@@ -39,13 +39,22 @@ func (h HealthStatus) IsHealthy() bool {
 
 // Sync captures the current sync view.
 type Sync struct {
-	State SyncState
+	State  SyncState
+	Reason string
+}
+
+// Health captures the current health summary.
+type Health struct {
+	Overall HealthStatus
+	Summary string
 }
 
 // DeploymentStatus captures observed state separate from desired spec.
 type DeploymentStatus struct {
 	ObservedGeneration int64
 	Sync               Sync
+	Health             Health
+	Conditions         []Condition
 }
 
 // IsSynced reports whether the deployment is currently synced.
