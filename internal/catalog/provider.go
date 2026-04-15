@@ -43,3 +43,14 @@ func RepositoryAccountProvider(root string) func() ([]AccountView, error) {
 		return ListAccounts(compiled), nil
 	}
 }
+
+// RepositoryPlacementProvider builds a placement listing function backed by a repository root.
+func RepositoryPlacementProvider(root string) func() ([]PlacementView, error) {
+	return func() ([]PlacementView, error) {
+		compiled, err := LoadFromRepository(root)
+		if err != nil {
+			return nil, err
+		}
+		return ListPlacements(compiled)
+	}
+}

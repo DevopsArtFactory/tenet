@@ -24,6 +24,7 @@ type Options struct {
 	CatalogDeployments  func() ([]catalog.DeploymentView, error)
 	CatalogEnvironments func() ([]catalog.EnvironmentView, error)
 	CatalogAccounts     func() ([]catalog.AccountView, error)
+	CatalogPlacements   func() ([]catalog.PlacementView, error)
 }
 
 // NewRouter builds the API router for the Tenet control plane.
@@ -106,6 +107,22 @@ func NewRouter(options Options) http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(accounts)
+	})
+	mux.HandleFunc("/v1/catalog/placements", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+		if options.CatalogPlacements == nil {
+			http.Error(w, "catalog placements unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		placements, err := options.CatalogPlacements()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(placements)
 	})
 
 	return mux

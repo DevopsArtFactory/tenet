@@ -28,6 +28,7 @@ func main() {
 		options.CatalogDeployments = catalog.RepositoryDeploymentProvider(repoRoot)
 		options.CatalogEnvironments = catalog.RepositoryEnvironmentProvider(repoRoot)
 		options.CatalogAccounts = catalog.RepositoryAccountProvider(repoRoot)
+		options.CatalogPlacements = catalog.RepositoryPlacementProvider(repoRoot)
 	}
 
 	if err := http.ListenAndServe(addr, api.NewRouter(options)); err != nil {
