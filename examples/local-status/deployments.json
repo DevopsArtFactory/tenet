@@ -1,0 +1,58 @@
+[
+  {
+    "deploymentName": "payments-api-prod",
+    "status": {
+      "observedGeneration": 3,
+      "sync": {
+        "state": "Synced",
+        "reason": "latest desired generation applied"
+      },
+      "health": {
+        "overall": "Healthy",
+        "summary": "3/3 tasks healthy in ap-northeast-2"
+      },
+      "conditions": [
+        {
+          "type": "Ready",
+          "status": true,
+          "reason": "AllTargetsHealthy",
+          "message": "Production deployment is serving live traffic"
+        },
+        {
+          "type": "Progressing",
+          "status": false,
+          "reason": "RolloutComplete",
+          "message": "No rollout in progress"
+        }
+      ]
+    }
+  },
+  {
+    "deploymentName": "payments-api-staging",
+    "status": {
+      "observedGeneration": 7,
+      "sync": {
+        "state": "Reconciling",
+        "reason": "candidate instances warming up"
+      },
+      "health": {
+        "overall": "Progressing",
+        "summary": "1/2 staging instances healthy while rollout continues"
+      },
+      "conditions": [
+        {
+          "type": "Ready",
+          "status": false,
+          "reason": "WaitingForWarmup",
+          "message": "New staging instance has not passed warmup yet"
+        },
+        {
+          "type": "Progressing",
+          "status": true,
+          "reason": "RollingUpdate",
+          "message": "Controller is moving traffic to the latest candidate"
+        }
+      ]
+    }
+  }
+]

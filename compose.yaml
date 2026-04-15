@@ -1,0 +1,33 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["/usr/local/bin/tenet-api"]
+    environment:
+      TENET_API_ADDR: ":8080"
+      TENET_REPO_ROOT: /workspace/examples/local-repo
+      TENET_STATUS_PATH: /workspace/examples/local-status/deployments.json
+    volumes:
+      - ./examples:/workspace/examples:ro
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  controller:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["/usr/local/bin/tenet-controller"]
+    environment:
+      TENET_REPO_ROOT: /workspace/examples/local-repo
+      TENET_CONTROLLER_WORKERS: "1"
+    volumes:
+      - ./examples:/workspace/examples:ro
+    depends_on:
+      api:
+        condition: service_healthy

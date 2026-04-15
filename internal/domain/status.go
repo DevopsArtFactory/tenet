@@ -39,22 +39,22 @@ func (h HealthStatus) IsHealthy() bool {
 
 // Sync captures the current sync view.
 type Sync struct {
-	State  SyncState
-	Reason string
+	State  SyncState `json:"state"`
+	Reason string    `json:"reason"`
 }
 
 // Health captures the current health summary.
 type Health struct {
-	Overall HealthStatus
-	Summary string
+	Overall HealthStatus `json:"overall"`
+	Summary string       `json:"summary"`
 }
 
 // DeploymentStatus captures observed state separate from desired spec.
 type DeploymentStatus struct {
-	ObservedGeneration int64
-	Sync               Sync
-	Health             Health
-	Conditions         []Condition
+	ObservedGeneration int64       `json:"observedGeneration"`
+	Sync               Sync        `json:"sync"`
+	Health             Health      `json:"health"`
+	Conditions         []Condition `json:"conditions"`
 }
 
 // IsSynced reports whether the deployment is currently synced.

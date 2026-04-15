@@ -1,0 +1,9 @@
+{
+  "name": "staging-core",
+  "awsAccountId": "210987654321",
+  "roleArn": "arn:aws:iam::210987654321:role/TenetDeployerRole",
+  "observerRoleArn": "arn:aws:iam::210987654321:role/TenetObserverRole",
+  "allowedRegions": [
+    "ap-northeast-2"
+  ]
+}
