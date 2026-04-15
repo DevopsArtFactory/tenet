@@ -5,6 +5,8 @@
 It currently returns filesystem-backed deployment status snapshots containing:
 - deployment name
 - observed generation
-- sync state
+- sync state and reason
+- overall health summary
+- conditions
 
 This keeps the first status API narrow and deterministic while richer persisted rollout, health, condition, and drift detail are still being built.

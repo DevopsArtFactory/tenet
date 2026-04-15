@@ -374,7 +374,7 @@ func TestRouterDeploymentStatuses(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 		DeploymentStatuses: func() ([]statusstore.Snapshot, error) {
-			return []statusstore.Snapshot{{DeploymentName: "api-prod", Status: domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStateSynced}}}}, nil
+			return []statusstore.Snapshot{{DeploymentName: "api-prod", Status: domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStateSynced, Reason: "RolloutCompleted"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "all checks passed"}, Conditions: []domain.Condition{{Type: "Ready", Status: true, Reason: "Stable", Message: "deployment is healthy"}}}}}, nil
 		},
 	})
 	req := httptest.NewRequest(http.MethodGet, "/v1/status/deployments", nil)
@@ -392,6 +392,9 @@ func TestRouterDeploymentStatuses(t *testing.T) {
 	}
 	if len(snapshots) != 1 || snapshots[0].DeploymentName != "api-prod" {
 		t.Fatalf("unexpected snapshots: %+v", snapshots)
+	}
+	if snapshots[0].Status.Sync.Reason != "RolloutCompleted" || len(snapshots[0].Status.Conditions) != 1 {
+		t.Fatalf("unexpected status payload: %+v", snapshots[0].Status)
 	}
 }
 

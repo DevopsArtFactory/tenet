@@ -41,8 +41,17 @@ func TestHealthStatusHelpers(t *testing.T) {
 }
 
 func TestDeploymentStatusIsSynced(t *testing.T) {
-	status := DeploymentStatus{Sync: Sync{State: SyncStateSynced}}
+	status := DeploymentStatus{Sync: Sync{State: SyncStateSynced, Reason: "RolloutCompleted"}, Health: Health{Overall: HealthHealthy, Summary: "all checks passed"}, Conditions: []Condition{{Type: "Ready", Status: true, Reason: "Stable", Message: "candidate promoted"}}}
 	if !status.IsSynced() {
 		t.Fatalf("synced status should report synced")
+	}
+	if status.Sync.Reason != "RolloutCompleted" {
+		t.Fatalf("unexpected sync reason: %+v", status.Sync)
+	}
+	if !status.Health.Overall.IsHealthy() {
+		t.Fatalf("expected healthy overall status: %+v", status.Health)
+	}
+	if len(status.Conditions) != 1 || status.Conditions[0].Type != "Ready" {
+		t.Fatalf("unexpected conditions: %+v", status.Conditions)
 	}
 }

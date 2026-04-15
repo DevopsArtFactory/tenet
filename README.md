@@ -14,6 +14,7 @@ Implemented today:
 - validated catalog compilation and repository-backed providers
 - repository-aware controller bootstrap that validates `TENET_REPO_ROOT`, logs catalog counts at startup, and stays alive as a long-running process
 - filesystem-backed deployment status storage for the first runtime-status slice
+- status snapshots now carry sync reasons, health summaries, and deployment conditions
 - read-only API endpoints for:
   - `GET /healthz`
   - `GET /v1/info`
