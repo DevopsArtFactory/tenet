@@ -188,5 +188,6 @@ func cloneRolloutSummary(summary *domain.RolloutSummary) *domain.RolloutSummary 
 	}
 	copy := *summary
 	copy.Steps = append([]domain.RolloutStepSummary(nil), summary.Steps...)
+	copy.Execution = append([]domain.RolloutExecutionDetail(nil), summary.Execution...)
 	return &copy
 }

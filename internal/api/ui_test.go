@@ -12,6 +12,7 @@ func TestEmbeddedUILazyLoadsDeploymentDetailsOnExpandOnly(t *testing.T) {
 	for _, fragment := range []string{
 		"const detailStateByDeployment = new Map();",
 		"const loadDeploymentDetail = (deploymentName, container) => {",
+		"renderDeploymentDetail(container, cached.detail);",
 		"detailPanel.hidden = true;",
 		"loadDeploymentDetail(deployment.name, detailPanel).catch(() => {});",
 		"fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}`)",
@@ -41,6 +42,10 @@ func TestEmbeddedUIUsesSafeDetailRenderingAndPreservesFalsyMetrics(t *testing.T)
 		"Sync reason",
 		"Account placement",
 		"Rollout generations",
+		"Rollout execution",
+		"detail.rollout?.execution || []",
+		"Execution resource",
+		"Execution description",
 		"Rollout steps",
 		"Conditions",
 	} {

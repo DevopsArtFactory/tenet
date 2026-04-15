@@ -55,14 +55,22 @@ type RolloutStepSummary struct {
 	Current bool   `json:"current,omitempty"`
 }
 
+// RolloutExecutionDetail captures one operator-facing execution resource detail.
+type RolloutExecutionDetail struct {
+	Resource    string `json:"resource"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+}
+
 // RolloutSummary captures the controller-owned rollout view for a deployment.
 type RolloutSummary struct {
-	DesiredGeneration  int64                `json:"desiredGeneration"`
-	ObservedGeneration int64                `json:"observedGeneration"`
-	Phase              RolloutPhase         `json:"phase,omitempty"`
-	CurrentStep        string               `json:"currentStep,omitempty"`
-	Summary            string               `json:"summary,omitempty"`
-	Steps              []RolloutStepSummary `json:"steps,omitempty"`
+	DesiredGeneration  int64                    `json:"desiredGeneration"`
+	ObservedGeneration int64                    `json:"observedGeneration"`
+	Phase              RolloutPhase             `json:"phase,omitempty"`
+	CurrentStep        string                   `json:"currentStep,omitempty"`
+	Summary            string                   `json:"summary,omitempty"`
+	Steps              []RolloutStepSummary     `json:"steps,omitempty"`
+	Execution          []RolloutExecutionDetail `json:"execution,omitempty"`
 }
 
 // DeploymentStatus captures observed state separate from desired spec.

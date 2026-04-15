@@ -17,7 +17,7 @@ It groups deployments by AWS account and shows:
 - current rollout step
 - planned rollout steps
 - sync and health summaries
-- expandable on-demand deployment detail panels for placement, sync reasons, rollout generations, conditions, and the full rollout-step list
+- expandable on-demand deployment detail panels for placement, sync reasons, rollout generations, rollout execution resources/descriptions, conditions, and the full rollout-step list
 
 ## Backing API
 
@@ -31,6 +31,7 @@ The page consumes joined overview endpoints:
 - `sync.reason`
 - account and region placement metadata
 - rollout desired/observed generations
+- `rollout.execution[*]`
 - `conditions[*]`
 - the complete `rollout.steps[*]` list
 
@@ -42,6 +43,12 @@ Each deployment card still surfaces the most operator-useful rollout cues direct
 - `rollout.steps[*].kind`
 
 The expandable detail panel extends that view without forcing operators to switch to the raw status endpoint for common troubleshooting.
+
+The rollout execution section is intentionally execution-mode-aware:
+- EC2 weighted target groups show the candidate Auto Scaling Group, active target group, candidate target group, and userdata bootstrap source.
+- EC2 instance refresh shows the service Auto Scaling Group plus the userdata bootstrap source for replacement capacity.
+- ECS rolling shows the ECS service that Tenet will update in place.
+- ECS CodeDeploy shows the ECS service, CodeDeploy application, and CodeDeploy deployment group used for traffic shifting.
 
 ## Detail-panel rendering constraints
 

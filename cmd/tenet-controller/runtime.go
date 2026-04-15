@@ -105,33 +105,116 @@ func syncStateLabel(state domain.SyncState) string {
 
 func deriveRolloutSummary(deployment domain.Deployment, status domain.DeploymentStatus, plan reconcile.Plan) *domain.RolloutSummary {
 	steps := make([]domain.RolloutStepSummary, 0, len(plan.Steps))
+	currentIndex := currentRolloutStepIndex(plan)
 	currentStep := ""
-	if len(plan.Steps) > 0 {
-		currentStep = string(plan.Steps[len(plan.Steps)-1].Kind)
+	if currentIndex >= 0 {
+		currentStep = string(plan.Steps[currentIndex].Kind)
 	}
 	for index, step := range plan.Steps {
 		steps = append(steps, domain.RolloutStepSummary{
 			Kind:    string(step.Kind),
-			Current: index == len(plan.Steps)-1,
+			Current: index == currentIndex,
 		})
 	}
 
 	return &domain.RolloutSummary{
 		DesiredGeneration:  deployment.Generation,
 		ObservedGeneration: status.ObservedGeneration,
-		Phase:              rolloutPhaseForPlan(plan),
+		Phase:              rolloutPhaseForStep(plan, currentIndex),
 		CurrentStep:        currentStep,
-		Summary:            rolloutSummaryForPlan(status, plan),
+		Summary:            rolloutSummaryForStep(status, plan, currentIndex),
 		Steps:              steps,
+		Execution:          deriveRolloutExecutionDetails(deployment),
 	}
 }
 
-func rolloutPhaseForPlan(plan reconcile.Plan) domain.RolloutPhase {
+func currentRolloutStepIndex(plan reconcile.Plan) int {
 	if len(plan.Steps) == 0 {
+		return -1
+	}
+	for index, step := range plan.Steps {
+		if step.Kind == reconcile.StepResolvePlacement || step.Kind == reconcile.StepObserveCurrentState {
+			continue
+		}
+		return index
+	}
+	return len(plan.Steps) - 1
+}
+
+func deriveRolloutExecutionDetails(deployment domain.Deployment) []domain.RolloutExecutionDetail {
+	switch deployment.ExecutionMode {
+	case "asgWeightedTargetGroups":
+		return []domain.RolloutExecutionDetail{{
+			Resource:    "candidateAutoScalingGroup",
+			Name:        deployment.Name + "-candidate",
+			Description: "Candidate Auto Scaling Group Tenet will create for weighted target group rollout",
+		}, {
+			Resource:    "activeTargetGroup",
+			Name:        deployment.Name + "-active",
+			Description: "Currently active target group receiving production traffic",
+		}, {
+			Resource:    "candidateTargetGroup",
+			Name:        deployment.Name + "-candidate",
+			Description: "Candidate target group Tenet will register and warm before traffic shifting",
+		}, {
+			Resource:    "userDataBootstrapSource",
+			Name:        userDataBootstrapSource(deployment.UserData),
+			Description: "Normalized userdata bootstrap source for candidate EC2 capacity",
+		}}
+	case "asgInstanceRefresh":
+		return []domain.RolloutExecutionDetail{{
+			Resource:    "serviceAutoScalingGroup",
+			Name:        deployment.Name + "-service",
+			Description: "Service Auto Scaling Group Tenet refreshes in place",
+		}, {
+			Resource:    "userDataBootstrapSource",
+			Name:        userDataBootstrapSource(deployment.UserData),
+			Description: "Normalized userdata bootstrap source for refreshed EC2 instances",
+		}}
+	case "ecsCodeDeploy":
+		return []domain.RolloutExecutionDetail{{
+			Resource:    "ecsService",
+			Name:        deployment.Name + "-service",
+			Description: "ECS service Tenet updates during deployment",
+		}, {
+			Resource:    "codeDeployApplication",
+			Name:        deployment.Name + "-codedeploy-app",
+			Description: "CodeDeploy application coordinating ECS traffic shifting",
+		}, {
+			Resource:    "codeDeployDeploymentGroup",
+			Name:        deployment.Name + "-codedeploy-group",
+			Description: "CodeDeploy deployment group Tenet targets for ECS rollout",
+		}}
+	case "ecsRolling":
+		return []domain.RolloutExecutionDetail{{
+			Resource:    "ecsService",
+			Name:        deployment.Name + "-service",
+			Description: "ECS service Tenet updates with native rolling deployment",
+		}}
+	default:
+		return nil
+	}
+}
+
+func userDataBootstrapSource(userData domain.DeploymentUserData) string {
+	if userData.Type == "" && userData.Path == "" {
+		return "unspecified"
+	}
+	if userData.Path == "" {
+		return userData.Type
+	}
+	if userData.Type == "" {
+		return userData.Path
+	}
+	return userData.Type + ":" + userData.Path
+}
+
+func rolloutPhaseForStep(plan reconcile.Plan, currentIndex int) domain.RolloutPhase {
+	if currentIndex < 0 || len(plan.Steps) == 0 {
 		return domain.RolloutPhasePending
 	}
 
-	switch plan.Steps[len(plan.Steps)-1].Kind {
+	switch plan.Steps[currentIndex].Kind {
 	case reconcile.StepPlanCandidateGeneration:
 		return domain.RolloutPhasePlanning
 	case reconcile.StepReconcileCurrentState:
@@ -153,12 +236,12 @@ func rolloutPhaseForPlan(plan reconcile.Plan) domain.RolloutPhase {
 	}
 }
 
-func rolloutSummaryForPlan(status domain.DeploymentStatus, plan reconcile.Plan) string {
-	if len(plan.Steps) == 0 {
+func rolloutSummaryForStep(status domain.DeploymentStatus, plan reconcile.Plan, currentIndex int) string {
+	if currentIndex < 0 || len(plan.Steps) == 0 {
 		return "Rollout pending"
 	}
 
-	switch plan.Steps[len(plan.Steps)-1].Kind {
+	switch plan.Steps[currentIndex].Kind {
 	case reconcile.StepPlanCandidateGeneration:
 		return "Planning candidate generation"
 	case reconcile.StepReconcileCurrentState:

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"hash/fnv"
 	"math"
+	gopath "path"
+	"strings"
 
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/spec"
@@ -66,6 +68,7 @@ func Compile(input CatalogSpec) (Catalog, error) {
 			AccountRef: environment.AccountRef,
 			Region:     environment.Region,
 			NetworkRef: environment.NetworkRef,
+			PolicyRef:  environment.PolicyRef,
 		}
 		if _, exists := environmentIndex[environment.Name]; exists {
 			return Catalog{}, fmt.Errorf("duplicate environment %q", environment.Name)
@@ -98,6 +101,7 @@ func Compile(input CatalogSpec) (Catalog, error) {
 				Binary: deployment.Binary,
 				Image:  deployment.Image,
 			},
+			UserData: normalizeUserData(deployment),
 		}
 		environment := environmentIndex[environmentRef]
 		account := accountIndex[environment.AccountRef]
@@ -143,10 +147,12 @@ func deploymentGeneration(deployment domain.Deployment, desired spec.DeploymentS
 			AccountRef: environment.AccountRef,
 			Region:     environment.Region,
 			NetworkRef: environment.NetworkRef,
+			PolicyRef:  environment.PolicyRef,
 		},
 		Account: deploymentAccountHash{
-			Name:         account.Name,
-			AWSAccountID: account.AWSAccountID,
+			Name:           account.Name,
+			AWSAccountID:   account.AWSAccountID,
+			AllowedRegions: append([]string(nil), account.AllowedRegions...),
 		},
 		Target: spec.TargetSpec{Type: desired.NormalizedTargetType()},
 		Strategy: spec.StrategySpec{
@@ -181,11 +187,13 @@ type deploymentEnvironmentHash struct {
 	AccountRef string `json:"accountRef"`
 	Region     string `json:"region"`
 	NetworkRef string `json:"networkRef,omitempty"`
+	PolicyRef  string `json:"policyRef,omitempty"`
 }
 
 type deploymentAccountHash struct {
-	Name         string `json:"name"`
-	AWSAccountID string `json:"awsAccountId"`
+	Name           string   `json:"name"`
+	AWSAccountID   string   `json:"awsAccountId"`
+	AllowedRegions []string `json:"allowedRegions,omitempty"`
 }
 
 func executionMode(target spec.TargetType, strategy spec.StrategyType) string {
@@ -206,4 +214,30 @@ func executionMode(target spec.TargetType, strategy spec.StrategyType) string {
 		}
 	}
 	return ""
+}
+
+func normalizeUserData(deployment spec.DeploymentSpec) domain.DeploymentUserData {
+	userData := deployment.UserData
+	if userData.Type == "" && userData.Path == "" && len(deployment.Stacks) > 0 {
+		userData = deployment.Stacks[0].UserData
+	}
+	return domain.DeploymentUserData{
+		Type: strings.TrimSpace(userData.Type),
+		Path: normalizeUserDataPath(userData.Path),
+	}
+}
+
+func normalizeUserDataPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	cleaned := gopath.Clean(strings.ReplaceAll(path, "\\", "/"))
+	for strings.HasPrefix(cleaned, "./") {
+		cleaned = strings.TrimPrefix(cleaned, "./")
+	}
+	if cleaned == "." {
+		return ""
+	}
+	return cleaned
 }

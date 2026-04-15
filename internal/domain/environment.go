@@ -6,4 +6,5 @@ type Environment struct {
 	AccountRef string
 	Region     string
 	NetworkRef string
+	PolicyRef  string
 }

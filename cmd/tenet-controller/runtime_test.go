@@ -141,13 +141,13 @@ func TestEmitRuntimePlansPersistsRolloutSummaryIntoStatusSnapshotsForEC2CanaryDe
 	if status.Rollout == nil {
 		t.Fatalf("expected rollout summary to be persisted")
 	}
-	if status.Rollout.CurrentStep != "PromoteCandidateCapacity" {
+	if status.Rollout.CurrentStep != "CreateCandidateCapacity" {
 		t.Fatalf("expected rollout current step to be persisted, got %+v", status.Rollout)
 	}
-	if status.Rollout.Phase != domain.RolloutPhasePromoting {
-		t.Fatalf("expected weighted target group rollout phase %q, got %+v", domain.RolloutPhasePromoting, status.Rollout)
+	if status.Rollout.Phase != domain.RolloutPhaseProvisioning {
+		t.Fatalf("expected weighted target group rollout phase %q, got %+v", domain.RolloutPhaseProvisioning, status.Rollout)
 	}
-	if status.Rollout.Summary != "Promoting candidate capacity through weighted target groups" {
+	if status.Rollout.Summary != "Creating candidate capacity for weighted target groups" {
 		t.Fatalf("expected weighted target group rollout summary, got %+v", status.Rollout)
 	}
 	wantSteps := []string{
@@ -167,8 +167,11 @@ func TestEmitRuntimePlansPersistsRolloutSummaryIntoStatusSnapshotsForEC2CanaryDe
 			}
 		}
 	}
-	if !status.Rollout.Steps[len(status.Rollout.Steps)-1].Current {
-		t.Fatalf("expected final rollout step to be marked current, got %+v", status.Rollout.Steps)
+	if status.Rollout.Steps[2].Kind != "CreateCandidateCapacity" || !status.Rollout.Steps[2].Current {
+		t.Fatalf("expected actionable rollout step to be marked current, got %+v", status.Rollout.Steps)
+	}
+	if status.Rollout.Steps[len(status.Rollout.Steps)-1].Current {
+		t.Fatalf("expected final planned rollout step to remain non-current, got %+v", status.Rollout.Steps)
 	}
 	if got := status.DeployedArtifact.Binary; got != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64" {
 		t.Fatalf("expected deployed artifact to be preserved, got %q", got)
@@ -228,13 +231,13 @@ func TestEmitRuntimePlansPersistsCodeDeployRolloutStepsForECSLinearDeployment(t 
 	if status.Rollout == nil {
 		t.Fatalf("expected rollout summary to be persisted")
 	}
-	if status.Rollout.CurrentStep != "VerifyServiceStability" {
+	if status.Rollout.CurrentStep != "CreateCodeDeployDeployment" {
 		t.Fatalf("expected ecs linear rollout current step, got %+v", status.Rollout)
 	}
-	if status.Rollout.Phase != domain.RolloutPhaseStabilizing {
-		t.Fatalf("expected ecs CodeDeploy rollout phase %q, got %+v", domain.RolloutPhaseStabilizing, status.Rollout)
+	if status.Rollout.Phase != domain.RolloutPhaseProvisioning {
+		t.Fatalf("expected ecs CodeDeploy rollout phase %q, got %+v", domain.RolloutPhaseProvisioning, status.Rollout)
 	}
-	if status.Rollout.Summary != "Stabilizing ECS service after CodeDeploy traffic shift" {
+	if status.Rollout.Summary != "Creating CodeDeploy traffic shift deployment" {
 		t.Fatalf("expected ecs CodeDeploy rollout summary, got %+v", status.Rollout)
 	}
 	if len(status.Rollout.Steps) != 5 || status.Rollout.Steps[2].Kind != "CreateCodeDeployDeployment" || status.Rollout.Steps[3].Kind != "ShiftTrafficLinear" {
@@ -242,11 +245,138 @@ func TestEmitRuntimePlansPersistsCodeDeployRolloutStepsForECSLinearDeployment(t 
 	}
 }
 
+func TestEmitRuntimePlansPersistsWeightedTargetGroupRolloutSummaryExecutionDetails(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1},"binary":"s3://releases.example.com/payments-api/prod/payments-api-linux-amd64","userdata":{"type":"file","path":"./userdata/bootstrap/../api-prod.sh"}}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"conditions":[]}}]`)
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	status := snapshots[0].Status
+	if status.Rollout == nil {
+		t.Fatalf("expected rollout summary to be persisted")
+	}
+	if status.Rollout.Phase != domain.RolloutPhaseProvisioning || status.Rollout.CurrentStep != "CreateCandidateCapacity" {
+		t.Fatalf("expected rollout phase/current step to reflect the first actionable weighted-target-group step, got %+v", status.Rollout)
+	}
+	want := []domain.RolloutExecutionDetail{{
+		Resource:    "candidateAutoScalingGroup",
+		Name:        "api-prod-candidate",
+		Description: "Candidate Auto Scaling Group Tenet will create for weighted target group rollout",
+	}, {
+		Resource:    "activeTargetGroup",
+		Name:        "api-prod-active",
+		Description: "Currently active target group receiving production traffic",
+	}, {
+		Resource:    "candidateTargetGroup",
+		Name:        "api-prod-candidate",
+		Description: "Candidate target group Tenet will register and warm before traffic shifting",
+	}, {
+		Resource:    "userDataBootstrapSource",
+		Name:        "file:userdata/api-prod.sh",
+		Description: "Normalized userdata bootstrap source for candidate EC2 capacity",
+	}}
+	if got := status.Rollout.Execution; len(got) != len(want) {
+		t.Fatalf("expected rollout execution details %v, got %+v", want, got)
+	} else {
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("expected rollout execution details %v, got %+v", want, got)
+			}
+		}
+	}
+}
+
+func TestEmitRuntimePlansPersistsCodeDeployRolloutSummaryExecutionDetails(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "worker-prod.json"), `{"name":"worker-prod","appRef":"payments-worker","environmentRef":"prod-apne2","target":{"type":"ecs"},"strategy":{"type":"linear"},"traffic":{"port":8080},"capacity":{"desired":1,"min":1,"max":2},"image":"ghcr.io/devopsartfactory/payments-worker:1.2.3"}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, `[{"deploymentName":"worker-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"task set missing"},"health":{"overall":"Progressing","summary":"deployment pending"},"conditions":[]}}]`)
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	status := snapshots[0].Status
+	if status.Rollout == nil {
+		t.Fatalf("expected rollout summary to be persisted")
+	}
+	if status.Rollout.Phase != domain.RolloutPhaseProvisioning || status.Rollout.CurrentStep != "CreateCodeDeployDeployment" {
+		t.Fatalf("expected rollout phase/current step to reflect the first actionable CodeDeploy step, got %+v", status.Rollout)
+	}
+	want := []domain.RolloutExecutionDetail{{
+		Resource:    "ecsService",
+		Name:        "worker-prod-service",
+		Description: "ECS service Tenet updates during deployment",
+	}, {
+		Resource:    "codeDeployApplication",
+		Name:        "worker-prod-codedeploy-app",
+		Description: "CodeDeploy application coordinating ECS traffic shifting",
+	}, {
+		Resource:    "codeDeployDeploymentGroup",
+		Name:        "worker-prod-codedeploy-group",
+		Description: "CodeDeploy deployment group Tenet targets for ECS rollout",
+	}}
+	assertRolloutExecutionDetails(t, status.Rollout.Execution, want)
+}
+
+func TestEmitRuntimePlansPersistsRollingECSExecutionDetails(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "worker-prod.json"), `{"name":"worker-prod","appRef":"payments-worker","environmentRef":"prod-apne2","target":{"type":"ecs"},"strategy":{"type":"rolling"},"traffic":{"port":8080},"capacity":{"desired":1,"min":1,"max":2},"image":"ghcr.io/devopsartfactory/payments-worker:1.2.3"}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, `[{"deploymentName":"worker-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"service update pending"},"health":{"overall":"Progressing","summary":"deployment pending"},"conditions":[]}}]`)
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	status := snapshots[0].Status
+	if status.Rollout == nil {
+		t.Fatalf("expected rollout summary to be persisted")
+	}
+	if status.Rollout.Phase != domain.RolloutPhaseProvisioning || status.Rollout.CurrentStep != "UpdateECSService" {
+		t.Fatalf("expected ecs rolling phase/current step to reflect the first actionable rolling step, got %+v", status.Rollout)
+	}
+	want := []domain.RolloutExecutionDetail{{
+		Resource:    "ecsService",
+		Name:        "worker-prod-service",
+		Description: "ECS service Tenet updates with native rolling deployment",
+	}}
+	assertRolloutExecutionDetails(t, status.Rollout.Execution, want)
+}
+
 func TestEmitRuntimePlansPersistsInstanceRefreshRolloutSummaryForEC2RollingDeployment(t *testing.T) {
 	root := t.TempDir()
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
 	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
-	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"rolling"},"traffic":{"port":443},"capacity":{"desired":2,"min":1,"max":3}}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"rolling"},"traffic":{"port":443},"capacity":{"desired":2,"min":1,"max":3},"userdata":{"type":"file","path":"userdata/api-prod-refresh.sh"}}`)
 	statusPath := filepath.Join(root, "status", "deployments.json")
 	writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"refresh pending"},"health":{"overall":"Progressing","summary":"replacement capacity pending"},"conditions":[]}}]`)
 
@@ -264,18 +394,28 @@ func TestEmitRuntimePlansPersistsInstanceRefreshRolloutSummaryForEC2RollingDeplo
 	if status.Rollout == nil {
 		t.Fatalf("expected rollout summary to be persisted")
 	}
-	if status.Rollout.CurrentStep != "VerifyReplacementCapacity" {
+	if status.Rollout.CurrentStep != "StartInstanceRefresh" {
 		t.Fatalf("expected instance refresh rollout current step, got %+v", status.Rollout)
 	}
-	if status.Rollout.Phase != domain.RolloutPhaseStabilizing {
-		t.Fatalf("expected instance refresh rollout phase %q, got %+v", domain.RolloutPhaseStabilizing, status.Rollout)
+	if status.Rollout.Phase != domain.RolloutPhaseProvisioning {
+		t.Fatalf("expected instance refresh rollout phase %q, got %+v", domain.RolloutPhaseProvisioning, status.Rollout)
 	}
-	if status.Rollout.Summary != "Verifying replacement capacity during instance refresh" {
+	if status.Rollout.Summary != "Starting EC2 instance refresh" {
 		t.Fatalf("expected instance refresh rollout summary, got %+v", status.Rollout)
 	}
 	if len(status.Rollout.Steps) != 4 || status.Rollout.Steps[2].Kind != "StartInstanceRefresh" || status.Rollout.Steps[3].Kind != "VerifyReplacementCapacity" {
 		t.Fatalf("expected instance refresh rollout steps, got %+v", status.Rollout.Steps)
 	}
+	want := []domain.RolloutExecutionDetail{{
+		Resource:    "serviceAutoScalingGroup",
+		Name:        "api-prod-service",
+		Description: "Service Auto Scaling Group Tenet refreshes in place",
+	}, {
+		Resource:    "userDataBootstrapSource",
+		Name:        "file:userdata/api-prod-refresh.sh",
+		Description: "Normalized userdata bootstrap source for refreshed EC2 instances",
+	}}
+	assertRolloutExecutionDetails(t, status.Rollout.Execution, want)
 }
 
 func TestEmitRuntimePlansBootstrapsMissingFileBackedStatusStore(t *testing.T) {
@@ -328,13 +468,13 @@ func TestEmitRuntimePlansPersistsWeightedTargetGroupRolloutStepsWhenDesiredGener
 	if status.Rollout == nil {
 		t.Fatalf("expected rollout summary to be persisted")
 	}
-	if status.Rollout.CurrentStep != "PromoteCandidateCapacity" {
-		t.Fatalf("expected rollout current step PromoteCandidateCapacity, got %+v", status.Rollout)
+	if status.Rollout.CurrentStep != "CreateCandidateCapacity" {
+		t.Fatalf("expected rollout current step CreateCandidateCapacity, got %+v", status.Rollout)
 	}
-	if status.Rollout.Phase != domain.RolloutPhasePromoting {
-		t.Fatalf("expected rollout phase %q, got %+v", domain.RolloutPhasePromoting, status.Rollout)
+	if status.Rollout.Phase != domain.RolloutPhaseProvisioning {
+		t.Fatalf("expected rollout phase %q, got %+v", domain.RolloutPhaseProvisioning, status.Rollout)
 	}
-	if status.Rollout.Summary != "Promoting candidate capacity through weighted target groups" {
+	if status.Rollout.Summary != "Creating candidate capacity for weighted target groups" {
 		t.Fatalf("expected weighted-target-group rollout summary, got %+v", status.Rollout)
 	}
 	if len(status.Rollout.Steps) != 6 || status.Rollout.Steps[2].Kind != "CreateCandidateCapacity" || status.Rollout.Steps[4].Kind != "ShiftTrafficFull" {
@@ -481,6 +621,18 @@ func rolloutStepKinds(steps []domain.RolloutStepSummary) []string {
 		kinds = append(kinds, step.Kind)
 	}
 	return kinds
+}
+
+func assertRolloutExecutionDetails(t *testing.T, got []domain.RolloutExecutionDetail, want []domain.RolloutExecutionDetail) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("expected rollout execution details %v, got %+v", want, got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("expected rollout execution details %v, got %+v", want, got)
+		}
+	}
 }
 
 func requireLogLine(t *testing.T, output interface{ String() string }, expected string) {

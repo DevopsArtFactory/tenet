@@ -10,6 +10,10 @@ import (
 )
 
 func TestBuildAccountOverviewsGroupsDeploymentsByAccount(t *testing.T) {
+	snapshots := []statusstore.Snapshot{
+		{DeploymentName: "payments-api-prod", Status: domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStateSynced, Reason: "stable"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "3/3 healthy"}, DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64"}, Rollout: &domain.RolloutSummary{DesiredGeneration: 4, ObservedGeneration: 3, Phase: domain.RolloutPhaseAccepted, CurrentStep: "PromoteCandidateCapacity", Summary: "Observing current state", Steps: []domain.RolloutStepSummary{{Kind: "CreateCandidateCapacity"}, {Kind: "ShiftTrafficCanary"}, {Kind: "PromoteCandidateCapacity", Current: true}}, Execution: []domain.RolloutExecutionDetail{{Resource: "autoScalingGroup", Name: "payments-api-prod-canary", Description: "Candidate EC2 capacity for weighted target groups"}, {Resource: "targetGroup", Name: "payments-api-prod-active", Description: "Primary target group currently serving traffic"}}}}},
+	}
+
 	overviews, err := BuildAccountOverviews(
 		manifest.Catalog{
 			Accounts: []domain.Account{
@@ -25,9 +29,7 @@ func TestBuildAccountOverviewsGroupsDeploymentsByAccount(t *testing.T) {
 				{Name: "payments-api-staging", AppRef: "payments-api", EnvironmentRef: "staging-apne2", TargetType: "ecs", Strategy: "linear", ExecutionMode: "ecsCodeDeploy", DesiredArtifact: domain.DeploymentArtifact{Image: "ghcr.io/devopsartfactory/payments-api:staging-20260415"}},
 			},
 		},
-		[]statusstore.Snapshot{
-			{DeploymentName: "payments-api-prod", Status: domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStateSynced, Reason: "stable"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "3/3 healthy"}, DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64"}, Rollout: &domain.RolloutSummary{DesiredGeneration: 4, ObservedGeneration: 3, Phase: domain.RolloutPhaseAccepted, CurrentStep: "PromoteCandidateCapacity", Summary: "Observing current state", Steps: []domain.RolloutStepSummary{{Kind: "CreateCandidateCapacity"}, {Kind: "ShiftTrafficCanary"}, {Kind: "PromoteCandidateCapacity", Current: true}}}}},
-		},
+		snapshots,
 	)
 	if err != nil {
 		t.Fatalf("BuildAccountOverviews returned error: %v", err)
@@ -49,6 +51,14 @@ func TestBuildAccountOverviewsGroupsDeploymentsByAccount(t *testing.T) {
 	}
 	if got := overviews[0].Deployments[0].Rollout.Steps; got[0].Kind != "CreateCandidateCapacity" || got[0].Current || got[1].Kind != "ShiftTrafficCanary" || got[1].Current || got[2].Kind != "PromoteCandidateCapacity" || !got[2].Current {
 		t.Fatalf("expected strategy-aware EC2 rollout steps, got %+v", got)
+	}
+	if got := overviews[0].Deployments[0].Rollout.Execution; len(got) != 2 || got[0].Resource != "autoScalingGroup" || got[0].Name != "payments-api-prod-canary" || got[1].Description != "Primary target group currently serving traffic" {
+		t.Fatalf("expected rollout execution details to be preserved, got %+v", got)
+	}
+
+	snapshots[0].Status.Rollout.Execution[0].Name = "mutated"
+	if overviews[0].Deployments[0].Rollout.Execution[0].Name != "payments-api-prod-canary" {
+		t.Fatalf("expected rollout execution details to be cloned defensively, got %+v", overviews[0].Deployments[0].Rollout.Execution)
 	}
 	if overviews[1].Deployments[0].Sync.State != "" {
 		t.Fatalf("expected missing status to remain zero-valued, got %+v", overviews[1].Deployments[0])
@@ -79,6 +89,10 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 					Steps: []domain.RolloutStepSummary{
 						{Kind: "CreateCandidateCapacity"},
 						{Kind: "ShiftTrafficCanary", Current: true},
+					},
+					Execution: []domain.RolloutExecutionDetail{
+						{Resource: "autoScalingGroup", Name: "payments-api-prod-canary", Description: "Candidate EC2 capacity for weighted target groups"},
+						{Resource: "targetGroup", Name: "payments-api-prod-green", Description: "Candidate target group receiving canary traffic"},
 					},
 				},
 			},
@@ -118,14 +132,21 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	if detail.Rollout == nil || detail.Rollout.Phase != domain.RolloutPhasePromoting || detail.Rollout.CurrentStep != "ShiftTrafficCanary" || len(detail.Rollout.Steps) != 2 {
 		t.Fatalf("expected rollout summary, got %+v", detail.Rollout)
 	}
+	if got := detail.Rollout.Execution; len(got) != 2 || got[0].Resource != "autoScalingGroup" || got[0].Name != "payments-api-prod-canary" || got[1].Description != "Candidate target group receiving canary traffic" {
+		t.Fatalf("expected rollout execution details, got %+v", got)
+	}
 	if len(detail.Conditions) != 1 || detail.Conditions[0].Reason != "RolloutInFlight" {
 		t.Fatalf("expected conditions to be surfaced, got %+v", detail.Conditions)
 	}
 
 	snapshots[0].Status.Rollout.Steps[0].Kind = "mutated"
+	snapshots[0].Status.Rollout.Execution[0].Name = "mutated"
 	snapshots[0].Status.Conditions[0].Reason = "Mutated"
 	if detail.Rollout.Steps[0].Kind != "CreateCandidateCapacity" {
 		t.Fatalf("expected rollout summary to be cloned defensively, got %+v", detail.Rollout)
+	}
+	if detail.Rollout.Execution[0].Name != "payments-api-prod-canary" {
+		t.Fatalf("expected rollout execution details to be cloned defensively, got %+v", detail.Rollout.Execution)
 	}
 	if detail.Conditions[0].Reason != "RolloutInFlight" {
 		t.Fatalf("expected conditions to be cloned defensively, got %+v", detail.Conditions)
@@ -142,7 +163,7 @@ func TestBuildDeploymentOverviewDetailReturnsNotFound(t *testing.T) {
 func TestBuildDeploymentOverviewDetailPropagatesPlacementErrors(t *testing.T) {
 	t.Run("missing environment", func(t *testing.T) {
 		catalog := manifest.Catalog{
-			Accounts: []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
+			Accounts:    []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
 			Deployments: []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
 		}
 
@@ -160,9 +181,9 @@ func TestBuildDeploymentOverviewDetailPropagatesPlacementErrors(t *testing.T) {
 
 	t.Run("disallowed region", func(t *testing.T) {
 		catalog := manifest.Catalog{
-			Accounts: []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"us-west-2"}}},
+			Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"us-west-2"}}},
 			Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
-			Deployments: []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
+			Deployments:  []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
 		}
 
 		_, err := BuildDeploymentOverviewDetail(catalog, nil, "payments-api-prod")

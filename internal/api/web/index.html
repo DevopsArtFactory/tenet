@@ -73,6 +73,7 @@
       .detail-list { margin: 0; padding-left: 18px; display:grid; gap: 8px; }
       .detail-list li::marker { color: var(--blue); }
       .detail-step-meta, .detail-condition-meta { display:block; margin-top: 4px; color: var(--muted); font-size: 13px; }
+      .detail-execution-meta { display:grid; gap: 4px; margin-top: 6px; }
       .empty, .loading { padding: 32px; text-align:center; color: var(--muted); background: var(--panel); border:1px solid var(--line); border-radius:20px; }
       @media (max-width: 720px) {
         .hero, .row-top, .account-head { flex-direction: column; align-items: stretch; }
@@ -180,6 +181,27 @@
           conditionsSection.append(conditionList);
         }
 
+        const executionSection = createDetailSection('Rollout execution');
+        const execution = detail.rollout?.execution || [];
+        if (!execution.length) {
+          executionSection.append(createElement('div', 'detail-state', 'No rollout execution resources are currently reported.'));
+        } else {
+          const executionList = createElement('ol', 'detail-list');
+          execution.forEach((item) => {
+            const executionItem = createElement('li');
+            executionItem.append(createElement('strong', '', textOrDash(item.name)));
+
+            const executionMeta = createElement('div', 'detail-execution-meta');
+            executionMeta.append(
+              createElement('span', 'detail-condition-meta', `Execution resource · ${textOrDash(item.resource)}`),
+              createElement('span', 'detail-condition-meta', `Execution description · ${textOrDash(item.description)}`),
+            );
+            executionItem.append(executionMeta);
+            executionList.append(executionItem);
+          });
+          executionSection.append(executionList);
+        }
+
         const stepsSection = createDetailSection('Rollout steps');
         const steps = detail.rollout?.steps || [];
         if (!steps.length) {
@@ -196,7 +218,7 @@
           stepsSection.append(stepsList);
         }
 
-        container.replaceChildren(detailGrid, conditionsSection, stepsSection);
+        container.replaceChildren(detailGrid, conditionsSection, executionSection, stepsSection);
       };
       const loadDeploymentDetail = (deploymentName, container) => {
         const cached = detailStateByDeployment.get(deploymentName);

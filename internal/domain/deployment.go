@@ -6,6 +6,12 @@ type DeploymentArtifact struct {
 	Image  string `json:"image,omitempty"`
 }
 
+// DeploymentUserData captures normalized EC2 bootstrap source metadata.
+type DeploymentUserData struct {
+	Type string `json:"type,omitempty"`
+	Path string `json:"path,omitempty"`
+}
+
 // Deployment is the desired deployment intent for one application and environment.
 type Deployment struct {
 	Name            string
@@ -16,4 +22,5 @@ type Deployment struct {
 	Strategy        string
 	ExecutionMode   string
 	DesiredArtifact DeploymentArtifact
+	UserData        DeploymentUserData
 }

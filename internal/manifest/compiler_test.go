@@ -131,6 +131,110 @@ func TestCompileDerivesExecutionModesForEC2AndECS(t *testing.T) {
 	}
 }
 
+func TestCompilePreservesNormalizedTopLevelUserDataForEC2(t *testing.T) {
+	catalog, err := Compile(CatalogSpec{
+		Accounts: []spec.AccountSpec{{
+			Name:           "prod-core",
+			AWSAccountID:   "123456789012",
+			RoleARN:        "arn:aws:iam::123456789012:role/TenetDeployerRole",
+			AllowedRegions: []string{"ap-northeast-2"},
+		}},
+		Environments: []spec.EnvironmentSpec{{
+			Name:       "prod-apne2",
+			AccountRef: "prod-core",
+			Region:     "ap-northeast-2",
+		}},
+		Deployments: []spec.DeploymentSpec{{
+			Name:           "payments-api-prod",
+			AppRef:         "payments-api",
+			EnvironmentRef: "prod-apne2",
+			Target:         spec.TargetSpec{Type: spec.TargetTypeEC2},
+			Strategy:       spec.StrategySpec{Type: spec.StrategyTypeBlueGreen},
+			Traffic:        spec.TrafficSpec{Port: 443},
+			Capacity:       spec.CapacitySpec{Desired: 2, Min: 1, Max: 3},
+			Binary:         "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
+			UserData:       spec.UserDataSpec{Type: " file ", Path: " ./userdata/bootstrap/../payments-api-prod.sh "},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Compile returned error: %v", err)
+	}
+
+	if got := catalog.Deployments[0].UserData; got.Type != "file" || got.Path != "userdata/payments-api-prod.sh" {
+		t.Fatalf("expected normalized EC2 userData, got %+v", got)
+	}
+}
+
+func TestCompilePreservesNormalizedTopLevelUserDataForEC2Rolling(t *testing.T) {
+	catalog, err := Compile(CatalogSpec{
+		Accounts: []spec.AccountSpec{{
+			Name:           "prod-core",
+			AWSAccountID:   "123456789012",
+			RoleARN:        "arn:aws:iam::123456789012:role/TenetDeployerRole",
+			AllowedRegions: []string{"ap-northeast-2"},
+		}},
+		Environments: []spec.EnvironmentSpec{{
+			Name:       "prod-apne2",
+			AccountRef: "prod-core",
+			Region:     "ap-northeast-2",
+		}},
+		Deployments: []spec.DeploymentSpec{{
+			Name:           "payments-api-prod",
+			AppRef:         "payments-api",
+			EnvironmentRef: "prod-apne2",
+			Target:         spec.TargetSpec{Type: spec.TargetTypeEC2},
+			Strategy:       spec.StrategySpec{Type: spec.StrategyTypeRolling},
+			Traffic:        spec.TrafficSpec{Port: 443},
+			Capacity:       spec.CapacitySpec{Desired: 2, Min: 1, Max: 3},
+			Binary:         "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
+			UserData:       spec.UserDataSpec{Type: " file ", Path: " ./userdata/refresh/../payments-api-refresh.sh "},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Compile returned error: %v", err)
+	}
+
+	if got := catalog.Deployments[0]; got.ExecutionMode != "asgInstanceRefresh" || got.UserData.Type != "file" || got.UserData.Path != "userdata/payments-api-refresh.sh" {
+		t.Fatalf("expected rolling EC2 deployment to keep normalized userData, got %+v", got)
+	}
+}
+
+func TestCompilePreservesNormalizedStackUserDataFallbackForEC2(t *testing.T) {
+	catalog, err := Compile(CatalogSpec{
+		Accounts: []spec.AccountSpec{{
+			Name:           "prod-core",
+			AWSAccountID:   "123456789012",
+			RoleARN:        "arn:aws:iam::123456789012:role/TenetDeployerRole",
+			AllowedRegions: []string{"ap-northeast-2"},
+		}},
+		Environments: []spec.EnvironmentSpec{{
+			Name:       "prod-apne2",
+			AccountRef: "prod-core",
+			Region:     "ap-northeast-2",
+		}},
+		Deployments: []spec.DeploymentSpec{{
+			Name:   "payments-api-prod",
+			Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
+			Stacks: []spec.StackSpec{{
+				Stack:           "payments-api-prod",
+				Account:         "prod-core",
+				Env:             "prod-apne2",
+				ReplacementType: "blueGreen",
+				UserData:        spec.UserDataSpec{Type: " git ", Path: " ./userdata/bootstrap/../payments-api-prod.sh "},
+				Capacity:        spec.CapacitySpec{Desired: 2, Min: 1, Max: 3},
+				Regions:         []spec.RegionSpec{{Region: "ap-northeast-2"}},
+			}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Compile returned error: %v", err)
+	}
+
+	if got := catalog.Deployments[0].UserData; got.Type != "git" || got.Path != "userdata/payments-api-prod.sh" {
+		t.Fatalf("expected normalized stack userData fallback, got %+v", got)
+	}
+}
+
 func TestCompileAssignsStableNonZeroDesiredGeneration(t *testing.T) {
 	input := testCompileGenerationCatalogSpec()
 
@@ -217,6 +321,25 @@ func TestCompileChangesDesiredGenerationWhenReferencedEnvironmentPlacementChange
 	}
 }
 
+func TestCompileChangesDesiredGenerationWhenReferencedEnvironmentPolicyChanges(t *testing.T) {
+	input := testCompileGenerationCatalogSpec()
+
+	first, err := Compile(input)
+	if err != nil {
+		t.Fatalf("first Compile returned error: %v", err)
+	}
+
+	input.Environments[0].PolicyRef = "prod-strict"
+	second, err := Compile(input)
+	if err != nil {
+		t.Fatalf("second Compile returned error: %v", err)
+	}
+
+	if second.Deployments[0].Generation == first.Deployments[0].Generation {
+		t.Fatalf("expected desired generation to change when referenced environment policy changes, got %d", second.Deployments[0].Generation)
+	}
+}
+
 func TestCompileChangesDesiredGenerationWhenReferencedAccountIdentityChanges(t *testing.T) {
 	input := testCompileGenerationCatalogSpec()
 
@@ -233,6 +356,25 @@ func TestCompileChangesDesiredGenerationWhenReferencedAccountIdentityChanges(t *
 
 	if second.Deployments[0].Generation == first.Deployments[0].Generation {
 		t.Fatalf("expected desired generation to change when referenced account identity changes, got %d", second.Deployments[0].Generation)
+	}
+}
+
+func TestCompileChangesDesiredGenerationWhenReferencedAccountPlacementChanges(t *testing.T) {
+	input := testCompileGenerationCatalogSpec()
+
+	first, err := Compile(input)
+	if err != nil {
+		t.Fatalf("first Compile returned error: %v", err)
+	}
+
+	input.Accounts[0].AllowedRegions = []string{"ap-northeast-2", "us-west-2"}
+	second, err := Compile(input)
+	if err != nil {
+		t.Fatalf("second Compile returned error: %v", err)
+	}
+
+	if second.Deployments[0].Generation == first.Deployments[0].Generation {
+		t.Fatalf("expected desired generation to change when referenced account placement changes, got %d", second.Deployments[0].Generation)
 	}
 }
 
