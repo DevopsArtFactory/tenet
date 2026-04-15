@@ -20,7 +20,7 @@ Implemented today:
 - pluggable deployment status storage with filesystem and Redis backends
 - status stores can be seeded from committed fixture JSON when empty
 - filesystem-backed deployment status storage for the first runtime-status slice
-- status snapshots now carry sync reasons, health summaries, deployment conditions, deployed binary/image artifact metadata, and controller-derived rollout summaries
+- status snapshots now carry sync reasons, health summaries, deployment conditions, deployed binary/image artifact metadata, bounded controller-authored runtime history entries, and controller-derived rollout summaries
 - rollout summaries now use strategy-aware step labels such as EC2 `CreateCandidateCapacity`/`ShiftTrafficCanary`/`PromoteCandidateCapacity`, ECS `CreateCodeDeployDeployment`/`ShiftTrafficLinear`, and native ECS rolling `UpdateECSService`/`VerifyServiceStability`
 - rollout summaries now also surface `rollout.execution[]` details so operators can see the concrete execution resources Tenet intends to use, including EC2 candidate ASGs/target groups, EC2 instance-refresh ASGs and userdata bootstrap sources, ECS rolling services, and ECS CodeDeploy application/deployment-group resources
 - committed local example fixtures under `examples/local-repo/` and `examples/local-status/`
@@ -39,7 +39,7 @@ Implemented today:
   - `GET /v1/overview/deployments/{deploymentName}`
   - `GET /v1/status/deployments`
   - `GET /v1/status/deployments/{deploymentName}`
-- embedded browser UI grouped by account and deployment at `/`, including additive account-header count pills from `/v1/overview/accounts` for deployment totals plus synced/progressing/paused/error runtime-state summaries, controller-authored rollout summary text alongside rollout phase, current step, and planned steps for EC2 candidate-capacity, weighted-target-group, ECS CodeDeploy, and ECS rolling executions, an operator filter toolbar with free-text search plus sync-state/account selectors and shareable URL query params, per-deployment quick links to the existing overview/status JSON detail read models, plus expandable deployment detail panels that lazy-load joined placement, sync reason, rollout generation, rollout execution resources/descriptions, rollout-step, and condition data from `/v1/overview/deployments/{deploymentName}`
+- embedded browser UI grouped by account and deployment at `/`, including additive account-header count pills from `/v1/overview/accounts` for deployment totals plus synced/progressing/paused/error runtime-state summaries, controller-authored rollout summary text alongside rollout phase, current step, and planned steps for EC2 candidate-capacity, weighted-target-group, ECS CodeDeploy, and ECS rolling executions, an operator filter toolbar with free-text search plus sync-state/account selectors and shareable URL query params, per-deployment quick links to the existing overview/status JSON detail read models, plus expandable deployment detail panels that lazy-load joined placement, sync reason, rollout generation, rollout execution resources/descriptions, runtime history, rollout-step, and condition data from `/v1/overview/deployments/{deploymentName}`
 - method guards for the read-only API surface
 - fail-fast validation for invalid repository roots and incomplete manifest layouts
 - optional status-file exposure through `TENET_STATUS_PATH`
@@ -47,7 +47,7 @@ Implemented today:
 
 Not implemented yet:
 - live AWS reconciliation/execution
-- controller-owned persisted runtime deployment status/history beyond current snapshot storage
+- controller-owned persisted runtime deployment event streams/audit logs beyond the current bounded status-history timeline
 - write APIs
 - a dedicated frontend application or mutation workflows
 
@@ -86,13 +86,15 @@ curl http://localhost:8080/v1/overview/deployments/payments-api-prod
 curl http://localhost:8080/v1/status/deployments/payments-api-prod
 ```
 
-When you run only `tenet-api` against the committed fixture file, the status endpoint still reflects the seeded snapshots and may not include controller-derived `rollout` summaries yet. To populate the execution-mode-aware rollout phase, current step, summary text, planned steps, and `rollout.execution[]` resource details, either run `tenet-controller` against the same repo/status store or use the Docker Compose stack below.
+When you run only `tenet-api` against the committed fixture file, the status endpoint still reflects the seeded snapshots and may not include controller-derived `rollout` summaries or bounded `history[]` entries yet. To populate the execution-mode-aware rollout phase, current step, summary text, planned steps, `rollout.execution[]` resource details, and recent runtime history timeline, either run `tenet-controller` against the same repo/status store or use the Docker Compose stack below.
 
 Execution detail examples surfaced through `/v1/overview/accounts`, `/v1/overview/deployments/{deploymentName}`, and `/v1/status/deployments/{deploymentName}`:
 - EC2 weighted target groups: candidate Auto Scaling Group, active target group, candidate target group, userdata bootstrap source
 - EC2 instance refresh: service Auto Scaling Group, userdata bootstrap source
 - ECS rolling: ECS service
 - ECS CodeDeploy: ECS service, CodeDeploy application, CodeDeploy deployment group
+
+Controller-authored runtime history is surfaced through `/v1/overview/deployments/{deploymentName}` and rendered in the expandable deployment detail panel at `/`. The current slice keeps only a bounded recent timeline so operators can see the latest sync/health/rollout-step changes without introducing a full event log.
 
 Run the local smoke check:
 
@@ -123,7 +125,7 @@ curl http://localhost:8080/v1/overview/accounts
 curl http://localhost:8080/v1/overview/deployments/payments-api-prod
 curl http://localhost:8080/v1/status/deployments
 open 'http://localhost:8080/?sync=Reconciling'
-open 'http://localhost:8080/?account=staging-core&q=codedeploy'
+open 'http://localhost:8080/?account=210987654321&q=codedeploy'
 docker compose logs controller --tail=20
 make docker-down
 ```

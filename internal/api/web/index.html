@@ -88,7 +88,7 @@
       .detail-list { margin: 0; padding-left: 18px; display:grid; gap: 8px; }
       .detail-list li::marker { color: var(--blue); }
       .detail-step-meta, .detail-condition-meta { display:block; margin-top: 4px; color: var(--muted); font-size: 13px; }
-      .detail-execution-meta { display:grid; gap: 4px; margin-top: 6px; }
+      .detail-execution-meta, .detail-history-meta { display:grid; gap: 4px; margin-top: 6px; }
       .empty, .loading { padding: 32px; text-align:center; color: var(--muted); background: var(--panel); border:1px solid var(--line); border-radius:20px; }
       @media (max-width: 720px) {
         .hero, .row-top, .account-head { flex-direction: column; align-items: stretch; }
@@ -418,6 +418,32 @@
           detailGrid.append(createMetric(label, value));
         });
 
+        const historySection = createDetailSection('Runtime history');
+        const history = detail.history || [];
+        if (!history.length) {
+          historySection.append(createElement('div', 'detail-state', 'No recent runtime history is available yet.'));
+        } else {
+          const historyList = createElement('ol', 'detail-list');
+          history.forEach((entry) => {
+            const historyItem = createElement('li');
+            historyItem.append(createElement('strong', '', textOrDash(entry.summary)));
+
+            const historyMeta = createElement('div', 'detail-history-meta');
+            historyMeta.append(
+              createElement('span', 'detail-condition-meta', `History timestamp · ${textOrDash(entry.timestamp)}`),
+              createElement('span', 'detail-condition-meta', `History summary · ${textOrDash(entry.summary)}`),
+              createElement('span', 'detail-condition-meta', `History sync · ${textOrDash(entry.sync?.state)}`),
+              createElement('span', 'detail-condition-meta', `History health · ${healthLabel(entry.health)}${entry.health?.summary ? ` · ${entry.health.summary}` : ''}`),
+            );
+            if (entry.currentStep) {
+              historyMeta.append(createElement('span', 'detail-condition-meta', `History rollout step · ${entry.currentStep}`));
+            }
+            historyItem.append(historyMeta);
+            historyList.append(historyItem);
+          });
+          historySection.append(historyList);
+        }
+
         const conditionsSection = createDetailSection('Conditions');
         const conditions = detail.conditions || [];
         if (!conditions.length) {
@@ -472,7 +498,7 @@
           stepsSection.append(stepsList);
         }
 
-        container.replaceChildren(detailGrid, conditionsSection, executionSection, stepsSection);
+        container.replaceChildren(detailGrid, historySection, conditionsSection, executionSection, stepsSection);
       };
       const loadDeploymentDetail = (deploymentName, container) => {
         const cached = detailStateByDeployment.get(deploymentName);

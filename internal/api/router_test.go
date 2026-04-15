@@ -672,8 +672,18 @@ func TestRouterOverviewDeployment(t *testing.T) {
 					CurrentStep:        "VerifyServiceStability",
 					Summary:            "Observing current state",
 					Steps:              []domain.RolloutStepSummary{{Kind: "CreateCodeDeployDeployment"}, {Kind: "ShiftTrafficLinear"}, {Kind: "VerifyServiceStability", Current: true}},
+					Execution:          []domain.RolloutExecutionDetail{{Resource: "codedeployDeploymentGroup", Name: "payments-api-prod", Description: "Routes ECS traffic shifts"}},
 				},
 				Conditions: []domain.Condition{{Type: "Ready", Status: false, Reason: "Updating", Message: "service is progressing"}},
+				History: []domain.StatusHistoryEntry{{
+					Timestamp:    "2026-04-16T06:49:00Z",
+					Source:       "controller",
+					Summary:      "Shifted 10 percent of traffic",
+					Sync:         domain.Sync{State: domain.SyncStateReconciling},
+					Health:       domain.Health{Overall: domain.HealthHealthy, Summary: "steady"},
+					RolloutPhase: domain.RolloutPhaseAccepted,
+					CurrentStep:  "ShiftTrafficLinear",
+				}},
 			}, nil
 		},
 	})
@@ -695,6 +705,61 @@ func TestRouterOverviewDeployment(t *testing.T) {
 	}
 	if detail.Rollout == nil || detail.Rollout.CurrentStep != "VerifyServiceStability" || len(detail.Rollout.Steps) != 3 {
 		t.Fatalf("expected rollout summary in deployment detail, got %+v", detail)
+	}
+	if len(detail.History) != 1 || detail.History[0].Summary != "Shifted 10 percent of traffic" || detail.History[0].CurrentStep != "ShiftTrafficLinear" {
+		t.Fatalf("expected runtime history in deployment detail, got %+v", detail.History)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode raw overview deployment payload: %v", err)
+	}
+	rollout, ok := payload["rollout"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rollout object in raw payload, got %#v", payload["rollout"])
+	}
+	if rollout["currentStep"] != "VerifyServiceStability" {
+		t.Fatalf("expected rollout.currentStep field, got %#v", rollout)
+	}
+	steps, ok := rollout["steps"].([]any)
+	if !ok || len(steps) != 3 {
+		t.Fatalf("expected rollout.steps array in raw payload, got %#v", rollout["steps"])
+	}
+	lastStep, ok := steps[2].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rollout.steps[2] object, got %#v", steps[2])
+	}
+	if lastStep["kind"] != "VerifyServiceStability" || lastStep["current"] != true {
+		t.Fatalf("expected rollout.steps[2] field names, got %#v", lastStep)
+	}
+	execution, ok := rollout["execution"].([]any)
+	if !ok || len(execution) != 1 {
+		t.Fatalf("expected rollout.execution array in raw payload, got %#v", rollout["execution"])
+	}
+	executionDetail, ok := execution[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rollout.execution[0] object, got %#v", execution[0])
+	}
+	if executionDetail["resource"] != "codedeployDeploymentGroup" || executionDetail["name"] != "payments-api-prod" || executionDetail["description"] != "Routes ECS traffic shifts" {
+		t.Fatalf("expected rollout.execution[0] field names, got %#v", executionDetail)
+	}
+	history, ok := payload["history"].([]any)
+	if !ok || len(history) != 1 {
+		t.Fatalf("expected history array in raw payload, got %#v", payload["history"])
+	}
+	historyEntry, ok := history[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected history[0] object, got %#v", history[0])
+	}
+	sync, ok := historyEntry["sync"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected history[0].sync object, got %#v", historyEntry["sync"])
+	}
+	if sync["state"] != string(domain.SyncStateReconciling) {
+		t.Fatalf("expected history[0].sync.state field, got %#v", sync)
+	}
+	if historyEntry["currentStep"] != "ShiftTrafficLinear" || historyEntry["rolloutPhase"] != string(domain.RolloutPhaseAccepted) {
+		t.Fatalf("expected history[0] field names, got %#v", historyEntry)
 	}
 }
 

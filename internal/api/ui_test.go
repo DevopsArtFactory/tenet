@@ -41,6 +41,14 @@ func TestEmbeddedUIUsesSafeDetailRenderingAndPreservesFalsyMetrics(t *testing.T)
 		"textContent",
 		"Sync reason",
 		"Account placement",
+		"Runtime history",
+		"No recent runtime history is available yet.",
+		"const history = detail.history || [];",
+		"History timestamp",
+		"History summary",
+		"History sync",
+		"History health",
+		"History rollout step",
 		"Rollout generations",
 		"Rollout execution",
 		"detail.rollout?.execution || []",
@@ -59,6 +67,8 @@ func TestEmbeddedUIUsesSafeDetailRenderingAndPreservesFalsyMetrics(t *testing.T)
 		"detailPanel.innerHTML",
 		"conditionList.innerHTML",
 		"stepsList.innerHTML",
+		"historySection.innerHTML",
+		"historyList.innerHTML",
 	} {
 		if strings.Contains(body, unsafe) {
 			t.Fatalf("expected embedded UI to avoid unsafe detail rendering %q", unsafe)

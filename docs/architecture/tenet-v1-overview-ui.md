@@ -18,7 +18,7 @@ It groups deployments by AWS account and shows:
 - current rollout step
 - planned rollout steps
 - sync and health summaries
-- expandable on-demand deployment detail panels for placement, sync reasons, rollout generations, rollout execution resources/descriptions, conditions, and the full rollout-step list
+- expandable on-demand deployment detail panels for placement, sync reasons, rollout generations, rollout execution resources/descriptions, recent bounded runtime history, conditions, and the full rollout-step list
 
 ## Backing API
 
@@ -41,6 +41,7 @@ The `/` UI renders those counters directly in each account header. When any aggr
 - `sync.reason`
 - account and region placement metadata
 - rollout desired/observed generations
+- `history[*]` controller-authored runtime timeline entries (timestamp, summary, sync, health, optional current step)
 - `rollout.execution[*]`
 - `conditions[*]`
 - the complete `rollout.steps[*]` list
@@ -68,7 +69,7 @@ Each deployment card still surfaces the most operator-useful rollout cues direct
 - `rollout.currentStep`
 - `rollout.steps[*].kind`
 
-The expandable detail panel extends that view without forcing operators to switch to the raw status endpoint for common troubleshooting.
+The expandable detail panel extends that view without forcing operators to switch to the raw status endpoint for common troubleshooting. It now includes a recent runtime-history section rendered with safe DOM construction, showing each controller-authored entry's timestamp, summary, sync state, health, and optional rollout step, plus an explicit `No recent runtime history is available yet.` empty state when no bounded history has been persisted yet.
 
 The rollout execution section is intentionally execution-mode-aware:
 - EC2 weighted target groups show the candidate Auto Scaling Group, active target group, candidate target group, and userdata bootstrap source.
