@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -51,5 +52,27 @@ func TestRepositoryDeploymentProviderLoadsStableDeploymentListing(t *testing.T) 
 	}
 	if deployments[0].Name != "api-prod" || deployments[1].Name != "worker-prod" {
 		t.Fatalf("expected sorted deployment list, got %+v", deployments)
+	}
+}
+
+func TestRepositoryEnvironmentProviderLoadsStableEnvironmentListing(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole"}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-usw2.json"), `{"name":"prod-usw2","accountRef":"prod-core","region":"us-west-2","networkRef":"prod-west"}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	if err := os.Mkdir(filepath.Join(root, "deployments"), 0o755); err != nil {
+		t.Fatalf("failed to create deployments dir: %v", err)
+	}
+
+	provider := RepositoryEnvironmentProvider(root)
+	environments, err := provider()
+	if err != nil {
+		t.Fatalf("provider returned error: %v", err)
+	}
+	if len(environments) != 2 {
+		t.Fatalf("expected two environments, got %+v", environments)
+	}
+	if environments[0].Name != "prod-apne2" || environments[1].Name != "prod-usw2" {
+		t.Fatalf("expected sorted environment list, got %+v", environments)
 	}
 }

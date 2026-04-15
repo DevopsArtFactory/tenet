@@ -21,3 +21,14 @@ func RepositoryDeploymentProvider(root string) func() ([]DeploymentView, error) 
 		return ListDeployments(compiled), nil
 	}
 }
+
+// RepositoryEnvironmentProvider builds an environment listing function backed by a repository root.
+func RepositoryEnvironmentProvider(root string) func() ([]EnvironmentView, error) {
+	return func() ([]EnvironmentView, error) {
+		compiled, err := LoadFromRepository(root)
+		if err != nil {
+			return nil, err
+		}
+		return ListEnvironments(compiled), nil
+	}
+}
