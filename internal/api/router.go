@@ -2,7 +2,9 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
@@ -28,6 +30,7 @@ type Options struct {
 	CatalogPlacements   func() ([]catalog.PlacementView, error)
 	CatalogTopology     func() (catalog.TopologySnapshot, error)
 	DeploymentStatuses  func() ([]statusstore.Snapshot, error)
+	DeploymentStatus    func(string) (statusstore.Snapshot, error)
 }
 
 // NewRouter builds the API router for the Tenet control plane.
@@ -158,6 +161,31 @@ func NewRouter(options Options) http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(snapshots)
+	})
+	mux.HandleFunc("/v1/status/deployments/", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+		if options.DeploymentStatus == nil {
+			http.Error(w, "deployment status unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		name := strings.TrimPrefix(r.URL.Path, "/v1/status/deployments/")
+		if name == "" || strings.Contains(name, "/") {
+			http.Error(w, "invalid deployment name", http.StatusBadRequest)
+			return
+		}
+		snapshot, err := options.DeploymentStatus(name)
+		if err != nil {
+			if errors.Is(err, statusstore.ErrNotFound) {
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(snapshot)
 	})
 
 	return mux

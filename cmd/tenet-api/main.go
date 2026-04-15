@@ -41,6 +41,13 @@ func main() {
 			}
 			return statusstore.List(loaded), nil
 		}
+		options.DeploymentStatus = func(name string) (statusstore.Snapshot, error) {
+			loaded, err := statusstore.Load(statusPath)
+			if err != nil {
+				return statusstore.Snapshot{}, err
+			}
+			return statusstore.Get(loaded, name)
+		}
 	}
 
 	if err := http.ListenAndServe(addr, api.NewRouter(options)); err != nil {
