@@ -2,16 +2,20 @@ package main
 
 import (
 	"fmt"
+	"strconv"
+	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 )
 
 type startupConfig struct {
-	Info        buildinfo.Info
-	WorkerCount string
-	RepoRoot    string
-	Summary     *catalog.Summary
+	Info            buildinfo.Info
+	WorkerCount     string
+	RepoRoot        string
+	StatusPath      string
+	RequeueInterval time.Duration
+	Summary         *catalog.Summary
 }
 
 func loadStartupConfig(getenv func(string) string) (startupConfig, error) {
@@ -19,11 +23,18 @@ func loadStartupConfig(getenv func(string) string) (startupConfig, error) {
 	commit := envOrDefaultFrom(getenv, "TENET_COMMIT", "unknown")
 	workerCount := envOrDefaultFrom(getenv, "TENET_CONTROLLER_WORKERS", "1")
 	repoRoot := getenv("TENET_REPO_ROOT")
+	statusPath := getenv("TENET_STATUS_PATH")
+	requeueSeconds, err := controllerRequeueSeconds(getenv)
+	if err != nil {
+		return startupConfig{}, err
+	}
 
 	config := startupConfig{
-		Info:        buildinfo.Current(version, commit),
-		WorkerCount: workerCount,
-		RepoRoot:    repoRoot,
+		Info:            buildinfo.Current(version, commit),
+		WorkerCount:     workerCount,
+		RepoRoot:        repoRoot,
+		StatusPath:      statusPath,
+		RequeueInterval: time.Duration(requeueSeconds) * time.Second,
 	}
 	if repoRoot == "" {
 		return config, nil
@@ -36,6 +47,18 @@ func loadStartupConfig(getenv func(string) string) (startupConfig, error) {
 	summary := catalog.Summarize(compiled)
 	config.Summary = &summary
 	return config, nil
+}
+
+func controllerRequeueSeconds(getenv func(string) string) (int, error) {
+	value := envOrDefaultFrom(getenv, "TENET_CONTROLLER_REQUEUE_SECONDS", "30")
+	seconds, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("parse TENET_CONTROLLER_REQUEUE_SECONDS: %w", err)
+	}
+	if seconds <= 0 {
+		return 0, fmt.Errorf("TENET_CONTROLLER_REQUEUE_SECONDS must be positive")
+	}
+	return seconds, nil
 }
 
 func envOrDefaultFrom(getenv func(string) string, name, fallback string) string {

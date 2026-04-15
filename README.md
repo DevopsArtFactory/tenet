@@ -13,6 +13,7 @@ Implemented today:
 - parser-light repository loader for `accounts/`, `environments/`, and `deployments/` JSON manifests
 - validated catalog compilation and repository-backed providers
 - repository-aware controller bootstrap that validates `TENET_REPO_ROOT`, logs catalog counts at startup, and stays alive as a long-running process
+- controller runtime loop that reloads repository and status fixtures on a timer and logs per-deployment planner intents
 - filesystem-backed deployment status storage for the first runtime-status slice
 - status snapshots now carry sync reasons, health summaries, and deployment conditions
 - committed local example fixtures under `examples/local-repo/` and `examples/local-status/`
@@ -83,7 +84,7 @@ make docker-up
 
 This starts:
 - `api` on `http://localhost:8080`
-- `controller` as a long-running repo-validating process
+- `controller` as a long-running repo-validating process that now reloads fixtures and logs reconcile plans every few seconds
 
 Useful commands:
 
@@ -91,6 +92,7 @@ Useful commands:
 curl http://localhost:8080/healthz
 curl http://localhost:8080/v1/catalog/topology
 curl http://localhost:8080/v1/status/deployments
+docker compose logs controller --tail=20
 make docker-down
 ```
 
@@ -112,6 +114,7 @@ GOROOT=/Users/kuma/.gvm/gos/go1.25 GOPATH=/Users/kuma/.gvm/pkgsets/go1.25/global
 Architecture and plan docs live under `docs/`:
 - `docs/plans/2026-04-15-control-plane-bootstrap.md`
 - `docs/plans/2026-04-15-local-runtime-bootstrap.md`
+- `docs/plans/2026-04-15-controller-runtime-loop.md`
 - `docs/architecture/tenet-v1-overview.md`
 - `docs/architecture/tenet-v1-domain-model.md`
 - `docs/architecture/tenet-v1-spec-shapes.md`
