@@ -21,6 +21,7 @@ Implemented today:
 - status stores can be seeded from committed fixture JSON when empty
 - filesystem-backed deployment status storage for the first runtime-status slice
 - status snapshots now carry sync reasons, health summaries, deployment conditions, deployed binary/image artifact metadata, and controller-derived rollout summaries
+- rollout summaries now use strategy-aware step labels such as EC2 `CreateCandidateCapacity`/`ShiftTrafficCanary`/`PromoteCandidateCapacity`, ECS `CreateCodeDeployDeployment`/`ShiftTrafficLinear`, and native ECS rolling `UpdateECSService`/`VerifyServiceStability`
 - committed local example fixtures under `examples/local-repo/` and `examples/local-status/`
 - Docker packaging and `compose.yaml` so the current control plane can run locally without AWS credentials
 - read-only API endpoints for:
@@ -36,7 +37,7 @@ Implemented today:
   - `GET /v1/overview/accounts`
   - `GET /v1/status/deployments`
   - `GET /v1/status/deployments/{deploymentName}`
-- embedded browser UI grouped by account and deployment at `/`, including rollout phase, current step, and planned steps
+- embedded browser UI grouped by account and deployment at `/`, including rollout phase, current step, and planned steps rendered from the richer EC2 candidate-capacity, weighted-target-group, ECS CodeDeploy, and ECS rolling summaries
 - method guards for the read-only API surface
 - fail-fast validation for invalid repository roots and incomplete manifest layouts
 - optional status-file exposure through `TENET_STATUS_PATH`

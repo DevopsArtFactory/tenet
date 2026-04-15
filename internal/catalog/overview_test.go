@@ -25,7 +25,7 @@ func TestBuildAccountOverviewsGroupsDeploymentsByAccount(t *testing.T) {
 			},
 		},
 		[]statusstore.Snapshot{
-			{DeploymentName: "payments-api-prod", Status: domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStateSynced, Reason: "stable"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "3/3 healthy"}, DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64"}, Rollout: &domain.RolloutSummary{DesiredGeneration: 4, ObservedGeneration: 3, Phase: domain.RolloutPhaseHealthChecking, CurrentStep: "bake", Summary: "waiting for bake window", Steps: []domain.RolloutStepSummary{{Kind: "shift-10"}, {Kind: "bake", Current: true}, {Kind: "shift-100"}}}}},
+			{DeploymentName: "payments-api-prod", Status: domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStateSynced, Reason: "stable"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "3/3 healthy"}, DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64"}, Rollout: &domain.RolloutSummary{DesiredGeneration: 4, ObservedGeneration: 3, Phase: domain.RolloutPhaseHealthChecking, CurrentStep: "ShiftTrafficCanary", Summary: "waiting for candidate bake window", Steps: []domain.RolloutStepSummary{{Kind: "CreateCandidateCapacity"}, {Kind: "ShiftTrafficCanary", Current: true}, {Kind: "PromoteCandidateCapacity"}}}}},
 		},
 	)
 	if err != nil {
@@ -43,8 +43,11 @@ func TestBuildAccountOverviewsGroupsDeploymentsByAccount(t *testing.T) {
 	if overviews[0].Deployments[0].Rollout == nil {
 		t.Fatalf("expected rollout summary to be surfaced, got %+v", overviews[0].Deployments[0])
 	}
-	if overviews[0].Deployments[0].Rollout.Phase != domain.RolloutPhaseHealthChecking || overviews[0].Deployments[0].Rollout.CurrentStep != "bake" || len(overviews[0].Deployments[0].Rollout.Steps) != 3 {
+	if overviews[0].Deployments[0].Rollout.Phase != domain.RolloutPhaseHealthChecking || overviews[0].Deployments[0].Rollout.CurrentStep != "ShiftTrafficCanary" || len(overviews[0].Deployments[0].Rollout.Steps) != 3 {
 		t.Fatalf("expected rollout summary data, got %+v", overviews[0].Deployments[0].Rollout)
+	}
+	if got := overviews[0].Deployments[0].Rollout.Steps; got[0].Kind != "CreateCandidateCapacity" || got[1].Kind != "ShiftTrafficCanary" || !got[1].Current || got[2].Kind != "PromoteCandidateCapacity" {
+		t.Fatalf("expected strategy-aware EC2 rollout steps, got %+v", got)
 	}
 	if overviews[1].Deployments[0].Sync.State != "" {
 		t.Fatalf("expected missing status to remain zero-valued, got %+v", overviews[1].Deployments[0])

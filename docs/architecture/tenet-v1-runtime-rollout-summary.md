@@ -28,6 +28,9 @@ Each `steps[]` entry is a `domain.RolloutStepSummary`:
 - `phase` is the coarse lifecycle state for the desired generation.
 - `currentStep` is the concise operator label for the step presently being executed or awaited.
 - `steps[]` is the ordered runtime plan summary, suitable for overview/UI rendering.
+- `currentStep` and `steps[].kind` intentionally use strategy-aware operator labels rather than generic placeholder phases.
+- EC2 weighted-target-group summaries now read like `CreateCandidateCapacity -> ShiftTrafficCanary -> PromoteCandidateCapacity`.
+- ECS CodeDeploy summaries now read like `CreateCodeDeployDeployment -> ShiftTrafficLinear -> VerifyServiceStability`, while native ECS rolling summaries use labels such as `UpdateECSService` and `VerifyServiceStability`.
 - `steps[].current=true` marks the active step when one is known.
 
 ## API/UI usage
@@ -39,7 +42,7 @@ The runtime summary is preserved in two read surfaces:
 The account overview surface also copies the same summary into each deployment card payload:
 - `GET /v1/overview/accounts`
 
-That lets the embedded overview UI show rollout phase, current step, and planned steps without needing additional API joins in the browser.
+That lets the embedded overview UI show rollout phase, current step, and planned steps without needing additional API joins in the browser, while preserving the richer EC2 candidate-capacity and ECS CodeDeploy/native-rolling terminology from the planner.
 
 ## Compatibility
 

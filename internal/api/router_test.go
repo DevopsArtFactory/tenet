@@ -569,7 +569,7 @@ func TestRouterOverviewAccounts(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 		OverviewAccounts: func() ([]catalog.AccountOverview, error) {
-			return []catalog.AccountOverview{{Name: "prod-core", AWSAccountID: "123456789012", Deployments: []catalog.DeploymentOverview{{Name: "api-prod", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", Rollout: &domain.RolloutSummary{Phase: domain.RolloutPhasePromoting, CurrentStep: "shift-50", Steps: []domain.RolloutStepSummary{{Kind: "shift-10"}, {Kind: "shift-50", Current: true}, {Kind: "shift-100"}}}}}}}, nil
+			return []catalog.AccountOverview{{Name: "prod-core", AWSAccountID: "123456789012", Deployments: []catalog.DeploymentOverview{{Name: "api-prod", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", Rollout: &domain.RolloutSummary{Phase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficCanary", Steps: []domain.RolloutStepSummary{{Kind: "CreateCandidateCapacity"}, {Kind: "ShiftTrafficCanary", Current: true}, {Kind: "PromoteCandidateCapacity"}}}}, {Name: "api-staging", Strategy: "linear", ExecutionMode: "ecsCodeDeploy", Rollout: &domain.RolloutSummary{Phase: domain.RolloutPhasePlanning, CurrentStep: "CreateCodeDeployDeployment", Steps: []domain.RolloutStepSummary{{Kind: "CreateCodeDeployDeployment", Current: true}, {Kind: "ShiftTrafficLinear"}, {Kind: "VerifyServiceStability"}}}}}}}, nil
 		},
 	})
 	req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts", nil)
@@ -585,11 +585,20 @@ func TestRouterOverviewAccounts(t *testing.T) {
 	if err := json.Unmarshal(resp.Body.Bytes(), &accounts); err != nil {
 		t.Fatalf("failed to decode overview accounts: %v", err)
 	}
-	if len(accounts) != 1 || accounts[0].Deployments[0].ExecutionMode != "asgWeightedTargetGroups" {
+	if len(accounts) != 1 || len(accounts[0].Deployments) != 2 || accounts[0].Deployments[0].ExecutionMode != "asgWeightedTargetGroups" {
 		t.Fatalf("unexpected overview accounts: %+v", accounts)
 	}
-	if accounts[0].Deployments[0].Rollout == nil || accounts[0].Deployments[0].Rollout.Phase != domain.RolloutPhasePromoting || accounts[0].Deployments[0].Rollout.CurrentStep != "shift-50" || len(accounts[0].Deployments[0].Rollout.Steps) != 3 {
+	if accounts[0].Deployments[0].Rollout == nil || accounts[0].Deployments[0].Rollout.Phase != domain.RolloutPhasePromoting || accounts[0].Deployments[0].Rollout.CurrentStep != "ShiftTrafficCanary" || len(accounts[0].Deployments[0].Rollout.Steps) != 3 {
 		t.Fatalf("expected rollout summary in overview accounts response, got %+v", accounts)
+	}
+	if got := accounts[0].Deployments[0].Rollout.Steps; got[0].Kind != "CreateCandidateCapacity" || got[1].Kind != "ShiftTrafficCanary" || got[2].Kind != "PromoteCandidateCapacity" {
+		t.Fatalf("expected strategy-aware EC2 rollout payload, got %+v", got)
+	}
+	if accounts[0].Deployments[1].Rollout == nil || accounts[0].Deployments[1].ExecutionMode != "ecsCodeDeploy" || accounts[0].Deployments[1].Rollout.CurrentStep != "CreateCodeDeployDeployment" {
+		t.Fatalf("expected strategy-aware ECS rollout payload, got %+v", accounts[0].Deployments[1])
+	}
+	if got := accounts[0].Deployments[1].Rollout.Steps; got[0].Kind != "CreateCodeDeployDeployment" || !got[0].Current || got[1].Kind != "ShiftTrafficLinear" || got[2].Kind != "VerifyServiceStability" {
+		t.Fatalf("expected strategy-aware ECS rollout steps, got %+v", got)
 	}
 }
 
@@ -639,7 +648,7 @@ func TestRouterRootServesUI(t *testing.T) {
 	if !strings.Contains(body, "/v1/overview/accounts") {
 		t.Fatalf("expected UI to reference overview endpoint, got %q", body)
 	}
-	for _, fragment := range []string{"Rollout phase", "Current step", "Planned steps"} {
+	for _, fragment := range []string{"Rollout phase", "Current step", "Planned steps", "ShiftTrafficCanary", "CreateCodeDeployDeployment"} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected UI to render rollout summary label %q, got %q", fragment, body)
 		}
