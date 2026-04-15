@@ -1,0 +1,17 @@
+name: payments-api-staging
+appRef: payments-api
+target:
+  type: ecs
+image: ghcr.io/devopsartfactory/payments-api:staging-20260415
+stacks:
+  - stack: payments-api-staging
+    account: staging-core
+    env: staging-apne2
+    replacement_type: rolling
+    rolling_update_instance_count: 1
+    capacity:
+      desired: 2
+      min: 1
+      max: 3
+    regions:
+      - region: ap-northeast-2

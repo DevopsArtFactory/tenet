@@ -1,0 +1,20 @@
+name: payments-api-prod
+appRef: payments-api
+binary: s3://releases.example.com/payments-api/prod/payments-api-linux-amd64
+userdata:
+  type: git
+  path: userdata/payments-api-prod.sh
+stacks:
+  - stack: payments-api-prod
+    account: prod-core
+    env: prod-apne2
+    replacement_type: blueGreen
+    termination_delay_rate: 25
+    capacity:
+      desired: 3
+      min: 2
+      max: 6
+    regions:
+      - region: ap-northeast-2
+        instance_type: t3.medium
+        ami_id: ami-1234567890abcdef0

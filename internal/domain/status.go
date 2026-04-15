@@ -51,10 +51,11 @@ type Health struct {
 
 // DeploymentStatus captures observed state separate from desired spec.
 type DeploymentStatus struct {
-	ObservedGeneration int64       `json:"observedGeneration"`
-	Sync               Sync        `json:"sync"`
-	Health             Health      `json:"health"`
-	Conditions         []Condition `json:"conditions"`
+	ObservedGeneration int64              `json:"observedGeneration"`
+	Sync               Sync               `json:"sync"`
+	Health             Health             `json:"health"`
+	Conditions         []Condition        `json:"conditions"`
+	DeployedArtifact   DeploymentArtifact `json:"deployedArtifact,omitempty"`
 }
 
 // IsSynced reports whether the deployment is currently synced.

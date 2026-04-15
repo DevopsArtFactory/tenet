@@ -9,11 +9,12 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 )
 
-func TestSaveAndLoadRoundTrip(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "status", "deployments.json")
+func TestSaveAndLoadRoundTripsSnapshots(t *testing.T) {
+	tempDir := t.TempDir()
+	path := filepath.Join(tempDir, "status", "deployments.json")
 	input := []Snapshot{
-		{DeploymentName: "worker-prod", Status: domain.DeploymentStatus{ObservedGeneration: 2, Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "CandidateHealthPending"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "candidate is warming"}, Conditions: []domain.Condition{{Type: "Ready", Status: false, Reason: "HealthPending", Message: "candidate target group is still warming"}}}},
-		{DeploymentName: "api-prod", Status: domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStateSynced, Reason: "RolloutCompleted"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "all checks passed"}, Conditions: []domain.Condition{{Type: "Ready", Status: true, Reason: "Stable", Message: "deployment is healthy"}}}},
+		{DeploymentName: "worker-prod", Status: domain.DeploymentStatus{ObservedGeneration: 2, Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "CandidateHealthPending"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "candidate is warming"}, Conditions: []domain.Condition{{Type: "Ready", Status: false, Reason: "HealthPending", Message: "candidate target group is still warming"}}, DeployedArtifact: domain.DeploymentArtifact{Image: "ghcr.io/devopsartfactory/payments-worker:1.2.3"}}},
+		{DeploymentName: "api-prod", Status: domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStateSynced, Reason: "RolloutCompleted"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "all checks passed"}, Conditions: []domain.Condition{{Type: "Ready", Status: true, Reason: "Stable", Message: "deployment is healthy"}}, DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64"}}},
 	}
 
 	if err := Save(path, input); err != nil {
@@ -34,6 +35,9 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 	}
 	if len(loaded[0].Status.Conditions) != 1 || loaded[0].Status.Conditions[0].Type != "Ready" {
 		t.Fatalf("unexpected loaded conditions: %+v", loaded[0].Status.Conditions)
+	}
+	if loaded[0].Status.DeployedArtifact.Binary == "" || loaded[1].Status.DeployedArtifact.Image == "" {
+		t.Fatalf("expected deployed artifact metadata, got %+v", loaded)
 	}
 }
 
