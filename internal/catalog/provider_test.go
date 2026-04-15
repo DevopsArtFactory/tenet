@@ -76,3 +76,27 @@ func TestRepositoryEnvironmentProviderLoadsStableEnvironmentListing(t *testing.T
 		t.Fatalf("expected sorted environment list, got %+v", environments)
 	}
 }
+
+func TestRepositoryAccountProviderLoadsStableAccountListing(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2","us-west-2"]}`)
+	writeJSON(t, filepath.Join(root, "accounts", "dev-core.json"), `{"name":"dev-core","awsAccountId":"123456789013","roleArn":"arn:aws:iam::123456789013:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	if err := os.Mkdir(filepath.Join(root, "environments"), 0o755); err != nil {
+		t.Fatalf("failed to create environments dir: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "deployments"), 0o755); err != nil {
+		t.Fatalf("failed to create deployments dir: %v", err)
+	}
+
+	provider := RepositoryAccountProvider(root)
+	accounts, err := provider()
+	if err != nil {
+		t.Fatalf("provider returned error: %v", err)
+	}
+	if len(accounts) != 2 {
+		t.Fatalf("expected two accounts, got %+v", accounts)
+	}
+	if accounts[0].Name != "dev-core" || accounts[1].Name != "prod-core" {
+		t.Fatalf("expected sorted account list, got %+v", accounts)
+	}
+}

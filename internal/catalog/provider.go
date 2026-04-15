@@ -32,3 +32,14 @@ func RepositoryEnvironmentProvider(root string) func() ([]EnvironmentView, error
 		return ListEnvironments(compiled), nil
 	}
 }
+
+// RepositoryAccountProvider builds an account listing function backed by a repository root.
+func RepositoryAccountProvider(root string) func() ([]AccountView, error) {
+	return func() ([]AccountView, error) {
+		compiled, err := LoadFromRepository(root)
+		if err != nil {
+			return nil, err
+		}
+		return ListAccounts(compiled), nil
+	}
+}

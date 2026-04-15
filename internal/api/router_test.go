@@ -206,6 +206,60 @@ func TestRouterCatalogEnvironmentsPropagatesErrors(t *testing.T) {
 	}
 }
 
+func TestRouterCatalogAccounts(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		CatalogAccounts: func() ([]catalog.AccountView, error) {
+			return []catalog.AccountView{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/accounts", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var accounts []catalog.AccountView
+	if err := json.Unmarshal(resp.Body.Bytes(), &accounts); err != nil {
+		t.Fatalf("failed to decode accounts: %v", err)
+	}
+	if len(accounts) != 1 || accounts[0].Name != "prod-core" {
+		t.Fatalf("unexpected accounts: %+v", accounts)
+	}
+}
+
+func TestRouterCatalogAccountsUnavailable(t *testing.T) {
+	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/accounts", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", resp.Code)
+	}
+}
+
+func TestRouterCatalogAccountsPropagatesErrors(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		CatalogAccounts: func() ([]catalog.AccountView, error) {
+			return nil, errors.New("boom")
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/accounts", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.Code)
+	}
+}
+
 func TestRouterRejectsNonGETMethods(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
@@ -218,9 +272,12 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		CatalogEnvironments: func() ([]catalog.EnvironmentView, error) {
 			return []catalog.EnvironmentView{}, nil
 		},
+		CatalogAccounts: func() ([]catalog.AccountView, error) {
+			return []catalog.AccountView{}, nil
+		},
 	})
 
-	paths := []string{"/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments"}
+	paths := []string{"/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts"}
 	for _, path := range paths {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		resp := httptest.NewRecorder()
