@@ -82,6 +82,9 @@ func ValidateDeployment(deployment DeploymentSpec) error {
 		return fmt.Errorf("warmupSeconds cannot be negative")
 	}
 	if len(deployment.Stacks) > 0 {
+		if len(deployment.Stacks) != 1 {
+			return fmt.Errorf("multiple deployment stacks are not supported yet")
+		}
 		first := deployment.Stacks[0]
 		if first.Account == "" {
 			return fmt.Errorf("deployment stack account is required")
@@ -91,6 +94,9 @@ func ValidateDeployment(deployment DeploymentSpec) error {
 		}
 		if len(first.Regions) == 0 {
 			return fmt.Errorf("deployment stack must declare at least one region")
+		}
+		if len(first.Regions) != 1 {
+			return fmt.Errorf("multiple deployment stack regions are not supported yet")
 		}
 		if first.Regions[0].Region == "" {
 			return fmt.Errorf("deployment stack region is required")

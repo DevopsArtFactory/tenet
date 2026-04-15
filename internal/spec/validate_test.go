@@ -86,6 +86,38 @@ func TestValidateDeploymentSpecAcceptsECSImageManifest(t *testing.T) {
 	}
 }
 
+func TestValidateDeploymentSpecRejectsMultipleStacksUntilSupported(t *testing.T) {
+	deployment := DeploymentSpec{
+		Name:   "payments-api-prod",
+		Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
+		Stacks: []StackSpec{
+			{Stack: "prod-apne2", Account: "prod-core", Env: "prod-apne2", ReplacementType: "blueGreen", Capacity: CapacitySpec{Desired: 2, Min: 1, Max: 3}, Regions: []RegionSpec{{Region: "ap-northeast-2"}}},
+			{Stack: "prod-usw2", Account: "prod-core", Env: "prod-usw2", ReplacementType: "blueGreen", Capacity: CapacitySpec{Desired: 2, Min: 1, Max: 3}, Regions: []RegionSpec{{Region: "us-west-2"}}},
+		},
+	}
+	if err := ValidateDeployment(deployment); err == nil {
+		t.Fatalf("expected unsupported multi-stack error")
+	}
+}
+
+func TestValidateDeploymentSpecRejectsMultipleRegionsUntilSupported(t *testing.T) {
+	deployment := DeploymentSpec{
+		Name:   "payments-api-prod",
+		Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
+		Stacks: []StackSpec{{
+			Stack:           "payments-api-prod",
+			Account:         "prod-core",
+			Env:             "prod-apne2",
+			ReplacementType: "blueGreen",
+			Capacity:        CapacitySpec{Desired: 2, Min: 1, Max: 3},
+			Regions:         []RegionSpec{{Region: "ap-northeast-2"}, {Region: "us-west-2"}},
+		}},
+	}
+	if err := ValidateDeployment(deployment); err == nil {
+		t.Fatalf("expected unsupported multi-region error")
+	}
+}
+
 func TestValidateDeploymentSpecRejectsUnknownTargetType(t *testing.T) {
 	deployment := DeploymentSpec{
 		Name:           "payments-api-prod",
