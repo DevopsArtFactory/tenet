@@ -83,6 +83,8 @@ curl http://localhost:8080/v1/overview/accounts
 curl http://localhost:8080/v1/status/deployments/payments-api-prod
 ```
 
+When you run only `tenet-api` against the committed fixture file, the status endpoint still reflects the seeded snapshots and may not include controller-derived `rollout` summaries yet. To populate strategy-aware rollout summaries, either run `tenet-controller` against the same repo/status store or use the Docker Compose stack below.
+
 Run the local smoke check:
 
 ```bash
