@@ -41,7 +41,7 @@ func (Planner) Build(deployment domain.Deployment, status domain.DeploymentStatu
 		if status.IsSynced() {
 			return Plan{Steps: []Step{{Kind: StepMarkSynced}}}
 		}
-		if status.Sync.State == domain.SyncStatePaused || status.Sync.State == domain.SyncStateError {
+		if status.Sync.State == domain.SyncStatePaused {
 			return Plan{Steps: []Step{
 				{Kind: StepResolvePlacement},
 				{Kind: StepObserveCurrentState},

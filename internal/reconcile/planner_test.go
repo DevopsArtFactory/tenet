@@ -60,17 +60,17 @@ func TestPlannerDoesNotReconcilePausedDeployment(t *testing.T) {
 	}
 }
 
-func TestPlannerDoesNotReconcileErroredDeployment(t *testing.T) {
+func TestPlannerContinuesReconcilingErroredDeployment(t *testing.T) {
 	planner := Planner{}
 	deployment := domain.Deployment{Generation: 3}
 	status := domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStateError}}
 
 	plan := planner.Build(deployment, status)
-	if len(plan.Steps) != 2 {
-		t.Fatalf("expected observation-only plan, got %+v", plan.Steps)
+	if len(plan.Steps) != 3 {
+		t.Fatalf("expected repair plan for errored deployment, got %+v", plan.Steps)
 	}
-	if plan.Steps[0].Kind != StepResolvePlacement || plan.Steps[1].Kind != StepObserveCurrentState {
-		t.Fatalf("unexpected errored plan: %+v", plan.Steps)
+	if plan.Steps[2].Kind != StepReconcileCurrentState {
+		t.Fatalf("expected current-state reconciliation for errored deployment, got %+v", plan.Steps)
 	}
 }
 
