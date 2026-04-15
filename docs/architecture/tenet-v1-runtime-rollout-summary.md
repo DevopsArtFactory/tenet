@@ -26,12 +26,14 @@ Each `steps[]` entry is a `domain.RolloutStepSummary`:
 
 - `rollout` is omitted when the controller has no derived rollout view for the deployment.
 - `phase` is the coarse lifecycle state for the desired generation.
-- `currentStep` is the concise operator label for the step presently being executed or awaited.
+- `currentStep` is currently derived from the last planned step emitted by `cmd/tenet-controller/runtime.go`, not from a separately tracked in-flight cursor.
 - `steps[]` is the ordered runtime plan summary, suitable for overview/UI rendering.
 - `currentStep` and `steps[].kind` intentionally use strategy-aware operator labels rather than generic placeholder phases.
 - EC2 weighted-target-group summaries now read like `CreateCandidateCapacity -> ShiftTrafficCanary -> PromoteCandidateCapacity`.
 - ECS CodeDeploy summaries now read like `CreateCodeDeployDeployment -> ShiftTrafficLinear -> VerifyServiceStability`, while native ECS rolling summaries use labels such as `UpdateECSService` and `VerifyServiceStability`.
-- `steps[].current=true` marks the active step when one is known.
+- `steps[].current=true` currently marks the final planned step in the emitted plan summary.
+- For candidate-style and CodeDeploy/native strategy plans, the controller therefore reports the tail step (for example `PromoteCandidateCapacity` or `VerifyServiceStability`) as `current`, even while earlier plan steps may be the more intuitive operator focus.
+- `phase` and `summary` are also derived from that same final planned step, so many in-progress strategy rollouts currently surface coarse values such as `Accepted` / `Observing current state`, while same-generation repair plans surface `Provisioning` / `Reconciling current state`.
 
 ## API/UI usage
 
