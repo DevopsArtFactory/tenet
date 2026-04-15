@@ -17,20 +17,38 @@ It groups deployments by AWS account and shows:
 - current rollout step
 - planned rollout steps
 - sync and health summaries
+- expandable on-demand deployment detail panels for placement, sync reasons, rollout generations, conditions, and the full rollout-step list
 
 ## Backing API
 
-The page consumes one joined endpoint:
+The page consumes joined overview endpoints:
 - `GET /v1/overview/accounts`
+- `GET /v1/overview/deployments/{deploymentName}`
 
-This endpoint combines catalog placement data with deployment status snapshots, including the controller-owned `rollout` summary when one is present.
+`/v1/overview/accounts` keeps the top-level account page fast by returning the summary slice needed to render the default cards.
 
-Each deployment card now surfaces the most operator-useful rollout cues directly in the overview response/UI:
+`/v1/overview/deployments/{deploymentName}` combines catalog placement data with the current deployment status snapshot for one deployment, including:
+- `sync.reason`
+- account and region placement metadata
+- rollout desired/observed generations
+- `conditions[*]`
+- the complete `rollout.steps[*]` list
+
+The embedded UI only fetches the deployment-detail endpoint when an operator expands a row.
+
+Each deployment card still surfaces the most operator-useful rollout cues directly in the overview response/UI:
 - `rollout.phase`
 - `rollout.currentStep`
 - `rollout.steps[*].kind`
 
-That keeps the account-first page useful for active rollouts without forcing operators to switch to the raw status endpoint for basic progress checks.
+The expandable detail panel extends that view without forcing operators to switch to the raw status endpoint for common troubleshooting.
+
+## Detail-panel rendering constraints
+
+The UI remains static embedded HTML/CSS/JS and preserves safe DOM construction:
+- detail content is rendered with `document.createElement`, `textContent`, and `replaceChildren`
+- manifest/status-derived values are not injected with `innerHTML`
+- loading and error states are scoped to the expanded deployment row
 
 ## Why account-first grouping
 

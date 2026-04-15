@@ -35,9 +35,10 @@ Implemented today:
   - `GET /v1/catalog/placements`
   - `GET /v1/catalog/topology`
   - `GET /v1/overview/accounts`
+  - `GET /v1/overview/deployments/{deploymentName}`
   - `GET /v1/status/deployments`
   - `GET /v1/status/deployments/{deploymentName}`
-- embedded browser UI grouped by account and deployment at `/`, including controller-authored rollout summary text alongside rollout phase, current step, and planned steps for EC2 candidate-capacity, weighted-target-group, ECS CodeDeploy, and ECS rolling executions
+- embedded browser UI grouped by account and deployment at `/`, including controller-authored rollout summary text alongside rollout phase, current step, and planned steps for EC2 candidate-capacity, weighted-target-group, ECS CodeDeploy, and ECS rolling executions, plus expandable deployment detail panels that lazy-load joined placement, sync reason, rollout generation, rollout-step, and condition data from `/v1/overview/deployments/{deploymentName}`
 - method guards for the read-only API surface
 - fail-fast validation for invalid repository roots and incomplete manifest layouts
 - optional status-file exposure through `TENET_STATUS_PATH`
@@ -80,6 +81,7 @@ In another terminal you can inspect the current control plane state:
 ```bash
 curl http://localhost:8080/v1/catalog/summary
 curl http://localhost:8080/v1/overview/accounts
+curl http://localhost:8080/v1/overview/deployments/payments-api-prod
 curl http://localhost:8080/v1/status/deployments/payments-api-prod
 ```
 
@@ -111,6 +113,7 @@ curl http://localhost:8080/
 curl http://localhost:8080/healthz
 curl http://localhost:8080/v1/catalog/topology
 curl http://localhost:8080/v1/overview/accounts
+curl http://localhost:8080/v1/overview/deployments/payments-api-prod
 curl http://localhost:8080/v1/status/deployments
 docker compose logs controller --tail=20
 make docker-down

@@ -30,6 +30,7 @@ type Options struct {
 	CatalogPlacements   func() ([]catalog.PlacementView, error)
 	CatalogTopology     func() (catalog.TopologySnapshot, error)
 	OverviewAccounts    func() ([]catalog.AccountOverview, error)
+	OverviewDeployment  func(string) (catalog.DeploymentOverviewDetail, error)
 	DeploymentStatuses  func() ([]statusstore.Snapshot, error)
 	DeploymentStatus    func(string) (statusstore.Snapshot, error)
 }
@@ -172,6 +173,31 @@ func NewRouter(options Options) http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(accounts)
+	})
+	mux.HandleFunc("/v1/overview/deployments/", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+		if options.OverviewDeployment == nil {
+			http.Error(w, "overview deployment unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		name := strings.TrimPrefix(r.URL.Path, "/v1/overview/deployments/")
+		if name == "" || strings.Contains(name, "/") {
+			http.Error(w, "invalid deployment name", http.StatusBadRequest)
+			return
+		}
+		detail, err := options.OverviewDeployment(name)
+		if err != nil {
+			if errors.Is(err, statusstore.ErrNotFound) {
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(detail)
 	})
 	mux.HandleFunc("/v1/status/deployments", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodGet) {

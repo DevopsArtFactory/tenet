@@ -1,10 +1,12 @@
 package catalog
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/manifest"
+	"github.com/DevopsArtFactory/tenet/internal/placement"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
 
@@ -23,6 +25,27 @@ type DeploymentOverview struct {
 	EnvironmentRef     string                    `json:"environmentRef"`
 	AccountName        string                    `json:"accountName"`
 	AWSAccountID       string                    `json:"awsAccountId"`
+	Region             string                    `json:"region"`
+	TargetType         string                    `json:"targetType,omitempty"`
+	Strategy           string                    `json:"strategy,omitempty"`
+	ExecutionMode      string                    `json:"executionMode,omitempty"`
+	DesiredArtifact    domain.DeploymentArtifact `json:"desiredArtifact,omitempty"`
+	DeployedArtifact   domain.DeploymentArtifact `json:"deployedArtifact,omitempty"`
+	ObservedGeneration int64                     `json:"observedGeneration,omitempty"`
+	Sync               domain.Sync               `json:"sync"`
+	Health             domain.Health             `json:"health"`
+	Rollout            *domain.RolloutSummary    `json:"rollout,omitempty"`
+	Conditions         []domain.Condition        `json:"conditions,omitempty"`
+}
+
+// DeploymentOverviewDetail joins one deployment's desired intent, placement, and observed state.
+type DeploymentOverviewDetail struct {
+	Name               string                    `json:"name"`
+	AppRef             string                    `json:"appRef"`
+	EnvironmentRef     string                    `json:"environmentRef"`
+	AccountName        string                    `json:"accountName"`
+	AWSAccountID       string                    `json:"awsAccountId"`
+	AllowedRegions     []string                  `json:"allowedRegions,omitempty"`
 	Region             string                    `json:"region"`
 	TargetType         string                    `json:"targetType,omitempty"`
 	Strategy           string                    `json:"strategy,omitempty"`
@@ -106,6 +129,57 @@ func BuildAccountOverviews(c manifest.Catalog, snapshots []statusstore.Snapshot)
 		return accounts[i].Name < accounts[j].Name
 	})
 	return accounts, nil
+}
+
+// BuildDeploymentOverviewDetail joins one deployment's placement-aware desired and observed state.
+func BuildDeploymentOverviewDetail(c manifest.Catalog, snapshots []statusstore.Snapshot, deploymentName string) (DeploymentOverviewDetail, error) {
+	statusByDeployment := make(map[string]domain.DeploymentStatus, len(snapshots))
+	for _, snapshot := range snapshots {
+		statusByDeployment[snapshot.DeploymentName] = snapshot.Status
+	}
+
+	deploymentByName := make(map[string]domain.Deployment, len(c.Deployments))
+	for _, deployment := range c.Deployments {
+		deploymentByName[deployment.Name] = deployment
+	}
+
+	deployment, ok := deploymentByName[deploymentName]
+	if !ok {
+		return DeploymentOverviewDetail{}, fmt.Errorf("%w: %s", statusstore.ErrNotFound, deploymentName)
+	}
+
+	resolver := placement.Resolver{}
+	resolved, err := resolver.Resolve(c.Accounts, c.Environments, deployment)
+	if err != nil {
+		return DeploymentOverviewDetail{}, err
+	}
+
+	accountByName := make(map[string]domain.Account, len(c.Accounts))
+	for _, account := range c.Accounts {
+		accountByName[account.Name] = account
+	}
+	account := accountByName[resolved.AccountName]
+	status := statusByDeployment[deploymentName]
+
+	return DeploymentOverviewDetail{
+		Name:               deployment.Name,
+		AppRef:             deployment.AppRef,
+		EnvironmentRef:     deployment.EnvironmentRef,
+		AccountName:        resolved.AccountName,
+		AWSAccountID:       resolved.AccountID,
+		AllowedRegions:     append([]string(nil), account.AllowedRegions...),
+		Region:             resolved.Region,
+		TargetType:         deployment.TargetType,
+		Strategy:           deployment.Strategy,
+		ExecutionMode:      deployment.ExecutionMode,
+		DesiredArtifact:    deployment.DesiredArtifact,
+		DeployedArtifact:   status.DeployedArtifact,
+		ObservedGeneration: status.ObservedGeneration,
+		Sync:               status.Sync,
+		Health:             status.Health,
+		Rollout:            cloneRolloutSummary(status.Rollout),
+		Conditions:         append([]domain.Condition(nil), status.Conditions...),
+	}, nil
 }
 
 func cloneRolloutSummary(summary *domain.RolloutSummary) *domain.RolloutSummary {

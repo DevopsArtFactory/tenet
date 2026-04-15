@@ -41,10 +41,15 @@
       .account-name { margin:0; font-size: 24px; }
       .account-meta { color: var(--muted); font-size: 14px; margin-top: 6px; }
       .rows { display:grid; gap: 12px; }
-      .row { background: var(--panel-2); border: 1px solid rgba(255,255,255,.06); border-radius: 16px; padding: 16px; display:grid; gap: 14px; }
+      .row { background: var(--panel-2); border: 1px solid rgba(255,255,255,.06); border-radius: 16px; display:grid; gap: 14px; overflow: clip; }
+      .row.expanded { border-color: rgba(103,183,255,.28); box-shadow: inset 0 0 0 1px rgba(103,183,255,.12); }
+      .row-toggle { width: 100%; border: 0; background: transparent; color: inherit; padding: 16px; display:grid; gap: 14px; text-align: left; cursor: pointer; }
+      .row-toggle:hover, .row-toggle:focus-visible { background: rgba(255,255,255,.03); }
+      .row-toggle:focus-visible { outline: 2px solid rgba(103,183,255,.45); outline-offset: -2px; }
       .row-top { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
       .row-title { margin:0; font-size: 18px; }
       .row-subtitle { margin-top:6px; color: var(--muted); font-size: 14px; }
+      .row-hint { margin-top: 10px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
       .pills { display:flex; flex-wrap:wrap; gap:8px; }
       .pill { padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; border: 1px solid transparent; }
       .pill.target { background: rgba(103,183,255,.12); color: var(--blue); border-color: rgba(103,183,255,.24); }
@@ -59,6 +64,15 @@
       .metric .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
       .metric .v { margin-top: 8px; font-size: 14px; font-weight: 650; word-break: break-word; }
       .metric.summary { grid-column: 1 / -1; }
+      .detail-panel { padding: 0 16px 16px; display:grid; gap: 12px; }
+      .detail-state { padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.03); color: var(--muted); }
+      .detail-state.error { border-color: rgba(255,123,123,.28); color: #ffd0d0; }
+      .detail-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+      .detail-section { padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.05); background: rgba(255,255,255,.03); }
+      .detail-section h4 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+      .detail-list { margin: 0; padding-left: 18px; display:grid; gap: 8px; }
+      .detail-list li::marker { color: var(--blue); }
+      .detail-step-meta, .detail-condition-meta { display:block; margin-top: 4px; color: var(--muted); font-size: 13px; }
       .empty, .loading { padding: 32px; text-align:center; color: var(--muted); background: var(--panel); border:1px solid var(--line); border-radius:20px; }
       @media (max-width: 720px) {
         .hero, .row-top, .account-head { flex-direction: column; align-items: stretch; }
@@ -79,6 +93,8 @@
       </section>
     </div>
     <script>
+      const detailStateByDeployment = new Map();
+
       const statusClass = (state) => {
         switch (state) {
           case 'Synced':
@@ -98,11 +114,13 @@
 
       const healthLabel = (health) => health?.overall || 'Unknown';
       const artifact = (obj) => obj?.binary || obj?.image || '—';
+      const boolLabel = (value) => value ? 'True' : 'False';
+      const textOrDash = (value) => value || '—';
       const plannedSteps = (rollout) => {
         const steps = (rollout?.steps || []).map((step) => step.kind).filter(Boolean);
         return steps.length ? steps.join(' → ') : '—';
       };
-      const metricValue = (value) => value || '—';
+      const metricValue = (value) => value ?? '—';
       const createElement = (tagName, className, text) => {
         const node = document.createElement(tagName);
         if (className) node.className = className;
@@ -121,6 +139,95 @@
       const renderEmptyState = (message) => {
         const empty = createElement('div', 'empty', message);
         document.getElementById('accounts').replaceChildren(empty);
+      };
+      const createDetailSection = (title) => {
+        const section = createElement('section', 'detail-section');
+        section.append(createElement('h4', '', title));
+        return section;
+      };
+      const renderDetailState = (container, text, className = '') => {
+        const stateNode = createElement('div', 'detail-state', text);
+        if (className) stateNode.classList.add(className);
+        container.replaceChildren(stateNode);
+      };
+      const renderDeploymentDetail = (container, detail) => {
+        const detailGrid = createElement('div', 'detail-grid');
+        [
+          ['Sync reason', textOrDash(detail.sync?.reason)],
+          ['Account placement', [textOrDash(detail.accountName), textOrDash(detail.awsAccountId)].join(' · ')],
+          ['Region placement', textOrDash(detail.region)],
+          ['Allowed regions', (detail.allowedRegions || []).join(', ') || '—'],
+          ['Rollout generations', detail.rollout ? `desired ${detail.rollout.desiredGeneration || 0} · observed ${detail.rollout.observedGeneration || 0}` : `desired — · observed ${detail.observedGeneration || 0}`],
+          ['Health summary', `${healthLabel(detail.health)}${detail.health?.summary ? ` · ${detail.health.summary}` : ''}`],
+        ].forEach(([label, value]) => {
+          detailGrid.append(createMetric(label, value));
+        });
+
+        const conditionsSection = createDetailSection('Conditions');
+        const conditions = detail.conditions || [];
+        if (!conditions.length) {
+          conditionsSection.append(createElement('div', 'detail-state', 'No deployment conditions reported.'));
+        } else {
+          const conditionList = createElement('ol', 'detail-list');
+          conditions.forEach((condition) => {
+            const item = createElement('li');
+            item.append(createElement('strong', '', `${textOrDash(condition.type)} = ${boolLabel(Boolean(condition.status))}`));
+            const conditionMeta = createElement('span', 'detail-condition-meta');
+            conditionMeta.textContent = [textOrDash(condition.reason), textOrDash(condition.message)].join(' · ');
+            item.append(conditionMeta);
+            conditionList.append(item);
+          });
+          conditionsSection.append(conditionList);
+        }
+
+        const stepsSection = createDetailSection('Rollout steps');
+        const steps = detail.rollout?.steps || [];
+        if (!steps.length) {
+          stepsSection.append(createElement('div', 'detail-state', 'No rollout steps are currently reported.'));
+        } else {
+          const stepsList = createElement('ol', 'detail-list');
+          steps.forEach((step, index) => {
+            const item = createElement('li');
+            item.append(createElement('strong', '', `${index + 1}. ${textOrDash(step.kind)}`));
+            const stepMeta = createElement('span', 'detail-step-meta', step.current ? 'Current rollout step' : 'Planned rollout step');
+            item.append(stepMeta);
+            stepsList.append(item);
+          });
+          stepsSection.append(stepsList);
+        }
+
+        container.replaceChildren(detailGrid, conditionsSection, stepsSection);
+      };
+      const loadDeploymentDetail = (deploymentName, container) => {
+        const cached = detailStateByDeployment.get(deploymentName);
+        if (cached?.status === 'ready') {
+          renderDeploymentDetail(container, cached.detail);
+          return Promise.resolve(cached.detail);
+        }
+        if (cached?.status === 'loading') {
+          renderDetailState(container, 'Loading deployment details…');
+          return cached.promise;
+        }
+
+        renderDetailState(container, 'Loading deployment details…');
+        const promise = fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}`)
+          .then((response) => {
+            if (!response.ok) throw new Error(`detail request failed (${response.status})`);
+            return response.json();
+          })
+          .then((detail) => {
+            detailStateByDeployment.set(deploymentName, { status: 'ready', detail });
+            renderDeploymentDetail(container, detail);
+            return detail;
+          })
+          .catch((error) => {
+            detailStateByDeployment.set(deploymentName, { status: 'error', error });
+            renderDetailState(container, `Failed to load deployment details: ${error.message}`, 'error');
+            throw error;
+          });
+
+        detailStateByDeployment.set(deploymentName, { status: 'loading', promise });
+        return promise;
       };
 
       const renderSummary = (accounts) => {
@@ -166,11 +273,16 @@
           const rows = createElement('div', 'rows');
           (account.deployments || []).forEach((deployment) => {
             const row = createElement('div', 'row');
+            const toggle = createElement('button', 'row-toggle');
+            toggle.type = 'button';
+            toggle.setAttribute('aria-expanded', 'false');
+            toggle.setAttribute('aria-label', `Expand details for ${deployment.name || 'deployment'}`);
             const rowTop = createElement('div', 'row-top');
             const rowTitleWrap = createElement('div');
             rowTitleWrap.append(
               createElement('h3', 'row-title', deployment.name || 'Unknown deployment'),
               createElement('div', 'row-subtitle', [deployment.appRef, deployment.environmentRef, deployment.region].filter(Boolean).join(' · ') || '—'),
+              createElement('div', 'row-hint', 'Expand details'),
             );
 
             const rowPills = createElement('div', 'pills');
@@ -198,7 +310,23 @@
               metrics.append(createMetric(label, value, className));
             });
 
-            row.append(rowTop, metrics);
+            toggle.append(rowTop, metrics);
+
+            const detailPanel = createElement('div', 'detail-panel');
+            detailPanel.hidden = true;
+
+            toggle.addEventListener('click', () => {
+              const expanded = toggle.getAttribute('aria-expanded') === 'true';
+              const nextExpanded = !expanded;
+              toggle.setAttribute('aria-expanded', String(nextExpanded));
+              row.classList.toggle('expanded', nextExpanded);
+              detailPanel.hidden = !nextExpanded;
+              if (nextExpanded) {
+                loadDeploymentDetail(deployment.name, detailPanel).catch(() => {});
+              }
+            });
+
+            row.append(toggle, detailPanel);
             rows.append(row);
           });
 
@@ -211,7 +339,7 @@
 
       fetch('/v1/overview/accounts')
         .then((response) => {
-          if (!response.ok) throw new Error('overview request failed');
+          if (!response.ok) throw new Error(`overview request failed (${response.status})`);
           return response.json();
         })
         .then((accounts) => {

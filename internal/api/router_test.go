@@ -631,6 +631,127 @@ func TestRouterOverviewAccountsPropagatesErrors(t *testing.T) {
 	}
 }
 
+func TestRouterOverviewDeployment(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			if name != "api-prod" {
+				t.Fatalf("unexpected lookup name: %s", name)
+			}
+			return catalog.DeploymentOverviewDetail{
+				Name:               "api-prod",
+				AppRef:             "payments-api",
+				EnvironmentRef:     "prod-apne2",
+				AccountName:        "prod-core",
+				AWSAccountID:       "123456789012",
+				AllowedRegions:     []string{"ap-northeast-2"},
+				Region:             "ap-northeast-2",
+				TargetType:         "ecs-service",
+				Strategy:           "linear",
+				ExecutionMode:      "ecsCodeDeploy",
+				DesiredArtifact:    domain.DeploymentArtifact{Image: "payments-api:v2"},
+				DeployedArtifact:   domain.DeploymentArtifact{Image: "payments-api:v1"},
+				ObservedGeneration: 7,
+				Sync:               domain.Sync{State: domain.SyncStateOutOfSync, Reason: "PendingPromotion"},
+				Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "warming up"},
+				Rollout: &domain.RolloutSummary{
+					DesiredGeneration:  8,
+					ObservedGeneration: 7,
+					Phase:              domain.RolloutPhaseAccepted,
+					CurrentStep:        "VerifyServiceStability",
+					Summary:            "Observing current state",
+					Steps:              []domain.RolloutStepSummary{{Kind: "CreateCodeDeployDeployment"}, {Kind: "ShiftTrafficLinear"}, {Kind: "VerifyServiceStability", Current: true}},
+				},
+				Conditions: []domain.Condition{{Type: "Ready", Status: false, Reason: "Updating", Message: "service is progressing"}},
+			}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var detail catalog.DeploymentOverviewDetail
+	if err := json.Unmarshal(resp.Body.Bytes(), &detail); err != nil {
+		t.Fatalf("failed to decode overview deployment: %v", err)
+	}
+	if detail.Name != "api-prod" || detail.ExecutionMode != "ecsCodeDeploy" || detail.AccountName != "prod-core" {
+		t.Fatalf("unexpected overview deployment detail: %+v", detail)
+	}
+	if detail.Rollout == nil || detail.Rollout.CurrentStep != "VerifyServiceStability" || len(detail.Rollout.Steps) != 3 {
+		t.Fatalf("expected rollout summary in deployment detail, got %+v", detail)
+	}
+}
+
+func TestRouterOverviewDeploymentUnavailable(t *testing.T) {
+	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", resp.Code)
+	}
+}
+
+func TestRouterOverviewDeploymentNotFound(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			return catalog.DeploymentOverviewDetail{}, statusstore.ErrNotFound
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/missing", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.Code)
+	}
+}
+
+func TestRouterOverviewDeploymentProviderErrorReturnsInternalServerError(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			return catalog.DeploymentOverviewDetail{}, errors.New("boom")
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.Code)
+	}
+}
+
+func TestRouterOverviewDeploymentRejectsInvalidNames(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			return catalog.DeploymentOverviewDetail{}, nil
+		},
+	})
+	for _, path := range []string{"/v1/overview/deployments/", "/v1/overview/deployments/a/b"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 for %s, got %d", path, resp.Code)
+		}
+	}
+}
+
 func TestRouterRootServesUI(t *testing.T) {
 	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -704,6 +825,9 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		OverviewAccounts: func() ([]catalog.AccountOverview, error) {
 			return []catalog.AccountOverview{}, nil
 		},
+		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			return catalog.DeploymentOverviewDetail{}, nil
+		},
 		DeploymentStatuses: func() ([]statusstore.Snapshot, error) {
 			return []statusstore.Snapshot{}, nil
 		},
@@ -712,7 +836,7 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		},
 	})
 
-	paths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/accounts", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
+	paths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/accounts", "/v1/overview/deployments/api-prod", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
 	for _, path := range paths {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		resp := httptest.NewRecorder()
