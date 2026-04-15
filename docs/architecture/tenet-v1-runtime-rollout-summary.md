@@ -1,6 +1,6 @@
 # Tenet v1 Runtime Rollout Summary
 
-`domain.DeploymentStatus` now carries an optional `rollout` summary slice derived by the controller.
+`domain.DeploymentStatus` now carries an optional `rollout` summary object derived by the controller.
 
 ## Purpose
 
@@ -22,6 +22,7 @@ The `rollout` summary exists to expose that operator-facing progress view in a s
 Each `steps[]` entry is a `domain.RolloutStepSummary`:
 - `kind`
 - `current`
+- `status`
 
 Each `execution[]` entry is a `domain.RolloutExecutionDetail`:
 - `resource`
@@ -34,11 +35,13 @@ Each `execution[]` entry is a `domain.RolloutExecutionDetail`:
 - `phase` is the coarse lifecycle state for the desired generation.
 - `currentStep` is derived from the first actionable step in the current abstract plan, skipping planner preflight steps such as `ResolvePlacement` and `ObserveCurrentState` when later execution work exists.
 - `steps[]` is the ordered runtime plan summary, suitable for overview/UI rendering.
+- `steps[].status` is additive controller-derived progress metadata for that ordered plan: `completed` means the step is before the current actionable step, `current` marks the controller's current actionable step, and `pending` marks later planned work.
 - `execution[]` is an additive ordered list of concrete execution resources or bootstrap inputs that the controller derived for the active execution mode.
 - `currentStep` and `steps[].kind` intentionally use strategy-aware operator labels rather than generic placeholder phases.
+- `steps[].status` is derived from the current plan index that drives `currentStep`, `phase`, and `summary`; it is not live AWS execution telemetry and should not be interpreted as proof that AWS has already completed the underlying action.
 - EC2 weighted-target-group summaries now read like `CreateCandidateCapacity -> ShiftTrafficCanary -> PromoteCandidateCapacity`.
 - ECS CodeDeploy summaries now read like `CreateCodeDeployDeployment -> ShiftTrafficLinear -> VerifyServiceStability`, while native ECS rolling summaries use labels such as `UpdateECSService` and `VerifyServiceStability`.
-- `steps[].current=true` marks that first actionable step, rather than the tail step of the full plan.
+- `steps[].current=true` remains as the legacy boolean marker for the same step whose `steps[].status` is `current`.
 - `phase` and `summary` are derived from that same actionable step so the persisted read model describes what the controller would do next, not only the eventual tail of the current plan.
 - EC2 weighted-target-group plans therefore surface `Provisioning` / `Creating candidate capacity for weighted target groups` first, then can advance to `HealthChecking` / `Verifying candidate capacity before traffic shifting`, and later to `Promoting` traffic-shift or promotion summaries as step-tracking becomes richer.
 - EC2 weighted-target-group `execution[]` entries identify the candidate Auto Scaling Group, the active target group, the candidate target group, and the userdata bootstrap source used to initialize candidate instances.

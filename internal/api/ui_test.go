@@ -12,6 +12,11 @@ func TestEmbeddedUILazyLoadsDeploymentDetailsOnExpandOnly(t *testing.T) {
 	for _, fragment := range []string{
 		"const detailStateByDeployment = new Map();",
 		"const loadDeploymentDetail = (deploymentName, container) => {",
+		"detailStateByDeployment.set(deploymentName, { ...cached, container });",
+		"const current = detailStateByDeployment.get(deploymentName);",
+		"if (current?.container) {",
+		"renderDeploymentDetail(current.container, detail);",
+		"renderDetailState(current.container, `Failed to load deployment details: ${error.message}`, 'error');",
 		"renderDeploymentDetail(container, cached.detail);",
 		"detailPanel.hidden = true;",
 		"loadDeploymentDetail(deployment.name, detailPanel).catch(() => {});",
@@ -19,7 +24,8 @@ func TestEmbeddedUILazyLoadsDeploymentDetailsOnExpandOnly(t *testing.T) {
 		"if (!response.ok) throw new Error(`detail request failed (${response.status})`);",
 		"renderDetailState(container, 'Loading deployment details…');",
 		"detailStateByDeployment.set(deploymentName, { status: 'ready', detail });",
-		"renderDetailState(container, `Failed to load deployment details: ${error.message}`, 'error');",
+		"detailStateByDeployment.set(deploymentName, { status: 'loading', promise, container });",
+		"renderDetailState(current.container, `Failed to load deployment details: ${error.message}`, 'error');",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include %q", fragment)
@@ -72,6 +78,43 @@ func TestEmbeddedUIUsesSafeDetailRenderingAndPreservesFalsyMetrics(t *testing.T)
 	} {
 		if strings.Contains(body, unsafe) {
 			t.Fatalf("expected embedded UI to avoid unsafe detail rendering %q", unsafe)
+		}
+	}
+}
+
+func TestEmbeddedUIRendersRolloutStepStatusMarkersInDetailList(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const rolloutStepStatus = (step, index, steps) => {",
+		"switch (step.status) {",
+		"case 'completed':",
+		"case 'current':",
+		"case 'pending':",
+		"return step.current ? 'current' : 'pending';",
+		"return 'completed';",
+		"return 'pending';",
+		"const rolloutStepStatusLabel = (status) => {",
+		"return 'Completed rollout step';",
+		"return 'Current rollout step';",
+		"return 'Pending rollout step';",
+		"const stepStatus = rolloutStepStatus(step, index, steps);",
+		"const stepMeta = createElement('span', `detail-step-meta detail-step-meta-${stepStatus}`, rolloutStepStatusLabel(stepStatus));",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+
+	legacyFallbackFragments := []string{
+		"const currentIndex = steps.findIndex((candidate) => candidate.current);",
+		"if (currentIndex === -1) return step.current ? 'current' : 'pending';",
+		"if (step.current) return 'current';",
+		"if (index < currentIndex) return 'completed';",
+	}
+	for _, fragment := range legacyFallbackFragments {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include legacy rollout-step fallback %q", fragment)
 		}
 	}
 }

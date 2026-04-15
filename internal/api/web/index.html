@@ -88,6 +88,9 @@
       .detail-list { margin: 0; padding-left: 18px; display:grid; gap: 8px; }
       .detail-list li::marker { color: var(--blue); }
       .detail-step-meta, .detail-condition-meta { display:block; margin-top: 4px; color: var(--muted); font-size: 13px; }
+      .detail-step-meta-completed { color: var(--green); }
+      .detail-step-meta-current { color: var(--blue); }
+      .detail-step-meta-pending { color: var(--muted); }
       .detail-execution-meta, .detail-history-meta { display:grid; gap: 4px; margin-top: 6px; }
       .empty, .loading { padding: 32px; text-align:center; color: var(--muted); background: var(--panel); border:1px solid var(--line); border-radius:20px; }
       @media (max-width: 720px) {
@@ -140,6 +143,36 @@
         return steps.length ? steps.join(' → ') : '—';
       };
       const metricValue = (value) => value ?? '—';
+      const rolloutStepStatus = (step, index, steps) => {
+        if (step.status) {
+          switch (step.status) {
+            case 'completed':
+              return 'completed';
+            case 'current':
+              return 'current';
+            case 'pending':
+              return 'pending';
+            default:
+              break;
+          }
+        }
+
+        const currentIndex = steps.findIndex((candidate) => candidate.current);
+        if (currentIndex === -1) return step.current ? 'current' : 'pending';
+        if (step.current) return 'current';
+        if (index < currentIndex) return 'completed';
+        return 'pending';
+      };
+      const rolloutStepStatusLabel = (status) => {
+        switch (status) {
+          case 'completed':
+            return 'Completed rollout step';
+          case 'current':
+            return 'Current rollout step';
+          default:
+            return 'Pending rollout step';
+        }
+      };
       const deriveAccountCounts = (account) => {
         const deployments = account.deployments || [];
         const counts = {
@@ -491,7 +524,8 @@
           steps.forEach((step, index) => {
             const item = createElement('li');
             item.append(createElement('strong', '', `${index + 1}. ${textOrDash(step.kind)}`));
-            const stepMeta = createElement('span', 'detail-step-meta', step.current ? 'Current rollout step' : 'Planned rollout step');
+            const stepStatus = rolloutStepStatus(step, index, steps);
+            const stepMeta = createElement('span', `detail-step-meta detail-step-meta-${stepStatus}`, rolloutStepStatusLabel(stepStatus));
             item.append(stepMeta);
             stepsList.append(item);
           });
@@ -507,6 +541,7 @@
           return Promise.resolve(cached.detail);
         }
         if (cached?.status === 'loading') {
+          detailStateByDeployment.set(deploymentName, { ...cached, container });
           renderDetailState(container, 'Loading deployment details…');
           return cached.promise;
         }
@@ -518,17 +553,23 @@
             return response.json();
           })
           .then((detail) => {
+            const current = detailStateByDeployment.get(deploymentName);
             detailStateByDeployment.set(deploymentName, { status: 'ready', detail });
-            renderDeploymentDetail(container, detail);
+            if (current?.container) {
+              renderDeploymentDetail(current.container, detail);
+            }
             return detail;
           })
           .catch((error) => {
+            const current = detailStateByDeployment.get(deploymentName);
             detailStateByDeployment.set(deploymentName, { status: 'error', error });
-            renderDetailState(container, `Failed to load deployment details: ${error.message}`, 'error');
+            if (current?.container) {
+              renderDetailState(current.container, `Failed to load deployment details: ${error.message}`, 'error');
+            }
             throw error;
           });
 
-        detailStateByDeployment.set(deploymentName, { status: 'loading', promise });
+        detailStateByDeployment.set(deploymentName, { status: 'loading', promise, container });
         return promise;
       };
 

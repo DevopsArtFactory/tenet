@@ -71,6 +71,13 @@ Each deployment card still surfaces the most operator-useful rollout cues direct
 
 The expandable detail panel extends that view without forcing operators to switch to the raw status endpoint for common troubleshooting. It now includes a recent runtime-history section rendered with safe DOM construction, showing each controller-authored entry's timestamp, summary, sync state, health, and optional rollout step, plus an explicit `No recent runtime history is available yet.` empty state when no bounded history has been persisted yet.
 
+The detail rollout-step list now also consumes additive `rollout.steps[*].status` metadata from the deployment-detail payload:
+- `completed` marks controller-plan steps that precede the current actionable step
+- `current` marks the controller's current actionable step
+- `pending` marks later planned steps that have not become current yet
+
+Those labels are derived from the controller's current abstract rollout plan and are intentionally not live AWS execution telemetry. The UI should present them as controller-authored progress cues for the planned rollout-step list, not as direct evidence that AWS resources have already finished the underlying operation.
+
 The rollout execution section is intentionally execution-mode-aware:
 - EC2 weighted target groups show the candidate Auto Scaling Group, active target group, candidate target group, and userdata bootstrap source.
 - EC2 instance refresh shows the service Auto Scaling Group plus the userdata bootstrap source for replacement capacity.

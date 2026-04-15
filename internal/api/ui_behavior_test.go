@@ -344,6 +344,11 @@ func TestEmbeddedUIDetailHistoryBehaviorWithNodeHarness(t *testing.T) {
 		"awsAccountId": "111111111111",
 		"region":       "us-west-2",
 		"sync":         map[string]any{"reason": "Traffic shift running"},
+		"rollout": map[string]any{"steps": []map[string]any{
+			{"kind": "CreateCodeDeployDeployment", "status": "completed"},
+			{"kind": "ShiftTrafficCanary", "status": "current"},
+			{"kind": "BakeTraffic", "status": "pending"},
+		}},
 		"history": []map[string]any{
 			{
 				"timestamp":   "2026-04-16T06:50:00Z",
@@ -363,7 +368,11 @@ func TestEmbeddedUIDetailHistoryBehaviorWithNodeHarness(t *testing.T) {
 		"accountName":  "acct-a",
 		"awsAccountId": "111111111111",
 		"region":       "us-west-2",
-		"history":      []map[string]any{},
+		"rollout": map[string]any{"steps": []map[string]any{
+			{"kind": "CreateCodeDeployDeployment", "current": true},
+			{"kind": "ShiftTrafficCanary"},
+		}},
+		"history": []map[string]any{},
 	})
 	if err != nil {
 		t.Fatalf("marshal empty detail: %v", err)
@@ -561,22 +570,330 @@ function collectText(node) {
 
   const historyHeading = findByText(env.document, 'Runtime history');
   if (!historyHeading) throw new Error('expected runtime history section heading');
-  const historySection = historyHeading.parentNode;
-  const historyText = collectText(historySection).join(' | ');
-  if (!historyText.includes('2026-04-16T06:50:00Z')) throw new Error('expected history timestamp to render');
-  if (!historyText.includes('Shifted 10 percent of traffic <script>alert(1)</script>')) throw new Error('expected history summary text to render literally');
-  if (!historyText.includes('History sync · Reconciling')) throw new Error('expected history sync state to render');
-  if (!historyText.includes('History health · Healthy · steady')) throw new Error('expected history health to render');
-  if (!historyText.includes('History rollout step · ShiftTrafficCanary')) throw new Error('expected history rollout step to render');
+	  const historySection = historyHeading.parentNode;
+	  const historyText = collectText(historySection).join(' | ');
+	  if (!historyText.includes('2026-04-16T06:50:00Z')) throw new Error('expected history timestamp to render');
+	  if (!historyText.includes('Shifted 10 percent of traffic <script>alert(1)</script>')) throw new Error('expected history summary text to render literally');
+	  if (!historyText.includes('History sync · Reconciling')) throw new Error('expected history sync state to render');
+	  if (!historyText.includes('History health · Healthy · steady')) throw new Error('expected history health to render');
+	  if (!historyText.includes('History rollout step · ShiftTrafficCanary')) throw new Error('expected history rollout step to render');
 
-  const emptyEnv = createEnvironment(detailEmptyPayload);
-  await settle();
-  const emptyToggle = findFirst(emptyEnv.document, (node) => node.tagName === 'BUTTON' && node.getAttribute('aria-label') === 'Expand details for api');
-  if (!emptyToggle) throw new Error('expected deployment expand toggle in empty-history env');
+	  const completedStep = findFirst(env.document, (node) => node.className === 'detail-step-meta detail-step-meta-completed');
+	  const currentStep = findFirst(env.document, (node) => node.className === 'detail-step-meta detail-step-meta-current');
+	  const pendingStep = findFirst(env.document, (node) => node.className === 'detail-step-meta detail-step-meta-pending');
+	  if (!completedStep || completedStep.textContent !== 'Completed rollout step') throw new Error('expected completed rollout-step status label/class');
+	  if (!currentStep || currentStep.textContent !== 'Current rollout step') throw new Error('expected current rollout-step status label/class');
+	  if (!pendingStep || pendingStep.textContent !== 'Pending rollout step') throw new Error('expected pending rollout-step status label/class');
+
+	  const emptyEnv = createEnvironment(detailEmptyPayload);
+	  await settle();
+	  const emptyToggle = findFirst(emptyEnv.document, (node) => node.tagName === 'BUTTON' && node.getAttribute('aria-label') === 'Expand details for api');
+	  if (!emptyToggle) throw new Error('expected deployment expand toggle in empty-history env');
   emptyToggle.dispatch('click');
+	  await settle();
+	  const emptyCopy = findByText(emptyEnv.document, 'No recent runtime history is available yet.');
+	  if (!emptyCopy) throw new Error('expected explicit empty runtime history copy');
+	  const legacyCurrentStep = findFirst(emptyEnv.document, (node) => node.className === 'detail-step-meta detail-step-meta-current');
+	  const legacyPendingStep = findFirst(emptyEnv.document, (node) => node.className === 'detail-step-meta detail-step-meta-pending');
+	  if (!legacyCurrentStep || legacyCurrentStep.textContent !== 'Current rollout step') throw new Error('expected legacy current rollout step to render as current');
+	  if (!legacyPendingStep || legacyPendingStep.textContent !== 'Pending rollout step') throw new Error('expected legacy non-current rollout step to render as pending');
+})();
+`
+
+	cmd := exec.Command("node", "-e", nodeProgram)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+	}
+}
+
+func TestEmbeddedUIDetailFetchRerenderRaceWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	accountsJSON, err := json.Marshal([]map[string]any{
+		{
+			"name":         "acct-a",
+			"awsAccountId": "111111111111",
+			"deployments": []map[string]any{
+				{
+					"name":           "api",
+					"appRef":         "payments",
+					"environmentRef": "prod",
+					"region":         "us-west-2",
+					"targetType":     "ecs",
+					"strategy":       "canary",
+					"executionMode":  "ecsCodeDeploy",
+					"sync":           map[string]any{"state": "Reconciling"},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal sample accounts: %v", err)
+	}
+
+	detailJSON, err := json.Marshal(map[string]any{
+		"name":         "api",
+		"accountName":  "acct-a",
+		"awsAccountId": "111111111111",
+		"region":       "us-west-2",
+		"sync":         map[string]any{"reason": "Traffic shift running"},
+		"history": []map[string]any{{
+			"timestamp": "2026-04-16T06:50:00Z",
+			"summary":   "Shifted 10 percent of traffic",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal sample detail: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const sampleAccounts = ` + string(accountsJSON) + `;
+const detailPayload = ` + string(detailJSON) + `;
+
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = {
+      add: (...names) => {
+        const current = new Set(this.className.split(/\s+/).filter(Boolean));
+        names.forEach((name) => current.add(name));
+        this.className = Array.from(current).join(' ');
+      },
+      toggle: (name, force) => {
+        const current = new Set(this.className.split(/\s+/).filter(Boolean));
+        const shouldAdd = force === undefined ? !current.has(name) : Boolean(force);
+        if (shouldAdd) {
+          current.add(name);
+        } else {
+          current.delete(name);
+        }
+        this.className = Array.from(current).join(' ');
+      },
+      contains: (name) => new Set(this.className.split(/\s+/).filter(Boolean)).has(name),
+    };
+  }
+  append(...nodes) {
+    nodes.forEach((node) => {
+      if (node == null) return;
+      if (typeof node === 'string') {
+        const textNode = new Element('#text', this.ownerDocument);
+        textNode.textContent = node;
+        node = textNode;
+      }
+      node.parentNode = this;
+      this.children.push(node);
+      if (this.tagName === 'SELECT' && node.tagName === 'OPTION') {
+        if (node.selected || this.value === '') this.value = node.value;
+      }
+    });
+  }
+  replaceChildren(...nodes) {
+    this.children = [];
+    this.append(...nodes);
+  }
+  addEventListener(type, handler) {
+    this.listeners[type] = handler;
+  }
+  dispatch(type, event = {}) {
+    if (!event.target) event.target = this;
+    const handler = this.listeners[type];
+    if (handler) handler(event);
+  }
+  setAttribute(name, value) {
+    this.attributes[name] = String(value);
+  }
+  getAttribute(name) {
+    return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null;
+  }
+  focus() {
+    this.ownerDocument.activeElement = this;
+  }
+}
+class InputElement extends Element {
+  setSelectionRange(start, end) {
+    this.selectionStart = start;
+    this.selectionEnd = end;
+  }
+}
+class Document {
+  constructor() {
+    this.activeElement = null;
+    this.byID = new Map();
+  }
+  createElement(tagName) {
+    if (String(tagName).toLowerCase() === 'input') {
+      return new InputElement(tagName, this);
+    }
+    return new Element(tagName, this);
+  }
+  getElementById(id) {
+    return this.byID.get(id) || null;
+  }
+  querySelector(selector) {
+    const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/);
+    if (!dataMatch) return null;
+    const target = dataMatch[1];
+    const stack = Array.from(this.byID.values());
+    while (stack.length) {
+      const node = stack.shift();
+      if (node?.dataset?.toolbarField === target) return node;
+      stack.push(...(node.children || []));
+    }
+    return null;
+  }
+}
+
+function walk(rootNodes) {
+  const stack = Array.from(rootNodes);
+  const nodes = [];
+  while (stack.length) {
+    const node = stack.shift();
+    if (!node) continue;
+    nodes.push(node);
+    stack.unshift(...(node.children || []));
+  }
+  return nodes;
+}
+
+function findFirst(document, predicate) {
+  return walk(document.byID.values()).find(predicate) || null;
+}
+
+function collectText(node) {
+  if (!node) return [];
+  return [node.textContent, ...node.children.flatMap((child) => collectText(child))].filter(Boolean);
+}
+
+function findDetailPanelForToggle(toggle) {
+  const row = toggle.parentNode;
+  return row.children.find((child) => child.className === 'detail-panel') || null;
+}
+
+function createEnvironment() {
+  const document = new Document();
+  const toolbar = document.createElement('section');
+  const summary = document.createElement('section');
+  const accounts = document.createElement('section');
+  document.byID.set('toolbar', toolbar);
+  document.byID.set('summary', summary);
+  document.byID.set('accounts', accounts);
+
+  const window = { location: { pathname: '/', search: '' } };
+  const history = {
+    replaceState(_state, _title, url) {
+      const [pathname, query = ''] = String(url).split('?');
+      window.location.pathname = pathname || '/';
+      window.location.search = query ? '?' + query : '';
+    },
+  };
+  const fetchCalls = [];
+  let resolveDetail;
+  const detailBody = new Promise((resolve) => {
+    resolveDetail = resolve;
+  });
+  const fetch = (url) => {
+    fetchCalls.push(String(url));
+    if (url === '/v1/overview/accounts') {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
+    }
+    if (url === '/v1/overview/deployments/api') {
+      return Promise.resolve({ ok: true, json: () => detailBody });
+    }
+    throw new Error('unexpected fetch url: ' + url);
+  };
+
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  return { document, fetchCalls, resolveDetail };
+}
+
+async function settle() {
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+(async () => {
+  const env = createEnvironment();
   await settle();
-  const emptyCopy = findByText(emptyEnv.document, 'No recent runtime history is available yet.');
-  if (!emptyCopy) throw new Error('expected explicit empty runtime history copy');
+
+  const initialToggle = findFirst(env.document, (node) => node.tagName === 'BUTTON' && node.getAttribute('aria-label') === 'Expand details for api');
+  if (!initialToggle) throw new Error('expected initial deployment expand toggle');
+  initialToggle.dispatch('click');
+  await settle();
+  if (env.fetchCalls.filter((url) => url === '/v1/overview/deployments/api').length !== 1) {
+    throw new Error('expected first expand to start exactly one deployment-detail fetch');
+  }
+
+  const initialPanel = findDetailPanelForToggle(initialToggle);
+  if (!initialPanel) throw new Error('expected initial detail panel');
+  if (!collectText(initialPanel).join(' | ').includes('Loading deployment details…')) {
+    throw new Error('expected initial detail panel to show loading state while fetch is in flight');
+  }
+
+  const searchInput = env.document.querySelector('[data-toolbar-field="Search deployments"]');
+  if (!searchInput) throw new Error('expected search input');
+  searchInput.value = 'missing';
+  searchInput.dispatch('input', { target: searchInput });
+  await settle();
+  if (env.document.getElementById('accounts').children[0].textContent !== 'No deployments match the current filters.') {
+    throw new Error('expected rerender to replace deployment rows with empty state');
+  }
+
+  const rerenderedInput = env.document.querySelector('[data-toolbar-field="Search deployments"]');
+  if (!rerenderedInput) throw new Error('expected rerendered search input');
+  rerenderedInput.value = '';
+  rerenderedInput.dispatch('input', { target: rerenderedInput });
+  await settle();
+
+  const replacementToggle = findFirst(env.document, (node) => node.tagName === 'BUTTON' && node.getAttribute('aria-label') === 'Expand details for api');
+  if (!replacementToggle) throw new Error('expected replacement deployment expand toggle after rerender');
+  if (replacementToggle === initialToggle) throw new Error('expected overview rerender to create a new deployment DOM node');
+  replacementToggle.dispatch('click');
+  await settle();
+  if (env.fetchCalls.filter((url) => url === '/v1/overview/deployments/api').length !== 1) {
+    throw new Error('expected replacement expand to reuse the in-flight deployment-detail fetch');
+  }
+
+  const replacementPanel = findDetailPanelForToggle(replacementToggle);
+  if (!replacementPanel) throw new Error('expected replacement detail panel');
+  if (!collectText(replacementPanel).join(' | ').includes('Loading deployment details…')) {
+    throw new Error('expected replacement detail panel to show loading state before the shared fetch resolves');
+  }
+
+  env.resolveDetail(detailPayload);
+  await settle();
+
+  const replacementText = collectText(replacementPanel).join(' | ');
+  if (replacementText.includes('Loading deployment details…')) {
+    throw new Error('expected replacement detail panel to stop showing loading state after shared fetch resolves');
+  }
+  if (!replacementText.includes('Sync reason') || !replacementText.includes('Traffic shift running')) {
+    throw new Error('expected replacement detail panel to render fetched deployment detail after rerender');
+  }
 })();
 `
 
