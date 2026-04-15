@@ -151,3 +151,30 @@ func TestRouterCatalogDeploymentsPropagatesErrors(t *testing.T) {
 		t.Fatalf("expected 500, got %d", resp.Code)
 	}
 }
+
+func TestRouterRejectsNonGETMethods(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		CatalogSummary: func() (catalog.Summary, error) {
+			return catalog.Summary{}, nil
+		},
+		CatalogDeployments: func() ([]catalog.DeploymentView, error) {
+			return []catalog.DeploymentView{}, nil
+		},
+	})
+
+	paths := []string{"/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments"}
+	for _, path := range paths {
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("expected 405 for %s, got %d", path, resp.Code)
+		}
+		if allow := resp.Header().Get("Allow"); allow != http.MethodGet {
+			t.Fatalf("expected Allow header for %s, got %q", path, allow)
+		}
+	}
+}

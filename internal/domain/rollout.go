@@ -23,7 +23,7 @@ const (
 // IsTerminal reports whether no forward progress remains in the current phase.
 func (p RolloutPhase) IsTerminal() bool {
 	switch p {
-	case RolloutPhaseCompleted, RolloutPhaseFailed, RolloutPhaseRolledBack, RolloutPhaseCancelled:
+	case RolloutPhaseCompleted, RolloutPhaseRolledBack, RolloutPhaseCancelled:
 		return true
 	default:
 		return false

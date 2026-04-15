@@ -16,7 +16,15 @@ func TestRolloutPhaseTerminal(t *testing.T) {
 	if !RolloutPhaseCompleted.IsTerminal() {
 		t.Fatalf("completed phase should be terminal")
 	}
-
+	if !RolloutPhaseRolledBack.IsTerminal() {
+		t.Fatalf("rolled back phase should be terminal")
+	}
+	if !RolloutPhaseCancelled.IsTerminal() {
+		t.Fatalf("cancelled phase should be terminal")
+	}
+	if RolloutPhaseFailed.IsTerminal() {
+		t.Fatalf("failed phase should not be terminal because rollback may still proceed")
+	}
 	if RolloutPhasePlanning.IsTerminal() {
 		t.Fatalf("planning phase should not be terminal")
 	}
