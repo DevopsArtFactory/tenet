@@ -83,12 +83,37 @@ func TestPlannerReturnsCurrentStateRepairForSameGenerationNonSyncedDeployment(t 
 func TestPlannerReturnsMarkSyncedForHealthyDeployment(t *testing.T) {
 	planner := Planner{}
 	deployment := domain.Deployment{Generation: 3}
-	status := domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStateSynced}}
+	status := domain.DeploymentStatus{
+		ObservedGeneration: 3,
+		Sync:               domain.Sync{State: domain.SyncStateSynced},
+		Health:             domain.Health{Overall: domain.HealthHealthy},
+	}
 
 	plan := planner.Build(deployment, status)
 	want := []StepKind{StepMarkSynced}
 	if got := stepKinds(plan.Steps); !reflect.DeepEqual(got, want) {
 		t.Fatalf("unexpected synced plan: got %v want %v", got, want)
+	}
+}
+
+func TestPlannerKeepsReconcilingSameGenerationSyncedDeploymentUntilHealthy(t *testing.T) {
+	planner := Planner{}
+	deployment := domain.Deployment{Generation: 3}
+
+	for _, health := range []domain.HealthStatus{domain.HealthProgressing, domain.HealthUnhealthy, domain.HealthUnknown} {
+		t.Run(string(health), func(t *testing.T) {
+			status := domain.DeploymentStatus{
+				ObservedGeneration: 3,
+				Sync:               domain.Sync{State: domain.SyncStateSynced},
+				Health:             domain.Health{Overall: health},
+			}
+
+			plan := planner.Build(deployment, status)
+			want := []StepKind{StepResolvePlacement, StepObserveCurrentState, StepReconcileCurrentState}
+			if got := stepKinds(plan.Steps); !reflect.DeepEqual(got, want) {
+				t.Fatalf("unexpected non-healthy synced plan: got %v want %v", got, want)
+			}
+		})
 	}
 }
 

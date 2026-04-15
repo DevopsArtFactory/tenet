@@ -49,7 +49,7 @@ func (Planner) Build(deployment domain.Deployment, status domain.DeploymentStatu
 	}
 
 	if deployment.Generation == status.ObservedGeneration {
-		if status.IsSynced() {
+		if status.IsSynced() && status.Health.Overall.IsHealthy() {
 			return Plan{Steps: []Step{{Kind: StepMarkSynced}}}
 		}
 		if status.Sync.State == domain.SyncStatePaused {

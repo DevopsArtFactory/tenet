@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -11,7 +12,9 @@ import (
 	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
+	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
+	"github.com/DevopsArtFactory/tenet/internal/reconcile"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
 
@@ -20,8 +23,9 @@ func TestRunControllerLogsReconcilePlansFromRepositoryAndStatusSnapshots(t *test
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
 	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
 	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+	desiredGeneration := desiredGenerationForTest(t, root, "api-prod")
 	statusPath := filepath.Join(root, "status", "deployments.json")
-	writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":2,"sync":{"state":"Reconciling","reason":"warming up"},"health":{"overall":"Progressing","summary":"warming"},"conditions":[]}}]`)
+	writeJSON(t, statusPath, fmt.Sprintf(`[{"deploymentName":"api-prod","status":{"observedGeneration":%d,"sync":{"state":"Reconciling","reason":"warming up"},"health":{"overall":"Progressing","summary":"warming"},"conditions":[]}}]`, desiredGeneration))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -43,7 +47,7 @@ func TestRunControllerLogsReconcilePlansFromRepositoryAndStatusSnapshots(t *test
 	}()
 
 	requireLogLine(t, output, "controller reconcile deployment=api-prod")
-	requireLogLine(t, output, "steps=ResolvePlacement,ObserveCurrentState,AwaitFreshDesired")
+	requireLogLine(t, output, "steps=ResolvePlacement,ObserveCurrentState,ReconcileCurrentState")
 
 	cancel()
 
@@ -235,8 +239,9 @@ func TestEmitRuntimePlansPersistsHealthySyncedRolloutSummaryWhenGenerationsMatch
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
 	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
 	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+	desiredGeneration := desiredGenerationForTest(t, root, "api-prod")
 	statusPath := filepath.Join(root, "status", "deployments.json")
-	writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":0,"sync":{"state":"Synced","reason":"stable"},"health":{"overall":"Healthy","summary":"all checks passed"},"conditions":[]}}]`)
+	writeJSON(t, statusPath, fmt.Sprintf(`[{"deploymentName":"api-prod","status":{"observedGeneration":%d,"sync":{"state":"Synced","reason":"stable"},"health":{"overall":"Healthy","summary":"all checks passed"},"conditions":[]}}]`, desiredGeneration))
 
 	logger := log.New(&bytes.Buffer{}, "", 0)
 	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
@@ -257,6 +262,37 @@ func TestEmitRuntimePlansPersistsHealthySyncedRolloutSummaryWhenGenerationsMatch
 	}
 	if status.Rollout.Summary != "Deployment is synced and healthy" {
 		t.Fatalf("expected healthy synced rollout summary, got %+v", status.Rollout)
+	}
+}
+
+func TestEmitRuntimePlansDoesNotPersistCompletedRolloutSummaryForSyncedButUnhealthyDeployment(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+	desiredGeneration := desiredGenerationForTest(t, root, "api-prod")
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, fmt.Sprintf(`[{"deploymentName":"api-prod","status":{"observedGeneration":%d,"sync":{"state":"Synced","reason":"stable"},"health":{"overall":"Progressing","summary":"still warming"},"conditions":[]}}]`, desiredGeneration))
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlans(logger, config); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	status := snapshots[0].Status
+	if status.Rollout == nil {
+		t.Fatalf("expected rollout summary to be persisted")
+	}
+	if status.Rollout.Phase == domain.RolloutPhaseCompleted {
+		t.Fatalf("expected synced but unhealthy deployment to avoid completed rollout phase, got %+v", status.Rollout)
+	}
+	if status.Rollout.CurrentStep == string(reconcile.StepMarkSynced) {
+		t.Fatalf("expected synced but unhealthy deployment to avoid mark-synced rollout step, got %+v", status.Rollout)
 	}
 }
 
@@ -295,11 +331,12 @@ func TestEmitRuntimePlansRemovesSnapshotsForDeletedDeployments(t *testing.T) {
 	}
 }
 
-func TestEmitRuntimePlansPersistsZeroRolloutGenerationsInJSON(t *testing.T) {
+func TestEmitRuntimePlansPersistsNonZeroDesiredGenerationAndZeroObservedGenerationInJSON(t *testing.T) {
 	root := t.TempDir()
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
 	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
 	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+	desiredGeneration := desiredGenerationForTest(t, root, "api-prod")
 	statusPath := filepath.Join(root, "status", "deployments.json")
 	writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":0,"sync":{"state":"Synced","reason":"stable"},"health":{"overall":"Healthy","summary":"all checks passed"},"conditions":[]}}]`)
 
@@ -322,8 +359,8 @@ func TestEmitRuntimePlansPersistsZeroRolloutGenerationsInJSON(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected rollout object in persisted status, got %s", string(content))
 	}
-	if value, exists := rollout["desiredGeneration"]; !exists || value != float64(0) {
-		t.Fatalf("expected desiredGeneration=0 to be persisted, got %#v", rollout)
+	if value, exists := rollout["desiredGeneration"]; !exists || value != float64(desiredGeneration) {
+		t.Fatalf("expected desiredGeneration=%d to be persisted, got %#v", desiredGeneration, rollout)
 	}
 	if value, exists := rollout["observedGeneration"]; !exists || value != float64(0) {
 		t.Fatalf("expected observedGeneration=0 to be persisted, got %#v", rollout)
@@ -348,4 +385,19 @@ func requireLogLine(t *testing.T, output interface{ String() string }, expected 
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("expected log line %q in %q", expected, output.String())
+}
+
+func desiredGenerationForTest(t *testing.T, repoRoot string, deploymentName string) int64 {
+	t.Helper()
+	compiled, err := catalog.LoadFromRepository(repoRoot)
+	if err != nil {
+		t.Fatalf("failed to compile repository for desired generation lookup: %v", err)
+	}
+	for _, deployment := range compiled.Deployments {
+		if deployment.Name == deploymentName {
+			return deployment.Generation
+		}
+	}
+	t.Fatalf("deployment %q not found in compiled repository", deploymentName)
+	return 0
 }

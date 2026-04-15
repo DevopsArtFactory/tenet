@@ -2,6 +2,8 @@ package manifest
 
 import (
 	"fmt"
+	"hash/fnv"
+	"math"
 
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/spec"
@@ -84,7 +86,7 @@ func Compile(input CatalogSpec) (Catalog, error) {
 			return Catalog{}, fmt.Errorf("deployment %q references unknown environment %q", deployment.Name, environmentRef)
 		}
 		strategy := deployment.NormalizedStrategy()
-		compiled.Deployments = append(compiled.Deployments, domain.Deployment{
+		compiledDeployment := domain.Deployment{
 			Name:           deployment.Name,
 			AppRef:         deployment.NormalizedAppRef(),
 			EnvironmentRef: environmentRef,
@@ -95,7 +97,9 @@ func Compile(input CatalogSpec) (Catalog, error) {
 				Binary: deployment.Binary,
 				Image:  deployment.Image,
 			},
-		})
+		}
+		compiledDeployment.Generation = deploymentGeneration(compiledDeployment)
+		compiled.Deployments = append(compiled.Deployments, compiledDeployment)
 		if len(deployment.Stacks) > 0 {
 			stack := deployment.Stacks[0]
 			environment := environmentIndex[environmentRef]
@@ -110,6 +114,31 @@ func Compile(input CatalogSpec) (Catalog, error) {
 	}
 
 	return compiled, nil
+}
+
+func deploymentGeneration(deployment domain.Deployment) int64 {
+	hasher := fnv.New64a()
+	_, _ = hasher.Write([]byte(deployment.Name))
+	_, _ = hasher.Write([]byte{0})
+	_, _ = hasher.Write([]byte(deployment.AppRef))
+	_, _ = hasher.Write([]byte{0})
+	_, _ = hasher.Write([]byte(deployment.EnvironmentRef))
+	_, _ = hasher.Write([]byte{0})
+	_, _ = hasher.Write([]byte(deployment.TargetType))
+	_, _ = hasher.Write([]byte{0})
+	_, _ = hasher.Write([]byte(deployment.Strategy))
+	_, _ = hasher.Write([]byte{0})
+	_, _ = hasher.Write([]byte(deployment.ExecutionMode))
+	_, _ = hasher.Write([]byte{0})
+	_, _ = hasher.Write([]byte(deployment.DesiredArtifact.Binary))
+	_, _ = hasher.Write([]byte{0})
+	_, _ = hasher.Write([]byte(deployment.DesiredArtifact.Image))
+
+	generation := int64(hasher.Sum64() & math.MaxInt64)
+	if generation == 0 {
+		return 1
+	}
+	return generation
 }
 
 func executionMode(target spec.TargetType, strategy spec.StrategyType) string {

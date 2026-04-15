@@ -131,6 +131,58 @@ func TestCompileDerivesExecutionModesForEC2AndECS(t *testing.T) {
 	}
 }
 
+func TestCompileAssignsStableNonZeroDesiredGeneration(t *testing.T) {
+	input := CatalogSpec{
+		Accounts: []spec.AccountSpec{{
+			Name:           "prod-core",
+			AWSAccountID:   "123456789012",
+			RoleARN:        "arn:aws:iam::123456789012:role/TenetDeployerRole",
+			AllowedRegions: []string{"ap-northeast-2"},
+		}},
+		Environments: []spec.EnvironmentSpec{{
+			Name:       "prod-apne2",
+			AccountRef: "prod-core",
+			Region:     "ap-northeast-2",
+			NetworkRef: "prod-main",
+		}},
+		Deployments: []spec.DeploymentSpec{{
+			Name:           "payments-api-prod",
+			AppRef:         "payments-api",
+			EnvironmentRef: "prod-apne2",
+			Target:         spec.TargetSpec{Type: spec.TargetTypeEC2},
+			Strategy:       spec.StrategySpec{Type: spec.StrategyTypeBlueGreen, WarmupSeconds: 60, MinHealthyPercent: 100},
+			Traffic:        spec.TrafficSpec{Hostname: "api.example.com", Port: 443},
+			Capacity:       spec.CapacitySpec{Desired: 4, Min: 2, Max: 8},
+			Binary:         "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
+		}},
+	}
+
+	first, err := Compile(input)
+	if err != nil {
+		t.Fatalf("first Compile returned error: %v", err)
+	}
+	second, err := Compile(input)
+	if err != nil {
+		t.Fatalf("second Compile returned error: %v", err)
+	}
+
+	if first.Deployments[0].Generation == 0 {
+		t.Fatalf("expected non-zero desired generation, got %+v", first.Deployments[0])
+	}
+	if first.Deployments[0].Generation != second.Deployments[0].Generation {
+		t.Fatalf("expected stable desired generation, got %d and %d", first.Deployments[0].Generation, second.Deployments[0].Generation)
+	}
+
+	input.Deployments[0].Binary = "s3://releases.example.com/payments-api/prod/payments-api-linux-arm64"
+	third, err := Compile(input)
+	if err != nil {
+		t.Fatalf("third Compile returned error: %v", err)
+	}
+	if third.Deployments[0].Generation == first.Deployments[0].Generation {
+		t.Fatalf("expected desired generation to change when desired artifact changes, got %d", third.Deployments[0].Generation)
+	}
+}
+
 func TestCompileRejectsGoployerStackAccountMismatch(t *testing.T) {
 	_, err := Compile(CatalogSpec{
 		Accounts: []spec.AccountSpec{
