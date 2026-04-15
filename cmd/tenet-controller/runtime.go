@@ -6,12 +6,20 @@ import (
 	"log"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/reconcile"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
+
+const (
+	runtimeHistorySourceController = "controller"
+	runtimeHistoryMaxEntries       = 10
+)
+
+var runtimeHistoryNow = time.Now
 
 func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupConfig, store statusstore.Store) error {
 	if config.RepoRoot == "" {
@@ -65,8 +73,10 @@ func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupCon
 	planner := reconcile.Planner{}
 	for _, deployment := range compiled.Deployments {
 		status := statuses[deployment.Name]
+		previousStatus := status
 		plan := planner.Build(deployment, status)
 		status.Rollout = deriveRolloutSummary(deployment, status, plan)
+		status.History = appendRuntimeHistory(previousStatus, status)
 		currentStatuses[deployment.Name] = status
 		logger.Printf(
 			"controller reconcile deployment=%s strategy=%s execution_mode=%s desired_generation=%d observed_generation=%d sync_state=%s steps=%s",
@@ -94,6 +104,53 @@ func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupCon
 	}
 
 	return nil
+}
+
+func appendRuntimeHistory(previous domain.DeploymentStatus, current domain.DeploymentStatus) []domain.StatusHistoryEntry {
+	history := append([]domain.StatusHistoryEntry(nil), current.History...)
+	entry := deriveRuntimeHistoryEntry(current)
+	latest := deriveRuntimeHistoryEntry(previous)
+	if len(history) > 0 {
+		latest = history[len(history)-1]
+	}
+	if !runtimeHistoryMeaningfullyChanged(latest, entry) {
+		return capRuntimeHistory(history)
+	}
+
+	entry.Timestamp = runtimeHistoryNow().UTC().Format(time.RFC3339)
+	history = append(history, entry)
+	return capRuntimeHistory(history)
+}
+
+func capRuntimeHistory(history []domain.StatusHistoryEntry) []domain.StatusHistoryEntry {
+	if len(history) <= runtimeHistoryMaxEntries {
+		return history
+	}
+	return append([]domain.StatusHistoryEntry(nil), history[len(history)-runtimeHistoryMaxEntries:]...)
+}
+
+func deriveRuntimeHistoryEntry(status domain.DeploymentStatus) domain.StatusHistoryEntry {
+	entry := domain.StatusHistoryEntry{
+		Source:  runtimeHistorySourceController,
+		Summary: "Runtime status updated",
+		Sync:    status.Sync,
+		Health:  status.Health,
+	}
+	if status.Rollout != nil {
+		entry.Summary = status.Rollout.Summary
+		entry.RolloutPhase = status.Rollout.Phase
+		entry.CurrentStep = status.Rollout.CurrentStep
+	}
+	return entry
+}
+
+func runtimeHistoryMeaningfullyChanged(previous domain.StatusHistoryEntry, current domain.StatusHistoryEntry) bool {
+	return previous.Source != current.Source ||
+		previous.Summary != current.Summary ||
+		previous.Sync != current.Sync ||
+		previous.Health != current.Health ||
+		previous.RolloutPhase != current.RolloutPhase ||
+		previous.CurrentStep != current.CurrentStep
 }
 
 func syncStateLabel(state domain.SyncState) string {

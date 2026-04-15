@@ -513,6 +513,203 @@ func TestEmitRuntimePlansPersistsHealthySyncedRolloutSummaryWhenGenerationsMatch
 	}
 }
 
+func TestEmitRuntimePlansPersistsRuntimeHistory(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"conditions":[],"history":[{"timestamp":"2026-04-16T05:00:00Z","source":"controller","summary":"Waiting for fresher desired state","sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"rolloutPhase":"Accepted","currentStep":"AwaitFreshDesired"}]}}]`)
+
+	oldNow := runtimeHistoryNow
+	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 0, 0, 0, time.UTC) }
+	defer func() { runtimeHistoryNow = oldNow }()
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	status := snapshots[0].Status
+	if len(status.History) != 2 {
+		t.Fatalf("expected prior history entry plus appended controller entry, got %+v", status.History)
+	}
+	latest := status.History[len(status.History)-1]
+	if latest.Timestamp != "2026-04-16T06:00:00Z" {
+		t.Fatalf("expected deterministic timestamp, got %+v", latest)
+	}
+	if latest.Source != runtimeHistorySourceController {
+		t.Fatalf("expected controller source, got %+v", latest)
+	}
+	if latest.Summary != "Creating candidate capacity for weighted target groups" {
+		t.Fatalf("expected rollout summary in history entry, got %+v", latest)
+	}
+	if latest.Sync != (domain.Sync{State: domain.SyncStateOutOfSync, Reason: "candidate missing"}) {
+		t.Fatalf("expected sync snapshot in history entry, got %+v", latest)
+	}
+	if latest.Health != (domain.Health{Overall: domain.HealthProgressing, Summary: "candidate pending"}) {
+		t.Fatalf("expected health snapshot in history entry, got %+v", latest)
+	}
+	if latest.RolloutPhase != domain.RolloutPhaseProvisioning || latest.CurrentStep != "CreateCandidateCapacity" {
+		t.Fatalf("expected rollout phase/current step in history entry, got %+v", latest)
+	}
+	if status.Rollout == nil || latest.Summary != status.Rollout.Summary || latest.RolloutPhase != status.Rollout.Phase || latest.CurrentStep != status.Rollout.CurrentStep {
+		t.Fatalf("expected history entry to reflect persisted rollout summary, got history=%+v rollout=%+v", latest, status.Rollout)
+	}
+	if got := status.History[0].Timestamp; got != "2026-04-16T05:00:00Z" {
+		t.Fatalf("expected seeded history to be preserved, got %+v", status.History)
+	}
+}
+
+func TestEmitRuntimePlansAvoidsDuplicateRuntimeHistory(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"conditions":[],"rollout":{"desiredGeneration":2681220996861709023,"observedGeneration":-1,"phase":"Provisioning","currentStep":"CreateCandidateCapacity","summary":"Creating candidate capacity for weighted target groups","steps":[{"kind":"ResolvePlacement"},{"kind":"ObserveCurrentState"},{"kind":"CreateCandidateCapacity","current":true},{"kind":"VerifyCandidateCapacity"},{"kind":"ShiftTrafficFull"},{"kind":"PromoteCandidateCapacity"}]},"history":[{"timestamp":"2026-04-16T05:30:00Z","source":"controller","summary":"Creating candidate capacity for weighted target groups","sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"rolloutPhase":"Provisioning","currentStep":"CreateCandidateCapacity"}]}}]`)
+
+	oldNow := runtimeHistoryNow
+	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 30, 0, 0, time.UTC) }
+	defer func() { runtimeHistoryNow = oldNow }()
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	status := snapshots[0].Status
+	if len(status.History) != 1 {
+		t.Fatalf("expected unchanged operator-facing status to avoid duplicate history entry, got %+v", status.History)
+	}
+	if got := status.History[0].Timestamp; got != "2026-04-16T05:30:00Z" {
+		t.Fatalf("expected existing history entry to be preserved, got %+v", status.History)
+	}
+}
+
+func TestEmitRuntimePlansCapsRuntimeHistory(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"conditions":[],"history":[{"timestamp":"2026-04-16T05:00:00Z","source":"controller","summary":"entry-00","sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"rolloutPhase":"Accepted","currentStep":"step-00"},{"timestamp":"2026-04-16T05:01:00Z","source":"controller","summary":"entry-01","sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"rolloutPhase":"Accepted","currentStep":"step-01"},{"timestamp":"2026-04-16T05:02:00Z","source":"controller","summary":"entry-02","sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"rolloutPhase":"Accepted","currentStep":"step-02"},{"timestamp":"2026-04-16T05:03:00Z","source":"controller","summary":"entry-03","sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"rolloutPhase":"Accepted","currentStep":"step-03"},{"timestamp":"2026-04-16T05:04:00Z","source":"controller","summary":"entry-04","sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"rolloutPhase":"Accepted","currentStep":"step-04"},{"timestamp":"2026-04-16T05:05:00Z","source":"controller","summary":"entry-05","sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"rolloutPhase":"Accepted","currentStep":"step-05"},{"timestamp":"2026-04-16T05:06:00Z","source":"controller","summary":"entry-06","sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"rolloutPhase":"Accepted","currentStep":"step-06"},{"timestamp":"2026-04-16T05:07:00Z","source":"controller","summary":"entry-07","sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"rolloutPhase":"Accepted","currentStep":"step-07"},{"timestamp":"2026-04-16T05:08:00Z","source":"controller","summary":"entry-08","sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"rolloutPhase":"Accepted","currentStep":"step-08"},{"timestamp":"2026-04-16T05:09:00Z","source":"controller","summary":"entry-09","sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"rolloutPhase":"Accepted","currentStep":"step-09"}]} }]`)
+
+	oldNow := runtimeHistoryNow
+	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 45, 0, 0, time.UTC) }
+	defer func() { runtimeHistoryNow = oldNow }()
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	status := snapshots[0].Status
+	if len(status.History) != runtimeHistoryMaxEntries {
+		t.Fatalf("expected history to be capped at %d entries, got %+v", runtimeHistoryMaxEntries, status.History)
+	}
+	if got := status.History[0].Summary; got != "entry-01" {
+		t.Fatalf("expected oldest entry to be trimmed when cap is exceeded, got %+v", status.History)
+	}
+	latest := status.History[len(status.History)-1]
+	if latest.Timestamp != "2026-04-16T06:45:00Z" || latest.Summary != "Creating candidate capacity for weighted target groups" || latest.CurrentStep != "CreateCandidateCapacity" {
+		t.Fatalf("expected newest controller-authored history entry to be retained after trimming, got %+v", latest)
+	}
+}
+
+func TestAppendRuntimeHistoryCapsOversizedExistingHistoryWithoutMeaningfulChange(t *testing.T) {
+	current := domain.DeploymentStatus{
+		Sync: domain.Sync{State: domain.SyncStateOutOfSync, Reason: "candidate missing"},
+		Health: domain.Health{Overall: domain.HealthProgressing, Summary: "candidate pending"},
+		Rollout: &domain.RolloutSummary{
+			Phase:       domain.RolloutPhaseProvisioning,
+			CurrentStep: "CreateCandidateCapacity",
+			Summary:     "Creating candidate capacity for weighted target groups",
+		},
+		History: make([]domain.StatusHistoryEntry, 0, runtimeHistoryMaxEntries+1),
+	}
+	for i := 0; i < runtimeHistoryMaxEntries; i++ {
+		current.History = append(current.History, domain.StatusHistoryEntry{
+			Timestamp:    fmt.Sprintf("2026-04-16T05:%02d:00Z", i),
+			Source:       runtimeHistorySourceController,
+			Summary:      fmt.Sprintf("entry-%02d", i),
+			Sync:         current.Sync,
+			Health:       current.Health,
+			RolloutPhase: domain.RolloutPhaseAccepted,
+			CurrentStep:  fmt.Sprintf("step-%02d", i),
+		})
+	}
+	current.History = append(current.History, domain.StatusHistoryEntry{
+		Timestamp:    "2026-04-16T05:10:00Z",
+		Source:       runtimeHistorySourceController,
+		Summary:      current.Rollout.Summary,
+		Sync:         current.Sync,
+		Health:       current.Health,
+		RolloutPhase: current.Rollout.Phase,
+		CurrentStep:  current.Rollout.CurrentStep,
+	})
+
+	got := appendRuntimeHistory(current, current)
+	if len(got) != runtimeHistoryMaxEntries {
+		t.Fatalf("expected oversized history to be trimmed to %d entries even without a new entry, got %+v", runtimeHistoryMaxEntries, got)
+	}
+	if got[0].Summary != "entry-01" {
+		t.Fatalf("expected oldest persisted entry to be trimmed, got %+v", got)
+	}
+	latest := got[len(got)-1]
+	if latest.Timestamp != "2026-04-16T05:10:00Z" || latest.Summary != current.Rollout.Summary || latest.CurrentStep != current.Rollout.CurrentStep {
+		t.Fatalf("expected latest persisted entry to be preserved when no new history is appended, got %+v", latest)
+	}
+}
+
+func TestAppendRuntimeHistoryDedupesAgainstLatestPersistedEntryForLegacySnapshot(t *testing.T) {
+	previous := domain.DeploymentStatus{
+		Sync:   domain.Sync{State: domain.SyncStateOutOfSync, Reason: "candidate missing"},
+		Health: domain.Health{Overall: domain.HealthProgressing, Summary: "candidate pending"},
+	}
+	current := domain.DeploymentStatus{
+		Sync:   previous.Sync,
+		Health: previous.Health,
+		Rollout: &domain.RolloutSummary{
+			Phase:       domain.RolloutPhaseProvisioning,
+			CurrentStep: "CreateCandidateCapacity",
+			Summary:     "Creating candidate capacity for weighted target groups",
+		},
+		History: []domain.StatusHistoryEntry{{
+			Timestamp:    "2026-04-16T05:30:00Z",
+			Source:       runtimeHistorySourceController,
+			Summary:      "Creating candidate capacity for weighted target groups",
+			Sync:         previous.Sync,
+			Health:       previous.Health,
+			RolloutPhase: domain.RolloutPhaseProvisioning,
+			CurrentStep:  "CreateCandidateCapacity",
+		}},
+	}
+
+	got := appendRuntimeHistory(previous, current)
+	if len(got) != 1 {
+		t.Fatalf("expected legacy snapshot dedupe to reuse the latest persisted entry instead of appending a duplicate, got %+v", got)
+	}
+	if got[0].Timestamp != "2026-04-16T05:30:00Z" {
+		t.Fatalf("expected existing persisted history entry to be preserved, got %+v", got)
+	}
+}
+
 func TestEmitRuntimePlansDoesNotPersistCompletedRolloutSummaryForSyncedButUnhealthyDeployment(t *testing.T) {
 	root := t.TempDir()
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
