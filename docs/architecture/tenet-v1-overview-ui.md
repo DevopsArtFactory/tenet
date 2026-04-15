@@ -7,6 +7,7 @@ Tenet now serves a minimal embedded UI at `/`.
 The UI is intended to make the current control-plane slice visible without introducing a separate frontend toolchain.
 
 It groups deployments by AWS account and shows:
+- account-header count pills for `deploymentCount`, `syncedCount`, `progressingCount`, `pausedCount`, and `errorCount`
 - deployment name and environment
 - target type
 - rollout strategy
@@ -26,6 +27,15 @@ The page consumes joined overview endpoints:
 - `GET /v1/overview/deployments/{deploymentName}`
 
 `/v1/overview/accounts` keeps the top-level account page fast by returning the summary slice needed to render the default cards.
+
+Each account object now also includes additive per-account runtime counters:
+- `deploymentCount`
+- `syncedCount`
+- `progressingCount`
+- `pausedCount`
+- `errorCount`
+
+The `/` UI renders those counters directly in each account header. When any aggregate account-count field is absent in the overview payload, the embedded client derives the fallback value from `account.deployments[*].sync.state` instead of displaying zero for the status buckets. Deployments with missing or unknown runtime state still contribute to `deploymentCount`, so they remain visible in the total even when they do not increment a concrete runtime-state bucket.
 
 `/v1/overview/deployments/{deploymentName}` combines catalog placement data with the current deployment status snapshot for one deployment, including:
 - `sync.reason`

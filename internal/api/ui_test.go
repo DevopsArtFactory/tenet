@@ -79,3 +79,38 @@ func TestEmbeddedUIIncludesOverviewStatusInFetchErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestEmbeddedUIRendersAccountStatusCountPills(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const deriveAccountCounts = (account) => {",
+		"const deployments = account.deployments || [];",
+		"const counts = {",
+		"deploymentCount: deployments.length,",
+		"syncedCount: 0,",
+		"progressingCount: 0,",
+		"pausedCount: 0,",
+		"errorCount: 0,",
+		"counts.syncedCount += 1;",
+		"counts.progressingCount += 1;",
+		"counts.pausedCount += 1;",
+		"counts.errorCount += 1;",
+		"const fallbackCounts = deriveAccountCounts(account);",
+		"[account.deploymentCount ?? fallbackCounts.deploymentCount, 'deployments', 'pill target']",
+		"[account.syncedCount ?? fallbackCounts.syncedCount, 'synced', 'pill synced']",
+		"[account.progressingCount ?? fallbackCounts.progressingCount, 'progressing', 'pill progress']",
+		"[account.pausedCount ?? fallbackCounts.pausedCount, 'paused', 'pill paused']",
+		"[account.errorCount ?? fallbackCounts.errorCount, 'error', 'pill error']",
+		"accountCountPills.forEach(([value, label, className]) => {",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+
+	fallbackContract := regexp.MustCompile(`const deriveAccountCounts = \(account\) => \{[\s\S]*?const deployments = account\.deployments \|\| \[\];[\s\S]*?deployments\.forEach\(\(deployment\) => \{[\s\S]*?switch \(deployment\.sync\?\.state\) \{[\s\S]*?case 'Synced':[\s\S]*?counts\.syncedCount \+= 1;[\s\S]*?case 'Reconciling':[\s\S]*?case 'OutOfSync':[\s\S]*?case 'Drifted':[\s\S]*?counts\.progressingCount \+= 1;[\s\S]*?case 'Paused':[\s\S]*?counts\.pausedCount \+= 1;[\s\S]*?case 'Error':[\s\S]*?counts\.errorCount \+= 1;[\s\S]*?default:[\s\S]*?\}[\s\S]*?\};`)
+	if !fallbackContract.MatchString(body) {
+		t.Fatalf("expected embedded UI to derive missing account status counts from deployment sync state")
+	}
+}

@@ -26,10 +26,11 @@ func TestBuildAccountOverviewsGroupsDeploymentsByAccount(t *testing.T) {
 			},
 			Deployments: []domain.Deployment{
 				{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2", TargetType: "ec2", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", DesiredArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64"}},
+				{Name: "billing-api-prod", AppRef: "billing-api", EnvironmentRef: "prod-apne2", TargetType: "ec2", Strategy: "blueGreen", ExecutionMode: "asgWeightedTargetGroups", DesiredArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/billing-api/prod/billing-api-linux-amd64"}},
 				{Name: "payments-api-staging", AppRef: "payments-api", EnvironmentRef: "staging-apne2", TargetType: "ecs", Strategy: "linear", ExecutionMode: "ecsCodeDeploy", DesiredArtifact: domain.DeploymentArtifact{Image: "ghcr.io/devopsartfactory/payments-api:staging-20260415"}},
 			},
 		},
-		snapshots,
+		append(snapshots, statusstore.Snapshot{DeploymentName: "billing-api-prod", Status: domain.DeploymentStatus{ObservedGeneration: 9, Sync: domain.Sync{State: domain.SyncStateOutOfSync, Reason: "PendingPromotion"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "warming up"}}}),
 	)
 	if err != nil {
 		t.Fatalf("BuildAccountOverviews returned error: %v", err)
@@ -37,34 +38,75 @@ func TestBuildAccountOverviewsGroupsDeploymentsByAccount(t *testing.T) {
 	if len(overviews) != 2 {
 		t.Fatalf("expected two accounts, got %+v", overviews)
 	}
-	if overviews[0].Name != "prod-core" || len(overviews[0].Deployments) != 1 {
+	if overviews[0].Name != "prod-core" || len(overviews[0].Deployments) != 2 {
 		t.Fatalf("unexpected prod overview: %+v", overviews[0])
 	}
-	if overviews[0].Deployments[0].ExecutionMode != "asgWeightedTargetGroups" {
+	if overviews[0].DeploymentCount != 2 || overviews[0].SyncedCount != 1 || overviews[0].ProgressingCount != 1 || overviews[0].PausedCount != 0 || overviews[0].ErrorCount != 0 {
+		t.Fatalf("expected additive deployment counts for prod overview, got %+v", overviews[0])
+	}
+	if overviews[0].Deployments[0].Name != "billing-api-prod" || overviews[0].Deployments[1].Name != "payments-api-prod" {
+		t.Fatalf("expected deployment sort order to be preserved, got %+v", overviews[0].Deployments)
+	}
+	if overviews[0].Deployments[1].ExecutionMode != "asgWeightedTargetGroups" {
 		t.Fatalf("expected rollout execution metadata, got %+v", overviews[0].Deployments[0])
 	}
-	if overviews[0].Deployments[0].Rollout == nil {
-		t.Fatalf("expected rollout summary to be surfaced, got %+v", overviews[0].Deployments[0])
+	if overviews[0].Deployments[1].Rollout == nil {
+		t.Fatalf("expected rollout summary to be surfaced, got %+v", overviews[0].Deployments[1])
 	}
-	if overviews[0].Deployments[0].Rollout.Phase != domain.RolloutPhaseAccepted || overviews[0].Deployments[0].Rollout.CurrentStep != "PromoteCandidateCapacity" || len(overviews[0].Deployments[0].Rollout.Steps) != 3 {
-		t.Fatalf("expected rollout summary data, got %+v", overviews[0].Deployments[0].Rollout)
+	if overviews[0].Deployments[1].Rollout.Phase != domain.RolloutPhaseAccepted || overviews[0].Deployments[1].Rollout.CurrentStep != "PromoteCandidateCapacity" || len(overviews[0].Deployments[1].Rollout.Steps) != 3 {
+		t.Fatalf("expected rollout summary data, got %+v", overviews[0].Deployments[1].Rollout)
 	}
-	if got := overviews[0].Deployments[0].Rollout.Steps; got[0].Kind != "CreateCandidateCapacity" || got[0].Current || got[1].Kind != "ShiftTrafficCanary" || got[1].Current || got[2].Kind != "PromoteCandidateCapacity" || !got[2].Current {
+	if got := overviews[0].Deployments[1].Rollout.Steps; got[0].Kind != "CreateCandidateCapacity" || got[0].Current || got[1].Kind != "ShiftTrafficCanary" || got[1].Current || got[2].Kind != "PromoteCandidateCapacity" || !got[2].Current {
 		t.Fatalf("expected strategy-aware EC2 rollout steps, got %+v", got)
 	}
-	if got := overviews[0].Deployments[0].Rollout.Execution; len(got) != 2 || got[0].Resource != "autoScalingGroup" || got[0].Name != "payments-api-prod-canary" || got[1].Description != "Primary target group currently serving traffic" {
+	if got := overviews[0].Deployments[1].Rollout.Execution; len(got) != 2 || got[0].Resource != "autoScalingGroup" || got[0].Name != "payments-api-prod-canary" || got[1].Description != "Primary target group currently serving traffic" {
 		t.Fatalf("expected rollout execution details to be preserved, got %+v", got)
 	}
 
 	snapshots[0].Status.Rollout.Execution[0].Name = "mutated"
-	if overviews[0].Deployments[0].Rollout.Execution[0].Name != "payments-api-prod-canary" {
-		t.Fatalf("expected rollout execution details to be cloned defensively, got %+v", overviews[0].Deployments[0].Rollout.Execution)
+	if overviews[0].Deployments[1].Rollout.Execution[0].Name != "payments-api-prod-canary" {
+		t.Fatalf("expected rollout execution details to be cloned defensively, got %+v", overviews[0].Deployments[1].Rollout.Execution)
+	}
+	if overviews[1].DeploymentCount != 1 || overviews[1].SyncedCount != 0 || overviews[1].ProgressingCount != 0 || overviews[1].PausedCount != 0 || overviews[1].ErrorCount != 0 {
+		t.Fatalf("expected missing status snapshot to count only toward deploymentCount, got %+v", overviews[1])
 	}
 	if overviews[1].Deployments[0].Sync.State != "" {
 		t.Fatalf("expected missing status to remain zero-valued, got %+v", overviews[1].Deployments[0])
 	}
 	if overviews[1].Deployments[0].Rollout != nil {
 		t.Fatalf("expected missing rollout summary to remain nil, got %+v", overviews[1].Deployments[0].Rollout)
+	}
+}
+
+func TestBuildAccountOverviewsCountsStatusBuckets(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts: []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
+		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments: []domain.Deployment{
+			{Name: "payments-api", AppRef: "payments", EnvironmentRef: "prod-apne2"},
+			{Name: "billing-api", AppRef: "billing", EnvironmentRef: "prod-apne2"},
+			{Name: "orders-api", AppRef: "orders", EnvironmentRef: "prod-apne2"},
+			{Name: "search-api", AppRef: "search", EnvironmentRef: "prod-apne2"},
+			{Name: "profiles-api", AppRef: "profiles", EnvironmentRef: "prod-apne2"},
+		},
+	}
+	snapshots := []statusstore.Snapshot{
+		{DeploymentName: "payments-api", Status: domain.DeploymentStatus{Sync: domain.Sync{State: domain.SyncStateSynced}}},
+		{DeploymentName: "billing-api", Status: domain.DeploymentStatus{Sync: domain.Sync{State: domain.SyncStatePaused}}},
+		{DeploymentName: "orders-api", Status: domain.DeploymentStatus{Sync: domain.Sync{State: domain.SyncStateError}}},
+		{DeploymentName: "search-api", Status: domain.DeploymentStatus{Sync: domain.Sync{State: domain.SyncStateDrifted}}},
+		{DeploymentName: "profiles-api", Status: domain.DeploymentStatus{Sync: domain.Sync{State: domain.SyncStateReconciling}}},
+	}
+
+	overviews, err := BuildAccountOverviews(catalog, snapshots)
+	if err != nil {
+		t.Fatalf("BuildAccountOverviews returned error: %v", err)
+	}
+	if len(overviews) != 1 {
+		t.Fatalf("expected one account overview, got %+v", overviews)
+	}
+	if overviews[0].DeploymentCount != 5 || overviews[0].SyncedCount != 1 || overviews[0].ProgressingCount != 2 || overviews[0].PausedCount != 1 || overviews[0].ErrorCount != 1 {
+		t.Fatalf("expected per-status counts to classify synced/progressing/paused/error states, got %+v", overviews[0])
 	}
 }
 

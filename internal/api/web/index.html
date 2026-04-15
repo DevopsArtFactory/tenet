@@ -122,6 +122,39 @@
         return steps.length ? steps.join(' → ') : '—';
       };
       const metricValue = (value) => value ?? '—';
+      const deriveAccountCounts = (account) => {
+        const deployments = account.deployments || [];
+        const counts = {
+          deploymentCount: deployments.length,
+          syncedCount: 0,
+          progressingCount: 0,
+          pausedCount: 0,
+          errorCount: 0,
+        };
+
+        deployments.forEach((deployment) => {
+          switch (deployment.sync?.state) {
+            case 'Synced':
+              counts.syncedCount += 1;
+              break;
+            case 'Reconciling':
+            case 'OutOfSync':
+            case 'Drifted':
+              counts.progressingCount += 1;
+              break;
+            case 'Paused':
+              counts.pausedCount += 1;
+              break;
+            case 'Error':
+              counts.errorCount += 1;
+              break;
+            default:
+              break;
+          }
+        });
+
+        return counts;
+      };
       const createElement = (tagName, className, text) => {
         const node = document.createElement(tagName);
         if (className) node.className = className;
@@ -289,7 +322,17 @@
             createElement('div', 'account-meta', `AWS account ${metricValue(account.awsAccountId)} · Regions: ${(account.allowedRegions || []).join(', ') || '—'}`),
           );
           const pills = createElement('div', 'pills');
-          pills.append(createElement('span', 'pill target', `${(account.deployments || []).length} deployments`));
+          const fallbackCounts = deriveAccountCounts(account);
+          const accountCountPills = [
+            [account.deploymentCount ?? fallbackCounts.deploymentCount, 'deployments', 'pill target'],
+            [account.syncedCount ?? fallbackCounts.syncedCount, 'synced', 'pill synced'],
+            [account.progressingCount ?? fallbackCounts.progressingCount, 'progressing', 'pill progress'],
+            [account.pausedCount ?? fallbackCounts.pausedCount, 'paused', 'pill paused'],
+            [account.errorCount ?? fallbackCounts.errorCount, 'error', 'pill error'],
+          ];
+          accountCountPills.forEach(([value, label, className]) => {
+            pills.append(createElement('span', className, `${value} ${label}`));
+          });
           head.append(titleWrap, pills);
 
           const rows = createElement('div', 'rows');

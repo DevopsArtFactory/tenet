@@ -569,7 +569,7 @@ func TestRouterOverviewAccounts(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 		OverviewAccounts: func() ([]catalog.AccountOverview, error) {
-			return []catalog.AccountOverview{{Name: "prod-core", AWSAccountID: "123456789012", Deployments: []catalog.DeploymentOverview{{Name: "api-prod", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", Rollout: &domain.RolloutSummary{DesiredGeneration: 4, ObservedGeneration: 3, Phase: domain.RolloutPhaseAccepted, CurrentStep: "PromoteCandidateCapacity", Summary: "Observing current state", Steps: []domain.RolloutStepSummary{{Kind: "CreateCandidateCapacity"}, {Kind: "ShiftTrafficCanary"}, {Kind: "PromoteCandidateCapacity", Current: true}}}}, {Name: "api-staging", Strategy: "linear", ExecutionMode: "ecsCodeDeploy", Rollout: &domain.RolloutSummary{DesiredGeneration: 8, ObservedGeneration: 7, Phase: domain.RolloutPhaseAccepted, CurrentStep: "VerifyServiceStability", Summary: "Observing current state", Steps: []domain.RolloutStepSummary{{Kind: "CreateCodeDeployDeployment"}, {Kind: "ShiftTrafficLinear"}, {Kind: "VerifyServiceStability", Current: true}}}}}}}, nil
+			return []catalog.AccountOverview{{Name: "prod-core", AWSAccountID: "123456789012", DeploymentCount: 3, SyncedCount: 1, ProgressingCount: 1, PausedCount: 1, ErrorCount: 0, Deployments: []catalog.DeploymentOverview{{Name: "api-prod", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", Rollout: &domain.RolloutSummary{DesiredGeneration: 4, ObservedGeneration: 3, Phase: domain.RolloutPhaseAccepted, CurrentStep: "PromoteCandidateCapacity", Summary: "Observing current state", Steps: []domain.RolloutStepSummary{{Kind: "CreateCandidateCapacity"}, {Kind: "ShiftTrafficCanary"}, {Kind: "PromoteCandidateCapacity", Current: true}}}}, {Name: "api-staging", Strategy: "linear", ExecutionMode: "ecsCodeDeploy", Rollout: &domain.RolloutSummary{DesiredGeneration: 8, ObservedGeneration: 7, Phase: domain.RolloutPhaseAccepted, CurrentStep: "VerifyServiceStability", Summary: "Observing current state", Steps: []domain.RolloutStepSummary{{Kind: "CreateCodeDeployDeployment"}, {Kind: "ShiftTrafficLinear"}, {Kind: "VerifyServiceStability", Current: true}}}}}}}, nil
 		},
 	})
 	req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts", nil)
@@ -588,6 +588,9 @@ func TestRouterOverviewAccounts(t *testing.T) {
 	if len(accounts) != 1 || len(accounts[0].Deployments) != 2 || accounts[0].Deployments[0].ExecutionMode != "asgWeightedTargetGroups" {
 		t.Fatalf("unexpected overview accounts: %+v", accounts)
 	}
+	if accounts[0].DeploymentCount != 3 || accounts[0].SyncedCount != 1 || accounts[0].ProgressingCount != 1 || accounts[0].PausedCount != 1 || accounts[0].ErrorCount != 0 {
+		t.Fatalf("expected additive account counts in overview response, got %+v", accounts[0])
+	}
 	if accounts[0].Deployments[0].Rollout == nil || accounts[0].Deployments[0].Rollout.Phase != domain.RolloutPhaseAccepted || accounts[0].Deployments[0].Rollout.CurrentStep != "PromoteCandidateCapacity" || len(accounts[0].Deployments[0].Rollout.Steps) != 3 {
 		t.Fatalf("expected rollout summary in overview accounts response, got %+v", accounts)
 	}
@@ -599,6 +602,14 @@ func TestRouterOverviewAccounts(t *testing.T) {
 	}
 	if got := accounts[0].Deployments[1].Rollout.Steps; got[0].Kind != "CreateCodeDeployDeployment" || got[0].Current || got[1].Kind != "ShiftTrafficLinear" || got[1].Current || got[2].Kind != "VerifyServiceStability" || !got[2].Current {
 		t.Fatalf("expected strategy-aware ECS rollout steps, got %+v", got)
+	}
+
+	var payload []map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode raw overview accounts payload: %v", err)
+	}
+	if payload[0]["deploymentCount"] != float64(3) || payload[0]["syncedCount"] != float64(1) || payload[0]["progressingCount"] != float64(1) || payload[0]["pausedCount"] != float64(1) || payload[0]["errorCount"] != float64(0) {
+		t.Fatalf("expected additive JSON count fields, got %+v", payload[0])
 	}
 }
 
@@ -769,7 +780,7 @@ func TestRouterRootServesUI(t *testing.T) {
 	if !strings.Contains(body, "/v1/overview/accounts") {
 		t.Fatalf("expected UI to reference overview endpoint, got %q", body)
 	}
-	for _, fragment := range []string{"Rollout phase", "Current step", "Planned steps", "ShiftTrafficCanary", "CreateCodeDeployDeployment"} {
+	for _, fragment := range []string{"Rollout phase", "Current step", "Planned steps", "ShiftTrafficCanary", "CreateCodeDeployDeployment", "deployments", "synced", "progressing", "paused", "error"} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected UI to render rollout summary label %q, got %q", fragment, body)
 		}

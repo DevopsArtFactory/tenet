@@ -39,7 +39,7 @@ Implemented today:
   - `GET /v1/overview/deployments/{deploymentName}`
   - `GET /v1/status/deployments`
   - `GET /v1/status/deployments/{deploymentName}`
-- embedded browser UI grouped by account and deployment at `/`, including controller-authored rollout summary text alongside rollout phase, current step, and planned steps for EC2 candidate-capacity, weighted-target-group, ECS CodeDeploy, and ECS rolling executions, plus expandable deployment detail panels that lazy-load joined placement, sync reason, rollout generation, rollout execution resources/descriptions, rollout-step, and condition data from `/v1/overview/deployments/{deploymentName}`
+- embedded browser UI grouped by account and deployment at `/`, including additive account-header count pills from `/v1/overview/accounts` for deployment totals plus synced/progressing/paused/error runtime-state summaries, controller-authored rollout summary text alongside rollout phase, current step, and planned steps for EC2 candidate-capacity, weighted-target-group, ECS CodeDeploy, and ECS rolling executions, plus expandable deployment detail panels that lazy-load joined placement, sync reason, rollout generation, rollout execution resources/descriptions, rollout-step, and condition data from `/v1/overview/deployments/{deploymentName}`
 - method guards for the read-only API surface
 - fail-fast validation for invalid repository roots and incomplete manifest layouts
 - optional status-file exposure through `TENET_STATUS_PATH`

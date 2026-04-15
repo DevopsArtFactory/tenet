@@ -12,10 +12,15 @@ import (
 
 // AccountOverview groups deployment state under a single account.
 type AccountOverview struct {
-	Name           string               `json:"name"`
-	AWSAccountID   string               `json:"awsAccountId"`
-	AllowedRegions []string             `json:"allowedRegions,omitempty"`
-	Deployments    []DeploymentOverview `json:"deployments"`
+	Name             string               `json:"name"`
+	AWSAccountID     string               `json:"awsAccountId"`
+	AllowedRegions   []string             `json:"allowedRegions,omitempty"`
+	DeploymentCount  int                  `json:"deploymentCount"`
+	SyncedCount      int                  `json:"syncedCount"`
+	ProgressingCount int                  `json:"progressingCount"`
+	PausedCount      int                  `json:"pausedCount"`
+	ErrorCount       int                  `json:"errorCount"`
+	Deployments      []DeploymentOverview `json:"deployments"`
 }
 
 // DeploymentOverview joins desired deployment intent with current runtime status.
@@ -97,6 +102,17 @@ func BuildAccountOverviews(c manifest.Catalog, snapshots []statusstore.Snapshot)
 			continue
 		}
 		status := statusByDeployment[placement.DeploymentName]
+		account.DeploymentCount++
+		switch status.Sync.State {
+		case domain.SyncStateSynced:
+			account.SyncedCount++
+		case domain.SyncStateReconciling, domain.SyncStateOutOfSync, domain.SyncStateDrifted:
+			account.ProgressingCount++
+		case domain.SyncStatePaused:
+			account.PausedCount++
+		case domain.SyncStateError:
+			account.ErrorCount++
+		}
 		account.Deployments = append(account.Deployments, DeploymentOverview{
 			Name:               deployment.Name,
 			AppRef:             deployment.AppRef,
