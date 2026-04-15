@@ -109,6 +109,11 @@ func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupCon
 func appendRuntimeHistory(previous domain.DeploymentStatus, current domain.DeploymentStatus) []domain.StatusHistoryEntry {
 	history := append([]domain.StatusHistoryEntry(nil), current.History...)
 	entry := deriveRuntimeHistoryEntry(current)
+	if len(history) == 0 {
+		entry.Timestamp = runtimeHistoryNow().UTC().Format(time.RFC3339)
+		return []domain.StatusHistoryEntry{entry}
+	}
+
 	latest := deriveRuntimeHistoryEntry(previous)
 	if len(history) > 0 {
 		latest = history[len(history)-1]

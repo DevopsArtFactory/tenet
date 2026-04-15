@@ -566,6 +566,50 @@ func TestEmitRuntimePlansPersistsRuntimeHistory(t *testing.T) {
 	}
 }
 
+func TestEmitRuntimePlansBootstrapsRuntimeHistoryForLegacyRolloutOnlySnapshot(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"conditions":[],"rollout":{"desiredGeneration":2681220996861709023,"observedGeneration":-1,"phase":"Provisioning","currentStep":"CreateCandidateCapacity","summary":"Creating candidate capacity for weighted target groups","steps":[{"kind":"ResolvePlacement"},{"kind":"ObserveCurrentState"},{"kind":"CreateCandidateCapacity","current":true},{"kind":"VerifyCandidateCapacity"},{"kind":"ShiftTrafficFull"},{"kind":"PromoteCandidateCapacity"}]},"history":[]}}]`)
+
+	oldNow := runtimeHistoryNow
+	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 15, 0, 0, time.UTC) }
+	defer func() { runtimeHistoryNow = oldNow }()
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	status := snapshots[0].Status
+	if len(status.History) != 1 {
+		t.Fatalf("expected legacy rollout-only snapshot to bootstrap first controller history entry, got %+v", status.History)
+	}
+	latest := status.History[0]
+	if latest.Timestamp != "2026-04-16T06:15:00Z" {
+		t.Fatalf("expected deterministic timestamp for bootstrapped history entry, got %+v", latest)
+	}
+	if latest.Source != runtimeHistorySourceController || latest.Summary != "Creating candidate capacity for weighted target groups" {
+		t.Fatalf("expected controller-authored rollout summary in bootstrapped history entry, got %+v", latest)
+	}
+	if latest.Sync != (domain.Sync{State: domain.SyncStateOutOfSync, Reason: "candidate missing"}) {
+		t.Fatalf("expected sync snapshot in bootstrapped history entry, got %+v", latest)
+	}
+	if latest.Health != (domain.Health{Overall: domain.HealthProgressing, Summary: "candidate pending"}) {
+		t.Fatalf("expected health snapshot in bootstrapped history entry, got %+v", latest)
+	}
+	if latest.RolloutPhase != domain.RolloutPhaseProvisioning || latest.CurrentStep != "CreateCandidateCapacity" {
+		t.Fatalf("expected rollout phase/current step in bootstrapped history entry, got %+v", latest)
+	}
+}
+
 func TestEmitRuntimePlansAvoidsDuplicateRuntimeHistory(t *testing.T) {
 	root := t.TempDir()
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
@@ -634,7 +678,7 @@ func TestEmitRuntimePlansCapsRuntimeHistory(t *testing.T) {
 
 func TestAppendRuntimeHistoryCapsOversizedExistingHistoryWithoutMeaningfulChange(t *testing.T) {
 	current := domain.DeploymentStatus{
-		Sync: domain.Sync{State: domain.SyncStateOutOfSync, Reason: "candidate missing"},
+		Sync:   domain.Sync{State: domain.SyncStateOutOfSync, Reason: "candidate missing"},
 		Health: domain.Health{Overall: domain.HealthProgressing, Summary: "candidate pending"},
 		Rollout: &domain.RolloutSummary{
 			Phase:       domain.RolloutPhaseProvisioning,
