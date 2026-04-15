@@ -12,7 +12,7 @@ Implemented today:
 - domain, placement, rollout, reconcile, spec, manifest, and catalog foundations
 - parser-light repository loader for `accounts/`, `environments/`, and `deployments/` JSON manifests
 - validated catalog compilation and repository-backed providers
-- repository-aware controller bootstrap that validates `TENET_REPO_ROOT` and logs catalog counts at startup
+- repository-aware controller bootstrap that validates `TENET_REPO_ROOT`, logs catalog counts at startup, and stays alive as a long-running process
 - read-only API endpoints for:
   - `GET /healthz`
   - `GET /v1/info`
