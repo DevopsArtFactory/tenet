@@ -47,6 +47,21 @@ The `/` UI renders those counters directly in each account header. When any aggr
 
 The embedded UI only fetches the deployment-detail endpoint when an operator expands a row.
 
+The overview page also includes a client-side filter toolbar above the summary cards:
+- a text search that matches account/deployment-visible fields from the `/v1/overview/accounts` payload
+- a sync-state filter
+- an account filter
+- a `Clear filters` action that resets the toolbar to the default account-wide view
+
+Toolbar state is URL-synced with `history.replaceState` using query params:
+- `q` for free-text search
+- `sync` for the selected sync-state bucket
+- `account` for the selected stable account identifier (`awsAccountId` in the current embedded UI)
+
+The page re-applies those query params on load so filtered views are shareable/bookmarkable without server-side filtering. Filtering remains client-side against the already-fetched overview payload; no additional overview requests are issued when controls change. Stale or invalid `sync`/`account` query values are normalized back to the default `all` selection before the toolbar renders, so bookmarked URLs cannot leave the control state and the active filter state out of sync. When the active filter combination removes every deployment, the UI renders the explicit empty state `No deployments match the current filters.`
+
+Because the page re-renders the account/deployment cards as filters change, the embedded toolbar preserves focus and the active text-selection/caret position for the typed search field across incremental search re-renders. This keeps free-text filtering usable even though the view is rebuilt client-side.
+
 Each deployment card still surfaces the most operator-useful rollout cues directly in the overview response/UI:
 - `rollout.phase`
 - `rollout.currentStep`

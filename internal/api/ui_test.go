@@ -114,3 +114,76 @@ func TestEmbeddedUIRendersAccountStatusCountPills(t *testing.T) {
 		t.Fatalf("expected embedded UI to derive missing account status counts from deployment sync state")
 	}
 }
+
+func TestEmbeddedUIProvidesFilterControlsAndURLSyncedViewState(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"<section class=\"toolbar\" id=\"toolbar\"></section>",
+		"const createSelect = (labelText, value, options, onChange) => {",
+		"const createInput = (labelText, value, placeholder, onInput) => {",
+		"const parseViewState = () => {",
+		"const normalizeViewState = (accounts, state) => {",
+		"const syncViewState = (state) => {",
+		"const applyViewState = (accounts, state) => {",
+		"const searchNeedle = state.query.trim().toLowerCase();",
+		"account.name,",
+		"account.awsAccountId,",
+		"state.account === 'all' || account.awsAccountId === state.account",
+		"deployment.rollout?.summary,",
+		"plannedSteps(deployment.rollout),",
+		"`${healthLabel(deployment.health)}${deployment.health?.summary ? ` ${deployment.health.summary}` : ''}`,",
+		"const matchesState = state.syncState === 'all' || deployment.sync?.state === state.syncState;",
+		"const query = params.toString();",
+		"const hash = window.location.hash || '';",
+		"const nextURL = query ? `${window.location.pathname}?${query}${hash}` : `${window.location.pathname}${hash}`;",
+		"history.replaceState({}, '', nextURL);",
+		"value: account.awsAccountId,",
+		"renderToolbar(allAccounts, currentViewState);",
+		"currentViewState = normalizeViewState(accounts, parseViewState());",
+		"renderOverview();",
+		"renderEmptyState('No deployments match the current filters.');",
+		"Clear filters",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+
+	urlStateContract := regexp.MustCompile(`const parseViewState = \(\) => \{[\s\S]*?new URLSearchParams\(window\.location\.search\)[\s\S]*?query: params\.get\('q'\) \|\| ''[\s\S]*?syncState: params\.get\('sync'\) \|\| 'all'[\s\S]*?account: params\.get\('account'\) \|\| 'all'[\s\S]*?\};[\s\S]*?const normalizeViewState = \(accounts, state\) => \{[\s\S]*?const validSyncStates = new Set\([\s\S]*?'Synced'[\s\S]*?'Error'[\s\S]*?\);[\s\S]*?const validAccounts = new Set\(\['all', \.\.\.accounts\.map\(\(account\) => account\.awsAccountId\)\.filter\(Boolean\)\]\);[\s\S]*?query: \(state\.query \|\| ''\)\.trim\(\),[\s\S]*?account: validAccounts\.has\(state\.account\) \? state\.account : 'all'[\s\S]*?\};[\s\S]*?const syncViewState = \(state\) => \{[\s\S]*?params\.set\('q', state\.query\);[\s\S]*?params\.set\('sync', state\.syncState\);[\s\S]*?params\.set\('account', state\.account\);[\s\S]*?history\.replaceState\(\{\}, '', nextURL\);`)
+	if !urlStateContract.MatchString(body) {
+		t.Fatalf("expected embedded UI to round-trip validated filter state through URL query params")
+	}
+}
+
+func TestEmbeddedUIPreservesToolbarFocusAndRestoresCaretAcrossFilterRerenders(t *testing.T) {
+	body := string(indexHTML)
+
+	if strings.Count(body, "const captureToolbarFocus = () => {") != 1 {
+		t.Fatalf("expected embedded UI to declare captureToolbarFocus exactly once")
+	}
+	if strings.Count(body, "const restoreToolbarFocus = (focusState) => {") != 1 {
+		t.Fatalf("expected embedded UI to declare restoreToolbarFocus exactly once")
+	}
+
+	for _, fragment := range []string{
+		"select.dataset.toolbarField = labelText;",
+		"input.dataset.toolbarField = labelText;",
+		"const captureToolbarFocus = () => {",
+		"const restoreToolbarFocus = (focusState) => {",
+		"selectionStart: typeof active.selectionStart === 'number' ? active.selectionStart : null,",
+		"selectionEnd: typeof active.selectionEnd === 'number' ? active.selectionEnd : null,",
+		"const selector = `[data-toolbar-field=\"${focusState.field}\"]`;",
+		"const node = document.querySelector(selector);",
+		"node.focus();",
+		"if (node instanceof HTMLInputElement && focusState.selectionStart !== null && focusState.selectionEnd !== null) {",
+		"node.setSelectionRange(focusState.selectionStart, focusState.selectionEnd);",
+		"const focusState = captureToolbarFocus();",
+		"renderOverview(focusState);",
+		"restoreToolbarFocus(focusState);",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+}

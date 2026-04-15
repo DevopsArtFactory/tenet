@@ -30,6 +30,17 @@
       .hero { display: flex; justify-content: space-between; gap: 16px; align-items: end; margin-bottom: 24px; }
       .title { font-size: 36px; font-weight: 800; letter-spacing: -0.04em; margin: 0 0 8px; }
       .subtitle { margin: 0; color: var(--muted); max-width: 720px; line-height: 1.5; }
+      .toolbar { display:grid; gap: 16px; margin-bottom: 24px; padding: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 18px 40px rgba(0,0,0,0.24); }
+      .toolbar-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+      .toolbar-field { display:grid; gap: 8px; }
+      .toolbar-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+      .toolbar-input, .toolbar-select { width: 100%; border-radius: 12px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.04); color: var(--text); padding: 12px 14px; font: inherit; }
+      .toolbar-input::placeholder { color: rgba(148,168,199,.72); }
+      .toolbar-input:focus, .toolbar-select:focus, .toolbar-button:focus-visible { outline: 2px solid rgba(103,183,255,.45); outline-offset: 2px; }
+      .toolbar-actions { display:flex; flex-wrap:wrap; gap: 10px; align-items:center; justify-content:space-between; }
+      .toolbar-active { color: var(--muted); font-size: 14px; }
+      .toolbar-button { border: 1px solid rgba(103,183,255,.24); background: rgba(103,183,255,.12); color: var(--blue); border-radius: 999px; padding: 10px 14px; font: inherit; font-weight: 700; cursor: pointer; }
+      .toolbar-button:hover { background: rgba(103,183,255,.18); }
       .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
       .card, .account { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 18px 40px rgba(0,0,0,0.24); }
       .card { padding: 18px; }
@@ -88,6 +99,7 @@
           <p class="subtitle">Account-oriented rollout visibility for EC2 binaries and ECS images, with strategy-aware step labels such as ShiftTrafficCanary and CreateCodeDeployDeployment for weighted-target-group and ECS CodeDeploy rollouts.</p>
         </div>
       </div>
+      <section class="toolbar" id="toolbar"></section>
       <section class="summary" id="summary"></section>
       <section id="accounts" class="accounts">
         <div class="loading">Loading deployment overview…</div>
@@ -95,6 +107,8 @@
     </div>
     <script>
       const detailStateByDeployment = new Map();
+      let allAccounts = [];
+      let currentViewState = { query: '', syncState: 'all', account: 'all' };
 
       const statusClass = (state) => {
         switch (state) {
@@ -169,6 +183,202 @@
           createElement('div', 'v', value),
         );
         return metric;
+      };
+      const createSelect = (labelText, value, options, onChange) => {
+        const field = createElement('label', 'toolbar-field');
+        field.append(createElement('span', 'toolbar-label', labelText));
+        const select = createElement('select', 'toolbar-select');
+        select.dataset.toolbarField = labelText;
+        options.forEach((option) => {
+          const node = document.createElement('option');
+          node.value = option.value;
+          node.textContent = option.label;
+          node.selected = option.value === value;
+          select.append(node);
+        });
+        select.addEventListener('change', onChange);
+        field.append(select);
+        return field;
+      };
+      const createInput = (labelText, value, placeholder, onInput) => {
+        const field = createElement('label', 'toolbar-field');
+        field.append(createElement('span', 'toolbar-label', labelText));
+        const input = createElement('input', 'toolbar-input');
+        input.dataset.toolbarField = labelText;
+        input.type = 'search';
+        input.value = value;
+        input.placeholder = placeholder;
+        input.autocomplete = 'off';
+        input.addEventListener('input', onInput);
+        field.append(input);
+        return field;
+      };
+      const captureToolbarFocus = () => {
+        const active = document.activeElement;
+        if (!(active instanceof HTMLElement)) return null;
+        const field = active.dataset.toolbarField;
+        if (!field) return null;
+        return {
+          field,
+          selectionStart: typeof active.selectionStart === 'number' ? active.selectionStart : null,
+          selectionEnd: typeof active.selectionEnd === 'number' ? active.selectionEnd : null,
+        };
+      };
+      const restoreToolbarFocus = (focusState) => {
+        if (!focusState?.field) return;
+        const selector = `[data-toolbar-field="${focusState.field}"]`;
+        const node = document.querySelector(selector);
+        if (!(node instanceof HTMLElement)) return;
+        node.focus();
+        if (node instanceof HTMLInputElement && focusState.selectionStart !== null && focusState.selectionEnd !== null) {
+          node.setSelectionRange(focusState.selectionStart, focusState.selectionEnd);
+        }
+      };
+      const parseViewState = () => {
+        const params = new URLSearchParams(window.location.search);
+        return {
+          query: params.get('q') || '',
+          syncState: params.get('sync') || 'all',
+          account: params.get('account') || 'all',
+        };
+      };
+      const normalizeViewState = (accounts, state) => {
+        const validSyncStates = new Set([
+          'all',
+          'Synced',
+          'Reconciling',
+          'OutOfSync',
+          'Drifted',
+          'Paused',
+          'Error',
+        ]);
+        const validAccounts = new Set(['all', ...accounts.map((account) => account.awsAccountId).filter(Boolean)]);
+        return {
+          query: (state.query || '').trim(),
+          syncState: validSyncStates.has(state.syncState) ? state.syncState : 'all',
+          account: validAccounts.has(state.account) ? state.account : 'all',
+        };
+      };
+      const syncViewState = (state) => {
+        const params = new URLSearchParams(window.location.search);
+        if (state.query) {
+          params.set('q', state.query);
+        } else {
+          params.delete('q');
+        }
+        if (state.syncState !== 'all') {
+          params.set('sync', state.syncState);
+        } else {
+          params.delete('sync');
+        }
+        if (state.account !== 'all') {
+          params.set('account', state.account);
+        } else {
+          params.delete('account');
+        }
+        const query = params.toString();
+        const hash = window.location.hash || '';
+        const nextURL = query ? `${window.location.pathname}?${query}${hash}` : `${window.location.pathname}${hash}`;
+        history.replaceState({}, '', nextURL);
+      };
+      const updateViewState = (patch) => {
+        const focusState = captureToolbarFocus();
+        currentViewState = normalizeViewState(allAccounts, { ...currentViewState, ...patch });
+        syncViewState(currentViewState);
+        renderOverview(focusState);
+      };
+      const applyViewState = (accounts, state) => {
+        const searchNeedle = state.query.trim().toLowerCase();
+        const hasActiveFilters = searchNeedle !== '' || state.syncState !== 'all' || state.account !== 'all';
+        return accounts
+          .filter((account) => state.account === 'all' || account.awsAccountId === state.account)
+          .map((account) => {
+            const deployments = (account.deployments || []).filter((deployment) => {
+              const matchesState = state.syncState === 'all' || deployment.sync?.state === state.syncState;
+              const searchHaystack = [
+                account.name,
+                account.awsAccountId,
+                ...(account.allowedRegions || []),
+                deployment.name,
+                deployment.appRef,
+                deployment.environmentRef,
+                deployment.region,
+                deployment.targetType,
+                deployment.strategy,
+                deployment.executionMode,
+                deployment.sync?.state,
+                deployment.sync?.reason,
+                deployment.rollout?.phase,
+                deployment.rollout?.currentStep,
+                deployment.rollout?.summary,
+                plannedSteps(deployment.rollout),
+                `${healthLabel(deployment.health)}${deployment.health?.summary ? ` ${deployment.health.summary}` : ''}`,
+                artifact(deployment.desiredArtifact),
+                artifact(deployment.deployedArtifact),
+              ].filter(Boolean).join(' ').toLowerCase();
+              const matchesQuery = !searchNeedle || searchHaystack.includes(searchNeedle);
+              return matchesState && matchesQuery;
+            });
+            const counts = deriveAccountCounts({ deployments });
+            return {
+              ...account,
+              deployments,
+              deploymentCount: counts.deploymentCount,
+              syncedCount: counts.syncedCount,
+              progressingCount: counts.progressingCount,
+              pausedCount: counts.pausedCount,
+              errorCount: counts.errorCount,
+            };
+          })
+          .filter((account) => !hasActiveFilters || account.deployments.length > 0);
+      };
+      const renderToolbar = (accounts, state) => {
+        const root = document.getElementById('toolbar');
+        const accountOptions = [
+          { value: 'all', label: 'All accounts' },
+          ...accounts.map((account) => ({ value: account.awsAccountId, label: `${account.name} (${account.awsAccountId || 'unknown'})` })),
+        ];
+        const syncOptions = [
+          { value: 'all', label: 'All sync states' },
+          { value: 'Synced', label: 'Synced' },
+          { value: 'Reconciling', label: 'Reconciling' },
+          { value: 'OutOfSync', label: 'OutOfSync' },
+          { value: 'Drifted', label: 'Drifted' },
+          { value: 'Paused', label: 'Paused' },
+          { value: 'Error', label: 'Error' },
+        ];
+        const controls = createElement('div', 'toolbar-grid');
+        controls.append(
+          createInput('Search deployments', state.query, 'Search by deployment, artifact, region, step, or rollout summary', (event) => {
+            updateViewState({ query: event.target.value });
+          }),
+          createSelect('Sync state', state.syncState, syncOptions, (event) => {
+            updateViewState({ syncState: event.target.value });
+          }),
+          createSelect('Account', state.account, accountOptions, (event) => {
+            updateViewState({ account: event.target.value });
+          }),
+        );
+        const active = [];
+        if (state.query) active.push(`search “${state.query}”`);
+        if (state.syncState !== 'all') active.push(`sync ${state.syncState}`);
+        if (state.account !== 'all') {
+          const activeAccount = accounts.find((account) => account.awsAccountId === state.account);
+          active.push(`account ${activeAccount?.name || state.account}`);
+        }
+        const actions = createElement('div', 'toolbar-actions');
+        actions.append(createElement('div', 'toolbar-active', active.length ? `Active filters: ${active.join(' · ')}` : 'Active filters: none'));
+        const clearButton = createElement('button', 'toolbar-button', 'Clear filters');
+        clearButton.type = 'button';
+        clearButton.disabled = !active.length;
+        clearButton.addEventListener('click', () => {
+          const focusState = captureToolbarFocus();
+          currentViewState = { query: '', syncState: 'all', account: 'all' };
+          syncViewState(currentViewState);
+          renderOverview(focusState);
+        });
+        actions.append(clearButton);
+        root.replaceChildren(controls, actions);
       };
       const renderEmptyState = (message) => {
         const empty = createElement('div', 'empty', message);
@@ -290,12 +500,16 @@
         const synced = deployments.filter((deployment) => deployment.sync?.state === 'Synced').length;
         const progressingStates = new Set(['Reconciling', 'OutOfSync', 'Drifted']);
         const progressing = deployments.filter((deployment) => progressingStates.has(deployment.sync?.state)).length;
+        const paused = deployments.filter((deployment) => deployment.sync?.state === 'Paused').length;
+        const errored = deployments.filter((deployment) => deployment.sync?.state === 'Error').length;
         const summary = document.getElementById('summary');
         summary.replaceChildren(...[
           ['Accounts', accounts.length],
           ['Deployments', deployments.length],
           ['Synced', synced],
           ['Progressing', progressing],
+          ['Paused', paused],
+          ['Error', errored],
         ].map(([label, value]) => {
           const card = createElement('div', 'card');
           card.append(
@@ -402,14 +616,35 @@
         root.replaceChildren(...accountNodes);
       };
 
+      const renderOverview = (focusState = null) => {
+        renderToolbar(allAccounts, currentViewState);
+        const visibleAccounts = applyViewState(allAccounts, currentViewState);
+        renderSummary(visibleAccounts);
+        if (!allAccounts.length) {
+          renderEmptyState('No accounts or deployments are loaded yet.');
+          restoreToolbarFocus(focusState);
+          return;
+        }
+        if (!visibleAccounts.length) {
+          renderEmptyState('No deployments match the current filters.');
+          restoreToolbarFocus(focusState);
+          return;
+        }
+        renderAccounts(visibleAccounts);
+        restoreToolbarFocus(focusState);
+      };
+
+      currentViewState = parseViewState();
       fetch('/v1/overview/accounts')
         .then((response) => {
           if (!response.ok) throw new Error(`overview request failed (${response.status})`);
           return response.json();
         })
         .then((accounts) => {
-          renderSummary(accounts);
-          renderAccounts(accounts);
+          allAccounts = accounts;
+          currentViewState = normalizeViewState(accounts, parseViewState());
+          syncViewState(currentViewState);
+          renderOverview();
         })
         .catch((error) => {
           renderEmptyState(`Failed to load overview: ${error.message}`);
