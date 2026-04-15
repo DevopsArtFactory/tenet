@@ -3,17 +3,19 @@ package main
 import (
 	"log"
 	"os"
-
-	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 )
 
 func main() {
-	version := envOrDefault("TENET_VERSION", "dev")
-	commit := envOrDefault("TENET_COMMIT", "unknown")
-	workerCount := envOrDefault("TENET_CONTROLLER_WORKERS", "1")
+	config, err := loadStartupConfig(os.Getenv)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	info := buildinfo.Current(version, commit)
-	log.Printf("starting tenet-controller version=%s commit=%s workers=%s", info.Version, info.Commit, workerCount)
+	if config.Summary != nil {
+		log.Printf("starting tenet-controller version=%s commit=%s workers=%s repo_root=%s accounts=%d environments=%d deployments=%d", config.Info.Version, config.Info.Commit, config.WorkerCount, config.RepoRoot, config.Summary.AccountCount, config.Summary.EnvironmentCount, config.Summary.DeploymentCount)
+		return
+	}
+	log.Printf("starting tenet-controller version=%s commit=%s workers=%s repo_root=%s", config.Info.Version, config.Info.Commit, config.WorkerCount, config.RepoRoot)
 }
 
 func envOrDefault(name, fallback string) string {

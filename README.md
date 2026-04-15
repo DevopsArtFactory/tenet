@@ -12,6 +12,7 @@ Implemented today:
 - domain, placement, rollout, reconcile, spec, manifest, and catalog foundations
 - parser-light repository loader for `accounts/`, `environments/`, and `deployments/` JSON manifests
 - validated catalog compilation and repository-backed providers
+- repository-aware controller bootstrap that validates `TENET_REPO_ROOT` and logs catalog counts at startup
 - read-only API endpoints for:
   - `GET /healthz`
   - `GET /v1/info`
@@ -68,6 +69,7 @@ Architecture and plan docs live under `docs/`:
 - `docs/architecture/tenet-v1-catalog-deployments-api.md`
 - `docs/architecture/tenet-v1-catalog-placements-api.md`
 - `docs/architecture/tenet-v1-catalog-topology-api.md`
+- `docs/architecture/tenet-v1-controller-repository-bootstrap.md`
 
 ## Open Source
 - [Contributing Guide](./CONTRIBUTING.md)
