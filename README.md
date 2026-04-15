@@ -10,12 +10,13 @@ Implemented today:
 - architecture and implementation-plan docs for the first control-plane slice plus the local-runtime bootstrap plan
 - Go module bootstrap with `tenet-api` and `tenet-controller`
 - domain, placement, rollout, reconcile, spec, manifest, and catalog foundations
-- parser-light repository loader for `accounts/`, `environments/`, and `deployments/` JSON manifests
+- parser-light repository loader for `accounts/`, `environments/`, and `deployments/` JSON or YAML manifests
+- deployment manifests can now ingest a goployer-compatible EC2 stack shape while carrying desired binary/image artifact metadata
 - validated catalog compilation and repository-backed providers
 - repository-aware controller bootstrap that validates `TENET_REPO_ROOT`, logs catalog counts at startup, and stays alive as a long-running process
 - controller runtime loop that reloads repository and status fixtures on a timer and logs per-deployment planner intents
 - filesystem-backed deployment status storage for the first runtime-status slice
-- status snapshots now carry sync reasons, health summaries, and deployment conditions
+- status snapshots now carry sync reasons, health summaries, deployment conditions, and deployed binary/image artifact metadata
 - committed local example fixtures under `examples/local-repo/` and `examples/local-status/`
 - Docker packaging and `compose.yaml` so the current control plane can run locally without AWS credentials
 - read-only API endpoints for:
@@ -43,9 +44,14 @@ Not implemented yet:
 ## Repository shape
 
 Tenet currently expects a repository-like manifest tree:
-- `accounts/*.json`
-- `environments/*.json`
-- `deployments/*.json`
+- `accounts/*.{json,yaml,yml}`
+- `environments/*.{json,yaml,yml}`
+- `deployments/*.{json,yaml,yml}`
+
+The local examples now use YAML deployment manifests with:
+- a goployer-compatible `stacks` shape for EC2/ECS placement metadata
+- `binary` for EC2 artifact intent
+- `image` for ECS artifact intent
 
 A runnable example lives in:
 - `examples/local-repo/`
@@ -115,6 +121,7 @@ Architecture and plan docs live under `docs/`:
 - `docs/plans/2026-04-15-control-plane-bootstrap.md`
 - `docs/plans/2026-04-15-local-runtime-bootstrap.md`
 - `docs/plans/2026-04-15-controller-runtime-loop.md`
+- `docs/plans/2026-04-15-deployment-yaml-manifests.md`
 - `docs/architecture/tenet-v1-overview.md`
 - `docs/architecture/tenet-v1-domain-model.md`
 - `docs/architecture/tenet-v1-spec-shapes.md`

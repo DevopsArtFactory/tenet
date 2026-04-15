@@ -6,8 +6,8 @@ The local runtime packages the current read-only control-plane foundation as a D
 
 - `tenet-api` serves the catalog and deployment-status read APIs.
 - `tenet-controller` validates the repository catalog at startup, then reloads the repo and status snapshots on a timer to log abstract reconcile plans per deployment.
-- a sample repository-shaped desired-state tree lives under `examples/local-repo/`.
-- a sample filesystem-backed deployment-status file lives under `examples/local-status/deployments.json`.
+- a sample repository-shaped desired-state tree lives under `examples/local-repo/`, including YAML deployment manifests that can carry `binary` or `image` artifact intent.
+- a sample filesystem-backed deployment-status file lives under `examples/local-status/deployments.json`, including the currently deployed binary/image metadata.
 - `compose.yaml` wires both processes together so the repo can be explored locally without AWS credentials.
 
 ## Runtime contract

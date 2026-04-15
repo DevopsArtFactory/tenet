@@ -40,42 +40,67 @@ func ValidateDeployment(deployment DeploymentSpec) error {
 	if deployment.Name == "" {
 		return fmt.Errorf("deployment name is required")
 	}
-	if deployment.AppRef == "" {
+	if deployment.NormalizedAppRef() == "" {
 		return fmt.Errorf("deployment appRef is required")
 	}
-	if deployment.EnvironmentRef == "" {
+	if deployment.NormalizedEnvironmentRef() == "" {
 		return fmt.Errorf("deployment environmentRef is required")
 	}
 
-	switch deployment.Target.Type {
+	targetType := deployment.NormalizedTargetType()
+	switch targetType {
 	case TargetTypeEC2, TargetTypeECS:
 	default:
-		return fmt.Errorf("unsupported target type %q", deployment.Target.Type)
+		return fmt.Errorf("unsupported target type %q", targetType)
 	}
 
-	switch deployment.Strategy.Type {
+	strategyType := deployment.NormalizedStrategy()
+	switch strategyType {
 	case StrategyTypeBlueGreen, StrategyTypeRolling:
 	default:
-		return fmt.Errorf("unsupported strategy type %q", deployment.Strategy.Type)
+		return fmt.Errorf("unsupported strategy type %q", strategyType)
 	}
 
-	if deployment.Traffic.Port <= 0 || deployment.Traffic.Port > 65535 {
-		return fmt.Errorf("traffic port must be between 1 and 65535")
-	}
-	if deployment.Capacity.Min <= 0 || deployment.Capacity.Max <= 0 || deployment.Capacity.Desired <= 0 {
+	capacity := deployment.NormalizedCapacity()
+	if capacity.Min <= 0 || capacity.Max <= 0 || capacity.Desired <= 0 {
 		return fmt.Errorf("capacity values must be positive")
 	}
-	if deployment.Capacity.Min > deployment.Capacity.Max {
+	if capacity.Min > capacity.Max {
 		return fmt.Errorf("capacity min cannot exceed max")
 	}
-	if deployment.Capacity.Desired < deployment.Capacity.Min || deployment.Capacity.Desired > deployment.Capacity.Max {
+	if capacity.Desired < capacity.Min || capacity.Desired > capacity.Max {
 		return fmt.Errorf("capacity desired must be within min/max")
+	}
+
+	if deployment.Traffic.Port != 0 && (deployment.Traffic.Port < 1 || deployment.Traffic.Port > 65535) {
+		return fmt.Errorf("traffic port must be between 1 and 65535")
 	}
 	if deployment.Strategy.MinHealthyPercent < 0 || deployment.Strategy.MinHealthyPercent > 100 {
 		return fmt.Errorf("minHealthyPercent must be between 0 and 100")
 	}
 	if deployment.Strategy.WarmupSeconds < 0 {
 		return fmt.Errorf("warmupSeconds cannot be negative")
+	}
+	if len(deployment.Stacks) > 0 {
+		first := deployment.Stacks[0]
+		if first.Account == "" {
+			return fmt.Errorf("deployment stack account is required")
+		}
+		if first.Env == "" {
+			return fmt.Errorf("deployment stack env is required")
+		}
+		if len(first.Regions) == 0 {
+			return fmt.Errorf("deployment stack must declare at least one region")
+		}
+		if first.Regions[0].Region == "" {
+			return fmt.Errorf("deployment stack region is required")
+		}
+	}
+	if deployment.Image != "" && targetType != TargetTypeECS {
+		return fmt.Errorf("image artifact requires ecs target")
+	}
+	if deployment.Binary != "" && targetType != TargetTypeEC2 {
+		return fmt.Errorf("binary artifact requires ec2 target")
 	}
 
 	return nil

@@ -38,10 +38,51 @@ func TestValidateDeploymentSpecAcceptsEC2BlueGreen(t *testing.T) {
 		Strategy:       StrategySpec{Type: StrategyTypeBlueGreen, WarmupSeconds: 60, MinHealthyPercent: 100},
 		Traffic:        TrafficSpec{Port: 443, Hostname: "api.example.com"},
 		Capacity:       CapacitySpec{Desired: 4, Min: 2, Max: 8},
+		Binary:         "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
 	}
 
 	if err := ValidateDeployment(deployment); err != nil {
 		t.Fatalf("ValidateDeployment returned error: %v", err)
+	}
+}
+
+func TestValidateDeploymentSpecAcceptsGoployerStyleEC2Manifest(t *testing.T) {
+	deployment := DeploymentSpec{
+		Name:     "payments-api-prod",
+		Binary:   "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
+		UserData: UserDataSpec{Type: "git", Path: "userdata/payments-api.sh"},
+		Stacks: []StackSpec{{
+			Stack:           "payments-api-prod",
+			Account:         "prod-core",
+			Env:             "prod-apne2",
+			ReplacementType: "blueGreen",
+			Capacity:        CapacitySpec{Desired: 3, Min: 2, Max: 6},
+			Regions:         []RegionSpec{{Region: "ap-northeast-2", InstanceType: "t3.medium", AMIID: "ami-1234567890abcdef0"}},
+		}},
+	}
+
+	if err := ValidateDeployment(deployment); err != nil {
+		t.Fatalf("ValidateDeployment returned error for goployer-style manifest: %v", err)
+	}
+}
+
+func TestValidateDeploymentSpecAcceptsECSImageManifest(t *testing.T) {
+	deployment := DeploymentSpec{
+		Name:   "payments-api-staging",
+		Image:  "ghcr.io/devopsartfactory/payments-api:staging-20260415",
+		Target: TargetSpec{Type: TargetTypeECS},
+		Stacks: []StackSpec{{
+			Stack:           "payments-api-staging",
+			Account:         "staging-core",
+			Env:             "staging-apne2",
+			ReplacementType: "rolling",
+			Capacity:        CapacitySpec{Desired: 2, Min: 1, Max: 3},
+			Regions:         []RegionSpec{{Region: "ap-northeast-2"}},
+		}},
+	}
+
+	if err := ValidateDeployment(deployment); err != nil {
+		t.Fatalf("ValidateDeployment returned error for ECS image manifest: %v", err)
 	}
 }
 

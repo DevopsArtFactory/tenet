@@ -28,6 +28,7 @@ func TestCompileReturnsDomainCatalog(t *testing.T) {
 			Strategy:       spec.StrategySpec{Type: spec.StrategyTypeBlueGreen, WarmupSeconds: 60, MinHealthyPercent: 100},
 			Traffic:        spec.TrafficSpec{Hostname: "api.example.com", Port: 443},
 			Capacity:       spec.CapacitySpec{Desired: 4, Min: 2, Max: 8},
+			Binary:         "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
 		}},
 	})
 	if err != nil {
@@ -39,6 +40,44 @@ func TestCompileReturnsDomainCatalog(t *testing.T) {
 	}
 	if catalog.Deployments[0].AppRef != "payments-api" {
 		t.Fatalf("unexpected deployment appRef: %s", catalog.Deployments[0].AppRef)
+	}
+	if catalog.Deployments[0].DesiredArtifact.Binary != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64" {
+		t.Fatalf("unexpected deployment binary: %+v", catalog.Deployments[0].DesiredArtifact)
+	}
+}
+
+func TestCompileAcceptsGoployerStyleDeploymentManifest(t *testing.T) {
+	catalog, err := Compile(CatalogSpec{
+		Accounts: []spec.AccountSpec{{
+			Name:           "prod-core",
+			AWSAccountID:   "123456789012",
+			RoleARN:        "arn:aws:iam::123456789012:role/TenetDeployerRole",
+			AllowedRegions: []string{"ap-northeast-2"},
+		}},
+		Environments: []spec.EnvironmentSpec{{
+			Name:       "prod-apne2",
+			AccountRef: "prod-core",
+			Region:     "ap-northeast-2",
+			NetworkRef: "prod-main",
+		}},
+		Deployments: []spec.DeploymentSpec{{
+			Name:   "payments-api-prod",
+			Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
+			Stacks: []spec.StackSpec{{
+				Stack:           "payments-api-prod",
+				Account:         "prod-core",
+				Env:             "prod-apne2",
+				ReplacementType: "blueGreen",
+				Capacity:        spec.CapacitySpec{Desired: 3, Min: 2, Max: 6},
+				Regions:         []spec.RegionSpec{{Region: "ap-northeast-2", InstanceType: "t3.medium"}},
+			}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Compile returned error for goployer-style deployment: %v", err)
+	}
+	if got := catalog.Deployments[0]; got.AppRef != "payments-api-prod" || got.EnvironmentRef != "prod-apne2" {
+		t.Fatalf("unexpected compiled deployment: %+v", got)
 	}
 }
 

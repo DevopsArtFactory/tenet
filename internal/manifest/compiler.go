@@ -79,13 +79,19 @@ func Compile(input CatalogSpec) (Catalog, error) {
 		if _, exists := deploymentIndex[deployment.Name]; exists {
 			return Catalog{}, fmt.Errorf("duplicate deployment %q", deployment.Name)
 		}
-		if _, ok := environmentIndex[deployment.EnvironmentRef]; !ok {
-			return Catalog{}, fmt.Errorf("deployment %q references unknown environment %q", deployment.Name, deployment.EnvironmentRef)
+		environmentRef := deployment.NormalizedEnvironmentRef()
+		if _, ok := environmentIndex[environmentRef]; !ok {
+			return Catalog{}, fmt.Errorf("deployment %q references unknown environment %q", deployment.Name, environmentRef)
 		}
 		compiled.Deployments = append(compiled.Deployments, domain.Deployment{
 			Name:           deployment.Name,
-			AppRef:         deployment.AppRef,
-			EnvironmentRef: deployment.EnvironmentRef,
+			AppRef:         deployment.NormalizedAppRef(),
+			EnvironmentRef: environmentRef,
+			TargetType:     string(deployment.NormalizedTargetType()),
+			DesiredArtifact: domain.DeploymentArtifact{
+				Binary: deployment.Binary,
+				Image:  deployment.Image,
+			},
 		})
 		deploymentIndex[deployment.Name] = struct{}{}
 	}

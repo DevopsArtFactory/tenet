@@ -46,7 +46,51 @@ func TestLoadRejectsInvalidJSON(t *testing.T) {
 	}
 }
 
-func TestLoadIgnoresNonJSONFiles(t *testing.T) {
+func TestLoadReadsYAMLDeploymentFiles(t *testing.T) {
+	root := t.TempDir()
+	mustWriteJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	mustWriteJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	mustWriteManifest(t, filepath.Join(root, "deployments", "payments-api-prod.yaml"), "name: payments-api-prod\nappRef: payments-api\nenvironmentRef: prod-apne2\ntarget:\n  type: ec2\nstrategy:\n  type: blueGreen\ntraffic:\n  hostname: api.example.com\n  port: 443\ncapacity:\n  desired: 1\n  min: 1\n  max: 1\n")
+
+	catalog, err := Load(root)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if len(catalog.Deployments) != 1 || catalog.Deployments[0].Name != "payments-api-prod" {
+		t.Fatalf("unexpected YAML deployment contents: %+v", catalog.Deployments)
+	}
+}
+
+func TestLoadReadsYMLDeploymentFiles(t *testing.T) {
+	root := t.TempDir()
+	mustWriteJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	mustWriteJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	mustWriteManifest(t, filepath.Join(root, "deployments", "payments-api-prod.yml"), "name: payments-api-prod\nappRef: payments-api\nenvironmentRef: prod-apne2\ntarget:\n  type: ec2\nstrategy:\n  type: blueGreen\ntraffic:\n  port: 443\ncapacity:\n  desired: 1\n  min: 1\n  max: 1\n")
+
+	catalog, err := Load(root)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if len(catalog.Deployments) != 1 || catalog.Deployments[0].Name != "payments-api-prod" {
+		t.Fatalf("unexpected YML deployment contents: %+v", catalog.Deployments)
+	}
+}
+
+func TestLoadRejectsInvalidYAML(t *testing.T) {
+	root := t.TempDir()
+	for _, dir := range []string{"accounts", "environments", "deployments"} {
+		if err := os.Mkdir(filepath.Join(root, dir), 0o755); err != nil {
+			t.Fatalf("failed to create required dir %s: %v", dir, err)
+		}
+	}
+	mustWriteManifest(t, filepath.Join(root, "deployments", "broken.yaml"), "name: [unterminated\n")
+
+	if _, err := Load(root); err == nil {
+		t.Fatalf("expected invalid YAML error")
+	}
+}
+
+func TestLoadIgnoresNonManifestFiles(t *testing.T) {
 	root := t.TempDir()
 	for _, dir := range []string{"accounts", "environments", "deployments"} {
 		if err := os.Mkdir(filepath.Join(root, dir), 0o755); err != nil {
@@ -68,6 +112,16 @@ func TestLoadIgnoresNonJSONFiles(t *testing.T) {
 }
 
 func mustWriteJSON(t *testing.T, path string, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("failed to create dir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+}
+
+func mustWriteManifest(t *testing.T, path string, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("failed to create dir: %v", err)

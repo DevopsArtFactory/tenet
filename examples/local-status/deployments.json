@@ -24,7 +24,10 @@
           "reason": "RolloutComplete",
           "message": "No rollout in progress"
         }
-      ]
+      ],
+      "deployedArtifact": {
+        "binary": "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64"
+      }
     }
   },
   {
@@ -33,18 +36,18 @@
       "observedGeneration": 7,
       "sync": {
         "state": "Reconciling",
-        "reason": "candidate instances warming up"
+        "reason": "candidate tasks warming up"
       },
       "health": {
         "overall": "Progressing",
-        "summary": "1/2 staging instances healthy while rollout continues"
+        "summary": "1/2 staging tasks healthy while rollout continues"
       },
       "conditions": [
         {
           "type": "Ready",
           "status": false,
           "reason": "WaitingForWarmup",
-          "message": "New staging instance has not passed warmup yet"
+          "message": "New staging task has not passed warmup yet"
         },
         {
           "type": "Progressing",
@@ -52,7 +55,10 @@
           "reason": "RollingUpdate",
           "message": "Controller is moving traffic to the latest candidate"
         }
-      ]
+      ],
+      "deployedArtifact": {
+        "image": "ghcr.io/devopsartfactory/payments-api:staging-20260415"
+      }
     }
   }
 ]

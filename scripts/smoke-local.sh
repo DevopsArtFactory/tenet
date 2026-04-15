@@ -48,5 +48,6 @@ assert summary['deploymentCount'] == 2, summary
 assert status['deploymentName'] == 'payments-api-prod', status
 assert status['status']['sync']['state'] == 'Synced', status
 assert status['status']['health']['overall'] == 'Healthy', status
+assert status['status']['deployedArtifact']['binary'].startswith('s3://releases.example.com/'), status
 print('smoke-local: ok')
 PY
