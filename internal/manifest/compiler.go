@@ -99,11 +99,12 @@ func Compile(input CatalogSpec) (Catalog, error) {
 				Image:  deployment.Image,
 			},
 		}
-		compiledDeployment.Generation = deploymentGeneration(compiledDeployment, deployment)
+		environment := environmentIndex[environmentRef]
+		account := accountIndex[environment.AccountRef]
+		compiledDeployment.Generation = deploymentGeneration(compiledDeployment, deployment, environment, account)
 		compiled.Deployments = append(compiled.Deployments, compiledDeployment)
 		if len(deployment.Stacks) > 0 {
 			stack := deployment.Stacks[0]
-			environment := environmentIndex[environmentRef]
 			if stack.Account != environment.AccountRef {
 				return Catalog{}, fmt.Errorf("deployment %q stack account %q does not match environment account %q", deployment.Name, stack.Account, environment.AccountRef)
 			}
@@ -117,11 +118,13 @@ func Compile(input CatalogSpec) (Catalog, error) {
 	return compiled, nil
 }
 
-func deploymentGeneration(deployment domain.Deployment, desired spec.DeploymentSpec) int64 {
+func deploymentGeneration(deployment domain.Deployment, desired spec.DeploymentSpec, environment domain.Environment, account domain.Account) int64 {
 	payload, err := json.Marshal(struct {
 		Name            string                    `json:"name"`
 		AppRef          string                    `json:"appRef"`
 		EnvironmentRef  string                    `json:"environmentRef"`
+		Environment     deploymentEnvironmentHash `json:"environment"`
+		Account         deploymentAccountHash     `json:"account"`
 		Target          spec.TargetSpec           `json:"target"`
 		Strategy        spec.StrategySpec         `json:"strategy"`
 		ExecutionMode   string                    `json:"executionMode"`
@@ -135,7 +138,17 @@ func deploymentGeneration(deployment domain.Deployment, desired spec.DeploymentS
 		Name:           deployment.Name,
 		AppRef:         deployment.AppRef,
 		EnvironmentRef: deployment.EnvironmentRef,
-		Target:         spec.TargetSpec{Type: desired.NormalizedTargetType()},
+		Environment: deploymentEnvironmentHash{
+			Name:       environment.Name,
+			AccountRef: environment.AccountRef,
+			Region:     environment.Region,
+			NetworkRef: environment.NetworkRef,
+		},
+		Account: deploymentAccountHash{
+			Name:         account.Name,
+			AWSAccountID: account.AWSAccountID,
+		},
+		Target: spec.TargetSpec{Type: desired.NormalizedTargetType()},
 		Strategy: spec.StrategySpec{
 			Type:              desired.NormalizedStrategy(),
 			WarmupSeconds:     desired.Strategy.WarmupSeconds,
@@ -161,6 +174,18 @@ func deploymentGeneration(deployment domain.Deployment, desired spec.DeploymentS
 		return 1
 	}
 	return generation
+}
+
+type deploymentEnvironmentHash struct {
+	Name       string `json:"name"`
+	AccountRef string `json:"accountRef"`
+	Region     string `json:"region"`
+	NetworkRef string `json:"networkRef,omitempty"`
+}
+
+type deploymentAccountHash struct {
+	Name         string `json:"name"`
+	AWSAccountID string `json:"awsAccountId"`
 }
 
 func executionMode(target spec.TargetType, strategy spec.StrategyType) string {

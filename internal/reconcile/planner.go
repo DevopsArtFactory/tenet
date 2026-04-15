@@ -40,14 +40,6 @@ type Planner struct{}
 
 // Build returns a minimal reconciliation plan without side effects.
 func (Planner) Build(deployment domain.Deployment, status domain.DeploymentStatus) Plan {
-	if deployment.Generation < status.ObservedGeneration {
-		return Plan{Steps: []Step{
-			{Kind: StepResolvePlacement},
-			{Kind: StepObserveCurrentState},
-			{Kind: StepAwaitFreshDesired},
-		}}
-	}
-
 	if deployment.Generation == status.ObservedGeneration {
 		if status.IsSynced() && status.Health.Overall.IsHealthy() {
 			return Plan{Steps: []Step{{Kind: StepMarkSynced}}}

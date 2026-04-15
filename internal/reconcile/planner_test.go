@@ -141,15 +141,15 @@ func TestPlannerContinuesReconcilingErroredDeployment(t *testing.T) {
 	}
 }
 
-func TestPlannerWaitsForFreshDesiredWhenStatusIsAhead(t *testing.T) {
+func TestPlannerBuildsRolloutWhenGenerationTokenDiffersEvenIfDesiredHashIsNumericallyLower(t *testing.T) {
 	planner := Planner{}
-	deployment := domain.Deployment{Generation: 2}
+	deployment := domain.Deployment{Generation: 2, TargetType: "ec2", Strategy: "blueGreen", ExecutionMode: "asgWeightedTargetGroups"}
 	status := domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStateReconciling}}
 
 	plan := planner.Build(deployment, status)
-	want := []StepKind{StepResolvePlacement, StepObserveCurrentState, StepAwaitFreshDesired}
+	want := []StepKind{StepResolvePlacement, StepObserveCurrentState, StepCreateCandidateCapacity, StepVerifyCandidateCapacity, StepShiftTrafficFull, StepPromoteCandidateCapacity}
 	if got := stepKinds(plan.Steps); !reflect.DeepEqual(got, want) {
-		t.Fatalf("unexpected await-fresh-desired plan: got %v want %v", got, want)
+		t.Fatalf("unexpected generation-mismatch rollout plan: got %v want %v", got, want)
 	}
 }
 

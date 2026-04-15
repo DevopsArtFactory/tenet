@@ -198,6 +198,44 @@ func TestCompileChangesDesiredGenerationWhenTagsChange(t *testing.T) {
 	}
 }
 
+func TestCompileChangesDesiredGenerationWhenReferencedEnvironmentPlacementChanges(t *testing.T) {
+	input := testCompileGenerationCatalogSpec()
+
+	first, err := Compile(input)
+	if err != nil {
+		t.Fatalf("first Compile returned error: %v", err)
+	}
+
+	input.Environments[0].NetworkRef = "prod-dr"
+	second, err := Compile(input)
+	if err != nil {
+		t.Fatalf("second Compile returned error: %v", err)
+	}
+
+	if second.Deployments[0].Generation == first.Deployments[0].Generation {
+		t.Fatalf("expected desired generation to change when referenced environment placement changes, got %d", second.Deployments[0].Generation)
+	}
+}
+
+func TestCompileChangesDesiredGenerationWhenReferencedAccountIdentityChanges(t *testing.T) {
+	input := testCompileGenerationCatalogSpec()
+
+	first, err := Compile(input)
+	if err != nil {
+		t.Fatalf("first Compile returned error: %v", err)
+	}
+
+	input.Accounts[0].AWSAccountID = "210987654321"
+	second, err := Compile(input)
+	if err != nil {
+		t.Fatalf("second Compile returned error: %v", err)
+	}
+
+	if second.Deployments[0].Generation == first.Deployments[0].Generation {
+		t.Fatalf("expected desired generation to change when referenced account identity changes, got %d", second.Deployments[0].Generation)
+	}
+}
+
 func testCompileGenerationCatalogSpec() CatalogSpec {
 	return CatalogSpec{
 		Accounts: []spec.AccountSpec{{
