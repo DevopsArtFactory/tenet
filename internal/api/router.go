@@ -6,6 +6,7 @@ import (
 
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
+	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
 
 func requireMethod(w http.ResponseWriter, r *http.Request, method string) bool {
@@ -26,6 +27,7 @@ type Options struct {
 	CatalogAccounts     func() ([]catalog.AccountView, error)
 	CatalogPlacements   func() ([]catalog.PlacementView, error)
 	CatalogTopology     func() (catalog.TopologySnapshot, error)
+	DeploymentStatuses  func() ([]statusstore.Snapshot, error)
 }
 
 // NewRouter builds the API router for the Tenet control plane.
@@ -140,6 +142,22 @@ func NewRouter(options Options) http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(topology)
+	})
+	mux.HandleFunc("/v1/status/deployments", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+		if options.DeploymentStatuses == nil {
+			http.Error(w, "deployment statuses unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		snapshots, err := options.DeploymentStatuses()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(snapshots)
 	})
 
 	return mux

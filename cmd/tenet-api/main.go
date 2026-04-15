@@ -8,6 +8,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/api"
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
+	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
 
 func main() {
@@ -15,9 +16,10 @@ func main() {
 	commit := envOrDefault("TENET_COMMIT", "unknown")
 	addr := envOrDefault("TENET_API_ADDR", ":8080")
 	repoRoot := os.Getenv("TENET_REPO_ROOT")
+	statusPath := os.Getenv("TENET_STATUS_PATH")
 
 	info := buildinfo.Current(version, commit)
-	log.Printf("starting tenet-api version=%s commit=%s addr=%s repo_root=%s", info.Version, info.Commit, addr, repoRoot)
+	log.Printf("starting tenet-api version=%s commit=%s addr=%s repo_root=%s status_path=%s", info.Version, info.Commit, addr, repoRoot, statusPath)
 
 	options := api.Options{BuildInfo: info}
 	if repoRoot != "" {
@@ -30,6 +32,15 @@ func main() {
 		options.CatalogAccounts = catalog.RepositoryAccountProvider(repoRoot)
 		options.CatalogPlacements = catalog.RepositoryPlacementProvider(repoRoot)
 		options.CatalogTopology = catalog.RepositoryTopologyProvider(repoRoot)
+	}
+	if statusPath != "" {
+		options.DeploymentStatuses = func() ([]statusstore.Snapshot, error) {
+			loaded, err := statusstore.Load(statusPath)
+			if err != nil {
+				return nil, err
+			}
+			return statusstore.List(loaded), nil
+		}
 	}
 
 	if err := http.ListenAndServe(addr, api.NewRouter(options)); err != nil {

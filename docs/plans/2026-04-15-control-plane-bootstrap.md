@@ -212,8 +212,9 @@ docs/
 
 Implemented so far:
 - Phases 0 through 6 foundations are in place in repo form.
-- Read-only API surface now includes summary, account, environment, deployment, placement, and topology endpoints.
+- Read-only API surface now includes summary, account, environment, deployment, placement, topology, and deployment-status endpoints.
 - Controller bootstrap now validates and summarizes the repository catalog at startup when `TENET_REPO_ROOT` is set, then stays alive as a signal-aware long-running process.
+- The first runtime-status persistence seam exists as a filesystem-backed deployment status store.
 - Independent logic-review fixes have already been applied for planner behavior, rollout semantics, HTTP method guards, and manifest root validation.
 
 Next likely slices:
