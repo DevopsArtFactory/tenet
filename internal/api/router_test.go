@@ -427,6 +427,99 @@ func TestRouterDeploymentStatusesPropagatesErrors(t *testing.T) {
 	}
 }
 
+func TestRouterDeploymentStatusByName(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		DeploymentStatus: func(name string) (statusstore.Snapshot, error) {
+			if name != "api-prod" {
+				t.Fatalf("unexpected lookup name: %s", name)
+			}
+			return statusstore.Snapshot{DeploymentName: "api-prod", Status: domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStateSynced, Reason: "RolloutCompleted"}}}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/status/deployments/api-prod", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var snapshot statusstore.Snapshot
+	if err := json.Unmarshal(resp.Body.Bytes(), &snapshot); err != nil {
+		t.Fatalf("failed to decode snapshot: %v", err)
+	}
+	if snapshot.DeploymentName != "api-prod" {
+		t.Fatalf("unexpected snapshot: %+v", snapshot)
+	}
+}
+
+func TestRouterDeploymentStatusByNameUnavailable(t *testing.T) {
+	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+	req := httptest.NewRequest(http.MethodGet, "/v1/status/deployments/api-prod", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", resp.Code)
+	}
+}
+
+func TestRouterDeploymentStatusByNameNotFound(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		DeploymentStatus: func(name string) (statusstore.Snapshot, error) {
+			return statusstore.Snapshot{}, statusstore.ErrNotFound
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/status/deployments/missing", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.Code)
+	}
+}
+
+func TestRouterDeploymentStatusByNameRejectsInvalidNames(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		DeploymentStatus: func(name string) (statusstore.Snapshot, error) {
+			return statusstore.Snapshot{}, nil
+		},
+	})
+	for _, path := range []string{"/v1/status/deployments/", "/v1/status/deployments/a/b"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 for %s, got %d", path, resp.Code)
+		}
+	}
+}
+
+func TestRouterDeploymentStatusByNamePropagatesErrors(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		DeploymentStatus: func(name string) (statusstore.Snapshot, error) {
+			return statusstore.Snapshot{}, errors.New("boom")
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/status/deployments/api-prod", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.Code)
+	}
+}
+
 func TestRouterRejectsNonGETMethods(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
@@ -451,9 +544,12 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		DeploymentStatuses: func() ([]statusstore.Snapshot, error) {
 			return []statusstore.Snapshot{}, nil
 		},
+		DeploymentStatus: func(name string) (statusstore.Snapshot, error) {
+			return statusstore.Snapshot{}, nil
+		},
 	})
 
-	paths := []string{"/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/status/deployments"}
+	paths := []string{"/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
 	for _, path := range paths {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		resp := httptest.NewRecorder()

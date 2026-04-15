@@ -28,6 +28,7 @@ Implemented today:
 - method guards for the read-only API surface
 - fail-fast validation for invalid repository roots and incomplete manifest layouts
 - optional status-file exposure through `TENET_STATUS_PATH`
+- per-deployment status lookup through `GET /v1/status/deployments/{deploymentName}`
 
 Not implemented yet:
 - live AWS reconciliation/execution

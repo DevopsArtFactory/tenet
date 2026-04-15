@@ -1,8 +1,12 @@
 # Tenet v1 Deployment Status API
 
-`/v1/status/deployments` is the first runtime-status read endpoint.
+`/v1/status/deployments` is the first runtime-status read endpoint family.
 
-It currently returns filesystem-backed deployment status snapshots containing:
+It currently supports:
+- `GET /v1/status/deployments`
+- `GET /v1/status/deployments/{deploymentName}`
+
+The payloads are filesystem-backed deployment status snapshots containing:
 - deployment name
 - observed generation
 - sync state and reason
