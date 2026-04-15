@@ -54,3 +54,14 @@ func RepositoryPlacementProvider(root string) func() ([]PlacementView, error) {
 		return ListPlacements(compiled)
 	}
 }
+
+// RepositoryTopologyProvider builds a topology snapshot function backed by a repository root.
+func RepositoryTopologyProvider(root string) func() (TopologySnapshot, error) {
+	return func() (TopologySnapshot, error) {
+		compiled, err := LoadFromRepository(root)
+		if err != nil {
+			return TopologySnapshot{}, err
+		}
+		return BuildTopology(compiled)
+	}
+}

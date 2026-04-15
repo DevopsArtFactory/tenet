@@ -314,6 +314,60 @@ func TestRouterCatalogPlacementsPropagatesErrors(t *testing.T) {
 	}
 }
 
+func TestRouterCatalogTopology(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		CatalogTopology: func() (catalog.TopologySnapshot, error) {
+			return catalog.TopologySnapshot{Summary: catalog.Summary{AccountCount: 1, EnvironmentCount: 1, DeploymentCount: 1}, Accounts: []catalog.AccountView{{Name: "prod-core"}}, Environments: []catalog.EnvironmentView{{Name: "prod-apne2"}}, Deployments: []catalog.DeploymentView{{Name: "api-prod"}}, Placements: []catalog.PlacementView{{DeploymentName: "api-prod", AccountName: "prod-core"}}}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/topology", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var topology catalog.TopologySnapshot
+	if err := json.Unmarshal(resp.Body.Bytes(), &topology); err != nil {
+		t.Fatalf("failed to decode topology: %v", err)
+	}
+	if topology.Summary.DeploymentCount != 1 || len(topology.Placements) != 1 {
+		t.Fatalf("unexpected topology: %+v", topology)
+	}
+}
+
+func TestRouterCatalogTopologyUnavailable(t *testing.T) {
+	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/topology", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", resp.Code)
+	}
+}
+
+func TestRouterCatalogTopologyPropagatesErrors(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		CatalogTopology: func() (catalog.TopologySnapshot, error) {
+			return catalog.TopologySnapshot{}, errors.New("boom")
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/topology", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.Code)
+	}
+}
+
 func TestRouterRejectsNonGETMethods(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
@@ -332,9 +386,12 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		CatalogPlacements: func() ([]catalog.PlacementView, error) {
 			return []catalog.PlacementView{}, nil
 		},
+		CatalogTopology: func() (catalog.TopologySnapshot, error) {
+			return catalog.TopologySnapshot{}, nil
+		},
 	})
 
-	paths := []string{"/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements"}
+	paths := []string{"/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology"}
 	for _, path := range paths {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		resp := httptest.NewRecorder()

@@ -120,3 +120,19 @@ func TestRepositoryPlacementProviderLoadsStablePlacementListing(t *testing.T) {
 		t.Fatalf("expected sorted placement list, got %+v", placements)
 	}
 }
+
+func TestRepositoryTopologyProviderLoadsStableTopologySnapshot(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+
+	provider := RepositoryTopologyProvider(root)
+	topology, err := provider()
+	if err != nil {
+		t.Fatalf("provider returned error: %v", err)
+	}
+	if topology.Summary.DeploymentCount != 1 || len(topology.Placements) != 1 {
+		t.Fatalf("unexpected topology: %+v", topology)
+	}
+}
