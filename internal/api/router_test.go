@@ -9,6 +9,8 @@ import (
 
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
+	"github.com/DevopsArtFactory/tenet/internal/domain"
+	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
 
 func TestRouterHealthz(t *testing.T) {
@@ -368,6 +370,60 @@ func TestRouterCatalogTopologyPropagatesErrors(t *testing.T) {
 	}
 }
 
+func TestRouterDeploymentStatuses(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		DeploymentStatuses: func() ([]statusstore.Snapshot, error) {
+			return []statusstore.Snapshot{{DeploymentName: "api-prod", Status: domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStateSynced}}}}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/status/deployments", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var snapshots []statusstore.Snapshot
+	if err := json.Unmarshal(resp.Body.Bytes(), &snapshots); err != nil {
+		t.Fatalf("failed to decode snapshots: %v", err)
+	}
+	if len(snapshots) != 1 || snapshots[0].DeploymentName != "api-prod" {
+		t.Fatalf("unexpected snapshots: %+v", snapshots)
+	}
+}
+
+func TestRouterDeploymentStatusesUnavailable(t *testing.T) {
+	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+	req := httptest.NewRequest(http.MethodGet, "/v1/status/deployments", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", resp.Code)
+	}
+}
+
+func TestRouterDeploymentStatusesPropagatesErrors(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		DeploymentStatuses: func() ([]statusstore.Snapshot, error) {
+			return nil, errors.New("boom")
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/status/deployments", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.Code)
+	}
+}
+
 func TestRouterRejectsNonGETMethods(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
@@ -389,9 +445,12 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		CatalogTopology: func() (catalog.TopologySnapshot, error) {
 			return catalog.TopologySnapshot{}, nil
 		},
+		DeploymentStatuses: func() ([]statusstore.Snapshot, error) {
+			return []statusstore.Snapshot{}, nil
+		},
 	})
 
-	paths := []string{"/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology"}
+	paths := []string{"/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/status/deployments"}
 	for _, path := range paths {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		resp := httptest.NewRecorder()

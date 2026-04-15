@@ -13,6 +13,7 @@ Implemented today:
 - parser-light repository loader for `accounts/`, `environments/`, and `deployments/` JSON manifests
 - validated catalog compilation and repository-backed providers
 - repository-aware controller bootstrap that validates `TENET_REPO_ROOT`, logs catalog counts at startup, and stays alive as a long-running process
+- filesystem-backed deployment status storage for the first runtime-status slice
 - read-only API endpoints for:
   - `GET /healthz`
   - `GET /v1/info`
@@ -22,8 +23,10 @@ Implemented today:
   - `GET /v1/catalog/deployments`
   - `GET /v1/catalog/placements`
   - `GET /v1/catalog/topology`
+  - `GET /v1/status/deployments`
 - method guards for the read-only API surface
 - fail-fast validation for invalid repository roots and incomplete manifest layouts
+- optional status-file exposure through `TENET_STATUS_PATH`
 
 Not implemented yet:
 - live AWS reconciliation/execution
@@ -70,6 +73,8 @@ Architecture and plan docs live under `docs/`:
 - `docs/architecture/tenet-v1-catalog-placements-api.md`
 - `docs/architecture/tenet-v1-catalog-topology-api.md`
 - `docs/architecture/tenet-v1-controller-repository-bootstrap.md`
+- `docs/architecture/tenet-v1-deployment-status-store.md`
+- `docs/architecture/tenet-v1-deployment-status-api.md`
 
 ## Open Source
 - [Contributing Guide](./CONTRIBUTING.md)
