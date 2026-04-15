@@ -18,6 +18,35 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
 
+type contextKey string
+
+type recordingRuntimeStore struct {
+	listContexts []context.Context
+	saveContexts []context.Context
+	snapshots    []statusstore.Snapshot
+	closeCalls   int
+}
+
+func (s *recordingRuntimeStore) List(ctx context.Context) ([]statusstore.Snapshot, error) {
+	s.listContexts = append(s.listContexts, ctx)
+	return append([]statusstore.Snapshot(nil), s.snapshots...), nil
+}
+
+func (s *recordingRuntimeStore) Get(_ context.Context, deploymentName string) (statusstore.Snapshot, error) {
+	return statusstore.Get(s.snapshots, deploymentName)
+}
+
+func (s *recordingRuntimeStore) Save(ctx context.Context, snapshots []statusstore.Snapshot) error {
+	s.saveContexts = append(s.saveContexts, ctx)
+	s.snapshots = append([]statusstore.Snapshot(nil), snapshots...)
+	return nil
+}
+
+func (s *recordingRuntimeStore) Close() error {
+	s.closeCalls++
+	return nil
+}
+
 func TestRunControllerLogsReconcilePlansFromRepositoryAndStatusSnapshots(t *testing.T) {
 	root := t.TempDir()
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
@@ -96,7 +125,7 @@ func TestEmitRuntimePlansPersistsRolloutSummaryIntoStatusSnapshotsForEC2CanaryDe
 
 	logger := log.New(&bytes.Buffer{}, "", 0)
 	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
-	if err := emitRuntimePlans(logger, config); err != nil {
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
 		t.Fatalf("emitRuntimePlans returned error: %v", err)
 	}
 
@@ -114,6 +143,12 @@ func TestEmitRuntimePlansPersistsRolloutSummaryIntoStatusSnapshotsForEC2CanaryDe
 	}
 	if status.Rollout.CurrentStep != "PromoteCandidateCapacity" {
 		t.Fatalf("expected rollout current step to be persisted, got %+v", status.Rollout)
+	}
+	if status.Rollout.Phase != domain.RolloutPhasePromoting {
+		t.Fatalf("expected weighted target group rollout phase %q, got %+v", domain.RolloutPhasePromoting, status.Rollout)
+	}
+	if status.Rollout.Summary != "Promoting candidate capacity through weighted target groups" {
+		t.Fatalf("expected weighted target group rollout summary, got %+v", status.Rollout)
 	}
 	wantSteps := []string{
 		"ResolvePlacement",
@@ -143,6 +178,34 @@ func TestEmitRuntimePlansPersistsRolloutSummaryIntoStatusSnapshotsForEC2CanaryDe
 	}
 }
 
+func TestEmitRuntimePlansUsesControllerContextForStoreIO(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+
+	store := &recordingRuntimeStore{}
+	ctx := context.WithValue(context.Background(), contextKey("request-id"), "controller-loop")
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root}
+
+	if err := emitRuntimePlans(ctx, logger, config, store); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+	if len(store.listContexts) == 0 {
+		t.Fatalf("expected emitRuntimePlans to list snapshots")
+	}
+	if len(store.saveContexts) == 0 {
+		t.Fatalf("expected emitRuntimePlans to save snapshots")
+	}
+	if got := store.listContexts[0].Value(contextKey("request-id")); got != "controller-loop" {
+		t.Fatalf("expected List to receive controller context, got %#v", got)
+	}
+	if got := store.saveContexts[0].Value(contextKey("request-id")); got != "controller-loop" {
+		t.Fatalf("expected Save to receive controller context, got %#v", got)
+	}
+}
+
 func TestEmitRuntimePlansPersistsCodeDeployRolloutStepsForECSLinearDeployment(t *testing.T) {
 	root := t.TempDir()
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
@@ -153,7 +216,7 @@ func TestEmitRuntimePlansPersistsCodeDeployRolloutStepsForECSLinearDeployment(t 
 
 	logger := log.New(&bytes.Buffer{}, "", 0)
 	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
-	if err := emitRuntimePlans(logger, config); err != nil {
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
 		t.Fatalf("emitRuntimePlans returned error: %v", err)
 	}
 
@@ -168,8 +231,50 @@ func TestEmitRuntimePlansPersistsCodeDeployRolloutStepsForECSLinearDeployment(t 
 	if status.Rollout.CurrentStep != "VerifyServiceStability" {
 		t.Fatalf("expected ecs linear rollout current step, got %+v", status.Rollout)
 	}
+	if status.Rollout.Phase != domain.RolloutPhaseStabilizing {
+		t.Fatalf("expected ecs CodeDeploy rollout phase %q, got %+v", domain.RolloutPhaseStabilizing, status.Rollout)
+	}
+	if status.Rollout.Summary != "Stabilizing ECS service after CodeDeploy traffic shift" {
+		t.Fatalf("expected ecs CodeDeploy rollout summary, got %+v", status.Rollout)
+	}
 	if len(status.Rollout.Steps) != 5 || status.Rollout.Steps[2].Kind != "CreateCodeDeployDeployment" || status.Rollout.Steps[3].Kind != "ShiftTrafficLinear" {
 		t.Fatalf("expected ecs codedeploy rollout steps, got %+v", status.Rollout.Steps)
+	}
+}
+
+func TestEmitRuntimePlansPersistsInstanceRefreshRolloutSummaryForEC2RollingDeployment(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"rolling"},"traffic":{"port":443},"capacity":{"desired":2,"min":1,"max":3}}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"refresh pending"},"health":{"overall":"Progressing","summary":"replacement capacity pending"},"conditions":[]}}]`)
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	status := snapshots[0].Status
+	if status.Rollout == nil {
+		t.Fatalf("expected rollout summary to be persisted")
+	}
+	if status.Rollout.CurrentStep != "VerifyReplacementCapacity" {
+		t.Fatalf("expected instance refresh rollout current step, got %+v", status.Rollout)
+	}
+	if status.Rollout.Phase != domain.RolloutPhaseStabilizing {
+		t.Fatalf("expected instance refresh rollout phase %q, got %+v", domain.RolloutPhaseStabilizing, status.Rollout)
+	}
+	if status.Rollout.Summary != "Verifying replacement capacity during instance refresh" {
+		t.Fatalf("expected instance refresh rollout summary, got %+v", status.Rollout)
+	}
+	if len(status.Rollout.Steps) != 4 || status.Rollout.Steps[2].Kind != "StartInstanceRefresh" || status.Rollout.Steps[3].Kind != "VerifyReplacementCapacity" {
+		t.Fatalf("expected instance refresh rollout steps, got %+v", status.Rollout.Steps)
 	}
 }
 
@@ -182,7 +287,7 @@ func TestEmitRuntimePlansBootstrapsMissingFileBackedStatusStore(t *testing.T) {
 
 	logger := log.New(&bytes.Buffer{}, "", 0)
 	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
-	if err := emitRuntimePlans(logger, config); err != nil {
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
 		t.Fatalf("emitRuntimePlans returned error: %v", err)
 	}
 
@@ -211,7 +316,7 @@ func TestEmitRuntimePlansPersistsWeightedTargetGroupRolloutStepsWhenDesiredGener
 
 	logger := log.New(&bytes.Buffer{}, "", 0)
 	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
-	if err := emitRuntimePlans(logger, config); err != nil {
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
 		t.Fatalf("emitRuntimePlans returned error: %v", err)
 	}
 
@@ -226,8 +331,11 @@ func TestEmitRuntimePlansPersistsWeightedTargetGroupRolloutStepsWhenDesiredGener
 	if status.Rollout.CurrentStep != "PromoteCandidateCapacity" {
 		t.Fatalf("expected rollout current step PromoteCandidateCapacity, got %+v", status.Rollout)
 	}
-	if status.Rollout.Phase != domain.RolloutPhaseAccepted {
-		t.Fatalf("expected rollout phase %q, got %+v", domain.RolloutPhaseAccepted, status.Rollout)
+	if status.Rollout.Phase != domain.RolloutPhasePromoting {
+		t.Fatalf("expected rollout phase %q, got %+v", domain.RolloutPhasePromoting, status.Rollout)
+	}
+	if status.Rollout.Summary != "Promoting candidate capacity through weighted target groups" {
+		t.Fatalf("expected weighted-target-group rollout summary, got %+v", status.Rollout)
 	}
 	if len(status.Rollout.Steps) != 6 || status.Rollout.Steps[2].Kind != "CreateCandidateCapacity" || status.Rollout.Steps[4].Kind != "ShiftTrafficFull" {
 		t.Fatalf("expected weighted-target-group rollout steps, got %+v", status.Rollout.Steps)
@@ -245,7 +353,7 @@ func TestEmitRuntimePlansPersistsHealthySyncedRolloutSummaryWhenGenerationsMatch
 
 	logger := log.New(&bytes.Buffer{}, "", 0)
 	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
-	if err := emitRuntimePlans(logger, config); err != nil {
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
 		t.Fatalf("emitRuntimePlans returned error: %v", err)
 	}
 
@@ -276,7 +384,7 @@ func TestEmitRuntimePlansDoesNotPersistCompletedRolloutSummaryForSyncedButUnheal
 
 	logger := log.New(&bytes.Buffer{}, "", 0)
 	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
-	if err := emitRuntimePlans(logger, config); err != nil {
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
 		t.Fatalf("emitRuntimePlans returned error: %v", err)
 	}
 
@@ -309,7 +417,7 @@ func TestEmitRuntimePlansRemovesSnapshotsForDeletedDeployments(t *testing.T) {
 
 	logger := log.New(&bytes.Buffer{}, "", 0)
 	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
-	if err := emitRuntimePlans(logger, config); err != nil {
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
 		t.Fatalf("emitRuntimePlans returned error: %v", err)
 	}
 
@@ -342,7 +450,7 @@ func TestEmitRuntimePlansPersistsNonZeroDesiredGenerationAndZeroObservedGenerati
 
 	logger := log.New(&bytes.Buffer{}, "", 0)
 	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
-	if err := emitRuntimePlans(logger, config); err != nil {
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
 		t.Fatalf("emitRuntimePlans returned error: %v", err)
 	}
 

@@ -37,7 +37,7 @@ Implemented today:
   - `GET /v1/overview/accounts`
   - `GET /v1/status/deployments`
   - `GET /v1/status/deployments/{deploymentName}`
-- embedded browser UI grouped by account and deployment at `/`, including rollout phase, current step, and planned steps rendered from the richer EC2 candidate-capacity, weighted-target-group, ECS CodeDeploy, and ECS rolling summaries
+- embedded browser UI grouped by account and deployment at `/`, including controller-authored rollout summary text alongside rollout phase, current step, and planned steps for EC2 candidate-capacity, weighted-target-group, ECS CodeDeploy, and ECS rolling executions
 - method guards for the read-only API surface
 - fail-fast validation for invalid repository roots and incomplete manifest layouts
 - optional status-file exposure through `TENET_STATUS_PATH`
@@ -83,7 +83,7 @@ curl http://localhost:8080/v1/overview/accounts
 curl http://localhost:8080/v1/status/deployments/payments-api-prod
 ```
 
-When you run only `tenet-api` against the committed fixture file, the status endpoint still reflects the seeded snapshots and may not include controller-derived `rollout` summaries yet. To populate strategy-aware rollout summaries, either run `tenet-controller` against the same repo/status store or use the Docker Compose stack below.
+When you run only `tenet-api` against the committed fixture file, the status endpoint still reflects the seeded snapshots and may not include controller-derived `rollout` summaries yet. To populate the execution-mode-aware rollout phase, current step, summary text, and planned steps, either run `tenet-controller` against the same repo/status store or use the Docker Compose stack below.
 
 Run the local smoke check:
 

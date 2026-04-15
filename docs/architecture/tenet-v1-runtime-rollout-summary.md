@@ -33,7 +33,11 @@ Each `steps[]` entry is a `domain.RolloutStepSummary`:
 - ECS CodeDeploy summaries now read like `CreateCodeDeployDeployment -> ShiftTrafficLinear -> VerifyServiceStability`, while native ECS rolling summaries use labels such as `UpdateECSService` and `VerifyServiceStability`.
 - `steps[].current=true` currently marks the final planned step in the emitted plan summary.
 - For candidate-style and CodeDeploy/native strategy plans, the controller therefore reports the tail step (for example `PromoteCandidateCapacity` or `VerifyServiceStability`) as `current`, even while earlier plan steps may be the more intuitive operator focus.
-- `phase` and `summary` are also derived from that same final planned step, so many in-progress strategy rollouts currently surface coarse values such as `Accepted` / `Observing current state`, while same-generation repair plans surface `Provisioning` / `Reconciling current state`.
+- `phase` and `summary` are also derived from that same final planned step, but the controller now maps those tail steps to execution-mode-aware values instead of the earlier coarse `Accepted` / `Observing current state` fallback.
+- EC2 weighted-target-group plans surface `Provisioning` / `Creating candidate capacity for weighted target groups`, `HealthChecking` / `Verifying candidate capacity before traffic shifting`, and `Promoting` / `Shifting canary traffic through weighted target groups` or `Promoting candidate capacity through weighted target groups` depending on the tail step.
+- EC2 instance-refresh plans surface `Provisioning` / `Starting EC2 instance refresh` and `Stabilizing` / `Verifying replacement capacity during instance refresh`.
+- ECS CodeDeploy plans surface `Provisioning` / `Creating CodeDeploy traffic shift deployment`, `Promoting` / `Shifting traffic with ECS CodeDeploy`, and `Stabilizing` / `Stabilizing ECS service after CodeDeploy traffic shift`.
+- Native ECS rolling plans surface `Provisioning` / `Updating ECS service deployment` and `Stabilizing` / `Stabilizing ECS service after rolling update`.
 
 ## API/UI usage
 
@@ -44,7 +48,7 @@ The runtime summary is preserved in two read surfaces:
 The account overview surface also copies the same summary into each deployment card payload:
 - `GET /v1/overview/accounts`
 
-That lets the embedded overview UI show rollout phase, current step, and planned steps without needing additional API joins in the browser, while preserving the richer EC2 candidate-capacity and ECS CodeDeploy/native-rolling terminology from the planner.
+That lets the embedded overview UI show rollout phase, current step, summary text, and planned steps without needing additional API joins in the browser, while preserving the richer EC2 candidate-capacity and ECS CodeDeploy/native-rolling terminology from the planner.
 
 ## Compatibility
 

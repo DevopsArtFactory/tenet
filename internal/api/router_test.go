@@ -657,14 +657,25 @@ func TestRouterRootServesUI(t *testing.T) {
 		"root.innerHTML = accounts.map",
 		"document.getElementById('accounts').innerHTML = `<div class=\"empty\">Failed to load overview: ${error.message}</div>`",
 		"['Progressing', deployments.length - synced]",
+		"const progressing = deployments.filter((deployment) => deployment.sync?.state === 'Reconciling' || deployment.sync?.state === 'OutOfSync').length;",
 	} {
 		if strings.Contains(body, unsafe) {
 			t.Fatalf("expected UI to avoid unsafe rendering or misclassified summary logic %q, got %q", unsafe, body)
 		}
 	}
-	for _, fragment := range []string{"textContent", "createElement", "deployment.sync?.state === 'Reconciling' || deployment.sync?.state === 'OutOfSync'"} {
+	for _, fragment := range []string{
+		"textContent",
+		"createElement",
+		"const progressingStates = new Set(['Reconciling', 'OutOfSync', 'Drifted']);",
+		"progressingStates.has(deployment.sync?.state)",
+		"case 'Reconciling':",
+		"case 'OutOfSync':",
+		"case 'Drifted':\n            return 'progress';",
+		"case 'Paused':\n            return 'paused';",
+		"case 'Error':\n            return 'error';",
+	} {
 		if !strings.Contains(body, fragment) {
-			t.Fatalf("expected UI to include safe rendering and precise progressing-state logic %q, got %q", fragment, body)
+			t.Fatalf("expected UI to include safe rendering and precise sync-state pill mapping %q, got %q", fragment, body)
 		}
 	}
 }
