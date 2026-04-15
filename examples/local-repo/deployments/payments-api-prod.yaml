@@ -8,7 +8,7 @@ stacks:
   - stack: payments-api-prod
     account: prod-core
     env: prod-apne2
-    replacement_type: blueGreen
+    replacement_type: canary
     termination_delay_rate: 25
     capacity:
       desired: 3

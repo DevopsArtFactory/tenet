@@ -81,6 +81,56 @@ func TestCompileAcceptsGoployerStyleDeploymentManifest(t *testing.T) {
 	}
 }
 
+func TestCompileDerivesExecutionModesForEC2AndECS(t *testing.T) {
+	catalog, err := Compile(CatalogSpec{
+		Accounts: []spec.AccountSpec{
+			{Name: "prod-core", AWSAccountID: "123456789012", RoleARN: "arn:aws:iam::123456789012:role/TenetDeployerRole", AllowedRegions: []string{"ap-northeast-2"}},
+			{Name: "staging-core", AWSAccountID: "123456789013", RoleARN: "arn:aws:iam::123456789013:role/TenetDeployerRole", AllowedRegions: []string{"ap-northeast-2"}},
+		},
+		Environments: []spec.EnvironmentSpec{
+			{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"},
+			{Name: "staging-apne2", AccountRef: "staging-core", Region: "ap-northeast-2"},
+		},
+		Deployments: []spec.DeploymentSpec{
+			{
+				Name:   "payments-api-prod",
+				Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
+				Stacks: []spec.StackSpec{{
+					Stack:           "payments-api-prod",
+					Account:         "prod-core",
+					Env:             "prod-apne2",
+					ReplacementType: "canary",
+					Capacity:        spec.CapacitySpec{Desired: 3, Min: 2, Max: 6},
+					Regions:         []spec.RegionSpec{{Region: "ap-northeast-2"}},
+				}},
+			},
+			{
+				Name:   "payments-api-staging",
+				Image:  "ghcr.io/devopsartfactory/payments-api:staging-20260415",
+				Target: spec.TargetSpec{Type: spec.TargetTypeECS},
+				Stacks: []spec.StackSpec{{
+					Stack:           "payments-api-staging",
+					Account:         "staging-core",
+					Env:             "staging-apne2",
+					ReplacementType: "linear",
+					Capacity:        spec.CapacitySpec{Desired: 2, Min: 1, Max: 3},
+					Regions:         []spec.RegionSpec{{Region: "ap-northeast-2"}},
+				}},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Compile returned error: %v", err)
+	}
+
+	if got := catalog.Deployments[0]; got.Strategy != "canary" || got.ExecutionMode != "asgWeightedTargetGroups" {
+		t.Fatalf("unexpected EC2 rollout mapping: %+v", got)
+	}
+	if got := catalog.Deployments[1]; got.Strategy != "linear" || got.ExecutionMode != "ecsCodeDeploy" {
+		t.Fatalf("unexpected ECS rollout mapping: %+v", got)
+	}
+}
+
 func TestCompileRejectsGoployerStackAccountMismatch(t *testing.T) {
 	_, err := Compile(CatalogSpec{
 		Accounts: []spec.AccountSpec{

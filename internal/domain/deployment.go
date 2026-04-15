@@ -13,5 +13,7 @@ type Deployment struct {
 	EnvironmentRef  string
 	Generation      int64
 	TargetType      string
+	Strategy        string
+	ExecutionMode   string
 	DesiredArtifact DeploymentArtifact
 }

@@ -1,4 +1,14 @@
 services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   api:
     build:
       context: .
@@ -7,11 +17,16 @@ services:
     environment:
       TENET_API_ADDR: ":8080"
       TENET_REPO_ROOT: /workspace/examples/local-repo
-      TENET_STATUS_PATH: /workspace/examples/local-status/deployments.json
+      TENET_STATUS_BACKEND: redis
+      TENET_REDIS_ADDR: redis:6379
+      TENET_STATUS_SEED_PATH: /workspace/examples/local-status/deployments.json
     volumes:
       - ./examples:/workspace/examples:ro
     ports:
       - "8080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
       interval: 5s
@@ -25,7 +40,9 @@ services:
     command: ["/usr/local/bin/tenet-controller"]
     environment:
       TENET_REPO_ROOT: /workspace/examples/local-repo
-      TENET_STATUS_PATH: /workspace/examples/local-status/deployments.json
+      TENET_STATUS_BACKEND: redis
+      TENET_REDIS_ADDR: redis:6379
+      TENET_STATUS_SEED_PATH: /workspace/examples/local-status/deployments.json
       TENET_CONTROLLER_WORKERS: "1"
       TENET_CONTROLLER_REQUEUE_SECONDS: "5"
     volumes:

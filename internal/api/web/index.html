@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tenet Control Plane</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #07111f;
+        --panel: rgba(11, 24, 43, 0.9);
+        --panel-2: rgba(21, 37, 63, 0.88);
+        --line: rgba(120, 160, 255, 0.16);
+        --text: #ebf2ff;
+        --muted: #94a8c7;
+        --green: #45d483;
+        --yellow: #f4c95d;
+        --blue: #67b7ff;
+        --red: #ff7b7b;
+        --purple: #a78bfa;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        background: radial-gradient(circle at top, #12305f 0%, var(--bg) 45%, #030814 100%);
+        color: var(--text);
+      }
+      .shell { max-width: 1280px; margin: 0 auto; padding: 32px 20px 56px; }
+      .hero { display: flex; justify-content: space-between; gap: 16px; align-items: end; margin-bottom: 24px; }
+      .title { font-size: 36px; font-weight: 800; letter-spacing: -0.04em; margin: 0 0 8px; }
+      .subtitle { margin: 0; color: var(--muted); max-width: 720px; line-height: 1.5; }
+      .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
+      .card, .account { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 18px 40px rgba(0,0,0,0.24); }
+      .card { padding: 18px; }
+      .label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .08em; }
+      .value { font-size: 28px; font-weight: 800; margin-top: 8px; }
+      .accounts { display: grid; gap: 20px; }
+      .account { padding: 20px; }
+      .account-head { display:flex; justify-content:space-between; gap:16px; align-items:start; margin-bottom: 16px; }
+      .account-name { margin:0; font-size: 24px; }
+      .account-meta { color: var(--muted); font-size: 14px; margin-top: 6px; }
+      .rows { display:grid; gap: 12px; }
+      .row { background: var(--panel-2); border: 1px solid rgba(255,255,255,.06); border-radius: 16px; padding: 16px; display:grid; gap: 14px; }
+      .row-top { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
+      .row-title { margin:0; font-size: 18px; }
+      .row-subtitle { margin-top:6px; color: var(--muted); font-size: 14px; }
+      .pills { display:flex; flex-wrap:wrap; gap:8px; }
+      .pill { padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; border: 1px solid transparent; }
+      .pill.target { background: rgba(103,183,255,.12); color: var(--blue); border-color: rgba(103,183,255,.24); }
+      .pill.strategy { background: rgba(167,139,250,.12); color: var(--purple); border-color: rgba(167,139,250,.28); }
+      .pill.mode { background: rgba(244,201,93,.12); color: var(--yellow); border-color: rgba(244,201,93,.28); }
+      .pill.synced { background: rgba(69,212,131,.12); color: var(--green); border-color: rgba(69,212,131,.24); }
+      .pill.progress { background: rgba(244,201,93,.12); color: var(--yellow); border-color: rgba(244,201,93,.28); }
+      .pill.error { background: rgba(255,123,123,.12); color: var(--red); border-color: rgba(255,123,123,.24); }
+      .metrics { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+      .metric { padding: 12px; border-radius: 14px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.05); }
+      .metric .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+      .metric .v { margin-top: 8px; font-size: 14px; font-weight: 650; word-break: break-word; }
+      .empty, .loading { padding: 32px; text-align:center; color: var(--muted); background: var(--panel); border:1px solid var(--line); border-radius:20px; }
+      @media (max-width: 720px) {
+        .hero, .row-top, .account-head { flex-direction: column; align-items: stretch; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="hero">
+        <div>
+          <h1 class="title">Tenet Control Plane</h1>
+          <p class="subtitle">Account-oriented rollout visibility for EC2 binaries and ECS images, with strategy guidance for blue/green, canary, and linear delivery.</p>
+        </div>
+      </div>
+      <section class="summary" id="summary"></section>
+      <section id="accounts" class="accounts">
+        <div class="loading">Loading deployment overview…</div>
+      </section>
+    </div>
+    <script>
+      const statusClass = (state) => {
+        if (state === 'Synced') return 'synced';
+        if (state === 'Reconciling' || state === 'OutOfSync') return 'progress';
+        return 'error';
+      };
+
+      const healthLabel = (health) => health?.overall || 'Unknown';
+      const artifact = (obj) => obj?.binary || obj?.image || '—';
+
+      const renderSummary = (accounts) => {
+        const deployments = accounts.flatMap((account) => account.deployments || []);
+        const synced = deployments.filter((d) => d.sync?.state === 'Synced').length;
+        const html = [
+          ['Accounts', accounts.length],
+          ['Deployments', deployments.length],
+          ['Synced', synced],
+          ['Progressing', deployments.length - synced],
+        ].map(([label, value]) => `
+          <div class="card">
+            <div class="label">${label}</div>
+            <div class="value">${value}</div>
+          </div>
+        `).join('');
+        document.getElementById('summary').innerHTML = html;
+      };
+
+      const renderAccounts = (accounts) => {
+        const root = document.getElementById('accounts');
+        if (!accounts.length) {
+          root.innerHTML = '<div class="empty">No accounts or deployments are loaded yet.</div>';
+          return;
+        }
+        root.innerHTML = accounts.map((account) => `
+          <article class="account">
+            <div class="account-head">
+              <div>
+                <h2 class="account-name">${account.name}</h2>
+                <div class="account-meta">AWS account ${account.awsAccountId} · Regions: ${(account.allowedRegions || []).join(', ') || '—'}</div>
+              </div>
+              <div class="pills">
+                <span class="pill target">${(account.deployments || []).length} deployments</span>
+              </div>
+            </div>
+            <div class="rows">
+              ${(account.deployments || []).map((deployment) => `
+                <div class="row">
+                  <div class="row-top">
+                    <div>
+                      <h3 class="row-title">${deployment.name}</h3>
+                      <div class="row-subtitle">${deployment.appRef} · ${deployment.environmentRef} · ${deployment.region}</div>
+                    </div>
+                    <div class="pills">
+                      <span class="pill target">${deployment.targetType || 'unknown target'}</span>
+                      <span class="pill strategy">${deployment.strategy || 'unknown strategy'}</span>
+                      <span class="pill mode">${deployment.executionMode || 'unassigned execution'}</span>
+                      <span class="pill ${statusClass(deployment.sync?.state)}">${deployment.sync?.state || 'Unknown'}</span>
+                    </div>
+                  </div>
+                  <div class="metrics">
+                    <div class="metric"><div class="k">Desired artifact</div><div class="v">${artifact(deployment.desiredArtifact)}</div></div>
+                    <div class="metric"><div class="k">Deployed artifact</div><div class="v">${artifact(deployment.deployedArtifact)}</div></div>
+                    <div class="metric"><div class="k">Health</div><div class="v">${healthLabel(deployment.health)}${deployment.health?.summary ? ` · ${deployment.health.summary}` : ''}</div></div>
+                    <div class="metric"><div class="k">Observed generation</div><div class="v">${deployment.observedGeneration || 0}</div></div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </article>
+        `).join('');
+      };
+
+      fetch('/v1/overview/accounts')
+        .then((response) => {
+          if (!response.ok) throw new Error('overview request failed');
+          return response.json();
+        })
+        .then((accounts) => {
+          renderSummary(accounts);
+          renderAccounts(accounts);
+        })
+        .catch((error) => {
+          document.getElementById('accounts').innerHTML = `<div class="empty">Failed to load overview: ${error.message}</div>`;
+        });
+    </script>
+  </body>
+</html>

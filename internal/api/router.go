@@ -29,6 +29,7 @@ type Options struct {
 	CatalogAccounts     func() ([]catalog.AccountView, error)
 	CatalogPlacements   func() ([]catalog.PlacementView, error)
 	CatalogTopology     func() (catalog.TopologySnapshot, error)
+	OverviewAccounts    func() ([]catalog.AccountOverview, error)
 	DeploymentStatuses  func() ([]statusstore.Snapshot, error)
 	DeploymentStatus    func(string) (statusstore.Snapshot, error)
 }
@@ -36,6 +37,16 @@ type Options struct {
 // NewRouter builds the API router for the Tenet control plane.
 func NewRouter(options Options) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+		serveUI(w)
+	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
@@ -145,6 +156,22 @@ func NewRouter(options Options) http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(topology)
+	})
+	mux.HandleFunc("/v1/overview/accounts", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+		if options.OverviewAccounts == nil {
+			http.Error(w, "overview accounts unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		accounts, err := options.OverviewAccounts()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(accounts)
 	})
 	mux.HandleFunc("/v1/status/deployments", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodGet) {

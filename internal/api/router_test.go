@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
@@ -564,6 +565,49 @@ func TestRouterDeploymentStatusByNamePropagatesErrors(t *testing.T) {
 	}
 }
 
+func TestRouterOverviewAccounts(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewAccounts: func() ([]catalog.AccountOverview, error) {
+			return []catalog.AccountOverview{{Name: "prod-core", AWSAccountID: "123456789012", Deployments: []catalog.DeploymentOverview{{Name: "api-prod", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups"}}}}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var accounts []catalog.AccountOverview
+	if err := json.Unmarshal(resp.Body.Bytes(), &accounts); err != nil {
+		t.Fatalf("failed to decode overview accounts: %v", err)
+	}
+	if len(accounts) != 1 || accounts[0].Deployments[0].ExecutionMode != "asgWeightedTargetGroups" {
+		t.Fatalf("unexpected overview accounts: %+v", accounts)
+	}
+}
+
+func TestRouterRootServesUI(t *testing.T) {
+	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+	if got := resp.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
+		t.Fatalf("unexpected content type: %q", got)
+	}
+	if body := resp.Body.String(); !strings.Contains(body, "/v1/overview/accounts") {
+		t.Fatalf("expected UI to reference overview endpoint, got %q", body)
+	}
+}
+
 func TestRouterRejectsNonGETMethods(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
@@ -585,6 +629,9 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		CatalogTopology: func() (catalog.TopologySnapshot, error) {
 			return catalog.TopologySnapshot{}, nil
 		},
+		OverviewAccounts: func() ([]catalog.AccountOverview, error) {
+			return []catalog.AccountOverview{}, nil
+		},
 		DeploymentStatuses: func() ([]statusstore.Snapshot, error) {
 			return []statusstore.Snapshot{}, nil
 		},
@@ -593,7 +640,7 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		},
 	})
 
-	paths := []string{"/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
+	paths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/accounts", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
 	for _, path := range paths {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		resp := httptest.NewRecorder()

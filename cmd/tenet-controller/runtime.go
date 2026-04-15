@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -23,8 +24,11 @@ func emitRuntimePlans(logger *log.Logger, config startupConfig) error {
 	}
 
 	statuses := map[string]domain.DeploymentStatus{}
-	if config.StatusPath != "" {
-		snapshots, err := statusstore.Load(config.StatusPath)
+	if store := mustOpenStatusStore(logger, config); store != nil {
+		if err := statusstore.SeedFromFileIfEmpty(context.Background(), store, config.StatusSeedPath); err != nil {
+			return fmt.Errorf("seed runtime statuses: %w", err)
+		}
+		snapshots, err := store.List(context.Background())
 		if err != nil {
 			return fmt.Errorf("load runtime statuses: %w", err)
 		}
@@ -43,8 +47,10 @@ func emitRuntimePlans(logger *log.Logger, config startupConfig) error {
 		status := statuses[deployment.Name]
 		plan := planner.Build(deployment, status)
 		logger.Printf(
-			"controller reconcile deployment=%s desired_generation=%d observed_generation=%d sync_state=%s steps=%s",
+			"controller reconcile deployment=%s strategy=%s execution_mode=%s desired_generation=%d observed_generation=%d sync_state=%s steps=%s",
 			deployment.Name,
+			deployment.Strategy,
+			deployment.ExecutionMode,
 			deployment.Generation,
 			status.ObservedGeneration,
 			syncStateLabel(status.Sync.State),

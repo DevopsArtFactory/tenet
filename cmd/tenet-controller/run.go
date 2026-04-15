@@ -8,9 +8,9 @@ import (
 
 func runController(ctx context.Context, logger *log.Logger, config startupConfig) {
 	if config.Summary != nil {
-		logger.Printf("starting tenet-controller version=%s commit=%s workers=%s repo_root=%s status_path=%s requeue_interval=%s accounts=%d environments=%d deployments=%d", config.Info.Version, config.Info.Commit, config.WorkerCount, config.RepoRoot, config.StatusPath, config.RequeueInterval, config.Summary.AccountCount, config.Summary.EnvironmentCount, config.Summary.DeploymentCount)
+		logger.Printf("starting tenet-controller version=%s commit=%s workers=%s repo_root=%s status_backend=%s status_path=%s redis_addr=%s requeue_interval=%s accounts=%d environments=%d deployments=%d", config.Info.Version, config.Info.Commit, config.WorkerCount, config.RepoRoot, config.StatusBackend, config.StatusPath, config.RedisAddr, config.RequeueInterval, config.Summary.AccountCount, config.Summary.EnvironmentCount, config.Summary.DeploymentCount)
 	} else {
-		logger.Printf("starting tenet-controller version=%s commit=%s workers=%s repo_root=%s status_path=%s requeue_interval=%s", config.Info.Version, config.Info.Commit, config.WorkerCount, config.RepoRoot, config.StatusPath, config.RequeueInterval)
+		logger.Printf("starting tenet-controller version=%s commit=%s workers=%s repo_root=%s status_backend=%s status_path=%s redis_addr=%s requeue_interval=%s", config.Info.Version, config.Info.Commit, config.WorkerCount, config.RepoRoot, config.StatusBackend, config.StatusPath, config.RedisAddr, config.RequeueInterval)
 	}
 
 	if err := emitRuntimePlans(logger, config); err != nil {

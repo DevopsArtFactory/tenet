@@ -83,11 +83,14 @@ func Compile(input CatalogSpec) (Catalog, error) {
 		if _, ok := environmentIndex[environmentRef]; !ok {
 			return Catalog{}, fmt.Errorf("deployment %q references unknown environment %q", deployment.Name, environmentRef)
 		}
+		strategy := deployment.NormalizedStrategy()
 		compiled.Deployments = append(compiled.Deployments, domain.Deployment{
 			Name:           deployment.Name,
 			AppRef:         deployment.NormalizedAppRef(),
 			EnvironmentRef: environmentRef,
 			TargetType:     string(deployment.NormalizedTargetType()),
+			Strategy:       string(strategy),
+			ExecutionMode:  executionMode(deployment.NormalizedTargetType(), strategy),
 			DesiredArtifact: domain.DeploymentArtifact{
 				Binary: deployment.Binary,
 				Image:  deployment.Image,
@@ -107,4 +110,24 @@ func Compile(input CatalogSpec) (Catalog, error) {
 	}
 
 	return compiled, nil
+}
+
+func executionMode(target spec.TargetType, strategy spec.StrategyType) string {
+	switch target {
+	case spec.TargetTypeEC2:
+		switch strategy {
+		case spec.StrategyTypeBlueGreen, spec.StrategyTypeCanary, spec.StrategyTypeLinear:
+			return "asgWeightedTargetGroups"
+		case spec.StrategyTypeRolling:
+			return "asgInstanceRefresh"
+		}
+	case spec.TargetTypeECS:
+		switch strategy {
+		case spec.StrategyTypeRolling:
+			return "ecsRolling"
+		case spec.StrategyTypeBlueGreen, spec.StrategyTypeCanary, spec.StrategyTypeLinear:
+			return "ecsCodeDeploy"
+		}
+	}
+	return ""
 }

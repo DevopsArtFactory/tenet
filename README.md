@@ -15,11 +15,16 @@ Implemented today:
 - validated catalog compilation and repository-backed providers
 - repository-aware controller bootstrap that validates `TENET_REPO_ROOT`, logs catalog counts at startup, and stays alive as a long-running process
 - controller runtime loop that reloads repository and status fixtures on a timer and logs per-deployment planner intents
+- rollout intent now supports `blueGreen`, `rolling`, `canary`, and `linear`
+- target-aware execution recommendations are exposed for EC2 (`asgWeightedTargetGroups`, `asgInstanceRefresh`) and ECS (`ecsRolling`, `ecsCodeDeploy`)
+- pluggable deployment status storage with filesystem and Redis backends
+- status stores can be seeded from committed fixture JSON when empty
 - filesystem-backed deployment status storage for the first runtime-status slice
 - status snapshots now carry sync reasons, health summaries, deployment conditions, and deployed binary/image artifact metadata
 - committed local example fixtures under `examples/local-repo/` and `examples/local-status/`
 - Docker packaging and `compose.yaml` so the current control plane can run locally without AWS credentials
 - read-only API endpoints for:
+  - `GET /`
   - `GET /healthz`
   - `GET /v1/info`
   - `GET /v1/catalog/summary`
@@ -28,8 +33,10 @@ Implemented today:
   - `GET /v1/catalog/deployments`
   - `GET /v1/catalog/placements`
   - `GET /v1/catalog/topology`
+  - `GET /v1/overview/accounts`
   - `GET /v1/status/deployments`
   - `GET /v1/status/deployments/{deploymentName}`
+- embedded browser UI grouped by account and deployment at `/`
 - method guards for the read-only API surface
 - fail-fast validation for invalid repository roots and incomplete manifest layouts
 - optional status-file exposure through `TENET_STATUS_PATH`
@@ -37,9 +44,9 @@ Implemented today:
 
 Not implemented yet:
 - live AWS reconciliation/execution
-- controller-owned persisted runtime deployment status/history
+- controller-owned persisted runtime deployment status/history beyond current snapshot storage
 - write APIs
-- UI
+- a dedicated frontend application or mutation workflows
 
 ## Repository shape
 
@@ -91,12 +98,15 @@ make docker-up
 This starts:
 - `api` on `http://localhost:8080`
 - `controller` as a long-running repo-validating process that now reloads fixtures and logs reconcile plans every few seconds
+- `redis` as the active runtime status backend, seeded from `examples/local-status/deployments.json` when empty
 
 Useful commands:
 
 ```bash
+curl http://localhost:8080/
 curl http://localhost:8080/healthz
 curl http://localhost:8080/v1/catalog/topology
+curl http://localhost:8080/v1/overview/accounts
 curl http://localhost:8080/v1/status/deployments
 docker compose logs controller --tail=20
 make docker-down
@@ -122,6 +132,7 @@ Architecture and plan docs live under `docs/`:
 - `docs/plans/2026-04-15-local-runtime-bootstrap.md`
 - `docs/plans/2026-04-15-controller-runtime-loop.md`
 - `docs/plans/2026-04-15-deployment-yaml-manifests.md`
+- `docs/plans/2026-04-15-rollout-runtime-ui.md`
 - `docs/architecture/tenet-v1-overview.md`
 - `docs/architecture/tenet-v1-domain-model.md`
 - `docs/architecture/tenet-v1-spec-shapes.md`
@@ -139,6 +150,9 @@ Architecture and plan docs live under `docs/`:
 - `docs/architecture/tenet-v1-deployment-status-store.md`
 - `docs/architecture/tenet-v1-deployment-status-api.md`
 - `docs/architecture/tenet-v1-local-runtime.md`
+- `docs/architecture/tenet-v1-rollout-strategy-model.md`
+- `docs/architecture/tenet-v1-runtime-state-storage.md`
+- `docs/architecture/tenet-v1-overview-ui.md`
 
 ## Open Source
 - [Contributing Guide](./CONTRIBUTING.md)
