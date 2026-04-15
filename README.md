@@ -20,7 +20,7 @@ Implemented today:
 - pluggable deployment status storage with filesystem and Redis backends
 - status stores can be seeded from committed fixture JSON when empty
 - filesystem-backed deployment status storage for the first runtime-status slice
-- status snapshots now carry sync reasons, health summaries, deployment conditions, and deployed binary/image artifact metadata
+- status snapshots now carry sync reasons, health summaries, deployment conditions, deployed binary/image artifact metadata, and controller-derived rollout summaries
 - committed local example fixtures under `examples/local-repo/` and `examples/local-status/`
 - Docker packaging and `compose.yaml` so the current control plane can run locally without AWS credentials
 - read-only API endpoints for:
@@ -36,7 +36,7 @@ Implemented today:
   - `GET /v1/overview/accounts`
   - `GET /v1/status/deployments`
   - `GET /v1/status/deployments/{deploymentName}`
-- embedded browser UI grouped by account and deployment at `/`
+- embedded browser UI grouped by account and deployment at `/`, including rollout phase, current step, and planned steps
 - method guards for the read-only API surface
 - fail-fast validation for invalid repository roots and incomplete manifest layouts
 - optional status-file exposure through `TENET_STATUS_PATH`
@@ -78,6 +78,7 @@ In another terminal you can inspect the current control plane state:
 
 ```bash
 curl http://localhost:8080/v1/catalog/summary
+curl http://localhost:8080/v1/overview/accounts
 curl http://localhost:8080/v1/status/deployments/payments-api-prod
 ```
 
@@ -151,6 +152,7 @@ Architecture and plan docs live under `docs/`:
 - `docs/architecture/tenet-v1-deployment-status-api.md`
 - `docs/architecture/tenet-v1-local-runtime.md`
 - `docs/architecture/tenet-v1-rollout-strategy-model.md`
+- `docs/architecture/tenet-v1-runtime-rollout-summary.md`
 - `docs/architecture/tenet-v1-runtime-state-storage.md`
 - `docs/architecture/tenet-v1-overview-ui.md`
 

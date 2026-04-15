@@ -85,67 +85,112 @@
 
       const healthLabel = (health) => health?.overall || 'Unknown';
       const artifact = (obj) => obj?.binary || obj?.image || '—';
+      const plannedSteps = (rollout) => {
+        const steps = (rollout?.steps || []).map((step) => step.kind).filter(Boolean);
+        return steps.length ? steps.join(' → ') : '—';
+      };
+      const metricValue = (value) => value || '—';
+      const createElement = (tagName, className, text) => {
+        const node = document.createElement(tagName);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+      };
+      const createMetric = (label, value) => {
+        const metric = createElement('div', 'metric');
+        metric.append(
+          createElement('div', 'k', label),
+          createElement('div', 'v', value),
+        );
+        return metric;
+      };
+      const renderEmptyState = (message) => {
+        const empty = createElement('div', 'empty', message);
+        document.getElementById('accounts').replaceChildren(empty);
+      };
 
       const renderSummary = (accounts) => {
         const deployments = accounts.flatMap((account) => account.deployments || []);
-        const synced = deployments.filter((d) => d.sync?.state === 'Synced').length;
-        const html = [
+        const synced = deployments.filter((deployment) => deployment.sync?.state === 'Synced').length;
+        const progressing = deployments.filter((deployment) => deployment.sync?.state === 'Reconciling' || deployment.sync?.state === 'OutOfSync').length;
+        const summary = document.getElementById('summary');
+        summary.replaceChildren(...[
           ['Accounts', accounts.length],
           ['Deployments', deployments.length],
           ['Synced', synced],
-          ['Progressing', deployments.length - synced],
-        ].map(([label, value]) => `
-          <div class="card">
-            <div class="label">${label}</div>
-            <div class="value">${value}</div>
-          </div>
-        `).join('');
-        document.getElementById('summary').innerHTML = html;
+          ['Progressing', progressing],
+        ].map(([label, value]) => {
+          const card = createElement('div', 'card');
+          card.append(
+            createElement('div', 'label', String(label)),
+            createElement('div', 'value', String(value)),
+          );
+          return card;
+        }));
       };
 
       const renderAccounts = (accounts) => {
         const root = document.getElementById('accounts');
         if (!accounts.length) {
-          root.innerHTML = '<div class="empty">No accounts or deployments are loaded yet.</div>';
+          renderEmptyState('No accounts or deployments are loaded yet.');
           return;
         }
-        root.innerHTML = accounts.map((account) => `
-          <article class="account">
-            <div class="account-head">
-              <div>
-                <h2 class="account-name">${account.name}</h2>
-                <div class="account-meta">AWS account ${account.awsAccountId} · Regions: ${(account.allowedRegions || []).join(', ') || '—'}</div>
-              </div>
-              <div class="pills">
-                <span class="pill target">${(account.deployments || []).length} deployments</span>
-              </div>
-            </div>
-            <div class="rows">
-              ${(account.deployments || []).map((deployment) => `
-                <div class="row">
-                  <div class="row-top">
-                    <div>
-                      <h3 class="row-title">${deployment.name}</h3>
-                      <div class="row-subtitle">${deployment.appRef} · ${deployment.environmentRef} · ${deployment.region}</div>
-                    </div>
-                    <div class="pills">
-                      <span class="pill target">${deployment.targetType || 'unknown target'}</span>
-                      <span class="pill strategy">${deployment.strategy || 'unknown strategy'}</span>
-                      <span class="pill mode">${deployment.executionMode || 'unassigned execution'}</span>
-                      <span class="pill ${statusClass(deployment.sync?.state)}">${deployment.sync?.state || 'Unknown'}</span>
-                    </div>
-                  </div>
-                  <div class="metrics">
-                    <div class="metric"><div class="k">Desired artifact</div><div class="v">${artifact(deployment.desiredArtifact)}</div></div>
-                    <div class="metric"><div class="k">Deployed artifact</div><div class="v">${artifact(deployment.deployedArtifact)}</div></div>
-                    <div class="metric"><div class="k">Health</div><div class="v">${healthLabel(deployment.health)}${deployment.health?.summary ? ` · ${deployment.health.summary}` : ''}</div></div>
-                    <div class="metric"><div class="k">Observed generation</div><div class="v">${deployment.observedGeneration || 0}</div></div>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          </article>
-        `).join('');
+
+        const accountNodes = accounts.map((account) => {
+          const article = createElement('article', 'account');
+          const head = createElement('div', 'account-head');
+          const titleWrap = createElement('div');
+          titleWrap.append(
+            createElement('h2', 'account-name', account.name || 'Unknown account'),
+            createElement('div', 'account-meta', `AWS account ${metricValue(account.awsAccountId)} · Regions: ${(account.allowedRegions || []).join(', ') || '—'}`),
+          );
+          const pills = createElement('div', 'pills');
+          pills.append(createElement('span', 'pill target', `${(account.deployments || []).length} deployments`));
+          head.append(titleWrap, pills);
+
+          const rows = createElement('div', 'rows');
+          (account.deployments || []).forEach((deployment) => {
+            const row = createElement('div', 'row');
+            const rowTop = createElement('div', 'row-top');
+            const rowTitleWrap = createElement('div');
+            rowTitleWrap.append(
+              createElement('h3', 'row-title', deployment.name || 'Unknown deployment'),
+              createElement('div', 'row-subtitle', [deployment.appRef, deployment.environmentRef, deployment.region].filter(Boolean).join(' · ') || '—'),
+            );
+
+            const rowPills = createElement('div', 'pills');
+            [
+              ['pill target', deployment.targetType || 'unknown target'],
+              ['pill strategy', deployment.strategy || 'unknown strategy'],
+              ['pill mode', deployment.executionMode || 'unassigned execution'],
+              [`pill ${statusClass(deployment.sync?.state)}`, deployment.sync?.state || 'Unknown'],
+            ].forEach(([className, text]) => {
+              rowPills.append(createElement('span', className, text));
+            });
+            rowTop.append(rowTitleWrap, rowPills);
+
+            const metrics = createElement('div', 'metrics');
+            [
+              ['Desired artifact', artifact(deployment.desiredArtifact)],
+              ['Deployed artifact', artifact(deployment.deployedArtifact)],
+              ['Rollout phase', metricValue(deployment.rollout?.phase)],
+              ['Current step', metricValue(deployment.rollout?.currentStep)],
+              ['Planned steps', plannedSteps(deployment.rollout)],
+              ['Health', `${healthLabel(deployment.health)}${deployment.health?.summary ? ` · ${deployment.health.summary}` : ''}`],
+              ['Observed generation', String(deployment.observedGeneration || 0)],
+            ].forEach(([label, value]) => {
+              metrics.append(createMetric(label, value));
+            });
+
+            row.append(rowTop, metrics);
+            rows.append(row);
+          });
+
+          article.append(head, rows);
+          return article;
+        });
+
+        root.replaceChildren(...accountNodes);
       };
 
       fetch('/v1/overview/accounts')
@@ -158,7 +203,7 @@
           renderAccounts(accounts);
         })
         .catch((error) => {
-          document.getElementById('accounts').innerHTML = `<div class="empty">Failed to load overview: ${error.message}</div>`;
+          renderEmptyState(`Failed to load overview: ${error.message}`);
         });
     </script>
   </body>

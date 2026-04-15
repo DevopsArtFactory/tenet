@@ -49,6 +49,22 @@ type Health struct {
 	Summary string       `json:"summary"`
 }
 
+// RolloutStepSummary captures one controller-derived step in the current rollout plan.
+type RolloutStepSummary struct {
+	Kind    string `json:"kind"`
+	Current bool   `json:"current,omitempty"`
+}
+
+// RolloutSummary captures the controller-owned rollout view for a deployment.
+type RolloutSummary struct {
+	DesiredGeneration  int64                `json:"desiredGeneration"`
+	ObservedGeneration int64                `json:"observedGeneration"`
+	Phase              RolloutPhase         `json:"phase,omitempty"`
+	CurrentStep        string               `json:"currentStep,omitempty"`
+	Summary            string               `json:"summary,omitempty"`
+	Steps              []RolloutStepSummary `json:"steps,omitempty"`
+}
+
 // DeploymentStatus captures observed state separate from desired spec.
 type DeploymentStatus struct {
 	ObservedGeneration int64              `json:"observedGeneration"`
@@ -56,6 +72,7 @@ type DeploymentStatus struct {
 	Health             Health             `json:"health"`
 	Conditions         []Condition        `json:"conditions"`
 	DeployedArtifact   DeploymentArtifact `json:"deployedArtifact,omitempty"`
+	Rollout            *RolloutSummary    `json:"rollout,omitempty"`
 }
 
 // IsSynced reports whether the deployment is currently synced.

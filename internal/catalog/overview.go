@@ -32,6 +32,7 @@ type DeploymentOverview struct {
 	ObservedGeneration int64                     `json:"observedGeneration,omitempty"`
 	Sync               domain.Sync               `json:"sync"`
 	Health             domain.Health             `json:"health"`
+	Rollout            *domain.RolloutSummary    `json:"rollout,omitempty"`
 	Conditions         []domain.Condition        `json:"conditions,omitempty"`
 }
 
@@ -88,6 +89,7 @@ func BuildAccountOverviews(c manifest.Catalog, snapshots []statusstore.Snapshot)
 			ObservedGeneration: status.ObservedGeneration,
 			Sync:               status.Sync,
 			Health:             status.Health,
+			Rollout:            cloneRolloutSummary(status.Rollout),
 			Conditions:         append([]domain.Condition(nil), status.Conditions...),
 		})
 	}
@@ -104,4 +106,13 @@ func BuildAccountOverviews(c manifest.Catalog, snapshots []statusstore.Snapshot)
 		return accounts[i].Name < accounts[j].Name
 	})
 	return accounts, nil
+}
+
+func cloneRolloutSummary(summary *domain.RolloutSummary) *domain.RolloutSummary {
+	if summary == nil {
+		return nil
+	}
+	copy := *summary
+	copy.Steps = append([]domain.RolloutStepSummary(nil), summary.Steps...)
+	return &copy
 }

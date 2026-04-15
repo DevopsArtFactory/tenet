@@ -25,7 +25,7 @@ func TestBuildAccountOverviewsGroupsDeploymentsByAccount(t *testing.T) {
 			},
 		},
 		[]statusstore.Snapshot{
-			{DeploymentName: "payments-api-prod", Status: domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStateSynced, Reason: "stable"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "3/3 healthy"}, DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64"}}},
+			{DeploymentName: "payments-api-prod", Status: domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStateSynced, Reason: "stable"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "3/3 healthy"}, DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64"}, Rollout: &domain.RolloutSummary{DesiredGeneration: 4, ObservedGeneration: 3, Phase: domain.RolloutPhaseHealthChecking, CurrentStep: "bake", Summary: "waiting for bake window", Steps: []domain.RolloutStepSummary{{Kind: "shift-10"}, {Kind: "bake", Current: true}, {Kind: "shift-100"}}}}},
 		},
 	)
 	if err != nil {
@@ -40,7 +40,16 @@ func TestBuildAccountOverviewsGroupsDeploymentsByAccount(t *testing.T) {
 	if overviews[0].Deployments[0].ExecutionMode != "asgWeightedTargetGroups" {
 		t.Fatalf("expected rollout execution metadata, got %+v", overviews[0].Deployments[0])
 	}
+	if overviews[0].Deployments[0].Rollout == nil {
+		t.Fatalf("expected rollout summary to be surfaced, got %+v", overviews[0].Deployments[0])
+	}
+	if overviews[0].Deployments[0].Rollout.Phase != domain.RolloutPhaseHealthChecking || overviews[0].Deployments[0].Rollout.CurrentStep != "bake" || len(overviews[0].Deployments[0].Rollout.Steps) != 3 {
+		t.Fatalf("expected rollout summary data, got %+v", overviews[0].Deployments[0].Rollout)
+	}
 	if overviews[1].Deployments[0].Sync.State != "" {
 		t.Fatalf("expected missing status to remain zero-valued, got %+v", overviews[1].Deployments[0])
+	}
+	if overviews[1].Deployments[0].Rollout != nil {
+		t.Fatalf("expected missing rollout summary to remain nil, got %+v", overviews[1].Deployments[0].Rollout)
 	}
 }

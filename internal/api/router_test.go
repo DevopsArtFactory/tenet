@@ -569,7 +569,7 @@ func TestRouterOverviewAccounts(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 		OverviewAccounts: func() ([]catalog.AccountOverview, error) {
-			return []catalog.AccountOverview{{Name: "prod-core", AWSAccountID: "123456789012", Deployments: []catalog.DeploymentOverview{{Name: "api-prod", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups"}}}}, nil
+			return []catalog.AccountOverview{{Name: "prod-core", AWSAccountID: "123456789012", Deployments: []catalog.DeploymentOverview{{Name: "api-prod", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", Rollout: &domain.RolloutSummary{Phase: domain.RolloutPhasePromoting, CurrentStep: "shift-50", Steps: []domain.RolloutStepSummary{{Kind: "shift-10"}, {Kind: "shift-50", Current: true}, {Kind: "shift-100"}}}}}}}, nil
 		},
 	})
 	req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts", nil)
@@ -588,6 +588,38 @@ func TestRouterOverviewAccounts(t *testing.T) {
 	if len(accounts) != 1 || accounts[0].Deployments[0].ExecutionMode != "asgWeightedTargetGroups" {
 		t.Fatalf("unexpected overview accounts: %+v", accounts)
 	}
+	if accounts[0].Deployments[0].Rollout == nil || accounts[0].Deployments[0].Rollout.Phase != domain.RolloutPhasePromoting || accounts[0].Deployments[0].Rollout.CurrentStep != "shift-50" || len(accounts[0].Deployments[0].Rollout.Steps) != 3 {
+		t.Fatalf("expected rollout summary in overview accounts response, got %+v", accounts)
+	}
+}
+
+func TestRouterOverviewAccountsUnavailable(t *testing.T) {
+	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", resp.Code)
+	}
+}
+
+func TestRouterOverviewAccountsPropagatesErrors(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewAccounts: func() ([]catalog.AccountOverview, error) {
+			return nil, errors.New("boom")
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.Code)
+	}
 }
 
 func TestRouterRootServesUI(t *testing.T) {
@@ -603,8 +635,28 @@ func TestRouterRootServesUI(t *testing.T) {
 	if got := resp.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
 		t.Fatalf("unexpected content type: %q", got)
 	}
-	if body := resp.Body.String(); !strings.Contains(body, "/v1/overview/accounts") {
+	body := resp.Body.String()
+	if !strings.Contains(body, "/v1/overview/accounts") {
 		t.Fatalf("expected UI to reference overview endpoint, got %q", body)
+	}
+	for _, fragment := range []string{"Rollout phase", "Current step", "Planned steps"} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected UI to render rollout summary label %q, got %q", fragment, body)
+		}
+	}
+	for _, unsafe := range []string{
+		"root.innerHTML = accounts.map",
+		"document.getElementById('accounts').innerHTML = `<div class=\"empty\">Failed to load overview: ${error.message}</div>`",
+		"['Progressing', deployments.length - synced]",
+	} {
+		if strings.Contains(body, unsafe) {
+			t.Fatalf("expected UI to avoid unsafe rendering or misclassified summary logic %q, got %q", unsafe, body)
+		}
+	}
+	for _, fragment := range []string{"textContent", "createElement", "deployment.sync?.state === 'Reconciling' || deployment.sync?.state === 'OutOfSync'"} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected UI to include safe rendering and precise progressing-state logic %q, got %q", fragment, body)
+		}
 	}
 }
 

@@ -2,7 +2,9 @@ package statusstore
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 )
 
 // Store is a pluggable deployment-status backend.
@@ -27,7 +29,15 @@ func (s FileStore) List(context.Context) ([]Snapshot, error) {
 	if s.Path == "" {
 		return nil, fmt.Errorf("file status store path is required")
 	}
-	return Load(s.Path)
+	snapshots, err := Load(s.Path)
+	if err != nil {
+		var pathErr *os.PathError
+		if errors.As(err, &pathErr) && errors.Is(pathErr.Err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return snapshots, nil
 }
 
 // Get loads one snapshot by deployment name.

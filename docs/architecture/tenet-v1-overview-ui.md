@@ -13,6 +13,9 @@ It groups deployments by AWS account and shows:
 - derived execution mode
 - desired artifact
 - deployed artifact
+- rollout phase
+- current rollout step
+- planned rollout steps
 - sync and health summaries
 
 ## Backing API
@@ -20,7 +23,14 @@ It groups deployments by AWS account and shows:
 The page consumes one joined endpoint:
 - `GET /v1/overview/accounts`
 
-This endpoint combines catalog placement data with deployment status snapshots.
+This endpoint combines catalog placement data with deployment status snapshots, including the controller-owned `rollout` summary when one is present.
+
+Each deployment card now surfaces the most operator-useful rollout cues directly in the overview response/UI:
+- `rollout.phase`
+- `rollout.currentStep`
+- `rollout.steps[*].kind`
+
+That keeps the account-first page useful for active rollouts without forcing operators to switch to the raw status endpoint for basic progress checks.
 
 ## Why account-first grouping
 

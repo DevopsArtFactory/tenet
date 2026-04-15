@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
@@ -13,6 +14,7 @@ import (
 )
 
 func emitRuntimePlans(logger *log.Logger, config startupConfig) error {
+	ctx := context.Background()
 	if config.RepoRoot == "" {
 		logger.Printf("controller runtime disabled reason=no_repo_root")
 		return nil
@@ -24,11 +26,12 @@ func emitRuntimePlans(logger *log.Logger, config startupConfig) error {
 	}
 
 	statuses := map[string]domain.DeploymentStatus{}
-	if store := mustOpenStatusStore(logger, config); store != nil {
-		if err := statusstore.SeedFromFileIfEmpty(context.Background(), store, config.StatusSeedPath); err != nil {
+	store := mustOpenStatusStore(logger, config)
+	if store != nil {
+		if err := statusstore.SeedFromFileIfEmpty(ctx, store, config.StatusSeedPath); err != nil {
 			return fmt.Errorf("seed runtime statuses: %w", err)
 		}
-		snapshots, err := store.List(context.Background())
+		snapshots, err := store.List(ctx)
 		if err != nil {
 			return fmt.Errorf("load runtime statuses: %w", err)
 		}
@@ -37,7 +40,13 @@ func emitRuntimePlans(logger *log.Logger, config startupConfig) error {
 		}
 	}
 
+	currentStatuses := make(map[string]domain.DeploymentStatus, len(compiled.Deployments))
 	if len(compiled.Deployments) == 0 {
+		if store != nil {
+			if err := store.Save(ctx, nil); err != nil {
+				return fmt.Errorf("save runtime statuses: %w", err)
+			}
+		}
 		logger.Printf("controller runtime found no deployments")
 		return nil
 	}
@@ -46,6 +55,8 @@ func emitRuntimePlans(logger *log.Logger, config startupConfig) error {
 	for _, deployment := range compiled.Deployments {
 		status := statuses[deployment.Name]
 		plan := planner.Build(deployment, status)
+		status.Rollout = deriveRolloutSummary(deployment, status, plan)
+		currentStatuses[deployment.Name] = status
 		logger.Printf(
 			"controller reconcile deployment=%s strategy=%s execution_mode=%s desired_generation=%d observed_generation=%d sync_state=%s steps=%s",
 			deployment.Name,
@@ -58,6 +69,19 @@ func emitRuntimePlans(logger *log.Logger, config startupConfig) error {
 		)
 	}
 
+	if store != nil {
+		snapshots := make([]statusstore.Snapshot, 0, len(currentStatuses))
+		for deploymentName, status := range currentStatuses {
+			snapshots = append(snapshots, statusstore.Snapshot{DeploymentName: deploymentName, Status: status})
+		}
+		sort.Slice(snapshots, func(i, j int) bool {
+			return snapshots[i].DeploymentName < snapshots[j].DeploymentName
+		})
+		if err := store.Save(ctx, snapshots); err != nil {
+			return fmt.Errorf("save runtime statuses: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -66,6 +90,70 @@ func syncStateLabel(state domain.SyncState) string {
 		return "Unknown"
 	}
 	return string(state)
+}
+
+func deriveRolloutSummary(deployment domain.Deployment, status domain.DeploymentStatus, plan reconcile.Plan) *domain.RolloutSummary {
+	steps := make([]domain.RolloutStepSummary, 0, len(plan.Steps))
+	currentStep := ""
+	if len(plan.Steps) > 0 {
+		currentStep = string(plan.Steps[len(plan.Steps)-1].Kind)
+	}
+	for index, step := range plan.Steps {
+		steps = append(steps, domain.RolloutStepSummary{
+			Kind:    string(step.Kind),
+			Current: index == len(plan.Steps)-1,
+		})
+	}
+
+	return &domain.RolloutSummary{
+		DesiredGeneration:  deployment.Generation,
+		ObservedGeneration: status.ObservedGeneration,
+		Phase:              rolloutPhaseForPlan(plan),
+		CurrentStep:        currentStep,
+		Summary:            rolloutSummaryForPlan(status, plan),
+		Steps:              steps,
+	}
+}
+
+func rolloutPhaseForPlan(plan reconcile.Plan) domain.RolloutPhase {
+	if len(plan.Steps) == 0 {
+		return domain.RolloutPhasePending
+	}
+
+	switch plan.Steps[len(plan.Steps)-1].Kind {
+	case reconcile.StepPlanCandidateGeneration:
+		return domain.RolloutPhasePlanning
+	case reconcile.StepReconcileCurrentState:
+		return domain.RolloutPhaseProvisioning
+	case reconcile.StepMarkSynced:
+		return domain.RolloutPhaseCompleted
+	case reconcile.StepAwaitFreshDesired:
+		return domain.RolloutPhaseAccepted
+	default:
+		return domain.RolloutPhaseAccepted
+	}
+}
+
+func rolloutSummaryForPlan(status domain.DeploymentStatus, plan reconcile.Plan) string {
+	if len(plan.Steps) == 0 {
+		return "Rollout pending"
+	}
+
+	switch plan.Steps[len(plan.Steps)-1].Kind {
+	case reconcile.StepPlanCandidateGeneration:
+		return "Planning candidate generation"
+	case reconcile.StepReconcileCurrentState:
+		return "Reconciling current state"
+	case reconcile.StepMarkSynced:
+		if status.Sync.State == domain.SyncStateSynced && status.Health.Overall == domain.HealthHealthy {
+			return "Deployment is synced and healthy"
+		}
+		return "Deployment is synced"
+	case reconcile.StepAwaitFreshDesired:
+		return "Waiting for fresher desired state"
+	default:
+		return "Observing current state"
+	}
 }
 
 func stepSummary(plan reconcile.Plan) string {
