@@ -7,7 +7,7 @@ stacks:
   - stack: payments-api-staging
     account: staging-core
     env: staging-apne2
-    replacement_type: rolling
+    replacement_type: linear
     rolling_update_instance_count: 1
     capacity:
       desired: 2

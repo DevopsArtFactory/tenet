@@ -36,18 +36,25 @@ done
 curl -fsS "http://$HOST:$PORT/healthz" >/dev/null
 
 summary=$(curl -fsS "http://$HOST:$PORT/v1/catalog/summary")
+overview=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts")
 status=$(curl -fsS "http://$HOST:$PORT/v1/status/deployments/payments-api-prod")
+ui=$(curl -fsS "http://$HOST:$PORT/")
 
-SUMMARY_JSON="$summary" STATUS_JSON="$status" python3 - <<'PY'
+SUMMARY_JSON="$summary" OVERVIEW_JSON="$overview" STATUS_JSON="$status" UI_HTML="$ui" python3 - <<'PY'
 import json, os
 summary = json.loads(os.environ['SUMMARY_JSON'])
+overview = json.loads(os.environ['OVERVIEW_JSON'])
 status = json.loads(os.environ['STATUS_JSON'])
+ui = os.environ['UI_HTML']
 assert summary['accountCount'] == 2, summary
 assert summary['environmentCount'] == 2, summary
 assert summary['deploymentCount'] == 2, summary
+assert overview[0]['deployments'][0]['executionMode'] in {'asgWeightedTargetGroups', 'asgInstanceRefresh'}, overview
+assert any(account['name'] == 'prod-core' for account in overview), overview
 assert status['deploymentName'] == 'payments-api-prod', status
 assert status['status']['sync']['state'] == 'Synced', status
 assert status['status']['health']['overall'] == 'Healthy', status
 assert status['status']['deployedArtifact']['binary'].startswith('s3://releases.example.com/'), status
+assert '/v1/overview/accounts' in ui, ui
 print('smoke-local: ok')
 PY

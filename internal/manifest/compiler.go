@@ -1,7 +1,12 @@
 package manifest
 
 import (
+	"encoding/json"
 	"fmt"
+	"hash/fnv"
+	"math"
+	gopath "path"
+	"strings"
 
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/spec"
@@ -63,6 +68,7 @@ func Compile(input CatalogSpec) (Catalog, error) {
 			AccountRef: environment.AccountRef,
 			Region:     environment.Region,
 			NetworkRef: environment.NetworkRef,
+			PolicyRef:  environment.PolicyRef,
 		}
 		if _, exists := environmentIndex[environment.Name]; exists {
 			return Catalog{}, fmt.Errorf("duplicate environment %q", environment.Name)
@@ -83,19 +89,26 @@ func Compile(input CatalogSpec) (Catalog, error) {
 		if _, ok := environmentIndex[environmentRef]; !ok {
 			return Catalog{}, fmt.Errorf("deployment %q references unknown environment %q", deployment.Name, environmentRef)
 		}
-		compiled.Deployments = append(compiled.Deployments, domain.Deployment{
+		strategy := deployment.NormalizedStrategy()
+		compiledDeployment := domain.Deployment{
 			Name:           deployment.Name,
 			AppRef:         deployment.NormalizedAppRef(),
 			EnvironmentRef: environmentRef,
 			TargetType:     string(deployment.NormalizedTargetType()),
+			Strategy:       string(strategy),
+			ExecutionMode:  executionMode(deployment.NormalizedTargetType(), strategy),
 			DesiredArtifact: domain.DeploymentArtifact{
 				Binary: deployment.Binary,
 				Image:  deployment.Image,
 			},
-		})
+			UserData: normalizeUserData(deployment),
+		}
+		environment := environmentIndex[environmentRef]
+		account := accountIndex[environment.AccountRef]
+		compiledDeployment.Generation = deploymentGeneration(compiledDeployment, deployment, environment, account)
+		compiled.Deployments = append(compiled.Deployments, compiledDeployment)
 		if len(deployment.Stacks) > 0 {
 			stack := deployment.Stacks[0]
-			environment := environmentIndex[environmentRef]
 			if stack.Account != environment.AccountRef {
 				return Catalog{}, fmt.Errorf("deployment %q stack account %q does not match environment account %q", deployment.Name, stack.Account, environment.AccountRef)
 			}
@@ -107,4 +120,124 @@ func Compile(input CatalogSpec) (Catalog, error) {
 	}
 
 	return compiled, nil
+}
+
+func deploymentGeneration(deployment domain.Deployment, desired spec.DeploymentSpec, environment domain.Environment, account domain.Account) int64 {
+	payload, err := json.Marshal(struct {
+		Name            string                    `json:"name"`
+		AppRef          string                    `json:"appRef"`
+		EnvironmentRef  string                    `json:"environmentRef"`
+		Environment     deploymentEnvironmentHash `json:"environment"`
+		Account         deploymentAccountHash     `json:"account"`
+		Target          spec.TargetSpec           `json:"target"`
+		Strategy        spec.StrategySpec         `json:"strategy"`
+		ExecutionMode   string                    `json:"executionMode"`
+		DesiredArtifact domain.DeploymentArtifact `json:"desiredArtifact"`
+		Traffic         spec.TrafficSpec          `json:"traffic"`
+		Capacity        spec.CapacitySpec         `json:"capacity"`
+		UserData        spec.UserDataSpec         `json:"userData"`
+		Tags            []string                  `json:"tags"`
+		Stacks          []spec.StackSpec          `json:"stacks"`
+	}{
+		Name:           deployment.Name,
+		AppRef:         deployment.AppRef,
+		EnvironmentRef: deployment.EnvironmentRef,
+		Environment: deploymentEnvironmentHash{
+			Name:       environment.Name,
+			AccountRef: environment.AccountRef,
+			Region:     environment.Region,
+			NetworkRef: environment.NetworkRef,
+			PolicyRef:  environment.PolicyRef,
+		},
+		Account: deploymentAccountHash{
+			Name:           account.Name,
+			AWSAccountID:   account.AWSAccountID,
+			AllowedRegions: append([]string(nil), account.AllowedRegions...),
+		},
+		Target: spec.TargetSpec{Type: desired.NormalizedTargetType()},
+		Strategy: spec.StrategySpec{
+			Type:              desired.NormalizedStrategy(),
+			WarmupSeconds:     desired.Strategy.WarmupSeconds,
+			MinHealthyPercent: desired.Strategy.MinHealthyPercent,
+		},
+		ExecutionMode:   deployment.ExecutionMode,
+		DesiredArtifact: deployment.DesiredArtifact,
+		Traffic:         desired.Traffic,
+		Capacity:        desired.NormalizedCapacity(),
+		UserData:        desired.UserData,
+		Tags:            append([]string(nil), desired.Tags...),
+		Stacks:          append([]spec.StackSpec(nil), desired.Stacks...),
+	})
+	if err != nil {
+		panic(fmt.Sprintf("marshal deployment generation payload: %v", err))
+	}
+
+	hasher := fnv.New64a()
+	_, _ = hasher.Write(payload)
+
+	generation := int64(hasher.Sum64() & math.MaxInt64)
+	if generation == 0 {
+		return 1
+	}
+	return generation
+}
+
+type deploymentEnvironmentHash struct {
+	Name       string `json:"name"`
+	AccountRef string `json:"accountRef"`
+	Region     string `json:"region"`
+	NetworkRef string `json:"networkRef,omitempty"`
+	PolicyRef  string `json:"policyRef,omitempty"`
+}
+
+type deploymentAccountHash struct {
+	Name           string   `json:"name"`
+	AWSAccountID   string   `json:"awsAccountId"`
+	AllowedRegions []string `json:"allowedRegions,omitempty"`
+}
+
+func executionMode(target spec.TargetType, strategy spec.StrategyType) string {
+	switch target {
+	case spec.TargetTypeEC2:
+		switch strategy {
+		case spec.StrategyTypeBlueGreen, spec.StrategyTypeCanary, spec.StrategyTypeLinear:
+			return "asgWeightedTargetGroups"
+		case spec.StrategyTypeRolling:
+			return "asgInstanceRefresh"
+		}
+	case spec.TargetTypeECS:
+		switch strategy {
+		case spec.StrategyTypeRolling:
+			return "ecsRolling"
+		case spec.StrategyTypeBlueGreen, spec.StrategyTypeCanary, spec.StrategyTypeLinear:
+			return "ecsCodeDeploy"
+		}
+	}
+	return ""
+}
+
+func normalizeUserData(deployment spec.DeploymentSpec) domain.DeploymentUserData {
+	userData := deployment.UserData
+	if userData.Type == "" && userData.Path == "" && len(deployment.Stacks) > 0 {
+		userData = deployment.Stacks[0].UserData
+	}
+	return domain.DeploymentUserData{
+		Type: strings.TrimSpace(userData.Type),
+		Path: normalizeUserDataPath(userData.Path),
+	}
+}
+
+func normalizeUserDataPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	cleaned := gopath.Clean(strings.ReplaceAll(path, "\\", "/"))
+	for strings.HasPrefix(cleaned, "./") {
+		cleaned = strings.TrimPrefix(cleaned, "./")
+	}
+	if cleaned == "." {
+		return ""
+	}
+	return cleaned
 }

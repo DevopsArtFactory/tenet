@@ -15,11 +15,18 @@ Implemented today:
 - validated catalog compilation and repository-backed providers
 - repository-aware controller bootstrap that validates `TENET_REPO_ROOT`, logs catalog counts at startup, and stays alive as a long-running process
 - controller runtime loop that reloads repository and status fixtures on a timer and logs per-deployment planner intents
+- rollout intent now supports `blueGreen`, `rolling`, `canary`, and `linear`
+- target-aware execution recommendations are exposed for EC2 (`asgWeightedTargetGroups`, `asgInstanceRefresh`) and ECS (`ecsRolling`, `ecsCodeDeploy`)
+- pluggable deployment status storage with filesystem and Redis backends
+- status stores can be seeded from committed fixture JSON when empty
 - filesystem-backed deployment status storage for the first runtime-status slice
-- status snapshots now carry sync reasons, health summaries, deployment conditions, and deployed binary/image artifact metadata
+- status snapshots now carry sync reasons, health summaries, deployment conditions, deployed binary/image artifact metadata, bounded controller-authored runtime history entries, and controller-derived rollout summaries
+- rollout summaries now use strategy-aware step labels such as EC2 `CreateCandidateCapacity`/`ShiftTrafficCanary`/`PromoteCandidateCapacity`, ECS `CreateCodeDeployDeployment`/`ShiftTrafficLinear`, and native ECS rolling `UpdateECSService`/`VerifyServiceStability`
+- rollout summaries now also surface `rollout.execution[]` details so operators can see the concrete execution resources Tenet intends to use, including EC2 candidate ASGs/target groups, EC2 instance-refresh ASGs and userdata bootstrap sources, ECS rolling services, and ECS CodeDeploy application/deployment-group resources
 - committed local example fixtures under `examples/local-repo/` and `examples/local-status/`
 - Docker packaging and `compose.yaml` so the current control plane can run locally without AWS credentials
 - read-only API endpoints for:
+  - `GET /`
   - `GET /healthz`
   - `GET /v1/info`
   - `GET /v1/catalog/summary`
@@ -28,8 +35,11 @@ Implemented today:
   - `GET /v1/catalog/deployments`
   - `GET /v1/catalog/placements`
   - `GET /v1/catalog/topology`
+  - `GET /v1/overview/accounts`
+  - `GET /v1/overview/deployments/{deploymentName}`
   - `GET /v1/status/deployments`
   - `GET /v1/status/deployments/{deploymentName}`
+- embedded browser UI grouped by account and deployment at `/`, including additive account-header count pills from `/v1/overview/accounts` for deployment totals plus synced/progressing/paused/error runtime-state summaries, controller-authored rollout summary text alongside rollout phase, current step, and planned steps for EC2 candidate-capacity, weighted-target-group, ECS CodeDeploy, and ECS rolling executions, an operator filter toolbar with free-text search plus sync-state/account selectors and shareable URL query params, per-deployment quick links to the existing overview/status JSON detail read models, plus expandable deployment detail panels that lazy-load joined placement, sync reason, rollout generation, rollout execution resources/descriptions, runtime history, rollout-step, and condition data from `/v1/overview/deployments/{deploymentName}`
 - method guards for the read-only API surface
 - fail-fast validation for invalid repository roots and incomplete manifest layouts
 - optional status-file exposure through `TENET_STATUS_PATH`
@@ -37,9 +47,9 @@ Implemented today:
 
 Not implemented yet:
 - live AWS reconciliation/execution
-- controller-owned persisted runtime deployment status/history
+- controller-owned persisted runtime deployment event streams/audit logs beyond the current bounded status-history timeline
 - write APIs
-- UI
+- a dedicated frontend application or mutation workflows
 
 ## Repository shape
 
@@ -71,8 +81,20 @@ In another terminal you can inspect the current control plane state:
 
 ```bash
 curl http://localhost:8080/v1/catalog/summary
+curl http://localhost:8080/v1/overview/accounts
+curl http://localhost:8080/v1/overview/deployments/payments-api-prod
 curl http://localhost:8080/v1/status/deployments/payments-api-prod
 ```
+
+When you run only `tenet-api` against the committed fixture file, the status endpoint still reflects the seeded snapshots and may not include controller-derived `rollout` summaries or bounded `history[]` entries yet. To populate the execution-mode-aware rollout phase, current step, summary text, planned steps, `rollout.execution[]` resource details, and recent runtime history timeline, either run `tenet-controller` against the same repo/status store or use the Docker Compose stack below.
+
+Execution detail examples surfaced through `/v1/overview/accounts`, `/v1/overview/deployments/{deploymentName}`, and `/v1/status/deployments/{deploymentName}`:
+- EC2 weighted target groups: candidate Auto Scaling Group, active target group, candidate target group, userdata bootstrap source
+- EC2 instance refresh: service Auto Scaling Group, userdata bootstrap source
+- ECS rolling: ECS service
+- ECS CodeDeploy: ECS service, CodeDeploy application, CodeDeploy deployment group
+
+Controller-authored runtime history is surfaced through `/v1/overview/deployments/{deploymentName}` and rendered in the expandable deployment detail panel at `/`. The current slice keeps only a bounded recent timeline so operators can see the latest sync/health/rollout-step changes without introducing a full event log.
 
 Run the local smoke check:
 
@@ -91,16 +113,24 @@ make docker-up
 This starts:
 - `api` on `http://localhost:8080`
 - `controller` as a long-running repo-validating process that now reloads fixtures and logs reconcile plans every few seconds
+- `redis` as the active runtime status backend, seeded from `examples/local-status/deployments.json` when empty
 
 Useful commands:
 
 ```bash
+curl http://localhost:8080/
 curl http://localhost:8080/healthz
 curl http://localhost:8080/v1/catalog/topology
+curl http://localhost:8080/v1/overview/accounts
+curl http://localhost:8080/v1/overview/deployments/payments-api-prod
 curl http://localhost:8080/v1/status/deployments
+open 'http://localhost:8080/?sync=Reconciling'
+open 'http://localhost:8080/?account=210987654321&q=codedeploy'
 docker compose logs controller --tail=20
 make docker-down
 ```
+
+The embedded UI toolbar keeps its current search, sync-state, and account filters in the URL query string so operators can bookmark or share a focused view without adding server-side filter endpoints. Each deployment card also exposes direct `Overview JSON` and `Status JSON` links for quick navigation into the existing read-only detail endpoints.
 
 
 Use the repository test suite:
@@ -122,6 +152,7 @@ Architecture and plan docs live under `docs/`:
 - `docs/plans/2026-04-15-local-runtime-bootstrap.md`
 - `docs/plans/2026-04-15-controller-runtime-loop.md`
 - `docs/plans/2026-04-15-deployment-yaml-manifests.md`
+- `docs/plans/2026-04-15-rollout-runtime-ui.md`
 - `docs/architecture/tenet-v1-overview.md`
 - `docs/architecture/tenet-v1-domain-model.md`
 - `docs/architecture/tenet-v1-spec-shapes.md`
@@ -139,6 +170,10 @@ Architecture and plan docs live under `docs/`:
 - `docs/architecture/tenet-v1-deployment-status-store.md`
 - `docs/architecture/tenet-v1-deployment-status-api.md`
 - `docs/architecture/tenet-v1-local-runtime.md`
+- `docs/architecture/tenet-v1-rollout-strategy-model.md`
+- `docs/architecture/tenet-v1-runtime-rollout-summary.md`
+- `docs/architecture/tenet-v1-runtime-state-storage.md`
+- `docs/architecture/tenet-v1-overview-ui.md`
 
 ## Open Source
 - [Contributing Guide](./CONTRIBUTING.md)

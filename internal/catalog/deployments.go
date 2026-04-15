@@ -12,6 +12,8 @@ type DeploymentView struct {
 	AppRef         string `json:"appRef"`
 	EnvironmentRef string `json:"environmentRef"`
 	TargetType     string `json:"targetType,omitempty"`
+	Strategy       string `json:"strategy,omitempty"`
+	ExecutionMode  string `json:"executionMode,omitempty"`
 	Binary         string `json:"binary,omitempty"`
 	Image          string `json:"image,omitempty"`
 }
@@ -25,6 +27,8 @@ func ListDeployments(c manifest.Catalog) []DeploymentView {
 			AppRef:         deployment.AppRef,
 			EnvironmentRef: deployment.EnvironmentRef,
 			TargetType:     deployment.TargetType,
+			Strategy:       deployment.Strategy,
+			ExecutionMode:  deployment.ExecutionMode,
 			Binary:         deployment.DesiredArtifact.Binary,
 			Image:          deployment.DesiredArtifact.Image,
 		})

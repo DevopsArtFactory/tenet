@@ -8,12 +8,28 @@ import (
 
 func runController(ctx context.Context, logger *log.Logger, config startupConfig) {
 	if config.Summary != nil {
-		logger.Printf("starting tenet-controller version=%s commit=%s workers=%s repo_root=%s status_path=%s requeue_interval=%s accounts=%d environments=%d deployments=%d", config.Info.Version, config.Info.Commit, config.WorkerCount, config.RepoRoot, config.StatusPath, config.RequeueInterval, config.Summary.AccountCount, config.Summary.EnvironmentCount, config.Summary.DeploymentCount)
+		logger.Printf("starting tenet-controller version=%s commit=%s workers=%s repo_root=%s status_backend=%s status_path=%s redis_addr=%s requeue_interval=%s accounts=%d environments=%d deployments=%d", config.Info.Version, config.Info.Commit, config.WorkerCount, config.RepoRoot, config.StatusBackend, config.StatusPath, config.RedisAddr, config.RequeueInterval, config.Summary.AccountCount, config.Summary.EnvironmentCount, config.Summary.DeploymentCount)
 	} else {
-		logger.Printf("starting tenet-controller version=%s commit=%s workers=%s repo_root=%s status_path=%s requeue_interval=%s", config.Info.Version, config.Info.Commit, config.WorkerCount, config.RepoRoot, config.StatusPath, config.RequeueInterval)
+		logger.Printf("starting tenet-controller version=%s commit=%s workers=%s repo_root=%s status_backend=%s status_path=%s redis_addr=%s requeue_interval=%s", config.Info.Version, config.Info.Commit, config.WorkerCount, config.RepoRoot, config.StatusBackend, config.StatusPath, config.RedisAddr, config.RequeueInterval)
 	}
 
-	if err := emitRuntimePlans(logger, config); err != nil {
+	var store runtimeStatusStore
+	if config.RepoRoot != "" {
+		var err error
+		store, err = openRuntimeStatusStore(ctx, logger, config)
+		if err != nil {
+			logger.Fatalf("open runtime status store: %v", err)
+		}
+		if store != nil {
+			defer func() {
+				if err := store.Close(); err != nil {
+					logger.Printf("close runtime status store: %v", err)
+				}
+			}()
+		}
+	}
+
+	if err := emitRuntimePlans(ctx, logger, config, store); err != nil {
 		logger.Printf("controller runtime error: %v", err)
 	}
 
@@ -30,7 +46,7 @@ func runController(ctx context.Context, logger *log.Logger, config startupConfig
 			logger.Printf("stopping tenet-controller")
 			return
 		case <-ticker.C:
-			if err := emitRuntimePlans(logger, config); err != nil {
+			if err := emitRuntimePlans(ctx, logger, config, store); err != nil {
 				logger.Printf("controller runtime error: %v", err)
 			}
 		}

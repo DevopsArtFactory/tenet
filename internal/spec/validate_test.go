@@ -86,6 +86,45 @@ func TestValidateDeploymentSpecAcceptsECSImageManifest(t *testing.T) {
 	}
 }
 
+func TestValidateDeploymentSpecAcceptsEC2CanaryManifest(t *testing.T) {
+	deployment := DeploymentSpec{
+		Name:   "payments-api-prod",
+		Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
+		Stacks: []StackSpec{{
+			Stack:           "payments-api-prod",
+			Account:         "prod-core",
+			Env:             "prod-apne2",
+			ReplacementType: "canary",
+			Capacity:        CapacitySpec{Desired: 3, Min: 2, Max: 6},
+			Regions:         []RegionSpec{{Region: "ap-northeast-2"}},
+		}},
+	}
+
+	if err := ValidateDeployment(deployment); err != nil {
+		t.Fatalf("ValidateDeployment returned error for EC2 canary manifest: %v", err)
+	}
+}
+
+func TestValidateDeploymentSpecAcceptsECSLinearManifest(t *testing.T) {
+	deployment := DeploymentSpec{
+		Name:   "payments-api-staging",
+		Image:  "ghcr.io/devopsartfactory/payments-api:staging-20260415",
+		Target: TargetSpec{Type: TargetTypeECS},
+		Stacks: []StackSpec{{
+			Stack:           "payments-api-staging",
+			Account:         "staging-core",
+			Env:             "staging-apne2",
+			ReplacementType: "linear",
+			Capacity:        CapacitySpec{Desired: 2, Min: 1, Max: 3},
+			Regions:         []RegionSpec{{Region: "ap-northeast-2"}},
+		}},
+	}
+
+	if err := ValidateDeployment(deployment); err != nil {
+		t.Fatalf("ValidateDeployment returned error for ECS linear manifest: %v", err)
+	}
+}
+
 func TestValidateDeploymentSpecRejectsMultipleStacksUntilSupported(t *testing.T) {
 	deployment := DeploymentSpec{
 		Name:   "payments-api-prod",

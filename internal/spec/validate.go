@@ -56,7 +56,7 @@ func ValidateDeployment(deployment DeploymentSpec) error {
 
 	strategyType := deployment.NormalizedStrategy()
 	switch strategyType {
-	case StrategyTypeBlueGreen, StrategyTypeRolling:
+	case StrategyTypeBlueGreen, StrategyTypeRolling, StrategyTypeCanary, StrategyTypeLinear:
 	default:
 		return fmt.Errorf("unsupported strategy type %q", strategyType)
 	}

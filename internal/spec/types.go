@@ -53,6 +53,8 @@ type StrategyType string
 const (
 	StrategyTypeBlueGreen StrategyType = "blueGreen"
 	StrategyTypeRolling   StrategyType = "rolling"
+	StrategyTypeCanary    StrategyType = "canary"
+	StrategyTypeLinear    StrategyType = "linear"
 )
 
 // StrategySpec configures rollout behavior.
@@ -147,6 +149,10 @@ func (d DeploymentSpec) NormalizedStrategy() StrategyType {
 		return StrategyTypeBlueGreen
 	case "rolling", "rollingUpdate", "rolling_update":
 		return StrategyTypeRolling
+	case "canary":
+		return StrategyTypeCanary
+	case "linear":
+		return StrategyTypeLinear
 	default:
 		return ""
 	}

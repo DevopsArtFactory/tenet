@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
@@ -564,6 +565,318 @@ func TestRouterDeploymentStatusByNamePropagatesErrors(t *testing.T) {
 	}
 }
 
+func TestRouterOverviewAccounts(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewAccounts: func() ([]catalog.AccountOverview, error) {
+			return []catalog.AccountOverview{{Name: "prod-core", AWSAccountID: "123456789012", DeploymentCount: 3, SyncedCount: 1, ProgressingCount: 1, PausedCount: 1, ErrorCount: 0, Deployments: []catalog.DeploymentOverview{{Name: "api-prod", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", Rollout: &domain.RolloutSummary{DesiredGeneration: 4, ObservedGeneration: 3, Phase: domain.RolloutPhaseAccepted, CurrentStep: "PromoteCandidateCapacity", Summary: "Observing current state", Steps: []domain.RolloutStepSummary{{Kind: "CreateCandidateCapacity"}, {Kind: "ShiftTrafficCanary"}, {Kind: "PromoteCandidateCapacity", Current: true}}}}, {Name: "api-staging", Strategy: "linear", ExecutionMode: "ecsCodeDeploy", Rollout: &domain.RolloutSummary{DesiredGeneration: 8, ObservedGeneration: 7, Phase: domain.RolloutPhaseAccepted, CurrentStep: "VerifyServiceStability", Summary: "Observing current state", Steps: []domain.RolloutStepSummary{{Kind: "CreateCodeDeployDeployment"}, {Kind: "ShiftTrafficLinear"}, {Kind: "VerifyServiceStability", Current: true}}}}}}}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var accounts []catalog.AccountOverview
+	if err := json.Unmarshal(resp.Body.Bytes(), &accounts); err != nil {
+		t.Fatalf("failed to decode overview accounts: %v", err)
+	}
+	if len(accounts) != 1 || len(accounts[0].Deployments) != 2 || accounts[0].Deployments[0].ExecutionMode != "asgWeightedTargetGroups" {
+		t.Fatalf("unexpected overview accounts: %+v", accounts)
+	}
+	if accounts[0].DeploymentCount != 3 || accounts[0].SyncedCount != 1 || accounts[0].ProgressingCount != 1 || accounts[0].PausedCount != 1 || accounts[0].ErrorCount != 0 {
+		t.Fatalf("expected additive account counts in overview response, got %+v", accounts[0])
+	}
+	if accounts[0].Deployments[0].Rollout == nil || accounts[0].Deployments[0].Rollout.Phase != domain.RolloutPhaseAccepted || accounts[0].Deployments[0].Rollout.CurrentStep != "PromoteCandidateCapacity" || len(accounts[0].Deployments[0].Rollout.Steps) != 3 {
+		t.Fatalf("expected rollout summary in overview accounts response, got %+v", accounts)
+	}
+	if got := accounts[0].Deployments[0].Rollout.Steps; got[0].Kind != "CreateCandidateCapacity" || got[0].Current || got[1].Kind != "ShiftTrafficCanary" || got[1].Current || got[2].Kind != "PromoteCandidateCapacity" || !got[2].Current {
+		t.Fatalf("expected strategy-aware EC2 rollout payload, got %+v", got)
+	}
+	if accounts[0].Deployments[1].Rollout == nil || accounts[0].Deployments[1].ExecutionMode != "ecsCodeDeploy" || accounts[0].Deployments[1].Rollout.Phase != domain.RolloutPhaseAccepted || accounts[0].Deployments[1].Rollout.CurrentStep != "VerifyServiceStability" {
+		t.Fatalf("expected strategy-aware ECS rollout payload, got %+v", accounts[0].Deployments[1])
+	}
+	if got := accounts[0].Deployments[1].Rollout.Steps; got[0].Kind != "CreateCodeDeployDeployment" || got[0].Current || got[1].Kind != "ShiftTrafficLinear" || got[1].Current || got[2].Kind != "VerifyServiceStability" || !got[2].Current {
+		t.Fatalf("expected strategy-aware ECS rollout steps, got %+v", got)
+	}
+
+	var payload []map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode raw overview accounts payload: %v", err)
+	}
+	if payload[0]["deploymentCount"] != float64(3) || payload[0]["syncedCount"] != float64(1) || payload[0]["progressingCount"] != float64(1) || payload[0]["pausedCount"] != float64(1) || payload[0]["errorCount"] != float64(0) {
+		t.Fatalf("expected additive JSON count fields, got %+v", payload[0])
+	}
+}
+
+func TestRouterOverviewAccountsUnavailable(t *testing.T) {
+	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", resp.Code)
+	}
+}
+
+func TestRouterOverviewAccountsPropagatesErrors(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewAccounts: func() ([]catalog.AccountOverview, error) {
+			return nil, errors.New("boom")
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.Code)
+	}
+}
+
+func TestRouterOverviewDeployment(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			if name != "api-prod" {
+				t.Fatalf("unexpected lookup name: %s", name)
+			}
+			return catalog.DeploymentOverviewDetail{
+				Name:               "api-prod",
+				AppRef:             "payments-api",
+				EnvironmentRef:     "prod-apne2",
+				AccountName:        "prod-core",
+				AWSAccountID:       "123456789012",
+				AllowedRegions:     []string{"ap-northeast-2"},
+				Region:             "ap-northeast-2",
+				TargetType:         "ecs-service",
+				Strategy:           "linear",
+				ExecutionMode:      "ecsCodeDeploy",
+				DesiredArtifact:    domain.DeploymentArtifact{Image: "payments-api:v2"},
+				DeployedArtifact:   domain.DeploymentArtifact{Image: "payments-api:v1"},
+				ObservedGeneration: 7,
+				Sync:               domain.Sync{State: domain.SyncStateOutOfSync, Reason: "PendingPromotion"},
+				Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "warming up"},
+				Rollout: &domain.RolloutSummary{
+					DesiredGeneration:  8,
+					ObservedGeneration: 7,
+					Phase:              domain.RolloutPhaseAccepted,
+					CurrentStep:        "VerifyServiceStability",
+					Summary:            "Observing current state",
+					Steps:              []domain.RolloutStepSummary{{Kind: "CreateCodeDeployDeployment"}, {Kind: "ShiftTrafficLinear"}, {Kind: "VerifyServiceStability", Current: true}},
+					Execution:          []domain.RolloutExecutionDetail{{Resource: "codedeployDeploymentGroup", Name: "payments-api-prod", Description: "Routes ECS traffic shifts"}},
+				},
+				Conditions: []domain.Condition{{Type: "Ready", Status: false, Reason: "Updating", Message: "service is progressing"}},
+				History: []domain.StatusHistoryEntry{{
+					Timestamp:    "2026-04-16T06:49:00Z",
+					Source:       "controller",
+					Summary:      "Shifted 10 percent of traffic",
+					Sync:         domain.Sync{State: domain.SyncStateReconciling},
+					Health:       domain.Health{Overall: domain.HealthHealthy, Summary: "steady"},
+					RolloutPhase: domain.RolloutPhaseAccepted,
+					CurrentStep:  "ShiftTrafficLinear",
+				}},
+			}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var detail catalog.DeploymentOverviewDetail
+	if err := json.Unmarshal(resp.Body.Bytes(), &detail); err != nil {
+		t.Fatalf("failed to decode overview deployment: %v", err)
+	}
+	if detail.Name != "api-prod" || detail.ExecutionMode != "ecsCodeDeploy" || detail.AccountName != "prod-core" {
+		t.Fatalf("unexpected overview deployment detail: %+v", detail)
+	}
+	if detail.Rollout == nil || detail.Rollout.CurrentStep != "VerifyServiceStability" || len(detail.Rollout.Steps) != 3 {
+		t.Fatalf("expected rollout summary in deployment detail, got %+v", detail)
+	}
+	if len(detail.History) != 1 || detail.History[0].Summary != "Shifted 10 percent of traffic" || detail.History[0].CurrentStep != "ShiftTrafficLinear" {
+		t.Fatalf("expected runtime history in deployment detail, got %+v", detail.History)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode raw overview deployment payload: %v", err)
+	}
+	rollout, ok := payload["rollout"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rollout object in raw payload, got %#v", payload["rollout"])
+	}
+	if rollout["currentStep"] != "VerifyServiceStability" {
+		t.Fatalf("expected rollout.currentStep field, got %#v", rollout)
+	}
+	steps, ok := rollout["steps"].([]any)
+	if !ok || len(steps) != 3 {
+		t.Fatalf("expected rollout.steps array in raw payload, got %#v", rollout["steps"])
+	}
+	lastStep, ok := steps[2].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rollout.steps[2] object, got %#v", steps[2])
+	}
+	if lastStep["kind"] != "VerifyServiceStability" || lastStep["current"] != true {
+		t.Fatalf("expected rollout.steps[2] field names, got %#v", lastStep)
+	}
+	execution, ok := rollout["execution"].([]any)
+	if !ok || len(execution) != 1 {
+		t.Fatalf("expected rollout.execution array in raw payload, got %#v", rollout["execution"])
+	}
+	executionDetail, ok := execution[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rollout.execution[0] object, got %#v", execution[0])
+	}
+	if executionDetail["resource"] != "codedeployDeploymentGroup" || executionDetail["name"] != "payments-api-prod" || executionDetail["description"] != "Routes ECS traffic shifts" {
+		t.Fatalf("expected rollout.execution[0] field names, got %#v", executionDetail)
+	}
+	history, ok := payload["history"].([]any)
+	if !ok || len(history) != 1 {
+		t.Fatalf("expected history array in raw payload, got %#v", payload["history"])
+	}
+	historyEntry, ok := history[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected history[0] object, got %#v", history[0])
+	}
+	sync, ok := historyEntry["sync"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected history[0].sync object, got %#v", historyEntry["sync"])
+	}
+	if sync["state"] != string(domain.SyncStateReconciling) {
+		t.Fatalf("expected history[0].sync.state field, got %#v", sync)
+	}
+	if historyEntry["currentStep"] != "ShiftTrafficLinear" || historyEntry["rolloutPhase"] != string(domain.RolloutPhaseAccepted) {
+		t.Fatalf("expected history[0] field names, got %#v", historyEntry)
+	}
+}
+
+func TestRouterOverviewDeploymentUnavailable(t *testing.T) {
+	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", resp.Code)
+	}
+}
+
+func TestRouterOverviewDeploymentNotFound(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			return catalog.DeploymentOverviewDetail{}, statusstore.ErrNotFound
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/missing", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.Code)
+	}
+}
+
+func TestRouterOverviewDeploymentProviderErrorReturnsInternalServerError(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			return catalog.DeploymentOverviewDetail{}, errors.New("boom")
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.Code)
+	}
+}
+
+func TestRouterOverviewDeploymentRejectsInvalidNames(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			return catalog.DeploymentOverviewDetail{}, nil
+		},
+	})
+	for _, path := range []string{"/v1/overview/deployments/", "/v1/overview/deployments/a/b"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 for %s, got %d", path, resp.Code)
+		}
+	}
+}
+
+func TestRouterRootServesUI(t *testing.T) {
+	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+	if got := resp.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
+		t.Fatalf("unexpected content type: %q", got)
+	}
+	body := resp.Body.String()
+	if !strings.Contains(body, "/v1/overview/accounts") {
+		t.Fatalf("expected UI to reference overview endpoint, got %q", body)
+	}
+	for _, fragment := range []string{"Rollout phase", "Current step", "Planned steps", "ShiftTrafficCanary", "CreateCodeDeployDeployment", "deployments", "synced", "progressing", "paused", "error"} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected UI to render rollout summary label %q, got %q", fragment, body)
+		}
+	}
+	for _, unsafe := range []string{
+		"root.innerHTML = accounts.map",
+		"document.getElementById('accounts').innerHTML = `<div class=\"empty\">Failed to load overview: ${error.message}</div>`",
+		"['Progressing', deployments.length - synced]",
+		"const progressing = deployments.filter((deployment) => deployment.sync?.state === 'Reconciling' || deployment.sync?.state === 'OutOfSync').length;",
+	} {
+		if strings.Contains(body, unsafe) {
+			t.Fatalf("expected UI to avoid unsafe rendering or misclassified summary logic %q, got %q", unsafe, body)
+		}
+	}
+	for _, fragment := range []string{
+		"textContent",
+		"createElement",
+		"const progressingStates = new Set(['Reconciling', 'OutOfSync', 'Drifted']);",
+		"progressingStates.has(deployment.sync?.state)",
+		"case 'Reconciling':",
+		"case 'OutOfSync':",
+		"case 'Drifted':\n            return 'progress';",
+		"case 'Paused':\n            return 'paused';",
+		"case 'Error':\n            return 'error';",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected UI to include safe rendering and precise sync-state pill mapping %q, got %q", fragment, body)
+		}
+	}
+}
+
 func TestRouterRejectsNonGETMethods(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
@@ -585,6 +898,12 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		CatalogTopology: func() (catalog.TopologySnapshot, error) {
 			return catalog.TopologySnapshot{}, nil
 		},
+		OverviewAccounts: func() ([]catalog.AccountOverview, error) {
+			return []catalog.AccountOverview{}, nil
+		},
+		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			return catalog.DeploymentOverviewDetail{}, nil
+		},
 		DeploymentStatuses: func() ([]statusstore.Snapshot, error) {
 			return []statusstore.Snapshot{}, nil
 		},
@@ -593,7 +912,7 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		},
 	})
 
-	paths := []string{"/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
+	paths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/accounts", "/v1/overview/deployments/api-prod", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
 	for _, path := range paths {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		resp := httptest.NewRecorder()

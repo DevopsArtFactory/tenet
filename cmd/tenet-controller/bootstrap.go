@@ -13,7 +13,10 @@ type startupConfig struct {
 	Info            buildinfo.Info
 	WorkerCount     string
 	RepoRoot        string
+	StatusBackend   string
 	StatusPath      string
+	RedisAddr       string
+	StatusSeedPath  string
 	RequeueInterval time.Duration
 	Summary         *catalog.Summary
 }
@@ -23,7 +26,10 @@ func loadStartupConfig(getenv func(string) string) (startupConfig, error) {
 	commit := envOrDefaultFrom(getenv, "TENET_COMMIT", "unknown")
 	workerCount := envOrDefaultFrom(getenv, "TENET_CONTROLLER_WORKERS", "1")
 	repoRoot := getenv("TENET_REPO_ROOT")
+	statusBackend := envOrDefaultFrom(getenv, "TENET_STATUS_BACKEND", "file")
 	statusPath := getenv("TENET_STATUS_PATH")
+	redisAddr := getenv("TENET_REDIS_ADDR")
+	statusSeedPath := getenv("TENET_STATUS_SEED_PATH")
 	requeueSeconds, err := controllerRequeueSeconds(getenv)
 	if err != nil {
 		return startupConfig{}, err
@@ -33,7 +39,10 @@ func loadStartupConfig(getenv func(string) string) (startupConfig, error) {
 		Info:            buildinfo.Current(version, commit),
 		WorkerCount:     workerCount,
 		RepoRoot:        repoRoot,
+		StatusBackend:   statusBackend,
 		StatusPath:      statusPath,
+		RedisAddr:       redisAddr,
+		StatusSeedPath:  statusSeedPath,
 		RequeueInterval: time.Duration(requeueSeconds) * time.Second,
 	}
 	if repoRoot == "" {
