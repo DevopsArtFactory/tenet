@@ -1,0 +1,22 @@
+{
+  "name": "payments-api-staging",
+  "appRef": "payments-api",
+  "environmentRef": "staging-apne2",
+  "target": {
+    "type": "ec2"
+  },
+  "strategy": {
+    "type": "rolling",
+    "warmupSeconds": 15,
+    "minHealthyPercent": 50
+  },
+  "traffic": {
+    "hostname": "payments-staging.example.com",
+    "port": 8443
+  },
+  "capacity": {
+    "desired": 1,
+    "min": 1,
+    "max": 2
+  }
+}

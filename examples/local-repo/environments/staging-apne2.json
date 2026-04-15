@@ -1,0 +1,7 @@
+{
+  "name": "staging-apne2",
+  "accountRef": "staging-core",
+  "region": "ap-northeast-2",
+  "networkRef": "staging-main",
+  "policyRef": "relaxed-staging"
+}

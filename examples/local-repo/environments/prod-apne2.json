@@ -1,0 +1,7 @@
+{
+  "name": "prod-apne2",
+  "accountRef": "prod-core",
+  "region": "ap-northeast-2",
+  "networkRef": "prod-main",
+  "policyRef": "strict-prod"
+}

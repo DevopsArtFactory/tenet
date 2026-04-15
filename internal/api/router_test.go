@@ -455,6 +455,50 @@ func TestRouterDeploymentStatusByName(t *testing.T) {
 	}
 }
 
+func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		DeploymentStatus: func(name string) (statusstore.Snapshot, error) {
+			return statusstore.Snapshot{DeploymentName: "api-prod", Status: domain.DeploymentStatus{
+				ObservedGeneration: 3,
+				Sync:               domain.Sync{State: domain.SyncStateSynced, Reason: "RolloutCompleted"},
+				Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "all checks passed"},
+				Conditions:         []domain.Condition{{Type: "Ready", Status: true, Reason: "Stable", Message: "deployment is healthy"}},
+			}}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/status/deployments/api-prod", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode raw payload: %v", err)
+	}
+	status, ok := payload["status"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected nested status object, got %#v", payload["status"])
+	}
+	if _, ok := status["observedGeneration"]; !ok {
+		t.Fatalf("expected observedGeneration field in %#v", status)
+	}
+	sync, ok := status["sync"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected sync object, got %#v", status["sync"])
+	}
+	if sync["state"] != string(domain.SyncStateSynced) {
+		t.Fatalf("unexpected sync payload: %#v", sync)
+	}
+	if _, exists := status["ObservedGeneration"]; exists {
+		t.Fatalf("unexpected Go-style field name in %#v", status)
+	}
+}
+
 func TestRouterDeploymentStatusByNameUnavailable(t *testing.T) {
 	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
 	req := httptest.NewRequest(http.MethodGet, "/v1/status/deployments/api-prod", nil)
