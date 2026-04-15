@@ -17,7 +17,7 @@ func main() {
 	info := buildinfo.Current(version, commit)
 	log.Printf("starting tenet-api version=%s commit=%s addr=%s", info.Version, info.Commit, addr)
 
-	if err := http.ListenAndServe(addr, api.NewRouter(info)); err != nil {
+	if err := http.ListenAndServe(addr, api.NewRouter(api.Options{BuildInfo: info})); err != nil {
 		log.Fatal(err)
 	}
 }
