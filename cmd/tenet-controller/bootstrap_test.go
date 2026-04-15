@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestLoadStartupConfigWithoutRepositoryRoot(t *testing.T) {
@@ -61,6 +62,40 @@ func TestLoadStartupConfigRejectsInvalidRepositoryRoot(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatalf("expected invalid repository root error")
+	}
+}
+
+func TestLoadStartupConfigLoadsRuntimeSettings(t *testing.T) {
+	config, err := loadStartupConfig(func(key string) string {
+		switch key {
+		case "TENET_STATUS_PATH":
+			return "/tmp/status.json"
+		case "TENET_CONTROLLER_REQUEUE_SECONDS":
+			return "7"
+		default:
+			return ""
+		}
+	})
+	if err != nil {
+		t.Fatalf("loadStartupConfig returned error: %v", err)
+	}
+	if config.StatusPath != "/tmp/status.json" {
+		t.Fatalf("unexpected status path: %q", config.StatusPath)
+	}
+	if config.RequeueInterval != 7*time.Second {
+		t.Fatalf("unexpected requeue interval: %s", config.RequeueInterval)
+	}
+}
+
+func TestLoadStartupConfigRejectsInvalidRequeueSeconds(t *testing.T) {
+	_, err := loadStartupConfig(func(key string) string {
+		if key == "TENET_CONTROLLER_REQUEUE_SECONDS" {
+			return "bogus"
+		}
+		return ""
+	})
+	if err == nil {
+		t.Fatalf("expected invalid requeue seconds error")
 	}
 }
 

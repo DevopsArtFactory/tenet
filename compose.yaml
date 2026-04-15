@@ -25,7 +25,9 @@ services:
     command: ["/usr/local/bin/tenet-controller"]
     environment:
       TENET_REPO_ROOT: /workspace/examples/local-repo
+      TENET_STATUS_PATH: /workspace/examples/local-status/deployments.json
       TENET_CONTROLLER_WORKERS: "1"
+      TENET_CONTROLLER_REQUEUE_SECONDS: "5"
     volumes:
       - ./examples:/workspace/examples:ro
     depends_on:
