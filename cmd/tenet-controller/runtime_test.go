@@ -108,14 +108,50 @@ func TestEmitRuntimePlansPersistsRolloutSummaryIntoStatusSnapshots(t *testing.T)
 	if status.Rollout == nil {
 		t.Fatalf("expected rollout summary to be persisted")
 	}
-	if status.Rollout.CurrentStep != "PlanCandidateGeneration" {
+	if status.Rollout.CurrentStep != "PromoteCandidateCapacity" {
 		t.Fatalf("expected rollout current step to be persisted, got %+v", status.Rollout)
+	}
+	if len(status.Rollout.Steps) != 6 {
+		t.Fatalf("expected rollout steps to be persisted, got %+v", status.Rollout)
+	}
+	if status.Rollout.Steps[2].Kind != "CreateCandidateCapacity" || status.Rollout.Steps[4].Kind != "ShiftTrafficFull" {
+		t.Fatalf("expected weighted-target-group rollout steps, got %+v", status.Rollout.Steps)
 	}
 	if got := status.DeployedArtifact.Binary; got != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64" {
 		t.Fatalf("expected deployed artifact to be preserved, got %q", got)
 	}
 	if len(status.Conditions) != 1 || status.Conditions[0] != (domain.Condition{Type: "Ready", Status: false, Reason: "HealthPending", Message: "candidate target group is still warming"}) {
 		t.Fatalf("expected seeded conditions to be preserved, got %+v", status.Conditions)
+	}
+}
+
+func TestEmitRuntimePlansPersistsCodeDeployRolloutStepsForECSLinearDeployment(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "worker-prod.json"), `{"name":"worker-prod","appRef":"payments-worker","environmentRef":"prod-apne2","target":{"type":"ecs"},"strategy":{"type":"linear"},"traffic":{"port":8080},"capacity":{"desired":1,"min":1,"max":2},"image":"ghcr.io/devopsartfactory/payments-worker:1.2.3"}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, `[{"deploymentName":"worker-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"task set missing"},"health":{"overall":"Progressing","summary":"deployment pending"},"conditions":[]}}]`)
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlans(logger, config); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	status := snapshots[0].Status
+	if status.Rollout == nil {
+		t.Fatalf("expected rollout summary to be persisted")
+	}
+	if status.Rollout.CurrentStep != "VerifyServiceStability" {
+		t.Fatalf("expected ecs linear rollout current step, got %+v", status.Rollout)
+	}
+	if len(status.Rollout.Steps) != 5 || status.Rollout.Steps[2].Kind != "CreateCodeDeployDeployment" || status.Rollout.Steps[3].Kind != "ShiftTrafficLinear" {
+		t.Fatalf("expected ecs codedeploy rollout steps, got %+v", status.Rollout.Steps)
 	}
 }
 
@@ -147,7 +183,7 @@ func TestEmitRuntimePlansBootstrapsMissingFileBackedStatusStore(t *testing.T) {
 	}
 }
 
-func TestEmitRuntimePlansPersistsCandidatePlanningCurrentStepWhenDesiredGenerationIsAhead(t *testing.T) {
+func TestEmitRuntimePlansPersistsWeightedTargetGroupRolloutStepsWhenDesiredGenerationIsAhead(t *testing.T) {
 	root := t.TempDir()
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
 	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
@@ -169,11 +205,14 @@ func TestEmitRuntimePlansPersistsCandidatePlanningCurrentStepWhenDesiredGenerati
 	if status.Rollout == nil {
 		t.Fatalf("expected rollout summary to be persisted")
 	}
-	if status.Rollout.CurrentStep != "PlanCandidateGeneration" {
-		t.Fatalf("expected rollout current step PlanCandidateGeneration, got %+v", status.Rollout)
+	if status.Rollout.CurrentStep != "PromoteCandidateCapacity" {
+		t.Fatalf("expected rollout current step PromoteCandidateCapacity, got %+v", status.Rollout)
 	}
-	if status.Rollout.Phase != domain.RolloutPhasePlanning {
-		t.Fatalf("expected rollout phase %q, got %+v", domain.RolloutPhasePlanning, status.Rollout)
+	if status.Rollout.Phase != domain.RolloutPhaseAccepted {
+		t.Fatalf("expected rollout phase %q, got %+v", domain.RolloutPhaseAccepted, status.Rollout)
+	}
+	if len(status.Rollout.Steps) != 6 || status.Rollout.Steps[2].Kind != "CreateCandidateCapacity" || status.Rollout.Steps[4].Kind != "ShiftTrafficFull" {
+		t.Fatalf("expected weighted-target-group rollout steps, got %+v", status.Rollout.Steps)
 	}
 }
 
