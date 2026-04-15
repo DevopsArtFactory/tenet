@@ -399,6 +399,98 @@ func TestRouterDeploymentStatuses(t *testing.T) {
 	}
 }
 
+func TestRouterDeploymentStatusesUseStableRolloutAndHistoryJSONFieldNames(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		DeploymentStatuses: func() ([]statusstore.Snapshot, error) {
+			return []statusstore.Snapshot{{DeploymentName: "api-prod", Status: domain.DeploymentStatus{
+				ObservedGeneration: 3,
+				Sync:               domain.Sync{State: domain.SyncStateSynced, Reason: "RolloutCompleted"},
+				Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "all checks passed"},
+				Rollout: &domain.RolloutSummary{
+					DesiredGeneration:  3,
+					ObservedGeneration: 3,
+					Phase:              domain.RolloutPhaseCompleted,
+					Summary:            "Deployment is synced and healthy",
+					Steps:              []domain.RolloutStepSummary{{Kind: "MarkSynced", Status: domain.RolloutStepStatusCompleted}},
+				},
+				History: []domain.StatusHistoryEntry{{
+					Timestamp:    "2026-04-16T07:00:00Z",
+					Source:       "controller",
+					Summary:      "Deployment is synced and healthy",
+					Sync:         domain.Sync{State: domain.SyncStateSynced, Reason: "RolloutCompleted"},
+					Health:       domain.Health{Overall: domain.HealthHealthy, Summary: "all checks passed"},
+					RolloutPhase: domain.RolloutPhaseCompleted,
+				}},
+			}}}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/status/deployments", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var payload []map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode raw status payload: %v", err)
+	}
+	status, ok := payload[0]["status"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected nested status object, got %#v", payload[0]["status"])
+	}
+	rollout, ok := status["rollout"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rollout object in raw status payload, got %#v", status["rollout"])
+	}
+	if rollout["phase"] != string(domain.RolloutPhaseCompleted) {
+		t.Fatalf("expected rollout.phase field, got %#v", rollout)
+	}
+	if _, exists := rollout["currentStep"]; exists {
+		t.Fatalf("expected completed rollout currentStep to be omitted, got %#v", rollout)
+	}
+	if _, exists := rollout["CurrentStep"]; exists {
+		t.Fatalf("unexpected Go-style rollout field name in %#v", rollout)
+	}
+	steps, ok := rollout["steps"].([]any)
+	if !ok || len(steps) != 1 {
+		t.Fatalf("expected rollout.steps array in raw status payload, got %#v", rollout["steps"])
+	}
+	step, ok := steps[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rollout.steps[0] object, got %#v", steps[0])
+	}
+	if step["kind"] != "MarkSynced" || step["status"] != string(domain.RolloutStepStatusCompleted) {
+		t.Fatalf("expected rollout.steps[0] field names/values, got %#v", step)
+	}
+	if _, exists := step["current"]; exists {
+		t.Fatalf("expected completed rollout step current flag to be omitted, got %#v", step)
+	}
+	if _, exists := step["Current"]; exists {
+		t.Fatalf("unexpected Go-style step field name in %#v", step)
+	}
+	history, ok := status["history"].([]any)
+	if !ok || len(history) != 1 {
+		t.Fatalf("expected history array in raw status payload, got %#v", status["history"])
+	}
+	historyEntry, ok := history[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected history[0] object, got %#v", history[0])
+	}
+	if historyEntry["rolloutPhase"] != string(domain.RolloutPhaseCompleted) {
+		t.Fatalf("expected history[0].rolloutPhase field, got %#v", historyEntry)
+	}
+	if _, exists := historyEntry["currentStep"]; exists {
+		t.Fatalf("expected completed history currentStep to be omitted, got %#v", historyEntry)
+	}
+	if _, exists := historyEntry["RolloutPhase"]; exists {
+		t.Fatalf("unexpected Go-style history field name in %#v", historyEntry)
+	}
+}
+
 func TestRouterDeploymentStatusesUnavailable(t *testing.T) {
 	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
 	req := httptest.NewRequest(http.MethodGet, "/v1/status/deployments", nil)
@@ -465,6 +557,23 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 				Sync:               domain.Sync{State: domain.SyncStateSynced, Reason: "RolloutCompleted"},
 				Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "all checks passed"},
 				Conditions:         []domain.Condition{{Type: "Ready", Status: true, Reason: "Stable", Message: "deployment is healthy"}},
+				Rollout: &domain.RolloutSummary{
+					DesiredGeneration:  4,
+					ObservedGeneration: 3,
+					Phase:              domain.RolloutPhaseProvisioning,
+					CurrentStep:        "CreateCandidateCapacity",
+					Summary:            "Creating candidate capacity for weighted target groups",
+					Steps:              []domain.RolloutStepSummary{{Kind: "ResolvePlacement", Status: domain.RolloutStepStatusCompleted}, {Kind: "CreateCandidateCapacity", Current: true, Status: domain.RolloutStepStatusCurrent}},
+				},
+				History: []domain.StatusHistoryEntry{{
+					Timestamp:    "2026-04-16T07:05:00Z",
+					Source:       "controller",
+					Summary:      "Creating candidate capacity for weighted target groups",
+					Sync:         domain.Sync{State: domain.SyncStateReconciling, Reason: "CandidateProvisioning"},
+					Health:       domain.Health{Overall: domain.HealthProgressing, Summary: "warming"},
+					RolloutPhase: domain.RolloutPhaseProvisioning,
+					CurrentStep:  "CreateCandidateCapacity",
+				}},
 			}}, nil
 		},
 	})
@@ -494,6 +603,45 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 	}
 	if sync["state"] != string(domain.SyncStateSynced) {
 		t.Fatalf("unexpected sync payload: %#v", sync)
+	}
+	rollout, ok := status["rollout"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rollout object, got %#v", status["rollout"])
+	}
+	if rollout["phase"] != string(domain.RolloutPhaseProvisioning) || rollout["currentStep"] != "CreateCandidateCapacity" {
+		t.Fatalf("expected rollout phase/currentStep fields, got %#v", rollout)
+	}
+	steps, ok := rollout["steps"].([]any)
+	if !ok || len(steps) != 2 {
+		t.Fatalf("expected rollout.steps array, got %#v", rollout["steps"])
+	}
+	firstStep, ok := steps[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rollout.steps[0] object, got %#v", steps[0])
+	}
+	if firstStep["kind"] != "ResolvePlacement" || firstStep["status"] != string(domain.RolloutStepStatusCompleted) {
+		t.Fatalf("expected rollout.steps[0] field names/values, got %#v", firstStep)
+	}
+	if _, exists := firstStep["current"]; exists {
+		t.Fatalf("expected completed rollout step current flag to be omitted, got %#v", firstStep)
+	}
+	currentStep, ok := steps[1].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rollout.steps[1] object, got %#v", steps[1])
+	}
+	if currentStep["kind"] != "CreateCandidateCapacity" || currentStep["current"] != true || currentStep["status"] != string(domain.RolloutStepStatusCurrent) {
+		t.Fatalf("expected rollout.steps[1] field names/values, got %#v", currentStep)
+	}
+	history, ok := status["history"].([]any)
+	if !ok || len(history) != 1 {
+		t.Fatalf("expected history array in raw payload, got %#v", status["history"])
+	}
+	historyEntry, ok := history[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected history[0] object, got %#v", history[0])
+	}
+	if historyEntry["currentStep"] != "CreateCandidateCapacity" || historyEntry["rolloutPhase"] != string(domain.RolloutPhaseProvisioning) {
+		t.Fatalf("expected history field names/values, got %#v", historyEntry)
 	}
 	if _, exists := status["ObservedGeneration"]; exists {
 		t.Fatalf("unexpected Go-style field name in %#v", status)
@@ -569,7 +717,7 @@ func TestRouterOverviewAccounts(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 		OverviewAccounts: func() ([]catalog.AccountOverview, error) {
-			return []catalog.AccountOverview{{Name: "prod-core", AWSAccountID: "123456789012", DeploymentCount: 3, SyncedCount: 1, ProgressingCount: 1, PausedCount: 1, ErrorCount: 0, Deployments: []catalog.DeploymentOverview{{Name: "api-prod", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", Rollout: &domain.RolloutSummary{DesiredGeneration: 4, ObservedGeneration: 3, Phase: domain.RolloutPhaseAccepted, CurrentStep: "PromoteCandidateCapacity", Summary: "Observing current state", Steps: []domain.RolloutStepSummary{{Kind: "CreateCandidateCapacity"}, {Kind: "ShiftTrafficCanary"}, {Kind: "PromoteCandidateCapacity", Current: true}}}}, {Name: "api-staging", Strategy: "linear", ExecutionMode: "ecsCodeDeploy", Rollout: &domain.RolloutSummary{DesiredGeneration: 8, ObservedGeneration: 7, Phase: domain.RolloutPhaseAccepted, CurrentStep: "VerifyServiceStability", Summary: "Observing current state", Steps: []domain.RolloutStepSummary{{Kind: "CreateCodeDeployDeployment"}, {Kind: "ShiftTrafficLinear"}, {Kind: "VerifyServiceStability", Current: true}}}}}}}, nil
+			return []catalog.AccountOverview{{Name: "prod-core", AWSAccountID: "123456789012", DeploymentCount: 3, SyncedCount: 1, ProgressingCount: 1, PausedCount: 1, ErrorCount: 0, Deployments: []catalog.DeploymentOverview{{Name: "api-prod", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", Rollout: &domain.RolloutSummary{DesiredGeneration: 4, ObservedGeneration: 3, Phase: domain.RolloutPhaseAccepted, CurrentStep: "PromoteCandidateCapacity", Summary: "Observing current state", Steps: []domain.RolloutStepSummary{{Kind: "CreateCandidateCapacity", Status: "completed"}, {Kind: "ShiftTrafficCanary", Status: "pending"}, {Kind: "PromoteCandidateCapacity", Current: true, Status: "current"}}}}, {Name: "api-staging", Strategy: "linear", ExecutionMode: "ecsCodeDeploy", Rollout: &domain.RolloutSummary{DesiredGeneration: 8, ObservedGeneration: 7, Phase: domain.RolloutPhaseAccepted, CurrentStep: "VerifyServiceStability", Summary: "Observing current state", Steps: []domain.RolloutStepSummary{{Kind: "CreateCodeDeployDeployment", Status: "completed"}, {Kind: "ShiftTrafficLinear", Status: "pending"}, {Kind: "VerifyServiceStability", Current: true, Status: "current"}}}}}}}, nil
 		},
 	})
 	req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts", nil)
@@ -610,6 +758,28 @@ func TestRouterOverviewAccounts(t *testing.T) {
 	}
 	if payload[0]["deploymentCount"] != float64(3) || payload[0]["syncedCount"] != float64(1) || payload[0]["progressingCount"] != float64(1) || payload[0]["pausedCount"] != float64(1) || payload[0]["errorCount"] != float64(0) {
 		t.Fatalf("expected additive JSON count fields, got %+v", payload[0])
+	}
+	rollout, ok := payload[0]["deployments"].([]any)[0].(map[string]any)["rollout"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rollout object in raw overview payload, got %#v", payload[0])
+	}
+	steps, ok := rollout["steps"].([]any)
+	if !ok || len(steps) != 3 {
+		t.Fatalf("expected rollout.steps array in raw overview payload, got %#v", rollout["steps"])
+	}
+	firstStep, ok := steps[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rollout.steps[0] object, got %#v", steps[0])
+	}
+	if firstStep["kind"] != "CreateCandidateCapacity" || firstStep["status"] != "completed" {
+		t.Fatalf("expected rollout.steps[0] status field names, got %#v", firstStep)
+	}
+	lastStep, ok := steps[2].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rollout.steps[2] object, got %#v", steps[2])
+	}
+	if lastStep["kind"] != "PromoteCandidateCapacity" || lastStep["current"] != true || lastStep["status"] != "current" {
+		t.Fatalf("expected rollout.steps[2] current/status field names, got %#v", lastStep)
 	}
 }
 
@@ -671,7 +841,7 @@ func TestRouterOverviewDeployment(t *testing.T) {
 					Phase:              domain.RolloutPhaseAccepted,
 					CurrentStep:        "VerifyServiceStability",
 					Summary:            "Observing current state",
-					Steps:              []domain.RolloutStepSummary{{Kind: "CreateCodeDeployDeployment"}, {Kind: "ShiftTrafficLinear"}, {Kind: "VerifyServiceStability", Current: true}},
+					Steps:              []domain.RolloutStepSummary{{Kind: "CreateCodeDeployDeployment", Status: "completed"}, {Kind: "ShiftTrafficLinear", Status: "pending"}, {Kind: "VerifyServiceStability", Current: true, Status: "current"}},
 					Execution:          []domain.RolloutExecutionDetail{{Resource: "codedeployDeploymentGroup", Name: "payments-api-prod", Description: "Routes ECS traffic shifts"}},
 				},
 				Conditions: []domain.Condition{{Type: "Ready", Status: false, Reason: "Updating", Message: "service is progressing"}},
@@ -729,8 +899,15 @@ func TestRouterOverviewDeployment(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected rollout.steps[2] object, got %#v", steps[2])
 	}
-	if lastStep["kind"] != "VerifyServiceStability" || lastStep["current"] != true {
+	if lastStep["kind"] != "VerifyServiceStability" || lastStep["current"] != true || lastStep["status"] != "current" {
 		t.Fatalf("expected rollout.steps[2] field names, got %#v", lastStep)
+	}
+	firstStep, ok := steps[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rollout.steps[0] object, got %#v", steps[0])
+	}
+	if firstStep["kind"] != "CreateCodeDeployDeployment" || firstStep["status"] != "completed" {
+		t.Fatalf("expected rollout.steps[0] status field names, got %#v", firstStep)
 	}
 	execution, ok := rollout["execution"].([]any)
 	if !ok || len(execution) != 1 {

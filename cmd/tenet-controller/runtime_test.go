@@ -167,6 +167,16 @@ func TestEmitRuntimePlansPersistsRolloutSummaryIntoStatusSnapshotsForEC2CanaryDe
 			}
 		}
 	}
+	wantStatuses := []string{"completed", "completed", "current", "pending", "pending", "pending"}
+	if got := rolloutStepStatuses(status.Rollout.Steps); len(got) != len(wantStatuses) {
+		t.Fatalf("expected rollout step statuses %v, got %v", wantStatuses, got)
+	} else {
+		for i := range wantStatuses {
+			if got[i] != wantStatuses[i] {
+				t.Fatalf("expected rollout step statuses %v, got %v", wantStatuses, got)
+			}
+		}
+	}
 	if status.Rollout.Steps[2].Kind != "CreateCandidateCapacity" || !status.Rollout.Steps[2].Current {
 		t.Fatalf("expected actionable rollout step to be marked current, got %+v", status.Rollout.Steps)
 	}
@@ -178,6 +188,41 @@ func TestEmitRuntimePlansPersistsRolloutSummaryIntoStatusSnapshotsForEC2CanaryDe
 	}
 	if len(status.Conditions) != 1 || status.Conditions[0] != (domain.Condition{Type: "Ready", Status: false, Reason: "HealthPending", Message: "candidate target group is still warming"}) {
 		t.Fatalf("expected seeded conditions to be preserved, got %+v", status.Conditions)
+	}
+}
+
+func TestDeriveRolloutSummaryLeavesNonActionablePlansPending(t *testing.T) {
+	deployment := domain.Deployment{Generation: 3}
+	status := domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStatePaused}}
+	plan := reconcile.Plan{Steps: []reconcile.Step{{Kind: reconcile.StepResolvePlacement}, {Kind: reconcile.StepObserveCurrentState}}}
+
+	rollout := deriveRolloutSummary(deployment, status, plan)
+	if rollout == nil {
+		t.Fatalf("expected rollout summary")
+	}
+	if rollout.CurrentStep != "" {
+		t.Fatalf("expected no actionable current step for non-actionable plan, got %+v", rollout)
+	}
+	if rollout.Phase != domain.RolloutPhasePending {
+		t.Fatalf("expected pending phase for non-actionable plan, got %+v", rollout)
+	}
+	if rollout.Summary != "Rollout pending" {
+		t.Fatalf("expected pending summary for non-actionable plan, got %+v", rollout)
+	}
+	wantStatuses := []string{"pending", "pending"}
+	if got := rolloutStepStatuses(rollout.Steps); len(got) != len(wantStatuses) {
+		t.Fatalf("expected rollout step statuses %v, got %v", wantStatuses, got)
+	} else {
+		for i := range wantStatuses {
+			if got[i] != wantStatuses[i] {
+				t.Fatalf("expected rollout step statuses %v, got %v", wantStatuses, got)
+			}
+		}
+	}
+	for _, step := range rollout.Steps {
+		if step.Current {
+			t.Fatalf("expected no current step for non-actionable plan, got %+v", rollout.Steps)
+		}
 	}
 }
 
@@ -242,6 +287,16 @@ func TestEmitRuntimePlansPersistsCodeDeployRolloutStepsForECSLinearDeployment(t 
 	}
 	if len(status.Rollout.Steps) != 5 || status.Rollout.Steps[2].Kind != "CreateCodeDeployDeployment" || status.Rollout.Steps[3].Kind != "ShiftTrafficLinear" {
 		t.Fatalf("expected ecs codedeploy rollout steps, got %+v", status.Rollout.Steps)
+	}
+	wantStatuses := []string{"completed", "completed", "current", "pending", "pending"}
+	if got := rolloutStepStatuses(status.Rollout.Steps); len(got) != len(wantStatuses) {
+		t.Fatalf("expected ecs CodeDeploy rollout step statuses %v, got %v", wantStatuses, got)
+	} else {
+		for i := range wantStatuses {
+			if got[i] != wantStatuses[i] {
+				t.Fatalf("expected ecs CodeDeploy rollout step statuses %v, got %v", wantStatuses, got)
+			}
+		}
 	}
 }
 
@@ -508,8 +563,24 @@ func TestEmitRuntimePlansPersistsHealthySyncedRolloutSummaryWhenGenerationsMatch
 	if status.Rollout.Phase != domain.RolloutPhaseCompleted {
 		t.Fatalf("expected rollout phase %q, got %+v", domain.RolloutPhaseCompleted, status.Rollout)
 	}
+	if status.Rollout.CurrentStep != "" {
+		t.Fatalf("expected completed rollout to clear current step, got %+v", status.Rollout)
+	}
 	if status.Rollout.Summary != "Deployment is synced and healthy" {
 		t.Fatalf("expected healthy synced rollout summary, got %+v", status.Rollout)
+	}
+	wantStatuses := []string{"completed"}
+	if got := rolloutStepStatuses(status.Rollout.Steps); len(got) != len(wantStatuses) {
+		t.Fatalf("expected completed rollout step statuses %v, got %v", wantStatuses, got)
+	} else {
+		for i := range wantStatuses {
+			if got[i] != wantStatuses[i] {
+				t.Fatalf("expected completed rollout step statuses %v, got %v", wantStatuses, got)
+			}
+		}
+	}
+	if len(status.Rollout.Steps) != 1 || status.Rollout.Steps[0].Kind != string(reconcile.StepMarkSynced) || status.Rollout.Steps[0].Current {
+		t.Fatalf("expected completed rollout step to be non-current mark-synced step, got %+v", status.Rollout.Steps)
 	}
 }
 
@@ -862,6 +933,14 @@ func rolloutStepKinds(steps []domain.RolloutStepSummary) []string {
 		kinds = append(kinds, step.Kind)
 	}
 	return kinds
+}
+
+func rolloutStepStatuses(steps []domain.RolloutStepSummary) []string {
+	statuses := make([]string, 0, len(steps))
+	for _, step := range steps {
+		statuses = append(statuses, string(step.Status))
+	}
+	return statuses
 }
 
 func assertRolloutExecutionDetails(t *testing.T, got []domain.RolloutExecutionDetail, want []domain.RolloutExecutionDetail) {

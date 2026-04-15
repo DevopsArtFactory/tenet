@@ -168,14 +168,16 @@ func syncStateLabel(state domain.SyncState) string {
 func deriveRolloutSummary(deployment domain.Deployment, status domain.DeploymentStatus, plan reconcile.Plan) *domain.RolloutSummary {
 	steps := make([]domain.RolloutStepSummary, 0, len(plan.Steps))
 	currentIndex := currentRolloutStepIndex(plan)
+	completed := completedRolloutStep(plan, currentIndex)
 	currentStep := ""
-	if currentIndex >= 0 {
+	if currentIndex >= 0 && !completed {
 		currentStep = string(plan.Steps[currentIndex].Kind)
 	}
 	for index, step := range plan.Steps {
 		steps = append(steps, domain.RolloutStepSummary{
 			Kind:    string(step.Kind),
-			Current: index == currentIndex,
+			Current: index == currentIndex && !completed,
+			Status:  rolloutStepStatus(index, currentIndex, completed),
 		})
 	}
 
@@ -191,16 +193,37 @@ func deriveRolloutSummary(deployment domain.Deployment, status domain.Deployment
 }
 
 func currentRolloutStepIndex(plan reconcile.Plan) int {
-	if len(plan.Steps) == 0 {
-		return -1
-	}
 	for index, step := range plan.Steps {
 		if step.Kind == reconcile.StepResolvePlacement || step.Kind == reconcile.StepObserveCurrentState {
 			continue
 		}
 		return index
 	}
-	return len(plan.Steps) - 1
+	return -1
+}
+
+func completedRolloutStep(plan reconcile.Plan, currentIndex int) bool {
+	if currentIndex < 0 || currentIndex >= len(plan.Steps) {
+		return false
+	}
+	return plan.Steps[currentIndex].Kind == reconcile.StepMarkSynced
+}
+
+func rolloutStepStatus(index int, currentIndex int, completed bool) domain.RolloutStepStatus {
+	if completed {
+		return domain.RolloutStepStatusCompleted
+	}
+	if currentIndex >= 0 {
+		switch {
+		case index < currentIndex:
+			return domain.RolloutStepStatusCompleted
+		case index == currentIndex:
+			return domain.RolloutStepStatusCurrent
+		default:
+			return domain.RolloutStepStatusPending
+		}
+	}
+	return domain.RolloutStepStatusPending
 }
 
 func deriveRolloutExecutionDetails(deployment domain.Deployment) []domain.RolloutExecutionDetail {

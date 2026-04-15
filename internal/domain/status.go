@@ -49,10 +49,20 @@ type Health struct {
 	Summary string       `json:"summary"`
 }
 
+// RolloutStepStatus captures the lifecycle state of a rollout step.
+type RolloutStepStatus string
+
+const (
+	RolloutStepStatusCompleted RolloutStepStatus = "completed"
+	RolloutStepStatusCurrent   RolloutStepStatus = "current"
+	RolloutStepStatusPending   RolloutStepStatus = "pending"
+)
+
 // RolloutStepSummary captures one controller-derived step in the current rollout plan.
 type RolloutStepSummary struct {
-	Kind    string `json:"kind"`
-	Current bool   `json:"current,omitempty"`
+	Kind    string            `json:"kind"`
+	Current bool              `json:"current,omitempty"`
+	Status  RolloutStepStatus `json:"status,omitempty"`
 }
 
 // RolloutExecutionDetail captures one operator-facing execution resource detail.
