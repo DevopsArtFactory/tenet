@@ -81,6 +81,39 @@ func TestCompileAcceptsGoployerStyleDeploymentManifest(t *testing.T) {
 	}
 }
 
+func TestCompileRejectsGoployerStackAccountMismatch(t *testing.T) {
+	_, err := Compile(CatalogSpec{
+		Accounts: []spec.AccountSpec{
+			{Name: "prod-core", AWSAccountID: "123456789012", RoleARN: "arn:aws:iam::123456789012:role/TenetDeployerRole", AllowedRegions: []string{"ap-northeast-2"}},
+			{Name: "other-core", AWSAccountID: "123456789013", RoleARN: "arn:aws:iam::123456789013:role/TenetDeployerRole", AllowedRegions: []string{"ap-northeast-2"}},
+		},
+		Environments: []spec.EnvironmentSpec{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments: []spec.DeploymentSpec{{
+			Name:   "payments-api-prod",
+			Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
+			Stacks: []spec.StackSpec{{Stack: "payments-api-prod", Account: "other-core", Env: "prod-apne2", ReplacementType: "blueGreen", Capacity: spec.CapacitySpec{Desired: 3, Min: 2, Max: 6}, Regions: []spec.RegionSpec{{Region: "ap-northeast-2"}}}},
+		}},
+	})
+	if err == nil {
+		t.Fatalf("expected stack account mismatch error")
+	}
+}
+
+func TestCompileRejectsGoployerStackRegionMismatch(t *testing.T) {
+	_, err := Compile(CatalogSpec{
+		Accounts:     []spec.AccountSpec{{Name: "prod-core", AWSAccountID: "123456789012", RoleARN: "arn:aws:iam::123456789012:role/TenetDeployerRole", AllowedRegions: []string{"ap-northeast-2", "us-west-2"}}},
+		Environments: []spec.EnvironmentSpec{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments: []spec.DeploymentSpec{{
+			Name:   "payments-api-prod",
+			Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
+			Stacks: []spec.StackSpec{{Stack: "payments-api-prod", Account: "prod-core", Env: "prod-apne2", ReplacementType: "blueGreen", Capacity: spec.CapacitySpec{Desired: 3, Min: 2, Max: 6}, Regions: []spec.RegionSpec{{Region: "us-west-2"}}}},
+		}},
+	})
+	if err == nil {
+		t.Fatalf("expected stack region mismatch error")
+	}
+}
+
 func TestCompileRejectsEnvironmentReferencingUnknownAccount(t *testing.T) {
 	_, err := Compile(CatalogSpec{
 		Accounts: []spec.AccountSpec{{
