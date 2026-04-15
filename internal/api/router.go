@@ -10,8 +10,9 @@ import (
 
 // Options configures the API router.
 type Options struct {
-	BuildInfo      buildinfo.Info
-	CatalogSummary func() (catalog.Summary, error)
+	BuildInfo          buildinfo.Info
+	CatalogSummary     func() (catalog.Summary, error)
+	CatalogDeployments func() ([]catalog.DeploymentView, error)
 }
 
 // NewRouter builds the API router for the Tenet control plane.
@@ -37,6 +38,19 @@ func NewRouter(options Options) http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(summary)
+	})
+	mux.HandleFunc("/v1/catalog/deployments", func(w http.ResponseWriter, _ *http.Request) {
+		if options.CatalogDeployments == nil {
+			http.Error(w, "catalog deployments unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		deployments, err := options.CatalogDeployments()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(deployments)
 	})
 
 	return mux

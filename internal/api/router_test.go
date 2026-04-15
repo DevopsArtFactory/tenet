@@ -97,3 +97,57 @@ func TestRouterCatalogSummaryPropagatesErrors(t *testing.T) {
 		t.Fatalf("expected 500, got %d", resp.Code)
 	}
 }
+
+func TestRouterCatalogDeployments(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		CatalogDeployments: func() ([]catalog.DeploymentView, error) {
+			return []catalog.DeploymentView{{Name: "api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/deployments", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var deployments []catalog.DeploymentView
+	if err := json.Unmarshal(resp.Body.Bytes(), &deployments); err != nil {
+		t.Fatalf("failed to decode deployments: %v", err)
+	}
+	if len(deployments) != 1 || deployments[0].Name != "api-prod" {
+		t.Fatalf("unexpected deployments: %+v", deployments)
+	}
+}
+
+func TestRouterCatalogDeploymentsUnavailable(t *testing.T) {
+	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/deployments", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", resp.Code)
+	}
+}
+
+func TestRouterCatalogDeploymentsPropagatesErrors(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		CatalogDeployments: func() ([]catalog.DeploymentView, error) {
+			return nil, errors.New("boom")
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/deployments", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.Code)
+	}
+}

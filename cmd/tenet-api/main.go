@@ -22,6 +22,7 @@ func main() {
 	options := api.Options{BuildInfo: info}
 	if repoRoot != "" {
 		options.CatalogSummary = catalog.RepositorySummaryProvider(repoRoot)
+		options.CatalogDeployments = catalog.RepositoryDeploymentProvider(repoRoot)
 	}
 
 	if err := http.ListenAndServe(addr, api.NewRouter(options)); err != nil {
