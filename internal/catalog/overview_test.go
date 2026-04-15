@@ -80,7 +80,7 @@ func TestBuildAccountOverviewsGroupsDeploymentsByAccount(t *testing.T) {
 
 func TestBuildAccountOverviewsCountsStatusBuckets(t *testing.T) {
 	catalog := manifest.Catalog{
-		Accounts: []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
 		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
 		Deployments: []domain.Deployment{
 			{Name: "payments-api", AppRef: "payments", EnvironmentRef: "prod-apne2"},
@@ -120,6 +120,26 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 				Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"},
 				Conditions: []domain.Condition{
 					{Type: "Progressing", Status: true, Reason: "RolloutInFlight", Message: "candidate receiving traffic"},
+				},
+				History: []domain.StatusHistoryEntry{
+					{
+						Timestamp:    "2026-04-16T06:15:00Z",
+						Source:       "controller",
+						Summary:      "Accepted rollout for r7",
+						Sync:         domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"},
+						Health:       domain.Health{Overall: domain.HealthProgressing, Summary: "candidate is warming"},
+						RolloutPhase: domain.RolloutPhaseAccepted,
+						CurrentStep:  "CreateCandidateCapacity",
+					},
+					{
+						Timestamp:    "2026-04-16T06:20:00Z",
+						Source:       "controller",
+						Summary:      "Shifting canary traffic",
+						Sync:         domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"},
+						Health:       domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"},
+						RolloutPhase: domain.RolloutPhasePromoting,
+						CurrentStep:  "ShiftTrafficCanary",
+					},
 				},
 				DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6"},
 				Rollout: &domain.RolloutSummary{
@@ -180,10 +200,18 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	if len(detail.Conditions) != 1 || detail.Conditions[0].Reason != "RolloutInFlight" {
 		t.Fatalf("expected conditions to be surfaced, got %+v", detail.Conditions)
 	}
+	if len(detail.History) != 2 {
+		t.Fatalf("expected runtime history to be surfaced, got %+v", detail.History)
+	}
+	if got := detail.History; got[0].Timestamp != "2026-04-16T06:15:00Z" || got[0].Source != "controller" || got[0].Summary != "Accepted rollout for r7" || got[0].Sync.Reason != "new artifact" || got[0].Health.Summary != "candidate is warming" || got[0].RolloutPhase != domain.RolloutPhaseAccepted || got[0].CurrentStep != "CreateCandidateCapacity" || got[1].RolloutPhase != domain.RolloutPhasePromoting || got[1].CurrentStep != "ShiftTrafficCanary" {
+		t.Fatalf("expected runtime history details, got %+v", got)
+	}
 
 	snapshots[0].Status.Rollout.Steps[0].Kind = "mutated"
 	snapshots[0].Status.Rollout.Execution[0].Name = "mutated"
 	snapshots[0].Status.Conditions[0].Reason = "Mutated"
+	snapshots[0].Status.History[0].Summary = "mutated"
+	detail.History[1].CurrentStep = "mutated-by-caller"
 	if detail.Rollout.Steps[0].Kind != "CreateCandidateCapacity" {
 		t.Fatalf("expected rollout summary to be cloned defensively, got %+v", detail.Rollout)
 	}
@@ -192,6 +220,12 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	}
 	if detail.Conditions[0].Reason != "RolloutInFlight" {
 		t.Fatalf("expected conditions to be cloned defensively, got %+v", detail.Conditions)
+	}
+	if detail.History[0].Summary != "Accepted rollout for r7" {
+		t.Fatalf("expected runtime history to be cloned from stored status, got %+v", detail.History)
+	}
+	if snapshots[0].Status.History[1].CurrentStep != "ShiftTrafficCanary" {
+		t.Fatalf("expected caller mutations to avoid mutating stored history, got %+v", snapshots[0].Status.History)
 	}
 }
 

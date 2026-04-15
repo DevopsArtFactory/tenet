@@ -73,14 +73,26 @@ type RolloutSummary struct {
 	Execution          []RolloutExecutionDetail `json:"execution,omitempty"`
 }
 
+// StatusHistoryEntry captures one operator-facing runtime history event.
+type StatusHistoryEntry struct {
+	Timestamp    string       `json:"timestamp"`
+	Source       string       `json:"source"`
+	Summary      string       `json:"summary"`
+	Sync         Sync         `json:"sync"`
+	Health       Health       `json:"health"`
+	RolloutPhase RolloutPhase `json:"rolloutPhase,omitempty"`
+	CurrentStep  string       `json:"currentStep,omitempty"`
+}
+
 // DeploymentStatus captures observed state separate from desired spec.
 type DeploymentStatus struct {
-	ObservedGeneration int64              `json:"observedGeneration"`
-	Sync               Sync               `json:"sync"`
-	Health             Health             `json:"health"`
-	Conditions         []Condition        `json:"conditions"`
-	DeployedArtifact   DeploymentArtifact `json:"deployedArtifact,omitempty"`
-	Rollout            *RolloutSummary    `json:"rollout,omitempty"`
+	ObservedGeneration int64                `json:"observedGeneration"`
+	Sync               Sync                 `json:"sync"`
+	Health             Health               `json:"health"`
+	Conditions         []Condition          `json:"conditions"`
+	History            []StatusHistoryEntry `json:"history,omitempty"`
+	DeployedArtifact   DeploymentArtifact   `json:"deployedArtifact,omitempty"`
+	Rollout            *RolloutSummary      `json:"rollout,omitempty"`
 }
 
 // IsSynced reports whether the deployment is currently synced.

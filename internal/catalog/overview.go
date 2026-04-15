@@ -45,23 +45,24 @@ type DeploymentOverview struct {
 
 // DeploymentOverviewDetail joins one deployment's desired intent, placement, and observed state.
 type DeploymentOverviewDetail struct {
-	Name               string                    `json:"name"`
-	AppRef             string                    `json:"appRef"`
-	EnvironmentRef     string                    `json:"environmentRef"`
-	AccountName        string                    `json:"accountName"`
-	AWSAccountID       string                    `json:"awsAccountId"`
-	AllowedRegions     []string                  `json:"allowedRegions,omitempty"`
-	Region             string                    `json:"region"`
-	TargetType         string                    `json:"targetType,omitempty"`
-	Strategy           string                    `json:"strategy,omitempty"`
-	ExecutionMode      string                    `json:"executionMode,omitempty"`
-	DesiredArtifact    domain.DeploymentArtifact `json:"desiredArtifact,omitempty"`
-	DeployedArtifact   domain.DeploymentArtifact `json:"deployedArtifact,omitempty"`
-	ObservedGeneration int64                     `json:"observedGeneration,omitempty"`
-	Sync               domain.Sync               `json:"sync"`
-	Health             domain.Health             `json:"health"`
-	Rollout            *domain.RolloutSummary    `json:"rollout,omitempty"`
-	Conditions         []domain.Condition        `json:"conditions,omitempty"`
+	Name               string                      `json:"name"`
+	AppRef             string                      `json:"appRef"`
+	EnvironmentRef     string                      `json:"environmentRef"`
+	AccountName        string                      `json:"accountName"`
+	AWSAccountID       string                      `json:"awsAccountId"`
+	AllowedRegions     []string                    `json:"allowedRegions,omitempty"`
+	Region             string                      `json:"region"`
+	TargetType         string                      `json:"targetType,omitempty"`
+	Strategy           string                      `json:"strategy,omitempty"`
+	ExecutionMode      string                      `json:"executionMode,omitempty"`
+	DesiredArtifact    domain.DeploymentArtifact   `json:"desiredArtifact,omitempty"`
+	DeployedArtifact   domain.DeploymentArtifact   `json:"deployedArtifact,omitempty"`
+	ObservedGeneration int64                       `json:"observedGeneration,omitempty"`
+	Sync               domain.Sync                 `json:"sync"`
+	Health             domain.Health               `json:"health"`
+	Rollout            *domain.RolloutSummary      `json:"rollout,omitempty"`
+	Conditions         []domain.Condition          `json:"conditions,omitempty"`
+	History            []domain.StatusHistoryEntry `json:"history,omitempty"`
 }
 
 // BuildAccountOverviews groups placement-aware deployment state by account.
@@ -195,6 +196,7 @@ func BuildDeploymentOverviewDetail(c manifest.Catalog, snapshots []statusstore.S
 		Health:             status.Health,
 		Rollout:            cloneRolloutSummary(status.Rollout),
 		Conditions:         append([]domain.Condition(nil), status.Conditions...),
+		History:            cloneStatusHistory(status.History),
 	}, nil
 }
 
@@ -206,4 +208,8 @@ func cloneRolloutSummary(summary *domain.RolloutSummary) *domain.RolloutSummary 
 	copy.Steps = append([]domain.RolloutStepSummary(nil), summary.Steps...)
 	copy.Execution = append([]domain.RolloutExecutionDetail(nil), summary.Execution...)
 	return &copy
+}
+
+func cloneStatusHistory(history []domain.StatusHistoryEntry) []domain.StatusHistoryEntry {
+	return append([]domain.StatusHistoryEntry(nil), history...)
 }
