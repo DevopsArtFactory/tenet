@@ -45,3 +45,45 @@ func TestPlannerReturnsMarkSyncedForHealthyDeployment(t *testing.T) {
 		t.Fatalf("expected single mark-synced step, got %+v", plan.Steps)
 	}
 }
+
+func TestPlannerDoesNotReconcilePausedDeployment(t *testing.T) {
+	planner := Planner{}
+	deployment := domain.Deployment{Generation: 3}
+	status := domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStatePaused}}
+
+	plan := planner.Build(deployment, status)
+	if len(plan.Steps) != 2 {
+		t.Fatalf("expected observation-only plan, got %+v", plan.Steps)
+	}
+	if plan.Steps[0].Kind != StepResolvePlacement || plan.Steps[1].Kind != StepObserveCurrentState {
+		t.Fatalf("unexpected paused plan: %+v", plan.Steps)
+	}
+}
+
+func TestPlannerDoesNotReconcileErroredDeployment(t *testing.T) {
+	planner := Planner{}
+	deployment := domain.Deployment{Generation: 3}
+	status := domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStateError}}
+
+	plan := planner.Build(deployment, status)
+	if len(plan.Steps) != 2 {
+		t.Fatalf("expected observation-only plan, got %+v", plan.Steps)
+	}
+	if plan.Steps[0].Kind != StepResolvePlacement || plan.Steps[1].Kind != StepObserveCurrentState {
+		t.Fatalf("unexpected errored plan: %+v", plan.Steps)
+	}
+}
+
+func TestPlannerWaitsForFreshDesiredWhenStatusIsAhead(t *testing.T) {
+	planner := Planner{}
+	deployment := domain.Deployment{Generation: 2}
+	status := domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStateReconciling}}
+
+	plan := planner.Build(deployment, status)
+	if len(plan.Steps) != 3 {
+		t.Fatalf("expected await-fresh-desired plan, got %+v", plan.Steps)
+	}
+	if plan.Steps[2].Kind != StepAwaitFreshDesired {
+		t.Fatalf("expected await-fresh-desired step, got %+v", plan.Steps)
+	}
+}

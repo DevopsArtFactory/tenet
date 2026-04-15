@@ -27,6 +27,16 @@ func TestLoadRejectsMissingRoot(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsMissingRequiredDirectories(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "accounts"), 0o755); err != nil {
+		t.Fatalf("failed to create accounts dir: %v", err)
+	}
+	if _, err := Load(root); err == nil {
+		t.Fatalf("expected missing required directories error")
+	}
+}
+
 func TestLoadRejectsInvalidJSON(t *testing.T) {
 	root := t.TempDir()
 	mustWriteJSON(t, filepath.Join(root, "accounts", "broken.json"), `{not-json}`)
@@ -38,10 +48,12 @@ func TestLoadRejectsInvalidJSON(t *testing.T) {
 
 func TestLoadIgnoresNonJSONFiles(t *testing.T) {
 	root := t.TempDir()
-	path := filepath.Join(root, "accounts", "note.txt")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("failed to create dir: %v", err)
+	for _, dir := range []string{"accounts", "environments", "deployments"} {
+		if err := os.Mkdir(filepath.Join(root, dir), 0o755); err != nil {
+			t.Fatalf("failed to create required dir %s: %v", dir, err)
+		}
 	}
+	path := filepath.Join(root, "accounts", "note.txt")
 	if err := os.WriteFile(path, []byte("ignore me"), 0o644); err != nil {
 		t.Fatalf("failed to write file: %v", err)
 	}

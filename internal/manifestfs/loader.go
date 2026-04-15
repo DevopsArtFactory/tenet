@@ -15,6 +15,9 @@ func Load(root string) (manifest.CatalogSpec, error) {
 	if err := ensureRootExists(root); err != nil {
 		return manifest.CatalogSpec{}, err
 	}
+	if err := ensureRequiredDirs(root); err != nil {
+		return manifest.CatalogSpec{}, err
+	}
 
 	accounts, err := loadSpecs[spec.AccountSpec](filepath.Join(root, "accounts"))
 	if err != nil {
@@ -77,6 +80,21 @@ func ensureRootExists(root string) error {
 	}
 	if !info.IsDir() {
 		return fmt.Errorf("manifest root %q is not a directory", root)
+	}
+	return nil
+}
+
+func ensureRequiredDirs(root string) error {
+	required := []string{"accounts", "environments", "deployments"}
+	for _, name := range required {
+		path := filepath.Join(root, name)
+		info, err := os.Stat(path)
+		if err != nil {
+			return fmt.Errorf("stat required manifest dir %q: %w", name, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("required manifest path %q is not a directory", path)
+		}
 	}
 	return nil
 }

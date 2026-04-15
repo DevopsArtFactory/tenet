@@ -8,6 +8,15 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 )
 
+func requireMethod(w http.ResponseWriter, r *http.Request, method string) bool {
+	if r.Method == method {
+		return true
+	}
+	w.Header().Set("Allow", method)
+	http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+	return false
+}
+
 // Options configures the API router.
 type Options struct {
 	BuildInfo          buildinfo.Info
@@ -18,15 +27,24 @@ type Options struct {
 // NewRouter builds the API router for the Tenet control plane.
 func NewRouter(options Options) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
-	mux.HandleFunc("/v1/info", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/v1/info", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(options.BuildInfo)
 	})
-	mux.HandleFunc("/v1/catalog/summary", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/v1/catalog/summary", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
 		if options.CatalogSummary == nil {
 			http.Error(w, "catalog summary unavailable", http.StatusServiceUnavailable)
 			return
@@ -39,7 +57,10 @@ func NewRouter(options Options) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(summary)
 	})
-	mux.HandleFunc("/v1/catalog/deployments", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/v1/catalog/deployments", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
 		if options.CatalogDeployments == nil {
 			http.Error(w, "catalog deployments unavailable", http.StatusServiceUnavailable)
 			return

@@ -21,6 +21,9 @@ func main() {
 
 	options := api.Options{BuildInfo: info}
 	if repoRoot != "" {
+		if _, err := catalog.LoadFromRepository(repoRoot); err != nil {
+			log.Fatalf("invalid TENET_REPO_ROOT: %v", err)
+		}
 		options.CatalogSummary = catalog.RepositorySummaryProvider(repoRoot)
 		options.CatalogDeployments = catalog.RepositoryDeploymentProvider(repoRoot)
 	}
