@@ -132,30 +132,7 @@ func TestCompileDerivesExecutionModesForEC2AndECS(t *testing.T) {
 }
 
 func TestCompileAssignsStableNonZeroDesiredGeneration(t *testing.T) {
-	input := CatalogSpec{
-		Accounts: []spec.AccountSpec{{
-			Name:           "prod-core",
-			AWSAccountID:   "123456789012",
-			RoleARN:        "arn:aws:iam::123456789012:role/TenetDeployerRole",
-			AllowedRegions: []string{"ap-northeast-2"},
-		}},
-		Environments: []spec.EnvironmentSpec{{
-			Name:       "prod-apne2",
-			AccountRef: "prod-core",
-			Region:     "ap-northeast-2",
-			NetworkRef: "prod-main",
-		}},
-		Deployments: []spec.DeploymentSpec{{
-			Name:           "payments-api-prod",
-			AppRef:         "payments-api",
-			EnvironmentRef: "prod-apne2",
-			Target:         spec.TargetSpec{Type: spec.TargetTypeEC2},
-			Strategy:       spec.StrategySpec{Type: spec.StrategyTypeBlueGreen, WarmupSeconds: 60, MinHealthyPercent: 100},
-			Traffic:        spec.TrafficSpec{Hostname: "api.example.com", Port: 443},
-			Capacity:       spec.CapacitySpec{Desired: 4, Min: 2, Max: 8},
-			Binary:         "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
-		}},
-	}
+	input := testCompileGenerationCatalogSpec()
 
 	first, err := Compile(input)
 	if err != nil {
@@ -180,6 +157,84 @@ func TestCompileAssignsStableNonZeroDesiredGeneration(t *testing.T) {
 	}
 	if third.Deployments[0].Generation == first.Deployments[0].Generation {
 		t.Fatalf("expected desired generation to change when desired artifact changes, got %d", third.Deployments[0].Generation)
+	}
+}
+
+func TestCompileChangesDesiredGenerationWhenCapacityChanges(t *testing.T) {
+	input := testCompileGenerationCatalogSpec()
+
+	first, err := Compile(input)
+	if err != nil {
+		t.Fatalf("first Compile returned error: %v", err)
+	}
+
+	input.Deployments[0].Capacity.Desired = 5
+	second, err := Compile(input)
+	if err != nil {
+		t.Fatalf("second Compile returned error: %v", err)
+	}
+
+	if second.Deployments[0].Generation == first.Deployments[0].Generation {
+		t.Fatalf("expected desired generation to change when capacity changes, got %d", second.Deployments[0].Generation)
+	}
+}
+
+func TestCompileChangesDesiredGenerationWhenTagsChange(t *testing.T) {
+	input := testCompileGenerationCatalogSpec()
+
+	first, err := Compile(input)
+	if err != nil {
+		t.Fatalf("first Compile returned error: %v", err)
+	}
+
+	input.Deployments[0].Tags = append(input.Deployments[0].Tags, "compliance:pci")
+	second, err := Compile(input)
+	if err != nil {
+		t.Fatalf("second Compile returned error: %v", err)
+	}
+
+	if second.Deployments[0].Generation == first.Deployments[0].Generation {
+		t.Fatalf("expected desired generation to change when tags change, got %d", second.Deployments[0].Generation)
+	}
+}
+
+func testCompileGenerationCatalogSpec() CatalogSpec {
+	return CatalogSpec{
+		Accounts: []spec.AccountSpec{{
+			Name:           "prod-core",
+			AWSAccountID:   "123456789012",
+			RoleARN:        "arn:aws:iam::123456789012:role/TenetDeployerRole",
+			AllowedRegions: []string{"ap-northeast-2"},
+		}},
+		Environments: []spec.EnvironmentSpec{{
+			Name:       "prod-apne2",
+			AccountRef: "prod-core",
+			Region:     "ap-northeast-2",
+			NetworkRef: "prod-main",
+		}},
+		Deployments: []spec.DeploymentSpec{{
+			Name:           "payments-api-prod",
+			AppRef:         "payments-api",
+			EnvironmentRef: "prod-apne2",
+			Target:         spec.TargetSpec{Type: spec.TargetTypeEC2},
+			Strategy:       spec.StrategySpec{Type: spec.StrategyTypeBlueGreen, WarmupSeconds: 60, MinHealthyPercent: 100},
+			Traffic:        spec.TrafficSpec{Hostname: "api.example.com", Port: 443},
+			Capacity:       spec.CapacitySpec{Desired: 4, Min: 2, Max: 8},
+			Binary:         "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
+			UserData:       spec.UserDataSpec{Type: "file", Path: "userdata/payments-api-prod.sh"},
+			Tags:           []string{"team:payments", "tier:prod"},
+			Stacks: []spec.StackSpec{{
+				Stack:                      "payments-api-prod",
+				Account:                    "prod-core",
+				Env:                        "prod-apne2",
+				ReplacementType:            "blueGreen",
+				TerminationDelayRate:       30,
+				RollingUpdateInstanceCount: 1,
+				UserData:                   spec.UserDataSpec{Type: "file", Path: "userdata/payments-api-prod.sh"},
+				Capacity:                   spec.CapacitySpec{Desired: 4, Min: 2, Max: 8},
+				Regions:                    []spec.RegionSpec{{Region: "ap-northeast-2", InstanceType: "t3.medium", AMIID: "ami-1234567890abcdef0"}},
+			}},
+		}},
 	}
 }
 

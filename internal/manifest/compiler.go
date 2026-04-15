@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"math"
@@ -98,7 +99,7 @@ func Compile(input CatalogSpec) (Catalog, error) {
 				Image:  deployment.Image,
 			},
 		}
-		compiledDeployment.Generation = deploymentGeneration(compiledDeployment)
+		compiledDeployment.Generation = deploymentGeneration(compiledDeployment, deployment)
 		compiled.Deployments = append(compiled.Deployments, compiledDeployment)
 		if len(deployment.Stacks) > 0 {
 			stack := deployment.Stacks[0]
@@ -116,23 +117,44 @@ func Compile(input CatalogSpec) (Catalog, error) {
 	return compiled, nil
 }
 
-func deploymentGeneration(deployment domain.Deployment) int64 {
+func deploymentGeneration(deployment domain.Deployment, desired spec.DeploymentSpec) int64 {
+	payload, err := json.Marshal(struct {
+		Name            string                    `json:"name"`
+		AppRef          string                    `json:"appRef"`
+		EnvironmentRef  string                    `json:"environmentRef"`
+		Target          spec.TargetSpec           `json:"target"`
+		Strategy        spec.StrategySpec         `json:"strategy"`
+		ExecutionMode   string                    `json:"executionMode"`
+		DesiredArtifact domain.DeploymentArtifact `json:"desiredArtifact"`
+		Traffic         spec.TrafficSpec          `json:"traffic"`
+		Capacity        spec.CapacitySpec         `json:"capacity"`
+		UserData        spec.UserDataSpec         `json:"userData"`
+		Tags            []string                  `json:"tags"`
+		Stacks          []spec.StackSpec          `json:"stacks"`
+	}{
+		Name:           deployment.Name,
+		AppRef:         deployment.AppRef,
+		EnvironmentRef: deployment.EnvironmentRef,
+		Target:         spec.TargetSpec{Type: desired.NormalizedTargetType()},
+		Strategy: spec.StrategySpec{
+			Type:              desired.NormalizedStrategy(),
+			WarmupSeconds:     desired.Strategy.WarmupSeconds,
+			MinHealthyPercent: desired.Strategy.MinHealthyPercent,
+		},
+		ExecutionMode:   deployment.ExecutionMode,
+		DesiredArtifact: deployment.DesiredArtifact,
+		Traffic:         desired.Traffic,
+		Capacity:        desired.NormalizedCapacity(),
+		UserData:        desired.UserData,
+		Tags:            append([]string(nil), desired.Tags...),
+		Stacks:          append([]spec.StackSpec(nil), desired.Stacks...),
+	})
+	if err != nil {
+		panic(fmt.Sprintf("marshal deployment generation payload: %v", err))
+	}
+
 	hasher := fnv.New64a()
-	_, _ = hasher.Write([]byte(deployment.Name))
-	_, _ = hasher.Write([]byte{0})
-	_, _ = hasher.Write([]byte(deployment.AppRef))
-	_, _ = hasher.Write([]byte{0})
-	_, _ = hasher.Write([]byte(deployment.EnvironmentRef))
-	_, _ = hasher.Write([]byte{0})
-	_, _ = hasher.Write([]byte(deployment.TargetType))
-	_, _ = hasher.Write([]byte{0})
-	_, _ = hasher.Write([]byte(deployment.Strategy))
-	_, _ = hasher.Write([]byte{0})
-	_, _ = hasher.Write([]byte(deployment.ExecutionMode))
-	_, _ = hasher.Write([]byte{0})
-	_, _ = hasher.Write([]byte(deployment.DesiredArtifact.Binary))
-	_, _ = hasher.Write([]byte{0})
-	_, _ = hasher.Write([]byte(deployment.DesiredArtifact.Image))
+	_, _ = hasher.Write(payload)
 
 	generation := int64(hasher.Sum64() & math.MaxInt64)
 	if generation == 0 {
