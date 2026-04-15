@@ -208,6 +208,18 @@ docs/
 - ECS-specific behavior should not leak into the shared rollout model too early.
 - Persistence and UI implementation should wait until status semantics stabilize.
 
+## Progress update
+
+Implemented so far:
+- Phases 0 through 6 foundations are in place in repo form.
+- Read-only API surface now includes summary, account, environment, deployment, placement, and topology endpoints.
+- Independent logic-review fixes have already been applied for planner behavior, rollout semantics, HTTP method guards, and manifest root validation.
+
+Next likely slices:
+- richer topology/status read models once runtime status persistence exists
+- controller-side orchestration beyond the current abstract planner skeleton
+- eventual AWS execution drivers once the data model stabilizes
+
 ## First execution target
 
 Land Phases 0 through 4 as the first PR series:
