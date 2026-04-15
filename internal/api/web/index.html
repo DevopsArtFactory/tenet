@@ -60,6 +60,10 @@
       .row-top { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
       .row-title { margin:0; font-size: 18px; }
       .row-subtitle { margin-top:6px; color: var(--muted); font-size: 14px; }
+      .row-links { display:flex; flex-wrap:wrap; gap: 10px; margin-top: 10px; }
+      .row-links-shell { padding: 0 16px 16px; }
+      .row-link { color: var(--blue); font-size: 13px; font-weight: 600; text-decoration: none; }
+      .row-link:hover, .row-link:focus-visible { text-decoration: underline; }
       .row-hint { margin-top: 10px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
       .pills { display:flex; flex-wrap:wrap; gap:8px; }
       .pill { padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; border: 1px solid transparent; }
@@ -183,6 +187,13 @@
           createElement('div', 'v', value),
         );
         return metric;
+      };
+      const createNavLink = (href, text) => {
+        const link = createElement('a', 'row-link', text);
+        link.href = href;
+        link.target = '_blank';
+        link.rel = 'noreferrer noopener';
+        return link;
       };
       const createSelect = (labelText, value, options, onChange) => {
         const field = createElement('label', 'toolbar-field');
@@ -591,6 +602,12 @@
 
             toggle.append(rowTop, metrics);
 
+            const detailLinks = createElement('div', 'row-links row-links-shell');
+            detailLinks.append(
+              createNavLink(`/v1/overview/deployments/${encodeURIComponent(deployment.name)}`, 'Overview JSON'),
+              createNavLink(`/v1/status/deployments/${encodeURIComponent(deployment.name)}`, 'Status JSON'),
+            );
+
             const detailPanel = createElement('div', 'detail-panel');
             detailPanel.hidden = true;
 
@@ -605,7 +622,7 @@
               }
             });
 
-            row.append(toggle, detailPanel);
+            row.append(toggle, detailLinks, detailPanel);
             rows.append(row);
           });
 

@@ -66,6 +66,28 @@ func TestEmbeddedUIUsesSafeDetailRenderingAndPreservesFalsyMetrics(t *testing.T)
 	}
 }
 
+func TestEmbeddedUIIncludesQuickLinksToDeploymentReadModels(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const createNavLink = (href, text) => {",
+		"link.target = '_blank';",
+		"link.rel = 'noreferrer noopener';",
+		"link.href = href;",
+		"const detailLinks = createElement('div', 'row-links row-links-shell');",
+		"createNavLink(`/v1/overview/deployments/${encodeURIComponent(deployment.name)}`, 'Overview JSON')",
+		"createNavLink(`/v1/status/deployments/${encodeURIComponent(deployment.name)}`, 'Status JSON')",
+		"detailLinks.append(",
+		"row.append(toggle, detailLinks, detailPanel);",
+		"Overview JSON",
+		"Status JSON",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+}
+
 func TestEmbeddedUIIncludesOverviewStatusInFetchErrors(t *testing.T) {
 	body := string(indexHTML)
 

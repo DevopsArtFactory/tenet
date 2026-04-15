@@ -47,10 +47,11 @@ The `/` UI renders those counters directly in each account header. When any aggr
 
 The embedded UI only fetches the deployment-detail endpoint when an operator expands a row.
 
-The overview page also includes a client-side filter toolbar above the summary cards:
+The overview page also includes a client-side filter toolbar above the summary cards and per-deployment quick links under each card title:
 - a text search that matches account/deployment-visible fields from the `/v1/overview/accounts` payload
 - a sync-state filter
 - an account filter
+- direct `Overview JSON` and `Status JSON` links that jump to `/v1/overview/deployments/{deploymentName}` and `/v1/status/deployments/{deploymentName}`
 - a `Clear filters` action that resets the toolbar to the default account-wide view
 
 Toolbar state is URL-synced with `history.replaceState` using query params:
