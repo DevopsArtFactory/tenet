@@ -82,11 +82,11 @@ func TestRunControllerLogsDisabledRuntimeWhenRepositoryRootIsUnset(t *testing.T)
 	}
 }
 
-func TestEmitRuntimePlansPersistsRolloutSummaryIntoStatusSnapshots(t *testing.T) {
+func TestEmitRuntimePlansPersistsRolloutSummaryIntoStatusSnapshotsForEC2CanaryDeployment(t *testing.T) {
 	root := t.TempDir()
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
 	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
-	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"canary"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
 	statusPath := filepath.Join(root, "status", "deployments.json")
 	writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"conditions":[{"type":"Ready","status":false,"reason":"HealthPending","message":"candidate target group is still warming"}],"deployedArtifact":{"binary":"s3://releases.example.com/payments-api/prod/payments-api-linux-amd64"}}}]`)
 
@@ -111,11 +111,25 @@ func TestEmitRuntimePlansPersistsRolloutSummaryIntoStatusSnapshots(t *testing.T)
 	if status.Rollout.CurrentStep != "PromoteCandidateCapacity" {
 		t.Fatalf("expected rollout current step to be persisted, got %+v", status.Rollout)
 	}
-	if len(status.Rollout.Steps) != 6 {
-		t.Fatalf("expected rollout steps to be persisted, got %+v", status.Rollout)
+	wantSteps := []string{
+		"ResolvePlacement",
+		"ObserveCurrentState",
+		"CreateCandidateCapacity",
+		"VerifyCandidateCapacity",
+		"ShiftTrafficCanary",
+		"PromoteCandidateCapacity",
 	}
-	if status.Rollout.Steps[2].Kind != "CreateCandidateCapacity" || status.Rollout.Steps[4].Kind != "ShiftTrafficFull" {
-		t.Fatalf("expected weighted-target-group rollout steps, got %+v", status.Rollout.Steps)
+	if got := rolloutStepKinds(status.Rollout.Steps); len(got) != len(wantSteps) {
+		t.Fatalf("expected rollout steps %v, got %v", wantSteps, got)
+	} else {
+		for i := range wantSteps {
+			if got[i] != wantSteps[i] {
+				t.Fatalf("expected rollout steps %v, got %v", wantSteps, got)
+			}
+		}
+	}
+	if !status.Rollout.Steps[len(status.Rollout.Steps)-1].Current {
+		t.Fatalf("expected final rollout step to be marked current, got %+v", status.Rollout.Steps)
 	}
 	if got := status.DeployedArtifact.Binary; got != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64" {
 		t.Fatalf("expected deployed artifact to be preserved, got %q", got)
@@ -314,6 +328,14 @@ func TestEmitRuntimePlansPersistsZeroRolloutGenerationsInJSON(t *testing.T) {
 	if value, exists := rollout["observedGeneration"]; !exists || value != float64(0) {
 		t.Fatalf("expected observedGeneration=0 to be persisted, got %#v", rollout)
 	}
+}
+
+func rolloutStepKinds(steps []domain.RolloutStepSummary) []string {
+	kinds := make([]string, 0, len(steps))
+	for _, step := range steps {
+		kinds = append(kinds, step.Kind)
+	}
+	return kinds
 }
 
 func requireLogLine(t *testing.T, output interface{ String() string }, expected string) {
