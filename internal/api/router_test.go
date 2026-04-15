@@ -152,6 +152,60 @@ func TestRouterCatalogDeploymentsPropagatesErrors(t *testing.T) {
 	}
 }
 
+func TestRouterCatalogEnvironments(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		CatalogEnvironments: func() ([]catalog.EnvironmentView, error) {
+			return []catalog.EnvironmentView{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2", NetworkRef: "prod-main"}}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/environments", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var environments []catalog.EnvironmentView
+	if err := json.Unmarshal(resp.Body.Bytes(), &environments); err != nil {
+		t.Fatalf("failed to decode environments: %v", err)
+	}
+	if len(environments) != 1 || environments[0].Name != "prod-apne2" {
+		t.Fatalf("unexpected environments: %+v", environments)
+	}
+}
+
+func TestRouterCatalogEnvironmentsUnavailable(t *testing.T) {
+	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/environments", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", resp.Code)
+	}
+}
+
+func TestRouterCatalogEnvironmentsPropagatesErrors(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		CatalogEnvironments: func() ([]catalog.EnvironmentView, error) {
+			return nil, errors.New("boom")
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/environments", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.Code)
+	}
+}
+
 func TestRouterRejectsNonGETMethods(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
@@ -161,9 +215,12 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		CatalogDeployments: func() ([]catalog.DeploymentView, error) {
 			return []catalog.DeploymentView{}, nil
 		},
+		CatalogEnvironments: func() ([]catalog.EnvironmentView, error) {
+			return []catalog.EnvironmentView{}, nil
+		},
 	})
 
-	paths := []string{"/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments"}
+	paths := []string{"/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments"}
 	for _, path := range paths {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		resp := httptest.NewRecorder()

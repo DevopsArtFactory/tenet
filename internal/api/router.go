@@ -19,9 +19,10 @@ func requireMethod(w http.ResponseWriter, r *http.Request, method string) bool {
 
 // Options configures the API router.
 type Options struct {
-	BuildInfo          buildinfo.Info
-	CatalogSummary     func() (catalog.Summary, error)
-	CatalogDeployments func() ([]catalog.DeploymentView, error)
+	BuildInfo           buildinfo.Info
+	CatalogSummary      func() (catalog.Summary, error)
+	CatalogDeployments  func() ([]catalog.DeploymentView, error)
+	CatalogEnvironments func() ([]catalog.EnvironmentView, error)
 }
 
 // NewRouter builds the API router for the Tenet control plane.
@@ -72,6 +73,22 @@ func NewRouter(options Options) http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(deployments)
+	})
+	mux.HandleFunc("/v1/catalog/environments", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+		if options.CatalogEnvironments == nil {
+			http.Error(w, "catalog environments unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		environments, err := options.CatalogEnvironments()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(environments)
 	})
 
 	return mux
