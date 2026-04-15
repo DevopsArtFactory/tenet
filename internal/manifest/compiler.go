@@ -93,6 +93,16 @@ func Compile(input CatalogSpec) (Catalog, error) {
 				Image:  deployment.Image,
 			},
 		})
+		if len(deployment.Stacks) > 0 {
+			stack := deployment.Stacks[0]
+			environment := environmentIndex[environmentRef]
+			if stack.Account != environment.AccountRef {
+				return Catalog{}, fmt.Errorf("deployment %q stack account %q does not match environment account %q", deployment.Name, stack.Account, environment.AccountRef)
+			}
+			if stack.Regions[0].Region != environment.Region {
+				return Catalog{}, fmt.Errorf("deployment %q stack region %q does not match environment region %q", deployment.Name, stack.Regions[0].Region, environment.Region)
+			}
+		}
 		deploymentIndex[deployment.Name] = struct{}{}
 	}
 
