@@ -43,8 +43,8 @@ The `/` UI renders those counters directly in each account header. When any aggr
 - rollout desired/observed generations
 - `history[*]` controller-authored runtime timeline entries (timestamp, summary, sync, health, optional current step)
 - `rollout.execution[*]`
-- `conditions[*]`
 - the complete `rollout.steps[*]` list
+- `conditions[*]`
 
 The embedded UI only fetches the deployment-detail endpoint when an operator expands a row.
 
@@ -71,12 +71,19 @@ Each deployment card still surfaces the most operator-useful rollout cues direct
 
 The expandable detail panel extends that view without forcing operators to switch to the raw status endpoint for common troubleshooting. It now includes a recent runtime-history section rendered with safe DOM construction, showing each controller-authored entry's timestamp, summary, sync state, health, and optional rollout step, plus an explicit `No recent runtime history is available yet.` empty state when no bounded history has been persisted yet.
 
-The detail rollout-step list now also consumes additive `rollout.steps[*].status` metadata from the deployment-detail payload:
-- `completed` marks controller-plan steps that precede the current actionable step
+The detail rollout-step list now also consumes additive `rollout.steps[*].status` metadata and controller-authored `rollout.steps[*].detail` text from the deployment-detail payload:
+- `completed` marks controller-plan steps that are already behind the current plan view, including fully completed rollouts with no remaining current actionable step
 - `current` marks the controller's current actionable step
 - `pending` marks later planned steps that have not become current yet
 
-Those labels are derived from the controller's current abstract rollout plan and are intentionally not live AWS execution telemetry. The UI should present them as controller-authored progress cues for the planned rollout-step list, not as direct evidence that AWS resources have already finished the underlying operation.
+When present, `rollout.steps[*].detail` is rendered alongside that status for the same row so the detail panel shows both the step's progress label and its explanatory detail text.
+
+Those labels and detail texts are derived from the controller's current abstract rollout plan and execution mode and are intentionally not live AWS execution telemetry. The UI should present them as controller-authored progress cues for the planned rollout-step list, not as direct evidence that AWS resources have already finished the underlying operation.
+
+The rollout-step detail text remains execution-mode-aware:
+- EC2 canary/linear/full-shift rows explain candidate Auto Scaling Group bootstrap from userdata plus weighted target-group traffic progression, whether that progression is a small canary slice, linear percentage increases, or a single full cutover.
+- ECS CodeDeploy rows explain CodeDeploy deployment creation, subsequent traffic shifting to the replacement task set, and the later ECS service-stability wait.
+- Native ECS rolling rows explain the in-place ECS service update that creates the rolling deployment plus the later service-stability verification step.
 
 The rollout execution section is intentionally execution-mode-aware:
 - EC2 weighted target groups show the candidate Auto Scaling Group, active target group, candidate target group, and userdata bootstrap source.

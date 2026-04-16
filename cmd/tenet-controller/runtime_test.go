@@ -300,6 +300,185 @@ func TestEmitRuntimePlansPersistsCodeDeployRolloutStepsForECSLinearDeployment(t 
 	}
 }
 
+func TestEmitRuntimePlansPersistsRolloutStepDetailsForEC2CanaryDeployment(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"canary"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1},"binary":"s3://releases.example.com/payments-api/prod/payments-api-linux-amd64","userdata":{"type":"file","path":"userdata/api-prod.sh"}}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"conditions":[]}}]`)
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	status := snapshots[0].Status
+	if status.Rollout == nil {
+		t.Fatalf("expected rollout summary to be persisted")
+	}
+	if len(status.Rollout.Steps) != 6 {
+		t.Fatalf("expected six rollout steps, got %+v", status.Rollout.Steps)
+	}
+	if status.Rollout.Steps[2].Detail != "Create a fresh candidate Auto Scaling Group bootstrapped from userdata before attaching it to the candidate target group." {
+		t.Fatalf("expected candidate-capacity step detail, got %+v", status.Rollout.Steps[2])
+	}
+	if status.Rollout.Steps[4].Detail != "Shift a small canary slice of production traffic to the candidate target group before full promotion." {
+		t.Fatalf("expected canary traffic detail, got %+v", status.Rollout.Steps[4])
+	}
+}
+
+func TestEmitRuntimePlansPersistsCodeDeployRolloutStepDetailsForECSLinearDeployment(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "worker-prod.json"), `{"name":"worker-prod","appRef":"payments-worker","environmentRef":"prod-apne2","target":{"type":"ecs"},"strategy":{"type":"linear"},"traffic":{"port":8080},"capacity":{"desired":1,"min":1,"max":2},"image":"ghcr.io/devopsartfactory/payments-worker:1.2.3"}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, `[{"deploymentName":"worker-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"task set missing"},"health":{"overall":"Progressing","summary":"deployment pending"},"conditions":[]}}]`)
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	status := snapshots[0].Status
+	if status.Rollout == nil {
+		t.Fatalf("expected rollout summary to be persisted")
+	}
+	if len(status.Rollout.Steps) != 5 {
+		t.Fatalf("expected five rollout steps, got %+v", status.Rollout.Steps)
+	}
+	if status.Rollout.Steps[2].Detail != "Create a CodeDeploy deployment to coordinate blue/green ECS traffic shifting for the replacement task set." {
+		t.Fatalf("expected CodeDeploy deployment step detail, got %+v", status.Rollout.Steps[2])
+	}
+	if status.Rollout.Steps[3].Detail != "Advance ECS traffic in linear increments through CodeDeploy until the replacement task set serves all traffic." {
+		t.Fatalf("expected linear ECS traffic detail, got %+v", status.Rollout.Steps[3])
+	}
+}
+
+func TestEmitRuntimePlansPersistsRolloutStepDetailsForECSRollingDeployment(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "worker-prod.json"), `{"name":"worker-prod","appRef":"payments-worker","environmentRef":"prod-apne2","target":{"type":"ecs"},"strategy":{"type":"rolling"},"traffic":{"port":8080},"capacity":{"desired":1,"min":1,"max":2},"image":"ghcr.io/devopsartfactory/payments-worker:1.2.3"}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, `[{"deploymentName":"worker-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"service update pending"},"health":{"overall":"Progressing","summary":"deployment pending"},"conditions":[]}}]`)
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	status := snapshots[0].Status
+	if status.Rollout == nil {
+		t.Fatalf("expected rollout summary to be persisted")
+	}
+	if len(status.Rollout.Steps) != 4 {
+		t.Fatalf("expected four rollout steps, got %+v", status.Rollout.Steps)
+	}
+	if status.Rollout.Steps[2].Detail != "Update the ECS service to start a native rolling deployment that replaces running tasks in place." {
+		t.Fatalf("expected ECS rolling update detail, got %+v", status.Rollout.Steps[2])
+	}
+	if status.Rollout.Steps[3].Detail != "Wait for the ECS service to report a stable native rolling deployment after replacing tasks." {
+		t.Fatalf("expected ECS rolling stability detail, got %+v", status.Rollout.Steps[3])
+	}
+}
+
+func TestEmitRuntimePlansPersistsCodeDeployRolloutStepDetailsForECSCanaryDeployment(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "worker-prod.json"), `{"name":"worker-prod","appRef":"payments-worker","environmentRef":"prod-apne2","target":{"type":"ecs"},"strategy":{"type":"canary"},"traffic":{"port":8080},"capacity":{"desired":1,"min":1,"max":2},"image":"ghcr.io/devopsartfactory/payments-worker:1.2.3"}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, `[{"deploymentName":"worker-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"task set missing"},"health":{"overall":"Progressing","summary":"deployment pending"},"conditions":[]}}]`)
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	status := snapshots[0].Status
+	if status.Rollout == nil {
+		t.Fatalf("expected rollout summary to be persisted")
+	}
+	if len(status.Rollout.Steps) != 5 {
+		t.Fatalf("expected five rollout steps, got %+v", status.Rollout.Steps)
+	}
+	if status.Rollout.Steps[3].Detail != "Shift a small canary slice of ECS service traffic to the replacement task set through CodeDeploy before the full cutover." {
+		t.Fatalf("expected ECS CodeDeploy canary detail, got %+v", status.Rollout.Steps[3])
+	}
+}
+
+func TestEmitRuntimePlansPersistsRolloutStepDetailsForWeightedTargetGroupFullShiftDeployment(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1},"binary":"s3://releases.example.com/payments-api/prod/payments-api-linux-amd64","userdata":{"type":"file","path":"userdata/api-prod.sh"}}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"conditions":[]}}]`)
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	status := snapshots[0].Status
+	if status.Rollout == nil {
+		t.Fatalf("expected rollout summary to be persisted")
+	}
+	if len(status.Rollout.Steps) != 6 {
+		t.Fatalf("expected six rollout steps, got %+v", status.Rollout.Steps)
+	}
+	if status.Rollout.Steps[4].Detail != "Shift all production traffic from the active target group to the candidate target group in one blue/green cutover." {
+		t.Fatalf("expected weighted target group full-shift detail, got %+v", status.Rollout.Steps[4])
+	}
+}
+
+func TestDeriveRolloutSummaryMarkSyncedDoesNotInventStepDetail(t *testing.T) {
+	deployment := domain.Deployment{Generation: 7}
+	status := domain.DeploymentStatus{ObservedGeneration: 7, Sync: domain.Sync{State: domain.SyncStateSynced}, Health: domain.Health{Overall: domain.HealthHealthy}}
+	plan := reconcile.Plan{Steps: []reconcile.Step{{Kind: reconcile.StepMarkSynced}}}
+
+	rollout := deriveRolloutSummary(deployment, status, plan)
+	if rollout == nil {
+		t.Fatalf("expected rollout summary")
+	}
+	if len(rollout.Steps) != 1 {
+		t.Fatalf("expected one rollout step, got %+v", rollout.Steps)
+	}
+	if rollout.Steps[0].Status != domain.RolloutStepStatusCompleted {
+		t.Fatalf("expected MarkSynced step to be completed, got %+v", rollout.Steps[0])
+	}
+	if rollout.Steps[0].Detail != "" {
+		t.Fatalf("expected MarkSynced step detail to remain empty, got %+v", rollout.Steps[0])
+	}
+}
+
 func TestEmitRuntimePlansPersistsWeightedTargetGroupRolloutSummaryExecutionDetails(t *testing.T) {
 	root := t.TempDir()
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)

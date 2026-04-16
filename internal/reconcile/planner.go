@@ -35,6 +35,16 @@ type Plan struct {
 	Steps []Step
 }
 
+// ContainsStep reports whether the plan includes the requested step kind.
+func (p Plan) ContainsStep(kind StepKind) bool {
+	for _, step := range p.Steps {
+		if step.Kind == kind {
+			return true
+		}
+	}
+	return false
+}
+
 // Planner turns desired deployment and observed status into an abstract plan.
 type Planner struct{}
 

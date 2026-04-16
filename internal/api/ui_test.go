@@ -119,6 +119,31 @@ func TestEmbeddedUIRendersRolloutStepStatusMarkersInDetailList(t *testing.T) {
 	}
 }
 
+func TestIndexHTMLIncludesRolloutStepDetailRendering(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const stepDetail = textOrDash(step.detail);",
+		"const stepDetailRow = createElement('span', 'detail-condition-meta', `Step detail · ${stepDetail}`);",
+		"if (step.detail) {",
+		"item.append(stepDetailRow);",
+		"Step detail · ${stepDetail}",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+
+	for _, unsafe := range []string{
+		"stepDetailRow.innerHTML",
+		"item.innerHTML",
+	} {
+		if strings.Contains(body, unsafe) {
+			t.Fatalf("expected embedded UI to keep rollout step detail rendering safe for %q", unsafe)
+		}
+	}
+}
+
 func TestEmbeddedUIIncludesQuickLinksToDeploymentReadModels(t *testing.T) {
 	body := string(indexHTML)
 
