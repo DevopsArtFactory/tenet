@@ -517,19 +517,19 @@ func TestEmitRuntimePlansPersistsWeightedTargetGroupRolloutSummaryExecutionDetai
 		Name:        "api-prod-candidate",
 		Description: "Candidate target group Tenet will register and warm before traffic shifting",
 	}, {
+		Resource:    "productionListenerRule",
+		Name:        "api-prod-prod-listener",
+		Description: "Production listener rule Tenet updates to keep weighted target groups attached during rollout",
+	}, {
+		Resource:    "trafficShiftPlan",
+		Name:        "api-prod-weighted-routing",
+		Description: "Controller-authored weighted routing plan describing how production traffic shifts between target groups",
+	}, {
 		Resource:    "userDataBootstrapSource",
 		Name:        "file:userdata/api-prod.sh",
 		Description: "Normalized userdata bootstrap source for candidate EC2 capacity",
 	}}
-	if got := status.Rollout.Execution; len(got) != len(want) {
-		t.Fatalf("expected rollout execution details %v, got %+v", want, got)
-	} else {
-		for i := range want {
-			if got[i] != want[i] {
-				t.Fatalf("expected rollout execution details %v, got %+v", want, got)
-			}
-		}
-	}
+	assertRolloutExecutionDetails(t, status.Rollout.Execution, want)
 }
 
 func TestEmitRuntimePlansPersistsCodeDeployRolloutSummaryExecutionDetails(t *testing.T) {

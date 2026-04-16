@@ -277,6 +277,14 @@ func deriveRolloutExecutionDetails(deployment domain.Deployment) []domain.Rollou
 			Name:        deployment.Name + "-candidate",
 			Description: "Candidate target group Tenet will register and warm before traffic shifting",
 		}, {
+			Resource:    "productionListenerRule",
+			Name:        deployment.Name + "-prod-listener",
+			Description: "Production listener rule Tenet updates to keep weighted target groups attached during rollout",
+		}, {
+			Resource:    "trafficShiftPlan",
+			Name:        deployment.Name + "-weighted-routing",
+			Description: "Controller-authored weighted routing plan describing how production traffic shifts between target groups",
+		}, {
 			Resource:    "userDataBootstrapSource",
 			Name:        userDataBootstrapSource(deployment.UserData),
 			Description: "Normalized userdata bootstrap source for candidate EC2 capacity",
