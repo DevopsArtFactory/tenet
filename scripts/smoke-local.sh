@@ -73,5 +73,9 @@ assert 'Account JSON' in ui, ui
 assert '/v1/overview/accounts/${encodeURIComponent(account.awsAccountId)}' in ui, ui
 assert 'Group JSON' in ui, ui
 assert '/v1/overview/accounts/${encodeURIComponent(account.awsAccountId)}/projects/${encodeURIComponent(group.appRef)}/environments/${encodeURIComponent(group.environmentRef)}' in ui, ui
+assert 'Drift view' in ui, ui
+assert 'Plan/apply' in ui, ui
+assert '/?view=drift&deployment=${encodeURIComponent(deployment.name)}' in ui, ui
+assert '/?view=plan&deployment=${encodeURIComponent(deployment.name)}' in ui, ui
 print('smoke-local: ok')
 PY

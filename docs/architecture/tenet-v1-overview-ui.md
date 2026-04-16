@@ -91,12 +91,15 @@ The overview page also includes a client-side filter toolbar above the summary c
 - an account-header `Account JSON` quick link that jumps to `/v1/overview/accounts/{awsAccountId}`
 - a grouped-header `Group JSON` quick link that jumps to `/v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}`
 - direct `Overview JSON` and `Status JSON` links that jump to `/v1/overview/deployments/{deploymentName}` and `/v1/status/deployments/{deploymentName}`
+- embedded `Drift view` and `Plan/apply` workspace links that jump to `/?view=drift&deployment={deploymentName}` and `/?view=plan&deployment={deploymentName}` for deployment-scoped troubleshooting shells backed by the same overview detail route
 - a `Clear filters` action that resets the toolbar to the default account-wide view
 
 Toolbar state is URL-synced with `history.replaceState` using query params:
 - `q` for free-text search
 - `sync` for the selected sync-state bucket
 - `account` for the selected stable account identifier (`awsAccountId` in the current embedded UI)
+
+Those deployment workspace links intentionally stay inside the same embedded HTML shell rather than introducing new server-rendered pages. `view=drift` and `view=plan` switch the client into deployment-scoped read-only workspaces after the initial overview fetch, then lazy-load `/v1/overview/deployments/{deploymentName}` to render deployment context plus placeholder troubleshooting/action sections. The drift workspace currently surfaces deployment conditions alongside an explicit field-level-drift placeholder, while the plan/apply workspace renders rollout-plan steps and disabled action buttons until mutation APIs exist.
 
 The page re-applies those query params on load so filtered views are shareable/bookmarkable without server-side filtering. Filtering remains client-side against the already-fetched overview payload; no additional overview requests are issued when controls change. Stale or invalid `sync`/`account` query values are normalized back to the default `all` selection before the toolbar renders, so bookmarked URLs cannot leave the control state and the active filter state out of sync. Matching on `runtimeSummary` is additive; it narrows the visible overview cards without changing lazy detail loading or detail-panel history behavior, and the matched summary text now includes `runtimeSummary.source` provenance plus `runtimeSummary.changes[]` labels when present. When the active filter combination removes every deployment, the UI renders the explicit empty state `No deployments match the current filters.`
 
