@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -116,7 +117,11 @@ func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupCon
 		}
 		sort.Strings(staleNames)
 		if batchWriter := runtimeStatusBatchWriter(store); batchWriter != nil {
-			if err := batchWriter.Apply(ctx, snapshots, staleNames); err != nil {
+			changedSnapshots := changedRuntimeSnapshots(snapshots, statuses)
+			if len(changedSnapshots) == 0 && len(staleNames) == 0 {
+				return nil
+			}
+			if err := batchWriter.Apply(ctx, changedSnapshots, staleNames); err != nil {
 				return fmt.Errorf("apply runtime status batch: %w", err)
 			}
 		} else {
@@ -127,6 +132,18 @@ func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupCon
 	}
 
 	return nil
+}
+
+func changedRuntimeSnapshots(current []statusstore.Snapshot, previous map[string]domain.DeploymentStatus) []statusstore.Snapshot {
+	changed := make([]statusstore.Snapshot, 0, len(current))
+	for _, snapshot := range current {
+		prior, ok := previous[snapshot.DeploymentName]
+		if ok && reflect.DeepEqual(snapshot.Status, prior) {
+			continue
+		}
+		changed = append(changed, snapshot)
+	}
+	return changed
 }
 
 func runtimeStatusBatchWriter(store statusstore.Store) statusstore.BatchWriter {
