@@ -569,6 +569,22 @@ func TestEmitRuntimePlansPersistsCodeDeployRolloutSummaryExecutionDetails(t *tes
 		Resource:    "codeDeployDeploymentGroup",
 		Name:        "worker-prod-codedeploy-group",
 		Description: "CodeDeploy deployment group Tenet targets for ECS rollout",
+	}, {
+		Resource:    "productionListener",
+		Name:        "worker-prod-prod-listener",
+		Description: "Production listener CodeDeploy shifts during ECS blue/green rollout",
+	}, {
+		Resource:    "testListener",
+		Name:        "worker-prod-test-listener",
+		Description: "Test listener CodeDeploy uses to validate the replacement ECS task set before promotion",
+	}, {
+		Resource:    "blueTaskSetTargetGroup",
+		Name:        "worker-prod-blue",
+		Description: "Blue task set target group CodeDeploy treats as the live ECS traffic destination",
+	}, {
+		Resource:    "greenTaskSetTargetGroup",
+		Name:        "worker-prod-green",
+		Description: "Green task set target group CodeDeploy warms before shifting ECS traffic",
 	}}
 	assertRolloutExecutionDetails(t, status.Rollout.Execution, want)
 }
