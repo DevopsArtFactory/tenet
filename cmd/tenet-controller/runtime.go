@@ -61,7 +61,16 @@ func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupCon
 
 	currentStatuses := make(map[string]domain.DeploymentStatus, len(compiled.Deployments))
 	if len(compiled.Deployments) == 0 {
-		if store != nil {
+		if batchWriter := runtimeStatusBatchWriter(store); batchWriter != nil {
+			staleNames := make([]string, 0, len(statuses))
+			for deploymentName := range statuses {
+				staleNames = append(staleNames, deploymentName)
+			}
+			sort.Strings(staleNames)
+			if err := batchWriter.Apply(ctx, nil, staleNames); err != nil {
+				return fmt.Errorf("apply runtime status batch: %w", err)
+			}
+		} else if store != nil {
 			if err := store.Save(ctx, nil); err != nil {
 				return fmt.Errorf("save runtime statuses: %w", err)
 			}
@@ -98,12 +107,34 @@ func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupCon
 		sort.Slice(snapshots, func(i, j int) bool {
 			return snapshots[i].DeploymentName < snapshots[j].DeploymentName
 		})
-		if err := store.Save(ctx, snapshots); err != nil {
-			return fmt.Errorf("save runtime statuses: %w", err)
+		staleNames := make([]string, 0)
+		for deploymentName := range statuses {
+			if _, ok := currentStatuses[deploymentName]; ok {
+				continue
+			}
+			staleNames = append(staleNames, deploymentName)
+		}
+		sort.Strings(staleNames)
+		if batchWriter := runtimeStatusBatchWriter(store); batchWriter != nil {
+			if err := batchWriter.Apply(ctx, snapshots, staleNames); err != nil {
+				return fmt.Errorf("apply runtime status batch: %w", err)
+			}
+		} else {
+			if err := store.Save(ctx, snapshots); err != nil {
+				return fmt.Errorf("save runtime statuses: %w", err)
+			}
 		}
 	}
 
 	return nil
+}
+
+func runtimeStatusBatchWriter(store statusstore.Store) statusstore.BatchWriter {
+	writer, ok := store.(statusstore.BatchWriter)
+	if !ok {
+		return nil
+	}
+	return writer
 }
 
 func appendRuntimeHistory(previous domain.DeploymentStatus, current domain.DeploymentStatus) []domain.StatusHistoryEntry {

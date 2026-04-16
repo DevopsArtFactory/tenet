@@ -47,6 +47,52 @@ func (s *recordingRuntimeStore) Close() error {
 	return nil
 }
 
+type recordingBatchRuntimeStore struct {
+	recordingRuntimeStore
+	applyContexts []context.Context
+	applyCalls    int
+	applied       []statusstore.Snapshot
+	deleted       []string
+}
+
+func (s *recordingBatchRuntimeStore) Apply(ctx context.Context, snapshots []statusstore.Snapshot, deletes []string) error {
+	s.applyContexts = append(s.applyContexts, ctx)
+	s.applyCalls++
+	s.applied = append([]statusstore.Snapshot(nil), snapshots...)
+	s.deleted = append([]string(nil), deletes...)
+	next := append([]statusstore.Snapshot(nil), s.snapshots...)
+	for _, snapshot := range snapshots {
+		next = upsertRuntimeTestSnapshots(next, snapshot)
+	}
+	for _, deploymentName := range deletes {
+		next = deleteRuntimeTestSnapshot(next, deploymentName)
+	}
+	s.snapshots = next
+	return nil
+}
+
+func upsertRuntimeTestSnapshots(snapshots []statusstore.Snapshot, snapshot statusstore.Snapshot) []statusstore.Snapshot {
+	updated := append([]statusstore.Snapshot(nil), snapshots...)
+	for i := range updated {
+		if updated[i].DeploymentName == snapshot.DeploymentName {
+			updated[i] = snapshot
+			return updated
+		}
+	}
+	return append(updated, snapshot)
+}
+
+func deleteRuntimeTestSnapshot(snapshots []statusstore.Snapshot, deploymentName string) []statusstore.Snapshot {
+	updated := make([]statusstore.Snapshot, 0, len(snapshots))
+	for _, snapshot := range snapshots {
+		if snapshot.DeploymentName == deploymentName {
+			continue
+		}
+		updated = append(updated, snapshot)
+	}
+	return updated
+}
+
 func TestRunControllerLogsReconcilePlansFromRepositoryAndStatusSnapshots(t *testing.T) {
 	root := t.TempDir()
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
@@ -251,6 +297,166 @@ func TestEmitRuntimePlansUsesControllerContextForStoreIO(t *testing.T) {
 	}
 	if got := store.saveContexts[0].Value(contextKey("request-id")); got != "controller-loop" {
 		t.Fatalf("expected Save to receive controller context, got %#v", got)
+	}
+}
+
+func TestEmitRuntimePlansUsesRuntimeStatusBatchWriterWhenSupported(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+	writeJSON(t, filepath.Join(root, "deployments", "worker-prod.json"), `{"name":"worker-prod","appRef":"payments-worker","environmentRef":"prod-apne2","target":{"type":"ecs"},"strategy":{"type":"rolling"},"traffic":{"port":8080},"capacity":{"desired":1,"min":1,"max":2},"image":"ghcr.io/devopsartfactory/payments-worker:1.2.3"}`)
+
+	store := &recordingBatchRuntimeStore{}
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root}
+
+	if err := emitRuntimePlans(context.Background(), logger, config, store); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+	if store.applyCalls != 1 {
+		t.Fatalf("expected exactly one batch apply call, got %d", store.applyCalls)
+	}
+	if len(store.saveContexts) != 0 {
+		t.Fatalf("expected batch writer path to skip Save, got %d Save calls", len(store.saveContexts))
+	}
+	if len(store.applied) != 2 {
+		t.Fatalf("expected two compiled snapshots in batch apply, got %+v", store.applied)
+	}
+	if store.applied[0].DeploymentName != "api-prod" || store.applied[1].DeploymentName != "worker-prod" {
+		t.Fatalf("expected deterministic batch snapshot order, got %+v", store.applied)
+	}
+	if store.applied[0].Status.Rollout == nil || store.applied[1].Status.Rollout == nil {
+		t.Fatalf("expected batch apply to persist derived rollout summaries, got %+v", store.applied)
+	}
+	if len(store.deleted) != 0 {
+		t.Fatalf("expected no stale deletions, got %+v", store.deleted)
+	}
+}
+
+func TestEmitRuntimePlansDeletesStaleSnapshotsWhenBatchWriterIsSupported(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+
+	store := &recordingBatchRuntimeStore{recordingRuntimeStore: recordingRuntimeStore{snapshots: []statusstore.Snapshot{{DeploymentName: "api-prod", Status: domain.DeploymentStatus{ObservedGeneration: 1}}, {DeploymentName: "legacy-prod", Status: domain.DeploymentStatus{ObservedGeneration: 9}}}}}
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root}
+
+	if err := emitRuntimePlans(context.Background(), logger, config, store); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+	if store.applyCalls != 1 {
+		t.Fatalf("expected stale-pruning batch path to apply exactly once, got %d", store.applyCalls)
+	}
+	if len(store.deleted) != 1 || store.deleted[0] != "legacy-prod" {
+		t.Fatalf("expected stale deployment snapshot to be deleted in batch, got %+v", store.deleted)
+	}
+	if len(store.applied) != 1 || store.applied[0].DeploymentName != "api-prod" {
+		t.Fatalf("expected only compiled deployment in applied batch, got %+v", store.applied)
+	}
+	if _, err := statusstore.Get(store.snapshots, "legacy-prod"); err == nil {
+		t.Fatalf("expected stale deployment snapshot to be removed from final store state, got %+v", store.snapshots)
+	}
+}
+
+func TestEmitRuntimePlansFallsBackToSaveForPlainStoreImplementations(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+
+	store := &recordingRuntimeStore{}
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root}
+
+	if err := emitRuntimePlans(context.Background(), logger, config, store); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+	if len(store.saveContexts) != 1 {
+		t.Fatalf("expected plain store fallback to Save exactly once, got %d", len(store.saveContexts))
+	}
+	if len(store.snapshots) != 1 || store.snapshots[0].DeploymentName != "api-prod" {
+		t.Fatalf("expected Save fallback to persist compiled snapshots, got %+v", store.snapshots)
+	}
+}
+
+func TestEmitRuntimePlansPreservesControllerContextForBatchWritesAndDeletes(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+
+	store := &recordingBatchRuntimeStore{recordingRuntimeStore: recordingRuntimeStore{snapshots: []statusstore.Snapshot{{DeploymentName: "legacy-prod", Status: domain.DeploymentStatus{ObservedGeneration: 9}}}}}
+	ctx := context.WithValue(context.Background(), contextKey("request-id"), "controller-loop")
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root}
+
+	if err := emitRuntimePlans(ctx, logger, config, store); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+	if len(store.applyContexts) != 1 {
+		t.Fatalf("expected batch Apply to be called once, got %d", len(store.applyContexts))
+	}
+	if got := store.applyContexts[0].Value(contextKey("request-id")); got != "controller-loop" {
+		t.Fatalf("expected Apply to receive controller context, got %#v", got)
+	}
+	if len(store.saveContexts) != 0 {
+		t.Fatalf("expected batch writer path to avoid Save, got %d Save calls", len(store.saveContexts))
+	}
+	if len(store.deleted) != 1 || store.deleted[0] != "legacy-prod" {
+		t.Fatalf("expected batch delete list to include legacy-prod, got %+v", store.deleted)
+	}
+}
+
+func TestEmitRuntimePlansUsesBatchWriterWhenRepositoryHasNoDeployments(t *testing.T) {
+	root := t.TempDir()
+	for _, dir := range []string{"accounts", "environments", "deployments"} {
+		if err := os.Mkdir(filepath.Join(root, dir), 0o755); err != nil {
+			t.Fatalf("failed to create %s dir: %v", dir, err)
+		}
+	}
+	store := &recordingBatchRuntimeStore{recordingRuntimeStore: recordingRuntimeStore{snapshots: []statusstore.Snapshot{{DeploymentName: "legacy-prod", Status: domain.DeploymentStatus{ObservedGeneration: 9}}}}}
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root}
+
+	if err := emitRuntimePlans(context.Background(), logger, config, store); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+	if store.applyCalls != 1 {
+		t.Fatalf("expected empty-catalog batch apply exactly once, got %d", store.applyCalls)
+	}
+	if len(store.applied) != 0 {
+		t.Fatalf("expected no compiled snapshots in empty-catalog batch, got %+v", store.applied)
+	}
+	if len(store.deleted) != 1 || store.deleted[0] != "legacy-prod" {
+		t.Fatalf("expected empty-catalog batch to delete stale snapshots, got %+v", store.deleted)
+	}
+	if len(store.saveContexts) != 0 {
+		t.Fatalf("expected batch writer path to avoid Save, got %d Save calls", len(store.saveContexts))
+	}
+}
+
+func TestEmitRuntimePlansFallsBackToSaveWhenRepositoryHasNoDeploymentsAndStoreIsPlain(t *testing.T) {
+	root := t.TempDir()
+	for _, dir := range []string{"accounts", "environments", "deployments"} {
+		if err := os.Mkdir(filepath.Join(root, dir), 0o755); err != nil {
+			t.Fatalf("failed to create %s dir: %v", dir, err)
+		}
+	}
+	store := &recordingRuntimeStore{snapshots: []statusstore.Snapshot{{DeploymentName: "legacy-prod", Status: domain.DeploymentStatus{ObservedGeneration: 9}}}}
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root}
+
+	if err := emitRuntimePlans(context.Background(), logger, config, store); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+	if len(store.saveContexts) != 1 {
+		t.Fatalf("expected empty-catalog plain store fallback to Save exactly once, got %d", len(store.saveContexts))
+	}
+	if len(store.snapshots) != 0 {
+		t.Fatalf("expected empty-catalog plain store fallback to clear snapshots, got %+v", store.snapshots)
 	}
 }
 
