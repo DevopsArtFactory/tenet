@@ -519,11 +519,11 @@ func TestEmitRuntimePlansPersistsWeightedTargetGroupRolloutSummaryExecutionDetai
 	}, {
 		Resource:    "productionListenerRule",
 		Name:        "api-prod-prod-listener",
-		Description: "Production listener rule Tenet updates to keep weighted target groups attached during rollout",
+		Description: "Production listener rule operators inspect while Tenet updates weighted forwarding during rollout",
 	}, {
 		Resource:    "trafficShiftPlan",
 		Name:        "api-prod-weighted-routing",
-		Description: "Controller-authored weighted routing plan describing how production traffic shifts between target groups",
+		Description: "Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group",
 	}, {
 		Resource:    "userDataBootstrapSource",
 		Name:        "file:userdata/api-prod.sh",

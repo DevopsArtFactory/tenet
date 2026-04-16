@@ -100,7 +100,7 @@ Execution detail examples surfaced through `/v1/overview/accounts`, `/v1/overvie
 - ECS rolling: ECS service
 - ECS CodeDeploy: ECS service (`ecsService`), CodeDeploy application (`codeDeployApplication`), CodeDeploy deployment group (`codeDeployDeploymentGroup`), production listener (`productionListener`), test listener (`testListener`), blue target group (`blueTaskSetTargetGroup`), green target group (`greenTaskSetTargetGroup`)
 
-Those `rollout.execution[]` entries remain controller-authored summaries of the intended execution contract. They describe the resources and routing objects the current abstract plan expects to use; they are not direct live AWS telemetry proving those resources already exist or have completed traffic movement.
+Those `rollout.execution[]` entries remain controller-authored summaries of the intended execution contract. They describe the resources and routing objects the current abstract plan expects to use; they are not direct live AWS telemetry proving those resources already exist or have completed traffic movement. The overview APIs and embedded UI preserve that ordered execution-resource list verbatim so the exact identifier names above remain part of the shared read-model contract.
 
 Controller-authored runtime history is surfaced through `/v1/overview/deployments/{deploymentName}` and rendered in the expandable deployment detail panel at `/`. The current slice keeps only a bounded recent timeline so operators can see the latest sync/health/rollout-step changes without introducing a full event log.
 

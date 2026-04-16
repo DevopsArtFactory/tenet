@@ -909,11 +909,11 @@ func TestRouterOverviewDeployment(t *testing.T) {
 				Rollout: &domain.RolloutSummary{
 					DesiredGeneration:  8,
 					ObservedGeneration: 7,
-					Phase:              domain.RolloutPhaseAccepted,
+					Phase:              domain.RolloutPhaseStabilizing,
 					CurrentStep:        "VerifyServiceStability",
-					Summary:            "Observing current state",
+					Summary:            "Stabilizing ECS service after CodeDeploy traffic shift",
 					Steps:              []domain.RolloutStepSummary{{Kind: "CreateCodeDeployDeployment", Status: "completed"}, {Kind: "ShiftTrafficLinear", Status: "pending"}, {Kind: "VerifyServiceStability", Current: true, Status: "current"}},
-					Execution:          []domain.RolloutExecutionDetail{{Resource: "codedeployDeploymentGroup", Name: "payments-api-prod", Description: "Routes ECS traffic shifts"}},
+					Execution: []domain.RolloutExecutionDetail{{Resource: "ecsService", Name: "payments-api-prod-service", Description: "ECS service Tenet updates during deployment"}, {Resource: "codeDeployApplication", Name: "payments-api-prod-codedeploy-app", Description: "CodeDeploy application coordinating ECS traffic shifting"}, {Resource: "codeDeployDeploymentGroup", Name: "payments-api-prod-codedeploy-group", Description: "CodeDeploy deployment group Tenet targets for ECS rollout"}, {Resource: "productionListener", Name: "payments-api-prod-prod-listener", Description: "Production listener CodeDeploy shifts during ECS blue/green rollout"}, {Resource: "testListener", Name: "payments-api-prod-test-listener", Description: "Test listener CodeDeploy uses to validate the replacement ECS task set before promotion"}, {Resource: "blueTaskSetTargetGroup", Name: "payments-api-prod-blue", Description: "Blue task set target group CodeDeploy treats as the live ECS traffic destination"}, {Resource: "greenTaskSetTargetGroup", Name: "payments-api-prod-green", Description: "Green task set target group CodeDeploy warms before shifting ECS traffic"}},
 				},
 				Conditions: []domain.Condition{{Type: "Ready", Status: false, Reason: "Updating", Message: "service is progressing"}},
 				History: []domain.StatusHistoryEntry{{
@@ -999,15 +999,22 @@ func TestRouterOverviewDeployment(t *testing.T) {
 		t.Fatalf("expected rollout.steps[0] status field names, got %#v", firstStep)
 	}
 	execution, ok := rollout["execution"].([]any)
-	if !ok || len(execution) != 1 {
+	if !ok || len(execution) != 7 {
 		t.Fatalf("expected rollout.execution array in raw payload, got %#v", rollout["execution"])
 	}
-	executionDetail, ok := execution[0].(map[string]any)
+	firstExecution, ok := execution[0].(map[string]any)
 	if !ok {
 		t.Fatalf("expected rollout.execution[0] object, got %#v", execution[0])
 	}
-	if executionDetail["resource"] != "codedeployDeploymentGroup" || executionDetail["name"] != "payments-api-prod" || executionDetail["description"] != "Routes ECS traffic shifts" {
-		t.Fatalf("expected rollout.execution[0] field names, got %#v", executionDetail)
+	if firstExecution["resource"] != "ecsService" || firstExecution["name"] != "payments-api-prod-service" || firstExecution["description"] != "ECS service Tenet updates during deployment" {
+		t.Fatalf("expected rollout.execution[0] field names, got %#v", firstExecution)
+	}
+	lastExecution, ok := execution[6].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rollout.execution[6] object, got %#v", execution[6])
+	}
+	if lastExecution["resource"] != "greenTaskSetTargetGroup" || lastExecution["name"] != "payments-api-prod-green" || lastExecution["description"] != "Green task set target group CodeDeploy warms before shifting ECS traffic" {
+		t.Fatalf("expected rollout.execution[6] field names, got %#v", lastExecution)
 	}
 	history, ok := payload["history"].([]any)
 	if !ok || len(history) != 1 {
