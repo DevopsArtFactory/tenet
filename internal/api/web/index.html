@@ -124,7 +124,7 @@
       let allAccounts = [];
       let allApplications = [];
       let currentViewState = { query: '', syncState: 'all', account: 'all' };
-      let currentPageState = { page: 'applications', deployment: '' };
+      let currentPageState = { page: 'applications', accountId: '', deployment: '' };
 
       const statusClass = (state) => {
         switch (state) {
@@ -457,9 +457,10 @@
       const parsePageState = () => {
         const params = new URLSearchParams(window.location.search);
         const page = params.get('page') || params.get('view') || 'applications';
-        const validPages = new Set(['applications', 'application', 'resource', 'drift', 'plan']);
+        const validPages = new Set(['applications', 'application', 'account', 'resource', 'drift', 'plan']);
         return {
           page: validPages.has(page) ? page : 'applications',
+          accountId: params.get('accountId') || '',
           deployment: params.get('deployment') || '',
           resourceType: params.get('resourceType') || '',
           resourceId: params.get('resourceId') || '',
@@ -514,7 +515,9 @@
           if (value == null || value === '') return;
           params.set(key, value);
         });
-        return `/?${params.toString()}`;
+        const query = params.toString();
+        const pathname = window.location.pathname || '/';
+        return query ? `${pathname}?${query}` : pathname;
       };
       const updateViewState = (patch) => {
         const focusState = captureToolbarFocus();
@@ -660,7 +663,12 @@
             metrics.append(createMetric(label, value));
           });
           const detailLinks = createElement('div', 'row-links row-links-shell');
-          detailLinks.append(createNavLink(buildPageURL('application', { deployment: deployment.name }), 'Open application', '_self'));
+          if (deployment.awsAccountId) {
+            detailLinks.append(createNavLink(buildPageURL('account', { accountId: deployment.awsAccountId }), 'Open account', '_self'));
+          }
+          if (deployment.name) {
+            detailLinks.append(createNavLink(buildPageURL('application', { deployment: deployment.name }), 'Open application', '_self'));
+          }
           row.append(top, metrics, detailLinks);
           rows.append(row);
         });
@@ -736,7 +744,9 @@
             );
             top.append(titleWrap, createElement('span', 'pill target', resource.type));
             const detailLinks = createElement('div', 'row-links row-links-shell');
-            detailLinks.append(createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self'));
+            if (detail.name) {
+              detailLinks.append(createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self'));
+            }
             row.append(top, detailLinks);
             groupRows.append(row);
           });
@@ -1232,14 +1242,7 @@
         }));
       };
 
-      const renderAccounts = (accounts) => {
-        const root = document.getElementById('accounts');
-        if (!accounts.length) {
-          renderEmptyState('No accounts or deployments are loaded yet.');
-          return;
-        }
-
-        const accountNodes = accounts.map((account) => {
+      const createAccountOverviewArticle = (account) => {
           const article = createElement('article', 'account');
           const head = createElement('div', 'account-head');
           const titleWrap = createElement('div');
@@ -1306,8 +1309,9 @@
             const groupRows = createElement('div', 'group-rows');
             group.deployments.forEach((deployment) => {
               const row = createElement('div', 'row');
-              const toggle = createElement('button', 'row-toggle');
-              toggle.type = 'button';
+              const toggle = createElement('div', 'row-toggle');
+              toggle.tabIndex = 0;
+              toggle.setAttribute('role', 'button');
               toggle.setAttribute('aria-expanded', 'false');
               toggle.setAttribute('aria-label', `Expand details for ${deployment.name || 'deployment'}`);
               const rowTop = createElement('div', 'row-top');
@@ -1350,25 +1354,41 @@
               toggle.append(rowTop, metrics);
 
               const detailLinks = createElement('div', 'row-links row-links-shell');
-              detailLinks.append(
-                createNavLink(`/v1/overview/deployments/${encodeURIComponent(deployment.name)}`, 'Overview JSON'),
-                createNavLink(`/v1/status/deployments/${encodeURIComponent(deployment.name)}`, 'Status JSON'),
-                createNavLink(buildPageURL('drift', { deployment: deployment.name }), 'Drift view'),
-                createNavLink(buildPageURL('plan', { deployment: deployment.name }), 'Plan/apply'),
-              );
+              if (deployment.name) {
+                detailLinks.append(
+                  createNavLink(buildPageURL('application', { deployment: deployment.name }), 'Open application', '_self'),
+                  createNavLink(`/v1/overview/deployments/${encodeURIComponent(deployment.name)}`, 'Overview JSON'),
+                  createNavLink(`/v1/status/deployments/${encodeURIComponent(deployment.name)}`, 'Status JSON'),
+                  createNavLink(buildPageURL('drift', { deployment: deployment.name }), 'Drift view'),
+                  createNavLink(buildPageURL('plan', { deployment: deployment.name }), 'Plan/apply'),
+                );
+              }
 
               const detailPanel = createElement('div', 'detail-panel');
               detailPanel.hidden = true;
 
-              toggle.addEventListener('click', () => {
+              const toggleExpandedState = () => {
                 const expanded = toggle.getAttribute('aria-expanded') === 'true';
                 const nextExpanded = !expanded;
                 toggle.setAttribute('aria-expanded', String(nextExpanded));
                 row.classList.toggle('expanded', nextExpanded);
                 detailPanel.hidden = !nextExpanded;
                 if (nextExpanded) {
+                  if (!deployment.name) {
+                    renderDetailState(detailPanel, 'Deployment detail is unavailable because this row is missing a deployment name.', 'error');
+                    return;
+                  }
                   loadDeploymentDetail(deployment.name, detailPanel).catch(() => {});
                 }
+              };
+
+              toggle.addEventListener('click', toggleExpandedState);
+              toggle.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') {
+                  return;
+                }
+                event.preventDefault();
+                toggleExpandedState();
               });
 
               row.append(toggle, detailLinks, detailPanel);
@@ -1381,7 +1401,36 @@
 
           article.append(head, rows);
           return article;
-        });
+      };
+
+      const renderAccountDetailPage = (account) => {
+        const toolbar = document.getElementById('toolbar');
+        const summary = document.getElementById('summary');
+        const root = document.getElementById('accounts');
+        const backLink = createNavLink(buildPageURL('applications'), 'Back to applications');
+        backLink.target = '_self';
+        backLink.rel = '';
+        toolbar.replaceChildren(backLink);
+
+        const detailSummary = createElement('article', 'account');
+        detailSummary.append(
+          createElement('div', 'label', 'Account deployment overview'),
+          createElement('h2', 'account-name', account.name || currentPageState.accountId || 'Account'),
+          createElement('div', 'account-meta', `AWS account ${metricValue(account.awsAccountId)} · Regions: ${(account.allowedRegions || []).join(', ') || '—'}`),
+          createElement('div', 'account-topology', `${account.projectCount ?? deriveProjectEnvironmentGroups(account).projectCount} projects · ${account.environmentCount ?? deriveProjectEnvironmentGroups(account).environmentCount} environments`),
+        );
+        summary.replaceChildren(detailSummary);
+        root.replaceChildren(createAccountOverviewArticle(account));
+      };
+
+      const renderAccounts = (accounts) => {
+        const root = document.getElementById('accounts');
+        if (!accounts.length) {
+          renderEmptyState('No accounts or deployments are loaded yet.');
+          return;
+        }
+
+        const accountNodes = accounts.map((account) => createAccountOverviewArticle(account));
 
         root.replaceChildren(...accountNodes);
       };
@@ -1421,6 +1470,22 @@
           .catch((error) => {
             renderEmptyState(`Failed to load overview: ${error.message}`);
           });
+      } else if (currentPageState.page === 'account') {
+        if (!currentPageState.accountId) {
+          renderEmptyState('account page is missing an accountId query parameter');
+        } else {
+          fetch(`/v1/overview/accounts/${encodeURIComponent(currentPageState.accountId)}`)
+            .then((response) => {
+              if (!response.ok) throw new Error(`overview request failed (${response.status})`);
+              return response.json();
+            })
+            .then((account) => {
+              renderAccountDetailPage(account);
+            })
+            .catch((error) => {
+              renderEmptyState(`Failed to load overview: ${error.message}`);
+            });
+        }
       } else {
         if (!currentPageState.deployment) {
           renderEmptyState('deployment page is missing a deployment query parameter');

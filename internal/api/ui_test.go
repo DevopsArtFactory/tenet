@@ -32,9 +32,23 @@ func TestEmbeddedUILazyLoadsDeploymentDetailsOnExpandOnly(t *testing.T) {
 		}
 	}
 
-	clickContract := regexp.MustCompile(`toggle\.addEventListener\('click', \(\) => \{[\s\S]*?const expanded = toggle\.getAttribute\('aria-expanded'\) === 'true';[\s\S]*?const nextExpanded = !expanded;[\s\S]*?toggle\.setAttribute\('aria-expanded', String\(nextExpanded\)\);[\s\S]*?row\.classList\.toggle\('expanded', nextExpanded\);[\s\S]*?detailPanel\.hidden = !nextExpanded;[\s\S]*?if \(nextExpanded\) \{[\s\S]*?loadDeploymentDetail\(deployment\.name, detailPanel\)\.catch\(\(\) => \{\}\);[\s\S]*?\}[\s\S]*?\}\);`)
-	if !clickContract.MatchString(body) {
-		t.Fatalf("expected embedded UI to keep the expand-toggle lazy-load contract intact")
+	for _, fragment := range []string{
+		"const toggleExpandedState = () => {",
+		"const expanded = toggle.getAttribute('aria-expanded') === 'true';",
+		"const nextExpanded = !expanded;",
+		"toggle.setAttribute('aria-expanded', String(nextExpanded));",
+		"row.classList.toggle('expanded', nextExpanded);",
+		"detailPanel.hidden = !nextExpanded;",
+		"loadDeploymentDetail(deployment.name, detailPanel).catch(() => {});",
+		"toggle.addEventListener('click', toggleExpandedState);",
+		"toggle.addEventListener('keydown', (event) => {",
+		"if (event.key !== 'Enter' && event.key !== ' ') {",
+		"event.preventDefault();",
+		"toggleExpandedState();",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
 	}
 }
 
@@ -205,21 +219,32 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 
 	for _, fragment := range []string{
 		"const parsePageState = () => {",
-		"const validPages = new Set(['applications', 'application', 'resource', 'drift', 'plan']);",
+		"const validPages = new Set(['applications', 'application', 'account', 'resource', 'drift', 'plan']);",
 		"const page = params.get('page') || params.get('view') || 'applications';",
 		"page: validPages.has(page) ? page : 'applications',",
+		"accountId: params.get('accountId') || '',",
 		"deployment: params.get('deployment') || '',",
 		"resourceId: params.get('resourceId') || '',",
 		"const buildPageURL = (page, extras = {}) => {",
 		"if (currentViewState.query) params.set('q', currentViewState.query);",
 		"if (currentViewState.syncState && currentViewState.syncState !== 'all') params.set('sync', currentViewState.syncState);",
 		"if (currentViewState.account && currentViewState.account !== 'all') params.set('account', currentViewState.account);",
+		"const pathname = window.location.pathname || '/';",
+		"return query ? `${pathname}?${query}` : pathname;",
 		"const renderApplicationsOverview = (applications, focusState = null) => {",
 		"Application status overview",
 		"Last update",
 		"Search applications",
+		"Open account",
+		"createNavLink(buildPageURL('account', { accountId: deployment.awsAccountId }), 'Open account', '_self')",
 		"Open application",
 		"createNavLink(buildPageURL('application', { deployment: deployment.name }), 'Open application', '_self')",
+		"const renderAccountDetailPage = (account) => {",
+		"Account deployment overview",
+		"Account JSON",
+		"Group JSON",
+		"Open application",
+		"Back to applications",
 		"const groupResourceSections = (detail) => {",
 		"const stableResourceIdentity = (resource) => {",
 		"const normalizeResource = (resource) => {",

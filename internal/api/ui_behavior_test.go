@@ -159,6 +159,50 @@ func TestApplicationsOverviewPageWithNodeHarness(t *testing.T) {
 		t.Fatalf("marshal application detail: %v", err)
 	}
 
+	accountDetailJSON, err := json.Marshal(map[string]any{
+		"name":             "staging-core",
+		"awsAccountId":     "210987654321",
+		"allowedRegions":   []string{"ap-northeast-2", "us-west-2"},
+		"deploymentCount":  2,
+		"projectCount":     1,
+		"environmentCount": 1,
+		"progressingCount": 1,
+		"syncedCount":      1,
+		"deployments": []map[string]any{
+			{
+				"name":           "payments-api-staging",
+				"appRef":         "payments",
+				"environmentRef": "staging-apne2",
+				"accountName":    "staging-core",
+				"awsAccountId":   "210987654321",
+				"region":         "ap-northeast-2",
+				"targetType":     "ecs",
+				"strategy":       "linear",
+				"executionMode":  "ecsCodeDeploy",
+				"sync":           map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
+				"health":         map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy"},
+				"runtimeSummary": map[string]any{"timestamp": "2026-04-16T07:10:00Z"},
+			},
+			{
+				"name":           "payments-worker-staging",
+				"appRef":         "payments",
+				"environmentRef": "staging-apne2",
+				"accountName":    "staging-core",
+				"awsAccountId":   "210987654321",
+				"region":         "us-west-2",
+				"targetType":     "ecs",
+				"strategy":       "linear",
+				"executionMode":  "ecsCodeDeploy",
+				"sync":           map[string]any{"state": "Synced", "reason": "steady"},
+				"health":         map[string]any{"overall": "Healthy", "summary": "2/2 tasks healthy"},
+				"runtimeSummary": map[string]any{"timestamp": "2026-04-16T07:12:00Z"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal account detail: %v", err)
+	}
+
 	t.Run("applications overview entry page", func(t *testing.T) {
 		nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;
@@ -231,10 +275,376 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (accountsText.includes('Status JSON')) throw new Error('applications page should not expose status quick links');
   if (accountsText.includes('Rollout execution')) throw new Error('applications page should not render deep detail sections');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
+  const accountLink = links.find((node) => node.href === '/?page=account&q=payments&sync=OutOfSync&account=210987654321&accountId=210987654321');
+  if (!accountLink) throw new Error('expected applications page link to account detail route');
+  if (accountLink.target !== '_self') throw new Error('expected applications page account link to stay in embedded UI flow');
+  if (accountLink.rel) throw new Error('expected applications page account link to avoid new-tab rel attributes');
   const appLink = links.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging');
   if (!appLink) throw new Error('expected applications page link to application detail route');
   if (appLink.target !== '_self') throw new Error('expected applications page link to stay in embedded UI flow');
   if (appLink.rel) throw new Error('expected applications page link to avoid new-tab rel attributes');
+})();
+`
+
+		cmd := exec.Command("node", "-e", nodeProgram)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+		}
+	})
+
+	t.Run("embedded drill-down links preserve non-root pathname", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const sampleApplications = ` + string(applicationsJSON) + `;
+const accountDetail = ` + string(accountDetailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const createDocument = () => {
+  const document = new Document();
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  return document;
+};
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+
+async function render(search, fetchImpl) {
+  const document = createDocument();
+  const window = { location: { pathname: '/console', search, hash: '' } };
+  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetchImpl, history, Element, InputElement);
+  await settle();
+  await settle();
+  return { document, window };
+}
+
+(async () => {
+  const applicationsView = await render('?q=payments&sync=OutOfSync&account=210987654321', (url) => {
+    if (url === '/v1/overview/applications') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleApplications) });
+    throw new Error('unexpected applications fetch url: ' + url);
+  });
+  const overviewLinks = collectNodes(applicationsView.document.getElementById('accounts'), (node) => node.tagName === 'A');
+  if (!overviewLinks.find((node) => node.href === '/console?page=account&q=payments&sync=OutOfSync&account=210987654321&accountId=210987654321' && node.textContent === 'Open account' && node.target === '_self')) {
+    throw new Error('expected applications overview account drill-down link to preserve /console pathname');
+  }
+  if (!overviewLinks.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Open application' && node.target === '_self')) {
+    throw new Error('expected applications overview application drill-down link to preserve /console pathname');
+  }
+
+  const accountView = await render('?page=account&accountId=210987654321&q=payments&sync=OutOfSync&account=210987654321', (url) => {
+    if (url === '/v1/overview/accounts/210987654321') return Promise.resolve({ ok: true, json: () => Promise.resolve(accountDetail) });
+    throw new Error('unexpected account fetch url: ' + url);
+  });
+  const toolbarLinks = collectNodes(accountView.document.getElementById('toolbar'), (node) => node.tagName === 'A');
+  if (!toolbarLinks.find((node) => node.href === '/console?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.textContent === 'Back to applications' && node.target === '_self')) {
+    throw new Error('expected account detail back link to preserve /console pathname');
+  }
+  const accountLinks = collectNodes(accountView.document.getElementById('accounts'), (node) => node.tagName === 'A');
+  if (!accountLinks.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Open application' && node.target === '_self')) {
+    throw new Error('expected account detail drill-down link to preserve /console pathname');
+  }
+})();
+`
+
+		cmd := exec.Command("node", "-e", nodeProgram)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+		}
+	})
+
+	t.Run("missing identifiers suppress broken self-links", func(t *testing.T) {
+		brokenApplicationsJSON, err := json.Marshal([]map[string]any{
+			{
+				"name":           "payments-api-staging",
+				"appRef":         "payments",
+				"environmentRef": "staging-apne2",
+				"accountName":    "staging-core",
+				"awsAccountId":   "210987654321",
+				"region":         "ap-northeast-2",
+				"targetType":     "ecs",
+				"strategy":       "linear",
+				"executionMode":  "ecsCodeDeploy",
+				"sync":           map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
+				"health":         map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy"},
+				"runtimeSummary": map[string]any{"timestamp": "2026-04-16T07:10:00Z"},
+			},
+			{
+				"name":           "missing-account-id",
+				"appRef":         "payments",
+				"environmentRef": "dev-apne2",
+				"accountName":    "dev-core",
+				"region":         "ap-northeast-2",
+				"targetType":     "ecs",
+				"strategy":       "linear",
+				"executionMode":  "ecsCodeDeploy",
+				"sync":           map[string]any{"state": "Synced", "reason": "steady"},
+				"health":         map[string]any{"overall": "Healthy", "summary": "2/2 tasks healthy"},
+				"runtimeSummary": map[string]any{"timestamp": "2026-04-16T07:11:00Z"},
+			},
+			{
+				"appRef":         "payments",
+				"environmentRef": "qa-apne2",
+				"accountName":    "qa-core",
+				"awsAccountId":   "999999999999",
+				"region":         "ap-northeast-2",
+				"targetType":     "ecs",
+				"strategy":       "linear",
+				"executionMode":  "ecsCodeDeploy",
+				"sync":           map[string]any{"state": "Synced", "reason": "steady"},
+				"health":         map[string]any{"overall": "Healthy", "summary": "2/2 tasks healthy"},
+				"runtimeSummary": map[string]any{"timestamp": "2026-04-16T07:12:00Z"},
+			},
+		})
+		if err != nil {
+			t.Fatalf("marshal broken applications: %v", err)
+		}
+
+		brokenAccountDetailJSON, err := json.Marshal(map[string]any{
+			"name":             "staging-core",
+			"awsAccountId":     "210987654321",
+			"allowedRegions":   []string{"ap-northeast-2"},
+			"deploymentCount":  2,
+			"projectCount":     2,
+			"environmentCount": 2,
+			"progressingCount": 1,
+			"syncedCount":      1,
+			"deployments": []map[string]any{
+				{
+					"name":           "payments-api-staging",
+					"appRef":         "payments",
+					"environmentRef": "staging-apne2",
+					"accountName":    "staging-core",
+					"awsAccountId":   "210987654321",
+					"region":         "ap-northeast-2",
+					"targetType":     "ecs",
+					"strategy":       "linear",
+					"executionMode":  "ecsCodeDeploy",
+					"sync":           map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
+					"health":         map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy"},
+				},
+				{
+					"appRef":         "payments",
+					"environmentRef": "qa-apne2",
+					"accountName":    "staging-core",
+					"awsAccountId":   "210987654321",
+					"region":         "ap-northeast-2",
+					"targetType":     "ecs",
+					"strategy":       "linear",
+					"executionMode":  "ecsCodeDeploy",
+					"sync":           map[string]any{"state": "Synced", "reason": "steady"},
+					"health":         map[string]any{"overall": "Healthy", "summary": "2/2 tasks healthy"},
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("marshal broken account detail: %v", err)
+		}
+
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const brokenApplications = ` + string(brokenApplicationsJSON) + `;
+const brokenAccountDetail = ` + string(brokenAccountDetailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const createDocument = () => {
+  const document = new Document();
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  return document;
+};
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+
+async function render(search, fetchImpl) {
+  const document = createDocument();
+  const window = { location: { pathname: '/', search, hash: '' } };
+  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetchImpl, history, Element, InputElement);
+  await settle();
+  await settle();
+  return document;
+}
+
+(async () => {
+  const applicationsDocument = await render('?q=payments', (url) => {
+    if (url === '/v1/overview/applications') return Promise.resolve({ ok: true, json: () => Promise.resolve(brokenApplications) });
+    throw new Error('unexpected applications fetch url: ' + url);
+  });
+  const overviewLinks = collectNodes(applicationsDocument.getElementById('accounts'), (node) => node.tagName === 'A');
+  if (overviewLinks.find((node) => node.textContent === 'Open account' && node.href.includes('missing-account-id'))) {
+    throw new Error('expected applications overview to suppress account drill-down without account id');
+  }
+  if (overviewLinks.find((node) => node.textContent === 'Open application' && node.href === '/?page=application&q=payments')) {
+    throw new Error('expected applications overview to suppress application drill-down without deployment name');
+  }
+
+  const accountDocument = await render('?page=account&accountId=210987654321', (url) => {
+    if (url === '/v1/overview/accounts/210987654321') return Promise.resolve({ ok: true, json: () => Promise.resolve(brokenAccountDetail) });
+    throw new Error('unexpected account fetch url: ' + url);
+  });
+  const accountLinks = collectNodes(accountDocument.getElementById('accounts'), (node) => node.tagName === 'A');
+  if (accountLinks.find((node) => node.textContent === 'Open application' && node.href === '/?page=application')) {
+    throw new Error('expected account detail page to suppress application drill-down without deployment name');
+  }
+})();
+`
+
+		cmd := exec.Command("node", "-e", nodeProgram)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+		}
+	})
+
+	t.Run("account detail route renders embedded overview page", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const accountDetail = ` + string(accountDetailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/', search: '?page=account&accountId=210987654321&q=payments&sync=OutOfSync&account=210987654321', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/accounts/210987654321') return Promise.resolve({ ok: true, json: () => Promise.resolve(accountDetail) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+(async () => {
+  await settle();
+  const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
+  const summaryText = collectText(document.getElementById('summary')).join(' | ');
+  const accountsText = collectText(document.getElementById('accounts')).join(' | ');
+  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/accounts/210987654321') throw new Error('expected only account overview detail fetch on account page');
+  if (!toolbarText.includes('Back to applications')) throw new Error('expected account page back link');
+  const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
+  const backLink = toolbarLinks.find((node) => node.href === '/?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.target === '_self');
+  if (!backLink) throw new Error('expected account page back link to preserve filters');
+  if (!summaryText.includes('Account deployment overview')) throw new Error('expected account page summary title');
+  if (!summaryText.includes('staging-core')) throw new Error('expected account page account name');
+  if (!accountsText.includes('payments · staging-apne2')) throw new Error('expected grouped project/environment heading');
+  if (!accountsText.includes('payments-api-staging')) throw new Error('expected account page deployment row');
+  if (!accountsText.includes('Account JSON')) throw new Error('expected account page account json link');
+  if (!accountsText.includes('Group JSON')) throw new Error('expected account page group json link');
+  if (!accountsText.includes('Open application')) throw new Error('expected account page application drill-down links');
+  const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
+  if (!links.find((node) => node.href === '/v1/overview/accounts/210987654321' && node.textContent === 'Account JSON')) throw new Error('expected account json href');
+  if (!links.find((node) => node.href === '/v1/overview/accounts/210987654321/projects/payments/environments/staging-apne2' && node.textContent === 'Group JSON')) throw new Error('expected group json href');
+  if (!links.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Open application' && node.target === '_self')) throw new Error('expected account page open application self link');
 })();
 `
 
@@ -841,6 +1251,99 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 	if err != nil {
 		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
 	}
+
+	t.Run("suppresses broken resource links when detail name missing", func(t *testing.T) {
+		detailWithoutNameJSON, err := json.Marshal(map[string]any{
+			"accountName":    "staging-core",
+			"awsAccountId":   "210987654321",
+			"region":         "ap-northeast-2",
+			"appRef":         "payments",
+			"environmentRef": "staging-apne2",
+			"targetType":     "ecs",
+			"strategy":       "linear",
+			"executionMode":  "ecsCodeDeploy",
+			"sync":           map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
+			"health":         map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy while rollout continues"},
+			"rollout": map[string]any{
+				"execution": []map[string]any{
+					{"name": "payments-api-staging ECS Service", "resource": "ecsService", "description": "Primary ECS service for the staging environment"},
+					{"name": "prod listener", "resource": "productionListener", "description": "Routes production traffic"},
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("marshal nameless detail body: %v", err)
+		}
+
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailWithoutNameJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/', search: '?page=application&deployment=payments-api-staging&q=payments&sync=OutOfSync&account=210987654321', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+(async () => {
+  await settle();
+  await settle();
+  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/deployments/payments-api-staging') throw new Error('expected nameless application page to load only deployment detail');
+  const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
+  if (links.length !== 0) throw new Error('expected nameless application page to suppress broken resource drill-down links');
+})();
+`
+
+		cmd := exec.Command("node", "-e", nodeProgram)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+		}
+	})
 }
 
 func TestResourceDetailPageUsesStableResourceIDsWithNodeHarness(t *testing.T) {

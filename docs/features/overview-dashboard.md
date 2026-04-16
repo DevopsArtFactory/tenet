@@ -47,6 +47,7 @@ Managed query params:
 - `sync`
 - `account`
 - `page`
+- `accountId`
 - `deployment`
 
 Current behavior:
@@ -69,7 +70,15 @@ Each row surfaces:
 - sync
 - health
 - last update
-- `Open application` link to `/?page=application&deployment={deploymentName}`
+- `_self` `Open account` link to `/?page=account&accountId={awsAccountId}`
+- `_self` `Open application` link to `/?page=application&deployment={deploymentName}`
+
+The account drill-down page consumes `GET /v1/overview/accounts/{awsAccountId}` and keeps the denser account-oriented view available without making it the first page again. Current account-page behavior:
+- back-link to the applications overview while preserving current filters
+- `Account deployment overview` summary/header with account and topology context
+- grouped project/environment sections derived from the account payload
+- sibling `Account JSON`, `Group JSON`, and `_self` `Open application` links outside the expandable row toggle
+- expandable deployment rows that still lazy-load `GET /v1/overview/deployments/{deploymentName}` for deep detail
 
 The underlying `/v1/overview/applications` payload is still a richer joined row than the first page renders. It also preserves additive runtime summary, rollout summary, artifact, generation, and condition fields so other UI helpers and future slices can reuse the same route without rejoining `/v1/overview/accounts`.
 
@@ -127,10 +136,11 @@ Current plan/apply workspace behavior:
 ## Quick links
 
 The dashboard now exposes the following navigation affordances across the current drill-down flow:
-- landing page: `Open application`
+- landing page: `_self` `Open account`, `_self` `Open application`
+- account detail page: `Account JSON`, `Group JSON`, `_self` `Open application`
 - application detail page: `Open resource`
 - resource/workspace drill-down pages: embedded back links that keep operators in the same shell
-- account-oriented JSON surfaces remain available through the API routes (`/v1/overview/accounts/{awsAccountId}`, `/v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}`, `/v1/overview/deployments/{deploymentName}`, `/v1/status/deployments/{deploymentName}`) even though they are no longer first-page quick links
+- account-oriented JSON surfaces remain available through the API routes (`/v1/overview/accounts/{awsAccountId}`, `/v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}`, `/v1/overview/deployments/{deploymentName}`, `/v1/status/deployments/{deploymentName}`)
 - deployment workspace shortcuts: `Drift view` and `Plan/apply`
 
 The landing page itself is backed by `GET /v1/overview/applications`, and the application/resource drill-down pages reuse `GET /v1/overview/deployments/{deploymentName}`.

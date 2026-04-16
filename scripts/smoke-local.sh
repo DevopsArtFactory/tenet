@@ -73,7 +73,9 @@ assert status['deploymentName'] == 'payments-api-prod', status
 assert status['status']['sync']['state'] == 'Synced', status
 assert 'Application status overview' in ui, ui
 assert '/v1/overview/applications' in ui, ui
+assert 'Open account' in ui, ui
 assert 'Open application' in ui, ui
+assert "buildPageURL('account', { accountId: deployment.awsAccountId })" in ui, ui
 assert "buildPageURL('application', { deployment: deployment.name })" in ui, ui
 assert 'Drift view' in ui, ui
 assert 'Plan/apply' in ui, ui
