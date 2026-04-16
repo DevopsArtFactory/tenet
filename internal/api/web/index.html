@@ -153,6 +153,7 @@
           runtimeSummary.sync?.reason,
           runtimeSummary.health?.overall,
           runtimeSummary.health?.summary,
+          runtimeSummary.source,
           runtimeSummary.rolloutPhase,
           runtimeSummary.currentStep,
           Number.isFinite(runtimeSummary.historyCount) ? `history ${runtimeSummary.historyCount}` : '',
@@ -503,6 +504,7 @@
           ['Region placement', textOrDash(detail.region)],
           ['Allowed regions', (detail.allowedRegions || []).join(', ') || '—'],
           ['Runtime generations', generationsText(detail.runtimeSummary)],
+          ['Runtime source', metricValue(detail.runtimeSummary?.source)],
           ['Rollout generations', detail.rollout ? generationsText(detail.rollout) : `desired — · observed ${generationValue(detail.observedGeneration)}`],
           ['Health summary', `${healthLabel(detail.health)}${detail.health?.summary ? ` · ${detail.health.summary}` : ''}`],
         ].forEach(([label, value]) => {
@@ -527,6 +529,12 @@
               createElement('span', 'detail-condition-meta', `History health · ${healthLabel(entry.health)}${entry.health?.summary ? ` · ${entry.health.summary}` : ''}`),
               createElement('span', 'detail-condition-meta', `History generations · ${generationsText(entry)}`),
             );
+            if (entry.source) {
+              historyMeta.append(createElement('span', 'detail-condition-meta', `History source · ${entry.source}`));
+            }
+            if (entry.rolloutPhase) {
+              historyMeta.append(createElement('span', 'detail-condition-meta', `History rollout phase · ${entry.rolloutPhase}`));
+            }
             if (entry.currentStep) {
               historyMeta.append(createElement('span', 'detail-condition-meta', `History rollout step · ${entry.currentStep}`));
             }

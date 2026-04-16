@@ -100,6 +100,7 @@ type StatusHistoryEntry struct {
 // RuntimeSummary captures the latest stable operator-facing runtime metadata.
 type RuntimeSummary struct {
 	Timestamp          string       `json:"timestamp,omitempty"`
+	Source             string       `json:"source,omitempty"`
 	Summary            string       `json:"summary,omitempty"`
 	Sync               Sync         `json:"sync"`
 	Health             Health       `json:"health"`
