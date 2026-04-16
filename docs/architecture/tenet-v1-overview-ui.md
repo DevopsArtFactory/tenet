@@ -18,6 +18,7 @@ It groups deployments by AWS account and then by project/environment within each
 - deployed artifact
 - additive latest-runtime summary text from `runtimeSummary.summary` plus runtime sync/health/rollout cues when present
 - additive latest-runtime timestamp from `runtimeSummary.timestamp` with a `Latest runtime status` fallback label when no timestamp exists yet
+- additive latest-runtime desired/observed generation metadata from `runtimeSummary.desiredGeneration` / `runtimeSummary.observedGeneration`
 - rollout phase
 - current rollout step
 - planned rollout steps
@@ -39,11 +40,13 @@ Each deployment object in that overview response now also includes an additive `
 - `runtimeSummary.sync.reason`
 - `runtimeSummary.health.overall`
 - `runtimeSummary.health.summary`
+- `runtimeSummary.desiredGeneration`
+- `runtimeSummary.observedGeneration`
 - `runtimeSummary.rolloutPhase`
 - `runtimeSummary.currentStep`
 - `runtimeSummary.historyCount`
 
-The embedded UI renders that latest runtime summary/timestamp directly on the overview card using `document.createElement`, `textContent`, and `replaceChildren`; it does not inject runtime summary strings with `innerHTML`.
+The embedded UI renders that latest runtime summary/timestamp directly on the overview card using `document.createElement`, `textContent`, and `replaceChildren`; it also renders a dedicated runtime-generation row from `runtimeSummary.desiredGeneration` / `runtimeSummary.observedGeneration` with the same safe DOM construction and does not inject runtime summary strings with `innerHTML`.
 
 Each account object now also includes additive per-account runtime counters:
 - `deploymentCount`
@@ -58,10 +61,11 @@ The embedded client also derives a lightweight project/environment topology summ
 
 `/v1/overview/deployments/{deploymentName}` combines catalog placement data with the current deployment status snapshot for one deployment, including:
 - the same additive `runtimeSummary` object used by the overview cards so API consumers can read a single latest-runtime contract without scraping `history[*]`
-- `sync.reason`
 - account and region placement metadata
+- `sync.reason`
+- dedicated UI rendering of `runtimeSummary.desiredGeneration` / `runtimeSummary.observedGeneration` as additive controller-owned runtime freshness metadata
 - rollout desired/observed generations
-- `history[*]` controller-authored runtime timeline entries (timestamp, summary, sync, health, optional current step)
+- `history[*]` controller-authored runtime timeline entries (timestamp, summary, sync, health, desired/observed generations, optional current step)
 - `rollout.execution[*]`
 - the complete `rollout.steps[*]` list
 - `conditions[*]`
@@ -89,7 +93,7 @@ Each deployment card still surfaces the most operator-useful rollout cues direct
 - `rollout.currentStep`
 - `rollout.steps[*].kind`
 
-The expandable detail panel extends that view without forcing operators to switch to the raw status endpoint for common troubleshooting. It now includes a recent runtime-history section rendered with safe DOM construction, showing each controller-authored entry's timestamp, summary, sync state, health, and optional rollout step, plus an explicit `No recent runtime history is available yet.` empty state when no bounded history has been persisted yet.
+The expandable detail panel extends that view without forcing operators to switch to the raw status endpoint for common troubleshooting. It now includes a safe runtime-generation row sourced from `runtimeSummary.desiredGeneration` / `runtimeSummary.observedGeneration`, plus a recent runtime-history section rendered with safe DOM construction, showing each controller-authored entry's timestamp, summary, sync state, health, desired/observed generations, and optional rollout step, plus an explicit `No recent runtime history is available yet.` empty state when no bounded history has been persisted yet.
 
 The detail rollout-step list now also consumes additive `rollout.steps[*].status` metadata and controller-authored `rollout.steps[*].detail` text from the deployment-detail payload:
 - `completed` marks controller-plan steps that are already behind the current plan view, including fully completed rollouts with no remaining current actionable step

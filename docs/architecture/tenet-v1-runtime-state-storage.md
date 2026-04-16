@@ -33,6 +33,6 @@ This makes local Docker flows convenient:
 
 ## Current scope
 
-This slice persists the current deployment status snapshot and a bounded recent runtime-history timeline authored by the controller. Each history entry captures the latest operator-facing summary of timestamp, summary text, sync state, health, and optional rollout step so the overview deployment-detail read model can expose recent changes without requiring a separate event stream.
+This slice persists the current deployment status snapshot and a bounded recent runtime-history timeline authored by the controller. Each history entry captures the latest operator-facing summary of timestamp, summary text, sync state, health, additive desired/observed generation metadata, rollout phase, and optional rollout step so the overview deployment-detail read model can expose recent changes without requiring a separate event stream.
 
 Long-lived runtime history, event streams, and audit logs are still future work.

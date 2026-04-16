@@ -164,6 +164,12 @@
         return steps.length ? steps.join(' → ') : '—';
       };
       const metricValue = (value) => value ?? '—';
+      const generationValue = (value) => Number.isFinite(value) ? String(value) : '—';
+      const generationsText = (value) => {
+        const desired = generationValue(value?.desiredGeneration);
+        const observed = generationValue(value?.observedGeneration);
+        return `desired ${desired} · observed ${observed}`;
+      };
       const rolloutStepStatus = (step, index, steps) => {
         if (step.status) {
           switch (step.status) {
@@ -496,7 +502,8 @@
           ['Account placement', [textOrDash(detail.accountName), textOrDash(detail.awsAccountId)].join(' · ')],
           ['Region placement', textOrDash(detail.region)],
           ['Allowed regions', (detail.allowedRegions || []).join(', ') || '—'],
-          ['Rollout generations', detail.rollout ? `desired ${detail.rollout.desiredGeneration || 0} · observed ${detail.rollout.observedGeneration || 0}` : `desired — · observed ${detail.observedGeneration || 0}`],
+          ['Runtime generations', generationsText(detail.runtimeSummary)],
+          ['Rollout generations', detail.rollout ? generationsText(detail.rollout) : `desired — · observed ${generationValue(detail.observedGeneration)}`],
           ['Health summary', `${healthLabel(detail.health)}${detail.health?.summary ? ` · ${detail.health.summary}` : ''}`],
         ].forEach(([label, value]) => {
           detailGrid.append(createMetric(label, value));
@@ -518,6 +525,7 @@
               createElement('span', 'detail-condition-meta', `History summary · ${textOrDash(entry.summary)}`),
               createElement('span', 'detail-condition-meta', `History sync · ${textOrDash(entry.sync?.state)}`),
               createElement('span', 'detail-condition-meta', `History health · ${healthLabel(entry.health)}${entry.health?.summary ? ` · ${entry.health.summary}` : ''}`),
+              createElement('span', 'detail-condition-meta', `History generations · ${generationsText(entry)}`),
             );
             if (entry.currentStep) {
               historyMeta.append(createElement('span', 'detail-condition-meta', `History rollout step · ${entry.currentStep}`));
@@ -731,12 +739,13 @@
                 ['Deployed artifact', artifact(deployment.deployedArtifact)],
                 ['Latest runtime', runtimeSummaryText(deployment.runtimeSummary), 'summary'],
                 ['Runtime timestamp', runtimeSummaryTimestamp(deployment.runtimeSummary)],
+                ['Runtime generations', generationsText(deployment.runtimeSummary)],
                 ['Rollout phase', metricValue(deployment.rollout?.phase)],
                 ['Current step', metricValue(deployment.rollout?.currentStep)],
                 ['Rollout summary', metricValue(deployment.rollout?.summary), 'summary'],
                 ['Planned steps', plannedSteps(deployment.rollout)],
                 ['Health', `${healthLabel(deployment.health)}${deployment.health?.summary ? ` · ${deployment.health.summary}` : ''}`],
-                ['Observed generation', String(deployment.observedGeneration || 0)],
+                ['Observed generation', generationValue(deployment.observedGeneration)],
               ].forEach(([label, value, className]) => {
                 metrics.append(createMetric(label, value, className));
               });
