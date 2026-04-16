@@ -277,6 +277,14 @@ func deriveRolloutExecutionDetails(deployment domain.Deployment) []domain.Rollou
 			Name:        deployment.Name + "-candidate",
 			Description: "Candidate target group Tenet will register and warm before traffic shifting",
 		}, {
+			Resource:    "productionListenerRule",
+			Name:        deployment.Name + "-prod-listener",
+			Description: "Production listener rule Tenet updates to keep weighted target groups attached during rollout",
+		}, {
+			Resource:    "trafficShiftPlan",
+			Name:        deployment.Name + "-weighted-routing",
+			Description: "Controller-authored weighted routing plan describing how production traffic shifts between target groups",
+		}, {
 			Resource:    "userDataBootstrapSource",
 			Name:        userDataBootstrapSource(deployment.UserData),
 			Description: "Normalized userdata bootstrap source for candidate EC2 capacity",
@@ -304,6 +312,22 @@ func deriveRolloutExecutionDetails(deployment domain.Deployment) []domain.Rollou
 			Resource:    "codeDeployDeploymentGroup",
 			Name:        deployment.Name + "-codedeploy-group",
 			Description: "CodeDeploy deployment group Tenet targets for ECS rollout",
+		}, {
+			Resource:    "productionListener",
+			Name:        deployment.Name + "-prod-listener",
+			Description: "Production listener CodeDeploy shifts during ECS blue/green rollout",
+		}, {
+			Resource:    "testListener",
+			Name:        deployment.Name + "-test-listener",
+			Description: "Test listener CodeDeploy uses to validate the replacement ECS task set before promotion",
+		}, {
+			Resource:    "blueTaskSetTargetGroup",
+			Name:        deployment.Name + "-blue",
+			Description: "Blue task set target group CodeDeploy treats as the live ECS traffic destination",
+		}, {
+			Resource:    "greenTaskSetTargetGroup",
+			Name:        deployment.Name + "-green",
+			Description: "Green task set target group CodeDeploy warms before shifting ECS traffic",
 		}}
 	case "ecsRolling":
 		return []domain.RolloutExecutionDetail{{

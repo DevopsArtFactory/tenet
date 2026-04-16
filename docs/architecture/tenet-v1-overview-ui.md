@@ -86,10 +86,12 @@ The rollout-step detail text remains execution-mode-aware:
 - Native ECS rolling rows explain the in-place ECS service update that creates the rolling deployment plus the later service-stability verification step.
 
 The rollout execution section is intentionally execution-mode-aware:
-- EC2 weighted target groups show the candidate Auto Scaling Group, active target group, candidate target group, and userdata bootstrap source.
-- EC2 instance refresh shows the service Auto Scaling Group plus the userdata bootstrap source for replacement capacity.
+- EC2 weighted target groups show the candidate Auto Scaling Group (`candidateAutoScalingGroup`), active target group (`activeTargetGroup`), candidate target group (`candidateTargetGroup`), production listener rule (`productionListenerRule`), traffic-shift plan (`trafficShiftPlan`), and userdata bootstrap source (`userDataBootstrapSource`).
+- EC2 instance refresh shows the service Auto Scaling Group (`serviceAutoScalingGroup`) plus the userdata bootstrap source (`userDataBootstrapSource`) for replacement capacity.
 - ECS rolling shows the ECS service that Tenet will update in place.
-- ECS CodeDeploy shows the ECS service, CodeDeploy application, and CodeDeploy deployment group used for traffic shifting.
+- ECS CodeDeploy shows the ECS service (`ecsService`), CodeDeploy application (`codeDeployApplication`), CodeDeploy deployment group (`codeDeployDeploymentGroup`), production listener (`productionListener`), test listener (`testListener`), blue target group (`blueTaskSetTargetGroup`), and green target group (`greenTaskSetTargetGroup`) used for blue/green traffic shifting.
+
+As with rollout-step status/detail rendering, those execution-resource rows are controller-authored summaries of Tenet's intended rollout contract. The UI should not present them as live AWS telemetry; they describe the plan's concrete resource names and routing objects, not independently observed completion.
 
 ## Detail-panel rendering constraints
 

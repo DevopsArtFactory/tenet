@@ -23,7 +23,7 @@ Implemented today:
 - status snapshots now carry sync reasons, health summaries, deployment conditions, deployed binary/image artifact metadata, bounded controller-authored runtime history entries, and controller-derived rollout summaries
 - rollout summaries now use strategy-aware step labels such as EC2 `CreateCandidateCapacity`/`ShiftTrafficCanary`/`PromoteCandidateCapacity`, ECS `CreateCodeDeployDeployment`/`ShiftTrafficLinear`, and native ECS rolling `UpdateECSService`/`VerifyServiceStability`
 - rollout summaries now also annotate each `rollout.steps[*]` entry with controller-derived `status` values (`completed`, `current`, `pending`) plus optional controller-derived `detail` text so operators can distinguish already-finished plan steps, the current actionable step, and future planned work; `completed` also covers fully finished plans that no longer have a current actionable step. Both fields come from the controller's current abstract plan and are not live AWS execution telemetry
-- rollout summaries now also surface `rollout.execution[]` details so operators can see the concrete execution resources Tenet intends to use, including EC2 candidate ASGs/target groups, EC2 instance-refresh ASGs and userdata bootstrap sources, ECS rolling services, and ECS CodeDeploy application/deployment-group resources
+- rollout summaries now also surface additive controller-derived `rollout.execution[]` details so operators can see the concrete execution resources Tenet intends to use, including EC2 weighted-target-group candidate capacity and traffic-routing resources, EC2 instance-refresh ASGs and userdata bootstrap sources, ECS rolling services, and ECS CodeDeploy listener/target-group resources alongside application and deployment-group resources
 - committed local example fixtures under `examples/local-repo/` and `examples/local-status/`
 - Docker packaging and `compose.yaml` so the current control plane can run locally without AWS credentials
 - read-only API endpoints for:
@@ -95,10 +95,12 @@ Rollout `rollout.steps[*].detail` examples surfaced through `/v1/overview/accoun
 - Native ECS rolling steps explain in-place ECS service deployment creation/update semantics plus the later service-stability verification step.
 
 Execution detail examples surfaced through `/v1/overview/accounts`, `/v1/overview/deployments/{deploymentName}`, and `/v1/status/deployments/{deploymentName}`:
-- EC2 weighted target groups: candidate Auto Scaling Group, active target group, candidate target group, userdata bootstrap source
-- EC2 instance refresh: service Auto Scaling Group, userdata bootstrap source
+- EC2 weighted target groups: candidate Auto Scaling Group (`candidateAutoScalingGroup`), active target group (`activeTargetGroup`), candidate target group (`candidateTargetGroup`), production listener rule (`productionListenerRule`), traffic-shift plan (`trafficShiftPlan`), userdata bootstrap source (`userDataBootstrapSource`)
+- EC2 instance refresh: service Auto Scaling Group (`serviceAutoScalingGroup`), userdata bootstrap source (`userDataBootstrapSource`)
 - ECS rolling: ECS service
-- ECS CodeDeploy: ECS service, CodeDeploy application, CodeDeploy deployment group
+- ECS CodeDeploy: ECS service (`ecsService`), CodeDeploy application (`codeDeployApplication`), CodeDeploy deployment group (`codeDeployDeploymentGroup`), production listener (`productionListener`), test listener (`testListener`), blue target group (`blueTaskSetTargetGroup`), green target group (`greenTaskSetTargetGroup`)
+
+Those `rollout.execution[]` entries remain controller-authored summaries of the intended execution contract. They describe the resources and routing objects the current abstract plan expects to use; they are not direct live AWS telemetry proving those resources already exist or have completed traffic movement.
 
 Controller-authored runtime history is surfaced through `/v1/overview/deployments/{deploymentName}` and rendered in the expandable deployment detail panel at `/`. The current slice keeps only a bounded recent timeline so operators can see the latest sync/health/rollout-step changes without introducing a full event log.
 
