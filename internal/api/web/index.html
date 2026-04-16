@@ -270,6 +270,39 @@
           groups: Array.from(groups.values()),
         };
       };
+      const deriveGroupCounts = (group) => {
+        const deployments = group.deployments || [];
+        const counts = {
+          deploymentCount: deployments.length,
+          syncedCount: 0,
+          progressingCount: 0,
+          pausedCount: 0,
+          errorCount: 0,
+        };
+
+        deployments.forEach((deployment) => {
+          switch (deployment.sync?.state) {
+            case 'Synced':
+              counts.syncedCount += 1;
+              break;
+            case 'Reconciling':
+            case 'OutOfSync':
+            case 'Drifted':
+              counts.progressingCount += 1;
+              break;
+            case 'Paused':
+              counts.pausedCount += 1;
+              break;
+            case 'Error':
+              counts.errorCount += 1;
+              break;
+            default:
+              break;
+          }
+        });
+
+        return counts;
+      };
       const createElement = (tagName, className, text) => {
         const node = document.createElement(tagName);
         if (className) node.className = className;
@@ -740,6 +773,17 @@
             const groupPills = createElement('div', 'pills');
             const groupCount = group.deployments.length;
             groupPills.append(createElement('span', 'group-pill', `${groupCount} deployment${groupCount === 1 ? '' : 's'}`));
+            const groupCounts = deriveGroupCounts(group);
+            [
+              [groupCounts.syncedCount, 'synced', 'pill synced'],
+              [groupCounts.progressingCount, 'progressing', 'pill progress'],
+              [groupCounts.pausedCount, 'paused', 'pill paused'],
+              [groupCounts.errorCount, 'error', 'pill error'],
+            ].forEach(([value, label, className]) => {
+              if (value > 0) {
+                groupPills.append(createElement('span', className, `${value} ${label}`));
+              }
+            });
             groupHead.append(groupTitleWrap, groupLinks, groupPills);
 
             const groupRows = createElement('div', 'group-rows');

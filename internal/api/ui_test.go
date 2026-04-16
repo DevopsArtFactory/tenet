@@ -291,6 +291,17 @@ func TestEmbeddedUIGroupsDeploymentsByProjectAndEnvironment(t *testing.T) {
 		"const key = [deployment.appRef || '', deployment.environmentRef || '', deployment.region || ''].join('\\u0000');",
 		"projectCount: projects.size,",
 		"environmentCount: environments.size,",
+		"const deriveGroupCounts = (group) => {",
+		"const deployments = group.deployments || [];",
+		"deploymentCount: deployments.length,",
+		"syncedCount: 0,",
+		"progressingCount: 0,",
+		"pausedCount: 0,",
+		"errorCount: 0,",
+		"counts.syncedCount += 1;",
+		"counts.progressingCount += 1;",
+		"counts.pausedCount += 1;",
+		"counts.errorCount += 1;",
 		"const derivedTopology = deriveProjectEnvironmentGroups(account);",
 		"const topology = {",
 		"projectCount: account.projectCount ?? derivedTopology.projectCount,",
@@ -301,12 +312,24 @@ func TestEmbeddedUIGroupsDeploymentsByProjectAndEnvironment(t *testing.T) {
 		"createElement('div', 'deployment-group-meta', `Project ${metricValue(group.appRef)} · Environment ${metricValue(group.environmentRef)} · Region ${metricValue(group.region)}`)",
 		"const groupCount = group.deployments.length;",
 		"groupPills.append(createElement('span', 'group-pill', `${groupCount} deployment${groupCount === 1 ? '' : 's'}`));",
+		"const groupCounts = deriveGroupCounts(group);",
+		"[groupCounts.syncedCount, 'synced', 'pill synced']",
+		"[groupCounts.progressingCount, 'progressing', 'pill progress']",
+		"[groupCounts.pausedCount, 'paused', 'pill paused']",
+		"[groupCounts.errorCount, 'error', 'pill error']",
+		"if (value > 0) {",
+		"groupPills.append(createElement('span', className, `${value} ${label}`));",
 		"const groupRows = createElement('div', 'group-rows');",
 		"groupSection.append(groupHead, groupRows);",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include %q", fragment)
 		}
+	}
+
+	fallbackContract := regexp.MustCompile(`const deriveGroupCounts = \(group\) => \{[\s\S]*?const deployments = group\.deployments \|\| \[\];[\s\S]*?deployments\.forEach\(\(deployment\) => \{[\s\S]*?switch \(deployment\.sync\?\.state\) \{[\s\S]*?case 'Synced':[\s\S]*?counts\.syncedCount \+= 1;[\s\S]*?case 'Reconciling':[\s\S]*?case 'OutOfSync':[\s\S]*?case 'Drifted':[\s\S]*?counts\.progressingCount \+= 1;[\s\S]*?case 'Paused':[\s\S]*?counts\.pausedCount \+= 1;[\s\S]*?case 'Error':[\s\S]*?counts\.errorCount \+= 1;[\s\S]*?default:[\s\S]*?\}[\s\S]*?\};`)
+	if !fallbackContract.MatchString(body) {
+		t.Fatalf("expected embedded UI to derive missing group status counts from deployment sync state")
 	}
 }
 

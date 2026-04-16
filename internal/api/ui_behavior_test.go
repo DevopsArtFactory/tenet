@@ -140,6 +140,7 @@ func TestUIProjectEnvironmentGroupingWithNodeHarness(t *testing.T) {
 				{"name": "api-prod", "appRef": "payments", "environmentRef": "prod", "region": "us-west-2", "sync": map[string]any{"state": "Synced"}},
 				{"name": "api-staging", "appRef": "payments", "environmentRef": "staging", "region": "us-west-2", "sync": map[string]any{"state": "Reconciling"}},
 				{"name": "worker-prod", "appRef": "jobs", "environmentRef": "prod", "region": "us-west-2", "sync": map[string]any{"state": "Paused"}},
+				{"name": "worker-staging", "appRef": "jobs", "environmentRef": "staging", "region": "us-west-2", "sync": map[string]any{"state": "Error"}},
 			},
 		},
 	})
@@ -199,12 +200,38 @@ async function settle() { await Promise.resolve(); await new Promise((resolve) =
   await settle();
   const root = document.getElementById('accounts');
   const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+  const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+  const hasClass = (node, className) => typeof node.className === 'string' && new RegExp('(^|\\s)' + className + '(\\s|$)').test(node.className);
   const text = collectText(root).join(' | ');
   if (!text.includes('2 projects · 2 environments')) throw new Error('expected account topology summary to show unique project/environment counts');
   if (!text.includes('payments · prod')) throw new Error('expected grouped project/environment title for payments prod');
   if (!text.includes('Project payments · Environment prod · Region us-west-2')) throw new Error('expected grouped project/environment metadata for payments prod');
   if (!text.includes('payments · staging')) throw new Error('expected grouped project/environment title for payments staging');
   if (!text.includes('jobs · prod')) throw new Error('expected grouped project/environment title for jobs prod');
+  if (!text.includes('jobs · staging')) throw new Error('expected grouped project/environment title for jobs staging');
+  const groupSections = collectNodes(root, (node) => hasClass(node, 'deployment-group'));
+  if (groupSections.length !== 4) throw new Error('expected one project/environment section per derived group');
+
+  const groupSummaryByTitle = new Map(groupSections.map((section) => {
+    const titleNode = collectNodes(section, (node) => hasClass(node, 'deployment-group-title'))[0];
+    const groupHead = collectNodes(section, (node) => hasClass(node, 'deployment-group-head'))[0];
+    if (!titleNode || !groupHead) throw new Error('expected each project/environment section to render a titled group header');
+    const deploymentCountPill = collectNodes(groupHead, (node) => hasClass(node, 'group-pill')).map((node) => node.textContent).filter(Boolean);
+    const statusPills = collectNodes(groupHead, (node) => hasClass(node, 'pill') && /(synced|progress|paused|error)/.test(node.className)).map((node) => node.textContent).filter(Boolean);
+    return [titleNode.textContent, { deploymentCountPill, statusPills }];
+  }));
+
+  const expectGroupPills = (title, expectedStatusPill) => {
+    const summary = groupSummaryByTitle.get(title);
+    if (!summary) throw new Error('expected grouped section for ' + title);
+    if (summary.deploymentCountPill.length !== 1 || summary.deploymentCountPill[0] !== '1 deployment') throw new Error('expected ' + title + ' to render exactly one deployment-count pill in the group header');
+    if (summary.statusPills.length !== 1 || summary.statusPills[0] !== expectedStatusPill) throw new Error('expected ' + title + ' header pills to be exactly ' + expectedStatusPill + ', got ' + (summary.statusPills.join(', ') || 'none'));
+  };
+
+  expectGroupPills('payments · prod', '1 synced');
+  expectGroupPills('payments · staging', '1 progressing');
+  expectGroupPills('jobs · prod', '1 paused');
+  expectGroupPills('jobs · staging', '1 error');
 })();
 `
 
