@@ -85,7 +85,7 @@ Run:
 - `GOROOT=/Users/kuma/.gvm/gos/go1.25 GOPATH=/Users/kuma/.gvm/pkgsets/go1.25/global PATH=/Users/kuma/.gvm/gos/go1.25/bin:/opt/homebrew/bin:$PATH go test ./...`
 - `GOROOT=/Users/kuma/.gvm/gos/go1.25 GOPATH=/Users/kuma/.gvm/pkgsets/go1.25/global PATH=/Users/kuma/.gvm/gos/go1.25/bin:/opt/homebrew/bin:$PATH make smoke-local`
 - `docker compose config`
-- If workspace rendering changed materially: `docker compose up --build -d`, verify `/`, `/?view=drift&deployment=payments-api-prod`, and `/?view=plan&deployment=payments-api-prod`, then `docker compose down --remove-orphans`
+- If workspace rendering changed materially: `docker compose up --build -d`, verify `/`, `/?page=drift&deployment=payments-api-prod`, and `/?page=plan&deployment=payments-api-prod`, then `docker compose down --remove-orphans`
 
 Expected: PASS.
 

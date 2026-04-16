@@ -73,14 +73,19 @@ Each row surfaces:
 - last update
 - `Open application` link to `/?page=application&deployment={deploymentName}`
 
-### Application detail placeholder
+### Application detail page
 
-Slice 1 also introduces the application-detail route target so the applications page can drill down into the next layer.
+The application-detail route now loads `GET /v1/overview/deployments/{deploymentName}` and renders grouped linked resources instead of deep deployment internals.
 
 Current behavior:
-- loads `GET /v1/overview/deployments/{deploymentName}`
-- renders a breadcrumb/back-link target
-- intentionally keeps grouped resource lists for the next slice
+- breadcrumb/back-link to the applications overview
+- top-level application summary for account/region context
+- grouped resource sections:
+  - `Workloads`
+  - `Traffic routing`
+  - `Config and access`
+- `Open resource` links that establish the next resource-detail drill-down target
+- intentionally keeps artifact/history/generation/log details off this page for now
 
 ### Deployment workspaces
 
@@ -91,8 +96,8 @@ The existing `Drift view` and `Plan/apply` workspace shells remain available as 
 The dashboard now supports lightweight workspace routing inside the same embedded shell.
 
 Routes:
-- `/?view=drift&deployment={name}`
-- `/?view=plan&deployment={name}`
+- `/?page=drift&deployment={name}`
+- `/?page=plan&deployment={name}`
 
 ### Drift workspace
 

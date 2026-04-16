@@ -123,7 +123,7 @@
       const detailStateByDeployment = new Map();
       let allAccounts = [];
       let currentViewState = { query: '', syncState: 'all', account: 'all' };
-      let currentPageState = { view: 'overview', deployment: '' };
+      let currentPageState = { page: 'applications', deployment: '' };
 
       const statusClass = (state) => {
         switch (state) {
@@ -504,7 +504,7 @@
         ];
         const controls = createElement('div', 'toolbar-grid');
         controls.append(
-          createInput('Search deployments', state.query, 'Search by deployment, artifact, region, step, or rollout summary', (event) => {
+          createInput('Search applications', state.query, 'Search by deployment, artifact, region, step, or rollout summary', (event) => {
             updateViewState({ query: event.target.value });
           }),
           createSelect('Sync state', state.syncState, syncOptions, (event) => {
@@ -546,6 +546,11 @@
         const progressing = applications.filter((deployment) => progressingStates.has(deployment.sync?.state)).length;
         const paused = applications.filter((deployment) => deployment.sync?.state === 'Paused').length;
         const errored = applications.filter((deployment) => deployment.sync?.state === 'Error').length;
+        const latestUpdate = applications
+          .map((deployment) => runtimeSummaryTimestamp(deployment.runtimeSummary))
+          .filter((value) => value && value !== '—')
+          .sort()
+          .at(-1) || '—';
         const summary = document.getElementById('summary');
         const header = createElement('article', 'card');
         header.append(
@@ -557,7 +562,7 @@
         statusCard.append(
           createElement('div', 'label', 'Sync and health summary'),
           createElement('div', 'account-meta', `${synced} synced · ${progressing} progressing · ${paused} paused · ${errored} error`),
-          createElement('div', 'account-meta', 'Last update'),
+          createElement('div', 'account-meta', `Last update · ${latestUpdate}`),
         );
         summary.replaceChildren(header, statusCard);
       };
@@ -613,6 +618,55 @@
         renderApplicationsTable(applications);
         restoreToolbarFocus(focusState);
       };
+      const groupResourceSections = (detail) => {
+        const groups = [
+          { title: 'Workloads', resources: [] },
+          { title: 'Traffic routing', resources: [] },
+          { title: 'Config and access', resources: [] },
+        ];
+        const execution = detail.rollout?.execution || [];
+        const synthesize = () => {
+          if (detail.executionMode === 'ecsCodeDeploy') {
+            return [
+              { name: `${detail.name} ECS Service`, resource: 'ecsService', description: 'Primary ECS service for the selected application' },
+              { name: `${detail.name} Deployment Group`, resource: 'codeDeployDeploymentGroup', description: 'CodeDeploy deployment group driving traffic shifts' },
+              { name: 'production listener', resource: 'productionListener', description: 'Primary listener serving live traffic' },
+              { name: 'blue task set target group', resource: 'blueTaskSetTargetGroup', description: 'Stable task set traffic target' },
+              { name: 'green task set target group', resource: 'greenTaskSetTargetGroup', description: 'Candidate task set traffic target' },
+            ];
+          }
+          if (detail.executionMode === 'asgWeightedTargetGroups') {
+            return [
+              { name: `${detail.name} candidate Auto Scaling Group`, resource: 'candidateAutoScalingGroup', description: 'Candidate capacity for weighted target group rollout' },
+              { name: 'active target group', resource: 'activeTargetGroup', description: 'Stable production target group' },
+              { name: 'candidate target group', resource: 'candidateTargetGroup', description: 'Candidate target group for the new version' },
+              { name: 'production listener rule', resource: 'productionListenerRule', description: 'Listener rule routing weighted traffic' },
+              { name: 'userdata bootstrap source', resource: 'userDataBootstrapSource', description: 'Bootstrap source for candidate instances' },
+            ];
+          }
+          return [];
+        };
+        const resourceList = execution.length ? execution : synthesize();
+        resourceList.forEach((resource) => {
+          const id = resource.resource || resource.name || 'resource';
+          const normalized = {
+            id,
+            type: resource.resource || 'resource',
+            name: resource.name || id,
+            description: resource.description || '—',
+          };
+          const trafficResources = new Set(['productionListener', 'testListener', 'productionListenerRule', 'activeTargetGroup', 'candidateTargetGroup', 'blueTaskSetTargetGroup', 'greenTaskSetTargetGroup', 'trafficShiftPlan']);
+          const configResources = new Set(['userDataBootstrapSource']);
+          if (trafficResources.has(normalized.type)) {
+            groups[1].resources.push(normalized);
+          } else if (configResources.has(normalized.type)) {
+            groups[2].resources.push(normalized);
+          } else {
+            groups[0].resources.push(normalized);
+          }
+        });
+        return groups;
+      };
       const renderApplicationDetailPage = (detail) => {
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
@@ -620,20 +674,182 @@
         const backLink = createNavLink('/?page=applications', 'Back to applications');
         backLink.target = '_self';
         backLink.rel = '';
-        toolbar.replaceChildren(createElement('div', 'toolbar-actions'), backLink);
+        toolbar.replaceChildren(backLink);
         const detailSummary = createElement('article', 'account');
         detailSummary.append(
           createElement('h2', 'account-name', detail.name || currentPageState.deployment || 'Application'),
           createElement('div', 'account-meta', [detail.accountName, detail.awsAccountId, detail.region].filter(Boolean).join(' · ') || '—'),
-          createElement('div', 'account-topology', 'Application detail page is the next drill-down slice.'),
+          createElement('div', 'account-topology', 'Application detail page: show only application-linked resources before the final resource-detail page.'),
         );
         summary.replaceChildren(detailSummary);
-        const placeholder = createElement('article', 'account');
-        placeholder.append(
-          createElement('h2', 'account-name', 'Application detail page'),
-          createElement('div', 'account-meta', 'This slice establishes the route target from the applications overview. Resource groups land in the next slice.'),
+        const page = createElement('article', 'account');
+        page.append(
+          createElement('h2', 'account-name', 'Application resources'),
+          createElement('div', 'account-meta', 'Grouped linked resources for the selected application. Deep rollout/history details stay on the final resource page.'),
         );
-        root.replaceChildren(placeholder);
+        const rows = createElement('div', 'rows');
+        groupResourceSections(detail).forEach((group) => {
+          const groupSection = createElement('section', 'deployment-group');
+          const groupHead = createElement('div', 'deployment-group-head');
+          const groupTitleWrap = createElement('div');
+          groupTitleWrap.append(
+            createElement('h3', 'deployment-group-title', group.title),
+            createElement('div', 'deployment-group-meta', `Application ${detail.name || currentPageState.deployment || 'deployment'} · ${group.resources.length} linked resource${group.resources.length === 1 ? '' : 's'}`),
+          );
+          groupHead.append(groupTitleWrap, createElement('div', 'group-pill', `${group.resources.length} resources`));
+          const groupRows = createElement('div', 'group-rows');
+          group.resources.forEach((resource) => {
+            const row = createElement('div', 'row');
+            const top = createElement('div', 'row-top');
+            const titleWrap = createElement('div');
+            titleWrap.append(
+              createElement('h3', 'row-title', resource.name),
+              createElement('div', 'row-subtitle', `${resource.type} · ${resource.description}`),
+            );
+            top.append(titleWrap, createElement('span', 'pill target', resource.type));
+            const detailLinks = createElement('div', 'row-links row-links-shell');
+            detailLinks.append(createNavLink(`/?page=resource&deployment=${encodeURIComponent(detail.name)}&resourceType=${encodeURIComponent(resource.type)}&resourceId=${encodeURIComponent(resource.id)}`, 'Open resource'));
+            row.append(top, detailLinks);
+            groupRows.append(row);
+          });
+          groupSection.append(groupHead, groupRows);
+          rows.append(groupSection);
+        });
+        page.append(rows);
+        root.replaceChildren(page);
+      };
+      const resolveResourceDetail = (detail) => {
+        const resources = groupResourceSections(detail).flatMap((group) => group.resources || []);
+        return resources.find((resource) => {
+          if (currentPageState.resourceId && currentPageState.resourceType) {
+            return resource.id === currentPageState.resourceId && resource.type === currentPageState.resourceType;
+          }
+          if (currentPageState.resourceId) {
+            return resource.id === currentPageState.resourceId;
+          }
+          if (currentPageState.resourceType) {
+            return resource.type === currentPageState.resourceType;
+          }
+          return false;
+        }) || {
+          id: currentPageState.resourceId || currentPageState.resourceType || 'resource',
+          type: currentPageState.resourceType || 'resource',
+          name: currentPageState.resourceId || currentPageState.resourceType || 'Resource',
+          description: 'No linked resource metadata is available for this selection.',
+        };
+      };
+      const renderResourceDetailPage = (detail) => {
+        const toolbar = document.getElementById('toolbar');
+        const summary = document.getElementById('summary');
+        const root = document.getElementById('accounts');
+        const resource = resolveResourceDetail(detail);
+        const backLink = createNavLink(`/?page=application&deployment=${encodeURIComponent(detail.name || currentPageState.deployment || '')}`, 'Back to application');
+        backLink.target = '_self';
+        backLink.rel = '';
+        toolbar.replaceChildren(backLink);
+        const detailSummary = createElement('article', 'account');
+        detailSummary.append(
+          createElement('div', 'label', 'Resource detail'),
+          createElement('h2', 'account-name', resource.name),
+          createElement('div', 'account-meta', `${resource.type} · ${textOrDash(resource.description)}`),
+          createElement('div', 'account-topology', [detail.name || currentPageState.deployment || 'Application', detail.accountName, detail.region].filter(Boolean).join(' · ')),
+        );
+        summary.replaceChildren(detailSummary);
+        const page = createElement('article', 'account');
+        page.append(
+          createElement('h2', 'account-name', 'Resource detail'),
+          createElement('div', 'account-meta', `Focused rollout/runtime context for ${resource.name}.`),
+        );
+        const shell = createElement('div', 'detail-grid');
+        [
+          ['Resource type', resource.type],
+          ['Resource id', resource.id],
+          ['Deployment', textOrDash(detail.name)],
+          ['Desired artifact', artifact(detail.desiredArtifact)],
+          ['Deployed artifact', artifact(detail.deployedArtifact)],
+          ['Sync reason', textOrDash(detail.sync?.reason)],
+          ['Rollout phase', metricValue(detail.rollout?.phase)],
+          ['Current step', metricValue(detail.rollout?.currentStep)],
+          ['Runtime generations', generationsText(detail.runtimeSummary)],
+          ['Rollout generations', detail.rollout ? generationsText(detail.rollout) : `desired — · observed ${generationValue(detail.observedGeneration)}`],
+          ['Runtime timestamp', metricValue(detail.runtimeSummary?.timestamp)],
+          ['Runtime source', metricValue(detail.runtimeSummary?.source)],
+          ['Runtime history', Number.isFinite(detail.runtimeSummary?.historyCount) ? String(detail.runtimeSummary.historyCount) : '—'],
+          ['Health summary', `${healthLabel(detail.health)}${detail.health?.summary ? ` · ${detail.health.summary}` : ''}`],
+        ].forEach(([label, value]) => shell.append(createMetric(label, value)));
+
+        const historySection = createDetailSection('Runtime history');
+        const history = detail.history || [];
+        if (!history.length) {
+          historySection.append(createElement('div', 'detail-state', 'No recent runtime history is available yet.'));
+        } else {
+          const historyList = createElement('ol', 'detail-list');
+          history.forEach((entry) => {
+            const item = createElement('li');
+            item.append(createElement('strong', '', textOrDash(entry.summary)));
+            const historyMeta = createElement('div', 'detail-history-meta');
+            historyMeta.append(
+              createElement('span', 'detail-condition-meta', `History timestamp · ${textOrDash(entry.timestamp)}`),
+              createElement('span', 'detail-condition-meta', `History summary · ${textOrDash(entry.summary)}`),
+              createElement('span', 'detail-condition-meta', `History generations · ${generationsText(entry)}`),
+            );
+            if (entry.source) {
+              historyMeta.append(createElement('span', 'detail-condition-meta', `History source · ${entry.source}`));
+            }
+            if (entry.rolloutPhase) {
+              historyMeta.append(createElement('span', 'detail-condition-meta', `History rollout phase · ${entry.rolloutPhase}`));
+            }
+            if (entry.currentStep) {
+              historyMeta.append(createElement('span', 'detail-condition-meta', `History rollout step · ${entry.currentStep}`));
+            }
+            item.append(historyMeta);
+            historyList.append(item);
+          });
+          historySection.append(historyList);
+        }
+
+        const executionSection = createDetailSection('Rollout execution');
+        const execution = (detail.rollout?.execution || []).filter((item) => item.resource === resource.type || item.name === resource.name);
+        if (!execution.length) {
+          executionSection.append(createElement('div', 'detail-state', 'No rollout execution resources are currently reported for this selection.'));
+        } else {
+          const executionList = createElement('ol', 'detail-list');
+          execution.forEach((item) => {
+            const executionItem = createElement('li');
+            executionItem.append(createElement('strong', '', textOrDash(item.name)));
+            const executionMeta = createElement('div', 'detail-execution-meta');
+            executionMeta.append(
+              createElement('span', 'detail-condition-meta', `Execution resource · ${textOrDash(item.resource)}`),
+              createElement('span', 'detail-condition-meta', `Execution description · ${textOrDash(item.description)}`),
+            );
+            executionItem.append(executionMeta);
+            executionList.append(executionItem);
+          });
+          executionSection.append(executionList);
+        }
+
+        const conditionsSection = createDetailSection('Conditions');
+        const conditions = detail.conditions || [];
+        if (!conditions.length) {
+          conditionsSection.append(createElement('div', 'detail-state', 'No deployment conditions reported.'));
+        } else {
+          const conditionList = createElement('ol', 'detail-list');
+          conditions.forEach((condition) => {
+            const item = createElement('li');
+            item.append(createElement('strong', '', `${textOrDash(condition.type)} = ${boolLabel(Boolean(condition.status))}`));
+            if (condition.reason) {
+              item.append(createElement('span', 'detail-condition-meta', `Condition reason · ${condition.reason}`));
+            }
+            if (condition.message) {
+              item.append(createElement('span', 'detail-condition-meta', `Condition message · ${condition.message}`));
+            }
+            conditionList.append(item);
+          });
+          conditionsSection.append(conditionList);
+        }
+
+        page.append(shell, historySection, executionSection, conditionsSection);
+        root.replaceChildren(page);
       };
       const renderEmptyState = (message) => {
         const empty = createElement('div', 'empty', message);
@@ -1112,8 +1328,8 @@
               detailLinks.append(
                 createNavLink(`/v1/overview/deployments/${encodeURIComponent(deployment.name)}`, 'Overview JSON'),
                 createNavLink(`/v1/status/deployments/${encodeURIComponent(deployment.name)}`, 'Status JSON'),
-                createNavLink(`/?view=drift&deployment=${encodeURIComponent(deployment.name)}`, 'Drift view'),
-                createNavLink(`/?view=plan&deployment=${encodeURIComponent(deployment.name)}`, 'Plan/apply'),
+                createNavLink(`/?page=drift&deployment=${encodeURIComponent(deployment.name)}`, 'Drift view'),
+                createNavLink(`/?page=plan&deployment=${encodeURIComponent(deployment.name)}`, 'Plan/apply'),
               );
 
               const detailPanel = createElement('div', 'detail-panel');
@@ -1191,6 +1407,10 @@
               };
               if (currentPageState.page === 'application') {
                 renderApplicationDetailPage(mergedDetail);
+                return;
+              }
+              if (currentPageState.page === 'resource') {
+                renderResourceDetailPage(mergedDetail);
                 return;
               }
               if (currentPageState.page === 'drift' || currentPageState.page === 'plan') {

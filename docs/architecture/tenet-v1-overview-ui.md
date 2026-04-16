@@ -15,7 +15,7 @@ In the current drill-down transition slice, the default `/` page now behaves as 
 - last update
 - a drill-down link to `/?page=application&deployment={deploymentName}`
 
-The denser account/group/resource presentation is being split into deeper pages instead of remaining on the first screen.
+The denser account/group/resource presentation is being split into deeper pages instead of remaining on the first screen. The next shipped page in that drill-down is `/?page=application&deployment={deploymentName}`, which reuses `/v1/overview/deployments/{deploymentName}` and groups linked rollout resources into `Workloads`, `Traffic routing`, and `Config and access` sections before the future final resource-detail/log page.
 
 ## Backing API
 
