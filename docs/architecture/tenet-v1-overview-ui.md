@@ -13,9 +13,10 @@ In the current drill-down transition slice, the default `/` page now behaves as 
 - sync
 - health
 - last update
+- a drill-down link to `/?page=account&accountId={awsAccountId}`
 - a drill-down link to `/?page=application&deployment={deploymentName}`
 
-The denser account/group/resource presentation is being split into deeper pages instead of remaining on the first screen. The next shipped page in that drill-down is `/?page=application&deployment={deploymentName}`, which reuses `/v1/overview/deployments/{deploymentName}` and groups linked rollout resources into `Workloads`, `Traffic routing`, and `Config and access` sections. Resource drill-down links use the stable route shape `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}`, while the account-oriented joined overview routes remain available for account/group drill-downs and JSON quick links.
+The denser account/group/resource presentation is being split into deeper pages instead of remaining on the first screen. The next shipped page in that drill-down can now be the account-oriented `/?page=account&accountId={awsAccountId}` view, which reuses `GET /v1/overview/accounts/{awsAccountId}` to render grouped project/environment sections plus sibling `Account JSON`, `Group JSON`, and `Open application` links. The deployment-scoped `/?page=application&deployment={deploymentName}` page still reuses `/v1/overview/deployments/{deploymentName}` and groups linked rollout resources into `Workloads`, `Traffic routing`, and `Config and access` sections. Resource drill-down links use the stable route shape `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}`, while the account-oriented joined overview routes remain available for account/group drill-downs and JSON quick links.
 
 ## Backing API
 
@@ -80,10 +81,13 @@ The current applications overview page includes a client-side filter toolbar abo
 - a text search matching application/account/project/runtime summary text from `/v1/overview/applications`
 - a sync-state filter
 - an account filter
+- an `Open account` drill-down link on each application row
 - an `Open application` drill-down link on each application row
 - a `Clear filters` action that resets the toolbar
 
-The older account/group JSON quick links and denser deployment quick links are no longer part of the default first page; they remain available only on the account-oriented joined overview routes and deeper drill-down contexts.
+The new embedded account page at `/?page=account&accountId={awsAccountId}` fetches `GET /v1/overview/accounts/{awsAccountId}` directly, preserves the active toolbar query params in its back link to the applications page, and renders the existing account/group-oriented joined overview with grouped project/environment sections plus sibling `Account JSON`, `Group JSON`, and `Open application` links outside the expandable row toggle.
+
+The older account/group JSON quick links and denser deployment quick links are no longer part of the default first page; they remain available on the account-oriented drill-down page and other deeper deployment contexts.
 
 Toolbar state is URL-synced with `history.replaceState` using query params:
 - `q` for free-text search
