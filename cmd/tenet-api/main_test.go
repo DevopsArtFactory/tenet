@@ -175,6 +175,120 @@ func TestAPIOptionsOverviewAccountPropagatesSnapshotListErrors(t *testing.T) {
 	}
 }
 
+func TestAPIOptionsOverviewApplicationsUsesSnapshotListLookup(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	store := &stubStatusStore{
+		listSnapshots: []statusstore.Snapshot{{
+			DeploymentName: "api-prod",
+			Status: domain.DeploymentStatus{
+				Sync:             domain.Sync{State: domain.SyncStateSynced, Reason: "steady"},
+				Health:           domain.Health{Overall: domain.HealthHealthy, Summary: "healthy"},
+				DeployedArtifact: domain.DeploymentArtifact{Image: "payments-api:v1"},
+			},
+		}},
+	}
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, store)
+	if options.OverviewApplications == nil {
+		t.Fatalf("expected overview applications provider")
+	}
+
+	applications, err := options.OverviewApplications()
+	if err != nil {
+		t.Fatalf("OverviewApplications returned error: %v", err)
+	}
+	if store.listCalls != 1 {
+		t.Fatalf("expected one List call, got %d", store.listCalls)
+	}
+	if store.getCalls != 0 {
+		t.Fatalf("expected no Get calls, got %d", store.getCalls)
+	}
+	if len(applications) != 2 {
+		t.Fatalf("expected one flattened row per deployment, got %+v", applications)
+	}
+	if applications[0].Name != "api-prod" || applications[0].DeployedArtifact.Image != "payments-api:v1" || applications[0].Sync.State != domain.SyncStateSynced {
+		t.Fatalf("unexpected application overview row: %+v", applications[0])
+	}
+}
+
+func TestAPIOptionsOverviewApplicationsFallsBackToCatalogWhenStoreMissing(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
+	if options.OverviewApplications == nil {
+		t.Fatalf("expected overview applications provider")
+	}
+
+	applications, err := options.OverviewApplications()
+	if err != nil {
+		t.Fatalf("OverviewApplications returned error: %v", err)
+	}
+	if len(applications) != 2 {
+		t.Fatalf("expected one flattened row per deployment, got %+v", applications)
+	}
+	if applications[0].Name != "api-prod" || applications[0].AWSAccountID != "123456789012" || applications[0].RuntimeSummary != nil {
+		t.Fatalf("expected catalog-only overview row with zero runtime state, got %+v", applications[0])
+	}
+	if applications[1].Name != "worker-prod" || applications[1].Sync != (domain.Sync{}) || applications[1].Health != (domain.Health{}) {
+		t.Fatalf("expected zero-valued runtime fields for repo-only row, got %+v", applications[1])
+	}
+}
+
+func TestAPIOptionsOverviewDetailProvidersFallBackToCatalogWhenStoreMissing(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
+	if options.OverviewDeployment == nil {
+		t.Fatalf("expected overview deployment provider")
+	}
+	if options.OverviewAccounts == nil {
+		t.Fatalf("expected overview accounts provider")
+	}
+	if options.OverviewAccount == nil {
+		t.Fatalf("expected overview account provider")
+	}
+	if options.OverviewProjectEnvironment == nil {
+		t.Fatalf("expected overview project/environment provider")
+	}
+
+	deployment, err := options.OverviewDeployment("api-prod")
+	if err != nil {
+		t.Fatalf("OverviewDeployment returned error: %v", err)
+	}
+	if deployment.Name != "api-prod" || deployment.AccountName != "prod-core" || deployment.Sync != (domain.Sync{}) || deployment.Health != (domain.Health{}) {
+		t.Fatalf("expected catalog-only deployment detail, got %+v", deployment)
+	}
+
+	accounts, err := options.OverviewAccounts()
+	if err != nil {
+		t.Fatalf("OverviewAccounts returned error: %v", err)
+	}
+	if len(accounts) != 1 || accounts[0].AWSAccountID != "123456789012" || len(accounts[0].Deployments) != 2 {
+		t.Fatalf("expected catalog-only account overviews, got %+v", accounts)
+	}
+
+	account, err := options.OverviewAccount("123456789012")
+	if err != nil {
+		t.Fatalf("OverviewAccount returned error: %v", err)
+	}
+	if account.Name != "prod-core" || account.DeploymentCount != 2 {
+		t.Fatalf("expected catalog-only account detail, got %+v", account)
+	}
+	if len(account.Deployments) == 0 {
+		t.Fatalf("expected account deployments in catalog-only detail, got %+v", account)
+	}
+
+	appRef := account.Deployments[0].AppRef
+	environmentRef := account.Deployments[0].EnvironmentRef
+	group, err := options.OverviewProjectEnvironment("123456789012", appRef, environmentRef)
+	if err != nil {
+		t.Fatalf("OverviewProjectEnvironment returned error: %v", err)
+	}
+	if group.AppRef != appRef || group.EnvironmentRef != environmentRef || len(group.Deployments) == 0 {
+		t.Fatalf("expected catalog-only project/environment detail, got %+v", group)
+	}
+}
+
 type stubStatusStore struct {
 	getSnapshot   statusstore.Snapshot
 	listSnapshots []statusstore.Snapshot

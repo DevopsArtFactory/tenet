@@ -36,15 +36,17 @@ done
 curl -fsS "http://$HOST:$PORT/healthz" >/dev/null
 
 summary=$(curl -fsS "http://$HOST:$PORT/v1/catalog/summary")
+applications=$(curl -fsS "http://$HOST:$PORT/v1/overview/applications")
 overview=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts")
 account_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts/123456789012")
 group_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts/123456789012/projects/payments-api/environments/prod-apne2")
 status=$(curl -fsS "http://$HOST:$PORT/v1/status/deployments/payments-api-prod")
 ui=$(curl -fsS "http://$HOST:$PORT/")
 
-SUMMARY_JSON="$summary" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" STATUS_JSON="$status" UI_HTML="$ui" python3 - <<'PY'
+SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" STATUS_JSON="$status" UI_HTML="$ui" python3 - <<'PY'
 import json, os
 summary = json.loads(os.environ['SUMMARY_JSON'])
+applications = json.loads(os.environ['APPLICATIONS_JSON'])
 overview = json.loads(os.environ['OVERVIEW_JSON'])
 account_detail = json.loads(os.environ['ACCOUNT_DETAIL_JSON'])
 group_detail = json.loads(os.environ['GROUP_DETAIL_JSON'])
@@ -53,6 +55,8 @@ ui = os.environ['UI_HTML']
 assert summary['accountCount'] == 2, summary
 assert summary['environmentCount'] == 2, summary
 assert summary['deploymentCount'] == 2, summary
+assert applications[0]['executionMode'] in {'asgWeightedTargetGroups', 'asgInstanceRefresh'}, applications
+assert any(application['name'] == 'payments-api-prod' for application in applications), applications
 assert overview[0]['deployments'][0]['executionMode'] in {'asgWeightedTargetGroups', 'asgInstanceRefresh'}, overview
 assert any(account['name'] == 'prod-core' for account in overview), overview
 assert account_detail['name'] == 'prod-core', account_detail
@@ -68,12 +72,13 @@ assert group_detail['deployments'][0]['name'] == 'payments-api-prod', group_deta
 assert status['deploymentName'] == 'payments-api-prod', status
 assert status['status']['sync']['state'] == 'Synced', status
 assert 'Application status overview' in ui, ui
+assert '/v1/overview/applications' in ui, ui
 assert 'Open application' in ui, ui
-assert '/?page=application&deployment=${encodeURIComponent(deployment.name)}' in ui, ui
+assert "buildPageURL('application', { deployment: deployment.name })" in ui, ui
 assert 'Drift view' in ui, ui
 assert 'Plan/apply' in ui, ui
 
-assert '/?page=drift&deployment=${encodeURIComponent(deployment.name)}' in ui, ui
-assert '/?page=plan&deployment=${encodeURIComponent(deployment.name)}' in ui, ui
+assert "buildPageURL('drift', { deployment: deployment.name })" in ui, ui
+assert "buildPageURL('plan', { deployment: deployment.name })" in ui, ui
 print('smoke-local: ok')
 PY

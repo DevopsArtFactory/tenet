@@ -6,7 +6,7 @@ Tenet now serves a minimal embedded UI at `/`.
 
 The UI is intended to make the current control-plane slice visible without introducing a separate frontend toolchain.
 
-In the current drill-down transition slice, the default `/` page now behaves as an applications overview instead of the previous dense account/group dashboard. The client still consumes `/v1/overview/accounts`, but it flattens that payload into application-level rows showing only:
+In the current drill-down transition slice, the default `/` page now behaves as an applications overview instead of the previous dense account/group dashboard. The landing page consumes `GET /v1/overview/applications`, a flattened joined read model that already carries application-level rows plus additive runtime/rollout/artifact metadata, and renders only:
 - application name
 - account
 - project/app
@@ -15,17 +15,18 @@ In the current drill-down transition slice, the default `/` page now behaves as 
 - last update
 - a drill-down link to `/?page=application&deployment={deploymentName}`
 
-The denser account/group/resource presentation is being split into deeper pages instead of remaining on the first screen. The next shipped page in that drill-down is `/?page=application&deployment={deploymentName}`, which reuses `/v1/overview/deployments/{deploymentName}` and groups linked rollout resources into `Workloads`, `Traffic routing`, and `Config and access` sections before the future final resource-detail/log page. Resource drill-down links use the stable route shape `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}`.
+The denser account/group/resource presentation is being split into deeper pages instead of remaining on the first screen. The next shipped page in that drill-down is `/?page=application&deployment={deploymentName}`, which reuses `/v1/overview/deployments/{deploymentName}` and groups linked rollout resources into `Workloads`, `Traffic routing`, and `Config and access` sections. Resource drill-down links use the stable route shape `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}`, while the account-oriented joined overview routes remain available for account/group drill-downs and JSON quick links.
 
 ## Backing API
 
 The page consumes joined overview endpoints:
+- `GET /v1/overview/applications`
 - `GET /v1/overview/accounts`
 - `GET /v1/overview/accounts/{awsAccountId}`
 - `GET /v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}`
 - `GET /v1/overview/deployments/{deploymentName}`
 
-`/v1/overview/accounts` keeps the top-level account page fast by returning the summary slice needed to render the default cards.
+`/v1/overview/applications` now keeps the default applications landing page narrow while still preserving the richer additive joined fields (`runtimeSummary`, rollout metadata, artifacts, generations, conditions) already produced for deployment rows. `/v1/overview/accounts` remains the richer account-oriented joined route used for account/group drill-downs and sibling JSON quick links.
 
 Each deployment object in that overview response now also includes an additive `runtimeSummary` object when recent runtime metadata exists. The current summary contract is intentionally compact and operator-facing:
 - `runtimeSummary.timestamp`
@@ -42,7 +43,7 @@ Each deployment object in that overview response now also includes an additive `
 - `runtimeSummary.currentStep`
 - `runtimeSummary.historyCount`
 
-The embedded UI renders that latest runtime summary/timestamp directly on the overview card using `document.createElement`, `textContent`, and `replaceChildren`; it also renders dedicated runtime-generation and latest-change rows from `runtimeSummary.desiredGeneration` / `runtimeSummary.observedGeneration` and `runtimeSummary.changes[]` with the same safe DOM construction, includes `runtimeSummary.source` and latest change labels in the compact overview-card summary/search text when present, builds the account-header `Account JSON` link with `createElement('a')` plus an encoded `href` derived from `awsAccountId`, and does not inject runtime/account identifier strings with `innerHTML`.
+The embedded UI renders the latest runtime summary/timestamp directly on the applications landing page using `document.createElement`, `textContent`, and `replaceChildren`; it also renders dedicated runtime-generation and latest-change rows from `runtimeSummary.desiredGeneration` / `runtimeSummary.observedGeneration` and `runtimeSummary.changes[]` with the same safe DOM construction, includes `runtimeSummary.source` and latest change labels in the compact overview-card summary/search text when present, and does not inject runtime/account identifier strings with `innerHTML`.
 
 Each account object now also includes additive per-account runtime counters:
 - `deploymentCount`
@@ -55,7 +56,7 @@ Each account overview object may also include additive topology counters:
 - `projectCount`
 - `environmentCount`
 
-The `/` UI renders the account-header runtime counters directly from those fields when present. The same account header now also renders an `Account JSON` quick link to `GET /v1/overview/accounts/{awsAccountId}` as a sibling control next to the title/count summary rather than nesting it inside deployment-level expand toggles. Each grouped project/environment header likewise renders sibling additive grouped status pills plus a `Group JSON` quick link to `GET /v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}` so operators can inspect the exact grouped scope already shown in the dashboard. Those grouped pills are derived from the deployments still visible in the section after client-side filtering and use the same bucket semantics as the account header: `Synced` contributes to synced, `Reconciling` / `OutOfSync` / `Drifted` contribute to progressing, `Paused` contributes to paused, and `Error` contributes to error. Zero-value group buckets are intentionally omitted so the compact grouped headers do not fill with empty counters. When any aggregate account-count field is absent in the overview payload, the embedded client derives the fallback value from `account.deployments[*].sync.state` instead of displaying zero for the status buckets. Deployments with missing or unknown runtime state still contribute to `deploymentCount`, so they remain visible in the total even when they do not increment a concrete runtime-state bucket.
+The account-oriented `/v1/overview/accounts` read model still carries those account-header runtime counters when present. The same account payload still exposes an `Account JSON` quick link to `GET /v1/overview/accounts/{awsAccountId}` and grouped project/environment headers can still surface sibling additive grouped status pills plus a `Group JSON` quick link to `GET /v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}` on account-focused views. Those grouped pills use the same bucket semantics as the account header: `Synced` contributes to synced, `Reconciling` / `OutOfSync` / `Drifted` contribute to progressing, `Paused` contributes to paused, and `Error` contributes to error. Zero-value group buckets are intentionally omitted so compact grouped headers do not fill with empty counters. When any aggregate account-count field is absent in the overview payload, the embedded client derives the fallback value from `account.deployments[*].sync.state` instead of displaying zero for the status buckets. Deployments with missing or unknown runtime state still contribute to `deploymentCount`, so they remain visible in the total even when they do not increment a concrete runtime-state bucket.
 
 For topology, the embedded client prefers authoritative account-level `projectCount` / `environmentCount` values when they are present on the overview payload. To preserve compatibility with older overview responses, it still falls back to deriving the unique project/environment counts from `account.deployments[*]` when either field is absent. Project/environment grouping for the nested deployment sections continues to come from deployment-level `appRef + environmentRef + region` data regardless of whether the authoritative account counters are present.
 
@@ -66,40 +67,43 @@ For topology, the embedded client prefers authoritative account-level `projectCo
 - dedicated UI rendering of `runtimeSummary.desiredGeneration` / `runtimeSummary.observedGeneration` as additive controller-owned runtime freshness metadata
 - dedicated UI rendering of `runtimeSummary.changes[]` as additive latest-runtime change labels
 - dedicated UI rendering of `runtimeSummary.source` as an additive `Runtime source` metric when the latest summary came from controller-authored history
+- optional normalized `userData` metadata from the deployment catalog so EC2 fallback rollout resources keep stable identities when canonical `rollout.execution[]` data is missing or empty
 - rollout desired/observed generations
 - `history[*]` controller-authored runtime timeline entries (timestamp, summary, sync, health, desired/observed generations, optional `changes[]`, optional source, optional rollout phase, optional current step)
 - `rollout.execution[*]`
 - the complete `rollout.steps[*]` list
 - `conditions[*]`
 
-The embedded UI only fetches the deployment-detail endpoint when an operator expands a row.
+The embedded UI fetches `GET /v1/overview/deployments/{deploymentName}` directly for `?page=application`, `?page=resource`, `?page=drift`, and `?page=plan`. The default `/` landing page is the only page that loads `/v1/overview/applications`; deeper drill-down pages no longer depend on `/v1/overview/accounts` just to render deployment detail.
 
 The current applications overview page includes a client-side filter toolbar above the application list:
-- a text search matching application/account/project/runtime summary text from `/v1/overview/accounts`
+- a text search matching application/account/project/runtime summary text from `/v1/overview/applications`
 - a sync-state filter
 - an account filter
 - an `Open application` drill-down link on each application row
 - a `Clear filters` action that resets the toolbar
 
-The older account/group JSON quick links and denser deployment quick links are no longer part of the default first page; they are being moved behind deeper drill-down pages.
+The older account/group JSON quick links and denser deployment quick links are no longer part of the default first page; they remain available only on the account-oriented joined overview routes and deeper drill-down contexts.
 
 Toolbar state is URL-synced with `history.replaceState` using query params:
 - `q` for free-text search
 - `sync` for the selected sync-state bucket
 - `account` for the selected stable account identifier (`awsAccountId` in the current embedded UI)
 
-Those deployment workspace links intentionally stay inside the same embedded HTML shell rather than introducing new server-rendered pages. `view=drift` and `view=plan` switch the client into deployment-scoped read-only workspaces after the initial overview fetch, then lazy-load `/v1/overview/deployments/{deploymentName}` to render deployment context plus placeholder troubleshooting/action sections. Both workspaces now also render a dedicated `Latest runtime signals` section directly in the shell using `runtimeSummary.source`, `runtimeSummary.timestamp`, and `runtimeSummary.historyCount`, followed by explicit runtime change-signal rows sourced from `runtimeSummary.changes[]`. Both workspaces also render a dedicated `Rollout execution` section from `detail.rollout.execution[]`, preserving the same ordered execution-resource identifiers documented for the detail panel. The drift workspace still surfaces deployment conditions alongside an explicit field-level-drift placeholder, while the plan/apply workspace still renders rollout-plan steps and disabled action buttons until mutation APIs exist.
+Those deployment workspace links intentionally stay inside the same embedded HTML shell rather than introducing new server-rendered pages. `?page=drift` and `?page=plan` switch the client into deployment-scoped read-only workspaces after the initial overview/deployment fetch flow, then lazy-load `/v1/overview/deployments/{deploymentName}` to render deployment context plus placeholder troubleshooting/action sections. Both workspaces now also render a dedicated `Latest runtime signals` section directly in the shell using `runtimeSummary.source`, `runtimeSummary.timestamp`, and `runtimeSummary.historyCount`, followed by explicit runtime change-signal rows sourced from `runtimeSummary.changes[]`. Both workspaces also render a dedicated `Rollout execution` section from `detail.rollout.execution[]`, preserving the same ordered execution-resource identifiers documented for the detail panel. The drift workspace still surfaces deployment conditions alongside an explicit field-level-drift placeholder, while the plan/apply workspace still renders rollout-plan steps and disabled action buttons until mutation APIs exist.
 
-The page re-applies those query params on load so filtered views are shareable/bookmarkable without server-side filtering. Filtering remains client-side against the already-fetched overview payload; no additional overview requests are issued when controls change. Stale or invalid `sync`/`account` query values are normalized back to the default `all` selection before the toolbar renders, so bookmarked URLs cannot leave the control state and the active filter state out of sync. Matching on `runtimeSummary` is additive; it narrows the visible overview cards without changing lazy detail loading or detail-panel history behavior, and the matched summary text now includes `runtimeSummary.source` provenance plus `runtimeSummary.changes[]` labels when present. When the active filter combination removes every deployment, the UI renders the explicit empty state `No deployments match the current filters.`
+The page re-applies those query params on load so filtered views are shareable/bookmarkable without server-side filtering. Filtering remains client-side against the already-fetched applications payload; no additional overview requests are issued when controls change. Stale or invalid `sync`/`account` query values are normalized back to the default `all` selection before the toolbar renders, so bookmarked URLs cannot leave the control state and the active filter state out of sync. Matching on `runtimeSummary` is additive; it narrows the visible application rows without changing deeper drill-down history behavior, and the matched summary text now includes `runtimeSummary.source` provenance plus `runtimeSummary.changes[]` labels when present. When the active filter combination removes every application, the UI renders the explicit empty state `No applications match the current filters.`
 
-Because the page re-renders the account/deployment cards as filters change, the embedded toolbar preserves focus and the active text-selection/caret position for the typed search field across incremental search re-renders. This keeps free-text filtering usable even though the view is rebuilt client-side.
+Because the page re-renders the application rows as filters change, the embedded toolbar preserves focus and the active text-selection/caret position for the typed search field across incremental search re-renders. This keeps free-text filtering usable even though the view is rebuilt client-side.
 
-Each deployment card still surfaces the most operator-useful rollout cues directly in the overview response/UI:
-- `rollout.phase`
-- `rollout.currentStep`
-- `rollout.steps[*].kind`
+Each application row still surfaces the most operator-useful rollout/runtime cues directly in the landing-page read model/UI:
+- `sync.state`
+- `health.overall`
+- `runtimeSummary.timestamp`
+- `runtimeSummary.summary`
+- drill-down navigation to `/?page=application&deployment={deploymentName}`
 
-The expandable detail panel extends that view without forcing operators to switch to the raw status endpoint for common troubleshooting. It now includes a safe runtime-generation row sourced from `runtimeSummary.desiredGeneration` / `runtimeSummary.observedGeneration`, a `Runtime changes` metric sourced from `runtimeSummary.changes[]`, a `Runtime source` metric sourced from `runtimeSummary.source` when present, plus a recent runtime-history section rendered with safe DOM construction, showing each controller-authored entry's timestamp, summary, sync state, health, desired/observed generations, optional `History changes`, optional `History source`, optional `History rollout phase`, and optional rollout step, plus an explicit `No recent runtime history is available yet.` empty state when no bounded history has been persisted yet. The deployment workspaces reuse that same safe DOM construction pattern for their `Latest runtime signals` and `Rollout execution` sections, including explicit empty states when `runtimeSummary.changes[]` or `rollout.execution[]` are absent.
+The deeper application/resource/workspace pages extend that view without forcing operators to switch to the raw status endpoint for common troubleshooting. The resource-detail page includes a safe runtime-generation row sourced from `runtimeSummary.desiredGeneration` / `runtimeSummary.observedGeneration`, a `Runtime changes` metric sourced from `runtimeSummary.changes[]`, a `Runtime source` metric sourced from `runtimeSummary.source` when present, plus a recent runtime-history section rendered with safe DOM construction, showing each controller-authored entry's timestamp, summary, sync state, health, desired/observed generations, optional `History changes`, optional `History source`, optional `History rollout phase`, and optional rollout step, plus an explicit `No recent runtime history is available yet.` empty state when no bounded history has been persisted yet. The deployment workspaces reuse that same safe DOM construction pattern for their `Latest runtime signals` and `Rollout execution` sections, including explicit empty states when `runtimeSummary.changes[]` or `rollout.execution[]` are absent.
 
 The detail rollout-step list now also consumes additive `rollout.steps[*].status` metadata and controller-authored `rollout.steps[*].detail` text from the deployment-detail payload:
 - `completed` marks controller-plan steps that are already behind the current plan view, including fully completed rollouts with no remaining current actionable step

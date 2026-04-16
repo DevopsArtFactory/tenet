@@ -993,6 +993,91 @@ func TestOverviewAccountsResponseOmitsRuntimeSummarySourceWithoutHistory(t *test
 	}
 }
 
+func TestRouterOverviewApplications(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewApplications: func() ([]catalog.ApplicationOverview, error) {
+			return []catalog.ApplicationOverview{{
+				Name:               "payments-api-prod",
+				AppRef:             "payments-api",
+				EnvironmentRef:     "prod-apne2",
+				AccountName:        "prod-core",
+				AWSAccountID:       "123456789012",
+				Region:             "ap-northeast-2",
+				TargetType:         "ec2",
+				Strategy:           "canary",
+				ExecutionMode:      "asgWeightedTargetGroups",
+				DesiredArtifact:    domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7"},
+				DeployedArtifact:   domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6"},
+				ObservedGeneration: 7,
+				Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"},
+				Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"},
+				RuntimeSummary: &domain.RuntimeSummary{
+					Timestamp:          "2026-04-16T06:20:00Z",
+					Source:             "controller",
+					Summary:            "Shifting canary traffic",
+					ObservedGeneration: 7,
+					CurrentStep:        "ShiftTrafficCanary",
+				},
+				Rollout: &domain.RolloutSummary{
+					DesiredGeneration:  8,
+					ObservedGeneration: 7,
+					Phase:              domain.RolloutPhasePromoting,
+					CurrentStep:        "ShiftTrafficCanary",
+				},
+				Conditions: []domain.Condition{{Type: "Progressing", Status: true, Reason: "RolloutInFlight", Message: "candidate receiving traffic"}},
+			}}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/applications", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var applications []catalog.ApplicationOverview
+	if err := json.Unmarshal(resp.Body.Bytes(), &applications); err != nil {
+		t.Fatalf("failed to decode overview applications: %v", err)
+	}
+	if len(applications) != 1 || applications[0].Name != "payments-api-prod" || applications[0].ExecutionMode != "asgWeightedTargetGroups" {
+		t.Fatalf("unexpected overview applications: %+v", applications)
+	}
+	if applications[0].RuntimeSummary == nil || applications[0].Rollout == nil || len(applications[0].Conditions) != 1 {
+		t.Fatalf("expected joined status metadata in overview applications response, got %+v", applications[0])
+	}
+}
+
+func TestRouterOverviewApplicationsUnavailable(t *testing.T) {
+	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/applications", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", resp.Code)
+	}
+}
+
+func TestRouterOverviewApplicationsPropagatesErrors(t *testing.T) {
+	const upstreamErr = "boom: overview applications provider details"
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewApplications: func() ([]catalog.ApplicationOverview, error) {
+			return nil, errors.New(upstreamErr)
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/applications", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	assertInternalServerErrorResponse(t, resp, upstreamErr)
+}
+
 func TestRouterOverviewAccountsUnavailable(t *testing.T) {
 	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
 	req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts", nil)
@@ -1253,6 +1338,7 @@ func TestRouterOverviewDeployment(t *testing.T) {
 				Strategy:           "linear",
 				ExecutionMode:      "ecsCodeDeploy",
 				DesiredArtifact:    domain.DeploymentArtifact{Image: "payments-api:v2"},
+				UserData:           domain.DeploymentUserData{Type: "file", Path: "userdata/payments-api-prod.sh"},
 				DeployedArtifact:   domain.DeploymentArtifact{Image: "payments-api:v1"},
 				ObservedGeneration: 7,
 				Sync:               domain.Sync{State: domain.SyncStateOutOfSync, Reason: "PendingPromotion"},
@@ -1299,6 +1385,9 @@ func TestRouterOverviewDeployment(t *testing.T) {
 	if detail.Name != "api-prod" || detail.ExecutionMode != "ecsCodeDeploy" || detail.AccountName != "prod-core" {
 		t.Fatalf("unexpected overview deployment detail: %+v", detail)
 	}
+	if detail.UserData.Type != "file" || detail.UserData.Path != "userdata/payments-api-prod.sh" {
+		t.Fatalf("expected userdata metadata in deployment detail, got %+v", detail.UserData)
+	}
 	if detail.Rollout == nil || detail.Rollout.CurrentStep != "VerifyServiceStability" || len(detail.Rollout.Steps) != 3 {
 		t.Fatalf("expected rollout summary in deployment detail, got %+v", detail)
 	}
@@ -1323,6 +1412,10 @@ func TestRouterOverviewDeployment(t *testing.T) {
 	runtimeSummary, ok := payload["runtimeSummary"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected runtimeSummary object in raw payload, got %#v", payload["runtimeSummary"])
+	}
+	userData, ok := payload["userData"].(map[string]any)
+	if !ok || userData["type"] != "file" || userData["path"] != "userdata/payments-api-prod.sh" {
+		t.Fatalf("expected userData object in raw payload, got %#v", payload["userData"])
 	}
 	if runtimeSummary["timestamp"] != "2026-04-16T06:49:00Z" || runtimeSummary["source"] != "controller" || runtimeSummary["summary"] != "Traffic shift is progressing" || runtimeSummary["desiredGeneration"] != float64(8) || runtimeSummary["observedGeneration"] != float64(7) || runtimeSummary["currentStep"] != "ShiftTrafficLinear" || runtimeSummary["historyCount"] != float64(3) || runtimeSummary["rolloutPhase"] != string(domain.RolloutPhaseAccepted) {
 		t.Fatalf("expected runtimeSummary JSON fields in raw payload, got %#v", runtimeSummary)
@@ -1714,7 +1807,7 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		},
 	})
 
-	paths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/accounts", "/v1/overview/accounts/123456789012", "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod", "/v1/overview/deployments/api-prod", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
+	paths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/applications", "/v1/overview/accounts", "/v1/overview/accounts/123456789012", "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod", "/v1/overview/deployments/api-prod", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
 	for _, path := range paths {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		resp := httptest.NewRecorder()

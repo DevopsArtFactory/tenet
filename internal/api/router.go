@@ -41,6 +41,7 @@ type Options struct {
 	CatalogAccounts            func() ([]catalog.AccountView, error)
 	CatalogPlacements          func() ([]catalog.PlacementView, error)
 	CatalogTopology            func() (catalog.TopologySnapshot, error)
+	OverviewApplications       func() ([]catalog.ApplicationOverview, error)
 	OverviewAccounts           func() ([]catalog.AccountOverview, error)
 	OverviewAccount            func(string) (catalog.AccountOverviewDetail, error)
 	OverviewProjectEnvironment func(string, string, string) (catalog.ProjectEnvironmentOverviewDetail, error)
@@ -171,6 +172,22 @@ func NewRouter(options Options) http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(topology)
+	})
+	mux.HandleFunc("/v1/overview/applications", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+		if options.OverviewApplications == nil {
+			http.Error(w, "overview applications unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		applications, err := options.OverviewApplications()
+		if err != nil {
+			respondInternalError(w)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(applications)
 	})
 	mux.HandleFunc("/v1/overview/accounts", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodGet) {

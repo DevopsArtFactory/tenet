@@ -73,7 +73,9 @@ func TestEmbeddedUIUsesSafeDetailRenderingAndPreservesFalsyMetrics(t *testing.T)
 		"History rollout step",
 		"Rollout generations",
 		"Rollout execution",
-		"detail.rollout?.execution || []",
+		"const rolloutExecutionResources = (detail) => {",
+		"return execution.length ? execution : canonicalRolloutExecutionFallback(detail);",
+		"rolloutExecutionResources(detail).filter((item) => normalizeResource(item).id === resource.id)",
 		"Execution resource",
 		"Execution description",
 		"Rollout steps",
@@ -183,8 +185,8 @@ func TestEmbeddedUIIncludesQuickLinksToDeploymentReadModels(t *testing.T) {
 		"const detailLinks = createElement('div', 'row-links row-links-shell');",
 		"createNavLink(`/v1/overview/deployments/${encodeURIComponent(deployment.name)}`, 'Overview JSON')",
 		"createNavLink(`/v1/status/deployments/${encodeURIComponent(deployment.name)}`, 'Status JSON')",
-		"createNavLink(`/?page=drift&deployment=${encodeURIComponent(deployment.name)}`, 'Drift view')",
-		"createNavLink(`/?page=plan&deployment=${encodeURIComponent(deployment.name)}`, 'Plan/apply')",
+		"createNavLink(buildPageURL('drift', { deployment: deployment.name }), 'Drift view')",
+		"createNavLink(buildPageURL('plan', { deployment: deployment.name }), 'Plan/apply')",
 		"detailLinks.append(",
 		"row.append(toggle, detailLinks, detailPanel);",
 		"Overview JSON",
@@ -208,12 +210,16 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"page: validPages.has(page) ? page : 'applications',",
 		"deployment: params.get('deployment') || '',",
 		"resourceId: params.get('resourceId') || '',",
-		"const renderApplicationsOverview = (accounts, focusState = null) => {",
+		"const buildPageURL = (page, extras = {}) => {",
+		"if (currentViewState.query) params.set('q', currentViewState.query);",
+		"if (currentViewState.syncState && currentViewState.syncState !== 'all') params.set('sync', currentViewState.syncState);",
+		"if (currentViewState.account && currentViewState.account !== 'all') params.set('account', currentViewState.account);",
+		"const renderApplicationsOverview = (applications, focusState = null) => {",
 		"Application status overview",
 		"Last update",
 		"Search applications",
 		"Open application",
-		"createNavLink(`/?page=application&deployment=${encodeURIComponent(deployment.name)}`, 'Open application', '_self')",
+		"createNavLink(buildPageURL('application', { deployment: deployment.name }), 'Open application', '_self')",
 		"const groupResourceSections = (detail) => {",
 		"const stableResourceIdentity = (resource) => {",
 		"const normalizeResource = (resource) => {",
@@ -221,7 +227,7 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"Workloads",
 		"Traffic routing",
 		"Config and access",
-		"createNavLink(`/?page=resource&deployment=${encodeURIComponent(detail.name)}&resourceType=${encodeURIComponent(resource.type)}&resourceId=${encodeURIComponent(resource.id)}`, 'Open resource', '_self')",
+		"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')",
 		"const renderApplicationDetailPage = (detail) => {",
 		"Application resources",
 		"backLink.target = '_self';",
@@ -243,9 +249,7 @@ func TestIndexHTMLLocksSynthesizedRolloutFallbackContract(t *testing.T) {
 		"const canonicalUserDataBootstrapSource = (userData) => {",
 		"const canonicalRolloutExecutionFallback = (detail) => {",
 		"const resourceId = stableResourceIdentity({ type, name, description });",
-		"/?page=resource&deployment=${encodeURIComponent(detail.name)}",
-		"resourceType=${encodeURIComponent(resource.type)}",
-		"resourceId=${encodeURIComponent(resource.id)}",
+		"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')",
 		"Open resource",
 		"Workloads",
 		"Traffic routing",
@@ -283,7 +287,7 @@ func TestIndexHTMLLocksSynthesizedRolloutFallbackContract(t *testing.T) {
 		}
 	}
 
-	if !strings.Contains(body, "createNavLink(`/?page=resource&deployment=${encodeURIComponent(detail.name)}&resourceType=${encodeURIComponent(resource.type)}&resourceId=${encodeURIComponent(resource.id)}`, 'Open resource', '_self')") {
+	if !strings.Contains(body, "createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')") {
 		t.Fatal("expected embedded UI to keep resource drill-down links keyed by stable resourceId identities")
 	}
 }
@@ -301,9 +305,9 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"detail.runtimeSummary?.changes || []",
 		"No runtime change signals are currently reported.",
 		"const executionSection = createDetailSection('Rollout execution');",
-		"detail.rollout?.execution || []",
+		"rolloutExecutionResources(detail).filter((item) => normalizeResource(item).id === resource.id)",
 		"No rollout execution resources are currently reported.",
-		"const backLink = createNavLink('/', 'Back to overview');",
+		"const backLink = createNavLink(buildPageURL('applications'), 'Back to overview');",
 		"backLink.target = '_self';",
 		"backLink.rel = '';",
 		"const emptyTitle = mode === 'drift' ? 'Field-level drift' : 'Plan operations';",
@@ -312,43 +316,12 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"Create Plan",
 		"Apply Plan",
 		"if (currentPageState.page === 'application') {",
-		"renderApplicationDetailPage(mergedDetail);",
+		"renderApplicationDetailPage(detail);",
 		"if (currentPageState.page === 'resource') {",
-		"renderResourceDetailPage(mergedDetail);",
+		"renderResourceDetailPage(detail);",
 		"if (currentPageState.page === 'drift' || currentPageState.page === 'plan') {",
-		"renderDeploymentWorkspace(currentPageState.page, mergedDetail);",
-		"return fetchDeploymentDetail(currentPageState.deployment)",
-	} {
-		if !strings.Contains(body, fragment) {
-			t.Fatalf("expected embedded UI to include %q", fragment)
-		}
-	}
-}
-
-func TestEmbeddedUIIncludesAccountJSONQuickLinksInAccountHeaders(t *testing.T) {
-	body := string(indexHTML)
-
-	for _, fragment := range []string{
-		"const accountLinks = createElement('div', 'row-links');",
-		"createNavLink(`/v1/overview/accounts/${encodeURIComponent(account.awsAccountId)}`, 'Account JSON')",
-		"head.append(titleWrap, accountLinks, pills);",
-		"Account JSON",
-	} {
-		if !strings.Contains(body, fragment) {
-			t.Fatalf("expected embedded UI to include %q", fragment)
-		}
-	}
-}
-
-func TestEmbeddedUIIncludesGroupJSONQuickLinksInGroupHeaders(t *testing.T) {
-	body := string(indexHTML)
-
-	for _, fragment := range []string{
-		"const groupLinks = createElement('div', 'row-links');",
-		"groupLinks.classList.add('group-links');",
-		"createNavLink(`/v1/overview/accounts/${encodeURIComponent(account.awsAccountId)}/projects/${encodeURIComponent(group.appRef)}/environments/${encodeURIComponent(group.environmentRef)}`, 'Group JSON')",
-		"groupHead.append(groupTitleWrap, groupLinks, groupPills);",
-		"Group JSON",
+		"renderDeploymentWorkspace(currentPageState.page, detail);",
+		"fetchDeploymentDetail(currentPageState.deployment)",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include %q", fragment)
@@ -360,7 +333,7 @@ func TestEmbeddedUIIncludesOverviewStatusInFetchErrors(t *testing.T) {
 	body := string(indexHTML)
 
 	for _, fragment := range []string{
-		"fetch('/v1/overview/accounts')",
+		"fetch('/v1/overview/applications')",
 		"if (!response.ok) throw new Error(`overview request failed (${response.status})`);",
 		"const labels = changeLabels(runtimeSummary?.changes);",
 		"['Latest runtime', runtimeSummaryText(deployment.runtimeSummary), 'summary']",
@@ -464,6 +437,8 @@ func TestUIOverviewCardsRenderRuntimeSummaryContract(t *testing.T) {
 	body := string(indexHTML)
 	for _, fragment := range []string{
 		"const runtimeSummaryTimestamp = (runtimeSummary) => runtimeSummary?.timestamp || 'Latest runtime status';",
+		"const latestRuntimeTimestamp = (applications) => applications",
+		"deployment.runtimeSummary?.timestamp",
 		"const generationValue = (value) => Number.isFinite(value) ? String(value) : '—';",
 		"const generationsText = (value) => {",
 		"['Runtime generations', generationsText(deployment.runtimeSummary)]",
@@ -487,6 +462,10 @@ func TestEmbeddedUIProvidesFilterControlsAndURLSyncedViewState(t *testing.T) {
 	for _, fragment := range []string{
 		"<section class=\"toolbar\" id=\"toolbar\"></section>",
 		"const runtimeSummaryTimestamp = (runtimeSummary) => runtimeSummary?.timestamp || 'Latest runtime status';",
+		"const healthClass = (overall) => {",
+		"case 'Healthy':",
+		"case 'Progressing':",
+		"case 'Unhealthy':",
 		"const runtimeSummaryText = (runtimeSummary) => {",
 		"runtimeSummary.summary,",
 		"runtimeSummary.sync?.state,",
@@ -500,13 +479,13 @@ func TestEmbeddedUIProvidesFilterControlsAndURLSyncedViewState(t *testing.T) {
 		"const createSelect = (labelText, value, options, onChange) => {",
 		"const createInput = (labelText, value, placeholder, onInput) => {",
 		"const parseViewState = () => {",
-		"const normalizeViewState = (accounts, state) => {",
+		"const normalizeViewState = (applications, state) => {",
 		"const syncViewState = (state) => {",
-		"const applyViewState = (accounts, state) => {",
+		"const applyViewState = (applications, state) => {",
 		"const searchNeedle = state.query.trim().toLowerCase();",
-		"account.name,",
-		"account.awsAccountId,",
-		"state.account === 'all' || account.awsAccountId === state.account",
+		"deployment.accountName,",
+		"deployment.awsAccountId,",
+		"const matchesAccount = state.account === 'all' || deployment.awsAccountId === state.account;",
 		"runtimeSummaryText(deployment.runtimeSummary),",
 		"runtimeSummaryTimestamp(deployment.runtimeSummary),",
 		"deployment.rollout?.summary,",
@@ -517,10 +496,10 @@ func TestEmbeddedUIProvidesFilterControlsAndURLSyncedViewState(t *testing.T) {
 		"const hash = window.location.hash || '';",
 		"const nextURL = query ? `${window.location.pathname}?${query}${hash}` : `${window.location.pathname}${hash}`;",
 		"history.replaceState({}, '', nextURL);",
-		"value: account.awsAccountId,",
-		"renderToolbar(allAccounts, currentViewState);",
-		"currentViewState = normalizeViewState(accounts, parseViewState());",
-		"renderApplicationsOverview(accounts);",
+		"value: application.awsAccountId,",
+		"renderToolbar(allApplications, currentViewState);",
+		"currentViewState = normalizeViewState(applications, parseViewState());",
+		"renderApplicationsOverview(applications);",
 		"renderEmptyState('No applications match the current filters.');",
 		"Clear filters",
 	} {
@@ -529,7 +508,7 @@ func TestEmbeddedUIProvidesFilterControlsAndURLSyncedViewState(t *testing.T) {
 		}
 	}
 
-	urlStateContract := regexp.MustCompile(`const parseViewState = \(\) => \{[\s\S]*?new URLSearchParams\(window\.location\.search\)[\s\S]*?query: params\.get\('q'\) \|\| ''[\s\S]*?syncState: params\.get\('sync'\) \|\| 'all'[\s\S]*?account: params\.get\('account'\) \|\| 'all'[\s\S]*?\};[\s\S]*?const normalizeViewState = \(accounts, state\) => \{[\s\S]*?const validSyncStates = new Set\([\s\S]*?'Synced'[\s\S]*?'Error'[\s\S]*?\);[\s\S]*?const validAccounts = new Set\(\['all', \.\.\.accounts\.map\(\(account\) => account\.awsAccountId\)\.filter\(Boolean\)\]\);[\s\S]*?query: \(state\.query \|\| ''\)\.trim\(\),[\s\S]*?account: validAccounts\.has\(state\.account\) \? state\.account : 'all'[\s\S]*?\};[\s\S]*?const syncViewState = \(state\) => \{[\s\S]*?params\.set\('q', state\.query\);[\s\S]*?params\.set\('sync', state\.syncState\);[\s\S]*?params\.set\('account', state\.account\);[\s\S]*?history\.replaceState\(\{\}, '', nextURL\);`)
+	urlStateContract := regexp.MustCompile(`const parseViewState = \(\) => \{[\s\S]*?new URLSearchParams\(window\.location\.search\)[\s\S]*?query: params\.get\('q'\) \|\| ''[\s\S]*?syncState: params\.get\('sync'\) \|\| 'all'[\s\S]*?account: params\.get\('account'\) \|\| 'all'[\s\S]*?\};[\s\S]*?const normalizeViewState = \(applications, state\) => \{[\s\S]*?const validSyncStates = new Set\([\s\S]*?'Synced'[\s\S]*?'Error'[\s\S]*?\);[\s\S]*?const validAccounts = new Set\(\['all', \.\.\.applications\.map\(\(application\) => application\.awsAccountId\)\.filter\(Boolean\)\]\);[\s\S]*?query: \(state\.query \|\| ''\)\.trim\(\),[\s\S]*?account: validAccounts\.has\(state\.account\) \? state\.account : 'all'[\s\S]*?\};[\s\S]*?const syncViewState = \(state\) => \{[\s\S]*?params\.set\('q', state\.query\);[\s\S]*?params\.set\('sync', state\.syncState\);[\s\S]*?params\.set\('account', state\.account\);[\s\S]*?history\.replaceState\(\{\}, '', nextURL\);`)
 	if !urlStateContract.MatchString(body) {
 		t.Fatalf("expected embedded UI to round-trip validated filter state through URL query params")
 	}
@@ -558,7 +537,7 @@ func TestEmbeddedUIPreservesToolbarFocusAndRestoresCaretAcrossFilterRerenders(t 
 		"if (node instanceof HTMLInputElement && focusState.selectionStart !== null && focusState.selectionEnd !== null) {",
 		"node.setSelectionRange(focusState.selectionStart, focusState.selectionEnd);",
 		"const focusState = captureToolbarFocus();",
-		"renderApplicationsOverview(allAccounts, focusState);",
+		"renderApplicationsOverview(allApplications, focusState);",
 		"restoreToolbarFocus(focusState);",
 	} {
 		if !strings.Contains(body, fragment) {

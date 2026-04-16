@@ -122,6 +122,7 @@
     <script>
       const detailStateByDeployment = new Map();
       let allAccounts = [];
+      let allApplications = [];
       let currentViewState = { query: '', syncState: 'all', account: 'all' };
       let currentPageState = { page: 'applications', deployment: '' };
 
@@ -136,6 +137,18 @@
           case 'Paused':
             return 'paused';
           case 'Error':
+            return 'error';
+          default:
+            return '';
+        }
+      };
+      const healthClass = (overall) => {
+        switch (overall) {
+          case 'Healthy':
+            return 'synced';
+          case 'Progressing':
+            return 'progress';
+          case 'Unhealthy':
             return 'error';
           default:
             return '';
@@ -180,6 +193,11 @@
         const labels = changeLabels(changes);
         return labels.length ? labels.join(', ') : '—';
       };
+      const latestRuntimeTimestamp = (applications) => applications
+        .map((deployment) => deployment.runtimeSummary?.timestamp)
+        .filter((value) => typeof value === 'string' && value)
+        .sort()
+        .at(-1) || '—';
       const rolloutStepStatus = (step, index, steps) => {
         if (step.status) {
           switch (step.status) {
@@ -374,6 +392,10 @@
         }
         return [];
       };
+      const rolloutExecutionResources = (detail) => {
+        const execution = detail.rollout?.execution || [];
+        return execution.length ? execution : canonicalRolloutExecutionFallback(detail);
+      };
       const createSelect = (labelText, value, options, onChange) => {
         const field = createElement('label', 'toolbar-field');
         field.append(createElement('span', 'toolbar-label', labelText));
@@ -443,7 +465,7 @@
           resourceId: params.get('resourceId') || '',
         };
       };
-      const normalizeViewState = (accounts, state) => {
+      const normalizeViewState = (applications, state) => {
         const validSyncStates = new Set([
           'all',
           'Synced',
@@ -453,7 +475,7 @@
           'Paused',
           'Error',
         ]);
-        const validAccounts = new Set(['all', ...accounts.map((account) => account.awsAccountId).filter(Boolean)]);
+        const validAccounts = new Set(['all', ...applications.map((application) => application.awsAccountId).filter(Boolean)]);
         return {
           query: (state.query || '').trim(),
           syncState: validSyncStates.has(state.syncState) ? state.syncState : 'all',
@@ -482,64 +504,60 @@
         const nextURL = query ? `${window.location.pathname}?${query}${hash}` : `${window.location.pathname}${hash}`;
         history.replaceState({}, '', nextURL);
       };
+      const buildPageURL = (page, extras = {}) => {
+        const params = new URLSearchParams();
+        params.set('page', page);
+        if (currentViewState.query) params.set('q', currentViewState.query);
+        if (currentViewState.syncState && currentViewState.syncState !== 'all') params.set('sync', currentViewState.syncState);
+        if (currentViewState.account && currentViewState.account !== 'all') params.set('account', currentViewState.account);
+        Object.entries(extras).forEach(([key, value]) => {
+          if (value == null || value === '') return;
+          params.set(key, value);
+        });
+        return `/?${params.toString()}`;
+      };
       const updateViewState = (patch) => {
         const focusState = captureToolbarFocus();
-        currentViewState = normalizeViewState(allAccounts, { ...currentViewState, ...patch });
+        currentViewState = normalizeViewState(allApplications, { ...currentViewState, ...patch });
         syncViewState(currentViewState);
-        renderApplicationsOverview(allAccounts, focusState);
+        renderApplicationsOverview(allApplications, focusState);
       };
-      const applyViewState = (accounts, state) => {
+      const applyViewState = (applications, state) => {
         const searchNeedle = state.query.trim().toLowerCase();
-        const hasActiveFilters = searchNeedle !== '' || state.syncState !== 'all' || state.account !== 'all';
-        return accounts
-          .filter((account) => state.account === 'all' || account.awsAccountId === state.account)
-          .map((account) => {
-            const deployments = (account.deployments || []).filter((deployment) => {
-              const matchesState = state.syncState === 'all' || deployment.sync?.state === state.syncState;
-              const searchHaystack = [
-                account.name,
-                account.awsAccountId,
-                ...(account.allowedRegions || []),
-                deployment.name,
-                deployment.appRef,
-                deployment.environmentRef,
-                deployment.region,
-                deployment.targetType,
-                deployment.strategy,
-                deployment.executionMode,
-                deployment.sync?.state,
-                deployment.sync?.reason,
-                runtimeSummaryText(deployment.runtimeSummary),
-                runtimeSummaryTimestamp(deployment.runtimeSummary),
-                deployment.rollout?.phase,
-                deployment.rollout?.currentStep,
-                deployment.rollout?.summary,
-                plannedSteps(deployment.rollout),
-                `${healthLabel(deployment.health)}${deployment.health?.summary ? ` ${deployment.health.summary}` : ''}`,
-                artifact(deployment.desiredArtifact),
-                artifact(deployment.deployedArtifact),
-              ].filter(Boolean).join(' ').toLowerCase();
-              const matchesQuery = !searchNeedle || searchHaystack.includes(searchNeedle);
-              return matchesState && matchesQuery;
-            });
-            const counts = deriveAccountCounts({ deployments });
-            return {
-              ...account,
-              deployments,
-              deploymentCount: counts.deploymentCount,
-              syncedCount: counts.syncedCount,
-              progressingCount: counts.progressingCount,
-              pausedCount: counts.pausedCount,
-              errorCount: counts.errorCount,
-            };
-          })
-          .filter((account) => !hasActiveFilters || account.deployments.length > 0);
+        return applications.filter((deployment) => {
+          const matchesAccount = state.account === 'all' || deployment.awsAccountId === state.account;
+          const matchesState = state.syncState === 'all' || deployment.sync?.state === state.syncState;
+          const searchHaystack = [
+            deployment.accountName,
+            deployment.awsAccountId,
+            deployment.name,
+            deployment.appRef,
+            deployment.environmentRef,
+            deployment.region,
+            deployment.targetType,
+            deployment.strategy,
+            deployment.executionMode,
+            deployment.sync?.state,
+            deployment.sync?.reason,
+            runtimeSummaryText(deployment.runtimeSummary),
+            runtimeSummaryTimestamp(deployment.runtimeSummary),
+            deployment.rollout?.phase,
+            deployment.rollout?.currentStep,
+            deployment.rollout?.summary,
+            plannedSteps(deployment.rollout),
+            `${healthLabel(deployment.health)}${deployment.health?.summary ? ` ${deployment.health.summary}` : ''}`,
+            artifact(deployment.desiredArtifact),
+            artifact(deployment.deployedArtifact),
+          ].filter(Boolean).join(' ').toLowerCase();
+          const matchesQuery = !searchNeedle || searchHaystack.includes(searchNeedle);
+          return matchesAccount && matchesState && matchesQuery;
+        });
       };
-      const renderToolbar = (accounts, state) => {
+      const renderToolbar = (applications, state) => {
         const root = document.getElementById('toolbar');
         const accountOptions = [
           { value: 'all', label: 'All accounts' },
-          ...accounts.map((account) => ({ value: account.awsAccountId, label: `${account.name} (${account.awsAccountId || 'unknown'})` })),
+          ...Array.from(new Map(applications.filter((application) => application.awsAccountId).map((application) => [application.awsAccountId, { value: application.awsAccountId, label: `${application.accountName || application.awsAccountId} (${application.awsAccountId})` }])).values()),
         ];
         const syncOptions = [
           { value: 'all', label: 'All sync states' },
@@ -566,8 +584,8 @@
         if (state.query) active.push(`search “${state.query}”`);
         if (state.syncState !== 'all') active.push(`sync ${state.syncState}`);
         if (state.account !== 'all') {
-          const activeAccount = accounts.find((account) => account.awsAccountId === state.account);
-          active.push(`account ${activeAccount?.name || state.account}`);
+          const activeAccount = applications.find((application) => application.awsAccountId === state.account);
+          active.push(`account ${activeAccount?.accountName || state.account}`);
         }
         const actions = createElement('div', 'toolbar-actions');
         actions.append(createElement('div', 'toolbar-active', active.length ? `Active filters: ${active.join(' · ')}` : 'Active filters: none'));
@@ -578,27 +596,18 @@
           const focusState = captureToolbarFocus();
           currentViewState = { query: '', syncState: 'all', account: 'all' };
           syncViewState(currentViewState);
-          renderApplicationsOverview(allAccounts, focusState);
+          renderApplicationsOverview(allApplications, focusState);
         });
         actions.append(clearButton);
         root.replaceChildren(controls, actions);
       };
-      const flattenApplications = (accounts) => accounts.flatMap((account) => (account.deployments || []).map((deployment) => ({
-        ...deployment,
-        accountName: account.name,
-        awsAccountId: account.awsAccountId,
-      })));
       const renderApplicationsSummary = (applications) => {
         const synced = applications.filter((deployment) => deployment.sync?.state === 'Synced').length;
         const progressingStates = new Set(['Reconciling', 'OutOfSync', 'Drifted']);
         const progressing = applications.filter((deployment) => progressingStates.has(deployment.sync?.state)).length;
         const paused = applications.filter((deployment) => deployment.sync?.state === 'Paused').length;
         const errored = applications.filter((deployment) => deployment.sync?.state === 'Error').length;
-        const latestUpdate = applications
-          .map((deployment) => runtimeSummaryTimestamp(deployment.runtimeSummary))
-          .filter((value) => value && value !== '—')
-          .sort()
-          .at(-1) || '—';
+        const latestUpdate = latestRuntimeTimestamp(applications);
         const summary = document.getElementById('summary');
         const header = createElement('article', 'card');
         header.append(
@@ -638,7 +647,7 @@
           rowPills.append(
             createElement('span', 'pill target', textOrDash(deployment.accountName)),
             createElement('span', `pill ${statusClass(deployment.sync?.state)}`, deployment.sync?.state || 'Unknown'),
-            createElement('span', `pill ${statusClass(deployment.health?.overall)}`, healthLabel(deployment.health)),
+            createElement('span', `pill ${healthClass(deployment.health?.overall)}`, healthLabel(deployment.health)),
           );
           top.append(titleWrap, rowPills);
           const metrics = createElement('div', 'metrics');
@@ -651,19 +660,18 @@
             metrics.append(createMetric(label, value));
           });
           const detailLinks = createElement('div', 'row-links row-links-shell');
-          detailLinks.append(createNavLink(`/?page=application&deployment=${encodeURIComponent(deployment.name)}`, 'Open application', '_self'));
+          detailLinks.append(createNavLink(buildPageURL('application', { deployment: deployment.name }), 'Open application', '_self'));
           row.append(top, metrics, detailLinks);
           rows.append(row);
         });
         table.append(rows);
         root.replaceChildren(table);
       };
-      const renderApplicationsOverview = (accounts, focusState = null) => {
-        renderToolbar(allAccounts, currentViewState);
-        const visibleAccounts = applyViewState(accounts, currentViewState);
-        const applications = flattenApplications(visibleAccounts);
-        renderApplicationsSummary(applications);
-        renderApplicationsTable(applications);
+      const renderApplicationsOverview = (applications, focusState = null) => {
+        renderToolbar(allApplications, currentViewState);
+        const visibleApplications = applyViewState(applications, currentViewState);
+        renderApplicationsSummary(visibleApplications);
+        renderApplicationsTable(visibleApplications);
         restoreToolbarFocus(focusState);
       };
       const groupResourceSections = (detail) => {
@@ -672,8 +680,7 @@
           { title: 'Traffic routing', resources: [] },
           { title: 'Config and access', resources: [] },
         ];
-        const execution = detail.rollout?.execution || [];
-        const resourceList = execution.length ? execution : canonicalRolloutExecutionFallback(detail);
+        const resourceList = rolloutExecutionResources(detail);
         resourceList.forEach((resource) => {
           const normalized = normalizeResource(resource);
           const trafficResources = new Set(['productionListener', 'testListener', 'productionListenerRule', 'activeTargetGroup', 'candidateTargetGroup', 'blueTaskSetTargetGroup', 'greenTaskSetTargetGroup', 'trafficShiftPlan']);
@@ -692,7 +699,7 @@
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
         const root = document.getElementById('accounts');
-        const backLink = createNavLink('/?page=applications', 'Back to applications');
+        const backLink = createNavLink(buildPageURL('applications'), 'Back to applications');
         backLink.target = '_self';
         backLink.rel = '';
         toolbar.replaceChildren(backLink);
@@ -729,7 +736,7 @@
             );
             top.append(titleWrap, createElement('span', 'pill target', resource.type));
             const detailLinks = createElement('div', 'row-links row-links-shell');
-            detailLinks.append(createNavLink(`/?page=resource&deployment=${encodeURIComponent(detail.name)}&resourceType=${encodeURIComponent(resource.type)}&resourceId=${encodeURIComponent(resource.id)}`, 'Open resource', '_self'));
+            detailLinks.append(createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self'));
             row.append(top, detailLinks);
             groupRows.append(row);
           });
@@ -764,7 +771,7 @@
         const summary = document.getElementById('summary');
         const root = document.getElementById('accounts');
         const resource = resolveResourceDetail(detail);
-        const backLink = createNavLink(`/?page=application&deployment=${encodeURIComponent(detail.name || currentPageState.deployment || '')}`, 'Back to application');
+        const backLink = createNavLink(buildPageURL('application', { deployment: detail.name || currentPageState.deployment || '' }), 'Back to application');
         backLink.target = '_self';
         backLink.rel = '';
         toolbar.replaceChildren(backLink);
@@ -830,7 +837,7 @@
         }
 
         const executionSection = createDetailSection('Rollout execution');
-        const execution = (detail.rollout?.execution || []).filter((item) => normalizeResource(item).id === resource.id);
+        const execution = rolloutExecutionResources(detail).filter((item) => normalizeResource(item).id === resource.id);
         if (!execution.length) {
           executionSection.append(createElement('div', 'detail-state', 'No rollout execution resources are currently reported for this selection.'));
         } else {
@@ -1039,9 +1046,6 @@
         detailStateByDeployment.set(deploymentName, { status: 'loading', promise, container });
         return promise;
       };
-      const findDeploymentSummary = (accounts, deploymentName) => accounts
-        .flatMap((account) => account.deployments || [])
-        .find((deployment) => deployment.name === deploymentName);
       const renderDeploymentWorkspace = (mode, detail) => {
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
@@ -1067,7 +1071,7 @@
         });
         head.append(titleWrap, pills);
 
-        const backLink = createNavLink('/', 'Back to overview');
+        const backLink = createNavLink(buildPageURL('applications'), 'Back to overview');
         backLink.target = '_self';
         backLink.rel = '';
         const toolbarActions = createElement('div', 'toolbar-actions');
@@ -1349,8 +1353,8 @@
               detailLinks.append(
                 createNavLink(`/v1/overview/deployments/${encodeURIComponent(deployment.name)}`, 'Overview JSON'),
                 createNavLink(`/v1/status/deployments/${encodeURIComponent(deployment.name)}`, 'Status JSON'),
-                createNavLink(`/?page=drift&deployment=${encodeURIComponent(deployment.name)}`, 'Drift view'),
-                createNavLink(`/?page=plan&deployment=${encodeURIComponent(deployment.name)}`, 'Plan/apply'),
+                createNavLink(buildPageURL('drift', { deployment: deployment.name }), 'Drift view'),
+                createNavLink(buildPageURL('plan', { deployment: deployment.name }), 'Plan/apply'),
               );
 
               const detailPanel = createElement('div', 'detail-panel');
@@ -1402,48 +1406,46 @@
 
       currentPageState = parsePageState();
       currentViewState = parseViewState();
-      fetch('/v1/overview/accounts')
-        .then((response) => {
-          if (!response.ok) throw new Error(`overview request failed (${response.status})`);
-          return response.json();
-        })
-        .then((accounts) => {
-          allAccounts = accounts;
-          currentViewState = normalizeViewState(accounts, parseViewState());
-          syncViewState(currentViewState);
-          currentPageState = parsePageState();
-          if (currentPageState.page === 'applications') {
-            renderApplicationsOverview(accounts);
-            return null;
-          }
-          if (!currentPageState.deployment) {
-            throw new Error('deployment page is missing a deployment query parameter');
-          }
-          const summary = findDeploymentSummary(accounts, currentPageState.deployment);
-          return fetchDeploymentDetail(currentPageState.deployment)
+      if (currentPageState.page === 'applications') {
+        fetch('/v1/overview/applications')
+          .then((response) => {
+            if (!response.ok) throw new Error(`overview request failed (${response.status})`);
+            return response.json();
+          })
+          .then((applications) => {
+            allApplications = applications;
+            currentViewState = normalizeViewState(applications, parseViewState());
+            syncViewState(currentViewState);
+            renderApplicationsOverview(applications);
+          })
+          .catch((error) => {
+            renderEmptyState(`Failed to load overview: ${error.message}`);
+          });
+      } else {
+        if (!currentPageState.deployment) {
+          renderEmptyState('deployment page is missing a deployment query parameter');
+        } else {
+          fetchDeploymentDetail(currentPageState.deployment)
             .then((detail) => {
-              const mergedDetail = {
-                ...(summary || {}),
-                ...detail,
-              };
               if (currentPageState.page === 'application') {
-                renderApplicationDetailPage(mergedDetail);
+                renderApplicationDetailPage(detail);
                 return;
               }
               if (currentPageState.page === 'resource') {
-                renderResourceDetailPage(mergedDetail);
+                renderResourceDetailPage(detail);
                 return;
               }
               if (currentPageState.page === 'drift' || currentPageState.page === 'plan') {
-                renderDeploymentWorkspace(currentPageState.page, mergedDetail);
+                renderDeploymentWorkspace(currentPageState.page, detail);
                 return;
               }
               throw new Error(`unsupported page ${currentPageState.page}`);
+            })
+            .catch((error) => {
+              renderEmptyState(`Failed to load overview: ${error.message}`);
             });
-        })
-        .catch((error) => {
-          renderEmptyState(`Failed to load overview: ${error.message}`);
-        });
+        }
+      }
     </script>
   </body>
 </html>
