@@ -754,6 +754,49 @@
         summary.replaceChildren(workspaceSummary);
 
         const sections = [];
+        const runtimeSignalsSection = createDetailSection('Latest runtime signals');
+        const runtimeSignals = createElement('div', 'detail-grid');
+        [
+          ['Runtime source', metricValue(detail.runtimeSummary?.source)],
+          ['Runtime timestamp', metricValue(detail.runtimeSummary?.timestamp)],
+          ['Runtime history', Number.isFinite(detail.runtimeSummary?.historyCount) ? String(detail.runtimeSummary.historyCount) : '—'],
+        ].forEach(([label, value]) => {
+          runtimeSignals.append(createMetric(label, value));
+        });
+        runtimeSignalsSection.append(runtimeSignals);
+        const runtimeChanges = detail.runtimeSummary?.changes || [];
+        if (!runtimeChanges.length) {
+          runtimeSignalsSection.append(createElement('div', 'detail-state', 'No runtime change signals are currently reported.'));
+        } else {
+          const runtimeChangesList = createElement('ul', 'detail-list');
+          runtimeChanges.forEach((change) => {
+            runtimeChangesList.append(createElement('li', '', textOrDash(change)));
+          });
+          runtimeSignalsSection.append(runtimeChangesList);
+        }
+        sections.push(runtimeSignalsSection);
+
+        const executionSection = createDetailSection('Rollout execution');
+        const execution = detail.rollout?.execution || [];
+        if (!execution.length) {
+          executionSection.append(createElement('div', 'detail-state', 'No rollout execution resources are currently reported.'));
+        } else {
+          const executionList = createElement('ol', 'detail-list');
+          execution.forEach((item) => {
+            const executionItem = createElement('li');
+            executionItem.append(createElement('strong', '', textOrDash(item.name)));
+            const executionMeta = createElement('div', 'detail-execution-meta');
+            executionMeta.append(
+              createElement('span', 'detail-condition-meta', `Execution resource · ${textOrDash(item.resource)}`),
+              createElement('span', 'detail-condition-meta', `Execution description · ${textOrDash(item.description)}`),
+            );
+            executionItem.append(executionMeta);
+            executionList.append(executionItem);
+          });
+          executionSection.append(executionList);
+        }
+        sections.push(executionSection);
+
         if (mode === 'drift') {
           const driftSection = createDetailSection(emptyTitle);
           driftSection.append(createElement('div', 'detail-state', 'Field-level drift is not yet available from the current read model.'));

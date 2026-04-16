@@ -1706,8 +1706,7 @@ async function settle() {
 	}
 }
 
-
-func TestUIDriftWorkspaceViewWithNodeHarness(t *testing.T) {
+func TestDeploymentWorkspaceDriftViewWithNodeHarness(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not installed")
 	}
@@ -1741,6 +1740,19 @@ func TestUIDriftWorkspaceViewWithNodeHarness(t *testing.T) {
 		"awsAccountId":   "111111111111",
 		"sync":           map[string]any{"state": "Drifted", "reason": "Service target group differs from desired"},
 		"health":         map[string]any{"overall": "Healthy", "summary": "traffic steady"},
+		"runtimeSummary": map[string]any{
+			"source":       "deployment-controller",
+			"timestamp":    "2026-04-16T06:50:00Z",
+			"historyCount": 3,
+			"changes":      []string{"listener rule updated", "target group weight drift"},
+		},
+		"rollout": map[string]any{
+			"execution": []map[string]any{{
+				"name":        "prod-router",
+				"resource":    "aws_lb_listener_rule.payments_prod",
+				"description": "Routes production traffic to the stable target group",
+			}},
+		},
 		"conditions": []map[string]any{{
 			"type":    "DriftDetected",
 			"status":  true,
@@ -1818,6 +1830,19 @@ const collectText = (node) => [node.textContent, ...(node.children || []).flatMa
   const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
   if (!text.includes('Drift viewer')) throw new Error('expected drift workspace title');
   if (!toolbarText.includes('Back to overview')) throw new Error('expected workspace back link');
+  if (!text.includes('Latest runtime signals')) throw new Error('expected drift workspace runtime signals section');
+  if (!text.includes('Runtime source')) throw new Error('expected drift workspace runtime source label');
+  if (!text.includes('deployment-controller')) throw new Error('expected drift workspace runtime source value');
+  if (!text.includes('Runtime timestamp')) throw new Error('expected drift workspace runtime timestamp label');
+  if (!text.includes('2026-04-16T06:50:00Z')) throw new Error('expected drift workspace runtime timestamp value');
+  if (!text.includes('Runtime history')) throw new Error('expected drift workspace runtime history label');
+  if (!/Runtime history \| 3(?: \||$)/.test(text)) throw new Error('expected drift workspace runtime history count');
+  if (!text.includes('listener rule updated')) throw new Error('expected drift workspace runtime change entry');
+  if (!text.includes('target group weight drift')) throw new Error('expected drift workspace second runtime change entry');
+  if (!text.includes('Rollout execution')) throw new Error('expected drift workspace rollout execution section');
+  if (!text.includes('prod-router')) throw new Error('expected drift workspace rollout execution name');
+  if (!text.includes('aws_lb_listener_rule.payments_prod')) throw new Error('expected drift workspace rollout execution resource');
+  if (!text.includes('Routes production traffic to the stable target group')) throw new Error('expected drift workspace rollout execution description');
   if (!text.includes('Field-level drift')) throw new Error('expected drift workspace section heading');
   if (!text.includes('Field-level drift is not yet available from the current read model.')) throw new Error('expected drift workspace empty-state guidance');
   if (!text.includes('Status conditions')) throw new Error('expected drift workspace to render status conditions section');
@@ -1833,7 +1858,7 @@ const collectText = (node) => [node.textContent, ...(node.children || []).flatMa
 	}
 }
 
-func TestUIPlanWorkspaceViewWithNodeHarness(t *testing.T) {
+func TestDeploymentWorkspacePlanViewWithNodeHarness(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not installed")
 	}
@@ -1869,11 +1894,17 @@ func TestUIPlanWorkspaceViewWithNodeHarness(t *testing.T) {
 		"health":           map[string]any{"overall": "Healthy", "summary": "traffic shifting"},
 		"desiredArtifact":  map[string]any{"image": "ghcr.io/example/payments:v2"},
 		"deployedArtifact": map[string]any{"image": "ghcr.io/example/payments:v1"},
+		"runtimeSummary": map[string]any{
+			"source":       "runtime-agent",
+			"timestamp":    "2026-04-16T07:10:00Z",
+			"historyCount": 5,
+		},
 		"rollout": map[string]any{
 			"phase":       "Progressing",
 			"currentStep": "ShiftTrafficCanary",
 			"summary":     "Shifting 10% canary traffic to the candidate task set",
-			"steps": []map[string]any{{"kind": "CreateCodeDeployDeployment", "status": "completed", "detail": "Created CodeDeploy deployment"}, {"kind": "ShiftTrafficCanary", "status": "current", "detail": "Moving 10% traffic to the green task set"}},
+			"execution":   []map[string]any{},
+			"steps":       []map[string]any{{"kind": "CreateCodeDeployDeployment", "status": "completed", "detail": "Created CodeDeploy deployment"}, {"kind": "ShiftTrafficCanary", "status": "current", "detail": "Moving 10% traffic to the green task set"}},
 		},
 	})
 	if err != nil {
@@ -1948,6 +1979,16 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!text.includes('Plan and apply')) throw new Error('expected plan workspace title');
   if (!text.includes('Plan/apply controls are not wired to mutation APIs in this read-only slice yet.')) throw new Error('expected plan workspace placeholder guidance');
   if (!text.includes('Plan operations')) throw new Error('expected plan workspace section heading');
+  if (!text.includes('Latest runtime signals')) throw new Error('expected plan workspace runtime signals section');
+  if (!text.includes('Runtime source')) throw new Error('expected plan workspace runtime source label');
+  if (!text.includes('runtime-agent')) throw new Error('expected plan workspace runtime source value');
+  if (!text.includes('Runtime timestamp')) throw new Error('expected plan workspace runtime timestamp label');
+  if (!text.includes('2026-04-16T07:10:00Z')) throw new Error('expected plan workspace runtime timestamp value');
+  if (!text.includes('Runtime history')) throw new Error('expected plan workspace runtime history label');
+  if (!/Runtime history \| 5(?: \||$)/.test(text)) throw new Error('expected plan workspace runtime history count');
+  if (!text.includes('No runtime change signals are currently reported.')) throw new Error('expected plan workspace runtime change empty state');
+  if (!text.includes('Rollout execution')) throw new Error('expected plan workspace rollout execution section');
+  if (!text.includes('No rollout execution resources are currently reported.')) throw new Error('expected plan workspace rollout execution empty state');
   if (!text.includes('CreateCodeDeployDeployment')) throw new Error('expected plan workspace to surface rollout plan steps');
   if (!text.includes('ShiftTrafficCanary')) throw new Error('expected plan workspace to surface current rollout step');
   const buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
