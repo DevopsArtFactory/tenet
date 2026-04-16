@@ -235,6 +235,59 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 	}
 }
 
+func TestIndexHTMLLocksSynthesizedRolloutFallbackContract(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const stableResourceIdentity = (resource) => {",
+		"const canonicalUserDataBootstrapSource = (userData) => {",
+		"const canonicalRolloutExecutionFallback = (detail) => {",
+		"const resourceId = stableResourceIdentity({ type, name, description });",
+		"/?page=resource&deployment=${encodeURIComponent(detail.name)}",
+		"resourceType=${encodeURIComponent(resource.type)}",
+		"resourceId=${encodeURIComponent(resource.id)}",
+		"Open resource",
+		"Workloads",
+		"Traffic routing",
+		"Config and access",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include synthesized rollout fallback contract fragment %q", fragment)
+		}
+	}
+
+	type fallbackExpectation struct {
+		resourceID   string
+		nameFragment string
+		description  string
+	}
+
+	for _, expectation := range []fallbackExpectation{
+		{resourceID: "ecsService", nameFragment: "-service", description: "ECS service Tenet updates during deployment"},
+		{resourceID: "codeDeployApplication", nameFragment: "-codedeploy-app", description: "CodeDeploy application coordinating ECS traffic shifting"},
+		{resourceID: "codeDeployDeploymentGroup", nameFragment: "-codedeploy-group", description: "CodeDeploy deployment group Tenet targets for ECS rollout"},
+		{resourceID: "productionListener", nameFragment: "-prod-listener", description: "Production listener CodeDeploy shifts during ECS blue/green rollout"},
+		{resourceID: "testListener", nameFragment: "-test-listener", description: "Test listener CodeDeploy uses to validate the replacement ECS task set before promotion"},
+		{resourceID: "blueTaskSetTargetGroup", nameFragment: "-blue", description: "Blue task set target group CodeDeploy treats as the live ECS traffic destination"},
+		{resourceID: "greenTaskSetTargetGroup", nameFragment: "-green", description: "Green task set target group CodeDeploy warms before shifting ECS traffic"},
+		{resourceID: "candidateAutoScalingGroup", nameFragment: "-candidate", description: "Candidate Auto Scaling Group Tenet will create for weighted target group rollout"},
+		{resourceID: "activeTargetGroup", nameFragment: "-active", description: "Currently active target group receiving production traffic"},
+		{resourceID: "candidateTargetGroup", nameFragment: "-candidate", description: "Candidate target group Tenet will register and warm before traffic shifting"},
+		{resourceID: "productionListenerRule", nameFragment: "-prod-listener", description: "Production listener rule operators inspect while Tenet updates weighted forwarding during rollout"},
+		{resourceID: "trafficShiftPlan", nameFragment: "-weighted-routing", description: "Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group"},
+		{resourceID: "userDataBootstrapSource", nameFragment: "canonicalUserDataBootstrapSource(detail.userData)", description: "Normalized userdata bootstrap source for candidate EC2 capacity"},
+	} {
+		contract := regexp.MustCompile(`(?s)` + regexp.QuoteMeta(expectation.resourceID) + `.*?` + regexp.QuoteMeta(expectation.nameFragment) + `.*?` + regexp.QuoteMeta(expectation.description))
+		if !contract.MatchString(body) {
+			t.Fatalf("expected embedded UI to lock synthesized rollout fallback resource %q with label %q and description %q", expectation.resourceID, expectation.nameFragment, expectation.description)
+		}
+	}
+
+	if !strings.Contains(body, "createNavLink(`/?page=resource&deployment=${encodeURIComponent(detail.name)}&resourceType=${encodeURIComponent(resource.type)}&resourceId=${encodeURIComponent(resource.id)}`, 'Open resource', '_self')") {
+		t.Fatal("expected embedded UI to keep resource drill-down links keyed by stable resourceId identities")
+	}
+}
+
 func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 	body := string(indexHTML)
 

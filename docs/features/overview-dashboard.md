@@ -84,8 +84,16 @@ Current behavior:
   - `Workloads`
   - `Traffic routing`
   - `Config and access`
-- `Open resource` links that establish the next resource-detail drill-down target
+- `Open resource` links targeting `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}`
 - intentionally keeps artifact/history/generation/log details off this page for now
+
+Resource-list fallback contract:
+- the UI synthesizes fallback rollout resources when `detail.rollout.execution[]` is missing or empty in the deployment-detail payload
+- when `detail.rollout.execution[]` is present and non-empty, the UI preserves the controller-authored list verbatim
+- synthesized fallback resources are limited to the canonical controller rollout contracts:
+  - `asgWeightedTargetGroups`: `candidateAutoScalingGroup`, `activeTargetGroup`, `candidateTargetGroup`, `productionListenerRule`, `trafficShiftPlan`, `userDataBootstrapSource`
+  - `ecsCodeDeploy`: `ecsService`, `codeDeployApplication`, `codeDeployDeploymentGroup`, `productionListener`, `testListener`, `blueTaskSetTargetGroup`, `greenTaskSetTargetGroup`
+- fallback names/descriptions stay aligned with the controller-authored `rollout.execution[]` metadata so derived `resourceId` values remain stable and bookmarked resource-detail routes keep resolving across fixture-backed and controller-authored payloads
 
 ### Deployment workspaces
 
