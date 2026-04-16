@@ -279,11 +279,11 @@ func deriveRolloutExecutionDetails(deployment domain.Deployment) []domain.Rollou
 		}, {
 			Resource:    "productionListenerRule",
 			Name:        deployment.Name + "-prod-listener",
-			Description: "Production listener rule Tenet updates to keep weighted target groups attached during rollout",
+			Description: "Production listener rule operators inspect while Tenet updates weighted forwarding during rollout",
 		}, {
 			Resource:    "trafficShiftPlan",
 			Name:        deployment.Name + "-weighted-routing",
-			Description: "Controller-authored weighted routing plan describing how production traffic shifts between target groups",
+			Description: "Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group",
 		}, {
 			Resource:    "userDataBootstrapSource",
 			Name:        userDataBootstrapSource(deployment.UserData),

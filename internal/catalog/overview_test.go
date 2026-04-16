@@ -12,7 +12,7 @@ import (
 
 func TestBuildAccountOverviewsGroupsDeploymentsByAccount(t *testing.T) {
 	snapshots := []statusstore.Snapshot{
-		{DeploymentName: "payments-api-prod", Status: domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStateSynced, Reason: "stable"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "3/3 healthy"}, DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64"}, Rollout: &domain.RolloutSummary{DesiredGeneration: 4, ObservedGeneration: 3, Phase: domain.RolloutPhaseAccepted, CurrentStep: "PromoteCandidateCapacity", Summary: "Observing current state", Steps: []domain.RolloutStepSummary{{Kind: "CreateCandidateCapacity"}, {Kind: "ShiftTrafficCanary"}, {Kind: "PromoteCandidateCapacity", Current: true}}, Execution: []domain.RolloutExecutionDetail{{Resource: "autoScalingGroup", Name: "payments-api-prod-canary", Description: "Candidate EC2 capacity for weighted target groups"}, {Resource: "targetGroup", Name: "payments-api-prod-active", Description: "Primary target group currently serving traffic"}}}}},
+		{DeploymentName: "payments-api-prod", Status: domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStateSynced, Reason: "stable"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "3/3 healthy"}, DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64"}, Rollout: &domain.RolloutSummary{DesiredGeneration: 4, ObservedGeneration: 3, Phase: domain.RolloutPhaseAccepted, CurrentStep: "PromoteCandidateCapacity", Summary: "Observing current state", Steps: []domain.RolloutStepSummary{{Kind: "CreateCandidateCapacity"}, {Kind: "ShiftTrafficCanary"}, {Kind: "PromoteCandidateCapacity", Current: true}}, Execution: []domain.RolloutExecutionDetail{{Resource: "candidateAutoScalingGroup", Name: "payments-api-prod-candidate", Description: "Candidate Auto Scaling Group Tenet will create for weighted target group rollout"}, {Resource: "activeTargetGroup", Name: "payments-api-prod-active", Description: "Currently active target group receiving production traffic"}, {Resource: "candidateTargetGroup", Name: "payments-api-prod-candidate", Description: "Candidate target group Tenet will register and warm before traffic shifting"}, {Resource: "productionListenerRule", Name: "payments-api-prod-prod-listener", Description: "Production listener rule operators inspect while Tenet updates weighted forwarding during rollout"}, {Resource: "trafficShiftPlan", Name: "payments-api-prod-weighted-routing", Description: "Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group"}, {Resource: "userDataBootstrapSource", Name: "file:userdata/payments-api-prod.sh", Description: "Normalized userdata bootstrap source for candidate EC2 capacity"}}}}},
 	}
 
 	overviews, err := BuildAccountOverviews(
@@ -60,12 +60,12 @@ func TestBuildAccountOverviewsGroupsDeploymentsByAccount(t *testing.T) {
 	if got := overviews[0].Deployments[1].Rollout.Steps; got[0].Kind != "CreateCandidateCapacity" || got[0].Current || got[1].Kind != "ShiftTrafficCanary" || got[1].Current || got[2].Kind != "PromoteCandidateCapacity" || !got[2].Current {
 		t.Fatalf("expected strategy-aware EC2 rollout steps, got %+v", got)
 	}
-	if got := overviews[0].Deployments[1].Rollout.Execution; len(got) != 2 || got[0].Resource != "autoScalingGroup" || got[0].Name != "payments-api-prod-canary" || got[1].Description != "Primary target group currently serving traffic" {
+	if got := overviews[0].Deployments[1].Rollout.Execution; len(got) != 6 || got[0].Resource != "candidateAutoScalingGroup" || got[0].Name != "payments-api-prod-candidate" || got[3].Resource != "productionListenerRule" || got[4].Name != "payments-api-prod-weighted-routing" || got[5].Description != "Normalized userdata bootstrap source for candidate EC2 capacity" {
 		t.Fatalf("expected rollout execution details to be preserved, got %+v", got)
 	}
 
 	snapshots[0].Status.Rollout.Execution[0].Name = "mutated"
-	if overviews[0].Deployments[1].Rollout.Execution[0].Name != "payments-api-prod-canary" {
+	if overviews[0].Deployments[1].Rollout.Execution[0].Name != "payments-api-prod-candidate" {
 		t.Fatalf("expected rollout execution details to be cloned defensively, got %+v", overviews[0].Deployments[1].Rollout.Execution)
 	}
 	if overviews[1].DeploymentCount != 1 || overviews[1].SyncedCount != 0 || overviews[1].ProgressingCount != 0 || overviews[1].PausedCount != 0 || overviews[1].ErrorCount != 0 {
@@ -263,8 +263,12 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 						{Kind: "ShiftTrafficCanary", Current: true},
 					},
 					Execution: []domain.RolloutExecutionDetail{
-						{Resource: "autoScalingGroup", Name: "payments-api-prod-canary", Description: "Candidate EC2 capacity for weighted target groups"},
-						{Resource: "targetGroup", Name: "payments-api-prod-green", Description: "Candidate target group receiving canary traffic"},
+						{Resource: "candidateAutoScalingGroup", Name: "payments-api-prod-candidate", Description: "Candidate Auto Scaling Group Tenet will create for weighted target group rollout"},
+						{Resource: "activeTargetGroup", Name: "payments-api-prod-active", Description: "Currently active target group receiving production traffic"},
+						{Resource: "candidateTargetGroup", Name: "payments-api-prod-candidate", Description: "Candidate target group Tenet will register and warm before traffic shifting"},
+						{Resource: "productionListenerRule", Name: "payments-api-prod-prod-listener", Description: "Production listener rule operators inspect while Tenet updates weighted forwarding during rollout"},
+						{Resource: "trafficShiftPlan", Name: "payments-api-prod-weighted-routing", Description: "Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group"},
+						{Resource: "userDataBootstrapSource", Name: "file:userdata/payments-api-prod.sh", Description: "Normalized userdata bootstrap source for candidate EC2 capacity"},
 					},
 				},
 			},
@@ -304,7 +308,7 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	if detail.Rollout == nil || detail.Rollout.Phase != domain.RolloutPhasePromoting || detail.Rollout.CurrentStep != "ShiftTrafficCanary" || len(detail.Rollout.Steps) != 2 {
 		t.Fatalf("expected rollout summary, got %+v", detail.Rollout)
 	}
-	if got := detail.Rollout.Execution; len(got) != 2 || got[0].Resource != "autoScalingGroup" || got[0].Name != "payments-api-prod-canary" || got[1].Description != "Candidate target group receiving canary traffic" {
+	if got := detail.Rollout.Execution; len(got) != 6 || got[0].Resource != "candidateAutoScalingGroup" || got[0].Name != "payments-api-prod-candidate" || got[2].Resource != "candidateTargetGroup" || got[3].Name != "payments-api-prod-prod-listener" || got[4].Description != "Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group" || got[5].Resource != "userDataBootstrapSource" {
 		t.Fatalf("expected rollout execution details, got %+v", got)
 	}
 	if len(detail.Conditions) != 1 || detail.Conditions[0].Reason != "RolloutInFlight" {
@@ -325,7 +329,7 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	if detail.Rollout.Steps[0].Kind != "CreateCandidateCapacity" {
 		t.Fatalf("expected rollout summary to be cloned defensively, got %+v", detail.Rollout)
 	}
-	if detail.Rollout.Execution[0].Name != "payments-api-prod-canary" {
+	if detail.Rollout.Execution[0].Name != "payments-api-prod-candidate" {
 		t.Fatalf("expected rollout execution details to be cloned defensively, got %+v", detail.Rollout.Execution)
 	}
 	if detail.Conditions[0].Reason != "RolloutInFlight" {

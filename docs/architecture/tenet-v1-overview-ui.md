@@ -107,7 +107,7 @@ The rollout execution section is intentionally execution-mode-aware:
 - ECS rolling shows the ECS service that Tenet will update in place.
 - ECS CodeDeploy shows the ECS service (`ecsService`), CodeDeploy application (`codeDeployApplication`), CodeDeploy deployment group (`codeDeployDeploymentGroup`), production listener (`productionListener`), test listener (`testListener`), blue target group (`blueTaskSetTargetGroup`), and green target group (`greenTaskSetTargetGroup`) used for blue/green traffic shifting.
 
-As with rollout-step status/detail rendering, those execution-resource rows are controller-authored summaries of Tenet's intended rollout contract. The UI should not present them as live AWS telemetry; they describe the plan's concrete resource names and routing objects, not independently observed completion.
+As with rollout-step status/detail rendering, those execution-resource rows are controller-authored summaries of Tenet's intended rollout contract. The UI should not present them as live AWS telemetry; they describe the plan's concrete resource names and routing objects, not independently observed completion. The account overview and deployment-detail read models preserve the ordered `rollout.execution[]` payload without renaming resource identifiers, so the exact strings documented above stay aligned with what operators see in the UI and JSON routes.
 
 ## Detail-panel rendering constraints
 
