@@ -8,7 +8,7 @@ The UI is intended to make the current control-plane slice visible without intro
 
 It groups deployments by AWS account and then by project/environment within each account, and shows:
 - account-header count pills for `deploymentCount`, `syncedCount`, `progressingCount`, `pausedCount`, and `errorCount`
-- account topology summary text for unique project/environment counts derived from the visible deployments
+- account topology summary text for unique project/environment counts, preferring additive account-level `projectCount` / `environmentCount` fields from `/v1/overview/accounts` when present and falling back to derivation from the visible deployments for older payloads
 - per-group project/environment headers with the grouped region and deployment count
 - deployment name and environment
 - target type
@@ -60,9 +60,13 @@ Each account object now also includes additive per-account runtime counters:
 - `pausedCount`
 - `errorCount`
 
-The `/` UI renders those counters directly in each account header. The same account header now also renders an `Account JSON` quick link to `GET /v1/overview/accounts/{awsAccountId}` as a sibling control next to the title/count summary rather than nesting it inside deployment-level expand toggles. When any aggregate account-count field is absent in the overview payload, the embedded client derives the fallback value from `account.deployments[*].sync.state` instead of displaying zero for the status buckets. Deployments with missing or unknown runtime state still contribute to `deploymentCount`, so they remain visible in the total even when they do not increment a concrete runtime-state bucket.
+Each account overview object may also include additive topology counters:
+- `projectCount`
+- `environmentCount`
 
-The embedded client also derives a lightweight project/environment topology summary directly from `account.deployments[*]` so each account card can show unique project/environment counts without waiting for another API field. Those same deployment rows are grouped by `appRef + environmentRef + region` before rendering, which keeps the dashboard aligned with issue #14's project/environment framing while preserving the existing account-first operating model.
+The `/` UI renders the account-header runtime counters directly from those fields when present. The same account header now also renders an `Account JSON` quick link to `GET /v1/overview/accounts/{awsAccountId}` as a sibling control next to the title/count summary rather than nesting it inside deployment-level expand toggles. When any aggregate account-count field is absent in the overview payload, the embedded client derives the fallback value from `account.deployments[*].sync.state` instead of displaying zero for the status buckets. Deployments with missing or unknown runtime state still contribute to `deploymentCount`, so they remain visible in the total even when they do not increment a concrete runtime-state bucket.
+
+For topology, the embedded client prefers authoritative account-level `projectCount` / `environmentCount` values when they are present on the overview payload. To preserve compatibility with older overview responses, it still falls back to deriving the unique project/environment counts from `account.deployments[*]` when either field is absent. Project/environment grouping for the nested deployment sections continues to come from deployment-level `appRef + environmentRef + region` data regardless of whether the authoritative account counters are present.
 
 `/v1/overview/deployments/{deploymentName}` combines catalog placement data with the current deployment status snapshot for one deployment, including:
 - the same additive `runtimeSummary` object used by the overview cards so API consumers can read a single latest-runtime contract without scraping `history[*]`

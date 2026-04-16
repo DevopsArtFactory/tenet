@@ -43,7 +43,7 @@ func TestBuildAccountOverviewsGroupsDeploymentsByAccount(t *testing.T) {
 	if overviews[0].Name != "prod-core" || len(overviews[0].Deployments) != 2 {
 		t.Fatalf("unexpected prod overview: %+v", overviews[0])
 	}
-	if overviews[0].DeploymentCount != 2 || overviews[0].SyncedCount != 1 || overviews[0].ProgressingCount != 1 || overviews[0].PausedCount != 0 || overviews[0].ErrorCount != 0 {
+	if overviews[0].DeploymentCount != 2 || overviews[0].ProjectCount != 2 || overviews[0].EnvironmentCount != 1 || overviews[0].SyncedCount != 1 || overviews[0].ProgressingCount != 1 || overviews[0].PausedCount != 0 || overviews[0].ErrorCount != 0 {
 		t.Fatalf("expected additive deployment counts for prod overview, got %+v", overviews[0])
 	}
 	if overviews[0].Deployments[0].Name != "billing-api-prod" || overviews[0].Deployments[1].Name != "payments-api-prod" {
@@ -69,7 +69,7 @@ func TestBuildAccountOverviewsGroupsDeploymentsByAccount(t *testing.T) {
 	if overviews[0].Deployments[1].Rollout.Execution[0].Name != "payments-api-prod-candidate" {
 		t.Fatalf("expected rollout execution details to be cloned defensively, got %+v", overviews[0].Deployments[1].Rollout.Execution)
 	}
-	if overviews[1].DeploymentCount != 1 || overviews[1].SyncedCount != 0 || overviews[1].ProgressingCount != 0 || overviews[1].PausedCount != 0 || overviews[1].ErrorCount != 0 {
+	if overviews[1].DeploymentCount != 1 || overviews[1].ProjectCount != 1 || overviews[1].EnvironmentCount != 1 || overviews[1].SyncedCount != 0 || overviews[1].ProgressingCount != 0 || overviews[1].PausedCount != 0 || overviews[1].ErrorCount != 0 {
 		t.Fatalf("expected missing status snapshot to count only toward deploymentCount, got %+v", overviews[1])
 	}
 	if overviews[1].Deployments[0].Sync.State != "" {
@@ -107,7 +107,7 @@ func TestBuildAccountOverviewsCountsStatusBuckets(t *testing.T) {
 	if len(overviews) != 1 {
 		t.Fatalf("expected one account overview, got %+v", overviews)
 	}
-	if overviews[0].DeploymentCount != 5 || overviews[0].SyncedCount != 1 || overviews[0].ProgressingCount != 2 || overviews[0].PausedCount != 1 || overviews[0].ErrorCount != 1 {
+	if overviews[0].DeploymentCount != 5 || overviews[0].ProjectCount != 5 || overviews[0].EnvironmentCount != 1 || overviews[0].SyncedCount != 1 || overviews[0].ProgressingCount != 2 || overviews[0].PausedCount != 1 || overviews[0].ErrorCount != 1 {
 		t.Fatalf("expected per-status counts to classify synced/progressing/paused/error states, got %+v", overviews[0])
 	}
 }
@@ -285,7 +285,7 @@ func TestBuildAccountOverviewDetail(t *testing.T) {
 	if !reflect.DeepEqual(detail.AllowedRegions, []string{"ap-northeast-2", "us-west-2"}) {
 		t.Fatalf("expected allowed regions, got %+v", detail.AllowedRegions)
 	}
-	if detail.DeploymentCount != 2 || detail.SyncedCount != 1 || detail.ProgressingCount != 1 || detail.PausedCount != 0 || detail.ErrorCount != 0 {
+	if detail.DeploymentCount != 2 || detail.ProjectCount != 2 || detail.EnvironmentCount != 1 || detail.SyncedCount != 1 || detail.ProgressingCount != 1 || detail.PausedCount != 0 || detail.ErrorCount != 0 {
 		t.Fatalf("expected additive deployment counts for account detail, got %+v", detail)
 	}
 	if len(detail.Deployments) != 2 || detail.Deployments[0].Name != "billing-api-prod" || detail.Deployments[1].Name != "payments-api-prod" {

@@ -693,7 +693,12 @@
           const article = createElement('article', 'account');
           const head = createElement('div', 'account-head');
           const titleWrap = createElement('div');
-          const topology = deriveProjectEnvironmentGroups(account);
+          const derivedTopology = deriveProjectEnvironmentGroups(account);
+          const topology = {
+            projectCount: account.projectCount ?? derivedTopology.projectCount,
+            environmentCount: account.environmentCount ?? derivedTopology.environmentCount,
+            groups: derivedTopology.groups,
+          };
           titleWrap.append(
             createElement('h2', 'account-name', account.name || 'Unknown account'),
             createElement('div', 'account-meta', `AWS account ${metricValue(account.awsAccountId)} · Regions: ${(account.allowedRegions || []).join(', ') || '—'}`),
