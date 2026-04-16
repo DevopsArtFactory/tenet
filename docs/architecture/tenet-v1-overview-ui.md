@@ -15,7 +15,7 @@ In the current drill-down transition slice, the default `/` page now behaves as 
 - last update
 - a drill-down link to `/?page=application&deployment={deploymentName}`
 
-The denser account/group/resource presentation is being split into deeper pages instead of remaining on the first screen. The next shipped page in that drill-down is `/?page=application&deployment={deploymentName}`, which reuses `/v1/overview/deployments/{deploymentName}` and groups linked rollout resources into `Workloads`, `Traffic routing`, and `Config and access` sections before the future final resource-detail/log page.
+The denser account/group/resource presentation is being split into deeper pages instead of remaining on the first screen. The next shipped page in that drill-down is `/?page=application&deployment={deploymentName}`, which reuses `/v1/overview/deployments/{deploymentName}` and groups linked rollout resources into `Workloads`, `Traffic routing`, and `Config and access` sections before the future final resource-detail/log page. Resource drill-down links use the stable route shape `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}`.
 
 ## Backing API
 
@@ -122,6 +122,27 @@ The rollout execution section is intentionally execution-mode-aware:
 - ECS CodeDeploy shows the ECS service (`ecsService`), CodeDeploy application (`codeDeployApplication`), CodeDeploy deployment group (`codeDeployDeploymentGroup`), production listener (`productionListener`), test listener (`testListener`), blue target group (`blueTaskSetTargetGroup`), and green target group (`greenTaskSetTargetGroup`) used for blue/green traffic shifting.
 
 As with rollout-step status/detail rendering, those execution-resource rows are controller-authored summaries of Tenet's intended rollout contract. The UI should not present them as live AWS telemetry; they describe the plan's concrete resource names and routing objects, not independently observed completion. The account overview and deployment-detail read models preserve the ordered `rollout.execution[]` payload without renaming resource identifiers, so the exact strings documented above stay aligned with what operators see in the UI and JSON routes.
+
+To preserve the application/resource drill-down contract for older fixture/local payloads, the UI synthesizes fallback execution resources when `detail.rollout.execution[]` is missing or empty. When the detail payload already includes `rollout.execution[]` as a non-empty array, the controller-authored array is used verbatim.
+
+The synthesized fallback set is intentionally restricted to the controller's canonical rollout contracts:
+- `asgWeightedTargetGroups`
+  - `candidateAutoScalingGroup` → `{deployment}-candidate` → `Candidate Auto Scaling Group Tenet will create for weighted target group rollout`
+  - `activeTargetGroup` → `{deployment}-active` → `Currently active target group receiving production traffic`
+  - `candidateTargetGroup` → `{deployment}-candidate` → `Candidate target group Tenet will register and warm before traffic shifting`
+  - `productionListenerRule` → `{deployment}-prod-listener` → `Production listener rule operators inspect while Tenet updates weighted forwarding during rollout`
+  - `trafficShiftPlan` → `{deployment}-weighted-routing` → `Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group`
+  - `userDataBootstrapSource` → normalized from `userData` as `{type}:{path}`, `{type}`, `{path}`, or `unspecified` → `Normalized userdata bootstrap source for candidate EC2 capacity`
+- `ecsCodeDeploy`
+  - `ecsService` → `{deployment}-service` → `ECS service Tenet updates during deployment`
+  - `codeDeployApplication` → `{deployment}-codedeploy-app` → `CodeDeploy application coordinating ECS traffic shifting`
+  - `codeDeployDeploymentGroup` → `{deployment}-codedeploy-group` → `CodeDeploy deployment group Tenet targets for ECS rollout`
+  - `productionListener` → `{deployment}-prod-listener` → `Production listener CodeDeploy shifts during ECS blue/green rollout`
+  - `testListener` → `{deployment}-test-listener` → `Test listener CodeDeploy uses to validate the replacement ECS task set before promotion`
+  - `blueTaskSetTargetGroup` → `{deployment}-blue` → `Blue task set target group CodeDeploy treats as the live ECS traffic destination`
+  - `greenTaskSetTargetGroup` → `{deployment}-green` → `Green task set target group CodeDeploy warms before shifting ECS traffic`
+
+Those fallback names/descriptions intentionally match the controller-authored `rollout.execution[]` metadata so the UI computes the same canonical `resourceId` values and existing bookmarked resource-detail routes stay stable across controller-authored and fixture-backed responses.
 
 ## Detail-panel rendering constraints
 

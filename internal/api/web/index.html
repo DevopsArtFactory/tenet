@@ -344,6 +344,36 @@
           description,
         };
       };
+      const canonicalUserDataBootstrapSource = (userData) => {
+        if (!userData || (!userData.type && !userData.path)) return 'unspecified';
+        if (!userData.path) return userData.type || 'unspecified';
+        if (!userData.type) return userData.path;
+        return `${userData.type}:${userData.path}`;
+      };
+      const canonicalRolloutExecutionFallback = (detail) => {
+        if (detail.executionMode === 'ecsCodeDeploy') {
+          return [
+            { resource: 'ecsService', name: `${detail.name}-service`, description: 'ECS service Tenet updates during deployment' },
+            { resource: 'codeDeployApplication', name: `${detail.name}-codedeploy-app`, description: 'CodeDeploy application coordinating ECS traffic shifting' },
+            { resource: 'codeDeployDeploymentGroup', name: `${detail.name}-codedeploy-group`, description: 'CodeDeploy deployment group Tenet targets for ECS rollout' },
+            { resource: 'productionListener', name: `${detail.name}-prod-listener`, description: 'Production listener CodeDeploy shifts during ECS blue/green rollout' },
+            { resource: 'testListener', name: `${detail.name}-test-listener`, description: 'Test listener CodeDeploy uses to validate the replacement ECS task set before promotion' },
+            { resource: 'blueTaskSetTargetGroup', name: `${detail.name}-blue`, description: 'Blue task set target group CodeDeploy treats as the live ECS traffic destination' },
+            { resource: 'greenTaskSetTargetGroup', name: `${detail.name}-green`, description: 'Green task set target group CodeDeploy warms before shifting ECS traffic' },
+          ];
+        }
+        if (detail.executionMode === 'asgWeightedTargetGroups') {
+          return [
+            { resource: 'candidateAutoScalingGroup', name: `${detail.name}-candidate`, description: 'Candidate Auto Scaling Group Tenet will create for weighted target group rollout' },
+            { resource: 'activeTargetGroup', name: `${detail.name}-active`, description: 'Currently active target group receiving production traffic' },
+            { resource: 'candidateTargetGroup', name: `${detail.name}-candidate`, description: 'Candidate target group Tenet will register and warm before traffic shifting' },
+            { resource: 'productionListenerRule', name: `${detail.name}-prod-listener`, description: 'Production listener rule operators inspect while Tenet updates weighted forwarding during rollout' },
+            { resource: 'trafficShiftPlan', name: `${detail.name}-weighted-routing`, description: 'Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group' },
+            { resource: 'userDataBootstrapSource', name: canonicalUserDataBootstrapSource(detail.userData), description: 'Normalized userdata bootstrap source for candidate EC2 capacity' },
+          ];
+        }
+        return [];
+      };
       const createSelect = (labelText, value, options, onChange) => {
         const field = createElement('label', 'toolbar-field');
         field.append(createElement('span', 'toolbar-label', labelText));
@@ -643,28 +673,7 @@
           { title: 'Config and access', resources: [] },
         ];
         const execution = detail.rollout?.execution || [];
-        const synthesize = () => {
-          if (detail.executionMode === 'ecsCodeDeploy') {
-            return [
-              { name: `${detail.name} ECS Service`, resource: 'ecsService', description: 'Primary ECS service for the selected application' },
-              { name: `${detail.name} Deployment Group`, resource: 'codeDeployDeploymentGroup', description: 'CodeDeploy deployment group driving traffic shifts' },
-              { name: 'production listener', resource: 'productionListener', description: 'Primary listener serving live traffic' },
-              { name: 'blue task set target group', resource: 'blueTaskSetTargetGroup', description: 'Stable task set traffic target' },
-              { name: 'green task set target group', resource: 'greenTaskSetTargetGroup', description: 'Candidate task set traffic target' },
-            ];
-          }
-          if (detail.executionMode === 'asgWeightedTargetGroups') {
-            return [
-              { name: `${detail.name} candidate Auto Scaling Group`, resource: 'candidateAutoScalingGroup', description: 'Candidate capacity for weighted target group rollout' },
-              { name: 'active target group', resource: 'activeTargetGroup', description: 'Stable production target group' },
-              { name: 'candidate target group', resource: 'candidateTargetGroup', description: 'Candidate target group for the new version' },
-              { name: 'production listener rule', resource: 'productionListenerRule', description: 'Listener rule routing weighted traffic' },
-              { name: 'userdata bootstrap source', resource: 'userDataBootstrapSource', description: 'Bootstrap source for candidate instances' },
-            ];
-          }
-          return [];
-        };
-        const resourceList = execution.length ? execution : synthesize();
+        const resourceList = execution.length ? execution : canonicalRolloutExecutionFallback(detail);
         resourceList.forEach((resource) => {
           const normalized = normalizeResource(resource);
           const trafficResources = new Set(['productionListener', 'testListener', 'productionListenerRule', 'activeTargetGroup', 'candidateTargetGroup', 'blueTaskSetTargetGroup', 'greenTaskSetTargetGroup', 'trafficShiftPlan']);

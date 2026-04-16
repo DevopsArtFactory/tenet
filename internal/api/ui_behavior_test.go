@@ -279,10 +279,258 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('Application resources')) throw new Error('expected application route resources body');
   if (!accountsText.includes('Workloads')) throw new Error('expected application route workloads group');
   if (!accountsText.includes('Traffic routing')) throw new Error('expected application route traffic routing group');
-  if (!accountsText.includes('payments-api-staging ECS Service')) throw new Error('expected application route synthesized workload resource');
-  if (!accountsText.includes('payments-api-staging Deployment Group')) throw new Error('expected application route synthesized deployment-group resource');
+  if (!accountsText.includes('payments-api-staging-service')) throw new Error('expected application route synthesized workload resource');
+  if (!accountsText.includes('payments-api-staging-codedeploy-group')) throw new Error('expected application route synthesized deployment-group resource');
   if (accountsText.includes('Create Plan')) throw new Error('application route should not render plan workspace actions');
   if (accountsText.includes('Field-level drift')) throw new Error('application route should not render drift workspace sections');
+})();
+`
+
+		cmd := exec.Command("node", "-e", nodeProgram)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+		}
+	})
+}
+
+func TestApplicationsOverviewPageWithNodeHarnessSynthesizesRolloutFallbackResources(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	accountsJSON, err := json.Marshal([]map[string]any{{
+		"name":         "prod-core",
+		"awsAccountId": "123456789012",
+		"deployments": []map[string]any{{
+			"name":           "payments-api-prod",
+			"appRef":         "payments",
+			"environmentRef": "prod-apne2",
+			"region":         "ap-northeast-2",
+			"targetType":     "ec2",
+			"strategy":       "canary",
+			"executionMode":  "asgWeightedTargetGroups",
+		}, {
+			"name":           "payments-api-staging",
+			"appRef":         "payments",
+			"environmentRef": "staging-apne2",
+			"region":         "ap-northeast-2",
+			"targetType":     "ecs",
+			"strategy":       "linear",
+			"executionMode":  "ecsCodeDeploy",
+		}},
+	}})
+	if err != nil {
+		t.Fatalf("marshal sample accounts: %v", err)
+	}
+
+	t.Run("ecs codedeploy fallback resources stay bookmarkable", func(t *testing.T) {
+		detailJSON, err := json.Marshal(map[string]any{
+			"name":           "payments-api-staging",
+			"accountName":    "prod-core",
+			"awsAccountId":   "123456789012",
+			"region":         "ap-northeast-2",
+			"appRef":         "payments",
+			"environmentRef": "staging-apne2",
+			"targetType":     "ecs",
+			"strategy":       "linear",
+			"executionMode":  "ecsCodeDeploy",
+			"sync":           map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
+			"health":         map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy"},
+		})
+		if err != nil {
+			t.Fatalf("marshal ecs fallback detail: %v", err)
+		}
+
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const sampleAccounts = ` + string(accountsJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/', search: '?page=application&deployment=payments-api-staging', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
+  if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+(async () => {
+  await settle();
+  await settle();
+  if (fetchCalls[0] !== '/v1/overview/accounts' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-staging') throw new Error('expected ecs fallback page to load overview then detail');
+  const accountsText = collectText(document.getElementById('accounts')).join(' | ');
+  const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
+  const expectedResources = [
+    ['payments-api-staging-codedeploy-app', 'codeDeployApplication', 'CodeDeploy application coordinating ECS traffic shifting'],
+    ['payments-api-staging-codedeploy-group', 'codeDeployDeploymentGroup', 'CodeDeploy deployment group Tenet targets for ECS rollout'],
+    ['payments-api-staging-prod-listener', 'productionListener', 'Production listener CodeDeploy shifts during ECS blue/green rollout'],
+    ['payments-api-staging-test-listener', 'testListener', 'Test listener CodeDeploy uses to validate the replacement ECS task set before promotion'],
+    ['payments-api-staging-blue', 'blueTaskSetTargetGroup', 'Blue task set target group CodeDeploy treats as the live ECS traffic destination'],
+    ['payments-api-staging-green', 'greenTaskSetTargetGroup', 'Green task set target group CodeDeploy warms before shifting ECS traffic'],
+  ];
+  for (const [name, type, description] of expectedResources) {
+    if (!accountsText.includes(name)) throw new Error('expected ecs fallback resource ' + name);
+    const resourceId = type + '::' + name + '::' + description;
+    const href = '/?page=resource&deployment=payments-api-staging&resourceType=' + encodeURIComponent(type) + '&resourceId=' + encodeURIComponent(resourceId);
+    if (!links.find((node) => node.href === href && node.target === '_self' && !node.rel)) throw new Error('expected ecs fallback stable link for ' + resourceId);
+  }
+})();
+`
+
+		cmd := exec.Command("node", "-e", nodeProgram)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+		}
+	})
+
+	t.Run("ec2 weighted-target-group fallback resources stay bookmarkable", func(t *testing.T) {
+		detailJSON, err := json.Marshal(map[string]any{
+			"name":           "payments-api-prod",
+			"accountName":    "prod-core",
+			"awsAccountId":   "123456789012",
+			"region":         "ap-northeast-2",
+			"appRef":         "payments",
+			"environmentRef": "prod-apne2",
+			"targetType":     "ec2",
+			"strategy":       "canary",
+			"executionMode":  "asgWeightedTargetGroups",
+			"userData":        map[string]any{"type": "file", "path": "userdata/payments-api-prod.sh"},
+			"sync":           map[string]any{"state": "OutOfSync", "reason": "weighted rollout in progress"},
+			"health":         map[string]any{"overall": "Progressing", "summary": "candidate fleet bootstrapping"},
+			"rollout":        map[string]any{"phase": "Progressing", "currentStep": "ShiftTrafficCanary"},
+		})
+		if err != nil {
+			t.Fatalf("marshal asg fallback detail: %v", err)
+		}
+
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const sampleAccounts = ` + string(accountsJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/', search: '?page=application&deployment=payments-api-prod', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
+  if (url === '/v1/overview/deployments/payments-api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+(async () => {
+  await settle();
+  await settle();
+  if (fetchCalls[0] !== '/v1/overview/accounts' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-prod') throw new Error('expected asg fallback page to load overview then detail');
+  const accountsText = collectText(document.getElementById('accounts')).join(' | ');
+  const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
+  const expectedResources = [
+    ['payments-api-prod-candidate', 'candidateAutoScalingGroup', 'Candidate Auto Scaling Group Tenet will create for weighted target group rollout'],
+    ['payments-api-prod-active', 'activeTargetGroup', 'Currently active target group receiving production traffic'],
+    ['payments-api-prod-candidate', 'candidateTargetGroup', 'Candidate target group Tenet will register and warm before traffic shifting'],
+    ['payments-api-prod-prod-listener', 'productionListenerRule', 'Production listener rule operators inspect while Tenet updates weighted forwarding during rollout'],
+    ['payments-api-prod-weighted-routing', 'trafficShiftPlan', 'Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group'],
+    ['file:userdata/payments-api-prod.sh', 'userDataBootstrapSource', 'Normalized userdata bootstrap source for candidate EC2 capacity'],
+  ];
+  for (const [name, type, description] of expectedResources) {
+    if (!accountsText.includes(name)) throw new Error('expected asg fallback resource ' + name);
+    const resourceId = type + '::' + name + '::' + description;
+    const href = '/?page=resource&deployment=payments-api-prod&resourceType=' + encodeURIComponent(type) + '&resourceId=' + encodeURIComponent(resourceId);
+    if (!links.find((node) => node.href === href && node.target === '_self' && !node.rel)) throw new Error('expected asg fallback stable link for ' + resourceId);
+  }
 })();
 `
 
@@ -430,6 +678,203 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (resourceLink.target !== '_self') throw new Error('expected resource drill-down link to stay in embedded UI flow');
   if (resourceLink.rel) throw new Error('expected resource drill-down link to avoid new-tab rel attributes');
   if (!resourceLink.href.includes('resourceId=ecsService%3A%3Apayments-api-staging%20ECS%20Service%3A%3APrimary%20ECS%20service%20for%20the%20staging%20environment')) throw new Error('expected stable unique resource identifier in drill-down href');
+})();
+`
+
+	cmd := exec.Command("node", "-e", nodeProgram)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+	}
+}
+
+func TestResourceDetailPageUsesStableResourceIDsWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	accountsJSON, err := json.Marshal([]map[string]any{{
+		"name":         "prod-core",
+		"awsAccountId": "123456789012",
+		"deployments": []map[string]any{{
+			"name":           "payments-api-prod",
+			"appRef":         "payments",
+			"environmentRef": "prod-apne2",
+			"region":         "ap-northeast-2",
+			"targetType":     "ec2",
+			"strategy":       "canary",
+			"executionMode":  "asgWeightedTargetGroups",
+		}},
+	}})
+	if err != nil {
+		t.Fatalf("marshal sample accounts: %v", err)
+	}
+
+	fallbackDetailJSON, err := json.Marshal(map[string]any{
+		"name":             "payments-api-prod",
+		"accountName":      "prod-core",
+		"awsAccountId":     "123456789012",
+		"region":           "ap-northeast-2",
+		"appRef":           "payments",
+		"environmentRef":   "prod-apne2",
+		"targetType":       "ec2",
+		"strategy":         "canary",
+		"executionMode":    "asgWeightedTargetGroups",
+		"userData":         map[string]any{"type": "file", "path": "userdata/payments-api-prod.sh"},
+		"sync":             map[string]any{"state": "OutOfSync", "reason": "weighted rollout in progress"},
+		"health":           map[string]any{"overall": "Progressing", "summary": "candidate fleet bootstrapping"},
+		"desiredArtifact":  map[string]any{"binary": "s3://artifacts/payments/v2.zip"},
+		"deployedArtifact": map[string]any{"binary": "s3://artifacts/payments/v1.zip"},
+		"runtimeSummary": map[string]any{
+			"source":             "runtime-agent",
+			"timestamp":          "2026-04-16T07:10:00Z",
+			"historyCount":       1,
+			"desiredGeneration":  12,
+			"observedGeneration": 11,
+		},
+		"rollout": map[string]any{
+			"phase":              "Progressing",
+			"currentStep":        "ShiftTrafficCanary",
+			"desiredGeneration":  12,
+			"observedGeneration": 11,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal fallback detail body: %v", err)
+	}
+
+	canonicalDetailJSON, err := json.Marshal(map[string]any{
+		"name":             "payments-api-prod",
+		"accountName":      "prod-core",
+		"awsAccountId":     "123456789012",
+		"region":           "ap-northeast-2",
+		"appRef":           "payments",
+		"environmentRef":   "prod-apne2",
+		"targetType":       "ec2",
+		"strategy":         "canary",
+		"executionMode":    "asgWeightedTargetGroups",
+		"userData":         map[string]any{"type": "file", "path": "userdata/payments-api-prod.sh"},
+		"sync":             map[string]any{"state": "OutOfSync", "reason": "weighted rollout in progress"},
+		"health":           map[string]any{"overall": "Progressing", "summary": "candidate fleet bootstrapping"},
+		"desiredArtifact":  map[string]any{"binary": "s3://artifacts/payments/v2.zip"},
+		"deployedArtifact": map[string]any{"binary": "s3://artifacts/payments/v1.zip"},
+		"runtimeSummary": map[string]any{
+			"source":             "runtime-agent",
+			"timestamp":          "2026-04-16T07:10:00Z",
+			"historyCount":       1,
+			"desiredGeneration":  12,
+			"observedGeneration": 11,
+		},
+		"rollout": map[string]any{
+			"phase":              "Progressing",
+			"currentStep":        "ShiftTrafficCanary",
+			"desiredGeneration":  12,
+			"observedGeneration": 11,
+			"execution": []map[string]any{
+				{"name": "payments-api-prod-candidate", "resource": "candidateAutoScalingGroup", "description": "Candidate Auto Scaling Group Tenet will create for weighted target group rollout"},
+				{"name": "payments-api-prod-active", "resource": "activeTargetGroup", "description": "Currently active target group receiving production traffic"},
+				{"name": "payments-api-prod-candidate", "resource": "candidateTargetGroup", "description": "Candidate target group Tenet will register and warm before traffic shifting"},
+				{"name": "payments-api-prod-prod-listener", "resource": "productionListenerRule", "description": "Production listener rule operators inspect while Tenet updates weighted forwarding during rollout"},
+				{"name": "payments-api-prod-weighted-routing", "resource": "trafficShiftPlan", "description": "Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group"},
+				{"name": "file:userdata/payments-api-prod.sh", "resource": "userDataBootstrapSource", "description": "Normalized userdata bootstrap source for candidate EC2 capacity"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal canonical detail body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const sampleAccounts = ` + string(accountsJSON) + `;
+const fallbackDetailBody = ` + string(fallbackDetailJSON) + `;
+const canonicalDetailBody = ` + string(canonicalDetailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const createDocument = () => {
+  const document = new Document();
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  return document;
+};
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+const runUI = async (search, detailBody) => {
+  const document = createDocument();
+  const fetchCalls = [];
+  const window = { location: { pathname: '/', search, hash: '' } };
+  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  const fetch = (url) => {
+    fetchCalls.push(String(url));
+    if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
+    if (url === '/v1/overview/deployments/payments-api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    throw new Error('unexpected fetch url: ' + url);
+  };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle();
+  await settle();
+  return { document, window, fetchCalls };
+};
+(async () => {
+  const fallbackRun = await runUI('?page=application&deployment=payments-api-prod', fallbackDetailBody);
+  if (fallbackRun.fetchCalls[0] !== '/v1/overview/accounts' || fallbackRun.fetchCalls[1] !== '/v1/overview/deployments/payments-api-prod') throw new Error('expected fallback application page to load overview then detail');
+  const fallbackLinks = collectNodes(fallbackRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
+  const expectedResourceID = 'trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group';
+  const resourceHref = '/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=' + encodeURIComponent(expectedResourceID);
+  const fallbackLink = fallbackLinks.find((node) => node.href === resourceHref);
+  if (!fallbackLink) throw new Error('expected fallback application page to synthesize canonical trafficShiftPlan resource link');
+  const canonicalRun = await runUI(fallbackLink.href.slice(1), canonicalDetailBody);
+  if (canonicalRun.fetchCalls[0] !== '/v1/overview/accounts' || canonicalRun.fetchCalls[1] !== '/v1/overview/deployments/payments-api-prod') throw new Error('expected canonical resource page to load overview then detail');
+  const summaryText = collectText(canonicalRun.document.getElementById('summary')).join(' | ');
+  const accountsText = collectText(canonicalRun.document.getElementById('accounts')).join(' | ');
+  if (!summaryText.includes('payments-api-prod-weighted-routing')) throw new Error('expected canonical resource page to resolve trafficShiftPlan resource title');
+  if (!summaryText.includes('trafficShiftPlan')) throw new Error('expected canonical resource page to resolve trafficShiftPlan resource type');
+  if (!summaryText.includes('Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group')) throw new Error('expected canonical resource page to resolve trafficShiftPlan resource description');
+  if (summaryText.includes('No linked resource metadata is available for this selection.')) throw new Error('expected canonical resource page not to fall back to placeholder metadata');
+  if (!accountsText.includes('Resource id')) throw new Error('expected canonical resource page to render resource id');
+  if (!accountsText.includes(expectedResourceID)) throw new Error('expected canonical resource page to preserve the fallback-generated canonical resource id');
+  if (accountsText.includes('No rollout execution resources are currently reported for this selection.')) throw new Error('expected canonical resource page to find rollout execution resources after transition');
 })();
 `
 
