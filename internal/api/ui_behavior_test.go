@@ -1705,3 +1705,262 @@ async function settle() {
 		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
 	}
 }
+
+
+func TestUIDriftWorkspaceViewWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	accountsJSON, err := json.Marshal([]map[string]any{{
+		"name":         "acct-a",
+		"awsAccountId": "111111111111",
+		"deployments": []map[string]any{{
+			"name":           "api-prod",
+			"appRef":         "payments",
+			"environmentRef": "prod",
+			"region":         "us-west-2",
+			"sync":           map[string]any{"state": "Drifted", "reason": "Service target group differs from desired"},
+		}},
+	}})
+	if err != nil {
+		t.Fatalf("marshal sample accounts: %v", err)
+	}
+
+	detailJSON, err := json.Marshal(map[string]any{
+		"name":           "api-prod",
+		"appRef":         "payments",
+		"environmentRef": "prod",
+		"region":         "us-west-2",
+		"accountName":    "acct-a",
+		"awsAccountId":   "111111111111",
+		"sync":           map[string]any{"state": "Drifted", "reason": "Service target group differs from desired"},
+		"health":         map[string]any{"overall": "Healthy", "summary": "traffic steady"},
+		"conditions": []map[string]any{{
+			"type":    "DriftDetected",
+			"status":  true,
+			"reason":  "TargetGroupMismatch",
+			"message": "ALB production listener still targets the legacy task set",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal detail body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const sampleAccounts = ` + string(accountsJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/', search: '?view=drift&deployment=api-prod', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
+  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+(async () => {
+  await settle();
+  await settle();
+  if (fetchCalls[0] !== '/v1/overview/accounts' || fetchCalls[1] !== '/v1/overview/deployments/api-prod') {
+    throw new Error('expected drift workspace to load overview then deployment detail, got ' + fetchCalls.join(', '));
+  }
+  const text = collectText(document.getElementById('accounts')).join(' | ');
+  const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
+  if (!text.includes('Drift viewer')) throw new Error('expected drift workspace title');
+  if (!toolbarText.includes('Back to overview')) throw new Error('expected workspace back link');
+  if (!text.includes('Field-level drift')) throw new Error('expected drift workspace section heading');
+  if (!text.includes('Field-level drift is not yet available from the current read model.')) throw new Error('expected drift workspace empty-state guidance');
+  if (!text.includes('Status conditions')) throw new Error('expected drift workspace to render status conditions section');
+  if (!text.includes('TargetGroupMismatch')) throw new Error('expected drift workspace to surface condition reason');
+  if (!text.includes('ALB production listener still targets the legacy task set')) throw new Error('expected drift workspace to surface condition message');
+})();
+`
+
+	cmd := exec.Command("node", "-e", nodeProgram)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+	}
+}
+
+func TestUIPlanWorkspaceViewWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	accountsJSON, err := json.Marshal([]map[string]any{{
+		"name":         "acct-a",
+		"awsAccountId": "111111111111",
+		"deployments": []map[string]any{{
+			"name":           "api-prod",
+			"appRef":         "payments",
+			"environmentRef": "prod",
+			"region":         "us-west-2",
+			"sync":           map[string]any{"state": "Reconciling", "reason": "rollout in progress"},
+		}},
+	}})
+	if err != nil {
+		t.Fatalf("marshal sample accounts: %v", err)
+	}
+
+	detailJSON, err := json.Marshal(map[string]any{
+		"name":             "api-prod",
+		"appRef":           "payments",
+		"environmentRef":   "prod",
+		"region":           "us-west-2",
+		"accountName":      "acct-a",
+		"awsAccountId":     "111111111111",
+		"sync":             map[string]any{"state": "Reconciling", "reason": "rollout in progress"},
+		"health":           map[string]any{"overall": "Healthy", "summary": "traffic shifting"},
+		"desiredArtifact":  map[string]any{"image": "ghcr.io/example/payments:v2"},
+		"deployedArtifact": map[string]any{"image": "ghcr.io/example/payments:v1"},
+		"rollout": map[string]any{
+			"phase":       "Progressing",
+			"currentStep": "ShiftTrafficCanary",
+			"summary":     "Shifting 10% canary traffic to the candidate task set",
+			"steps": []map[string]any{{"kind": "CreateCodeDeployDeployment", "status": "completed", "detail": "Created CodeDeploy deployment"}, {"kind": "ShiftTrafficCanary", "status": "current", "detail": "Moving 10% traffic to the green task set"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal detail body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const sampleAccounts = ` + string(accountsJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/', search: '?view=plan&deployment=api-prod', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
+  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+(async () => {
+  await settle();
+  await settle();
+  if (fetchCalls[0] !== '/v1/overview/accounts' || fetchCalls[1] !== '/v1/overview/deployments/api-prod') {
+    throw new Error('expected plan workspace to load overview then deployment detail, got ' + fetchCalls.join(', '));
+  }
+  const root = document.getElementById('accounts');
+  const text = collectText(root).join(' | ');
+  if (!text.includes('Plan and apply')) throw new Error('expected plan workspace title');
+  if (!text.includes('Plan/apply controls are not wired to mutation APIs in this read-only slice yet.')) throw new Error('expected plan workspace placeholder guidance');
+  if (!text.includes('Plan operations')) throw new Error('expected plan workspace section heading');
+  if (!text.includes('CreateCodeDeployDeployment')) throw new Error('expected plan workspace to surface rollout plan steps');
+  if (!text.includes('ShiftTrafficCanary')) throw new Error('expected plan workspace to surface current rollout step');
+  const buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  const createPlan = buttons.find((node) => node.textContent === 'Create Plan');
+  const applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');
+  if (!createPlan || !applyPlan) throw new Error('expected plan workspace action buttons');
+  if (!createPlan.disabled || !applyPlan.disabled) throw new Error('expected read-only plan workspace buttons to remain disabled');
+})();
+`
+
+	cmd := exec.Command("node", "-e", nodeProgram)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+	}
+}

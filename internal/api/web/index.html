@@ -123,6 +123,7 @@
       const detailStateByDeployment = new Map();
       let allAccounts = [];
       let currentViewState = { query: '', syncState: 'all', account: 'all' };
+      let currentPageState = { view: 'overview', deployment: '' };
 
       const statusClass = (state) => {
         switch (state) {
@@ -383,6 +384,15 @@
           account: params.get('account') || 'all',
         };
       };
+      const parsePageState = () => {
+        const params = new URLSearchParams(window.location.search);
+        const view = params.get('view') || 'overview';
+        const validViews = new Set(['overview', 'drift', 'plan']);
+        return {
+          view: validViews.has(view) ? view : 'overview',
+          deployment: params.get('deployment') || '',
+        };
+      };
       const normalizeViewState = (accounts, state) => {
         const validSyncStates = new Set([
           'all',
@@ -537,6 +547,11 @@
         if (className) stateNode.classList.add(className);
         container.replaceChildren(stateNode);
       };
+      const fetchDeploymentDetail = (deploymentName) => fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}`)
+        .then((response) => {
+          if (!response.ok) throw new Error(`detail request failed (${response.status})`);
+          return response.json();
+        });
       const renderDeploymentDetail = (container, detail) => {
         const detailGrid = createElement('div', 'detail-grid');
         [
@@ -664,11 +679,7 @@
         }
 
         renderDetailState(container, 'Loading deployment details…');
-        const promise = fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}`)
-          .then((response) => {
-            if (!response.ok) throw new Error(`detail request failed (${response.status})`);
-            return response.json();
-          })
+        const promise = fetchDeploymentDetail(deploymentName)
           .then((detail) => {
             const current = detailStateByDeployment.get(deploymentName);
             detailStateByDeployment.set(deploymentName, { status: 'ready', detail });
@@ -688,6 +699,126 @@
 
         detailStateByDeployment.set(deploymentName, { status: 'loading', promise, container });
         return promise;
+      };
+      const findDeploymentSummary = (accounts, deploymentName) => accounts
+        .flatMap((account) => account.deployments || [])
+        .find((deployment) => deployment.name === deploymentName);
+      const renderDeploymentWorkspace = (mode, detail) => {
+        const toolbar = document.getElementById('toolbar');
+        const summary = document.getElementById('summary');
+        const root = document.getElementById('accounts');
+        const workspaceTitle = mode === 'drift' ? 'Drift viewer' : 'Plan and apply';
+        const emptyTitle = mode === 'drift' ? 'Field-level drift' : 'Plan operations';
+        const header = createElement('article', 'account');
+        const head = createElement('div', 'account-head');
+        const titleWrap = createElement('div');
+        titleWrap.append(
+          createElement('h2', 'account-name', workspaceTitle),
+          createElement('div', 'account-meta', detail.name || currentPageState.deployment || 'Unknown deployment'),
+          createElement('div', 'account-topology', [detail.accountName, detail.awsAccountId, detail.region].filter(Boolean).join(' · ') || '—'),
+        );
+        const pills = createElement('div', 'pills');
+        [
+          [`pill ${statusClass(detail.sync?.state)}`, detail.sync?.state || 'Unknown'],
+          ['pill target', detail.targetType || 'unknown target'],
+          ['pill strategy', detail.strategy || 'unknown strategy'],
+          ['pill mode', detail.executionMode || 'unassigned execution'],
+        ].forEach(([className, text]) => {
+          pills.append(createElement('span', className, text));
+        });
+        head.append(titleWrap, pills);
+
+        const backLink = createNavLink('/', 'Back to overview');
+        backLink.target = '_self';
+        backLink.rel = '';
+        const toolbarActions = createElement('div', 'toolbar-actions');
+        toolbarActions.append(
+          backLink,
+          createElement('div', 'toolbar-active', `${workspaceTitle} · ${detail.name || currentPageState.deployment || 'deployment'}`),
+        );
+        toolbar.replaceChildren(toolbarActions);
+
+        const workspaceSummary = createElement('div', 'detail-grid');
+        [
+          ['Desired artifact', artifact(detail.desiredArtifact)],
+          ['Deployed artifact', artifact(detail.deployedArtifact)],
+          ['Sync reason', textOrDash(detail.sync?.reason)],
+          ['Health summary', `${healthLabel(detail.health)}${detail.health?.summary ? ` · ${detail.health.summary}` : ''}`],
+          ['Rollout phase', metricValue(detail.rollout?.phase)],
+          ['Current step', metricValue(detail.rollout?.currentStep)],
+          ['Runtime generations', generationsText(detail.runtimeSummary)],
+          ['Latest runtime', runtimeSummaryText(detail.runtimeSummary)],
+        ].forEach(([label, value]) => {
+          workspaceSummary.append(createMetric(label, value, label === 'Latest runtime' ? 'summary' : ''));
+        });
+        summary.replaceChildren(workspaceSummary);
+
+        const sections = [];
+        if (mode === 'drift') {
+          const driftSection = createDetailSection(emptyTitle);
+          driftSection.append(createElement('div', 'detail-state', 'Field-level drift is not yet available from the current read model.'));
+          sections.push(driftSection);
+
+          const conditionsSection = createDetailSection('Status conditions');
+          const conditions = detail.conditions || [];
+          if (!conditions.length) {
+            conditionsSection.append(createElement('div', 'detail-state', 'No deployment conditions are currently reported.'));
+          } else {
+            const conditionList = createElement('ul', 'detail-list');
+            conditions.forEach((condition) => {
+              const item = createElement('li');
+              item.append(createElement('strong', '', textOrDash(condition.type)));
+              item.append(createElement('span', 'detail-condition-meta', `Condition status · ${boolLabel(condition.status)}`));
+              if (condition.reason) {
+                item.append(createElement('span', 'detail-condition-meta', `Condition reason · ${condition.reason}`));
+              }
+              if (condition.message) {
+                item.append(createElement('span', 'detail-condition-meta', `Condition message · ${condition.message}`));
+              }
+              conditionList.append(item);
+            });
+            conditionsSection.append(conditionList);
+          }
+          sections.push(conditionsSection);
+        } else {
+          const actionsSection = createDetailSection('Plan/apply actions');
+          const actionBar = createElement('div', 'row-links');
+          const createPlanButton = createElement('button', 'toolbar-button', 'Create Plan');
+          createPlanButton.type = 'button';
+          createPlanButton.disabled = true;
+          const applyPlanButton = createElement('button', 'toolbar-button', 'Apply Plan');
+          applyPlanButton.type = 'button';
+          applyPlanButton.disabled = true;
+          actionBar.append(createPlanButton, applyPlanButton);
+          actionsSection.append(
+            actionBar,
+            createElement('div', 'detail-state', 'Plan/apply controls are not wired to mutation APIs in this read-only slice yet.'),
+          );
+          sections.push(actionsSection);
+
+          const planSection = createDetailSection(emptyTitle);
+          const steps = detail.rollout?.steps || [];
+          if (!steps.length) {
+            planSection.append(createElement('div', 'detail-state', 'No rollout plan steps are currently available.'));
+          } else {
+            const stepList = createElement('ol', 'detail-list');
+            steps.forEach((step, index) => {
+              const item = createElement('li');
+              item.append(createElement('strong', '', textOrDash(step.kind)));
+              const stepStatus = rolloutStepStatus(step, index, steps);
+              item.append(createElement('span', `detail-step-meta detail-step-meta-${stepStatus}`, rolloutStepStatusLabel(stepStatus)));
+              if (step.detail) {
+                item.append(createElement('span', 'detail-condition-meta', `Step detail · ${step.detail}`));
+              }
+              stepList.append(item);
+            });
+            planSection.append(stepList);
+          }
+          sections.push(planSection);
+        }
+
+        header.append(head, ...sections);
+        root.replaceChildren(header);
       };
 
       const renderSummary = (accounts) => {
@@ -836,6 +967,8 @@
               detailLinks.append(
                 createNavLink(`/v1/overview/deployments/${encodeURIComponent(deployment.name)}`, 'Overview JSON'),
                 createNavLink(`/v1/status/deployments/${encodeURIComponent(deployment.name)}`, 'Status JSON'),
+                createNavLink(`/?view=drift&deployment=${encodeURIComponent(deployment.name)}`, 'Drift view'),
+                createNavLink(`/?view=plan&deployment=${encodeURIComponent(deployment.name)}`, 'Plan/apply'),
               );
 
               const detailPanel = createElement('div', 'detail-panel');
@@ -885,6 +1018,7 @@
         restoreToolbarFocus(focusState);
       };
 
+      currentPageState = parsePageState();
       currentViewState = parseViewState();
       fetch('/v1/overview/accounts')
         .then((response) => {
@@ -895,7 +1029,22 @@
           allAccounts = accounts;
           currentViewState = normalizeViewState(accounts, parseViewState());
           syncViewState(currentViewState);
-          renderOverview();
+          currentPageState = parsePageState();
+          if (currentPageState.view === 'overview') {
+            renderOverview();
+            return null;
+          }
+          if (!currentPageState.deployment) {
+            throw new Error('deployment workspace is missing a deployment query parameter');
+          }
+          const summary = findDeploymentSummary(accounts, currentPageState.deployment);
+          return fetchDeploymentDetail(currentPageState.deployment)
+            .then((detail) => {
+              renderDeploymentWorkspace(currentPageState.view, {
+                ...(summary || {}),
+                ...detail,
+              });
+            });
         })
         .catch((error) => {
           renderEmptyState(`Failed to load overview: ${error.message}`);

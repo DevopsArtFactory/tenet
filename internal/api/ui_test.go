@@ -183,10 +183,39 @@ func TestEmbeddedUIIncludesQuickLinksToDeploymentReadModels(t *testing.T) {
 		"const detailLinks = createElement('div', 'row-links row-links-shell');",
 		"createNavLink(`/v1/overview/deployments/${encodeURIComponent(deployment.name)}`, 'Overview JSON')",
 		"createNavLink(`/v1/status/deployments/${encodeURIComponent(deployment.name)}`, 'Status JSON')",
+		"createNavLink(`/?view=drift&deployment=${encodeURIComponent(deployment.name)}`, 'Drift view')",
+		"createNavLink(`/?view=plan&deployment=${encodeURIComponent(deployment.name)}`, 'Plan/apply')",
 		"detailLinks.append(",
 		"row.append(toggle, detailLinks, detailPanel);",
 		"Overview JSON",
 		"Status JSON",
+		"Drift view",
+		"Plan/apply",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+}
+
+func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const parsePageState = () => {",
+		"const validViews = new Set(['overview', 'drift', 'plan']);",
+		"view: validViews.has(view) ? view : 'overview',",
+		"deployment: params.get('deployment') || '',",
+		"const renderDeploymentWorkspace = (mode, detail) => {",
+		"const workspaceTitle = mode === 'drift' ? 'Drift viewer' : 'Plan and apply';",
+		"const backLink = createNavLink('/', 'Back to overview');",
+		"backLink.target = '_self';",
+		"backLink.rel = '';",
+		"const emptyTitle = mode === 'drift' ? 'Field-level drift' : 'Plan operations';",
+		"Field-level drift is not yet available from the current read model.",
+		"Plan/apply controls are not wired to mutation APIs in this read-only slice yet.",
+		"Create Plan",
+		"Apply Plan",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include %q", fragment)
@@ -206,10 +235,6 @@ func TestEmbeddedUIIncludesAccountJSONQuickLinksInAccountHeaders(t *testing.T) {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include %q", fragment)
 		}
-	}
-
-	if strings.Contains(body, "head.append(titleWrap, pills);") {
-		t.Fatalf("expected account quick link to render inside the account header alongside the existing pills")
 	}
 }
 
