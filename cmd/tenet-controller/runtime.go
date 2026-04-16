@@ -136,13 +136,16 @@ func capRuntimeHistory(history []domain.StatusHistoryEntry) []domain.StatusHisto
 
 func deriveRuntimeHistoryEntry(status domain.DeploymentStatus) domain.StatusHistoryEntry {
 	entry := domain.StatusHistoryEntry{
-		Source:  runtimeHistorySourceController,
-		Summary: "Runtime status updated",
-		Sync:    status.Sync,
-		Health:  status.Health,
+		Source:             runtimeHistorySourceController,
+		Summary:            "Runtime status updated",
+		Sync:               status.Sync,
+		Health:             status.Health,
+		ObservedGeneration: status.ObservedGeneration,
 	}
 	if status.Rollout != nil {
 		entry.Summary = status.Rollout.Summary
+		entry.DesiredGeneration = status.Rollout.DesiredGeneration
+		entry.ObservedGeneration = status.Rollout.ObservedGeneration
 		entry.RolloutPhase = status.Rollout.Phase
 		entry.CurrentStep = status.Rollout.CurrentStep
 	}
@@ -154,6 +157,8 @@ func runtimeHistoryMeaningfullyChanged(previous domain.StatusHistoryEntry, curre
 		previous.Summary != current.Summary ||
 		previous.Sync != current.Sync ||
 		previous.Health != current.Health ||
+		previous.DesiredGeneration != current.DesiredGeneration ||
+		previous.ObservedGeneration != current.ObservedGeneration ||
 		previous.RolloutPhase != current.RolloutPhase ||
 		previous.CurrentStep != current.CurrentStep
 }

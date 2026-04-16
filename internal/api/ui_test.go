@@ -43,10 +43,16 @@ func TestEmbeddedUIUsesSafeDetailRenderingAndPreservesFalsyMetrics(t *testing.T)
 
 	for _, fragment := range []string{
 		"const metricValue = (value) => value ?? '—';",
+		"const generationValue = (value) => Number.isFinite(value) ? String(value) : '—';",
+		"const generationsText = (value) => {",
+		"const desired = generationValue(value?.desiredGeneration);",
+		"const observed = generationValue(value?.observedGeneration);",
+		"return `desired ${desired} · observed ${observed}`;",
 		"replaceChildren",
 		"textContent",
 		"Sync reason",
 		"Account placement",
+		"Runtime generations",
 		"Runtime history",
 		"No recent runtime history is available yet.",
 		"const history = detail.history || [];",
@@ -54,6 +60,7 @@ func TestEmbeddedUIUsesSafeDetailRenderingAndPreservesFalsyMetrics(t *testing.T)
 		"History summary",
 		"History sync",
 		"History health",
+		"History generations",
 		"History rollout step",
 		"Rollout generations",
 		"Rollout execution",
@@ -78,6 +85,17 @@ func TestEmbeddedUIUsesSafeDetailRenderingAndPreservesFalsyMetrics(t *testing.T)
 	} {
 		if strings.Contains(body, unsafe) {
 			t.Fatalf("expected embedded UI to avoid unsafe detail rendering %q", unsafe)
+		}
+	}
+
+	for _, legacy := range []string{
+		"detail.rollout.desiredGeneration || 0",
+		"detail.rollout.observedGeneration || 0",
+		"detail.observedGeneration || 0",
+		"String(deployment.observedGeneration || 0)",
+	} {
+		if strings.Contains(body, legacy) {
+			t.Fatalf("expected embedded UI to avoid zero-fallback generation rendering %q", legacy)
 		}
 	}
 }
@@ -245,9 +263,15 @@ func TestUIOverviewCardsRenderRuntimeSummaryContract(t *testing.T) {
 	body := string(indexHTML)
 	for _, fragment := range []string{
 		"const runtimeSummaryTimestamp = (runtimeSummary) => runtimeSummary?.timestamp || 'Latest runtime status';",
+		"const generationValue = (value) => Number.isFinite(value) ? String(value) : '—';",
+		"const generationsText = (value) => {",
+		"['Runtime generations', generationsText(deployment.runtimeSummary)]",
+		"['Observed generation', generationValue(deployment.observedGeneration)]",
+		"['Rollout generations', detail.rollout ? generationsText(detail.rollout) : `desired — · observed ${generationValue(detail.observedGeneration)}`]",
 		"const runtimeSummaryText = (runtimeSummary) => {",
 		"['Latest runtime', runtimeSummaryText(deployment.runtimeSummary), 'summary']",
 		"['Runtime timestamp', runtimeSummaryTimestamp(deployment.runtimeSummary)]",
+		"['Runtime generations', generationsText(deployment.runtimeSummary)]",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include %q", fragment)

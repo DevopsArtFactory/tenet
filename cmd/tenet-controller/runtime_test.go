@@ -881,8 +881,9 @@ func TestEmitRuntimePlansAvoidsDuplicateRuntimeHistory(t *testing.T) {
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
 	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
 	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+	desiredGeneration := desiredGenerationForTest(t, root, "api-prod")
 	statusPath := filepath.Join(root, "status", "deployments.json")
-	writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"conditions":[],"rollout":{"desiredGeneration":2681220996861709023,"observedGeneration":-1,"phase":"Provisioning","currentStep":"CreateCandidateCapacity","summary":"Creating candidate capacity for weighted target groups","steps":[{"kind":"ResolvePlacement"},{"kind":"ObserveCurrentState"},{"kind":"CreateCandidateCapacity","current":true},{"kind":"VerifyCandidateCapacity"},{"kind":"ShiftTrafficFull"},{"kind":"PromoteCandidateCapacity"}]},"history":[{"timestamp":"2026-04-16T05:30:00Z","source":"controller","summary":"Creating candidate capacity for weighted target groups","sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"rolloutPhase":"Provisioning","currentStep":"CreateCandidateCapacity"}]}}]`)
+	writeJSON(t, statusPath, fmt.Sprintf(`[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"conditions":[],"rollout":{"desiredGeneration":%d,"observedGeneration":-1,"phase":"Provisioning","currentStep":"CreateCandidateCapacity","summary":"Creating candidate capacity for weighted target groups","steps":[{"kind":"ResolvePlacement"},{"kind":"ObserveCurrentState"},{"kind":"CreateCandidateCapacity","current":true},{"kind":"VerifyCandidateCapacity"},{"kind":"ShiftTrafficFull"},{"kind":"PromoteCandidateCapacity"}]},"history":[{"timestamp":"2026-04-16T05:30:00Z","source":"controller","summary":"Creating candidate capacity for weighted target groups","sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"desiredGeneration":%d,"observedGeneration":-1,"rolloutPhase":"Provisioning","currentStep":"CreateCandidateCapacity"}]}}]`, desiredGeneration, desiredGeneration))
 
 	oldNow := runtimeHistoryNow
 	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 30, 0, 0, time.UTC) }
@@ -904,6 +905,60 @@ func TestEmitRuntimePlansAvoidsDuplicateRuntimeHistory(t *testing.T) {
 	}
 	if got := status.History[0].Timestamp; got != "2026-04-16T05:30:00Z" {
 		t.Fatalf("expected existing history entry to be preserved, got %+v", status.History)
+	}
+}
+
+func TestAppendRuntimeHistoryAppendsWhenGenerationsChangeWithoutOtherStatusChanges(t *testing.T) {
+	previous := domain.DeploymentStatus{
+		ObservedGeneration: 7,
+		Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "traffic shift running"},
+		Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "steady"},
+		Rollout: &domain.RolloutSummary{
+			DesiredGeneration:  8,
+			ObservedGeneration: 7,
+			Phase:              domain.RolloutPhaseAccepted,
+			CurrentStep:        "ShiftTrafficCanary",
+			Summary:            "Traffic shift is progressing",
+		},
+		History: []domain.StatusHistoryEntry{{
+			Timestamp:          "2026-04-16T05:30:00Z",
+			Source:             runtimeHistorySourceController,
+			Summary:            "Traffic shift is progressing",
+			Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "traffic shift running"},
+			Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "steady"},
+			DesiredGeneration:  8,
+			ObservedGeneration: 7,
+			RolloutPhase:       domain.RolloutPhaseAccepted,
+			CurrentStep:        "ShiftTrafficCanary",
+		}},
+	}
+	current := previous
+	current.ObservedGeneration = 8
+	current.Rollout = &domain.RolloutSummary{
+		DesiredGeneration:  9,
+		ObservedGeneration: 8,
+		Phase:              domain.RolloutPhaseAccepted,
+		CurrentStep:        "ShiftTrafficCanary",
+		Summary:            "Traffic shift is progressing",
+	}
+
+	oldNow := runtimeHistoryNow
+	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 30, 0, 0, time.UTC) }
+	defer func() { runtimeHistoryNow = oldNow }()
+
+	got := appendRuntimeHistory(previous, current)
+	if len(got) != 2 {
+		t.Fatalf("expected generation change to append a new history entry, got %+v", got)
+	}
+	latest := got[len(got)-1]
+	if latest.Timestamp != "2026-04-16T06:30:00Z" {
+		t.Fatalf("expected deterministic timestamp, got %+v", latest)
+	}
+	if latest.Summary != "Traffic shift is progressing" || latest.Sync != current.Sync || latest.Health != current.Health || latest.RolloutPhase != domain.RolloutPhaseAccepted || latest.CurrentStep != "ShiftTrafficCanary" {
+		t.Fatalf("expected non-generation fields to remain stable, got %+v", latest)
+	}
+	if latest.DesiredGeneration != 9 || latest.ObservedGeneration != 8 {
+		t.Fatalf("expected appended entry to record changed generations, got %+v", latest)
 	}
 }
 

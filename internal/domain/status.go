@@ -86,24 +86,28 @@ type RolloutSummary struct {
 
 // StatusHistoryEntry captures one operator-facing runtime history event.
 type StatusHistoryEntry struct {
-	Timestamp    string       `json:"timestamp"`
-	Source       string       `json:"source"`
-	Summary      string       `json:"summary"`
-	Sync         Sync         `json:"sync"`
-	Health       Health       `json:"health"`
-	RolloutPhase RolloutPhase `json:"rolloutPhase,omitempty"`
-	CurrentStep  string       `json:"currentStep,omitempty"`
+	Timestamp          string       `json:"timestamp"`
+	Source             string       `json:"source"`
+	Summary            string       `json:"summary"`
+	Sync               Sync         `json:"sync"`
+	Health             Health       `json:"health"`
+	DesiredGeneration  int64        `json:"desiredGeneration"`
+	ObservedGeneration int64        `json:"observedGeneration"`
+	RolloutPhase       RolloutPhase `json:"rolloutPhase,omitempty"`
+	CurrentStep        string       `json:"currentStep,omitempty"`
 }
 
 // RuntimeSummary captures the latest stable operator-facing runtime metadata.
 type RuntimeSummary struct {
-	Timestamp    string       `json:"timestamp,omitempty"`
-	Summary      string       `json:"summary,omitempty"`
-	Sync         Sync         `json:"sync"`
-	Health       Health       `json:"health"`
-	RolloutPhase RolloutPhase `json:"rolloutPhase,omitempty"`
-	CurrentStep  string       `json:"currentStep,omitempty"`
-	HistoryCount int          `json:"historyCount"`
+	Timestamp          string       `json:"timestamp,omitempty"`
+	Summary            string       `json:"summary,omitempty"`
+	Sync               Sync         `json:"sync"`
+	Health             Health       `json:"health"`
+	DesiredGeneration  int64        `json:"desiredGeneration"`
+	ObservedGeneration int64        `json:"observedGeneration"`
+	RolloutPhase       RolloutPhase `json:"rolloutPhase,omitempty"`
+	CurrentStep        string       `json:"currentStep,omitempty"`
+	HistoryCount       int          `json:"historyCount"`
 }
 
 // DeploymentStatus captures observed state separate from desired spec.

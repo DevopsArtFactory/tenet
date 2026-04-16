@@ -208,13 +208,15 @@ func deriveRuntimeSummary(status domain.DeploymentStatus) *domain.RuntimeSummary
 	if len(status.History) > 0 {
 		latest := status.History[len(status.History)-1]
 		return &domain.RuntimeSummary{
-			Timestamp:    latest.Timestamp,
-			Summary:      latest.Summary,
-			Sync:         latest.Sync,
-			Health:       latest.Health,
-			RolloutPhase: latest.RolloutPhase,
-			CurrentStep:  latest.CurrentStep,
-			HistoryCount: len(status.History),
+			Timestamp:          latest.Timestamp,
+			Summary:            latest.Summary,
+			Sync:               latest.Sync,
+			Health:             latest.Health,
+			DesiredGeneration:  latest.DesiredGeneration,
+			ObservedGeneration: latest.ObservedGeneration,
+			RolloutPhase:       latest.RolloutPhase,
+			CurrentStep:        latest.CurrentStep,
+			HistoryCount:       len(status.History),
 		}
 	}
 	if status.Sync == (domain.Sync{}) && status.Health == (domain.Health{}) && status.Rollout == nil {
@@ -222,12 +224,15 @@ func deriveRuntimeSummary(status domain.DeploymentStatus) *domain.RuntimeSummary
 	}
 
 	summary := &domain.RuntimeSummary{
-		Sync:         status.Sync,
-		Health:       status.Health,
-		HistoryCount: len(status.History),
+		Sync:               status.Sync,
+		Health:             status.Health,
+		ObservedGeneration: status.ObservedGeneration,
+		HistoryCount:       len(status.History),
 	}
 	if status.Rollout != nil {
 		summary.Summary = status.Rollout.Summary
+		summary.DesiredGeneration = status.Rollout.DesiredGeneration
+		summary.ObservedGeneration = status.Rollout.ObservedGeneration
 		summary.RolloutPhase = status.Rollout.Phase
 		summary.CurrentStep = status.Rollout.CurrentStep
 	}

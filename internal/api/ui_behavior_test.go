@@ -232,20 +232,19 @@ func TestEmbeddedUIFilterBehaviorWithNodeHarness(t *testing.T) {
 			"allowedRegions": []string{"us-west-2"},
 			"deployments": []map[string]any{
 				{
-					"name":               "api",
-					"appRef":             "payments",
-					"environmentRef":     "prod",
-					"region":             "us-west-2",
-					"targetType":         "ecs",
-					"strategy":           "canary",
-					"executionMode":      "ecsCodeDeploy",
-					"desiredArtifact":    map[string]any{"image": "ghcr.io/example/api:v2"},
-					"deployedArtifact":   map[string]any{"image": "ghcr.io/example/api:v1"},
-					"sync":               map[string]any{"state": "Reconciling", "reason": "Traffic shift running"},
-					"runtimeSummary":     map[string]any{"timestamp": "2026-04-16T06:50:00Z", "summary": "Traffic shift is progressing", "sync": map[string]any{"state": "Reconciling", "reason": "Traffic shift running"}, "health": map[string]any{"overall": "Healthy", "summary": "steady"}, "rolloutPhase": "Progressing", "currentStep": "ShiftTrafficCanary", "historyCount": 2},
-					"rollout":            map[string]any{"phase": "Progressing", "currentStep": "ShiftTrafficCanary", "summary": "10 percent shifted", "steps": []map[string]any{{"kind": "ShiftTrafficCanary"}, {"kind": "BakeTraffic"}}},
-					"health":             map[string]any{"overall": "Healthy", "summary": "steady"},
-					"observedGeneration": 1,
+					"name":             "api",
+					"appRef":           "payments",
+					"environmentRef":   "prod",
+					"region":           "us-west-2",
+					"targetType":       "ecs",
+					"strategy":         "canary",
+					"executionMode":    "ecsCodeDeploy",
+					"desiredArtifact":  map[string]any{"image": "ghcr.io/example/api:v2"},
+					"deployedArtifact": map[string]any{"image": "ghcr.io/example/api:v1"},
+					"sync":             map[string]any{"state": "Reconciling", "reason": "Traffic shift running"},
+					"runtimeSummary":   map[string]any{"timestamp": "2026-04-16T06:50:00Z", "summary": "Traffic shift is progressing", "sync": map[string]any{"state": "Reconciling", "reason": "Traffic shift running"}, "health": map[string]any{"overall": "Healthy", "summary": "steady"}, "desiredGeneration": 7, "observedGeneration": 6, "rolloutPhase": "Progressing", "currentStep": "ShiftTrafficCanary", "historyCount": 2},
+					"rollout":          map[string]any{"phase": "Progressing", "currentStep": "ShiftTrafficCanary", "summary": "10 percent shifted", "steps": []map[string]any{{"kind": "ShiftTrafficCanary"}, {"kind": "BakeTraffic"}}},
+					"health":           map[string]any{"overall": "Healthy", "summary": "steady"},
 				},
 			},
 		},
@@ -265,7 +264,7 @@ func TestEmbeddedUIFilterBehaviorWithNodeHarness(t *testing.T) {
 					"desiredArtifact":    map[string]any{"binary": "worker-v3"},
 					"deployedArtifact":   map[string]any{"binary": "worker-v2"},
 					"sync":               map[string]any{"state": "Error", "reason": "Alarm triggered"},
-					"runtimeSummary":     map[string]any{"summary": "Rollout blocked after alarm", "sync": map[string]any{"state": "Error", "reason": "Alarm triggered"}, "health": map[string]any{"overall": "Degraded", "summary": "alarm open"}, "rolloutPhase": "Blocked", "currentStep": "AbortTrafficShift", "historyCount": 1},
+					"runtimeSummary":     map[string]any{"summary": "Rollout blocked after alarm", "sync": map[string]any{"state": "Error", "reason": "Alarm triggered"}, "health": map[string]any{"overall": "Degraded", "summary": "alarm open"}, "desiredGeneration": 9, "observedGeneration": 4, "rolloutPhase": "Blocked", "currentStep": "AbortTrafficShift", "historyCount": 1},
 					"rollout":            map[string]any{"phase": "Blocked", "currentStep": "AbortTrafficShift", "summary": "stopped after alarm", "steps": []map[string]any{{"kind": "AbortTrafficShift"}}},
 					"health":             map[string]any{"overall": "Degraded", "summary": "alarm open"},
 					"observedGeneration": 2,
@@ -436,6 +435,22 @@ function findButtonByText(document, text) {
   return null;
 }
 
+function walk(rootNodes) {
+  const stack = Array.from(rootNodes);
+  const nodes = [];
+  while (stack.length) {
+    const node = stack.shift();
+    if (!node) continue;
+    nodes.push(node);
+    stack.unshift(...(node.children || []));
+  }
+  return nodes;
+}
+
+function findFirst(document, predicate) {
+  return walk(document.byID.values()).find(predicate) || null;
+}
+
 function collectText(node) {
   return [node?.textContent, ...((node?.children || []).flatMap((child) => collectText(child)))].filter(Boolean);
 }
@@ -451,6 +466,13 @@ function collectText(node) {
   if (!defaultText.includes('Latest runtime')) throw new Error('expected overview cards to render a latest runtime metric');
   if (!defaultText.includes('Traffic shift is progressing')) throw new Error('expected overview cards to render runtime summary text');
   if (!defaultText.includes('2026-04-16T06:50:00Z')) throw new Error('expected overview cards to render runtime summary timestamp');
+  if (!defaultText.includes('Runtime generations')) throw new Error('expected overview cards to render runtime generation label');
+  if (!defaultText.includes('desired 7 · observed 6')) throw new Error('expected overview cards to render runtime generation values');
+  const apiToggle = findFirst(defaultEnv.document, (node) => node.tagName === 'BUTTON' && node.getAttribute('aria-label') === 'Expand details for api');
+  if (!apiToggle) throw new Error('expected api deployment expand toggle in overview');
+  const apiOverviewText = collectText(apiToggle).join(' | ');
+  if (!apiOverviewText.includes('Observed generation | —')) throw new Error('expected missing overview observed generation to render as em dash');
+  if (apiOverviewText.includes('Observed generation | 0')) throw new Error('expected missing overview observed generation to avoid zero fallback');
 
   const filteredEnv = createEnvironment('?sync=Unknown&account=missing&q=%20api%20');
   await settle();
@@ -541,6 +563,7 @@ func TestEmbeddedUIDetailHistoryBehaviorWithNodeHarness(t *testing.T) {
 					"strategy":       "canary",
 					"executionMode":  "ecsCodeDeploy",
 					"sync":           map[string]any{"state": "Reconciling"},
+					"runtimeSummary": map[string]any{"summary": "Traffic shift is progressing", "timestamp": "2026-04-16T06:50:00Z", "desiredGeneration": 7, "observedGeneration": 6},
 				},
 			},
 		},
@@ -554,7 +577,13 @@ func TestEmbeddedUIDetailHistoryBehaviorWithNodeHarness(t *testing.T) {
 		"accountName":  "acct-a",
 		"awsAccountId": "111111111111",
 		"region":       "us-west-2",
-		"sync":         map[string]any{"reason": "Traffic shift running"},
+		"runtimeSummary": map[string]any{
+			"summary":            "Traffic shift is progressing",
+			"timestamp":          "2026-04-16T06:50:00Z",
+			"desiredGeneration":  7,
+			"observedGeneration": 6,
+		},
+		"sync": map[string]any{"reason": "Traffic shift running"},
 		"rollout": map[string]any{"steps": []map[string]any{
 			{"kind": "CreateCodeDeployDeployment", "detail": "Creates deployment group <unsafe>", "status": "completed"},
 			{"kind": "ShiftTrafficCanary", "detail": "Shifts 10 percent of traffic <script>alert(1)</script>", "status": "current"},
@@ -562,11 +591,13 @@ func TestEmbeddedUIDetailHistoryBehaviorWithNodeHarness(t *testing.T) {
 		}},
 		"history": []map[string]any{
 			{
-				"timestamp":   "2026-04-16T06:50:00Z",
-				"summary":     "Shifted 10 percent of traffic <script>alert(1)</script>",
-				"sync":        map[string]any{"state": "Reconciling"},
-				"health":      map[string]any{"overall": "Healthy", "summary": "steady"},
-				"currentStep": "ShiftTrafficCanary",
+				"timestamp":          "2026-04-16T06:50:00Z",
+				"summary":            "Shifted 10 percent of traffic <script>alert(1)</script>",
+				"sync":               map[string]any{"state": "Reconciling"},
+				"health":             map[string]any{"overall": "Healthy", "summary": "steady"},
+				"desiredGeneration":  7,
+				"observedGeneration": 6,
+				"currentStep":        "ShiftTrafficCanary",
 			},
 		},
 	})
@@ -575,10 +606,11 @@ func TestEmbeddedUIDetailHistoryBehaviorWithNodeHarness(t *testing.T) {
 	}
 
 	detailEmptyJSON, err := json.Marshal(map[string]any{
-		"name":         "api",
-		"accountName":  "acct-a",
-		"awsAccountId": "111111111111",
-		"region":       "us-west-2",
+		"name":           "api",
+		"accountName":    "acct-a",
+		"awsAccountId":   "111111111111",
+		"region":         "us-west-2",
+		"runtimeSummary": map[string]any{},
 		"rollout": map[string]any{"steps": []map[string]any{
 			{"kind": "CreateCodeDeployDeployment", "current": true},
 			{"kind": "ShiftTrafficCanary"},
@@ -759,6 +791,13 @@ function findByText(document, text) {
   return findFirst(document, (node) => node.textContent === text);
 }
 
+function findDetailPanelForToggle(toggle) {
+  if (!toggle) return null;
+  const row = toggle.parentNode;
+  if (!row) return null;
+  return (row.children || []).find((child) => child.className === 'detail-panel') || null;
+}
+
 function collectText(node) {
   if (!node) return [];
   return [node.textContent, ...node.children.flatMap((child) => collectText(child))].filter(Boolean);
@@ -778,15 +817,20 @@ function collectText(node) {
   if (env.fetchCalls.length !== 2 || env.fetchCalls[1] !== '/v1/overview/deployments/api') {
     throw new Error('expected expand to fetch deployment detail exactly once');
   }
+	  const historyHeading = findByText(env.document, 'Runtime history');
+	  if (!historyHeading) throw new Error('expected runtime history section heading');
 
-  const historyHeading = findByText(env.document, 'Runtime history');
-  if (!historyHeading) throw new Error('expected runtime history section heading');
+	  const detailText = collectText(findFirst(env.document, (node) => node.className === 'detail-grid')).join(' | ');
+	  if (!detailText.includes('Runtime generations')) throw new Error('expected detail grid to render runtime generation label');
+	  if (!detailText.includes('desired 7 · observed 6')) throw new Error('expected detail grid to render runtime generation values');
+
 	  const historySection = historyHeading.parentNode;
 	  const historyText = collectText(historySection).join(' | ');
 	  if (!historyText.includes('2026-04-16T06:50:00Z')) throw new Error('expected history timestamp to render');
 	  if (!historyText.includes('Shifted 10 percent of traffic <script>alert(1)</script>')) throw new Error('expected history summary text to render literally');
 	  if (!historyText.includes('History sync · Reconciling')) throw new Error('expected history sync state to render');
 	  if (!historyText.includes('History health · Healthy · steady')) throw new Error('expected history health to render');
+	  if (!historyText.includes('History generations · desired 7 · observed 6')) throw new Error('expected history generations to render');
 	  if (!historyText.includes('History rollout step · ShiftTrafficCanary')) throw new Error('expected history rollout step to render');
 
 	  const completedStep = findFirst(env.document, (node) => node.className === 'detail-step-meta detail-step-meta-completed');
@@ -808,10 +852,17 @@ function collectText(node) {
 	  if (!emptyToggle) throw new Error('expected deployment expand toggle in empty-history env');
   emptyToggle.dispatch('click');
 	  await settle();
-	  const emptyCopy = findByText(emptyEnv.document, 'No recent runtime history is available yet.');
-	  if (!emptyCopy) throw new Error('expected explicit empty runtime history copy');
-	  const legacyCurrentStep = findFirst(emptyEnv.document, (node) => node.className === 'detail-step-meta detail-step-meta-current');
-	  const legacyPendingStep = findFirst(emptyEnv.document, (node) => node.className === 'detail-step-meta detail-step-meta-pending');
+  const emptyCopy = findByText(emptyEnv.document, 'No recent runtime history is available yet.');
+  if (!emptyCopy) throw new Error('expected explicit empty runtime history copy');
+  const emptyDetailPanel = findDetailPanelForToggle(emptyToggle);
+  if (!emptyDetailPanel) throw new Error('expected detail panel for empty-history env');
+  const emptyDetailText = collectText(emptyDetailPanel).join(' | ');
+  if (!emptyDetailText.includes('Runtime generations | desired — · observed —')) throw new Error('expected missing runtime generations to render as em dash');
+  if (!emptyDetailText.includes('Rollout generations | desired — · observed —')) throw new Error('expected missing rollout generations to render as em dash');
+  if (emptyDetailText.includes('Runtime generations | desired 0 · observed 0')) throw new Error('expected missing runtime generations to avoid zero fallback');
+  if (emptyDetailText.includes('Rollout generations | desired 0 · observed 0')) throw new Error('expected missing rollout generations to avoid zero fallback');
+  const legacyCurrentStep = findFirst(emptyEnv.document, (node) => node.className === 'detail-step-meta detail-step-meta-current');
+const legacyPendingStep = findFirst(emptyEnv.document, (node) => node.className === 'detail-step-meta detail-step-meta-pending');
 	  if (!legacyCurrentStep || legacyCurrentStep.textContent !== 'Current rollout step') throw new Error('expected legacy current rollout step to render as current');
 	  if (!legacyPendingStep || legacyPendingStep.textContent !== 'Pending rollout step') throw new Error('expected legacy non-current rollout step to render as pending');
 })();
