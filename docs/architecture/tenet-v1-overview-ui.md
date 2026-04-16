@@ -6,8 +6,10 @@ Tenet now serves a minimal embedded UI at `/`.
 
 The UI is intended to make the current control-plane slice visible without introducing a separate frontend toolchain.
 
-It groups deployments by AWS account and shows:
+It groups deployments by AWS account and then by project/environment within each account, and shows:
 - account-header count pills for `deploymentCount`, `syncedCount`, `progressingCount`, `pausedCount`, and `errorCount`
+- account topology summary text for unique project/environment counts derived from the visible deployments
+- per-group project/environment headers with the grouped region and deployment count
 - deployment name and environment
 - target type
 - rollout strategy
@@ -51,6 +53,8 @@ Each account object now also includes additive per-account runtime counters:
 - `errorCount`
 
 The `/` UI renders those counters directly in each account header. When any aggregate account-count field is absent in the overview payload, the embedded client derives the fallback value from `account.deployments[*].sync.state` instead of displaying zero for the status buckets. Deployments with missing or unknown runtime state still contribute to `deploymentCount`, so they remain visible in the total even when they do not increment a concrete runtime-state bucket.
+
+The embedded client also derives a lightweight project/environment topology summary directly from `account.deployments[*]` so each account card can show unique project/environment counts without waiting for another API field. Those same deployment rows are grouped by `appRef + environmentRef + region` before rendering, which keeps the dashboard aligned with issue #14's project/environment framing while preserving the existing account-first operating model.
 
 `/v1/overview/deployments/{deploymentName}` combines catalog placement data with the current deployment status snapshot for one deployment, including:
 - the same additive `runtimeSummary` object used by the overview cards so API consumers can read a single latest-runtime contract without scraping `history[*]`
