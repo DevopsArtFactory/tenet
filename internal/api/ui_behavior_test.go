@@ -191,6 +191,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
   const appLink = links.find((node) => node.href === '/?page=application&deployment=payments-api-staging');
   if (!appLink) throw new Error('expected applications page link to application detail route');
+  if (appLink.target !== '_self') throw new Error('expected applications page link to stay in embedded UI flow');
+  if (appLink.rel) throw new Error('expected applications page link to avoid new-tab rel attributes');
 })();
 `
 
@@ -425,6 +427,9 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const resourceLink = links.find((node) => node.textContent === 'Open resource');
   if (!resourceLink) throw new Error('expected resource drill-down link');
   if (!resourceLink.href.includes('/?page=resource&deployment=payments-api-staging')) throw new Error('expected resource detail href to include deployment');
+  if (resourceLink.target !== '_self') throw new Error('expected resource drill-down link to stay in embedded UI flow');
+  if (resourceLink.rel) throw new Error('expected resource drill-down link to avoid new-tab rel attributes');
+  if (!resourceLink.href.includes('resourceId=ecsService%3A%3Apayments-api-staging%20ECS%20Service%3A%3APrimary%20ECS%20service%20for%20the%20staging%20environment')) throw new Error('expected stable unique resource identifier in drill-down href');
 })();
 `
 
@@ -563,7 +568,7 @@ document.byID.set('toolbar', document.createElement('section'));
 document.byID.set('summary', document.createElement('section'));
 document.byID.set('accounts', document.createElement('section'));
 const fetchCalls = [];
-const window = { location: { pathname: '/', search: '?page=resource&deployment=payments-api-staging&resourceType=codeDeployDeploymentGroup&resourceId=codeDeployDeploymentGroup', hash: '' } };
+const window = { location: { pathname: '/', search: '?page=resource&deployment=payments-api-staging&resourceType=codeDeployDeploymentGroup&resourceId=codeDeployDeploymentGroup%3A%3Apayments-api-staging%20Deployment%20Group%3A%3ALinear%20traffic%20shifting%20deployment%20group', hash: '' } };
 const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
 const fetch = (url) => {
   fetchCalls.push(String(url));
@@ -586,6 +591,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
   const backLink = toolbarLinks.find((node) => node.href === '/?page=application&deployment=payments-api-staging' && node.target === '_self');
   if (!backLink) throw new Error('expected resource page self-navigation back link');
+  if (backLink.rel) throw new Error('expected resource page back link to avoid new-tab rel attributes');
   if (!summaryText.includes('Resource detail')) throw new Error('expected resource page summary heading');
   if (!summaryText.includes('payments-api-staging Deployment Group')) throw new Error('expected resource page resource title');
   if (!summaryText.includes('codeDeployDeploymentGroup')) throw new Error('expected resource page resource type');
@@ -602,6 +608,283 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('Created deployment group revision for v2')) throw new Error('expected resource page history detail');
   if (!accountsText.includes('Conditions')) throw new Error('expected resource page conditions section');
   if (!accountsText.includes('ServiceReady')) throw new Error('expected resource page condition reason');
+})();
+`
+
+	cmd := exec.Command("node", "-e", nodeProgram)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+	}
+}
+
+func TestResourceDetailPageWithNodeHarnessResolvesDuplicateSameTypeResources(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	accountsJSON, err := json.Marshal([]map[string]any{{
+		"name":         "staging-core",
+		"awsAccountId": "210987654321",
+		"deployments": []map[string]any{{
+			"name":           "payments-api-staging",
+			"appRef":         "payments",
+			"environmentRef": "staging-apne2",
+			"region":         "ap-northeast-2",
+			"targetType":     "ecs",
+			"strategy":       "linear",
+			"executionMode":  "ecsCodeDeploy",
+		}},
+	}})
+	if err != nil {
+		t.Fatalf("marshal sample accounts: %v", err)
+	}
+
+	detailJSON, err := json.Marshal(map[string]any{
+		"name":          "payments-api-staging",
+		"accountName":   "staging-core",
+		"awsAccountId":  "210987654321",
+		"region":        "ap-northeast-2",
+		"executionMode": "ecsCodeDeploy",
+		"rollout": map[string]any{
+			"execution": []map[string]any{
+				{"name": "prod listener", "resource": "productionListener", "description": "Routes production traffic"},
+				{"name": "test listener", "resource": "productionListener", "description": "Routes verification traffic"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal detail body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const sampleAccounts = ` + string(accountsJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/', search: '?page=resource&deployment=payments-api-staging&resourceType=productionListener&resourceId=productionListener%3A%3Atest%20listener%3A%3ARoutes%20verification%20traffic', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
+  if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+(async () => {
+  await settle();
+  await settle();
+  if (fetchCalls[0] !== '/v1/overview/accounts' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-staging') throw new Error('expected duplicate-resource page to load overview then detail');
+  const summaryText = collectText(document.getElementById('summary')).join(' | ');
+  const accountsText = collectText(document.getElementById('accounts')).join(' | ');
+  if (!summaryText.includes('test listener')) throw new Error('expected resource detail to resolve the intended duplicate resource');
+  if (summaryText.includes('prod listener')) throw new Error('expected duplicate resource resolution not to fall back to the first same-type resource');
+  if (!accountsText.includes('Resource id')) throw new Error('expected duplicate resource page to render resource id');
+  if (!accountsText.includes('productionListener::test listener::Routes verification traffic')) throw new Error('expected duplicate resource page to surface the stable unique resource id');
+  if (!accountsText.includes('Routes verification traffic')) throw new Error('expected duplicate resource page to render the matched duplicate resource execution description');
+  if (accountsText.includes('Routes production traffic')) throw new Error('expected duplicate resource page not to render the wrong duplicate resource execution description');
+})();
+`
+
+	cmd := exec.Command("node", "-e", nodeProgram)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+	}
+}
+
+func TestResourceDetailPageWithNodeHarnessResolvesBookmarkedResourceAcrossReorderedExecutionPayloads(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	accountsJSON, err := json.Marshal([]map[string]any{{
+		"name":         "staging-core",
+		"awsAccountId": "210987654321",
+		"deployments": []map[string]any{{
+			"name":           "payments-api-staging",
+			"appRef":         "payments",
+			"environmentRef": "staging-apne2",
+			"region":         "ap-northeast-2",
+			"targetType":     "ecs",
+			"strategy":       "linear",
+			"executionMode":  "ecsCodeDeploy",
+		}},
+	}})
+	if err != nil {
+		t.Fatalf("marshal sample accounts: %v", err)
+	}
+
+	bookmarkedDetailJSON, err := json.Marshal(map[string]any{
+		"name":          "payments-api-staging",
+		"accountName":   "staging-core",
+		"awsAccountId":  "210987654321",
+		"region":        "ap-northeast-2",
+		"executionMode": "ecsCodeDeploy",
+		"rollout": map[string]any{
+			"execution": []map[string]any{
+				{"name": "prod listener", "resource": "productionListener", "description": "Routes production traffic"},
+				{"name": "test listener", "resource": "productionListener", "description": "Routes verification traffic"},
+				{"name": "payments-api-staging Deployment Group", "resource": "codeDeployDeploymentGroup", "description": "Linear traffic shifting deployment group"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal bookmarked detail body: %v", err)
+	}
+
+	reorderedDetailJSON, err := json.Marshal(map[string]any{
+		"name":          "payments-api-staging",
+		"accountName":   "staging-core",
+		"awsAccountId":  "210987654321",
+		"region":        "ap-northeast-2",
+		"executionMode": "ecsCodeDeploy",
+		"rollout": map[string]any{
+			"execution": []map[string]any{
+				{"name": "payments-api-staging Deployment Group", "resource": "codeDeployDeploymentGroup", "description": "Linear traffic shifting deployment group"},
+				{"name": "prod listener", "resource": "productionListener", "description": "Routes production traffic"},
+				{"name": "test listener", "resource": "productionListener", "description": "Routes verification traffic"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal reordered detail body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const sampleAccounts = ` + string(accountsJSON) + `;
+const bookmarkedDetail = ` + string(bookmarkedDetailJSON) + `;
+const reorderedDetail = ` + string(reorderedDetailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+const resourceID = 'productionListener::test listener::Routes verification traffic';
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+async function render(search, detailBody) {
+  const window = { location: { pathname: '/', search, hash: '' } };
+  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  const fetch = (url) => {
+    if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
+    if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    throw new Error('unexpected fetch url: ' + url);
+  };
+  document.getElementById('toolbar').replaceChildren();
+  document.getElementById('summary').replaceChildren();
+  document.getElementById('accounts').replaceChildren();
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle();
+  await settle();
+}
+(async () => {
+  await render('?page=application&deployment=payments-api-staging', bookmarkedDetail);
+  const resourceLinks = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
+  const bookmarkedLink = resourceLinks.find((node) => node.href.includes('resourceId=' + encodeURIComponent(resourceID)));
+  if (!bookmarkedLink) throw new Error('expected application page to generate bookmarkable stable resource link before reorder');
+  if (bookmarkedLink.target !== '_self') throw new Error('expected bookmarked resource link to stay in embedded UI flow');
+
+  await render('?page=resource&deployment=payments-api-staging&resourceType=productionListener&resourceId=' + encodeURIComponent(resourceID), reorderedDetail);
+  const summaryText = collectText(document.getElementById('summary')).join(' | ');
+  const accountsText = collectText(document.getElementById('accounts')).join(' | ');
+  const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
+  const backLink = toolbarLinks.find((node) => node.href === '/?page=application&deployment=payments-api-staging');
+  if (!backLink || backLink.target !== '_self' || backLink.rel) throw new Error('expected reordered resource page to preserve self-navigation back link');
+  if (!summaryText.includes('test listener')) throw new Error('expected bookmarked resource detail to resolve the intended resource after reorder');
+  if (summaryText.includes('prod listener')) throw new Error('expected bookmarked resource detail not to drift to a different resource after reorder');
+  if (!accountsText.includes(resourceID)) throw new Error('expected reordered resource page to preserve stable resource identity');
+  if (!accountsText.includes('Routes verification traffic')) throw new Error('expected reordered resource page to render the intended execution description');
+  if (accountsText.includes('Routes production traffic')) throw new Error('expected reordered resource page not to render the wrong execution description');
 })();
 `
 
