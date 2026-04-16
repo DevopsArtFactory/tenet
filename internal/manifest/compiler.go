@@ -35,6 +35,7 @@ func Compile(input CatalogSpec) (Catalog, error) {
 	}
 
 	accountIndex := make(map[string]domain.Account, len(input.Accounts))
+	accountIDIndex := make(map[string]string, len(input.Accounts))
 	for _, account := range input.Accounts {
 		if err := spec.ValidateAccount(account); err != nil {
 			return Catalog{}, fmt.Errorf("validate account %q: %w", account.Name, err)
@@ -47,8 +48,12 @@ func Compile(input CatalogSpec) (Catalog, error) {
 		if _, exists := accountIndex[account.Name]; exists {
 			return Catalog{}, fmt.Errorf("duplicate account %q", account.Name)
 		}
+		if existingName, exists := accountIDIndex[account.AWSAccountID]; exists {
+			return Catalog{}, fmt.Errorf("duplicate AWS account ID %q for accounts %q and %q", account.AWSAccountID, existingName, account.Name)
+		}
 		compiled.Accounts = append(compiled.Accounts, compiledAccount)
 		accountIndex[account.Name] = compiledAccount
+		accountIDIndex[account.AWSAccountID] = account.Name
 	}
 
 	environmentIndex := make(map[string]domain.Environment, len(input.Environments))

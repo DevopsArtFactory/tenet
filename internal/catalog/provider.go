@@ -1,5 +1,7 @@
 package catalog
 
+import "github.com/DevopsArtFactory/tenet/internal/statusstore"
+
 // RepositorySummaryProvider builds a summary function backed by a repository root.
 func RepositorySummaryProvider(root string) func() (Summary, error) {
 	return func() (Summary, error) {
@@ -63,5 +65,20 @@ func RepositoryTopologyProvider(root string) func() (TopologySnapshot, error) {
 			return TopologySnapshot{}, err
 		}
 		return BuildTopology(compiled)
+	}
+}
+
+// RepositoryAccountOverviewDetailProvider builds an account detail function backed by a repository root.
+func RepositoryAccountOverviewDetailProvider(root string, snapshots func() ([]statusstore.Snapshot, error)) func(string) (AccountOverviewDetail, error) {
+	return func(awsAccountID string) (AccountOverviewDetail, error) {
+		compiled, err := LoadFromRepository(root)
+		if err != nil {
+			return AccountOverviewDetail{}, err
+		}
+		currentSnapshots, err := snapshots()
+		if err != nil {
+			return AccountOverviewDetail{}, err
+		}
+		return BuildAccountOverviewDetail(compiled, currentSnapshots, awsAccountID)
 	}
 }

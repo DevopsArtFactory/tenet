@@ -118,16 +118,81 @@ func TestAPIOptionsOverviewDeploymentReturnsNotFoundForRepoUnknownDeployment(t *
 	}
 }
 
+func TestAPIOptionsOverviewAccountUsesSnapshotListLookup(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	store := &stubStatusStore{
+		listSnapshots: []statusstore.Snapshot{{
+			DeploymentName: "api-prod",
+			Status: domain.DeploymentStatus{
+				Sync:   domain.Sync{State: domain.SyncStateSynced, Reason: "steady"},
+				Health: domain.Health{Overall: domain.HealthHealthy, Summary: "healthy"},
+			},
+		}},
+	}
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, store)
+	if options.OverviewAccount == nil {
+		t.Fatalf("expected overview account provider")
+	}
+
+	detail, err := options.OverviewAccount("123456789012")
+	if err != nil {
+		t.Fatalf("OverviewAccount returned error: %v", err)
+	}
+	if store.listCalls != 1 {
+		t.Fatalf("expected one List call, got %d", store.listCalls)
+	}
+	if store.getCalls != 0 {
+		t.Fatalf("expected no Get calls, got %d", store.getCalls)
+	}
+	if detail.AWSAccountID != "123456789012" || detail.Name != "prod-core" || len(detail.Deployments) != 2 {
+		t.Fatalf("unexpected account detail: %+v", detail)
+	}
+	if detail.Deployments[0].Name != "api-prod" {
+		t.Fatalf("expected api-prod first deployment, got %+v", detail.Deployments)
+	}
+}
+
+func TestAPIOptionsOverviewAccountPropagatesSnapshotListErrors(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	expected := errors.New("snapshots unavailable")
+	store := &stubStatusStore{listErr: expected}
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, store)
+	if options.OverviewAccount == nil {
+		t.Fatalf("expected overview account provider")
+	}
+
+	_, err := options.OverviewAccount("123456789012")
+	if !errors.Is(err, expected) {
+		t.Fatalf("expected snapshot list error, got %v", err)
+	}
+	if store.listCalls != 1 {
+		t.Fatalf("expected one List call, got %d", store.listCalls)
+	}
+	if store.getCalls != 0 {
+		t.Fatalf("expected no Get calls, got %d", store.getCalls)
+	}
+}
+
 type stubStatusStore struct {
-	getSnapshot statusstore.Snapshot
-	getErr      error
-	gotGetName  string
-	getCalls    int
-	listCalls   int
+	getSnapshot   statusstore.Snapshot
+	listSnapshots []statusstore.Snapshot
+	getErr        error
+	listErr       error
+	gotGetName    string
+	getCalls      int
+	listCalls     int
 }
 
 func (s *stubStatusStore) List(context.Context) ([]statusstore.Snapshot, error) {
 	s.listCalls++
+	if s.listErr != nil {
+		return nil, s.listErr
+	}
+	if s.listSnapshots != nil {
+		return s.listSnapshots, nil
+	}
 	return []statusstore.Snapshot{s.getSnapshot}, nil
 }
 

@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/DevopsArtFactory/tenet/internal/spec"
@@ -478,6 +479,21 @@ func TestCompileRejectsDuplicateAccountNames(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatalf("expected duplicate account error")
+	}
+}
+
+func TestCompileRejectsDuplicateAWSAccountID(t *testing.T) {
+	_, err := Compile(CatalogSpec{
+		Accounts: []spec.AccountSpec{
+			{Name: "prod-core", AWSAccountID: "123456789012", RoleARN: "arn:aws:iam::123456789012:role/TenetDeployerRole"},
+			{Name: "staging-core", AWSAccountID: "123456789012", RoleARN: "arn:aws:iam::123456789012:role/TenetDeployerRole"},
+		},
+	})
+	if err == nil {
+		t.Fatalf("expected duplicate AWS account ID error")
+	}
+	if !strings.Contains(err.Error(), `duplicate AWS account ID "123456789012"`) || !strings.Contains(err.Error(), `prod-core`) || !strings.Contains(err.Error(), `staging-core`) {
+		t.Fatalf("expected clear duplicate AWS account ID error, got %v", err)
 	}
 }
 

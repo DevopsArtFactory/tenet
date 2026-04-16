@@ -67,6 +67,7 @@
       .row-title { margin:0; font-size: 18px; }
       .row-subtitle { margin-top:6px; color: var(--muted); font-size: 14px; }
       .row-links { display:flex; flex-wrap:wrap; gap: 10px; margin-top: 10px; }
+      .account-links { margin-top: 0; align-self: center; }
       .row-links-shell { padding: 0 16px 16px; }
       .row-link { color: var(--blue); font-size: 13px; font-weight: 600; text-decoration: none; }
       .row-link:hover, .row-link:focus-visible { text-decoration: underline; }
@@ -698,6 +699,11 @@
             createElement('div', 'account-meta', `AWS account ${metricValue(account.awsAccountId)} · Regions: ${(account.allowedRegions || []).join(', ') || '—'}`),
             createElement('div', 'account-topology', `${topology.projectCount} projects · ${topology.environmentCount} environments`),
           );
+          const accountLinks = createElement('div', 'row-links');
+          accountLinks.classList.add('account-links');
+          if (account.awsAccountId) {
+            accountLinks.append(createNavLink(`/v1/overview/accounts/${encodeURIComponent(account.awsAccountId)}`, 'Account JSON'));
+          }
           const pills = createElement('div', 'pills');
           const fallbackCounts = deriveAccountCounts(account);
           const accountCountPills = [
@@ -710,7 +716,7 @@
           accountCountPills.forEach(([value, label, className]) => {
             pills.append(createElement('span', className, `${value} ${label}`));
           });
-          head.append(titleWrap, pills);
+          head.append(titleWrap, accountLinks, pills);
 
           const rows = createElement('div', 'rows');
           topology.groups.forEach((group) => {

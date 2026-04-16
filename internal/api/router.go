@@ -20,6 +20,18 @@ func requireMethod(w http.ResponseWriter, r *http.Request, method string) bool {
 	return false
 }
 
+func respondInternalError(w http.ResponseWriter) {
+	http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+}
+
+func respondLookupError(w http.ResponseWriter, err error) {
+	if errors.Is(err, statusstore.ErrNotFound) {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	respondInternalError(w)
+}
+
 // Options configures the API router.
 type Options struct {
 	BuildInfo           buildinfo.Info
@@ -30,6 +42,7 @@ type Options struct {
 	CatalogPlacements   func() ([]catalog.PlacementView, error)
 	CatalogTopology     func() (catalog.TopologySnapshot, error)
 	OverviewAccounts    func() ([]catalog.AccountOverview, error)
+	OverviewAccount     func(string) (catalog.AccountOverviewDetail, error)
 	OverviewDeployment  func(string) (catalog.DeploymentOverviewDetail, error)
 	DeploymentStatuses  func() ([]statusstore.Snapshot, error)
 	DeploymentStatus    func(string) (statusstore.Snapshot, error)
@@ -72,7 +85,7 @@ func NewRouter(options Options) http.Handler {
 		}
 		summary, err := options.CatalogSummary()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			respondInternalError(w)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -88,7 +101,7 @@ func NewRouter(options Options) http.Handler {
 		}
 		deployments, err := options.CatalogDeployments()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			respondInternalError(w)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -104,7 +117,7 @@ func NewRouter(options Options) http.Handler {
 		}
 		environments, err := options.CatalogEnvironments()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			respondInternalError(w)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -120,7 +133,7 @@ func NewRouter(options Options) http.Handler {
 		}
 		accounts, err := options.CatalogAccounts()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			respondInternalError(w)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -136,7 +149,7 @@ func NewRouter(options Options) http.Handler {
 		}
 		placements, err := options.CatalogPlacements()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			respondInternalError(w)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -152,7 +165,7 @@ func NewRouter(options Options) http.Handler {
 		}
 		topology, err := options.CatalogTopology()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			respondInternalError(w)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -168,11 +181,32 @@ func NewRouter(options Options) http.Handler {
 		}
 		accounts, err := options.OverviewAccounts()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			respondInternalError(w)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(accounts)
+	})
+	mux.HandleFunc("/v1/overview/accounts/", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+		if options.OverviewAccount == nil {
+			http.Error(w, "overview account unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		awsAccountID := strings.TrimPrefix(r.URL.Path, "/v1/overview/accounts/")
+		if awsAccountID == "" || strings.Contains(awsAccountID, "/") {
+			http.Error(w, "invalid aws account id", http.StatusBadRequest)
+			return
+		}
+		detail, err := options.OverviewAccount(awsAccountID)
+		if err != nil {
+			respondLookupError(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(detail)
 	})
 	mux.HandleFunc("/v1/overview/deployments/", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodGet) {
@@ -189,11 +223,7 @@ func NewRouter(options Options) http.Handler {
 		}
 		detail, err := options.OverviewDeployment(name)
 		if err != nil {
-			if errors.Is(err, statusstore.ErrNotFound) {
-				http.Error(w, err.Error(), http.StatusNotFound)
-				return
-			}
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			respondLookupError(w, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -209,7 +239,7 @@ func NewRouter(options Options) http.Handler {
 		}
 		snapshots, err := options.DeploymentStatuses()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			respondInternalError(w)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -230,11 +260,7 @@ func NewRouter(options Options) http.Handler {
 		}
 		snapshot, err := options.DeploymentStatus(name)
 		if err != nil {
-			if errors.Is(err, statusstore.ErrNotFound) {
-				http.Error(w, err.Error(), http.StatusNotFound)
-				return
-			}
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			respondLookupError(w, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
