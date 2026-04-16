@@ -1098,6 +1098,9 @@ func TestEmitRuntimePlansPersistsRuntimeHistory(t *testing.T) {
 	if latest.RolloutPhase != domain.RolloutPhaseProvisioning || latest.CurrentStep != "CreateCandidateCapacity" {
 		t.Fatalf("expected rollout phase/current step in history entry, got %+v", latest)
 	}
+	if !reflect.DeepEqual(latest.Changes, []string{"summary", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep"}) {
+		t.Fatalf("expected change labels for appended history entry, got %+v", latest.Changes)
+	}
 	if status.Rollout == nil || latest.Summary != status.Rollout.Summary || latest.RolloutPhase != status.Rollout.Phase || latest.CurrentStep != status.Rollout.CurrentStep {
 		t.Fatalf("expected history entry to reflect persisted rollout summary, got history=%+v rollout=%+v", latest, status.Rollout)
 	}
@@ -1147,6 +1150,9 @@ func TestEmitRuntimePlansBootstrapsRuntimeHistoryForLegacyRolloutOnlySnapshot(t 
 	}
 	if latest.RolloutPhase != domain.RolloutPhaseProvisioning || latest.CurrentStep != "CreateCandidateCapacity" {
 		t.Fatalf("expected rollout phase/current step in bootstrapped history entry, got %+v", latest)
+	}
+	if !reflect.DeepEqual(latest.Changes, []string{"initial"}) {
+		t.Fatalf("expected first controller-authored history entry to be labeled initial, got %+v", latest.Changes)
 	}
 }
 
@@ -1233,6 +1239,9 @@ func TestAppendRuntimeHistoryAppendsWhenGenerationsChangeWithoutOtherStatusChang
 	}
 	if latest.DesiredGeneration != 9 || latest.ObservedGeneration != 8 {
 		t.Fatalf("expected appended entry to record changed generations, got %+v", latest)
+	}
+	if !reflect.DeepEqual(latest.Changes, []string{"desiredGeneration", "observedGeneration"}) {
+		t.Fatalf("expected generation-only change labels, got %+v", latest.Changes)
 	}
 }
 
@@ -1346,6 +1355,42 @@ func TestAppendRuntimeHistoryDedupesAgainstLatestPersistedEntryForLegacySnapshot
 	}
 	if got[0].Timestamp != "2026-04-16T05:30:00Z" {
 		t.Fatalf("expected existing persisted history entry to be preserved, got %+v", got)
+	}
+}
+
+func TestAppendRuntimeHistoryLabelsFirstControllerEntryInitialAfterLegacyEntries(t *testing.T) {
+	previous := domain.DeploymentStatus{
+		ObservedGeneration: 7,
+		Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "waiting for candidate"},
+		Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "warming"},
+	}
+	current := previous
+	current.History = []domain.StatusHistoryEntry{{
+		Timestamp:          "2026-04-16T05:30:00Z",
+		Source:             "operator",
+		Summary:            "Runtime status updated",
+		Sync:               previous.Sync,
+		Health:             previous.Health,
+		ObservedGeneration: previous.ObservedGeneration,
+	}}
+
+	oldNow := runtimeHistoryNow
+	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 35, 0, 0, time.UTC) }
+	defer func() { runtimeHistoryNow = oldNow }()
+
+	got := appendRuntimeHistory(previous, current)
+	if len(got) != 2 {
+		t.Fatalf("expected first controller-authored history entry to append after legacy entries, got %+v", got)
+	}
+	latest := got[len(got)-1]
+	if latest.Timestamp != "2026-04-16T06:35:00Z" {
+		t.Fatalf("expected deterministic timestamp for first controller-authored entry, got %+v", latest)
+	}
+	if latest.Source != runtimeHistorySourceController {
+		t.Fatalf("expected appended history entry to be controller-authored, got %+v", latest)
+	}
+	if !reflect.DeepEqual(latest.Changes, []string{"initial"}) {
+		t.Fatalf("expected first controller-authored history entry to be labeled initial even after legacy entries, got %+v", latest.Changes)
 	}
 }
 

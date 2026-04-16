@@ -563,7 +563,7 @@ func TestEmbeddedUIBehaviorWithNodeHarness(t *testing.T) {
 					"strategy":       "canary",
 					"executionMode":  "ecsCodeDeploy",
 					"sync":           map[string]any{"state": "Reconciling"},
-					"runtimeSummary": map[string]any{"summary": "Traffic shift is progressing", "timestamp": "2026-04-16T06:50:00Z", "source": "controller-runtime", "desiredGeneration": 7, "observedGeneration": 6},
+					"runtimeSummary": map[string]any{"summary": "Traffic shift is progressing", "timestamp": "2026-04-16T06:50:00Z", "source": "controller-runtime", "desiredGeneration": 7, "observedGeneration": 6, "changes": []string{"traffic-shift <literal>", "capacity-ready"}},
 				},
 			},
 		},
@@ -583,6 +583,7 @@ func TestEmbeddedUIBehaviorWithNodeHarness(t *testing.T) {
 			"source":             "controller-runtime",
 			"desiredGeneration":  7,
 			"observedGeneration": 6,
+			"changes": []string{"traffic-shift <literal>", "capacity-ready"},
 		},
 		"sync": map[string]any{"reason": "Traffic shift running"},
 		"rollout": map[string]any{"steps": []map[string]any{
@@ -599,6 +600,7 @@ func TestEmbeddedUIBehaviorWithNodeHarness(t *testing.T) {
 				"health":             map[string]any{"overall": "Healthy", "summary": "steady"},
 				"desiredGeneration":  7,
 				"observedGeneration": 6,
+				"changes": []string{"traffic-shift <literal>", "alarm-cleared<script>"},
 				"rolloutPhase":       "Progressing <literal>",
 				"currentStep":        "ShiftTrafficCanary",
 			},
@@ -818,8 +820,14 @@ function collectText(node) {
 
 	  const overviewText = collectText(env.document.getElementById('accounts')).join(' | ');
 	  if (!overviewText.includes('Traffic shift is progressing · controller-runtime')) throw new Error('expected overview runtime summary text to include runtime source');
+	  if (!overviewText.includes('Latest changes')) throw new Error('expected overview card to render latest change label heading');
+	  if (!overviewText.includes('traffic-shift <literal>, capacity-ready')) throw new Error('expected overview card to render latest change labels literally');
 	  const searchInput = env.document.querySelector('[data-toolbar-field="Search deployments"]');
 	  if (!searchInput) throw new Error('expected search input in detail-history env');
+	  searchInput.value = 'traffic-shift <literal>';
+	  searchInput.dispatch('input', { target: searchInput });
+	  await settle();
+	  if (env.document.getElementById('accounts').children.length !== 1) throw new Error('expected runtime change labels to participate in additive overview search');
 	  searchInput.value = 'controller-runtime';
 	  searchInput.dispatch('input', { target: searchInput });
 	  await settle();
@@ -842,6 +850,7 @@ function collectText(node) {
 	  if (!detailText.includes('Runtime generations')) throw new Error('expected detail grid to render runtime generation label');
 	  if (!detailText.includes('desired 7 · observed 6')) throw new Error('expected detail grid to render runtime generation values');
 	  if (!detailText.includes('Runtime source | controller-runtime')) throw new Error('expected detail grid to render runtime source metric');
+	  if (!detailText.includes('Runtime changes | traffic-shift <literal>, capacity-ready')) throw new Error('expected detail grid to render runtime change labels literally');
 
 	  const historySection = historyHeading.parentNode;
 	  const historyText = collectText(historySection).join(' | ');
@@ -850,6 +859,7 @@ function collectText(node) {
 	  if (!historyText.includes('History sync · Reconciling')) throw new Error('expected history sync state to render');
 	  if (!historyText.includes('History health · Healthy · steady')) throw new Error('expected history health to render');
 	  if (!historyText.includes('History generations · desired 7 · observed 6')) throw new Error('expected history generations to render');
+	  if (!historyText.includes('History changes · traffic-shift <literal>, alarm-cleared<script>')) throw new Error('expected history change labels to render literally');
 	  if (!historyText.includes('History source · runtime-cache<unsafe>')) throw new Error('expected history source to render literally');
 	  if (!historyText.includes('History rollout phase · Progressing <literal>')) throw new Error('expected history rollout phase to render literally');
 	  if (!historyText.includes('History rollout step · ShiftTrafficCanary')) throw new Error('expected history rollout step to render');

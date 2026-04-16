@@ -159,6 +159,7 @@ func appendRuntimeHistory(previous domain.DeploymentStatus, current domain.Deplo
 	entry := deriveRuntimeHistoryEntry(current)
 	if len(history) == 0 {
 		entry.Timestamp = runtimeHistoryNow().UTC().Format(time.RFC3339)
+		entry.Changes = []string{"initial"}
 		return []domain.StatusHistoryEntry{entry}
 	}
 
@@ -171,8 +172,48 @@ func appendRuntimeHistory(previous domain.DeploymentStatus, current domain.Deplo
 	}
 
 	entry.Timestamp = runtimeHistoryNow().UTC().Format(time.RFC3339)
+	if !runtimeHistoryHasControllerEntry(history) {
+		entry.Changes = []string{"initial"}
+	} else {
+		entry.Changes = runtimeHistoryChanges(latest, entry)
+	}
 	history = append(history, entry)
 	return capRuntimeHistory(history)
+}
+
+func runtimeHistoryHasControllerEntry(history []domain.StatusHistoryEntry) bool {
+	for _, entry := range history {
+		if entry.Source == runtimeHistorySourceController {
+			return true
+		}
+	}
+	return false
+}
+
+func runtimeHistoryChanges(previous domain.StatusHistoryEntry, current domain.StatusHistoryEntry) []string {
+	changes := make([]string, 0, 7)
+	if previous.Summary != current.Summary {
+		changes = append(changes, "summary")
+	}
+	if previous.Sync != current.Sync {
+		changes = append(changes, "sync")
+	}
+	if previous.Health != current.Health {
+		changes = append(changes, "health")
+	}
+	if previous.DesiredGeneration != current.DesiredGeneration {
+		changes = append(changes, "desiredGeneration")
+	}
+	if previous.ObservedGeneration != current.ObservedGeneration {
+		changes = append(changes, "observedGeneration")
+	}
+	if previous.RolloutPhase != current.RolloutPhase {
+		changes = append(changes, "rolloutPhase")
+	}
+	if previous.CurrentStep != current.CurrentStep {
+		changes = append(changes, "currentStep")
+	}
+	return changes
 }
 
 func capRuntimeHistory(history []domain.StatusHistoryEntry) []domain.StatusHistoryEntry {

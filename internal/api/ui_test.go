@@ -48,12 +48,17 @@ func TestEmbeddedUIUsesSafeDetailRenderingAndPreservesFalsyMetrics(t *testing.T)
 		"const desired = generationValue(value?.desiredGeneration);",
 		"const observed = generationValue(value?.observedGeneration);",
 		"return `desired ${desired} · observed ${observed}`;",
+		"const changeLabels = (changes) => (changes || []).filter((change) => typeof change === 'string' && change);",
+		"const changeLabelsText = (changes) => {",
+		"const labels = changeLabels(changes);",
+		"return labels.length ? labels.join(', ') : '—';",
 		"replaceChildren",
 		"textContent",
 		"Sync reason",
 		"Account placement",
 		"Runtime generations",
 		"Runtime source",
+		"Runtime changes",
 		"Runtime history",
 		"No recent runtime history is available yet.",
 		"const history = detail.history || [];",
@@ -62,6 +67,7 @@ func TestEmbeddedUIUsesSafeDetailRenderingAndPreservesFalsyMetrics(t *testing.T)
 		"History sync",
 		"History health",
 		"History generations",
+		"History changes",
 		"History source",
 		"History rollout phase",
 		"History rollout step",
@@ -96,6 +102,7 @@ func TestEmbeddedUIUsesSafeDetailRenderingAndPreservesFalsyMetrics(t *testing.T)
 		"detail.rollout.observedGeneration || 0",
 		"detail.observedGeneration || 0",
 		"String(deployment.observedGeneration || 0)",
+		"change?.label",
 	} {
 		if strings.Contains(body, legacy) {
 			t.Fatalf("expected embedded UI to avoid zero-fallback generation rendering %q", legacy)
@@ -193,7 +200,9 @@ func TestEmbeddedUIIncludesOverviewStatusInFetchErrors(t *testing.T) {
 	for _, fragment := range []string{
 		"fetch('/v1/overview/accounts')",
 		"if (!response.ok) throw new Error(`overview request failed (${response.status})`);",
+		"const labels = changeLabels(runtimeSummary?.changes);",
 		"['Latest runtime', runtimeSummaryText(deployment.runtimeSummary), 'summary']",
+		"['Latest changes', changeLabelsText(deployment.runtimeSummary?.changes)]",
 		"['Runtime timestamp', runtimeSummaryTimestamp(deployment.runtimeSummary)]",
 		"renderEmptyState(`Failed to load overview: ${error.message}`);",
 	} {
