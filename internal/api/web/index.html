@@ -319,12 +319,30 @@
         );
         return metric;
       };
-      const createNavLink = (href, text) => {
+      const createNavLink = (href, text, target = '_blank') => {
         const link = createElement('a', 'row-link', text);
         link.href = href;
-        link.target = '_blank';
-        link.rel = 'noreferrer noopener';
+        link.target = target;
+        link.rel = target === '_blank' ? 'noreferrer noopener' : '';
         return link;
+      };
+      const stableResourceIdentity = (resource) => {
+        const type = resource.type || resource.resource || 'resource';
+        const name = resource.name || type;
+        const description = resource.description || '—';
+        return [type, name, description].join('::');
+      };
+      const normalizeResource = (resource) => {
+        const type = resource.resource || 'resource';
+        const name = resource.name || type;
+        const description = resource.description || '—';
+        const resourceId = stableResourceIdentity({ type, name, description });
+        return {
+          id: resourceId,
+          type,
+          name,
+          description,
+        };
       };
       const createSelect = (labelText, value, options, onChange) => {
         const field = createElement('label', 'toolbar-field');
@@ -603,7 +621,7 @@
             metrics.append(createMetric(label, value));
           });
           const detailLinks = createElement('div', 'row-links row-links-shell');
-          detailLinks.append(createNavLink(`/?page=application&deployment=${encodeURIComponent(deployment.name)}`, 'Open application'));
+          detailLinks.append(createNavLink(`/?page=application&deployment=${encodeURIComponent(deployment.name)}`, 'Open application', '_self'));
           row.append(top, metrics, detailLinks);
           rows.append(row);
         });
@@ -648,13 +666,7 @@
         };
         const resourceList = execution.length ? execution : synthesize();
         resourceList.forEach((resource) => {
-          const id = resource.resource || resource.name || 'resource';
-          const normalized = {
-            id,
-            type: resource.resource || 'resource',
-            name: resource.name || id,
-            description: resource.description || '—',
-          };
+          const normalized = normalizeResource(resource);
           const trafficResources = new Set(['productionListener', 'testListener', 'productionListenerRule', 'activeTargetGroup', 'candidateTargetGroup', 'blueTaskSetTargetGroup', 'greenTaskSetTargetGroup', 'trafficShiftPlan']);
           const configResources = new Set(['userDataBootstrapSource']);
           if (trafficResources.has(normalized.type)) {
@@ -708,7 +720,7 @@
             );
             top.append(titleWrap, createElement('span', 'pill target', resource.type));
             const detailLinks = createElement('div', 'row-links row-links-shell');
-            detailLinks.append(createNavLink(`/?page=resource&deployment=${encodeURIComponent(detail.name)}&resourceType=${encodeURIComponent(resource.type)}&resourceId=${encodeURIComponent(resource.id)}`, 'Open resource'));
+            detailLinks.append(createNavLink(`/?page=resource&deployment=${encodeURIComponent(detail.name)}&resourceType=${encodeURIComponent(resource.type)}&resourceId=${encodeURIComponent(resource.id)}`, 'Open resource', '_self'));
             row.append(top, detailLinks);
             groupRows.append(row);
           });
@@ -809,7 +821,7 @@
         }
 
         const executionSection = createDetailSection('Rollout execution');
-        const execution = (detail.rollout?.execution || []).filter((item) => item.resource === resource.type || item.name === resource.name);
+        const execution = (detail.rollout?.execution || []).filter((item) => normalizeResource(item).id === resource.id);
         if (!execution.length) {
           executionSection.append(createElement('div', 'detail-state', 'No rollout execution resources are currently reported for this selection.'));
         } else {
