@@ -1199,6 +1199,9 @@ func TestAppendRuntimeHistoryAppendsWhenGenerationsChangeWithoutOtherStatusChang
 			Phase:              domain.RolloutPhaseAccepted,
 			CurrentStep:        "ShiftTrafficCanary",
 			Summary:            "Traffic shift is progressing",
+			TargetType:         "ec2",
+			Strategy:           "canary",
+			ExecutionMode:      "asgWeightedTargetGroups",
 		},
 		History: []domain.StatusHistoryEntry{{
 			Timestamp:          "2026-04-16T05:30:00Z",
@@ -1210,6 +1213,9 @@ func TestAppendRuntimeHistoryAppendsWhenGenerationsChangeWithoutOtherStatusChang
 			ObservedGeneration: 7,
 			RolloutPhase:       domain.RolloutPhaseAccepted,
 			CurrentStep:        "ShiftTrafficCanary",
+			TargetType:         "ec2",
+			Strategy:           "canary",
+			ExecutionMode:      "asgWeightedTargetGroups",
 		}},
 	}
 	current := previous
@@ -1220,6 +1226,9 @@ func TestAppendRuntimeHistoryAppendsWhenGenerationsChangeWithoutOtherStatusChang
 		Phase:              domain.RolloutPhaseAccepted,
 		CurrentStep:        "ShiftTrafficCanary",
 		Summary:            "Traffic shift is progressing",
+		TargetType:         "ec2",
+		Strategy:           "canary",
+		ExecutionMode:      "asgWeightedTargetGroups",
 	}
 
 	oldNow := runtimeHistoryNow
@@ -1240,8 +1249,73 @@ func TestAppendRuntimeHistoryAppendsWhenGenerationsChangeWithoutOtherStatusChang
 	if latest.DesiredGeneration != 9 || latest.ObservedGeneration != 8 {
 		t.Fatalf("expected appended entry to record changed generations, got %+v", latest)
 	}
+	if latest.TargetType != "ec2" || latest.Strategy != "canary" || latest.ExecutionMode != "asgWeightedTargetGroups" {
+		t.Fatalf("expected appended entry to preserve rollout context, got %+v", latest)
+	}
 	if !reflect.DeepEqual(latest.Changes, []string{"desiredGeneration", "observedGeneration"}) {
 		t.Fatalf("expected generation-only change labels, got %+v", latest.Changes)
+	}
+}
+
+func TestAppendRuntimeHistoryTracksRolloutContextChanges(t *testing.T) {
+	previous := domain.DeploymentStatus{
+		ObservedGeneration: 7,
+		Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"},
+		Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "warming"},
+		Rollout: &domain.RolloutSummary{
+			DesiredGeneration:  8,
+			ObservedGeneration: 7,
+			Phase:              domain.RolloutPhaseAccepted,
+			CurrentStep:        "CreateCandidateCapacity",
+			Summary:            "Candidate is warming",
+			TargetType:         "ec2",
+			Strategy:           "canary",
+			ExecutionMode:      "asgWeightedTargetGroups",
+		},
+		History: []domain.StatusHistoryEntry{{
+			Timestamp:          "2026-04-16T05:30:00Z",
+			Source:             runtimeHistorySourceController,
+			Summary:            "Candidate is warming",
+			Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"},
+			Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "warming"},
+			DesiredGeneration:  8,
+			ObservedGeneration: 7,
+			RolloutPhase:       domain.RolloutPhaseAccepted,
+			CurrentStep:        "CreateCandidateCapacity",
+			TargetType:         "ec2",
+			Strategy:           "canary",
+			ExecutionMode:      "asgWeightedTargetGroups",
+		}},
+	}
+	current := previous
+	current.Rollout = &domain.RolloutSummary{
+		DesiredGeneration:  8,
+		ObservedGeneration: 7,
+		Phase:              domain.RolloutPhaseAccepted,
+		CurrentStep:        "CreateCandidateCapacity",
+		Summary:            "Candidate is warming",
+		TargetType:         "ec2",
+		Strategy:           "blueGreen",
+		ExecutionMode:      "asgInstanceRefresh",
+	}
+
+	oldNow := runtimeHistoryNow
+	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 40, 0, 0, time.UTC) }
+	defer func() { runtimeHistoryNow = oldNow }()
+
+	got := appendRuntimeHistory(previous, current)
+	if len(got) != 2 {
+		t.Fatalf("expected rollout context change to append a new history entry, got %+v", got)
+	}
+	latest := got[len(got)-1]
+	if latest.Timestamp != "2026-04-16T06:40:00Z" {
+		t.Fatalf("expected deterministic timestamp, got %+v", latest)
+	}
+	if latest.TargetType != "ec2" || latest.Strategy != "blueGreen" || latest.ExecutionMode != "asgInstanceRefresh" {
+		t.Fatalf("expected latest rollout context to be recorded, got %+v", latest)
+	}
+	if !reflect.DeepEqual(latest.Changes, []string{"strategy", "executionMode"}) {
+		t.Fatalf("expected rollout context change labels, got %+v", latest.Changes)
 	}
 }
 
@@ -1355,6 +1429,56 @@ func TestAppendRuntimeHistoryDedupesAgainstLatestPersistedEntryForLegacySnapshot
 	}
 	if got[0].Timestamp != "2026-04-16T05:30:00Z" {
 		t.Fatalf("expected existing persisted history entry to be preserved, got %+v", got)
+	}
+}
+
+func TestAppendRuntimeHistoryNormalizesLegacyLatestControllerEntryContext(t *testing.T) {
+	previous := domain.DeploymentStatus{
+		Sync:   domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"},
+		Health: domain.Health{Overall: domain.HealthProgressing, Summary: "warming"},
+	}
+	current := domain.DeploymentStatus{
+		Sync:   previous.Sync,
+		Health: previous.Health,
+		Rollout: &domain.RolloutSummary{
+			DesiredGeneration:  8,
+			ObservedGeneration: 7,
+			Phase:              domain.RolloutPhaseAccepted,
+			CurrentStep:        "CreateCandidateCapacity",
+			Summary:            "Candidate is warming",
+			TargetType:         "ec2",
+			Strategy:           "canary",
+			ExecutionMode:      "asgWeightedTargetGroups",
+		},
+		History: []domain.StatusHistoryEntry{{
+			Timestamp:          "2026-04-16T05:30:00Z",
+			Source:             runtimeHistorySourceController,
+			Summary:            "Candidate is warming",
+			Sync:               previous.Sync,
+			Health:             previous.Health,
+			DesiredGeneration:  8,
+			ObservedGeneration: 7,
+			RolloutPhase:       domain.RolloutPhaseAccepted,
+			CurrentStep:        "CreateCandidateCapacity",
+		}},
+	}
+
+	got := appendRuntimeHistory(previous, current)
+	if len(got) != 1 {
+		t.Fatalf("expected legacy latest controller history entry to be normalized in place without appending, got %+v", got)
+	}
+	latest := got[0]
+	if latest.TargetType != "ec2" || latest.Strategy != "canary" || latest.ExecutionMode != "asgWeightedTargetGroups" {
+		t.Fatalf("expected latest persisted controller history entry to be backfilled from current rollout context, got %+v", latest)
+	}
+	if latest.Timestamp != "2026-04-16T05:30:00Z" || latest.Summary != "Candidate is warming" || latest.Sync != previous.Sync || latest.Health != previous.Health || latest.DesiredGeneration != 8 || latest.ObservedGeneration != 7 || latest.RolloutPhase != domain.RolloutPhaseAccepted || latest.CurrentStep != "CreateCandidateCapacity" {
+		t.Fatalf("expected legacy latest history entry to preserve original persisted values while normalizing context, got %+v", latest)
+	}
+	if len(latest.Changes) != 0 {
+		t.Fatalf("expected normalization-only path to preserve existing change labels, got %+v", latest)
+	}
+	if current.History[0].TargetType != "" || current.History[0].Strategy != "" || current.History[0].ExecutionMode != "" {
+		t.Fatalf("expected normalization to avoid mutating current status history in place, got %+v", current.History[0])
 	}
 }
 

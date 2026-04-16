@@ -129,8 +129,8 @@ func TestBuildAccountOverviewsRuntimeSummaryUsesLatestHistory(t *testing.T) {
 				Summary:     "stale rollout",
 			},
 			History: []domain.StatusHistoryEntry{
-				{Timestamp: "2026-04-16T06:15:00Z", Source: "controller", Summary: "Accepted rollout for r7", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "candidate warming"}, DesiredGeneration: 7, ObservedGeneration: 6, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "CreateCandidateCapacity", Changes: []string{"initial"}},
-				{Timestamp: "2026-04-16T06:20:00Z", Source: "controller", Summary: "Shifting canary traffic", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficCanary", Changes: []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep"}},
+				{Timestamp: "2026-04-16T06:15:00Z", Source: "controller", Summary: "Accepted rollout for r7", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "candidate warming"}, DesiredGeneration: 7, ObservedGeneration: 6, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "CreateCandidateCapacity", TargetType: "ec2", Strategy: "blueGreen", ExecutionMode: "asgInstanceRefresh", Changes: []string{"initial"}},
+				{Timestamp: "2026-04-16T06:20:00Z", Source: "controller", Summary: "Shifting canary traffic", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficCanary", TargetType: "ec2", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", Changes: []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep", "strategy", "executionMode"}},
 			},
 		},
 	}}
@@ -147,13 +147,62 @@ func TestBuildAccountOverviewsRuntimeSummaryUsesLatestHistory(t *testing.T) {
 	if summary == nil {
 		t.Fatalf("expected runtime summary to be surfaced, got %+v", overviews[0].Deployments[0])
 	}
-	if summary.Timestamp != "2026-04-16T06:20:00Z" || summary.Source != "controller" || summary.Summary != "Shifting canary traffic" || summary.Sync.Reason != "progressing" || summary.Health.Summary != "2/3 targets healthy" || summary.DesiredGeneration != 8 || summary.ObservedGeneration != 7 || summary.RolloutPhase != domain.RolloutPhasePromoting || summary.CurrentStep != "ShiftTrafficCanary" || summary.HistoryCount != 2 || !reflect.DeepEqual(summary.Changes, []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep"}) {
+	if summary.Timestamp != "2026-04-16T06:20:00Z" || summary.Source != "controller" || summary.Summary != "Shifting canary traffic" || summary.Sync.Reason != "progressing" || summary.Health.Summary != "2/3 targets healthy" || summary.DesiredGeneration != 8 || summary.ObservedGeneration != 7 || summary.RolloutPhase != domain.RolloutPhasePromoting || summary.CurrentStep != "ShiftTrafficCanary" || summary.TargetType != "ec2" || summary.Strategy != "canary" || summary.ExecutionMode != "asgWeightedTargetGroups" || summary.HistoryCount != 2 || !reflect.DeepEqual(summary.Changes, []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep", "strategy", "executionMode"}) {
 		t.Fatalf("expected latest history entry to drive runtime summary, got %+v", summary)
 	}
 
 	snapshots[0].Status.History[1].Summary = "mutated"
 	if overviews[0].Deployments[0].RuntimeSummary.Summary != "Shifting canary traffic" {
 		t.Fatalf("expected runtime summary to be cloned defensively, got %+v", overviews[0].Deployments[0].RuntimeSummary)
+	}
+}
+
+func TestBuildAccountOverviewsRuntimeSummaryBackfillsLegacyHistoryContextFromCurrentRollout(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
+		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments:  []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
+	}
+	snapshots := []statusstore.Snapshot{{
+		DeploymentName: "payments-api-prod",
+		Status: domain.DeploymentStatus{
+			Sync:   domain.Sync{State: domain.SyncStateOutOfSync, Reason: "stale-current"},
+			Health: domain.Health{Overall: domain.HealthUnhealthy, Summary: "stale health"},
+			Rollout: &domain.RolloutSummary{
+				DesiredGeneration:  8,
+				ObservedGeneration: 7,
+				Phase:              domain.RolloutPhasePromoting,
+				CurrentStep:        "ShiftTrafficCanary",
+				Summary:            "stale rollout",
+				TargetType:         "ec2",
+				Strategy:           "canary",
+				ExecutionMode:      "asgWeightedTargetGroups",
+			},
+			History: []domain.StatusHistoryEntry{
+				{Timestamp: "2026-04-16T06:20:00Z", Source: "controller", Summary: "Shifting canary traffic", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficCanary", Changes: []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep"}},
+			},
+		},
+	}}
+
+	overviews, err := BuildAccountOverviews(catalog, snapshots)
+	if err != nil {
+		t.Fatalf("BuildAccountOverviews returned error: %v", err)
+	}
+	summary := overviews[0].Deployments[0].RuntimeSummary
+	if summary == nil {
+		t.Fatalf("expected runtime summary to be surfaced, got %+v", overviews[0].Deployments[0])
+	}
+	if summary.TargetType != "ec2" || summary.Strategy != "canary" || summary.ExecutionMode != "asgWeightedTargetGroups" {
+		t.Fatalf("expected legacy latest history entry to backfill rollout context from current rollout, got %+v", summary)
+	}
+	if snapshots[0].Status.History[0].TargetType != "" || snapshots[0].Status.History[0].Strategy != "" || snapshots[0].Status.History[0].ExecutionMode != "" {
+		t.Fatalf("expected backfill to avoid mutating stored legacy history, got %+v", snapshots[0].Status.History[0])
+	}
+	if !reflect.DeepEqual(summary.Changes, []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep"}) {
+		t.Fatalf("expected legacy history change labels to stay intact, got %+v", summary.Changes)
+	}
+	if summary.HistoryCount != 1 || summary.Timestamp != "2026-04-16T06:20:00Z" || summary.Source != "controller" || summary.Summary != "Shifting canary traffic" || summary.Sync.Reason != "progressing" || summary.Health.Summary != "2/3 targets healthy" || summary.DesiredGeneration != 8 || summary.ObservedGeneration != 7 || summary.RolloutPhase != domain.RolloutPhasePromoting || summary.CurrentStep != "ShiftTrafficCanary" {
+		t.Fatalf("expected latest history fields to remain authoritative after backfill, got %+v", summary)
 	}
 }
 
@@ -175,6 +224,9 @@ func TestBuildAccountOverviewsRuntimeSummaryFallsBackToCurrentStatus(t *testing.
 				Phase:              domain.RolloutPhaseCompleted,
 				CurrentStep:        "Complete",
 				Summary:            "Serving stable capacity",
+				TargetType:         "ecs",
+				Strategy:           "linear",
+				ExecutionMode:      "ecsCodeDeploy",
 			},
 		},
 	}}
@@ -187,7 +239,7 @@ func TestBuildAccountOverviewsRuntimeSummaryFallsBackToCurrentStatus(t *testing.
 	if summary == nil {
 		t.Fatalf("expected runtime summary fallback, got %+v", overviews[0].Deployments[0])
 	}
-	if summary.Timestamp != "" || summary.Source != "" || summary.Summary != "Serving stable capacity" || summary.Sync.Reason != "steady" || summary.Health.Summary != "3/3 healthy" || summary.DesiredGeneration != 7 || summary.ObservedGeneration != 6 || summary.RolloutPhase != domain.RolloutPhaseCompleted || summary.CurrentStep != "Complete" || summary.HistoryCount != 0 {
+	if summary.Timestamp != "" || summary.Source != "" || summary.Summary != "Serving stable capacity" || summary.Sync.Reason != "steady" || summary.Health.Summary != "3/3 healthy" || summary.DesiredGeneration != 7 || summary.ObservedGeneration != 6 || summary.RolloutPhase != domain.RolloutPhaseCompleted || summary.CurrentStep != "Complete" || summary.TargetType != "ecs" || summary.Strategy != "linear" || summary.ExecutionMode != "ecsCodeDeploy" || summary.HistoryCount != 0 {
 		t.Fatalf("expected current status fallback runtime summary, got %+v", summary)
 	}
 }
@@ -258,7 +310,10 @@ func TestBuildApplicationOverviews(t *testing.T) {
 					ObservedGeneration: 7,
 					RolloutPhase:       domain.RolloutPhasePromoting,
 					CurrentStep:        "ShiftTrafficCanary",
-					Changes:            []string{"summary", "sync", "health"},
+					TargetType:         "ec2",
+					Strategy:           "canary",
+					ExecutionMode:      "asgWeightedTargetGroups",
+					Changes:            []string{"summary", "sync", "health", "strategy", "executionMode"},
 				}},
 				DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6"},
 				Rollout: &domain.RolloutSummary{
@@ -267,6 +322,9 @@ func TestBuildApplicationOverviews(t *testing.T) {
 					Phase:              domain.RolloutPhasePromoting,
 					CurrentStep:        "ShiftTrafficCanary",
 					Summary:            "Canary is serving 10% of traffic",
+					TargetType:         "ec2",
+					Strategy:           "canary",
+					ExecutionMode:      "asgWeightedTargetGroups",
 					Steps:              []domain.RolloutStepSummary{{Kind: "CreateCandidateCapacity"}, {Kind: "ShiftTrafficCanary", Current: true}},
 					Execution:          []domain.RolloutExecutionDetail{{Resource: "candidateAutoScalingGroup", Name: "payments-api-prod-candidate", Description: "Candidate Auto Scaling Group Tenet will create for weighted target group rollout"}},
 				},
@@ -307,7 +365,7 @@ func TestBuildApplicationOverviews(t *testing.T) {
 	if payments.ObservedGeneration != 7 || payments.Sync.Reason != "new artifact" || payments.Health.Summary != "2/3 targets healthy" {
 		t.Fatalf("expected runtime status fields to be preserved, got %+v", payments)
 	}
-	if payments.RuntimeSummary == nil || payments.RuntimeSummary.Summary != "Shifting canary traffic" || payments.RuntimeSummary.CurrentStep != "ShiftTrafficCanary" {
+	if payments.RuntimeSummary == nil || payments.RuntimeSummary.Summary != "Shifting canary traffic" || payments.RuntimeSummary.CurrentStep != "ShiftTrafficCanary" || payments.RuntimeSummary.TargetType != "ec2" || payments.RuntimeSummary.Strategy != "canary" || payments.RuntimeSummary.ExecutionMode != "asgWeightedTargetGroups" {
 		t.Fatalf("expected runtime summary to be preserved, got %+v", payments)
 	}
 	if payments.Rollout == nil || payments.Rollout.Phase != domain.RolloutPhasePromoting || payments.Rollout.Execution[0].Name != "payments-api-prod-candidate" {
@@ -658,7 +716,51 @@ func TestBuildDeploymentOverviewDetailRuntimeSummaryUsesLatestHistory(t *testing
 				Summary:     "stale rollout",
 			},
 			History: []domain.StatusHistoryEntry{
-				{Timestamp: "2026-04-16T06:15:00Z", Source: "controller", Summary: "Accepted rollout for r7", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "candidate warming"}, DesiredGeneration: 7, ObservedGeneration: 6, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "CreateCandidateCapacity", Changes: []string{"initial"}},
+				{Timestamp: "2026-04-16T06:15:00Z", Source: "controller", Summary: "Accepted rollout for r7", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "candidate warming"}, DesiredGeneration: 7, ObservedGeneration: 6, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "CreateCandidateCapacity", TargetType: "ec2", Strategy: "blueGreen", ExecutionMode: "asgInstanceRefresh", Changes: []string{"initial"}},
+				{Timestamp: "2026-04-16T06:20:00Z", Source: "controller", Summary: "Shifting canary traffic", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficCanary", TargetType: "ec2", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", Changes: []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep", "strategy", "executionMode"}},
+			},
+		},
+	}}
+
+	detail, err := BuildDeploymentOverviewDetail(catalog, snapshots, "payments-api-prod")
+	if err != nil {
+		t.Fatalf("BuildDeploymentOverviewDetail returned error: %v", err)
+	}
+	if detail.RuntimeSummary == nil {
+		t.Fatalf("expected runtime summary to be surfaced, got %+v", detail)
+	}
+	if detail.RuntimeSummary.Timestamp != "2026-04-16T06:20:00Z" || detail.RuntimeSummary.Source != "controller" || detail.RuntimeSummary.Summary != "Shifting canary traffic" || detail.RuntimeSummary.Sync.Reason != "progressing" || detail.RuntimeSummary.Health.Summary != "2/3 targets healthy" || detail.RuntimeSummary.DesiredGeneration != 8 || detail.RuntimeSummary.ObservedGeneration != 7 || detail.RuntimeSummary.RolloutPhase != domain.RolloutPhasePromoting || detail.RuntimeSummary.CurrentStep != "ShiftTrafficCanary" || detail.RuntimeSummary.TargetType != "ec2" || detail.RuntimeSummary.Strategy != "canary" || detail.RuntimeSummary.ExecutionMode != "asgWeightedTargetGroups" || detail.RuntimeSummary.HistoryCount != 2 || !reflect.DeepEqual(detail.RuntimeSummary.Changes, []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep", "strategy", "executionMode"}) {
+		t.Fatalf("expected latest history entry runtime summary, got %+v", detail.RuntimeSummary)
+	}
+
+	snapshots[0].Status.History[1].CurrentStep = "mutated"
+	if detail.RuntimeSummary.CurrentStep != "ShiftTrafficCanary" {
+		t.Fatalf("expected runtime summary to be cloned defensively, got %+v", detail.RuntimeSummary)
+	}
+}
+
+func TestBuildDeploymentOverviewDetailRuntimeSummaryBackfillsLegacyHistoryContextFromCurrentRollout(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
+		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments:  []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
+	}
+	snapshots := []statusstore.Snapshot{{
+		DeploymentName: "payments-api-prod",
+		Status: domain.DeploymentStatus{
+			Sync:   domain.Sync{State: domain.SyncStateOutOfSync, Reason: "stale-current"},
+			Health: domain.Health{Overall: domain.HealthUnhealthy, Summary: "stale health"},
+			Rollout: &domain.RolloutSummary{
+				DesiredGeneration:  8,
+				ObservedGeneration: 7,
+				Phase:              domain.RolloutPhasePromoting,
+				CurrentStep:        "ShiftTrafficCanary",
+				Summary:            "stale rollout",
+				TargetType:         "ec2",
+				Strategy:           "canary",
+				ExecutionMode:      "asgWeightedTargetGroups",
+			},
+			History: []domain.StatusHistoryEntry{
 				{Timestamp: "2026-04-16T06:20:00Z", Source: "controller", Summary: "Shifting canary traffic", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficCanary", Changes: []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep"}},
 			},
 		},
@@ -671,13 +773,17 @@ func TestBuildDeploymentOverviewDetailRuntimeSummaryUsesLatestHistory(t *testing
 	if detail.RuntimeSummary == nil {
 		t.Fatalf("expected runtime summary to be surfaced, got %+v", detail)
 	}
-	if detail.RuntimeSummary.Timestamp != "2026-04-16T06:20:00Z" || detail.RuntimeSummary.Source != "controller" || detail.RuntimeSummary.Summary != "Shifting canary traffic" || detail.RuntimeSummary.Sync.Reason != "progressing" || detail.RuntimeSummary.Health.Summary != "2/3 targets healthy" || detail.RuntimeSummary.DesiredGeneration != 8 || detail.RuntimeSummary.ObservedGeneration != 7 || detail.RuntimeSummary.RolloutPhase != domain.RolloutPhasePromoting || detail.RuntimeSummary.CurrentStep != "ShiftTrafficCanary" || detail.RuntimeSummary.HistoryCount != 2 || !reflect.DeepEqual(detail.RuntimeSummary.Changes, []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep"}) {
-		t.Fatalf("expected latest history entry runtime summary, got %+v", detail.RuntimeSummary)
+	if detail.RuntimeSummary.TargetType != "ec2" || detail.RuntimeSummary.Strategy != "canary" || detail.RuntimeSummary.ExecutionMode != "asgWeightedTargetGroups" {
+		t.Fatalf("expected legacy latest history entry to backfill rollout context from current rollout, got %+v", detail.RuntimeSummary)
 	}
-
-	snapshots[0].Status.History[1].CurrentStep = "mutated"
-	if detail.RuntimeSummary.CurrentStep != "ShiftTrafficCanary" {
-		t.Fatalf("expected runtime summary to be cloned defensively, got %+v", detail.RuntimeSummary)
+	if snapshots[0].Status.History[0].TargetType != "" || snapshots[0].Status.History[0].Strategy != "" || snapshots[0].Status.History[0].ExecutionMode != "" {
+		t.Fatalf("expected backfill to avoid mutating stored legacy history, got %+v", snapshots[0].Status.History[0])
+	}
+	if !reflect.DeepEqual(detail.RuntimeSummary.Changes, []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep"}) {
+		t.Fatalf("expected legacy history change labels to stay intact, got %+v", detail.RuntimeSummary.Changes)
+	}
+	if detail.RuntimeSummary.HistoryCount != 1 || detail.RuntimeSummary.Timestamp != "2026-04-16T06:20:00Z" || detail.RuntimeSummary.Source != "controller" || detail.RuntimeSummary.Summary != "Shifting canary traffic" || detail.RuntimeSummary.Sync.Reason != "progressing" || detail.RuntimeSummary.Health.Summary != "2/3 targets healthy" || detail.RuntimeSummary.DesiredGeneration != 8 || detail.RuntimeSummary.ObservedGeneration != 7 || detail.RuntimeSummary.RolloutPhase != domain.RolloutPhasePromoting || detail.RuntimeSummary.CurrentStep != "ShiftTrafficCanary" {
+		t.Fatalf("expected latest history fields to remain authoritative after backfill, got %+v", detail.RuntimeSummary)
 	}
 }
 
@@ -699,6 +805,9 @@ func TestBuildDeploymentOverviewDetailRuntimeSummaryFallsBackToCurrentStatus(t *
 				Phase:              domain.RolloutPhaseCompleted,
 				CurrentStep:        "Complete",
 				Summary:            "Serving stable capacity",
+				TargetType:         "ecs",
+				Strategy:           "linear",
+				ExecutionMode:      "ecsCodeDeploy",
 			},
 		},
 	}}

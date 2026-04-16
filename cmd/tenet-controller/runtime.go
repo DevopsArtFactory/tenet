@@ -167,7 +167,11 @@ func appendRuntimeHistory(previous domain.DeploymentStatus, current domain.Deplo
 	if len(history) > 0 {
 		latest = history[len(history)-1]
 	}
-	if !runtimeHistoryMeaningfullyChanged(latest, entry) {
+	normalizedLatest := normalizeRuntimeHistoryEntryContext(latest, entry)
+	if len(history) > 0 && !reflect.DeepEqual(normalizedLatest, history[len(history)-1]) {
+		history[len(history)-1] = normalizedLatest
+	}
+	if !runtimeHistoryMeaningfullyChanged(normalizedLatest, entry) {
 		return capRuntimeHistory(history)
 	}
 
@@ -175,10 +179,26 @@ func appendRuntimeHistory(previous domain.DeploymentStatus, current domain.Deplo
 	if !runtimeHistoryHasControllerEntry(history) {
 		entry.Changes = []string{"initial"}
 	} else {
-		entry.Changes = runtimeHistoryChanges(latest, entry)
+		entry.Changes = runtimeHistoryChanges(normalizedLatest, entry)
 	}
 	history = append(history, entry)
 	return capRuntimeHistory(history)
+}
+
+func normalizeRuntimeHistoryEntryContext(entry domain.StatusHistoryEntry, fallback domain.StatusHistoryEntry) domain.StatusHistoryEntry {
+	if entry.Source != runtimeHistorySourceController {
+		return entry
+	}
+	if entry.TargetType == "" {
+		entry.TargetType = fallback.TargetType
+	}
+	if entry.Strategy == "" {
+		entry.Strategy = fallback.Strategy
+	}
+	if entry.ExecutionMode == "" {
+		entry.ExecutionMode = fallback.ExecutionMode
+	}
+	return entry
 }
 
 func runtimeHistoryHasControllerEntry(history []domain.StatusHistoryEntry) bool {
@@ -191,7 +211,7 @@ func runtimeHistoryHasControllerEntry(history []domain.StatusHistoryEntry) bool 
 }
 
 func runtimeHistoryChanges(previous domain.StatusHistoryEntry, current domain.StatusHistoryEntry) []string {
-	changes := make([]string, 0, 7)
+	changes := make([]string, 0, 10)
 	if previous.Summary != current.Summary {
 		changes = append(changes, "summary")
 	}
@@ -212,6 +232,15 @@ func runtimeHistoryChanges(previous domain.StatusHistoryEntry, current domain.St
 	}
 	if previous.CurrentStep != current.CurrentStep {
 		changes = append(changes, "currentStep")
+	}
+	if previous.TargetType != current.TargetType {
+		changes = append(changes, "targetType")
+	}
+	if previous.Strategy != current.Strategy {
+		changes = append(changes, "strategy")
+	}
+	if previous.ExecutionMode != current.ExecutionMode {
+		changes = append(changes, "executionMode")
 	}
 	return changes
 }
@@ -237,6 +266,9 @@ func deriveRuntimeHistoryEntry(status domain.DeploymentStatus) domain.StatusHist
 		entry.ObservedGeneration = status.Rollout.ObservedGeneration
 		entry.RolloutPhase = status.Rollout.Phase
 		entry.CurrentStep = status.Rollout.CurrentStep
+		entry.TargetType = status.Rollout.TargetType
+		entry.Strategy = status.Rollout.Strategy
+		entry.ExecutionMode = status.Rollout.ExecutionMode
 	}
 	return entry
 }
@@ -249,7 +281,10 @@ func runtimeHistoryMeaningfullyChanged(previous domain.StatusHistoryEntry, curre
 		previous.DesiredGeneration != current.DesiredGeneration ||
 		previous.ObservedGeneration != current.ObservedGeneration ||
 		previous.RolloutPhase != current.RolloutPhase ||
-		previous.CurrentStep != current.CurrentStep
+		previous.CurrentStep != current.CurrentStep ||
+		previous.TargetType != current.TargetType ||
+		previous.Strategy != current.Strategy ||
+		previous.ExecutionMode != current.ExecutionMode
 }
 
 func syncStateLabel(state domain.SyncState) string {
@@ -282,6 +317,9 @@ func deriveRolloutSummary(deployment domain.Deployment, status domain.Deployment
 		Phase:              rolloutPhaseForStep(plan, currentIndex),
 		CurrentStep:        currentStep,
 		Summary:            rolloutSummaryForStep(status, plan, currentIndex),
+		TargetType:         deployment.TargetType,
+		Strategy:           deployment.Strategy,
+		ExecutionMode:      deployment.ExecutionMode,
 		Steps:              steps,
 		Execution:          deriveRolloutExecutionDetails(deployment),
 	}
