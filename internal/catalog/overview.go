@@ -410,7 +410,7 @@ func BuildDeploymentOverviewDetail(c manifest.Catalog, snapshots []statusstore.S
 func deriveRuntimeSummary(status domain.DeploymentStatus) *domain.RuntimeSummary {
 	if len(status.History) > 0 {
 		latest := status.History[len(status.History)-1]
-		return &domain.RuntimeSummary{
+		summary := &domain.RuntimeSummary{
 			Timestamp:          latest.Timestamp,
 			Source:             latest.Source,
 			Summary:            latest.Summary,
@@ -421,8 +421,23 @@ func deriveRuntimeSummary(status domain.DeploymentStatus) *domain.RuntimeSummary
 			ObservedGeneration: latest.ObservedGeneration,
 			RolloutPhase:       latest.RolloutPhase,
 			CurrentStep:        latest.CurrentStep,
+			TargetType:         latest.TargetType,
+			Strategy:           latest.Strategy,
+			ExecutionMode:      latest.ExecutionMode,
 			HistoryCount:       len(status.History),
 		}
+		if status.Rollout != nil {
+			if summary.TargetType == "" {
+				summary.TargetType = status.Rollout.TargetType
+			}
+			if summary.Strategy == "" {
+				summary.Strategy = status.Rollout.Strategy
+			}
+			if summary.ExecutionMode == "" {
+				summary.ExecutionMode = status.Rollout.ExecutionMode
+			}
+		}
+		return summary
 	}
 	if status.Sync == (domain.Sync{}) && status.Health == (domain.Health{}) && status.Rollout == nil {
 		return nil
@@ -440,6 +455,9 @@ func deriveRuntimeSummary(status domain.DeploymentStatus) *domain.RuntimeSummary
 		summary.ObservedGeneration = status.Rollout.ObservedGeneration
 		summary.RolloutPhase = status.Rollout.Phase
 		summary.CurrentStep = status.Rollout.CurrentStep
+		summary.TargetType = status.Rollout.TargetType
+		summary.Strategy = status.Rollout.Strategy
+		summary.ExecutionMode = status.Rollout.ExecutionMode
 	}
 	return summary
 }

@@ -80,6 +80,9 @@ type RolloutSummary struct {
 	Phase              RolloutPhase             `json:"phase,omitempty"`
 	CurrentStep        string                   `json:"currentStep,omitempty"`
 	Summary            string                   `json:"summary,omitempty"`
+	TargetType         string                   `json:"targetType,omitempty"`
+	Strategy           string                   `json:"strategy,omitempty"`
+	ExecutionMode      string                   `json:"executionMode,omitempty"`
 	Steps              []RolloutStepSummary     `json:"steps,omitempty"`
 	Execution          []RolloutExecutionDetail `json:"execution,omitempty"`
 }
@@ -96,6 +99,9 @@ type StatusHistoryEntry struct {
 	ObservedGeneration int64        `json:"observedGeneration"`
 	RolloutPhase       RolloutPhase `json:"rolloutPhase,omitempty"`
 	CurrentStep        string       `json:"currentStep,omitempty"`
+	TargetType         string       `json:"targetType,omitempty"`
+	Strategy           string       `json:"strategy,omitempty"`
+	ExecutionMode      string       `json:"executionMode,omitempty"`
 }
 
 // RuntimeSummary captures the latest stable operator-facing runtime metadata.
@@ -110,6 +116,9 @@ type RuntimeSummary struct {
 	ObservedGeneration int64        `json:"observedGeneration"`
 	RolloutPhase       RolloutPhase `json:"rolloutPhase,omitempty"`
 	CurrentStep        string       `json:"currentStep,omitempty"`
+	TargetType         string       `json:"targetType,omitempty"`
+	Strategy           string       `json:"strategy,omitempty"`
+	ExecutionMode      string       `json:"executionMode,omitempty"`
 	HistoryCount       int          `json:"historyCount"`
 }
 

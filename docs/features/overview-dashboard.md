@@ -80,7 +80,7 @@ The account drill-down page consumes `GET /v1/overview/accounts/{awsAccountId}` 
 - sibling `Account JSON`, `Group JSON`, and `_self` `Open application` links outside the expandable row toggle
 - expandable deployment rows that still lazy-load `GET /v1/overview/deployments/{deploymentName}` for deep detail
 
-The underlying `/v1/overview/applications` payload is still a richer joined row than the first page renders. It also preserves additive runtime summary, rollout summary, artifact, generation, and condition fields so other UI helpers and future slices can reuse the same route without rejoining `/v1/overview/accounts`.
+The underlying `/v1/overview/applications` payload is still a richer joined row than the first page renders. It also preserves additive runtime summary, rollout summary, artifact, generation, condition, and rollout-context fields (`runtimeSummary.targetType` / `runtimeSummary.strategy` / `runtimeSummary.executionMode`) so other UI helpers and future slices can reuse the same route without rejoining `/v1/overview/accounts`.
 
 ### Application detail page
 
@@ -122,6 +122,7 @@ Routes:
 Current drift workspace behavior:
 - reuses the embedded shell
 - lazy-loads deployment detail
+- shows latest runtime context rows for target/strategy/execution mode
 - shows deployment context and status conditions
 - explicitly states that field-level drift rows are not yet available in the read model
 
@@ -129,6 +130,7 @@ Current drift workspace behavior:
 
 Current plan/apply workspace behavior:
 - reuses the embedded shell
+- shows latest runtime context rows for target/strategy/execution mode
 - shows rollout-plan steps from the deployment detail route
 - displays disabled `Create Plan` / `Apply Plan` buttons
 - explicitly states that mutation APIs are not wired yet
@@ -162,6 +164,9 @@ Current operator-visible fields include:
 - `runtimeSummary.health.summary`
 - `runtimeSummary.desiredGeneration`
 - `runtimeSummary.observedGeneration`
+- `runtimeSummary.targetType`
+- `runtimeSummary.strategy`
+- `runtimeSummary.executionMode`
 - `runtimeSummary.changes[]`
 - `runtimeSummary.source`
 - `runtimeSummary.rolloutPhase`
@@ -172,6 +177,7 @@ UI rendering rules:
 - safe DOM construction only (`createElement`, `textContent`, `replaceChildren`)
 - no `innerHTML` for manifest/status-backed values
 - missing generation fields render as `—`, not `0`
+- runtime context rows are rendered as concise `Target … · Strategy … · Execution …` text sourced from runtimeSummary/history fields, not reconstructed from HTML snippets
 - latest change labels are additive string arrays, not objects
 
 ## Testing and verification
@@ -179,7 +185,7 @@ UI rendering rules:
 Current coverage includes:
 - Go string-fragment tests in `internal/api/ui_test.go`
 - Node-backed behavior tests in `internal/api/ui_behavior_test.go`
-- script syntax validation with `node --check`
+- embedded-script syntax validation by extracting the `<script>` block from `internal/api/web/index.html` and running `node --check` on the extracted JavaScript
 - `make smoke-local`
 
 When changing the overview UI, preserve all of the following:

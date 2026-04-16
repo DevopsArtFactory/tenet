@@ -1709,6 +1709,9 @@ func TestResourceDetailPageWithNodeHarness(t *testing.T) {
 		"runtimeSummary": map[string]any{
 			"source":             "runtime-agent",
 			"timestamp":          "2026-04-16T07:10:00Z",
+			"targetType":         "ecs",
+			"strategy":           "linear",
+			"executionMode":      "ecsCodeDeploy",
 			"historyCount":       2,
 			"desiredGeneration":  12,
 			"observedGeneration": 11,
@@ -1722,6 +1725,9 @@ func TestResourceDetailPageWithNodeHarness(t *testing.T) {
 			"observedGeneration": 10,
 			"rolloutPhase":       "Progressing",
 			"currentStep":        "CreateCodeDeployDeployment",
+			"targetType":         "ecs",
+			"strategy":           "linear",
+			"executionMode":      "ecsCodeDeploy",
 		}},
 		"rollout": map[string]any{
 			"phase":              "Progressing",
@@ -1829,8 +1835,11 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('ShiftTrafficCanary')) throw new Error('expected resource page current rollout step');
   if (!accountsText.includes('Runtime generations')) throw new Error('expected resource page runtime generation detail');
   if (!accountsText.includes('desired 12 · observed 11')) throw new Error('expected resource page runtime generation values');
+  if (!accountsText.includes('Runtime context')) throw new Error('expected resource page runtime context label');
+  if (!accountsText.includes('Target ecs · Strategy linear · Execution ecsCodeDeploy')) throw new Error('expected resource page runtime context value');
   if (!accountsText.includes('Runtime history')) throw new Error('expected resource page runtime history section');
   if (!accountsText.includes('Created deployment group revision for v2')) throw new Error('expected resource page history detail');
+  if (!accountsText.includes('History context')) throw new Error('expected resource page history context label');
   if (!accountsText.includes('Conditions')) throw new Error('expected resource page conditions section');
   if (!accountsText.includes('ServiceReady')) throw new Error('expected resource page condition reason');
 })();
@@ -1862,6 +1871,9 @@ func TestResourceDetailPageRecentLogsWithNodeHarness(t *testing.T) {
 		"runtimeSummary": map[string]any{
 			"timestamp":    "2026-04-16T07:10:00Z",
 			"source":       "runtime-agent",
+			"targetType":   "ecs",
+			"strategy":     "linear",
+			"executionMode": "ecsCodeDeploy",
 			"historyCount": 1,
 		},
 		"rollout": map[string]any{
@@ -2345,6 +2357,9 @@ func TestDeploymentWorkspaceDriftViewWithNodeHarness(t *testing.T) {
 		"runtimeSummary": map[string]any{
 			"source":       "deployment-controller",
 			"timestamp":    "2026-04-16T06:50:00Z",
+			"targetType":   "ec2",
+			"strategy":     "canary",
+			"executionMode": "asgWeightedTargetGroups",
 			"historyCount": 3,
 			"changes":      []string{"listener rule updated", "target group weight drift"},
 		},
@@ -2435,6 +2450,8 @@ const collectText = (node) => [node.textContent, ...(node.children || []).flatMa
   if (!text.includes('Latest runtime signals')) throw new Error('expected drift workspace runtime signals section');
   if (!text.includes('Runtime source')) throw new Error('expected drift workspace runtime source label');
   if (!text.includes('deployment-controller')) throw new Error('expected drift workspace runtime source value');
+  if (!text.includes('Runtime context')) throw new Error('expected drift workspace runtime context label');
+  if (!text.includes('Target ec2 · Strategy canary · Execution asgWeightedTargetGroups')) throw new Error('expected drift workspace runtime context value');
   if (!text.includes('Runtime timestamp')) throw new Error('expected drift workspace runtime timestamp label');
   if (!text.includes('2026-04-16T06:50:00Z')) throw new Error('expected drift workspace runtime timestamp value');
   if (!text.includes('Runtime history')) throw new Error('expected drift workspace runtime history label');
@@ -2499,6 +2516,9 @@ func TestDeploymentWorkspacePlanViewWithNodeHarness(t *testing.T) {
 		"runtimeSummary": map[string]any{
 			"source":       "runtime-agent",
 			"timestamp":    "2026-04-16T07:10:00Z",
+			"targetType":   "ecs",
+			"strategy":     "linear",
+			"executionMode": "ecsCodeDeploy",
 			"historyCount": 5,
 		},
 		"rollout": map[string]any{
@@ -2584,6 +2604,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!text.includes('Latest runtime signals')) throw new Error('expected plan workspace runtime signals section');
   if (!text.includes('Runtime source')) throw new Error('expected plan workspace runtime source label');
   if (!text.includes('runtime-agent')) throw new Error('expected plan workspace runtime source value');
+  if (!text.includes('Runtime context')) throw new Error('expected plan workspace runtime context label');
+  if (!text.includes('Target ecs · Strategy linear · Execution ecsCodeDeploy')) throw new Error('expected plan workspace runtime context value');
   if (!text.includes('Runtime timestamp')) throw new Error('expected plan workspace runtime timestamp label');
   if (!text.includes('2026-04-16T07:10:00Z')) throw new Error('expected plan workspace runtime timestamp value');
   if (!text.includes('Runtime history')) throw new Error('expected plan workspace runtime history label');

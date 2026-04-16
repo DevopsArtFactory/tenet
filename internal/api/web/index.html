@@ -161,15 +161,25 @@
       const boolLabel = (value) => value ? 'True' : 'False';
       const textOrDash = (value) => value || '—';
       const runtimeSummaryTimestamp = (runtimeSummary) => runtimeSummary?.timestamp || 'Latest runtime status';
+      const rolloutContextText = (value) => {
+        const parts = [
+          value?.targetType ? `Target ${value.targetType}` : '',
+          value?.strategy ? `Strategy ${value.strategy}` : '',
+          value?.executionMode ? `Execution ${value.executionMode}` : '',
+        ].filter(Boolean);
+        return parts.length ? parts.join(' · ') : '';
+      };
       const runtimeSummaryText = (runtimeSummary) => {
         if (!runtimeSummary) return '—';
         const labels = changeLabels(runtimeSummary?.changes);
+        const runtimeContext = rolloutContextText(runtimeSummary);
         const parts = [
           runtimeSummary.summary,
           runtimeSummary.sync?.state,
           runtimeSummary.sync?.reason,
           runtimeSummary.health?.overall,
           runtimeSummary.health?.summary,
+          runtimeContext,
           runtimeSummary.source,
           labels.length ? labels.join(', ') : '',
           runtimeSummary.rolloutPhase,
@@ -817,6 +827,7 @@
           ['Rollout phase', metricValue(detail.rollout?.phase)],
           ['Current step', metricValue(detail.rollout?.currentStep)],
           ['Runtime generations', generationsText(detail.runtimeSummary)],
+          ['Runtime context', rolloutContextText(detail.runtimeSummary) || '—'],
           ['Rollout generations', detail.rollout ? generationsText(detail.rollout) : `desired — · observed ${generationValue(detail.observedGeneration)}`],
           ['Runtime timestamp', metricValue(detail.runtimeSummary?.timestamp)],
           ['Runtime source', metricValue(detail.runtimeSummary?.source)],
@@ -839,6 +850,10 @@
               createElement('span', 'detail-condition-meta', `History summary · ${textOrDash(entry.summary)}`),
               createElement('span', 'detail-condition-meta', `History generations · ${generationsText(entry)}`),
             );
+            const historyContext = rolloutContextText(entry);
+            if (historyContext) {
+              historyMeta.append(createElement('span', 'detail-condition-meta', `History context · ${historyContext}`));
+            }
             if (entry.source) {
               historyMeta.append(createElement('span', 'detail-condition-meta', `History source · ${entry.source}`));
             }
@@ -1037,6 +1052,7 @@
           ['Region placement', textOrDash(detail.region)],
           ['Allowed regions', (detail.allowedRegions || []).join(', ') || '—'],
           ['Runtime generations', generationsText(detail.runtimeSummary)],
+          ['Runtime context', rolloutContextText(detail.runtimeSummary) || '—'],
           ['Runtime source', metricValue(detail.runtimeSummary?.source)],
           ['Runtime changes', changeLabelsText(detail.runtimeSummary?.changes)],
           ['Rollout generations', detail.rollout ? generationsText(detail.rollout) : `desired — · observed ${generationValue(detail.observedGeneration)}`],
@@ -1065,6 +1081,10 @@
             );
             if (changeLabels(entry.changes).length) {
               historyMeta.append(createElement('span', 'detail-condition-meta', `History changes · ${changeLabelsText(entry.changes)}`));
+            }
+            const historyContext = rolloutContextText(entry);
+            if (historyContext) {
+              historyMeta.append(createElement('span', 'detail-condition-meta', `History context · ${historyContext}`));
             }
             if (entry.source) {
               historyMeta.append(createElement('span', 'detail-condition-meta', `History source · ${entry.source}`));
@@ -1232,6 +1252,7 @@
         const runtimeSignals = createElement('div', 'detail-grid');
         [
           ['Runtime source', metricValue(detail.runtimeSummary?.source)],
+          ['Runtime context', rolloutContextText(detail.runtimeSummary) || '—'],
           ['Runtime timestamp', metricValue(detail.runtimeSummary?.timestamp)],
           ['Runtime history', Number.isFinite(detail.runtimeSummary?.historyCount) ? String(detail.runtimeSummary.historyCount) : '—'],
         ].forEach(([label, value]) => {
