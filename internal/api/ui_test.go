@@ -217,6 +217,30 @@ func TestEmbeddedUIRendersAccountStatusCountPills(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUIGroupsDeploymentsByProjectAndEnvironment(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const deriveProjectEnvironmentGroups = (account) => {",
+		"const groups = new Map();",
+		"const key = [deployment.appRef || '', deployment.environmentRef || '', deployment.region || ''].join('\\u0000');",
+		"projectCount: projects.size,",
+		"environmentCount: environments.size,",
+		"const topology = deriveProjectEnvironmentGroups(account);",
+		"createElement('div', 'account-topology', `${topology.projectCount} projects · ${topology.environmentCount} environments`)",
+		"createElement('h3', 'deployment-group-title', `${metricValue(group.appRef)} · ${metricValue(group.environmentRef)}`)",
+		"createElement('div', 'deployment-group-meta', `Project ${metricValue(group.appRef)} · Environment ${metricValue(group.environmentRef)} · Region ${metricValue(group.region)}`)",
+		"const groupCount = group.deployments.length;",
+		"groupPills.append(createElement('span', 'group-pill', `${groupCount} deployment${groupCount === 1 ? '' : 's'}`));",
+		"const groupRows = createElement('div', 'group-rows');",
+		"groupSection.append(groupHead, groupRows);",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+}
+
 func TestUIOverviewCardsRenderRuntimeSummaryContract(t *testing.T) {
 	body := string(indexHTML)
 	for _, fragment := range []string{
