@@ -209,6 +209,7 @@ func deriveRuntimeSummary(status domain.DeploymentStatus) *domain.RuntimeSummary
 		latest := status.History[len(status.History)-1]
 		return &domain.RuntimeSummary{
 			Timestamp:          latest.Timestamp,
+			Source:             latest.Source,
 			Summary:            latest.Summary,
 			Sync:               latest.Sync,
 			Health:             latest.Health,

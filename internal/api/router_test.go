@@ -717,7 +717,7 @@ func TestRouterOverviewAccounts(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 		OverviewAccounts: func() ([]catalog.AccountOverview, error) {
-			return []catalog.AccountOverview{{Name: "prod-core", AWSAccountID: "123456789012", DeploymentCount: 3, SyncedCount: 1, ProgressingCount: 1, PausedCount: 1, ErrorCount: 0, Deployments: []catalog.DeploymentOverview{{Name: "api-prod", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", RuntimeSummary: &domain.RuntimeSummary{Timestamp: "2026-04-16T06:49:00Z", Summary: "Traffic shift is progressing", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "Traffic shift running"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "steady"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "PromoteCandidateCapacity", HistoryCount: 4}, Rollout: &domain.RolloutSummary{DesiredGeneration: 4, ObservedGeneration: 3, Phase: domain.RolloutPhaseAccepted, CurrentStep: "PromoteCandidateCapacity", Summary: "Observing current state", Steps: []domain.RolloutStepSummary{{Kind: "CreateCandidateCapacity", Status: "completed"}, {Kind: "ShiftTrafficCanary", Status: "pending"}, {Kind: "PromoteCandidateCapacity", Current: true, Status: "current"}}}}, {Name: "api-staging", Strategy: "linear", ExecutionMode: "ecsCodeDeploy", RuntimeSummary: &domain.RuntimeSummary{Summary: "Waiting for service stability", Sync: domain.Sync{State: domain.SyncStateOutOfSync, Reason: "PendingPromotion"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "warming up"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "VerifyServiceStability", HistoryCount: 0}, Rollout: &domain.RolloutSummary{DesiredGeneration: 8, ObservedGeneration: 7, Phase: domain.RolloutPhaseAccepted, CurrentStep: "VerifyServiceStability", Summary: "Observing current state", Steps: []domain.RolloutStepSummary{{Kind: "CreateCodeDeployDeployment", Status: "completed"}, {Kind: "ShiftTrafficLinear", Status: "pending"}, {Kind: "VerifyServiceStability", Current: true, Status: "current"}}}}}}}, nil
+			return []catalog.AccountOverview{{Name: "prod-core", AWSAccountID: "123456789012", DeploymentCount: 3, SyncedCount: 1, ProgressingCount: 1, PausedCount: 1, ErrorCount: 0, Deployments: []catalog.DeploymentOverview{{Name: "api-prod", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", RuntimeSummary: &domain.RuntimeSummary{Timestamp: "2026-04-16T06:49:00Z", Source: "controller", Summary: "Traffic shift is progressing", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "Traffic shift running"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "steady"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "PromoteCandidateCapacity", HistoryCount: 4}, Rollout: &domain.RolloutSummary{DesiredGeneration: 4, ObservedGeneration: 3, Phase: domain.RolloutPhaseAccepted, CurrentStep: "PromoteCandidateCapacity", Summary: "Observing current state", Steps: []domain.RolloutStepSummary{{Kind: "CreateCandidateCapacity", Status: "completed"}, {Kind: "ShiftTrafficCanary", Status: "pending"}, {Kind: "PromoteCandidateCapacity", Current: true, Status: "current"}}}}, {Name: "api-staging", Strategy: "linear", ExecutionMode: "ecsCodeDeploy", RuntimeSummary: &domain.RuntimeSummary{Summary: "Waiting for service stability", Sync: domain.Sync{State: domain.SyncStateOutOfSync, Reason: "PendingPromotion"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "warming up"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "VerifyServiceStability", HistoryCount: 0}, Rollout: &domain.RolloutSummary{DesiredGeneration: 8, ObservedGeneration: 7, Phase: domain.RolloutPhaseAccepted, CurrentStep: "VerifyServiceStability", Summary: "Observing current state", Steps: []domain.RolloutStepSummary{{Kind: "CreateCodeDeployDeployment", Status: "completed"}, {Kind: "ShiftTrafficLinear", Status: "pending"}, {Kind: "VerifyServiceStability", Current: true, Status: "current"}}}}}}}, nil
 		},
 	})
 	req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts", nil)
@@ -748,7 +748,7 @@ func TestRouterOverviewAccounts(t *testing.T) {
 	if accounts[0].Deployments[1].Rollout == nil || accounts[0].Deployments[1].ExecutionMode != "ecsCodeDeploy" || accounts[0].Deployments[1].Rollout.Phase != domain.RolloutPhaseAccepted || accounts[0].Deployments[1].Rollout.CurrentStep != "VerifyServiceStability" {
 		t.Fatalf("expected strategy-aware ECS rollout payload, got %+v", accounts[0].Deployments[1])
 	}
-	if accounts[0].Deployments[0].RuntimeSummary == nil || accounts[0].Deployments[0].RuntimeSummary.Timestamp != "2026-04-16T06:49:00Z" || accounts[0].Deployments[0].RuntimeSummary.Summary != "Traffic shift is progressing" || accounts[0].Deployments[0].RuntimeSummary.Sync.Reason != "Traffic shift running" || accounts[0].Deployments[0].RuntimeSummary.DesiredGeneration != 8 || accounts[0].Deployments[0].RuntimeSummary.ObservedGeneration != 7 || accounts[0].Deployments[0].RuntimeSummary.CurrentStep != "PromoteCandidateCapacity" || accounts[0].Deployments[0].RuntimeSummary.HistoryCount != 4 {
+	if accounts[0].Deployments[0].RuntimeSummary == nil || accounts[0].Deployments[0].RuntimeSummary.Timestamp != "2026-04-16T06:49:00Z" || accounts[0].Deployments[0].RuntimeSummary.Source != "controller" || accounts[0].Deployments[0].RuntimeSummary.Summary != "Traffic shift is progressing" || accounts[0].Deployments[0].RuntimeSummary.Sync.Reason != "Traffic shift running" || accounts[0].Deployments[0].RuntimeSummary.DesiredGeneration != 8 || accounts[0].Deployments[0].RuntimeSummary.ObservedGeneration != 7 || accounts[0].Deployments[0].RuntimeSummary.CurrentStep != "PromoteCandidateCapacity" || accounts[0].Deployments[0].RuntimeSummary.HistoryCount != 4 {
 		t.Fatalf("expected runtime summary in overview accounts response, got %+v", accounts[0].Deployments[0])
 	}
 	if got := accounts[0].Deployments[1].Rollout.Steps; got[0].Kind != "CreateCodeDeployDeployment" || got[0].Current || got[1].Kind != "ShiftTrafficLinear" || got[1].Current || got[2].Kind != "VerifyServiceStability" || !got[2].Current {
@@ -788,7 +788,7 @@ func TestRouterOverviewAccounts(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected runtimeSummary object in raw overview payload, got %#v", payload[0])
 	}
-	if runtimeSummary["timestamp"] != "2026-04-16T06:49:00Z" || runtimeSummary["summary"] != "Traffic shift is progressing" || runtimeSummary["desiredGeneration"] != float64(8) || runtimeSummary["observedGeneration"] != float64(7) || runtimeSummary["currentStep"] != "PromoteCandidateCapacity" || runtimeSummary["historyCount"] != float64(4) || runtimeSummary["rolloutPhase"] != string(domain.RolloutPhaseAccepted) {
+	if runtimeSummary["timestamp"] != "2026-04-16T06:49:00Z" || runtimeSummary["source"] != "controller" || runtimeSummary["summary"] != "Traffic shift is progressing" || runtimeSummary["desiredGeneration"] != float64(8) || runtimeSummary["observedGeneration"] != float64(7) || runtimeSummary["currentStep"] != "PromoteCandidateCapacity" || runtimeSummary["historyCount"] != float64(4) || runtimeSummary["rolloutPhase"] != string(domain.RolloutPhaseAccepted) {
 		t.Fatalf("expected runtimeSummary JSON fields in raw overview payload, got %#v", runtimeSummary)
 	}
 	syncSummary, ok := runtimeSummary["sync"].(map[string]any)
@@ -812,6 +812,7 @@ func TestOverviewAccountsResponseIncludesRuntimeSummary(t *testing.T) {
 					Name: "api-prod",
 					RuntimeSummary: &domain.RuntimeSummary{
 						Timestamp:          "2026-04-16T06:49:00Z",
+						Source:             "controller",
 						Summary:            "Traffic shift is progressing",
 						Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "Traffic shift running"},
 						Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "steady"},
@@ -842,7 +843,7 @@ func TestOverviewAccountsResponseIncludesRuntimeSummary(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected runtimeSummary object in overview accounts payload, got %#v", payload)
 	}
-	if runtimeSummary["summary"] != "Traffic shift is progressing" || runtimeSummary["timestamp"] != "2026-04-16T06:49:00Z" || runtimeSummary["desiredGeneration"] != float64(8) || runtimeSummary["observedGeneration"] != float64(7) || runtimeSummary["currentStep"] != "ShiftTrafficCanary" || runtimeSummary["historyCount"] != float64(2) || runtimeSummary["rolloutPhase"] != string(domain.RolloutPhaseAccepted) {
+	if runtimeSummary["summary"] != "Traffic shift is progressing" || runtimeSummary["timestamp"] != "2026-04-16T06:49:00Z" || runtimeSummary["source"] != "controller" || runtimeSummary["desiredGeneration"] != float64(8) || runtimeSummary["observedGeneration"] != float64(7) || runtimeSummary["currentStep"] != "ShiftTrafficCanary" || runtimeSummary["historyCount"] != float64(2) || runtimeSummary["rolloutPhase"] != string(domain.RolloutPhaseAccepted) {
 		t.Fatalf("expected runtimeSummary fields in overview accounts payload, got %#v", runtimeSummary)
 	}
 	syncSummary, ok := runtimeSummary["sync"].(map[string]any)
@@ -852,6 +853,51 @@ func TestOverviewAccountsResponseIncludesRuntimeSummary(t *testing.T) {
 	healthSummary, ok := runtimeSummary["health"].(map[string]any)
 	if !ok || healthSummary["overall"] != string(domain.HealthHealthy) || healthSummary["summary"] != "steady" {
 		t.Fatalf("expected runtimeSummary.health fields in overview accounts payload, got %#v", runtimeSummary["health"])
+	}
+}
+
+func TestOverviewAccountsResponseOmitsRuntimeSummarySourceWithoutHistory(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewAccounts: func() ([]catalog.AccountOverview, error) {
+			return []catalog.AccountOverview{{
+				Name:         "prod-core",
+				AWSAccountID: "123456789012",
+				Deployments: []catalog.DeploymentOverview{{
+					Name: "api-prod",
+					RuntimeSummary: &domain.RuntimeSummary{
+						Summary:            "Serving stable capacity",
+						Sync:               domain.Sync{State: domain.SyncStateSynced, Reason: "steady"},
+						Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "steady"},
+						DesiredGeneration:  8,
+						ObservedGeneration: 8,
+						RolloutPhase:       domain.RolloutPhaseCompleted,
+						CurrentStep:        "Complete",
+						HistoryCount:       0,
+					},
+				}},
+			}}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var payload []map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode raw overview accounts payload: %v", err)
+	}
+	runtimeSummary, ok := payload[0]["deployments"].([]any)[0].(map[string]any)["runtimeSummary"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected runtimeSummary object in overview accounts payload, got %#v", payload)
+	}
+	if _, ok := runtimeSummary["source"]; ok {
+		t.Fatalf("expected runtimeSummary.source to be omitted without history, got %#v", runtimeSummary)
 	}
 }
 
@@ -907,7 +953,7 @@ func TestRouterOverviewDeployment(t *testing.T) {
 				ObservedGeneration: 7,
 				Sync:               domain.Sync{State: domain.SyncStateOutOfSync, Reason: "PendingPromotion"},
 				Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "warming up"},
-				RuntimeSummary:     &domain.RuntimeSummary{Timestamp: "2026-04-16T06:49:00Z", Summary: "Traffic shift is progressing", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "Traffic shift running"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "steady"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "ShiftTrafficLinear", HistoryCount: 3},
+				RuntimeSummary:     &domain.RuntimeSummary{Timestamp: "2026-04-16T06:49:00Z", Source: "controller", Summary: "Traffic shift is progressing", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "Traffic shift running"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "steady"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "ShiftTrafficLinear", HistoryCount: 3},
 				Rollout: &domain.RolloutSummary{
 					DesiredGeneration:  8,
 					ObservedGeneration: 7,
@@ -951,7 +997,7 @@ func TestRouterOverviewDeployment(t *testing.T) {
 	if detail.Rollout == nil || detail.Rollout.CurrentStep != "VerifyServiceStability" || len(detail.Rollout.Steps) != 3 {
 		t.Fatalf("expected rollout summary in deployment detail, got %+v", detail)
 	}
-	if detail.RuntimeSummary == nil || detail.RuntimeSummary.Timestamp != "2026-04-16T06:49:00Z" || detail.RuntimeSummary.Summary != "Traffic shift is progressing" || detail.RuntimeSummary.Sync.Reason != "Traffic shift running" || detail.RuntimeSummary.DesiredGeneration != 8 || detail.RuntimeSummary.ObservedGeneration != 7 || detail.RuntimeSummary.CurrentStep != "ShiftTrafficLinear" || detail.RuntimeSummary.HistoryCount != 3 {
+	if detail.RuntimeSummary == nil || detail.RuntimeSummary.Timestamp != "2026-04-16T06:49:00Z" || detail.RuntimeSummary.Source != "controller" || detail.RuntimeSummary.Summary != "Traffic shift is progressing" || detail.RuntimeSummary.Sync.Reason != "Traffic shift running" || detail.RuntimeSummary.DesiredGeneration != 8 || detail.RuntimeSummary.ObservedGeneration != 7 || detail.RuntimeSummary.CurrentStep != "ShiftTrafficLinear" || detail.RuntimeSummary.HistoryCount != 3 {
 		t.Fatalf("expected runtime summary in deployment detail, got %+v", detail)
 	}
 	if len(detail.History) != 1 || detail.History[0].Summary != "Shifted 10 percent of traffic" || detail.History[0].DesiredGeneration != 8 || detail.History[0].ObservedGeneration != 7 || detail.History[0].CurrentStep != "ShiftTrafficLinear" {
@@ -973,7 +1019,7 @@ func TestRouterOverviewDeployment(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected runtimeSummary object in raw payload, got %#v", payload["runtimeSummary"])
 	}
-	if runtimeSummary["timestamp"] != "2026-04-16T06:49:00Z" || runtimeSummary["summary"] != "Traffic shift is progressing" || runtimeSummary["desiredGeneration"] != float64(8) || runtimeSummary["observedGeneration"] != float64(7) || runtimeSummary["currentStep"] != "ShiftTrafficLinear" || runtimeSummary["historyCount"] != float64(3) || runtimeSummary["rolloutPhase"] != string(domain.RolloutPhaseAccepted) {
+	if runtimeSummary["timestamp"] != "2026-04-16T06:49:00Z" || runtimeSummary["source"] != "controller" || runtimeSummary["summary"] != "Traffic shift is progressing" || runtimeSummary["desiredGeneration"] != float64(8) || runtimeSummary["observedGeneration"] != float64(7) || runtimeSummary["currentStep"] != "ShiftTrafficLinear" || runtimeSummary["historyCount"] != float64(3) || runtimeSummary["rolloutPhase"] != string(domain.RolloutPhaseAccepted) {
 		t.Fatalf("expected runtimeSummary JSON fields in raw payload, got %#v", runtimeSummary)
 	}
 	syncSummary, ok := runtimeSummary["sync"].(map[string]any)
@@ -1037,6 +1083,50 @@ func TestRouterOverviewDeployment(t *testing.T) {
 	}
 	if historyEntry["currentStep"] != "ShiftTrafficLinear" || historyEntry["desiredGeneration"] != float64(8) || historyEntry["observedGeneration"] != float64(7) || historyEntry["rolloutPhase"] != string(domain.RolloutPhaseAccepted) {
 		t.Fatalf("expected history[0] field names, got %#v", historyEntry)
+	}
+}
+
+func TestDeploymentOverviewDetailRouteOmitsRuntimeSummarySourceWithoutHistory(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			if name != "api-prod" {
+				t.Fatalf("unexpected lookup name: %s", name)
+			}
+			return catalog.DeploymentOverviewDetail{
+				Name: "api-prod",
+				RuntimeSummary: &domain.RuntimeSummary{
+					Summary:            "Serving stable capacity",
+					Sync:               domain.Sync{State: domain.SyncStateSynced, Reason: "steady"},
+					Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "steady"},
+					DesiredGeneration:  8,
+					ObservedGeneration: 8,
+					RolloutPhase:       domain.RolloutPhaseCompleted,
+					CurrentStep:        "Complete",
+					HistoryCount:       0,
+				},
+			}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode raw overview deployment payload: %v", err)
+	}
+	runtimeSummary, ok := payload["runtimeSummary"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected runtimeSummary object in raw payload, got %#v", payload["runtimeSummary"])
+	}
+	if _, ok := runtimeSummary["source"]; ok {
+		t.Fatalf("expected runtimeSummary.source to be omitted without history, got %#v", runtimeSummary)
 	}
 }
 
