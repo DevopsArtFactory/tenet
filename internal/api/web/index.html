@@ -386,11 +386,13 @@
       };
       const parsePageState = () => {
         const params = new URLSearchParams(window.location.search);
-        const view = params.get('view') || 'overview';
-        const validViews = new Set(['overview', 'drift', 'plan']);
+        const page = params.get('page') || params.get('view') || 'applications';
+        const validPages = new Set(['applications', 'application', 'resource', 'drift', 'plan']);
         return {
-          view: validViews.has(view) ? view : 'overview',
+          page: validPages.has(page) ? page : 'applications',
           deployment: params.get('deployment') || '',
+          resourceType: params.get('resourceType') || '',
+          resourceId: params.get('resourceId') || '',
         };
       };
       const normalizeViewState = (accounts, state) => {
@@ -436,7 +438,7 @@
         const focusState = captureToolbarFocus();
         currentViewState = normalizeViewState(allAccounts, { ...currentViewState, ...patch });
         syncViewState(currentViewState);
-        renderOverview(focusState);
+        renderApplicationsOverview(allAccounts, focusState);
       };
       const applyViewState = (accounts, state) => {
         const searchNeedle = state.query.trim().toLowerCase();
@@ -528,10 +530,110 @@
           const focusState = captureToolbarFocus();
           currentViewState = { query: '', syncState: 'all', account: 'all' };
           syncViewState(currentViewState);
-          renderOverview(focusState);
+          renderApplicationsOverview(allAccounts, focusState);
         });
         actions.append(clearButton);
         root.replaceChildren(controls, actions);
+      };
+      const flattenApplications = (accounts) => accounts.flatMap((account) => (account.deployments || []).map((deployment) => ({
+        ...deployment,
+        accountName: account.name,
+        awsAccountId: account.awsAccountId,
+      })));
+      const renderApplicationsSummary = (applications) => {
+        const synced = applications.filter((deployment) => deployment.sync?.state === 'Synced').length;
+        const progressingStates = new Set(['Reconciling', 'OutOfSync', 'Drifted']);
+        const progressing = applications.filter((deployment) => progressingStates.has(deployment.sync?.state)).length;
+        const paused = applications.filter((deployment) => deployment.sync?.state === 'Paused').length;
+        const errored = applications.filter((deployment) => deployment.sync?.state === 'Error').length;
+        const summary = document.getElementById('summary');
+        const header = createElement('article', 'card');
+        header.append(
+          createElement('div', 'label', 'Application status overview'),
+          createElement('div', 'value', String(applications.length)),
+          createElement('div', 'account-meta', 'Argo-style first page: show only application state, then drill down into the application detail page.'),
+        );
+        const statusCard = createElement('article', 'card');
+        statusCard.append(
+          createElement('div', 'label', 'Sync and health summary'),
+          createElement('div', 'account-meta', `${synced} synced · ${progressing} progressing · ${paused} paused · ${errored} error`),
+          createElement('div', 'account-meta', 'Last update'),
+        );
+        summary.replaceChildren(header, statusCard);
+      };
+      const renderApplicationsTable = (applications) => {
+        const root = document.getElementById('accounts');
+        if (!applications.length) {
+          renderEmptyState('No applications match the current filters.');
+          return;
+        }
+        const table = createElement('article', 'account');
+        table.append(
+          createElement('h2', 'account-name', 'Application status overview'),
+          createElement('div', 'account-meta', 'Select an application to open the next drill-down page.'),
+        );
+        const rows = createElement('div', 'rows');
+        applications.forEach((deployment) => {
+          const row = createElement('div', 'row');
+          const top = createElement('div', 'row-top');
+          const titleWrap = createElement('div');
+          titleWrap.append(
+            createElement('h3', 'row-title', deployment.name || 'Unknown deployment'),
+            createElement('div', 'row-subtitle', [deployment.environmentRef, deployment.targetType, deployment.executionMode].filter(Boolean).join(' · ') || '—'),
+          );
+          const rowPills = createElement('div', 'pills');
+          rowPills.append(
+            createElement('span', 'pill target', textOrDash(deployment.accountName)),
+            createElement('span', `pill ${statusClass(deployment.sync?.state)}`, deployment.sync?.state || 'Unknown'),
+            createElement('span', `pill ${statusClass(deployment.health?.overall)}`, healthLabel(deployment.health)),
+          );
+          top.append(titleWrap, rowPills);
+          const metrics = createElement('div', 'metrics');
+          [
+            ['Account', textOrDash(deployment.accountName)],
+            ['Project', textOrDash(deployment.appRef)],
+            ['Health', `${healthLabel(deployment.health)}${deployment.health?.summary ? ` · ${deployment.health.summary}` : ''}`],
+            ['Last update', runtimeSummaryTimestamp(deployment.runtimeSummary)],
+          ].forEach(([label, value]) => {
+            metrics.append(createMetric(label, value));
+          });
+          const detailLinks = createElement('div', 'row-links row-links-shell');
+          detailLinks.append(createNavLink(`/?page=application&deployment=${encodeURIComponent(deployment.name)}`, 'Open application'));
+          row.append(top, metrics, detailLinks);
+          rows.append(row);
+        });
+        table.append(rows);
+        root.replaceChildren(table);
+      };
+      const renderApplicationsOverview = (accounts, focusState = null) => {
+        renderToolbar(allAccounts, currentViewState);
+        const visibleAccounts = applyViewState(accounts, currentViewState);
+        const applications = flattenApplications(visibleAccounts);
+        renderApplicationsSummary(applications);
+        renderApplicationsTable(applications);
+        restoreToolbarFocus(focusState);
+      };
+      const renderApplicationDetailPage = (detail) => {
+        const toolbar = document.getElementById('toolbar');
+        const summary = document.getElementById('summary');
+        const root = document.getElementById('accounts');
+        const backLink = createNavLink('/?page=applications', 'Back to applications');
+        backLink.target = '_self';
+        backLink.rel = '';
+        toolbar.replaceChildren(createElement('div', 'toolbar-actions'), backLink);
+        const detailSummary = createElement('article', 'account');
+        detailSummary.append(
+          createElement('h2', 'account-name', detail.name || currentPageState.deployment || 'Application'),
+          createElement('div', 'account-meta', [detail.accountName, detail.awsAccountId, detail.region].filter(Boolean).join(' · ') || '—'),
+          createElement('div', 'account-topology', 'Application detail page is the next drill-down slice.'),
+        );
+        summary.replaceChildren(detailSummary);
+        const placeholder = createElement('article', 'account');
+        placeholder.append(
+          createElement('h2', 'account-name', 'Application detail page'),
+          createElement('div', 'account-meta', 'This slice establishes the route target from the applications overview. Resource groups land in the next slice.'),
+        );
+        root.replaceChildren(placeholder);
       };
       const renderEmptyState = (message) => {
         const empty = createElement('div', 'empty', message);
@@ -1073,20 +1175,29 @@
           currentViewState = normalizeViewState(accounts, parseViewState());
           syncViewState(currentViewState);
           currentPageState = parsePageState();
-          if (currentPageState.view === 'overview') {
-            renderOverview();
+          if (currentPageState.page === 'applications') {
+            renderApplicationsOverview(accounts);
             return null;
           }
           if (!currentPageState.deployment) {
-            throw new Error('deployment workspace is missing a deployment query parameter');
+            throw new Error('deployment page is missing a deployment query parameter');
           }
           const summary = findDeploymentSummary(accounts, currentPageState.deployment);
           return fetchDeploymentDetail(currentPageState.deployment)
             .then((detail) => {
-              renderDeploymentWorkspace(currentPageState.view, {
+              const mergedDetail = {
                 ...(summary || {}),
                 ...detail,
-              });
+              };
+              if (currentPageState.page === 'application') {
+                renderApplicationDetailPage(mergedDetail);
+                return;
+              }
+              if (currentPageState.page === 'drift' || currentPageState.page === 'plan') {
+                renderDeploymentWorkspace(currentPageState.page, mergedDetail);
+                return;
+              }
+              throw new Error(`unsupported page ${currentPageState.page}`);
             });
         })
         .catch((error) => {

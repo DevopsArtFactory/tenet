@@ -198,14 +198,33 @@ func TestEmbeddedUIIncludesQuickLinksToDeploymentReadModels(t *testing.T) {
 	}
 }
 
-func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
+func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 	body := string(indexHTML)
 
 	for _, fragment := range []string{
 		"const parsePageState = () => {",
-		"const validViews = new Set(['overview', 'drift', 'plan']);",
-		"view: validViews.has(view) ? view : 'overview',",
+		"const validPages = new Set(['applications', 'application', 'resource', 'drift', 'plan']);",
+		"const page = params.get('page') || params.get('view') || 'applications';",
+		"page: validPages.has(page) ? page : 'applications',",
 		"deployment: params.get('deployment') || '',",
+		"const renderApplicationsOverview = (accounts, focusState = null) => {",
+		"Application status overview",
+		"Last update",
+		"Open application",
+		"createNavLink(`/?page=application&deployment=${encodeURIComponent(deployment.name)}`, 'Open application')",
+		"const renderApplicationDetailPage = (detail) => {",
+		"Application detail page is the next drill-down slice.",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+}
+
+func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
 		"const renderDeploymentWorkspace = (mode, detail) => {",
 		"const workspaceTitle = mode === 'drift' ? 'Drift viewer' : 'Plan and apply';",
 		"const runtimeSignalsSection = createDetailSection('Latest runtime signals');",
@@ -225,6 +244,11 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"Plan/apply controls are not wired to mutation APIs in this read-only slice yet.",
 		"Create Plan",
 		"Apply Plan",
+		"if (currentPageState.page === 'application') {",
+		"renderApplicationDetailPage(mergedDetail);",
+		"if (currentPageState.page === 'drift' || currentPageState.page === 'plan') {",
+		"renderDeploymentWorkspace(currentPageState.page, mergedDetail);",
+		"return fetchDeploymentDetail(currentPageState.deployment)",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include %q", fragment)
@@ -427,8 +451,8 @@ func TestEmbeddedUIProvidesFilterControlsAndURLSyncedViewState(t *testing.T) {
 		"value: account.awsAccountId,",
 		"renderToolbar(allAccounts, currentViewState);",
 		"currentViewState = normalizeViewState(accounts, parseViewState());",
-		"renderOverview();",
-		"renderEmptyState('No deployments match the current filters.');",
+		"renderApplicationsOverview(accounts);",
+		"renderEmptyState('No applications match the current filters.');",
 		"Clear filters",
 	} {
 		if !strings.Contains(body, fragment) {
@@ -465,7 +489,7 @@ func TestEmbeddedUIPreservesToolbarFocusAndRestoresCaretAcrossFilterRerenders(t 
 		"if (node instanceof HTMLInputElement && focusState.selectionStart !== null && focusState.selectionEnd !== null) {",
 		"node.setSelectionRange(focusState.selectionStart, focusState.selectionEnd);",
 		"const focusState = captureToolbarFocus();",
-		"renderOverview(focusState);",
+		"renderApplicationsOverview(allAccounts, focusState);",
 		"restoreToolbarFocus(focusState);",
 	} {
 		if !strings.Contains(body, fragment) {
