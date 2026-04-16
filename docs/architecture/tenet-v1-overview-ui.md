@@ -26,6 +26,7 @@ The page consumes joined overview endpoints:
 - `GET /v1/overview/accounts/{awsAccountId}`
 - `GET /v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}`
 - `GET /v1/overview/deployments/{deploymentName}`
+- `GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}`
 
 `/v1/overview/applications` now keeps the default applications landing page narrow while still preserving the richer additive joined fields (`runtimeSummary`, rollout metadata, artifacts, generations, conditions) already produced for deployment rows. `/v1/overview/accounts` remains the richer account-oriented joined route used for account/group drill-downs and sibling JSON quick links.
 
@@ -107,7 +108,14 @@ Each application row still surfaces the most operator-useful rollout/runtime cue
 - `runtimeSummary.summary`
 - drill-down navigation to `/?page=application&deployment={deploymentName}`
 
-The deeper application/resource/workspace pages extend that view without forcing operators to switch to the raw status endpoint for common troubleshooting. The resource-detail page includes a safe runtime-generation row sourced from `runtimeSummary.desiredGeneration` / `runtimeSummary.observedGeneration`, a `Runtime changes` metric sourced from `runtimeSummary.changes[]`, a `Runtime source` metric sourced from `runtimeSummary.source` when present, plus a recent runtime-history section rendered with safe DOM construction, showing each controller-authored entry's timestamp, summary, sync state, health, desired/observed generations, optional `History changes`, optional `History source`, optional `History rollout phase`, and optional rollout step, plus an explicit `No recent runtime history is available yet.` empty state when no bounded history has been persisted yet. The deployment workspaces reuse that same safe DOM construction pattern for their `Latest runtime signals` and `Rollout execution` sections, including explicit empty states when `runtimeSummary.changes[]` or `rollout.execution[]` are absent.
+The deeper application/resource/workspace pages extend that view without forcing operators to switch to the raw status endpoint for common troubleshooting. The resource-detail page includes a safe runtime-generation row sourced from `runtimeSummary.desiredGeneration` / `runtimeSummary.observedGeneration`, a `Runtime changes` metric sourced from `runtimeSummary.changes[]`, a `Runtime source` metric sourced from `runtimeSummary.source` when present, plus a recent runtime-history section rendered with safe DOM construction, showing each controller-authored entry's timestamp, summary, sync state, health, desired/observed generations, optional `History changes`, optional `History source`, optional `History rollout phase`, and optional rollout step, plus an explicit `No recent runtime history is available yet.` empty state when no bounded history has been persisted yet. The same resource-detail page now also lazy-loads a `Recent logs` section from `GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}` using the currently selected resource type/name pair from the route. That section keeps its own explicit `Loading recent logs…`, unavailable, empty, and populated states and is rendered with safe DOM construction only. The deployment workspaces reuse that same safe DOM construction pattern for their `Latest runtime signals` and `Rollout execution` sections, including explicit empty states when `runtimeSummary.changes[]` or `rollout.execution[]` are absent.
+
+The current resource-log route intentionally supports only the resource types backed by the new read-only provider:
+- `ecsService`
+- `candidateAutoScalingGroup`
+- `serviceAutoScalingGroup`
+
+Other resource types remain visible as resource-detail pages, but their `Recent logs` section renders an explicit unavailable state rather than inventing log data. The same unavailable contract is used when AWS credentials, assume-role access, task/container log configuration, running tasks/instances, or EC2 console-output access are not available from the current API process.
 
 The detail rollout-step list now also consumes additive `rollout.steps[*].status` metadata and controller-authored `rollout.steps[*].detail` text from the deployment-detail payload:
 - `completed` marks controller-plan steps that are already behind the current plan view, including fully completed rollouts with no remaining current actionable step
@@ -156,6 +164,7 @@ Those fallback names/descriptions intentionally match the controller-authored `r
 
 The UI remains static embedded HTML/CSS/JS and preserves safe DOM construction:
 - detail content is rendered with `document.createElement`, `textContent`, and `replaceChildren`
+- recent-log content is rendered with `document.createElement`, `textContent`, and `replaceChildren`
 - manifest/status-derived values are not injected with `innerHTML`
 - loading and error states are scoped to the expanded deployment row
 

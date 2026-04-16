@@ -1007,6 +1007,114 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 		}
 	})
 
+	t.Run("ec2 instance-refresh fallback resources stay bookmarkable", func(t *testing.T) {
+		detailJSON, err := json.Marshal(map[string]any{
+			"name":           "payments-api-refresh",
+			"accountName":    "prod-core",
+			"awsAccountId":   "123456789012",
+			"region":         "ap-northeast-2",
+			"appRef":         "payments",
+			"environmentRef": "prod-apne2",
+			"targetType":     "ec2",
+			"strategy":       "rolling",
+			"executionMode":  "asgInstanceRefresh",
+			"userData":       map[string]any{"type": "file", "path": "userdata/payments-api-refresh.sh"},
+			"sync":           map[string]any{"state": "OutOfSync", "reason": "instance refresh in progress"},
+			"health":         map[string]any{"overall": "Progressing", "summary": "instances replacing in service auto scaling group"},
+			"rollout":        map[string]any{"phase": "Progressing", "currentStep": "StartInstanceRefresh"},
+		})
+		if err != nil {
+			t.Fatalf("marshal instance refresh fallback detail: %v", err)
+		}
+
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const sampleAccounts = ` + string(accountsJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/', search: '?page=application&deployment=payments-api-refresh', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
+  if (url === '/v1/overview/deployments/payments-api-refresh') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+(async () => {
+  await settle();
+  await settle();
+  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/deployments/payments-api-refresh') throw new Error('expected instance refresh fallback page to load only deployment detail');
+  const accountsText = collectText(document.getElementById('accounts')).join(' | ');
+  const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
+  const expectedResources = [
+    ['payments-api-refresh-service', 'serviceAutoScalingGroup', 'Service Auto Scaling Group Tenet refreshes in place'],
+    ['file:userdata/payments-api-refresh.sh', 'userDataBootstrapSource', 'Normalized userdata bootstrap source for refreshed EC2 instances'],
+  ];
+  for (const [name, type, description] of expectedResources) {
+    if (!accountsText.includes(name)) throw new Error('expected instance refresh fallback resource ' + name);
+    const resourceId = type + '::' + name + '::' + description;
+    const href = '/?' + new URLSearchParams({
+      page: 'resource',
+      deployment: 'payments-api-refresh',
+      resourceType: type,
+      resourceId,
+    }).toString();
+    if (!links.find((node) => node.href === href && node.target === '_self' && !node.rel)) throw new Error('expected instance refresh fallback stable link for ' + resourceId);
+  }
+})();
+`
+
+		cmd := exec.Command("node", "-e", nodeProgram)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+		}
+	})
+
 	t.Run("resource detail renders synthesized fallback execution metadata", func(t *testing.T) {
 		detailJSON, err := json.Marshal(map[string]any{
 			"name":           "payments-api-staging",
@@ -1080,15 +1188,18 @@ const resourceId = 'testListener::payments-api-staging-test-listener::Test liste
   const window = { location: { pathname: '/', search: '?page=resource&deployment=payments-api-staging&resourceType=testListener&resourceId=' + encodeURIComponent(resourceId), hash: '' } };
   const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
   const fetchCalls = [];
+  const logsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=testListener&resourceName=payments-api-staging-test-listener';
   const fetch = (url) => {
     fetchCalls.push(String(url));
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
     throw new Error('unexpected fetch url: ' + url);
   };
   new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
   await settle();
   await settle();
-  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/deployments/payments-api-staging') throw new Error('expected fallback resource page to load only deployment detail');
+  if (!fetchCalls.includes('/v1/overview/deployments/payments-api-staging')) throw new Error('expected fallback resource page to load deployment detail');
+  if (!fetchCalls.includes(logsURL)) throw new Error('expected fallback resource page to load recent logs for the synthesized resource');
   const summaryText = collectText(document.getElementById('summary')).join(' | ');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   if (!summaryText.includes('payments-api-staging-test-listener')) throw new Error('expected fallback resource page to resolve the synthesized resource name');
@@ -1501,12 +1612,14 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 const runUI = async (search, detailBody) => {
   const document = createDocument();
   const fetchCalls = [];
+  const resourceLogsURL = '/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing';
   const window = { location: { pathname: '/', search, hash: '' } };
   const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
   const fetch = (url) => {
     fetchCalls.push(String(url));
     if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
     if (url === '/v1/overview/deployments/payments-api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === resourceLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
     throw new Error('unexpected fetch url: ' + url);
   };
   new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -1528,7 +1641,8 @@ const runUI = async (search, detailBody) => {
   const fallbackLink = fallbackLinks.find((node) => node.href === resourceHref);
   if (!fallbackLink) throw new Error('expected fallback application page to synthesize canonical trafficShiftPlan resource link');
   const canonicalRun = await runUI(fallbackLink.href.slice(1), canonicalDetailBody);
-  if (canonicalRun.fetchCalls.length !== 1 || canonicalRun.fetchCalls[0] !== '/v1/overview/deployments/payments-api-prod') throw new Error('expected canonical resource page to load only deployment detail');
+  if (!canonicalRun.fetchCalls.includes('/v1/overview/deployments/payments-api-prod')) throw new Error('expected canonical resource page to load deployment detail');
+  if (!canonicalRun.fetchCalls.includes('/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing')) throw new Error('expected canonical resource page to load recent logs for the selected resource');
   const summaryText = collectText(canonicalRun.document.getElementById('summary')).join(' | ');
   const accountsText = collectText(canonicalRun.document.getElementById('accounts')).join(' | ');
   if (!summaryText.includes('payments-api-prod-weighted-routing')) throw new Error('expected canonical resource page to resolve trafficShiftPlan resource title');
@@ -1678,10 +1792,12 @@ document.byID.set('accounts', document.createElement('section'));
 const fetchCalls = [];
 const window = { location: { pathname: '/', search: '?page=resource&deployment=payments-api-staging&resourceType=codeDeployDeploymentGroup&resourceId=codeDeployDeploymentGroup%3A%3Apayments-api-staging%20Deployment%20Group%3A%3ALinear%20traffic%20shifting%20deployment%20group&q=payments&sync=OutOfSync&account=210987654321', hash: '' } };
 const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const logsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging+Deployment+Group';
 const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
   if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -1691,7 +1807,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/deployments/payments-api-staging') throw new Error('expected resource page to load only deployment detail');
+  if (!fetchCalls.includes('/v1/overview/deployments/payments-api-staging')) throw new Error('expected resource page to load deployment detail');
+  if (!fetchCalls.includes(logsURL)) throw new Error('expected resource page to load recent logs for selected resource');
   const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
   const summaryText = collectText(document.getElementById('summary')).join(' | ');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
@@ -1716,6 +1833,178 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('Created deployment group revision for v2')) throw new Error('expected resource page history detail');
   if (!accountsText.includes('Conditions')) throw new Error('expected resource page conditions section');
   if (!accountsText.includes('ServiceReady')) throw new Error('expected resource page condition reason');
+})();
+`
+
+	cmd := exec.Command("node", "-e", nodeProgram)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+	}
+}
+
+func TestResourceDetailPageRecentLogsWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	detailJSON, err := json.Marshal(map[string]any{
+		"name":          "payments-api-staging",
+		"accountName":   "staging-core",
+		"awsAccountId":  "210987654321",
+		"region":        "ap-northeast-2",
+		"executionMode": "ecsCodeDeploy",
+		"runtimeSummary": map[string]any{
+			"timestamp":    "2026-04-16T07:10:00Z",
+			"source":       "runtime-agent",
+			"historyCount": 1,
+		},
+		"rollout": map[string]any{
+			"phase":       "Progressing",
+			"currentStep": "ShiftTrafficLinear",
+			"execution": []map[string]any{
+				{"name": "payments-api-staging Deployment Group", "resource": "codeDeployDeploymentGroup", "description": "Linear traffic shifting deployment group"},
+				{"name": "payments-api-staging-service", "resource": "ecsService", "description": "Primary ECS service"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal detail body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const createDocument = () => {
+  const document = new Document();
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  return document;
+};
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const resourceID = 'codeDeployDeploymentGroup::payments-api-staging Deployment Group::Linear traffic shifting deployment group';
+async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=payments-api-staging&resourceType=codeDeployDeploymentGroup&resourceId=' + encodeURIComponent(resourceID)) {
+  const document = createDocument();
+  const window = { location: { pathname: '/', search, hash: '' } };
+  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetchImpl, history, Element, InputElement);
+  await settle();
+  return { document, window };
+}
+
+(async () => {
+  const logsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging+Deployment+Group';
+
+  let resolveLogs;
+  const loadingFetchCalls = [];
+  const loadingRun = await renderWithFetch((url) => {
+    loadingFetchCalls.push(String(url));
+    if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === logsURL) return new Promise((resolve) => { resolveLogs = resolve; });
+    throw new Error('unexpected loading fetch url: ' + url);
+  });
+  const loadingText = collectText(loadingRun.document.getElementById('accounts')).join(' | ');
+  if (!loadingText.includes('Recent logs')) throw new Error('expected resource page to render recent logs section heading while loading');
+  if (!loadingText.includes('Loading recent logs…')) throw new Error('expected resource page to render loading state for recent logs');
+  if (!loadingFetchCalls.includes(logsURL)) throw new Error('expected resource page to lazy-load logs for the selected resource');
+  resolveLogs({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', entries: [] }) });
+  await settle();
+
+  const unavailableRun = await renderWithFetch((url) => {
+    if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'cross_account_not_configured', entries: [] }) });
+    throw new Error('unexpected unavailable fetch url: ' + url);
+  });
+  const unavailableText = collectText(unavailableRun.document.getElementById('accounts')).join(' | ');
+  if (!unavailableText.includes('Recent logs are unavailable for this resource.')) throw new Error('expected resource page unavailable recent logs state');
+  if (!unavailableText.includes('Cross-account access is not configured for this deployment.')) throw new Error('expected unavailable recent logs state to surface friendly provider reason');
+
+  const emptyRun = await renderWithFetch((url) => {
+    if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', entries: [] }) });
+    throw new Error('unexpected empty fetch url: ' + url);
+  });
+  const emptyText = collectText(emptyRun.document.getElementById('accounts')).join(' | ');
+  if (!emptyText.includes('No recent logs are available for this resource.')) throw new Error('expected resource page empty recent logs state');
+
+  const failedStatusRun = await renderWithFetch((url) => {
+    if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === logsURL) return Promise.resolve({ ok: false, status: 503, json: () => Promise.resolve({}) });
+    throw new Error('unexpected failed-status fetch url: ' + url);
+  });
+  await settle();
+  const failedStatusText = collectText(failedStatusRun.document.getElementById('accounts')).join(' | ');
+  if (!failedStatusText.includes('Failed to load recent logs: resource logs request failed (503)')) throw new Error('expected resource page failed recent logs state for non-2xx responses');
+
+  const rejectedRun = await renderWithFetch((url) => {
+    if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === logsURL) return Promise.reject(new Error('<img src=x onerror=1> upstream timeout'));
+    throw new Error('unexpected rejected fetch url: ' + url);
+  });
+  await settle();
+  const rejectedText = collectText(rejectedRun.document.getElementById('accounts')).join(' | ');
+  if (!rejectedText.includes('Failed to load recent logs: <img src=x onerror=1> upstream timeout')) throw new Error('expected resource page failed recent logs state for rejected fetches');
+  const rejectedImages = collectNodes(rejectedRun.document.getElementById('accounts'), (node) => node.tagName === 'IMG');
+  if (rejectedImages.length !== 0) throw new Error('expected rejected recent-log fetch errors to remain text content rather than parsed html');
+
+  const populatedRun = await renderWithFetch((url) => {
+    if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', entries: [{ timestamp: '2026-04-16T07:11:00Z', stream: 'codedeploy/bluegreen/1', message: '<img src=x onerror=1> rollback check passed' }] }) });
+    throw new Error('unexpected populated fetch url: ' + url);
+  });
+  await settle();
+  const populatedText = collectText(populatedRun.document.getElementById('accounts')).join(' | ');
+  if (!populatedText.includes('Logs source')) throw new Error('expected populated recent logs section to show source');
+  if (!populatedText.includes('cloudwatch')) throw new Error('expected populated recent logs section to show source value');
+  if (!populatedText.includes('Log stream · codedeploy/bluegreen/1')) throw new Error('expected populated recent logs section to show stream');
+  if (!populatedText.includes('Log timestamp · 2026-04-16T07:11:00Z')) throw new Error('expected populated recent logs section to show timestamp');
+  if (!populatedText.includes('<img src=x onerror=1> rollback check passed')) throw new Error('expected populated recent logs section to render raw log message text safely');
+  const images = collectNodes(populatedRun.document.getElementById('accounts'), (node) => node.tagName === 'IMG');
+  if (images.length !== 0) throw new Error('expected log messages to remain text content rather than parsed html');
 })();
 `
 
@@ -1817,10 +2106,12 @@ document.byID.set('accounts', document.createElement('section'));
 const fetchCalls = [];
 const window = { location: { pathname: '/', search: '?page=resource&deployment=payments-api-staging&resourceType=productionListener&resourceId=productionListener%3A%3Atest%20listener%3A%3ARoutes%20verification%20traffic&q=payments&sync=OutOfSync&account=210987654321', hash: '' } };
 const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const logsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=productionListener&resourceName=test+listener';
 const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
   if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -1829,7 +2120,8 @@ const collectText = (node) => [node.textContent, ...(node.children || []).flatMa
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/deployments/payments-api-staging') throw new Error('expected duplicate-resource page to load only deployment detail');
+  if (!fetchCalls.includes('/v1/overview/deployments/payments-api-staging')) throw new Error('expected duplicate-resource page to load deployment detail');
+  if (!fetchCalls.includes(logsURL)) throw new Error('expected duplicate-resource page to load recent logs for selected resource');
   const summaryText = collectText(document.getElementById('summary')).join(' | ');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   if (!summaryText.includes('test listener')) throw new Error('expected resource detail to resolve the intended duplicate resource');
@@ -1837,6 +2129,7 @@ const collectText = (node) => [node.textContent, ...(node.children || []).flatMa
   if (!accountsText.includes('Resource id')) throw new Error('expected duplicate resource page to render resource id');
   if (!accountsText.includes('productionListener::test listener::Routes verification traffic')) throw new Error('expected duplicate resource page to surface the stable unique resource id');
   if (!accountsText.includes('Routes verification traffic')) throw new Error('expected duplicate resource page to render the matched duplicate resource execution description');
+  if (!accountsText.includes('Recent logs are not supported for this resource type.')) throw new Error('expected duplicate resource page to render friendly recent-log unavailable text');
   if (accountsText.includes('Routes production traffic')) throw new Error('expected duplicate resource page not to render the wrong duplicate resource execution description');
 })();
 `
@@ -1963,9 +2256,11 @@ async function settle() { await Promise.resolve(); await new Promise((resolve) =
 async function render(search, detailBody) {
   const window = { location: { pathname: '/', search, hash: '' } };
   const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  const logsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=productionListener&resourceName=test+listener';
   const fetch = (url) => {
     if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
     throw new Error('unexpected fetch url: ' + url);
   };
   document.getElementById('toolbar').replaceChildren();

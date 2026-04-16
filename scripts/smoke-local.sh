@@ -41,9 +41,10 @@ overview=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts")
 account_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts/123456789012")
 group_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts/123456789012/projects/payments-api/environments/prod-apne2")
 status=$(curl -fsS "http://$HOST:$PORT/v1/status/deployments/payments-api-prod")
+resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")
 ui=$(curl -fsS "http://$HOST:$PORT/")
 
-SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" STATUS_JSON="$status" UI_HTML="$ui" python3 - <<'PY'
+SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" UI_HTML="$ui" python3 - <<'PY'
 import json, os
 summary = json.loads(os.environ['SUMMARY_JSON'])
 applications = json.loads(os.environ['APPLICATIONS_JSON'])
@@ -51,6 +52,7 @@ overview = json.loads(os.environ['OVERVIEW_JSON'])
 account_detail = json.loads(os.environ['ACCOUNT_DETAIL_JSON'])
 group_detail = json.loads(os.environ['GROUP_DETAIL_JSON'])
 status = json.loads(os.environ['STATUS_JSON'])
+resource_logs = json.loads(os.environ['RESOURCE_LOGS_JSON'])
 ui = os.environ['UI_HTML']
 assert summary['accountCount'] == 2, summary
 assert summary['environmentCount'] == 2, summary
@@ -71,6 +73,15 @@ assert len(group_detail['deployments']) == 1, group_detail
 assert group_detail['deployments'][0]['name'] == 'payments-api-prod', group_detail
 assert status['deploymentName'] == 'payments-api-prod', status
 assert status['status']['sync']['state'] == 'Synced', status
+assert resource_logs['deploymentName'] == 'payments-api-prod', resource_logs
+assert resource_logs['resourceType'] == 'trafficShiftPlan', resource_logs
+assert resource_logs['resourceName'] == 'payments-api-prod-weighted-routing', resource_logs
+assert isinstance(resource_logs['available'], bool), resource_logs
+assert resource_logs.get('entries') is None or isinstance(resource_logs.get('entries'), list), resource_logs
+if resource_logs['available']:
+    assert isinstance(resource_logs.get('source'), str), resource_logs
+else:
+    assert isinstance(resource_logs.get('unavailableReason'), str) and resource_logs['unavailableReason'], resource_logs
 assert 'Application status overview' in ui, ui
 assert '/v1/overview/applications' in ui, ui
 assert 'Open account' in ui, ui
@@ -79,6 +90,7 @@ assert "buildPageURL('account', { accountId: deployment.awsAccountId })" in ui, 
 assert "buildPageURL('application', { deployment: deployment.name })" in ui, ui
 assert 'Drift view' in ui, ui
 assert 'Plan/apply' in ui, ui
+assert 'Recent logs' in ui, ui
 
 assert "buildPageURL('drift', { deployment: deployment.name })" in ui, ui
 assert "buildPageURL('plan', { deployment: deployment.name })" in ui, ui

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
+	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
 
@@ -1720,6 +1722,254 @@ func TestRouterOverviewDeploymentRejectsInvalidNames(t *testing.T) {
 	}
 }
 
+func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
+	t.Run("returns resource log payload", func(t *testing.T) {
+		expected := resourcelogs.Result{
+			DeploymentName: "api-prod",
+			ResourceType:   "ecsService",
+			ResourceName:   "payments-api-prod-service",
+			Available:      true,
+			Source:         resourcelogs.SourceCloudWatch,
+			Entries: []resourcelogs.Entry{
+				{Timestamp: "2026-04-16T07:10:00Z", Message: "service became healthy", Stream: "ecs/payments-api/service/abc123"},
+				{Timestamp: "2026-04-16T07:09:00Z", Message: "registered 2/2 targets"},
+			},
+			UnavailableReason: "",
+		}
+
+		var gotRequest struct {
+			deploymentName string
+			resourceType   string
+			resourceName   string
+		}
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "api-prod" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+				gotRequest.deploymentName = deploymentName
+				gotRequest.resourceType = resourceType
+				gotRequest.resourceName = resourceName
+				return expected, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if !reflect.DeepEqual(gotRequest, struct {
+			deploymentName string
+			resourceType   string
+			resourceName   string
+		}{deploymentName: "api-prod", resourceType: "ecsService", resourceName: "payments-api-prod-service"}) {
+			t.Fatalf("unexpected provider request: %+v", gotRequest)
+		}
+
+		var got resourcelogs.Result
+		if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+			t.Fatalf("failed to decode resource logs payload: %v", err)
+		}
+		if !reflect.DeepEqual(got, expected) {
+			t.Fatalf("unexpected resource logs payload: %+v", got)
+		}
+
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw resource logs payload: %v", err)
+		}
+		for _, key := range []string{"deploymentName", "resourceType", "resourceName", "available", "source", "entries", "unavailableReason"} {
+			if _, ok := raw[key]; !ok {
+				t.Fatalf("expected %q field in payload, got %#v", key, raw)
+			}
+		}
+		entries, ok := raw["entries"].([]any)
+		if !ok || len(entries) != 2 {
+			t.Fatalf("expected entries array in payload, got %#v", raw["entries"])
+		}
+		entry, ok := entries[0].(map[string]any)
+		if !ok || entry["timestamp"] != "2026-04-16T07:10:00Z" || entry["message"] != "service became healthy" || entry["stream"] != "ecs/payments-api/service/abc123" {
+			t.Fatalf("expected entry shape in payload, got %#v", entries[0])
+		}
+		entry, ok = entries[1].(map[string]any)
+		if !ok {
+			t.Fatalf("expected second entry shape in payload, got %#v", entries[1])
+		}
+		if _, ok := entry["stream"]; ok {
+			t.Fatalf("expected optional stream to be omitted when empty, got %#v", entries[1])
+		}
+	})
+
+	for _, tc := range []struct {
+		name         string
+		query        string
+		wantBodyPart string
+	}{
+		{name: "missing resourceType", query: "resourceName=payments-api-prod-service", wantBodyPart: "resourceType"},
+		{name: "missing resourceName", query: "resourceType=ecsService", wantBodyPart: "resourceName"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			router := NewRouter(Options{
+				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+				OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+					t.Fatalf("overview deployment lookup should not run for invalid query")
+					return catalog.DeploymentOverviewDetail{}, nil
+				},
+				OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+					t.Fatalf("resource logs provider should not run for invalid query")
+					return resourcelogs.Result{}, nil
+				},
+			})
+
+			req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?"+tc.query, nil)
+			resp := httptest.NewRecorder()
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d with body %q", resp.Code, resp.Body.String())
+			}
+			if !strings.Contains(resp.Body.String(), tc.wantBodyPart) {
+				t.Fatalf("expected 400 body to mention %q, got %q", tc.wantBodyPart, resp.Body.String())
+			}
+		})
+	}
+
+	t.Run("returns 503 when provider is unavailable", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "api-prod" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service", nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusServiceUnavailable {
+			t.Fatalf("expected 503, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if !strings.Contains(resp.Body.String(), "resource logs") {
+			t.Fatalf("expected 503 body to mention resource logs, got %q", resp.Body.String())
+		}
+	})
+
+	t.Run("propagates deployment not found as 404", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "missing" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{}, statusstore.ErrNotFound
+			},
+			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+				t.Fatalf("resource logs provider should not run when deployment lookup fails")
+				return resourcelogs.Result{}, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/missing/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service", nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if !strings.Contains(resp.Body.String(), statusstore.ErrNotFound.Error()) {
+			t.Fatalf("expected 404 body to include %q, got %q", statusstore.ErrNotFound.Error(), resp.Body.String())
+		}
+	})
+
+	t.Run("propagates deployment resource binding failures as 404", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "api-prod" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+				if deploymentName != "api-prod" || resourceType != "ecsService" || resourceName != "payments-api-prod-service" {
+					t.Fatalf("unexpected resource logs request: deployment=%q type=%q name=%q", deploymentName, resourceType, resourceName)
+				}
+				return resourcelogs.Result{}, statusstore.ErrNotFound
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service", nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if !strings.Contains(resp.Body.String(), statusstore.ErrNotFound.Error()) {
+			t.Fatalf("expected 404 body to include %q, got %q", statusstore.ErrNotFound.Error(), resp.Body.String())
+		}
+	})
+
+	t.Run("returns generic 500 when resource logs provider errors", func(t *testing.T) {
+		const providerErr = "boom: resource logs provider internals"
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "api-prod" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+				if deploymentName != "api-prod" || resourceType != "ecsService" || resourceName != "payments-api-prod-service" {
+					t.Fatalf("unexpected resource logs request: deployment=%q type=%q name=%q", deploymentName, resourceType, resourceName)
+				}
+				return resourcelogs.Result{}, errors.New(providerErr)
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service", nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		assertInternalServerErrorResponse(t, resp, providerErr)
+	})
+
+	t.Run("returns generic 500 when deployment lookup errors on resource logs route", func(t *testing.T) {
+		const providerErr = "boom: deployment lookup internals"
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "api-prod" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{}, errors.New(providerErr)
+			},
+			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+				t.Fatalf("resource logs provider should not run when deployment lookup errors")
+				return resourcelogs.Result{}, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service", nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		assertInternalServerErrorResponse(t, resp, providerErr)
+	})
+}
+
 func TestRouterRootServesUI(t *testing.T) {
 	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -1799,6 +2049,9 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
 			return catalog.DeploymentOverviewDetail{}, nil
 		},
+		OverviewDeploymentResourceLogs: func(context.Context, string, string, string) (resourcelogs.Result, error) {
+			return resourcelogs.Result{}, nil
+		},
 		DeploymentStatuses: func() ([]statusstore.Snapshot, error) {
 			return []statusstore.Snapshot{}, nil
 		},
@@ -1807,7 +2060,7 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		},
 	})
 
-	paths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/applications", "/v1/overview/accounts", "/v1/overview/accounts/123456789012", "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod", "/v1/overview/deployments/api-prod", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
+	paths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/applications", "/v1/overview/accounts", "/v1/overview/accounts/123456789012", "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod", "/v1/overview/deployments/api-prod", "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
 	for _, path := range paths {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		resp := httptest.NewRecorder()
