@@ -215,6 +215,277 @@ async function settle() { await Promise.resolve(); await new Promise((resolve) =
 	}
 }
 
+func TestEmbeddedUIRendersAccountJSONQuickLinkInAccountHeaderWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	accountID := `111111111111/<script>alert(1)</script>`
+	accountsJSON, err := json.Marshal([]map[string]any{
+		{
+			"name":         "acct-a",
+			"awsAccountId": accountID,
+			"deployments": []map[string]any{{
+				"name":           "api",
+				"appRef":         "payments",
+				"environmentRef": "prod",
+				"region":         "us-west-2",
+				"targetType":     "ecs",
+				"strategy":       "canary",
+				"executionMode":  "ecsCodeDeploy",
+				"sync":           map[string]any{"state": "Reconciling"},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal sample accounts: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const sampleAccounts = ` + string(accountsJSON) + `;
+
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.href = '';
+    this.target = '';
+    this.rel = '';
+    this.classList = {
+      add: (...names) => {
+        const current = new Set(this.className.split(/\s+/).filter(Boolean));
+        names.forEach((name) => current.add(name));
+        this.className = Array.from(current).join(' ');
+      },
+      toggle: (name, force) => {
+        const current = new Set(this.className.split(/\s+/).filter(Boolean));
+        const shouldAdd = force === undefined ? !current.has(name) : Boolean(force);
+        if (shouldAdd) current.add(name); else current.delete(name);
+        this.className = Array.from(current).join(' ');
+      },
+    };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector() { return null; }
+}
+
+function walk(rootNodes) {
+  const stack = Array.from(rootNodes);
+  const nodes = [];
+  while (stack.length) {
+    const node = stack.shift();
+    if (!node) continue;
+    nodes.push(node);
+    stack.unshift(...(node.children || []));
+  }
+  return nodes;
+}
+
+function findFirst(document, predicate) {
+  return walk(document.byID.values()).find(predicate) || null;
+}
+
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const window = { location: { pathname: '/', search: '' } };
+const history = { replaceState() {} };
+const fetch = (url) => {
+  if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, Element);
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+(async () => {
+  await settle();
+  const link = findFirst(document, (node) => node.tagName === 'A' && node.textContent === 'Account JSON');
+  if (!link) throw new Error('expected account quick link in account header');
+  const expectedHref = '/v1/overview/accounts/' + encodeURIComponent(sampleAccounts[0].awsAccountId);
+  if (link.href !== expectedHref) throw new Error('expected account quick link href to encode awsAccountId');
+  if (link.target !== '_blank') throw new Error('expected account quick link target');
+  if (link.rel !== 'noreferrer noopener') throw new Error('expected account quick link rel');
+  const header = link.parentNode && link.parentNode.parentNode;
+  if (!header || header.className !== 'account-head') throw new Error('expected account quick link container to live in account header');
+  if (findFirst(document, (node) => node.tagName === 'BUTTON' && walk([node]).includes(link))) throw new Error('expected account quick link not to be nested inside deployment toggle buttons');
+})();
+`
+
+	cmd := exec.Command("node", "-e", nodeProgram)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+	}
+}
+
+func TestEmbeddedUIRendersDeploymentQuickLinksBesideExpandButtonWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	deploymentName := `api/prod?<script>alert(1)</script>`
+	accountsJSON, err := json.Marshal([]map[string]any{
+		{
+			"name":         "acct-a",
+			"awsAccountId": "111111111111",
+			"deployments": []map[string]any{{
+				"name":           deploymentName,
+				"appRef":         "payments",
+				"environmentRef": "prod",
+				"region":         "us-west-2",
+				"targetType":     "ecs",
+				"strategy":       "canary",
+				"executionMode":  "ecsCodeDeploy",
+				"sync":           map[string]any{"state": "Reconciling"},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal sample accounts: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const sampleAccounts = ` + string(accountsJSON) + `;
+
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.href = '';
+    this.target = '';
+    this.rel = '';
+    this.type = '';
+    this.classList = {
+      add: (...names) => {
+        const current = new Set(this.className.split(/\s+/).filter(Boolean));
+        names.forEach((name) => current.add(name));
+        this.className = Array.from(current).join(' ');
+      },
+      toggle: (name, force) => {
+        const current = new Set(this.className.split(/\s+/).filter(Boolean));
+        const shouldAdd = force === undefined ? !current.has(name) : Boolean(force);
+        if (shouldAdd) current.add(name); else current.delete(name);
+        this.className = Array.from(current).join(' ');
+      },
+    };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector() { return null; }
+}
+
+function walk(rootNodes) {
+  const stack = Array.from(rootNodes);
+  const nodes = [];
+  while (stack.length) {
+    const node = stack.shift();
+    if (!node) continue;
+    nodes.push(node);
+    stack.unshift(...(node.children || []));
+  }
+  return nodes;
+}
+
+function findFirst(document, predicate) {
+  return walk(document.byID.values()).find(predicate) || null;
+}
+
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const window = { location: { pathname: '/', search: '' } };
+const history = { replaceState() {} };
+const fetch = (url) => {
+  if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, Element);
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+(async () => {
+  await settle();
+  const rowLinks = findFirst(document, (node) => node.tagName === 'DIV' && node.className === 'row-links row-links-shell');
+  if (!rowLinks) throw new Error('expected deployment quick-link container');
+  const overviewLink = (rowLinks.children || []).find((node) => node.tagName === 'A' && node.textContent === 'Overview JSON');
+  const statusLink = (rowLinks.children || []).find((node) => node.tagName === 'A' && node.textContent === 'Status JSON');
+  if (!overviewLink) throw new Error('expected Overview JSON quick link');
+  if (!statusLink) throw new Error('expected Status JSON quick link');
+  const expectedOverviewHref = '/v1/overview/deployments/' + encodeURIComponent(sampleAccounts[0].deployments[0].name);
+  const expectedStatusHref = '/v1/status/deployments/' + encodeURIComponent(sampleAccounts[0].deployments[0].name);
+  if (overviewLink.href !== expectedOverviewHref) throw new Error('expected Overview JSON quick link href to encode deployment name');
+  if (statusLink.href !== expectedStatusHref) throw new Error('expected Status JSON quick link href to encode deployment name');
+  for (const link of [overviewLink, statusLink]) {
+    if (link.target !== '_blank') throw new Error('expected deployment quick link target');
+    if (link.rel !== 'noreferrer noopener') throw new Error('expected deployment quick link rel');
+    if (findFirst(document, (node) => node.tagName === 'BUTTON' && walk([node]).includes(link))) throw new Error('expected deployment quick link not to be nested inside expand button');
+  }
+  const row = rowLinks.parentNode;
+  if (!row || row.className !== 'row') throw new Error('expected deployment quick-link container to live directly under the deployment row');
+  const [toggle, links, detailPanel] = row.children || [];
+  if (toggle?.tagName !== 'BUTTON') throw new Error('expected expand button to remain first child in row');
+  if (links !== rowLinks) throw new Error('expected deployment quick links to remain outside the expand button as a sibling container');
+  if (detailPanel?.className !== 'detail-panel') throw new Error('expected deployment detail panel to remain separate from quick links');
+})();
+`
+
+	cmd := exec.Command("node", "-e", nodeProgram)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+	}
+}
+
 func TestEmbeddedUIFilterBehaviorWithNodeHarness(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not installed")
@@ -583,7 +854,7 @@ func TestEmbeddedUIBehaviorWithNodeHarness(t *testing.T) {
 			"source":             "controller-runtime",
 			"desiredGeneration":  7,
 			"observedGeneration": 6,
-			"changes": []string{"traffic-shift <literal>", "capacity-ready"},
+			"changes":            []string{"traffic-shift <literal>", "capacity-ready"},
 		},
 		"sync": map[string]any{"reason": "Traffic shift running"},
 		"rollout": map[string]any{"steps": []map[string]any{
@@ -600,7 +871,7 @@ func TestEmbeddedUIBehaviorWithNodeHarness(t *testing.T) {
 				"health":             map[string]any{"overall": "Healthy", "summary": "steady"},
 				"desiredGeneration":  7,
 				"observedGeneration": 6,
-				"changes": []string{"traffic-shift <literal>", "alarm-cleared<script>"},
+				"changes":            []string{"traffic-shift <literal>", "alarm-cleared<script>"},
 				"rolloutPhase":       "Progressing <literal>",
 				"currentStep":        "ShiftTrafficCanary",
 			},

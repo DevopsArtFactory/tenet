@@ -15,6 +15,20 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
 
+func assertInternalServerErrorResponse(t *testing.T, resp *httptest.ResponseRecorder, leaked string) {
+	t.Helper()
+	if resp.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.Code)
+	}
+	body := resp.Body.String()
+	if body != http.StatusText(http.StatusInternalServerError)+"\n" {
+		t.Fatalf("expected generic 500 body %q, got %q", http.StatusText(http.StatusInternalServerError)+"\n", body)
+	}
+	if strings.Contains(body, leaked) {
+		t.Fatalf("expected 500 body to avoid leaking %q, got %q", leaked, body)
+	}
+}
+
 func TestRouterHealthz(t *testing.T) {
 	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
@@ -86,10 +100,11 @@ func TestRouterCatalogSummaryUnavailable(t *testing.T) {
 }
 
 func TestRouterCatalogSummaryPropagatesErrors(t *testing.T) {
+	const upstreamErr = "boom: summary provider details"
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 		CatalogSummary: func() (catalog.Summary, error) {
-			return catalog.Summary{}, errors.New("boom")
+			return catalog.Summary{}, errors.New(upstreamErr)
 		},
 	})
 	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/summary", nil)
@@ -97,9 +112,7 @@ func TestRouterCatalogSummaryPropagatesErrors(t *testing.T) {
 
 	router.ServeHTTP(resp, req)
 
-	if resp.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", resp.Code)
-	}
+	assertInternalServerErrorResponse(t, resp, upstreamErr)
 }
 
 func TestRouterCatalogDeployments(t *testing.T) {
@@ -924,10 +937,11 @@ func TestRouterOverviewAccountsUnavailable(t *testing.T) {
 }
 
 func TestRouterOverviewAccountsPropagatesErrors(t *testing.T) {
+	const upstreamErr = "boom: overview accounts provider details"
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 		OverviewAccounts: func() ([]catalog.AccountOverview, error) {
-			return nil, errors.New("boom")
+			return nil, errors.New(upstreamErr)
 		},
 	})
 	req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts", nil)
@@ -935,9 +949,122 @@ func TestRouterOverviewAccountsPropagatesErrors(t *testing.T) {
 
 	router.ServeHTTP(resp, req)
 
-	if resp.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", resp.Code)
+	assertInternalServerErrorResponse(t, resp, upstreamErr)
+}
+
+func TestRouterOverviewAccountDetail(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewAccount: func(awsAccountID string) (catalog.AccountOverviewDetail, error) {
+			if awsAccountID != "123456789012" {
+				t.Fatalf("unexpected lookup aws account id: %s", awsAccountID)
+			}
+			return catalog.AccountOverviewDetail{
+				Name:            "prod-core",
+				AWSAccountID:    "123456789012",
+				AllowedRegions:  []string{"ap-northeast-2", "us-west-2"},
+				DeploymentCount: 1,
+				SyncedCount:     1,
+				Deployments: []catalog.DeploymentOverview{{
+					Name:           "api-prod",
+					EnvironmentRef: "prod-apne2",
+					Region:         "ap-northeast-2",
+					Strategy:       "canary",
+					ExecutionMode:  "asgWeightedTargetGroups",
+					Sync:           domain.Sync{State: domain.SyncStateSynced, Reason: "steady"},
+					Health:         domain.Health{Overall: domain.HealthHealthy, Summary: "steady"},
+				}},
+			}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts/123456789012", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
 	}
+
+	var detail catalog.AccountOverviewDetail
+	if err := json.Unmarshal(resp.Body.Bytes(), &detail); err != nil {
+		t.Fatalf("failed to decode overview account detail: %v", err)
+	}
+	if detail.Name != "prod-core" || detail.AWSAccountID != "123456789012" || len(detail.Deployments) != 1 {
+		t.Fatalf("unexpected overview account detail: %+v", detail)
+	}
+	if detail.Deployments[0].Name != "api-prod" || detail.Deployments[0].ExecutionMode != "asgWeightedTargetGroups" {
+		t.Fatalf("unexpected overview account deployment detail: %+v", detail.Deployments[0])
+	}
+}
+
+func TestOverviewAccountDetailRoute(t *testing.T) {
+	t.Run("unavailable", func(t *testing.T) {
+		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts/123456789012", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusServiceUnavailable {
+			t.Fatalf("expected 503, got %d", resp.Code)
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewAccount: func(string) (catalog.AccountOverviewDetail, error) {
+				return catalog.AccountOverviewDetail{}, statusstore.ErrNotFound
+			},
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts/missing", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != statusstore.ErrNotFound.Error()+"\n" {
+			t.Fatalf("expected not-found body %q, got %q", statusstore.ErrNotFound.Error()+"\n", body)
+		}
+	})
+
+	t.Run("provider error", func(t *testing.T) {
+		const upstreamErr = "boom: overview account detail provider details"
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewAccount: func(string) (catalog.AccountOverviewDetail, error) {
+				return catalog.AccountOverviewDetail{}, errors.New(upstreamErr)
+			},
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts/123456789012", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		assertInternalServerErrorResponse(t, resp, upstreamErr)
+	})
+
+	t.Run("rejects invalid names", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewAccount: func(string) (catalog.AccountOverviewDetail, error) {
+				return catalog.AccountOverviewDetail{}, nil
+			},
+		})
+		for _, path := range []string{"/v1/overview/accounts/", "/v1/overview/accounts/a/b"} {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400 for %s, got %d", path, resp.Code)
+			}
+		}
+	})
 }
 
 func TestRouterOverviewDeployment(t *testing.T) {
@@ -1406,6 +1533,9 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		OverviewAccounts: func() ([]catalog.AccountOverview, error) {
 			return []catalog.AccountOverview{}, nil
 		},
+		OverviewAccount: func(string) (catalog.AccountOverviewDetail, error) {
+			return catalog.AccountOverviewDetail{}, nil
+		},
 		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
 			return catalog.DeploymentOverviewDetail{}, nil
 		},
@@ -1417,7 +1547,7 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		},
 	})
 
-	paths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/accounts", "/v1/overview/deployments/api-prod", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
+	paths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/accounts", "/v1/overview/accounts/123456789012", "/v1/overview/deployments/api-prod", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
 	for _, path := range paths {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		resp := httptest.NewRecorder()

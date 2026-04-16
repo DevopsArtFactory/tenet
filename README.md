@@ -38,10 +38,11 @@ Implemented today:
   - `GET /v1/catalog/placements`
   - `GET /v1/catalog/topology`
   - `GET /v1/overview/accounts`
+  - `GET /v1/overview/accounts/{awsAccountId}`
   - `GET /v1/overview/deployments/{deploymentName}`
   - `GET /v1/status/deployments`
   - `GET /v1/status/deployments/{deploymentName}`
-- embedded browser UI grouped by account and then project/environment deployment sections at `/`, including additive account-header count pills from `/v1/overview/accounts` for deployment totals plus synced/progressing/paused/error runtime-state summaries, additive account topology summaries for unique project/environment counts, additive `runtimeSummary` cards on each deployment row (latest summary text plus latest timestamp fallback plus desired/observed generation metadata, latest runtime change labels from `runtimeSummary.changes[]`, and history-backed provenance text via `runtimeSummary.source` when present), controller-authored rollout summary text alongside rollout phase, current step, and planned steps for EC2 weighted-target-group and instance-refresh executions plus ECS CodeDeploy and native rolling executions, an operator filter toolbar with free-text search plus sync-state/account selectors and shareable URL query params, free-text matching that now also includes additive `runtimeSummary` provenance/source fields plus latest change labels, per-deployment quick links to the existing overview/status JSON detail read models, plus expandable deployment detail panels that lazy-load joined placement, sync reason, runtime-summary generations/source/change labels, rollout generation, rollout execution resources/descriptions, runtime history generation metadata plus additive history `changes[]`/source/rollout-phase rows when present, rollout-step status/detail pairs, and condition data from `/v1/overview/deployments/{deploymentName}`
+- embedded browser UI grouped by account and then project/environment deployment sections at `/`, including additive account-header count pills from `/v1/overview/accounts` for deployment totals plus synced/progressing/paused/error runtime-state summaries, additive account topology summaries for unique project/environment counts, an account-header `Account JSON` quick link to `/v1/overview/accounts/{awsAccountId}`, additive `runtimeSummary` cards on each deployment row (latest summary text plus latest timestamp fallback plus desired/observed generation metadata, latest runtime change labels from `runtimeSummary.changes[]`, and history-backed provenance text via `runtimeSummary.source` when present), controller-authored rollout summary text alongside rollout phase, current step, and planned steps for EC2 weighted-target-group and instance-refresh executions plus ECS CodeDeploy and native rolling executions, an operator filter toolbar with free-text search plus sync-state/account selectors and shareable URL query params, free-text matching that now also includes additive `runtimeSummary` provenance/source fields plus latest change labels, per-deployment quick links to the existing overview/status JSON detail read models, plus expandable deployment detail panels that lazy-load joined placement, sync reason, runtime-summary generations/source/change labels, rollout generation, rollout execution resources/descriptions, runtime history generation metadata plus additive history `changes[]`/source/rollout-phase rows when present, rollout-step status/detail pairs, and condition data from `/v1/overview/deployments/{deploymentName}`
 - method guards for the read-only API surface
 - fail-fast validation for invalid repository roots and incomplete manifest layouts
 - optional status-file exposure through `TENET_STATUS_PATH`
@@ -84,6 +85,7 @@ In another terminal you can inspect the current control plane state:
 ```bash
 curl http://localhost:8080/v1/catalog/summary
 curl http://localhost:8080/v1/overview/accounts
+curl http://localhost:8080/v1/overview/accounts/210987654321
 curl http://localhost:8080/v1/overview/deployments/payments-api-prod
 curl http://localhost:8080/v1/status/deployments/payments-api-prod
 ```
@@ -133,6 +135,7 @@ curl http://localhost:8080/
 curl http://localhost:8080/healthz
 curl http://localhost:8080/v1/catalog/topology
 curl http://localhost:8080/v1/overview/accounts
+curl http://localhost:8080/v1/overview/accounts/210987654321
 curl http://localhost:8080/v1/overview/deployments/payments-api-prod
 curl http://localhost:8080/v1/status/deployments
 open 'http://localhost:8080/?sync=Reconciling'
@@ -141,7 +144,7 @@ docker compose logs controller --tail=20
 make docker-down
 ```
 
-The embedded UI toolbar keeps its current search, sync-state, and account filters in the URL query string so operators can bookmark or share a focused view without adding server-side filter endpoints. Each account card now also summarizes the unique project/environment topology visible under that AWS account, and the deployment rows are grouped into project/environment sections before operators expand individual deployments. Runtime-summary display/search text on those cards now includes provenance/source text when `runtimeSummary.source` is present, so controller-authored history-backed summaries remain visible and searchable from the overview without opening the detail panel. Each deployment card still exposes direct `Overview JSON` and `Status JSON` links for quick navigation into the existing read-only detail endpoints.
+The embedded UI toolbar keeps its current search, sync-state, and account filters in the URL query string so operators can bookmark or share a focused view without adding server-side filter endpoints. Each account card now also summarizes the unique project/environment topology visible under that AWS account, exposes an `Account JSON` quick link to `/v1/overview/accounts/{awsAccountId}` directly in the account header, and groups deployment rows into project/environment sections before operators expand individual deployments. Runtime-summary display/search text on those cards now includes provenance/source text when `runtimeSummary.source` is present, so controller-authored history-backed summaries remain visible and searchable from the overview without opening the detail panel. Each deployment card still exposes direct `Overview JSON` and `Status JSON` links for quick navigation into the existing read-only detail endpoints.
 
 
 Use the repository test suite:

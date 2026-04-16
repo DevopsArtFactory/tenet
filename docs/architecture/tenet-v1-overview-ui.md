@@ -31,6 +31,7 @@ It groups deployments by AWS account and then by project/environment within each
 
 The page consumes joined overview endpoints:
 - `GET /v1/overview/accounts`
+- `GET /v1/overview/accounts/{awsAccountId}`
 - `GET /v1/overview/deployments/{deploymentName}`
 
 `/v1/overview/accounts` keeps the top-level account page fast by returning the summary slice needed to render the default cards.
@@ -50,7 +51,7 @@ Each deployment object in that overview response now also includes an additive `
 - `runtimeSummary.currentStep`
 - `runtimeSummary.historyCount`
 
-The embedded UI renders that latest runtime summary/timestamp directly on the overview card using `document.createElement`, `textContent`, and `replaceChildren`; it also renders dedicated runtime-generation and latest-change rows from `runtimeSummary.desiredGeneration` / `runtimeSummary.observedGeneration` and `runtimeSummary.changes[]` with the same safe DOM construction, includes `runtimeSummary.source` and latest change labels in the compact overview-card summary/search text when present, and does not inject runtime summary strings with `innerHTML`.
+The embedded UI renders that latest runtime summary/timestamp directly on the overview card using `document.createElement`, `textContent`, and `replaceChildren`; it also renders dedicated runtime-generation and latest-change rows from `runtimeSummary.desiredGeneration` / `runtimeSummary.observedGeneration` and `runtimeSummary.changes[]` with the same safe DOM construction, includes `runtimeSummary.source` and latest change labels in the compact overview-card summary/search text when present, builds the account-header `Account JSON` link with `createElement('a')` plus an encoded `href` derived from `awsAccountId`, and does not inject runtime/account identifier strings with `innerHTML`.
 
 Each account object now also includes additive per-account runtime counters:
 - `deploymentCount`
@@ -59,7 +60,7 @@ Each account object now also includes additive per-account runtime counters:
 - `pausedCount`
 - `errorCount`
 
-The `/` UI renders those counters directly in each account header. When any aggregate account-count field is absent in the overview payload, the embedded client derives the fallback value from `account.deployments[*].sync.state` instead of displaying zero for the status buckets. Deployments with missing or unknown runtime state still contribute to `deploymentCount`, so they remain visible in the total even when they do not increment a concrete runtime-state bucket.
+The `/` UI renders those counters directly in each account header. The same account header now also renders an `Account JSON` quick link to `GET /v1/overview/accounts/{awsAccountId}` as a sibling control next to the title/count summary rather than nesting it inside deployment-level expand toggles. When any aggregate account-count field is absent in the overview payload, the embedded client derives the fallback value from `account.deployments[*].sync.state` instead of displaying zero for the status buckets. Deployments with missing or unknown runtime state still contribute to `deploymentCount`, so they remain visible in the total even when they do not increment a concrete runtime-state bucket.
 
 The embedded client also derives a lightweight project/environment topology summary directly from `account.deployments[*]` so each account card can show unique project/environment counts without waiting for another API field. Those same deployment rows are grouped by `appRef + environmentRef + region` before rendering, which keeps the dashboard aligned with issue #14's project/environment framing while preserving the existing account-first operating model.
 
@@ -82,6 +83,7 @@ The overview page also includes a client-side filter toolbar above the summary c
 - a text search that matches account/deployment-visible fields from the `/v1/overview/accounts` payload, including additive `runtimeSummary` text, latest change labels, provenance/source, and timestamp fields
 - a sync-state filter
 - an account filter
+- an account-header `Account JSON` quick link that jumps to `/v1/overview/accounts/{awsAccountId}`
 - direct `Overview JSON` and `Status JSON` links that jump to `/v1/overview/deployments/{deploymentName}` and `/v1/status/deployments/{deploymentName}`
 - a `Clear filters` action that resets the toolbar to the default account-wide view
 

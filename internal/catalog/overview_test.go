@@ -224,6 +224,129 @@ func TestBuildAccountOverviewsRuntimeSummaryRemainsNilWhenStatusIsEmpty(t *testi
 	}
 }
 
+func TestBuildAccountOverviewDetail(t *testing.T) {
+	snapshots := []statusstore.Snapshot{
+		{
+			DeploymentName: "payments-api-prod",
+			Status: domain.DeploymentStatus{
+				ObservedGeneration: 7,
+				Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"},
+				Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"},
+				Conditions:         []domain.Condition{{Type: "Progressing", Status: true, Reason: "RolloutInFlight", Message: "candidate receiving traffic"}},
+				History: []domain.StatusHistoryEntry{{
+					Timestamp:          "2026-04-16T06:20:00Z",
+					Source:             "controller",
+					Summary:            "Shifting canary traffic",
+					Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"},
+					Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"},
+					DesiredGeneration:  8,
+					ObservedGeneration: 7,
+					RolloutPhase:       domain.RolloutPhasePromoting,
+					CurrentStep:        "ShiftTrafficCanary",
+					Changes:            []string{"summary"},
+				}},
+				DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6"},
+				Rollout: &domain.RolloutSummary{
+					DesiredGeneration:  8,
+					ObservedGeneration: 7,
+					Phase:              domain.RolloutPhasePromoting,
+					CurrentStep:        "ShiftTrafficCanary",
+					Summary:            "Canary is serving 10% of traffic",
+					Steps:              []domain.RolloutStepSummary{{Kind: "CreateCandidateCapacity"}, {Kind: "ShiftTrafficCanary", Current: true}},
+					Execution:          []domain.RolloutExecutionDetail{{Resource: "candidateAutoScalingGroup", Name: "payments-api-prod-candidate", Description: "Candidate Auto Scaling Group Tenet will create for weighted target group rollout"}},
+				},
+			},
+		},
+		{DeploymentName: "billing-api-prod", Status: domain.DeploymentStatus{ObservedGeneration: 9, Sync: domain.Sync{State: domain.SyncStateSynced, Reason: "stable"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "3/3 healthy"}}},
+	}
+	catalog := manifest.Catalog{
+		Accounts: []domain.Account{
+			{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2", "us-west-2"}},
+			{Name: "prod-shadow", AWSAccountID: "prod-core", AllowedRegions: []string{"eu-west-1"}},
+		},
+		Environments: []domain.Environment{
+			{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"},
+			{Name: "prod-apne2-shadow", AccountRef: "prod-shadow", Region: "eu-west-1"},
+		},
+		Deployments: []domain.Deployment{
+			{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2", TargetType: "ec2", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", DesiredArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7"}},
+			{Name: "billing-api-prod", AppRef: "billing-api", EnvironmentRef: "prod-apne2", TargetType: "ec2", Strategy: "blueGreen", ExecutionMode: "asgWeightedTargetGroups", DesiredArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/billing-api/prod/billing-api-linux-amd64-r9"}},
+			{Name: "shadow-api-prod", AppRef: "shadow-api", EnvironmentRef: "prod-apne2-shadow", TargetType: "ecs", Strategy: "rolling", ExecutionMode: "ecsCodeDeploy"},
+		},
+	}
+
+	detail, err := BuildAccountOverviewDetail(catalog, snapshots, "123456789012")
+	if err != nil {
+		t.Fatalf("BuildAccountOverviewDetail returned error: %v", err)
+	}
+	if detail.Name != "prod-core" || detail.AWSAccountID != "123456789012" {
+		t.Fatalf("expected account identity fields, got %+v", detail)
+	}
+	if !reflect.DeepEqual(detail.AllowedRegions, []string{"ap-northeast-2", "us-west-2"}) {
+		t.Fatalf("expected allowed regions, got %+v", detail.AllowedRegions)
+	}
+	if detail.DeploymentCount != 2 || detail.SyncedCount != 1 || detail.ProgressingCount != 1 || detail.PausedCount != 0 || detail.ErrorCount != 0 {
+		t.Fatalf("expected additive deployment counts for account detail, got %+v", detail)
+	}
+	if len(detail.Deployments) != 2 || detail.Deployments[0].Name != "billing-api-prod" || detail.Deployments[1].Name != "payments-api-prod" {
+		t.Fatalf("expected sorted deployments, got %+v", detail.Deployments)
+	}
+	if detail.Deployments[1].RuntimeSummary == nil || detail.Deployments[1].RuntimeSummary.CurrentStep != "ShiftTrafficCanary" {
+		t.Fatalf("expected runtime summary to be surfaced, got %+v", detail.Deployments[1])
+	}
+
+	snapshots[0].Status.Rollout.Steps[0].Kind = "mutated"
+	snapshots[0].Status.Rollout.Execution[0].Name = "mutated"
+	snapshots[0].Status.Conditions[0].Reason = "Mutated"
+	snapshots[0].Status.History[0].Summary = "mutated"
+	if detail.Deployments[1].Rollout.Steps[0].Kind != "CreateCandidateCapacity" {
+		t.Fatalf("expected rollout summary to be cloned defensively, got %+v", detail.Deployments[1].Rollout)
+	}
+	if detail.Deployments[1].Rollout.Execution[0].Name != "payments-api-prod-candidate" {
+		t.Fatalf("expected rollout execution details to be cloned defensively, got %+v", detail.Deployments[1].Rollout.Execution)
+	}
+	if detail.Deployments[1].Conditions[0].Reason != "RolloutInFlight" {
+		t.Fatalf("expected conditions to be cloned defensively, got %+v", detail.Deployments[1].Conditions)
+	}
+	if detail.Deployments[1].RuntimeSummary.Summary != "Shifting canary traffic" {
+		t.Fatalf("expected runtime summary to be cloned defensively, got %+v", detail.Deployments[1].RuntimeSummary)
+	}
+}
+
+func TestBuildAccountOverviewDetailReturnsErrorForDuplicateAWSAccountIDs(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts: []domain.Account{
+			{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}},
+			{Name: "prod-shadow", AWSAccountID: "123456789012", AllowedRegions: []string{"us-west-2"}},
+		},
+		Environments: []domain.Environment{
+			{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"},
+			{Name: "prod-usw2", AccountRef: "prod-shadow", Region: "us-west-2"},
+		},
+		Deployments: []domain.Deployment{
+			{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"},
+			{Name: "shadow-api-prod", AppRef: "shadow-api", EnvironmentRef: "prod-usw2"},
+		},
+	}
+
+	_, err := BuildAccountOverviewDetail(catalog, nil, "123456789012")
+	if !errors.Is(err, errAmbiguousAccountOverviewDetail) {
+		t.Fatalf("expected ambiguous account detail error, got %v", err)
+	}
+	if errors.Is(err, statusstore.ErrNotFound) {
+		t.Fatalf("expected duplicate account ID to stay distinct from not found, got %v", err)
+	}
+}
+
+func TestBuildAccountOverviewDetailReturnsNotFound(t *testing.T) {
+	catalog := manifest.Catalog{Accounts: []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012"}}}
+
+	_, err := BuildAccountOverviewDetail(catalog, nil, "missing")
+	if !errors.Is(err, statusstore.ErrNotFound) {
+		t.Fatalf("expected not found error, got %v", err)
+	}
+}
+
 func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	snapshots := []statusstore.Snapshot{
 		{

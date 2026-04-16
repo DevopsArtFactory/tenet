@@ -194,6 +194,25 @@ func TestEmbeddedUIIncludesQuickLinksToDeploymentReadModels(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUIIncludesAccountJSONQuickLinksInAccountHeaders(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const accountLinks = createElement('div', 'row-links');",
+		"createNavLink(`/v1/overview/accounts/${encodeURIComponent(account.awsAccountId)}`, 'Account JSON')",
+		"head.append(titleWrap, accountLinks, pills);",
+		"Account JSON",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+
+	if strings.Contains(body, "head.append(titleWrap, pills);") {
+		t.Fatalf("expected account quick link to render inside the account header alongside the existing pills")
+	}
+}
+
 func TestEmbeddedUIIncludesOverviewStatusInFetchErrors(t *testing.T) {
 	body := string(indexHTML)
 

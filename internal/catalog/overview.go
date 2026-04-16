@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 
@@ -10,8 +11,23 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
 
+var errAmbiguousAccountOverviewDetail = errors.New("account overview detail is ambiguous")
+
 // AccountOverview groups deployment state under a single account.
 type AccountOverview struct {
+	Name             string               `json:"name"`
+	AWSAccountID     string               `json:"awsAccountId"`
+	AllowedRegions   []string             `json:"allowedRegions,omitempty"`
+	DeploymentCount  int                  `json:"deploymentCount"`
+	SyncedCount      int                  `json:"syncedCount"`
+	ProgressingCount int                  `json:"progressingCount"`
+	PausedCount      int                  `json:"pausedCount"`
+	ErrorCount       int                  `json:"errorCount"`
+	Deployments      []DeploymentOverview `json:"deployments"`
+}
+
+// AccountOverviewDetail describes one account's deployment state, keyed by AWS account ID.
+type AccountOverviewDetail struct {
 	Name             string               `json:"name"`
 	AWSAccountID     string               `json:"awsAccountId"`
 	AllowedRegions   []string             `json:"allowedRegions,omitempty"`
@@ -149,6 +165,42 @@ func BuildAccountOverviews(c manifest.Catalog, snapshots []statusstore.Snapshot)
 		return accounts[i].Name < accounts[j].Name
 	})
 	return accounts, nil
+}
+
+// BuildAccountOverviewDetail returns one account overview by exact AWS account ID.
+func BuildAccountOverviewDetail(c manifest.Catalog, snapshots []statusstore.Snapshot, awsAccountID string) (AccountOverviewDetail, error) {
+	accounts, err := BuildAccountOverviews(c, snapshots)
+	if err != nil {
+		return AccountOverviewDetail{}, err
+	}
+	var (
+		matched AccountOverview
+		found   bool
+	)
+	for _, account := range accounts {
+		if account.AWSAccountID != awsAccountID {
+			continue
+		}
+		if found {
+			return AccountOverviewDetail{}, fmt.Errorf("%w: %s", errAmbiguousAccountOverviewDetail, awsAccountID)
+		}
+		matched = account
+		found = true
+	}
+	if found {
+		return AccountOverviewDetail{
+			Name:             matched.Name,
+			AWSAccountID:     matched.AWSAccountID,
+			AllowedRegions:   append([]string(nil), matched.AllowedRegions...),
+			DeploymentCount:  matched.DeploymentCount,
+			SyncedCount:      matched.SyncedCount,
+			ProgressingCount: matched.ProgressingCount,
+			PausedCount:      matched.PausedCount,
+			ErrorCount:       matched.ErrorCount,
+			Deployments:      append([]DeploymentOverview(nil), matched.Deployments...),
+		}, nil
+	}
+	return AccountOverviewDetail{}, fmt.Errorf("%w: %s", statusstore.ErrNotFound, awsAccountID)
 }
 
 // BuildDeploymentOverviewDetail joins one deployment's placement-aware desired and observed state.
