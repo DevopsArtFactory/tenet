@@ -73,6 +73,7 @@ assert '/?page=application&deployment=${encodeURIComponent(deployment.name)}' in
 assert 'Drift view' in ui, ui
 assert 'Plan/apply' in ui, ui
 
-assert '/?view=plan&deployment=${encodeURIComponent(deployment.name)}' in ui, ui
+assert '/?page=drift&deployment=${encodeURIComponent(deployment.name)}' in ui, ui
+assert '/?page=plan&deployment=${encodeURIComponent(deployment.name)}' in ui, ui
 print('smoke-local: ok')
 PY
