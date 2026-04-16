@@ -43,6 +43,22 @@ type AccountOverviewDetail struct {
 	Deployments      []DeploymentOverview `json:"deployments"`
 }
 
+// ProjectEnvironmentOverviewDetail describes one grouped project/environment slice under an account.
+type ProjectEnvironmentOverviewDetail struct {
+	AccountName      string               `json:"accountName"`
+	AWSAccountID     string               `json:"awsAccountId"`
+	AllowedRegions   []string             `json:"allowedRegions,omitempty"`
+	AppRef           string               `json:"appRef"`
+	EnvironmentRef   string               `json:"environmentRef"`
+	Region           string               `json:"region,omitempty"`
+	DeploymentCount  int                  `json:"deploymentCount"`
+	SyncedCount      int                  `json:"syncedCount"`
+	ProgressingCount int                  `json:"progressingCount"`
+	PausedCount      int                  `json:"pausedCount"`
+	ErrorCount       int                  `json:"errorCount"`
+	Deployments      []DeploymentOverview `json:"deployments"`
+}
+
 type accountOverviewAccumulator struct {
 	overview        AccountOverview
 	projectRefs     map[string]struct{}
@@ -222,6 +238,61 @@ func BuildAccountOverviewDetail(c manifest.Catalog, snapshots []statusstore.Snap
 	return AccountOverviewDetail{}, fmt.Errorf("%w: %s", statusstore.ErrNotFound, awsAccountID)
 }
 
+// BuildProjectEnvironmentOverviewDetail returns one grouped project/environment overview under an exact AWS account ID.
+func BuildProjectEnvironmentOverviewDetail(c manifest.Catalog, snapshots []statusstore.Snapshot, awsAccountID, appRef, environmentRef string) (ProjectEnvironmentOverviewDetail, error) {
+	accountDetail, err := BuildAccountOverviewDetail(c, snapshots, awsAccountID)
+	if err != nil {
+		return ProjectEnvironmentOverviewDetail{}, err
+	}
+
+	detail := ProjectEnvironmentOverviewDetail{
+		AccountName:    accountDetail.Name,
+		AWSAccountID:   accountDetail.AWSAccountID,
+		AllowedRegions: append([]string(nil), accountDetail.AllowedRegions...),
+		AppRef:         appRef,
+		EnvironmentRef: environmentRef,
+		Deployments:    make([]DeploymentOverview, 0, len(accountDetail.Deployments)),
+	}
+
+	for _, environment := range c.Environments {
+		if environment.Name == environmentRef {
+			detail.Region = environment.Region
+			break
+		}
+	}
+
+	for _, deployment := range accountDetail.Deployments {
+		if deployment.AppRef != appRef || deployment.EnvironmentRef != environmentRef {
+			continue
+		}
+		if detail.Region == "" {
+			detail.Region = deployment.Region
+		}
+		detail.Deployments = append(detail.Deployments, cloneDeploymentOverview(deployment))
+		detail.DeploymentCount++
+		switch deployment.Sync.State {
+		case domain.SyncStateSynced:
+			detail.SyncedCount++
+		case domain.SyncStateReconciling, domain.SyncStateOutOfSync, domain.SyncStateDrifted:
+			detail.ProgressingCount++
+		case domain.SyncStatePaused:
+			detail.PausedCount++
+		case domain.SyncStateError:
+			detail.ErrorCount++
+		}
+	}
+
+	if len(detail.Deployments) == 0 {
+		return ProjectEnvironmentOverviewDetail{}, fmt.Errorf("%w: %s/%s/%s", statusstore.ErrNotFound, awsAccountID, appRef, environmentRef)
+	}
+
+	sort.Slice(detail.Deployments, func(i, j int) bool {
+		return detail.Deployments[i].Name < detail.Deployments[j].Name
+	})
+
+	return detail, nil
+}
+
 // BuildDeploymentOverviewDetail joins one deployment's placement-aware desired and observed state.
 func BuildDeploymentOverviewDetail(c manifest.Catalog, snapshots []statusstore.Snapshot, deploymentName string) (DeploymentOverviewDetail, error) {
 	statusByDeployment := make(map[string]domain.DeploymentStatus, len(snapshots))
@@ -319,6 +390,14 @@ func cloneRuntimeSummary(summary *domain.RuntimeSummary) *domain.RuntimeSummary 
 	copy := *summary
 	copy.Changes = append([]string(nil), summary.Changes...)
 	return &copy
+}
+
+func cloneDeploymentOverview(deployment DeploymentOverview) DeploymentOverview {
+	copy := deployment
+	copy.RuntimeSummary = cloneRuntimeSummary(deployment.RuntimeSummary)
+	copy.Rollout = cloneRolloutSummary(deployment.Rollout)
+	copy.Conditions = append([]domain.Condition(nil), deployment.Conditions...)
+	return copy
 }
 
 func cloneRolloutSummary(summary *domain.RolloutSummary) *domain.RolloutSummary {

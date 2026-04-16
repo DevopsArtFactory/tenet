@@ -347,6 +347,62 @@ func TestBuildAccountOverviewDetailReturnsNotFound(t *testing.T) {
 	}
 }
 
+func TestBuildProjectEnvironmentOverviewDetail(t *testing.T) {
+	snapshots := []statusstore.Snapshot{
+		{DeploymentName: "payments-api-prod", Status: domain.DeploymentStatus{ObservedGeneration: 7, Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"}, DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6"}}},
+		{DeploymentName: "payments-worker-prod", Status: domain.DeploymentStatus{ObservedGeneration: 7, Sync: domain.Sync{State: domain.SyncStatePaused, Reason: "manual pause"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "3/3 healthy"}}},
+		{DeploymentName: "billing-api-prod", Status: domain.DeploymentStatus{ObservedGeneration: 9, Sync: domain.Sync{State: domain.SyncStateSynced, Reason: "stable"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "3/3 healthy"}}},
+	}
+	catalog := manifest.Catalog{
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2", "us-west-2"}}},
+		Environments: []domain.Environment{{Name: "prod", AccountRef: "prod-core", Region: "ap-northeast-2"}, {Name: "staging", AccountRef: "prod-core", Region: "us-west-2"}},
+		Deployments: []domain.Deployment{
+			{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod", TargetType: "ec2", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", DesiredArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7"}},
+			{Name: "payments-worker-prod", AppRef: "payments-api", EnvironmentRef: "prod", TargetType: "ec2", Strategy: "linear", ExecutionMode: "asgWeightedTargetGroups"},
+			{Name: "billing-api-prod", AppRef: "billing-api", EnvironmentRef: "prod", TargetType: "ec2", Strategy: "blueGreen", ExecutionMode: "asgWeightedTargetGroups"},
+		},
+	}
+
+	detail, err := BuildProjectEnvironmentOverviewDetail(catalog, snapshots, "123456789012", "payments-api", "prod")
+	if err != nil {
+		t.Fatalf("BuildProjectEnvironmentOverviewDetail returned error: %v", err)
+	}
+	if detail.AccountName != "prod-core" || detail.AWSAccountID != "123456789012" || detail.AppRef != "payments-api" || detail.EnvironmentRef != "prod" || detail.Region != "ap-northeast-2" {
+		t.Fatalf("expected grouped identity metadata, got %+v", detail)
+	}
+	if detail.DeploymentCount != 2 || detail.SyncedCount != 0 || detail.ProgressingCount != 1 || detail.PausedCount != 1 || detail.ErrorCount != 0 {
+		t.Fatalf("expected grouped status counters, got %+v", detail)
+	}
+	if len(detail.Deployments) != 2 || detail.Deployments[0].Name != "payments-api-prod" || detail.Deployments[1].Name != "payments-worker-prod" {
+		t.Fatalf("expected sorted grouped deployments, got %+v", detail.Deployments)
+	}
+	if !reflect.DeepEqual(detail.AllowedRegions, []string{"ap-northeast-2", "us-west-2"}) {
+		t.Fatalf("expected grouped allowed regions, got %+v", detail.AllowedRegions)
+	}
+
+	detail.Deployments[0].Sync.Reason = "mutated"
+	refetched, err := BuildProjectEnvironmentOverviewDetail(catalog, snapshots, "123456789012", "payments-api", "prod")
+	if err != nil {
+		t.Fatalf("BuildProjectEnvironmentOverviewDetail returned error on refetch: %v", err)
+	}
+	if refetched.Deployments[0].Sync.Reason != "new artifact" {
+		t.Fatalf("expected grouped deployment detail to be cloned defensively, got %+v", refetched.Deployments[0])
+	}
+}
+
+func TestBuildProjectEnvironmentOverviewDetailReturnsNotFound(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012"}},
+		Environments: []domain.Environment{{Name: "prod", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments:  []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod"}},
+	}
+
+	_, err := BuildProjectEnvironmentOverviewDetail(catalog, nil, "123456789012", "missing", "prod")
+	if !errors.Is(err, statusstore.ErrNotFound) {
+		t.Fatalf("expected not found error, got %v", err)
+	}
+}
+
 func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	snapshots := []statusstore.Snapshot{
 		{

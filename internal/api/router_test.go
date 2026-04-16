@@ -1149,6 +1149,91 @@ func TestOverviewAccountDetailRoute(t *testing.T) {
 	})
 }
 
+func TestRouterProjectEnvironmentOverview(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewProjectEnvironment: func(accountID, appRef, environmentRef string) (catalog.ProjectEnvironmentOverviewDetail, error) {
+			if accountID != "123456789012" || appRef != "payments-api" || environmentRef != "prod" {
+				t.Fatalf("unexpected grouped lookup: %s %s %s", accountID, appRef, environmentRef)
+			}
+			return catalog.ProjectEnvironmentOverviewDetail{
+				AccountName:      "prod-core",
+				AWSAccountID:     "123456789012",
+				AllowedRegions:   []string{"ap-northeast-2", "us-west-2"},
+				AppRef:           "payments-api",
+				EnvironmentRef:   "prod",
+				Region:           "ap-northeast-2",
+				DeploymentCount:  2,
+				SyncedCount:      1,
+				ProgressingCount: 1,
+				PausedCount:      0,
+				ErrorCount:       0,
+				Deployments:      []catalog.DeploymentOverview{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod", AWSAccountID: "123456789012", Region: "ap-northeast-2", ExecutionMode: "asgWeightedTargetGroups", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "warming"}}, {Name: "payments-worker-prod", AppRef: "payments-api", EnvironmentRef: "prod", AWSAccountID: "123456789012", Region: "ap-northeast-2", ExecutionMode: "asgWeightedTargetGroups", Sync: domain.Sync{State: domain.SyncStateSynced, Reason: "steady"}}},
+			}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+	var detail catalog.ProjectEnvironmentOverviewDetail
+	if err := json.Unmarshal(resp.Body.Bytes(), &detail); err != nil {
+		t.Fatalf("failed to decode grouped overview detail: %v", err)
+	}
+	if detail.AccountName != "prod-core" || detail.AppRef != "payments-api" || detail.EnvironmentRef != "prod" || detail.Region != "ap-northeast-2" || len(detail.Deployments) != 2 {
+		t.Fatalf("unexpected grouped overview detail: %+v", detail)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode raw grouped overview payload: %v", err)
+	}
+	if payload["accountName"] != "prod-core" || payload["appRef"] != "payments-api" || payload["environmentRef"] != "prod" || payload["deploymentCount"] != float64(2) {
+		t.Fatalf("expected grouped overview JSON fields, got %#v", payload)
+	}
+}
+
+func TestOverviewProjectEnvironmentRoute(t *testing.T) {
+	t.Run("unavailable", func(t *testing.T) {
+		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod", nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+		if resp.Code != http.StatusServiceUnavailable {
+			t.Fatalf("expected 503, got %d", resp.Code)
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}, OverviewProjectEnvironment: func(string, string, string) (catalog.ProjectEnvironmentOverviewDetail, error) {
+			return catalog.ProjectEnvironmentOverviewDetail{}, statusstore.ErrNotFound
+		}})
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts/123456789012/projects/missing/environments/prod", nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+		if resp.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", resp.Code)
+		}
+	})
+
+	t.Run("invalid paths", func(t *testing.T) {
+		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}, OverviewProjectEnvironment: func(string, string, string) (catalog.ProjectEnvironmentOverviewDetail, error) {
+			return catalog.ProjectEnvironmentOverviewDetail{}, nil
+		}})
+		for _, path := range []string{"/v1/overview/accounts/", "/v1/overview/accounts/123456789012/projects", "/v1/overview/accounts/123456789012/projects/payments-api", "/v1/overview/accounts/123456789012/projects/payments-api/environments", "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod/extra"} {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			resp := httptest.NewRecorder()
+			router.ServeHTTP(resp, req)
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400 for %s, got %d", path, resp.Code)
+			}
+		}
+	})
+}
+
 func TestRouterOverviewDeployment(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
@@ -1629,7 +1714,7 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		},
 	})
 
-	paths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/accounts", "/v1/overview/accounts/123456789012", "/v1/overview/deployments/api-prod", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
+	paths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/accounts", "/v1/overview/accounts/123456789012", "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod", "/v1/overview/deployments/api-prod", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
 	for _, path := range paths {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		resp := httptest.NewRecorder()

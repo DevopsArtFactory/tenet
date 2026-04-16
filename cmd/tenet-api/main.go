@@ -79,6 +79,9 @@ func newAPIOptions(info buildinfo.Info, repoRoot string, store statusstore.Store
 	options.OverviewAccount = catalog.RepositoryAccountOverviewDetailProvider(repoRoot, func() ([]statusstore.Snapshot, error) {
 		return store.List(context.Background())
 	})
+	options.OverviewProjectEnvironment = catalog.RepositoryProjectEnvironmentOverviewDetailProvider(repoRoot, func() ([]statusstore.Snapshot, error) {
+		return store.List(context.Background())
+	})
 	options.OverviewDeployment = func(name string) (catalog.DeploymentOverviewDetail, error) {
 		compiled, err := catalog.LoadFromRepository(repoRoot)
 		if err != nil {

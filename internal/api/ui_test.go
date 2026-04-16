@@ -213,6 +213,22 @@ func TestEmbeddedUIIncludesAccountJSONQuickLinksInAccountHeaders(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUIIncludesGroupJSONQuickLinksInGroupHeaders(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const groupLinks = createElement('div', 'row-links');",
+		"groupLinks.classList.add('group-links');",
+		"createNavLink(`/v1/overview/accounts/${encodeURIComponent(account.awsAccountId)}/projects/${encodeURIComponent(group.appRef)}/environments/${encodeURIComponent(group.environmentRef)}`, 'Group JSON')",
+		"groupHead.append(groupTitleWrap, groupLinks, groupPills);",
+		"Group JSON",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+}
+
 func TestEmbeddedUIIncludesOverviewStatusInFetchErrors(t *testing.T) {
 	body := string(indexHTML)
 
