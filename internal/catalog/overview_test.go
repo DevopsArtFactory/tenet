@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -107,6 +108,115 @@ func TestBuildAccountOverviewsCountsStatusBuckets(t *testing.T) {
 	}
 	if overviews[0].DeploymentCount != 5 || overviews[0].SyncedCount != 1 || overviews[0].ProgressingCount != 2 || overviews[0].PausedCount != 1 || overviews[0].ErrorCount != 1 {
 		t.Fatalf("expected per-status counts to classify synced/progressing/paused/error states, got %+v", overviews[0])
+	}
+}
+
+func TestBuildAccountOverviewsRuntimeSummaryUsesLatestHistory(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
+		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments:  []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
+	}
+	snapshots := []statusstore.Snapshot{{
+		DeploymentName: "payments-api-prod",
+		Status: domain.DeploymentStatus{
+			Sync:   domain.Sync{State: domain.SyncStateOutOfSync, Reason: "stale-current"},
+			Health: domain.Health{Overall: domain.HealthUnhealthy, Summary: "stale health"},
+			Rollout: &domain.RolloutSummary{
+				Phase:       domain.RolloutPhaseFailed,
+				CurrentStep: "stale-step",
+				Summary:     "stale rollout",
+			},
+			History: []domain.StatusHistoryEntry{
+				{Timestamp: "2026-04-16T06:15:00Z", Summary: "Accepted rollout for r7", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "candidate warming"}, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "CreateCandidateCapacity"},
+				{Timestamp: "2026-04-16T06:20:00Z", Summary: "Shifting canary traffic", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"}, RolloutPhase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficCanary"},
+			},
+		},
+	}}
+
+	overviews, err := BuildAccountOverviews(catalog, snapshots)
+	if err != nil {
+		t.Fatalf("BuildAccountOverviews returned error: %v", err)
+	}
+	if len(overviews) != 1 || len(overviews[0].Deployments) != 1 {
+		t.Fatalf("expected one deployment overview, got %+v", overviews)
+	}
+
+	summary := overviews[0].Deployments[0].RuntimeSummary
+	if summary == nil {
+		t.Fatalf("expected runtime summary to be surfaced, got %+v", overviews[0].Deployments[0])
+	}
+	if summary.Timestamp != "2026-04-16T06:20:00Z" || summary.Summary != "Shifting canary traffic" || summary.Sync.Reason != "progressing" || summary.Health.Summary != "2/3 targets healthy" || summary.RolloutPhase != domain.RolloutPhasePromoting || summary.CurrentStep != "ShiftTrafficCanary" || summary.HistoryCount != 2 {
+		t.Fatalf("expected latest history entry to drive runtime summary, got %+v", summary)
+	}
+
+	snapshots[0].Status.History[1].Summary = "mutated"
+	if overviews[0].Deployments[0].RuntimeSummary.Summary != "Shifting canary traffic" {
+		t.Fatalf("expected runtime summary to be cloned defensively, got %+v", overviews[0].Deployments[0].RuntimeSummary)
+	}
+}
+
+func TestBuildAccountOverviewsRuntimeSummaryFallsBackToCurrentStatus(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
+		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments:  []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
+	}
+	snapshots := []statusstore.Snapshot{{
+		DeploymentName: "payments-api-prod",
+		Status: domain.DeploymentStatus{
+			Sync:   domain.Sync{State: domain.SyncStateSynced, Reason: "steady"},
+			Health: domain.Health{Overall: domain.HealthHealthy, Summary: "3/3 healthy"},
+			Rollout: &domain.RolloutSummary{
+				Phase:       domain.RolloutPhaseCompleted,
+				CurrentStep: "Complete",
+				Summary:     "Serving stable capacity",
+			},
+		},
+	}}
+
+	overviews, err := BuildAccountOverviews(catalog, snapshots)
+	if err != nil {
+		t.Fatalf("BuildAccountOverviews returned error: %v", err)
+	}
+	summary := overviews[0].Deployments[0].RuntimeSummary
+	if summary == nil {
+		t.Fatalf("expected runtime summary fallback, got %+v", overviews[0].Deployments[0])
+	}
+	if summary.Timestamp != "" || summary.Summary != "Serving stable capacity" || summary.Sync.Reason != "steady" || summary.Health.Summary != "3/3 healthy" || summary.RolloutPhase != domain.RolloutPhaseCompleted || summary.CurrentStep != "Complete" || summary.HistoryCount != 0 {
+		t.Fatalf("expected current status fallback runtime summary, got %+v", summary)
+	}
+}
+
+func TestBuildAccountOverviewsRuntimeSummaryRemainsNilWhenStatusIsEmpty(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
+		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments:  []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
+	}
+	snapshots := []statusstore.Snapshot{{
+		DeploymentName: "payments-api-prod",
+		Status:         domain.DeploymentStatus{},
+	}}
+
+	overviews, err := BuildAccountOverviews(catalog, snapshots)
+	if err != nil {
+		t.Fatalf("BuildAccountOverviews returned error: %v", err)
+	}
+	if len(overviews) != 1 || len(overviews[0].Deployments) != 1 {
+		t.Fatalf("expected one deployment overview, got %+v", overviews)
+	}
+
+	deployment := overviews[0].Deployments[0]
+	if deployment.RuntimeSummary != nil {
+		t.Fatalf("expected empty status runtime summary to remain nil, got %+v", deployment.RuntimeSummary)
+	}
+	payload, err := json.Marshal(deployment)
+	if err != nil {
+		t.Fatalf("Marshal returned error: %v", err)
+	}
+	if jsonContainsKey(payload, "runtimeSummary") {
+		t.Fatalf("expected runtimeSummary to be omitted from JSON, got %s", payload)
 	}
 }
 
@@ -227,6 +337,113 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	if snapshots[0].Status.History[1].CurrentStep != "ShiftTrafficCanary" {
 		t.Fatalf("expected caller mutations to avoid mutating stored history, got %+v", snapshots[0].Status.History)
 	}
+}
+
+func TestBuildDeploymentOverviewDetailRuntimeSummaryUsesLatestHistory(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
+		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments:  []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
+	}
+	snapshots := []statusstore.Snapshot{{
+		DeploymentName: "payments-api-prod",
+		Status: domain.DeploymentStatus{
+			Sync:   domain.Sync{State: domain.SyncStateOutOfSync, Reason: "stale-current"},
+			Health: domain.Health{Overall: domain.HealthUnhealthy, Summary: "stale health"},
+			Rollout: &domain.RolloutSummary{
+				Phase:       domain.RolloutPhaseFailed,
+				CurrentStep: "stale-step",
+				Summary:     "stale rollout",
+			},
+			History: []domain.StatusHistoryEntry{
+				{Timestamp: "2026-04-16T06:15:00Z", Summary: "Accepted rollout for r7", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "candidate warming"}, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "CreateCandidateCapacity"},
+				{Timestamp: "2026-04-16T06:20:00Z", Summary: "Shifting canary traffic", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"}, RolloutPhase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficCanary"},
+			},
+		},
+	}}
+
+	detail, err := BuildDeploymentOverviewDetail(catalog, snapshots, "payments-api-prod")
+	if err != nil {
+		t.Fatalf("BuildDeploymentOverviewDetail returned error: %v", err)
+	}
+	if detail.RuntimeSummary == nil {
+		t.Fatalf("expected runtime summary to be surfaced, got %+v", detail)
+	}
+	if detail.RuntimeSummary.Timestamp != "2026-04-16T06:20:00Z" || detail.RuntimeSummary.Summary != "Shifting canary traffic" || detail.RuntimeSummary.Sync.Reason != "progressing" || detail.RuntimeSummary.Health.Summary != "2/3 targets healthy" || detail.RuntimeSummary.RolloutPhase != domain.RolloutPhasePromoting || detail.RuntimeSummary.CurrentStep != "ShiftTrafficCanary" || detail.RuntimeSummary.HistoryCount != 2 {
+		t.Fatalf("expected latest history entry runtime summary, got %+v", detail.RuntimeSummary)
+	}
+
+	snapshots[0].Status.History[1].CurrentStep = "mutated"
+	if detail.RuntimeSummary.CurrentStep != "ShiftTrafficCanary" {
+		t.Fatalf("expected runtime summary to be cloned defensively, got %+v", detail.RuntimeSummary)
+	}
+}
+
+func TestBuildDeploymentOverviewDetailRuntimeSummaryFallsBackToCurrentStatus(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
+		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments:  []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
+	}
+	snapshots := []statusstore.Snapshot{{
+		DeploymentName: "payments-api-prod",
+		Status: domain.DeploymentStatus{
+			Sync:   domain.Sync{State: domain.SyncStateSynced, Reason: "steady"},
+			Health: domain.Health{Overall: domain.HealthHealthy, Summary: "3/3 healthy"},
+			Rollout: &domain.RolloutSummary{
+				Phase:       domain.RolloutPhaseCompleted,
+				CurrentStep: "Complete",
+				Summary:     "Serving stable capacity",
+			},
+		},
+	}}
+
+	detail, err := BuildDeploymentOverviewDetail(catalog, snapshots, "payments-api-prod")
+	if err != nil {
+		t.Fatalf("BuildDeploymentOverviewDetail returned error: %v", err)
+	}
+	if detail.RuntimeSummary == nil {
+		t.Fatalf("expected runtime summary fallback, got %+v", detail)
+	}
+	if detail.RuntimeSummary.Timestamp != "" || detail.RuntimeSummary.Summary != "Serving stable capacity" || detail.RuntimeSummary.Sync.Reason != "steady" || detail.RuntimeSummary.Health.Summary != "3/3 healthy" || detail.RuntimeSummary.RolloutPhase != domain.RolloutPhaseCompleted || detail.RuntimeSummary.CurrentStep != "Complete" || detail.RuntimeSummary.HistoryCount != 0 {
+		t.Fatalf("expected current status fallback runtime summary, got %+v", detail.RuntimeSummary)
+	}
+}
+
+func TestBuildDeploymentOverviewDetailRuntimeSummaryRemainsNilWhenStatusIsEmpty(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
+		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments:  []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
+	}
+	snapshots := []statusstore.Snapshot{{
+		DeploymentName: "payments-api-prod",
+		Status:         domain.DeploymentStatus{},
+	}}
+
+	detail, err := BuildDeploymentOverviewDetail(catalog, snapshots, "payments-api-prod")
+	if err != nil {
+		t.Fatalf("BuildDeploymentOverviewDetail returned error: %v", err)
+	}
+	if detail.RuntimeSummary != nil {
+		t.Fatalf("expected empty status runtime summary to remain nil, got %+v", detail.RuntimeSummary)
+	}
+	payload, err := json.Marshal(detail)
+	if err != nil {
+		t.Fatalf("Marshal returned error: %v", err)
+	}
+	if jsonContainsKey(payload, "runtimeSummary") {
+		t.Fatalf("expected runtimeSummary to be omitted from JSON, got %s", payload)
+	}
+}
+
+func jsonContainsKey(payload []byte, key string) bool {
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		return false
+	}
+	_, ok := decoded[key]
+	return ok
 }
 
 func TestBuildDeploymentOverviewDetailReturnsNotFound(t *testing.T) {

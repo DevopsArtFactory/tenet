@@ -14,6 +14,8 @@ It groups deployments by AWS account and shows:
 - derived execution mode
 - desired artifact
 - deployed artifact
+- additive latest-runtime summary text from `runtimeSummary.summary` plus runtime sync/health/rollout cues when present
+- additive latest-runtime timestamp from `runtimeSummary.timestamp` with a `Latest runtime status` fallback label when no timestamp exists yet
 - rollout phase
 - current rollout step
 - planned rollout steps
@@ -28,6 +30,19 @@ The page consumes joined overview endpoints:
 
 `/v1/overview/accounts` keeps the top-level account page fast by returning the summary slice needed to render the default cards.
 
+Each deployment object in that overview response now also includes an additive `runtimeSummary` object when recent runtime metadata exists. The current summary contract is intentionally compact and operator-facing:
+- `runtimeSummary.timestamp`
+- `runtimeSummary.summary`
+- `runtimeSummary.sync.state`
+- `runtimeSummary.sync.reason`
+- `runtimeSummary.health.overall`
+- `runtimeSummary.health.summary`
+- `runtimeSummary.rolloutPhase`
+- `runtimeSummary.currentStep`
+- `runtimeSummary.historyCount`
+
+The embedded UI renders that latest runtime summary/timestamp directly on the overview card using `document.createElement`, `textContent`, and `replaceChildren`; it does not inject runtime summary strings with `innerHTML`.
+
 Each account object now also includes additive per-account runtime counters:
 - `deploymentCount`
 - `syncedCount`
@@ -38,6 +53,7 @@ Each account object now also includes additive per-account runtime counters:
 The `/` UI renders those counters directly in each account header. When any aggregate account-count field is absent in the overview payload, the embedded client derives the fallback value from `account.deployments[*].sync.state` instead of displaying zero for the status buckets. Deployments with missing or unknown runtime state still contribute to `deploymentCount`, so they remain visible in the total even when they do not increment a concrete runtime-state bucket.
 
 `/v1/overview/deployments/{deploymentName}` combines catalog placement data with the current deployment status snapshot for one deployment, including:
+- the same additive `runtimeSummary` object used by the overview cards so API consumers can read a single latest-runtime contract without scraping `history[*]`
 - `sync.reason`
 - account and region placement metadata
 - rollout desired/observed generations
@@ -49,7 +65,7 @@ The `/` UI renders those counters directly in each account header. When any aggr
 The embedded UI only fetches the deployment-detail endpoint when an operator expands a row.
 
 The overview page also includes a client-side filter toolbar above the summary cards and per-deployment quick links under each card title:
-- a text search that matches account/deployment-visible fields from the `/v1/overview/accounts` payload
+- a text search that matches account/deployment-visible fields from the `/v1/overview/accounts` payload, including additive `runtimeSummary` text and timestamp fields
 - a sync-state filter
 - an account filter
 - direct `Overview JSON` and `Status JSON` links that jump to `/v1/overview/deployments/{deploymentName}` and `/v1/status/deployments/{deploymentName}`
@@ -60,7 +76,7 @@ Toolbar state is URL-synced with `history.replaceState` using query params:
 - `sync` for the selected sync-state bucket
 - `account` for the selected stable account identifier (`awsAccountId` in the current embedded UI)
 
-The page re-applies those query params on load so filtered views are shareable/bookmarkable without server-side filtering. Filtering remains client-side against the already-fetched overview payload; no additional overview requests are issued when controls change. Stale or invalid `sync`/`account` query values are normalized back to the default `all` selection before the toolbar renders, so bookmarked URLs cannot leave the control state and the active filter state out of sync. When the active filter combination removes every deployment, the UI renders the explicit empty state `No deployments match the current filters.`
+The page re-applies those query params on load so filtered views are shareable/bookmarkable without server-side filtering. Filtering remains client-side against the already-fetched overview payload; no additional overview requests are issued when controls change. Stale or invalid `sync`/`account` query values are normalized back to the default `all` selection before the toolbar renders, so bookmarked URLs cannot leave the control state and the active filter state out of sync. Matching on `runtimeSummary` is additive; it narrows the visible overview cards without changing lazy detail loading or detail-panel history behavior. When the active filter combination removes every deployment, the UI renders the explicit empty state `No deployments match the current filters.`
 
 Because the page re-renders the account/deployment cards as filters change, the embedded toolbar preserves focus and the active text-selection/caret position for the typed search field across incremental search re-renders. This keeps free-text filtering usable even though the view is rebuilt client-side.
 
