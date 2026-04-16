@@ -138,6 +138,21 @@
       const artifact = (obj) => obj?.binary || obj?.image || '—';
       const boolLabel = (value) => value ? 'True' : 'False';
       const textOrDash = (value) => value || '—';
+      const runtimeSummaryTimestamp = (runtimeSummary) => runtimeSummary?.timestamp || 'Latest runtime status';
+      const runtimeSummaryText = (runtimeSummary) => {
+        if (!runtimeSummary) return '—';
+        const parts = [
+          runtimeSummary.summary,
+          runtimeSummary.sync?.state,
+          runtimeSummary.sync?.reason,
+          runtimeSummary.health?.overall,
+          runtimeSummary.health?.summary,
+          runtimeSummary.rolloutPhase,
+          runtimeSummary.currentStep,
+          Number.isFinite(runtimeSummary.historyCount) ? `history ${runtimeSummary.historyCount}` : '',
+        ].filter(Boolean);
+        return parts.length ? parts.join(' · ') : '—';
+      };
       const plannedSteps = (rollout) => {
         const steps = (rollout?.steps || []).map((step) => step.kind).filter(Boolean);
         return steps.length ? steps.join(' → ') : '—';
@@ -352,6 +367,8 @@
                 deployment.executionMode,
                 deployment.sync?.state,
                 deployment.sync?.reason,
+                runtimeSummaryText(deployment.runtimeSummary),
+                runtimeSummaryTimestamp(deployment.runtimeSummary),
                 deployment.rollout?.phase,
                 deployment.rollout?.currentStep,
                 deployment.rollout?.summary,
@@ -662,6 +679,8 @@
             [
               ['Desired artifact', artifact(deployment.desiredArtifact)],
               ['Deployed artifact', artifact(deployment.deployedArtifact)],
+              ['Latest runtime', runtimeSummaryText(deployment.runtimeSummary), 'summary'],
+              ['Runtime timestamp', runtimeSummaryTimestamp(deployment.runtimeSummary)],
               ['Rollout phase', metricValue(deployment.rollout?.phase)],
               ['Current step', metricValue(deployment.rollout?.currentStep)],
               ['Rollout summary', metricValue(deployment.rollout?.summary), 'summary'],

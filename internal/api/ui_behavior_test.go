@@ -20,6 +20,107 @@ func embeddedUIScriptForTest(t *testing.T) string {
 	return string(matches[1])
 }
 
+func TestUIFilterBehaviorMatchesRuntimeSummaryTextWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	accountsJSON, err := json.Marshal([]map[string]any{
+		{
+			"name":         "acct-a",
+			"awsAccountId": "111111111111",
+			"deployments": []map[string]any{{
+				"name":           "api",
+				"appRef":         "payments",
+				"environmentRef": "prod",
+				"region":         "us-west-2",
+				"sync":           map[string]any{"state": "Reconciling", "reason": "Traffic shift running"},
+				"runtimeSummary": map[string]any{"timestamp": "2026-04-16T06:50:00Z", "summary": "Traffic shift is progressing", "sync": map[string]any{"state": "Reconciling", "reason": "Traffic shift running"}, "health": map[string]any{"overall": "Healthy", "summary": "steady"}, "rolloutPhase": "Progressing", "currentStep": "ShiftTrafficCanary", "historyCount": 2},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal sample accounts: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const sampleAccounts = ` + string(accountsJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const window = { location: { pathname: '/', search: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+(async () => {
+  await settle();
+  const root = document.getElementById('accounts');
+  const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+  const beforeText = collectText(root).join(' | ');
+  if (!beforeText.includes('Latest runtime')) throw new Error('expected overview card to render latest runtime label');
+  if (!beforeText.includes('Traffic shift is progressing')) throw new Error('expected overview card to render runtime summary text');
+  if (!beforeText.includes('2026-04-16T06:50:00Z')) throw new Error('expected overview card to render runtime summary timestamp');
+  const searchInput = document.querySelector('[data-toolbar-field="Search deployments"]');
+  if (!searchInput) throw new Error('expected search input');
+  searchInput.value = 'Traffic shift running';
+  searchInput.dispatch('input', { target: searchInput });
+  await settle();
+  if (window.location.search !== '?q=Traffic+shift+running') throw new Error('expected runtime-summary filter query to sync to URL');
+  if (document.getElementById('accounts').children.length !== 1) throw new Error('expected runtime-summary text to match additively in search');
+})();
+`
+
+	cmd := exec.Command("node", "-e", nodeProgram)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+	}
+}
+
 func TestEmbeddedUIFilterBehaviorWithNodeHarness(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not installed")
@@ -47,6 +148,7 @@ func TestEmbeddedUIFilterBehaviorWithNodeHarness(t *testing.T) {
 					"desiredArtifact":    map[string]any{"image": "ghcr.io/example/api:v2"},
 					"deployedArtifact":   map[string]any{"image": "ghcr.io/example/api:v1"},
 					"sync":               map[string]any{"state": "Reconciling", "reason": "Traffic shift running"},
+					"runtimeSummary":     map[string]any{"timestamp": "2026-04-16T06:50:00Z", "summary": "Traffic shift is progressing", "sync": map[string]any{"state": "Reconciling", "reason": "Traffic shift running"}, "health": map[string]any{"overall": "Healthy", "summary": "steady"}, "rolloutPhase": "Progressing", "currentStep": "ShiftTrafficCanary", "historyCount": 2},
 					"rollout":            map[string]any{"phase": "Progressing", "currentStep": "ShiftTrafficCanary", "summary": "10 percent shifted", "steps": []map[string]any{{"kind": "ShiftTrafficCanary"}, {"kind": "BakeTraffic"}}},
 					"health":             map[string]any{"overall": "Healthy", "summary": "steady"},
 					"observedGeneration": 1,
@@ -69,6 +171,7 @@ func TestEmbeddedUIFilterBehaviorWithNodeHarness(t *testing.T) {
 					"desiredArtifact":    map[string]any{"binary": "worker-v3"},
 					"deployedArtifact":   map[string]any{"binary": "worker-v2"},
 					"sync":               map[string]any{"state": "Error", "reason": "Alarm triggered"},
+					"runtimeSummary":     map[string]any{"summary": "Rollout blocked after alarm", "sync": map[string]any{"state": "Error", "reason": "Alarm triggered"}, "health": map[string]any{"overall": "Degraded", "summary": "alarm open"}, "rolloutPhase": "Blocked", "currentStep": "AbortTrafficShift", "historyCount": 1},
 					"rollout":            map[string]any{"phase": "Blocked", "currentStep": "AbortTrafficShift", "summary": "stopped after alarm", "steps": []map[string]any{{"kind": "AbortTrafficShift"}}},
 					"health":             map[string]any{"overall": "Degraded", "summary": "alarm open"},
 					"observedGeneration": 2,
@@ -239,6 +342,10 @@ function findButtonByText(document, text) {
   return null;
 }
 
+function collectText(node) {
+  return [node?.textContent, ...((node?.children || []).flatMap((child) => collectText(child)))].filter(Boolean);
+}
+
 (async () => {
   const defaultEnv = createEnvironment('');
   await settle();
@@ -246,6 +353,10 @@ function findButtonByText(document, text) {
   if (defaultAccounts.children.length !== 3) {
     throw new Error('expected default overview to render accounts with and without deployments');
   }
+  const defaultText = collectText(defaultAccounts).join(' | ');
+  if (!defaultText.includes('Latest runtime')) throw new Error('expected overview cards to render a latest runtime metric');
+  if (!defaultText.includes('Traffic shift is progressing')) throw new Error('expected overview cards to render runtime summary text');
+  if (!defaultText.includes('2026-04-16T06:50:00Z')) throw new Error('expected overview cards to render runtime summary timestamp');
 
   const filteredEnv = createEnvironment('?sync=Unknown&account=missing&q=%20api%20');
   await settle();
@@ -262,10 +373,16 @@ function findButtonByText(document, text) {
   if (!syncSelect || syncSelect.value !== 'all') throw new Error('expected normalized sync filter to be reflected in the toolbar select');
   if (!accountSelect || accountSelect.value !== 'all') throw new Error('expected normalized account filter to be reflected in the toolbar select');
   if (!clearButton || clearButton.disabled !== false) throw new Error('expected clear-filters button to be enabled for active filters');
-  if (filteredEnv.window.location.search !== '?q=api') throw new Error('expected normalized URL state to persist the trimmed free-text query');
+	  if (filteredEnv.window.location.search !== '?q=api') throw new Error('expected normalized URL state to persist the trimmed free-text query');
 
-  searchInput.focus();
-  searchInput.selectionStart = 2;
+	  searchInput.value = 'Traffic shift running';
+	  searchInput.dispatch('input', { target: searchInput });
+	  await settle();
+	  if (filteredEnv.window.location.search !== '?q=Traffic+shift+running') throw new Error('expected runtime-summary search text to update the URL query string');
+	  if (filteredEnv.document.getElementById('accounts').children.length !== 1) throw new Error('expected runtime-summary search to filter down to one account');
+
+	  searchInput.focus();
+	  searchInput.selectionStart = 2;
   searchInput.selectionEnd = 2;
   searchInput.value = 'BakeTraffic';
   searchInput.dispatch('input', { target: searchInput });

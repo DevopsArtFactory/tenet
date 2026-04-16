@@ -95,6 +95,17 @@ type StatusHistoryEntry struct {
 	CurrentStep  string       `json:"currentStep,omitempty"`
 }
 
+// RuntimeSummary captures the latest stable operator-facing runtime metadata.
+type RuntimeSummary struct {
+	Timestamp    string       `json:"timestamp,omitempty"`
+	Summary      string       `json:"summary,omitempty"`
+	Sync         Sync         `json:"sync"`
+	Health       Health       `json:"health"`
+	RolloutPhase RolloutPhase `json:"rolloutPhase,omitempty"`
+	CurrentStep  string       `json:"currentStep,omitempty"`
+	HistoryCount int          `json:"historyCount"`
+}
+
 // DeploymentStatus captures observed state separate from desired spec.
 type DeploymentStatus struct {
 	ObservedGeneration int64                `json:"observedGeneration"`

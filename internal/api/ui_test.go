@@ -172,6 +172,8 @@ func TestEmbeddedUIIncludesOverviewStatusInFetchErrors(t *testing.T) {
 	for _, fragment := range []string{
 		"fetch('/v1/overview/accounts')",
 		"if (!response.ok) throw new Error(`overview request failed (${response.status})`);",
+		"['Latest runtime', runtimeSummaryText(deployment.runtimeSummary), 'summary']",
+		"['Runtime timestamp', runtimeSummaryTimestamp(deployment.runtimeSummary)]",
 		"renderEmptyState(`Failed to load overview: ${error.message}`);",
 	} {
 		if !strings.Contains(body, fragment) {
@@ -215,11 +217,35 @@ func TestEmbeddedUIRendersAccountStatusCountPills(t *testing.T) {
 	}
 }
 
+func TestUIOverviewCardsRenderRuntimeSummaryContract(t *testing.T) {
+	body := string(indexHTML)
+	for _, fragment := range []string{
+		"const runtimeSummaryTimestamp = (runtimeSummary) => runtimeSummary?.timestamp || 'Latest runtime status';",
+		"const runtimeSummaryText = (runtimeSummary) => {",
+		"['Latest runtime', runtimeSummaryText(deployment.runtimeSummary), 'summary']",
+		"['Runtime timestamp', runtimeSummaryTimestamp(deployment.runtimeSummary)]",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+}
+
 func TestEmbeddedUIProvidesFilterControlsAndURLSyncedViewState(t *testing.T) {
 	body := string(indexHTML)
 
 	for _, fragment := range []string{
 		"<section class=\"toolbar\" id=\"toolbar\"></section>",
+		"const runtimeSummaryTimestamp = (runtimeSummary) => runtimeSummary?.timestamp || 'Latest runtime status';",
+		"const runtimeSummaryText = (runtimeSummary) => {",
+		"runtimeSummary.summary,",
+		"runtimeSummary.sync?.state,",
+		"runtimeSummary.sync?.reason,",
+		"runtimeSummary.health?.overall,",
+		"runtimeSummary.health?.summary,",
+		"runtimeSummary.rolloutPhase,",
+		"runtimeSummary.currentStep,",
+		"Number.isFinite(runtimeSummary.historyCount) ? `history ${runtimeSummary.historyCount}` : '',",
 		"const createSelect = (labelText, value, options, onChange) => {",
 		"const createInput = (labelText, value, placeholder, onInput) => {",
 		"const parseViewState = () => {",
@@ -230,6 +256,8 @@ func TestEmbeddedUIProvidesFilterControlsAndURLSyncedViewState(t *testing.T) {
 		"account.name,",
 		"account.awsAccountId,",
 		"state.account === 'all' || account.awsAccountId === state.account",
+		"runtimeSummaryText(deployment.runtimeSummary),",
+		"runtimeSummaryTimestamp(deployment.runtimeSummary),",
 		"deployment.rollout?.summary,",
 		"plannedSteps(deployment.rollout),",
 		"`${healthLabel(deployment.health)}${deployment.health?.summary ? ` ${deployment.health.summary}` : ''}`,",

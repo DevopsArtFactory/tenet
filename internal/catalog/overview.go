@@ -39,6 +39,7 @@ type DeploymentOverview struct {
 	ObservedGeneration int64                     `json:"observedGeneration,omitempty"`
 	Sync               domain.Sync               `json:"sync"`
 	Health             domain.Health             `json:"health"`
+	RuntimeSummary     *domain.RuntimeSummary    `json:"runtimeSummary,omitempty"`
 	Rollout            *domain.RolloutSummary    `json:"rollout,omitempty"`
 	Conditions         []domain.Condition        `json:"conditions,omitempty"`
 }
@@ -60,6 +61,7 @@ type DeploymentOverviewDetail struct {
 	ObservedGeneration int64                       `json:"observedGeneration,omitempty"`
 	Sync               domain.Sync                 `json:"sync"`
 	Health             domain.Health               `json:"health"`
+	RuntimeSummary     *domain.RuntimeSummary      `json:"runtimeSummary,omitempty"`
 	Rollout            *domain.RolloutSummary      `json:"rollout,omitempty"`
 	Conditions         []domain.Condition          `json:"conditions,omitempty"`
 	History            []domain.StatusHistoryEntry `json:"history,omitempty"`
@@ -129,6 +131,7 @@ func BuildAccountOverviews(c manifest.Catalog, snapshots []statusstore.Snapshot)
 			ObservedGeneration: status.ObservedGeneration,
 			Sync:               status.Sync,
 			Health:             status.Health,
+			RuntimeSummary:     cloneRuntimeSummary(deriveRuntimeSummary(status)),
 			Rollout:            cloneRolloutSummary(status.Rollout),
 			Conditions:         append([]domain.Condition(nil), status.Conditions...),
 		})
@@ -194,10 +197,49 @@ func BuildDeploymentOverviewDetail(c manifest.Catalog, snapshots []statusstore.S
 		ObservedGeneration: status.ObservedGeneration,
 		Sync:               status.Sync,
 		Health:             status.Health,
+		RuntimeSummary:     cloneRuntimeSummary(deriveRuntimeSummary(status)),
 		Rollout:            cloneRolloutSummary(status.Rollout),
 		Conditions:         append([]domain.Condition(nil), status.Conditions...),
 		History:            cloneStatusHistory(status.History),
 	}, nil
+}
+
+func deriveRuntimeSummary(status domain.DeploymentStatus) *domain.RuntimeSummary {
+	if len(status.History) > 0 {
+		latest := status.History[len(status.History)-1]
+		return &domain.RuntimeSummary{
+			Timestamp:    latest.Timestamp,
+			Summary:      latest.Summary,
+			Sync:         latest.Sync,
+			Health:       latest.Health,
+			RolloutPhase: latest.RolloutPhase,
+			CurrentStep:  latest.CurrentStep,
+			HistoryCount: len(status.History),
+		}
+	}
+	if status.Sync == (domain.Sync{}) && status.Health == (domain.Health{}) && status.Rollout == nil {
+		return nil
+	}
+
+	summary := &domain.RuntimeSummary{
+		Sync:         status.Sync,
+		Health:       status.Health,
+		HistoryCount: len(status.History),
+	}
+	if status.Rollout != nil {
+		summary.Summary = status.Rollout.Summary
+		summary.RolloutPhase = status.Rollout.Phase
+		summary.CurrentStep = status.Rollout.CurrentStep
+	}
+	return summary
+}
+
+func cloneRuntimeSummary(summary *domain.RuntimeSummary) *domain.RuntimeSummary {
+	if summary == nil {
+		return nil
+	}
+	copy := *summary
+	return &copy
 }
 
 func cloneRolloutSummary(summary *domain.RolloutSummary) *domain.RolloutSummary {
