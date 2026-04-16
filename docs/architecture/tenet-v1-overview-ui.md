@@ -6,26 +6,16 @@ Tenet now serves a minimal embedded UI at `/`.
 
 The UI is intended to make the current control-plane slice visible without introducing a separate frontend toolchain.
 
-It groups deployments by AWS account and then by project/environment within each account, and shows:
-- account-header count pills for `deploymentCount`, `syncedCount`, `progressingCount`, `pausedCount`, and `errorCount`
-- account topology summary text for unique project/environment counts, preferring additive account-level `projectCount` / `environmentCount` fields from `/v1/overview/accounts` when present and falling back to derivation from the visible deployments for older payloads
-- per-group project/environment headers with the grouped region, deployment count, and additive grouped status pills derived from the deployments currently visible in that section
-- deployment name and environment
-- target type
-- rollout strategy
-- derived execution mode
-- desired artifact
-- deployed artifact
-- additive latest-runtime summary text from `runtimeSummary.summary` plus runtime sync/health/rollout cues when present
-- additive latest-runtime timestamp from `runtimeSummary.timestamp` with a `Latest runtime status` fallback label when no timestamp exists yet
-- additive latest-runtime desired/observed generation metadata from `runtimeSummary.desiredGeneration` / `runtimeSummary.observedGeneration`
-- additive latest-runtime change labels from `runtimeSummary.changes[]`
-- additive latest-runtime provenance text from `runtimeSummary.source` when the summary was derived from controller-authored history
-- rollout phase
-- current rollout step
-- planned rollout steps
-- sync and health summaries
-- expandable on-demand deployment detail panels for placement, sync reasons, rollout generations, rollout execution resources/descriptions, recent bounded runtime history, conditions, and the full rollout-step list
+In the current drill-down transition slice, the default `/` page now behaves as an applications overview instead of the previous dense account/group dashboard. The client still consumes `/v1/overview/accounts`, but it flattens that payload into application-level rows showing only:
+- application name
+- account
+- project/app
+- sync
+- health
+- last update
+- a drill-down link to `/?page=application&deployment={deploymentName}`
+
+The denser account/group/resource presentation is being split into deeper pages instead of remaining on the first screen.
 
 ## Backing API
 
@@ -84,15 +74,14 @@ For topology, the embedded client prefers authoritative account-level `projectCo
 
 The embedded UI only fetches the deployment-detail endpoint when an operator expands a row.
 
-The overview page also includes a client-side filter toolbar above the summary cards and per-deployment quick links under each card title:
-- a text search that matches account/deployment-visible fields from the `/v1/overview/accounts` payload, including additive `runtimeSummary` text, latest change labels, provenance/source, and timestamp fields
+The current applications overview page includes a client-side filter toolbar above the application list:
+- a text search matching application/account/project/runtime summary text from `/v1/overview/accounts`
 - a sync-state filter
 - an account filter
-- an account-header `Account JSON` quick link that jumps to `/v1/overview/accounts/{awsAccountId}`
-- a grouped-header `Group JSON` quick link that jumps to `/v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}`
-- direct `Overview JSON` and `Status JSON` links that jump to `/v1/overview/deployments/{deploymentName}` and `/v1/status/deployments/{deploymentName}`
-- embedded `Drift view` and `Plan/apply` workspace links that jump to `/?view=drift&deployment={deploymentName}` and `/?view=plan&deployment={deploymentName}` for deployment-scoped troubleshooting shells backed by the same overview detail route
-- a `Clear filters` action that resets the toolbar to the default account-wide view
+- an `Open application` drill-down link on each application row
+- a `Clear filters` action that resets the toolbar
+
+The older account/group JSON quick links and denser deployment quick links are no longer part of the default first page; they are being moved behind deeper drill-down pages.
 
 Toolbar state is URL-synced with `history.replaceState` using query params:
 - `q` for free-text search
