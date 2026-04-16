@@ -34,18 +34,19 @@ func respondLookupError(w http.ResponseWriter, err error) {
 
 // Options configures the API router.
 type Options struct {
-	BuildInfo           buildinfo.Info
-	CatalogSummary      func() (catalog.Summary, error)
-	CatalogDeployments  func() ([]catalog.DeploymentView, error)
-	CatalogEnvironments func() ([]catalog.EnvironmentView, error)
-	CatalogAccounts     func() ([]catalog.AccountView, error)
-	CatalogPlacements   func() ([]catalog.PlacementView, error)
-	CatalogTopology     func() (catalog.TopologySnapshot, error)
-	OverviewAccounts    func() ([]catalog.AccountOverview, error)
-	OverviewAccount     func(string) (catalog.AccountOverviewDetail, error)
-	OverviewDeployment  func(string) (catalog.DeploymentOverviewDetail, error)
-	DeploymentStatuses  func() ([]statusstore.Snapshot, error)
-	DeploymentStatus    func(string) (statusstore.Snapshot, error)
+	BuildInfo                  buildinfo.Info
+	CatalogSummary             func() (catalog.Summary, error)
+	CatalogDeployments         func() ([]catalog.DeploymentView, error)
+	CatalogEnvironments        func() ([]catalog.EnvironmentView, error)
+	CatalogAccounts            func() ([]catalog.AccountView, error)
+	CatalogPlacements          func() ([]catalog.PlacementView, error)
+	CatalogTopology            func() (catalog.TopologySnapshot, error)
+	OverviewAccounts           func() ([]catalog.AccountOverview, error)
+	OverviewAccount            func(string) (catalog.AccountOverviewDetail, error)
+	OverviewProjectEnvironment func(string, string, string) (catalog.ProjectEnvironmentOverviewDetail, error)
+	OverviewDeployment         func(string) (catalog.DeploymentOverviewDetail, error)
+	DeploymentStatuses         func() ([]statusstore.Snapshot, error)
+	DeploymentStatus           func(string) (statusstore.Snapshot, error)
 }
 
 // NewRouter builds the API router for the Tenet control plane.
@@ -191,22 +192,36 @@ func NewRouter(options Options) http.Handler {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
-		if options.OverviewAccount == nil {
-			http.Error(w, "overview account unavailable", http.StatusServiceUnavailable)
-			return
+		path := strings.TrimPrefix(r.URL.Path, "/v1/overview/accounts/")
+		segments := strings.Split(path, "/")
+		switch {
+		case len(segments) == 1 && segments[0] != "":
+			if options.OverviewAccount == nil {
+				http.Error(w, "overview account unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			detail, err := options.OverviewAccount(segments[0])
+			if err != nil {
+				respondLookupError(w, err)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(detail)
+		case len(segments) == 5 && segments[0] != "" && segments[1] == "projects" && segments[2] != "" && segments[3] == "environments" && segments[4] != "":
+			if options.OverviewProjectEnvironment == nil {
+				http.Error(w, "overview project environment unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			detail, err := options.OverviewProjectEnvironment(segments[0], segments[2], segments[4])
+			if err != nil {
+				respondLookupError(w, err)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(detail)
+		default:
+			http.Error(w, "invalid overview account path", http.StatusBadRequest)
 		}
-		awsAccountID := strings.TrimPrefix(r.URL.Path, "/v1/overview/accounts/")
-		if awsAccountID == "" || strings.Contains(awsAccountID, "/") {
-			http.Error(w, "invalid aws account id", http.StatusBadRequest)
-			return
-		}
-		detail, err := options.OverviewAccount(awsAccountID)
-		if err != nil {
-			respondLookupError(w, err)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(detail)
 	})
 	mux.HandleFunc("/v1/overview/deployments/", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodGet) {

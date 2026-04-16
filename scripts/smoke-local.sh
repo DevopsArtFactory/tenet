@@ -38,14 +38,16 @@ curl -fsS "http://$HOST:$PORT/healthz" >/dev/null
 summary=$(curl -fsS "http://$HOST:$PORT/v1/catalog/summary")
 overview=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts")
 account_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts/123456789012")
+group_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts/123456789012/projects/payments-api/environments/prod-apne2")
 status=$(curl -fsS "http://$HOST:$PORT/v1/status/deployments/payments-api-prod")
 ui=$(curl -fsS "http://$HOST:$PORT/")
 
-SUMMARY_JSON="$summary" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" STATUS_JSON="$status" UI_HTML="$ui" python3 - <<'PY'
+SUMMARY_JSON="$summary" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" STATUS_JSON="$status" UI_HTML="$ui" python3 - <<'PY'
 import json, os
 summary = json.loads(os.environ['SUMMARY_JSON'])
 overview = json.loads(os.environ['OVERVIEW_JSON'])
 account_detail = json.loads(os.environ['ACCOUNT_DETAIL_JSON'])
+group_detail = json.loads(os.environ['GROUP_DETAIL_JSON'])
 status = json.loads(os.environ['STATUS_JSON'])
 ui = os.environ['UI_HTML']
 assert summary['accountCount'] == 2, summary
@@ -56,11 +58,20 @@ assert any(account['name'] == 'prod-core' for account in overview), overview
 assert account_detail['name'] == 'prod-core', account_detail
 assert account_detail['awsAccountId'] == '123456789012', account_detail
 assert len(account_detail['deployments']) >= 1, account_detail
+assert group_detail['accountName'] == 'prod-core', group_detail
+assert group_detail['awsAccountId'] == '123456789012', group_detail
+assert group_detail['appRef'] == 'payments-api', group_detail
+assert group_detail['environmentRef'] == 'prod-apne2', group_detail
+assert group_detail['region'] == 'ap-northeast-2', group_detail
+assert len(group_detail['deployments']) == 1, group_detail
+assert group_detail['deployments'][0]['name'] == 'payments-api-prod', group_detail
 assert status['deploymentName'] == 'payments-api-prod', status
 assert status['status']['sync']['state'] == 'Synced', status
 assert status['status']['health']['overall'] == 'Healthy', status
 assert status['status']['deployedArtifact']['binary'].startswith('s3://releases.example.com/'), status
 assert 'Account JSON' in ui, ui
 assert '/v1/overview/accounts/${encodeURIComponent(account.awsAccountId)}' in ui, ui
+assert 'Group JSON' in ui, ui
+assert '/v1/overview/accounts/${encodeURIComponent(account.awsAccountId)}/projects/${encodeURIComponent(group.appRef)}/environments/${encodeURIComponent(group.environmentRef)}' in ui, ui
 print('smoke-local: ok')
 PY

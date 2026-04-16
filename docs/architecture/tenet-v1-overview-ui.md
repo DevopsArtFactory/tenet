@@ -32,6 +32,7 @@ It groups deployments by AWS account and then by project/environment within each
 The page consumes joined overview endpoints:
 - `GET /v1/overview/accounts`
 - `GET /v1/overview/accounts/{awsAccountId}`
+- `GET /v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}`
 - `GET /v1/overview/deployments/{deploymentName}`
 
 `/v1/overview/accounts` keeps the top-level account page fast by returning the summary slice needed to render the default cards.
@@ -64,7 +65,7 @@ Each account overview object may also include additive topology counters:
 - `projectCount`
 - `environmentCount`
 
-The `/` UI renders the account-header runtime counters directly from those fields when present. The same account header now also renders an `Account JSON` quick link to `GET /v1/overview/accounts/{awsAccountId}` as a sibling control next to the title/count summary rather than nesting it inside deployment-level expand toggles. When any aggregate account-count field is absent in the overview payload, the embedded client derives the fallback value from `account.deployments[*].sync.state` instead of displaying zero for the status buckets. Deployments with missing or unknown runtime state still contribute to `deploymentCount`, so they remain visible in the total even when they do not increment a concrete runtime-state bucket.
+The `/` UI renders the account-header runtime counters directly from those fields when present. The same account header now also renders an `Account JSON` quick link to `GET /v1/overview/accounts/{awsAccountId}` as a sibling control next to the title/count summary rather than nesting it inside deployment-level expand toggles. Each grouped project/environment header likewise renders a sibling `Group JSON` quick link to `GET /v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}` so operators can inspect the exact grouped scope already shown in the dashboard. When any aggregate account-count field is absent in the overview payload, the embedded client derives the fallback value from `account.deployments[*].sync.state` instead of displaying zero for the status buckets. Deployments with missing or unknown runtime state still contribute to `deploymentCount`, so they remain visible in the total even when they do not increment a concrete runtime-state bucket.
 
 For topology, the embedded client prefers authoritative account-level `projectCount` / `environmentCount` values when they are present on the overview payload. To preserve compatibility with older overview responses, it still falls back to deriving the unique project/environment counts from `account.deployments[*]` when either field is absent. Project/environment grouping for the nested deployment sections continues to come from deployment-level `appRef + environmentRef + region` data regardless of whether the authoritative account counters are present.
 
@@ -88,6 +89,7 @@ The overview page also includes a client-side filter toolbar above the summary c
 - a sync-state filter
 - an account filter
 - an account-header `Account JSON` quick link that jumps to `/v1/overview/accounts/{awsAccountId}`
+- a grouped-header `Group JSON` quick link that jumps to `/v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}`
 - direct `Overview JSON` and `Status JSON` links that jump to `/v1/overview/deployments/{deploymentName}` and `/v1/status/deployments/{deploymentName}`
 - a `Clear filters` action that resets the toolbar to the default account-wide view
 

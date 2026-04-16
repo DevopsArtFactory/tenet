@@ -732,10 +732,15 @@
               createElement('h3', 'deployment-group-title', `${metricValue(group.appRef)} · ${metricValue(group.environmentRef)}`),
               createElement('div', 'deployment-group-meta', `Project ${metricValue(group.appRef)} · Environment ${metricValue(group.environmentRef)} · Region ${metricValue(group.region)}`),
             );
+            const groupLinks = createElement('div', 'row-links');
+            groupLinks.classList.add('group-links');
+            if (account.awsAccountId && group.appRef && group.environmentRef) {
+              groupLinks.append(createNavLink(`/v1/overview/accounts/${encodeURIComponent(account.awsAccountId)}/projects/${encodeURIComponent(group.appRef)}/environments/${encodeURIComponent(group.environmentRef)}`, 'Group JSON'));
+            }
             const groupPills = createElement('div', 'pills');
             const groupCount = group.deployments.length;
             groupPills.append(createElement('span', 'group-pill', `${groupCount} deployment${groupCount === 1 ? '' : 's'}`));
-            groupHead.append(groupTitleWrap, groupPills);
+            groupHead.append(groupTitleWrap, groupLinks, groupPills);
 
             const groupRows = createElement('div', 'group-rows');
             group.deployments.forEach((deployment) => {

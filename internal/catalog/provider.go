@@ -82,3 +82,18 @@ func RepositoryAccountOverviewDetailProvider(root string, snapshots func() ([]st
 		return BuildAccountOverviewDetail(compiled, currentSnapshots, awsAccountID)
 	}
 }
+
+// RepositoryProjectEnvironmentOverviewDetailProvider builds a grouped project/environment detail function backed by a repository root.
+func RepositoryProjectEnvironmentOverviewDetailProvider(root string, snapshots func() ([]statusstore.Snapshot, error)) func(string, string, string) (ProjectEnvironmentOverviewDetail, error) {
+	return func(awsAccountID, appRef, environmentRef string) (ProjectEnvironmentOverviewDetail, error) {
+		compiled, err := LoadFromRepository(root)
+		if err != nil {
+			return ProjectEnvironmentOverviewDetail{}, err
+		}
+		currentSnapshots, err := snapshots()
+		if err != nil {
+			return ProjectEnvironmentOverviewDetail{}, err
+		}
+		return BuildProjectEnvironmentOverviewDetail(compiled, currentSnapshots, awsAccountID, appRef, environmentRef)
+	}
+}

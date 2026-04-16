@@ -141,6 +141,28 @@ func TestRepositoryTopologyProviderLoadsStableTopologySnapshot(t *testing.T) {
 	}
 }
 
+func TestRepositoryProjectEnvironmentOverviewDetailProvider(t *testing.T) {
+	t.Run("loads grouped detail", func(t *testing.T) {
+		root := t.TempDir()
+		writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2","us-west-2"]}`)
+		writeJSON(t, filepath.Join(root, "environments", "prod.json"), `{"name":"prod","accountRef":"prod-core","region":"ap-northeast-2"}`)
+		writeJSON(t, filepath.Join(root, "deployments", "payments-api-prod.json"), `{"name":"payments-api-prod","appRef":"payments-api","environmentRef":"prod","target":{"type":"ec2"},"strategy":{"type":"canary"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+		writeJSON(t, filepath.Join(root, "deployments", "payments-worker-prod.json"), `{"name":"payments-worker-prod","appRef":"payments-api","environmentRef":"prod","target":{"type":"ec2"},"strategy":{"type":"linear"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+
+		provider := RepositoryProjectEnvironmentOverviewDetailProvider(root, func() ([]statusstore.Snapshot, error) {
+			return []statusstore.Snapshot{{DeploymentName: "payments-api-prod", Status: domain.DeploymentStatus{Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "warming"}}}, {DeploymentName: "payments-worker-prod", Status: domain.DeploymentStatus{Sync: domain.Sync{State: domain.SyncStatePaused, Reason: "manual pause"}}}}, nil
+		})
+
+		detail, err := provider("123456789012", "payments-api", "prod")
+		if err != nil {
+			t.Fatalf("provider returned error: %v", err)
+		}
+		if detail.AccountName != "prod-core" || detail.AppRef != "payments-api" || detail.EnvironmentRef != "prod" || detail.Region != "ap-northeast-2" || detail.DeploymentCount != 2 {
+			t.Fatalf("unexpected grouped detail: %+v", detail)
+		}
+	})
+}
+
 func TestRepositoryAccountOverviewDetailProvider(t *testing.T) {
 	t.Run("loads account detail", func(t *testing.T) {
 		root := t.TempDir()
