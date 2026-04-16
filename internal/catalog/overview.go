@@ -19,6 +19,8 @@ type AccountOverview struct {
 	AWSAccountID     string               `json:"awsAccountId"`
 	AllowedRegions   []string             `json:"allowedRegions,omitempty"`
 	DeploymentCount  int                  `json:"deploymentCount"`
+	ProjectCount     int                  `json:"projectCount"`
+	EnvironmentCount int                  `json:"environmentCount"`
 	SyncedCount      int                  `json:"syncedCount"`
 	ProgressingCount int                  `json:"progressingCount"`
 	PausedCount      int                  `json:"pausedCount"`
@@ -32,11 +34,19 @@ type AccountOverviewDetail struct {
 	AWSAccountID     string               `json:"awsAccountId"`
 	AllowedRegions   []string             `json:"allowedRegions,omitempty"`
 	DeploymentCount  int                  `json:"deploymentCount"`
+	ProjectCount     int                  `json:"projectCount"`
+	EnvironmentCount int                  `json:"environmentCount"`
 	SyncedCount      int                  `json:"syncedCount"`
 	ProgressingCount int                  `json:"progressingCount"`
 	PausedCount      int                  `json:"pausedCount"`
 	ErrorCount       int                  `json:"errorCount"`
 	Deployments      []DeploymentOverview `json:"deployments"`
+}
+
+type accountOverviewAccumulator struct {
+	overview        AccountOverview
+	projectRefs     map[string]struct{}
+	environmentRefs map[string]struct{}
 }
 
 // DeploymentOverview joins desired deployment intent with current runtime status.
@@ -100,15 +110,18 @@ func BuildAccountOverviews(c manifest.Catalog, snapshots []statusstore.Snapshot)
 		deploymentByName[deployment.Name] = deployment
 	}
 
-	accountMap := make(map[string]*AccountOverview, len(c.Accounts))
+	accountMap := make(map[string]*accountOverviewAccumulator, len(c.Accounts))
 	for _, account := range c.Accounts {
-		accountCopy := AccountOverview{
-			Name:           account.Name,
-			AWSAccountID:   account.AWSAccountID,
-			AllowedRegions: append([]string(nil), account.AllowedRegions...),
-			Deployments:    []DeploymentOverview{},
+		accountMap[account.Name] = &accountOverviewAccumulator{
+			overview: AccountOverview{
+				Name:           account.Name,
+				AWSAccountID:   account.AWSAccountID,
+				AllowedRegions: append([]string(nil), account.AllowedRegions...),
+				Deployments:    []DeploymentOverview{},
+			},
+			projectRefs:     make(map[string]struct{}),
+			environmentRefs: make(map[string]struct{}),
 		}
-		accountMap[account.Name] = &accountCopy
 	}
 
 	for _, placement := range placementViews {
@@ -121,18 +134,20 @@ func BuildAccountOverviews(c manifest.Catalog, snapshots []statusstore.Snapshot)
 			continue
 		}
 		status := statusByDeployment[placement.DeploymentName]
-		account.DeploymentCount++
+		account.overview.DeploymentCount++
+		account.projectRefs[deployment.AppRef] = struct{}{}
+		account.environmentRefs[deployment.EnvironmentRef] = struct{}{}
 		switch status.Sync.State {
 		case domain.SyncStateSynced:
-			account.SyncedCount++
+			account.overview.SyncedCount++
 		case domain.SyncStateReconciling, domain.SyncStateOutOfSync, domain.SyncStateDrifted:
-			account.ProgressingCount++
+			account.overview.ProgressingCount++
 		case domain.SyncStatePaused:
-			account.PausedCount++
+			account.overview.PausedCount++
 		case domain.SyncStateError:
-			account.ErrorCount++
+			account.overview.ErrorCount++
 		}
-		account.Deployments = append(account.Deployments, DeploymentOverview{
+		account.overview.Deployments = append(account.overview.Deployments, DeploymentOverview{
 			Name:               deployment.Name,
 			AppRef:             deployment.AppRef,
 			EnvironmentRef:     deployment.EnvironmentRef,
@@ -155,10 +170,12 @@ func BuildAccountOverviews(c manifest.Catalog, snapshots []statusstore.Snapshot)
 
 	accounts := make([]AccountOverview, 0, len(accountMap))
 	for _, account := range accountMap {
-		sort.Slice(account.Deployments, func(i, j int) bool {
-			return account.Deployments[i].Name < account.Deployments[j].Name
+		account.overview.ProjectCount = len(account.projectRefs)
+		account.overview.EnvironmentCount = len(account.environmentRefs)
+		sort.Slice(account.overview.Deployments, func(i, j int) bool {
+			return account.overview.Deployments[i].Name < account.overview.Deployments[j].Name
 		})
-		accounts = append(accounts, *account)
+		accounts = append(accounts, account.overview)
 	}
 
 	sort.Slice(accounts, func(i, j int) bool {
@@ -193,6 +210,8 @@ func BuildAccountOverviewDetail(c manifest.Catalog, snapshots []statusstore.Snap
 			AWSAccountID:     matched.AWSAccountID,
 			AllowedRegions:   append([]string(nil), matched.AllowedRegions...),
 			DeploymentCount:  matched.DeploymentCount,
+			ProjectCount:     matched.ProjectCount,
+			EnvironmentCount: matched.EnvironmentCount,
 			SyncedCount:      matched.SyncedCount,
 			ProgressingCount: matched.ProgressingCount,
 			PausedCount:      matched.PausedCount,

@@ -731,7 +731,76 @@ func TestRouterOverviewAccounts(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 		OverviewAccounts: func() ([]catalog.AccountOverview, error) {
-			return []catalog.AccountOverview{{Name: "prod-core", AWSAccountID: "123456789012", DeploymentCount: 3, SyncedCount: 1, ProgressingCount: 1, PausedCount: 1, ErrorCount: 0, Deployments: []catalog.DeploymentOverview{{Name: "api-prod", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", RuntimeSummary: &domain.RuntimeSummary{Timestamp: "2026-04-16T06:49:00Z", Source: "controller", Summary: "Traffic shift is progressing", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "Traffic shift running"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "steady"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "PromoteCandidateCapacity", HistoryCount: 4, Changes: []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep"}}, Rollout: &domain.RolloutSummary{DesiredGeneration: 4, ObservedGeneration: 3, Phase: domain.RolloutPhaseAccepted, CurrentStep: "PromoteCandidateCapacity", Summary: "Observing current state", Steps: []domain.RolloutStepSummary{{Kind: "CreateCandidateCapacity", Status: "completed"}, {Kind: "ShiftTrafficCanary", Status: "pending"}, {Kind: "PromoteCandidateCapacity", Current: true, Status: "current"}}}}, {Name: "api-staging", Strategy: "linear", ExecutionMode: "ecsCodeDeploy", RuntimeSummary: &domain.RuntimeSummary{Summary: "Waiting for service stability", Sync: domain.Sync{State: domain.SyncStateOutOfSync, Reason: "PendingPromotion"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "warming up"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "VerifyServiceStability", HistoryCount: 0}, Rollout: &domain.RolloutSummary{DesiredGeneration: 8, ObservedGeneration: 7, Phase: domain.RolloutPhaseAccepted, CurrentStep: "VerifyServiceStability", Summary: "Observing current state", Steps: []domain.RolloutStepSummary{{Kind: "CreateCodeDeployDeployment", Status: "completed"}, {Kind: "ShiftTrafficLinear", Status: "pending"}, {Kind: "VerifyServiceStability", Current: true, Status: "current"}}}}}}}, nil
+			return []catalog.AccountOverview{{
+				Name:             "prod-core",
+				AWSAccountID:     "123456789012",
+				DeploymentCount:  3,
+				ProjectCount:     2,
+				EnvironmentCount: 2,
+				SyncedCount:      1,
+				ProgressingCount: 1,
+				PausedCount:      1,
+				ErrorCount:       0,
+				Deployments: []catalog.DeploymentOverview{
+					{
+						Name:          "api-prod",
+						Strategy:      "canary",
+						ExecutionMode: "asgWeightedTargetGroups",
+						RuntimeSummary: &domain.RuntimeSummary{
+							Timestamp:          "2026-04-16T06:49:00Z",
+							Source:             "controller",
+							Summary:            "Traffic shift is progressing",
+							Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "Traffic shift running"},
+							Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "steady"},
+							DesiredGeneration:  8,
+							ObservedGeneration: 7,
+							RolloutPhase:       domain.RolloutPhaseAccepted,
+							CurrentStep:        "PromoteCandidateCapacity",
+							HistoryCount:       4,
+							Changes:            []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep"},
+						},
+						Rollout: &domain.RolloutSummary{
+							DesiredGeneration:  4,
+							ObservedGeneration: 3,
+							Phase:              domain.RolloutPhaseAccepted,
+							CurrentStep:        "PromoteCandidateCapacity",
+							Summary:            "Observing current state",
+							Steps: []domain.RolloutStepSummary{
+								{Kind: "CreateCandidateCapacity", Status: "completed"},
+								{Kind: "ShiftTrafficCanary", Status: "pending"},
+								{Kind: "PromoteCandidateCapacity", Current: true, Status: "current"},
+							},
+						},
+					},
+					{
+						Name:          "api-staging",
+						Strategy:      "linear",
+						ExecutionMode: "ecsCodeDeploy",
+						RuntimeSummary: &domain.RuntimeSummary{
+							Summary:            "Waiting for service stability",
+							Sync:               domain.Sync{State: domain.SyncStateOutOfSync, Reason: "PendingPromotion"},
+							Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "warming up"},
+							DesiredGeneration:  8,
+							ObservedGeneration: 7,
+							RolloutPhase:       domain.RolloutPhaseAccepted,
+							CurrentStep:        "VerifyServiceStability",
+							HistoryCount:       0,
+						},
+						Rollout: &domain.RolloutSummary{
+							DesiredGeneration:  8,
+							ObservedGeneration: 7,
+							Phase:              domain.RolloutPhaseAccepted,
+							CurrentStep:        "VerifyServiceStability",
+							Summary:            "Observing current state",
+							Steps: []domain.RolloutStepSummary{
+								{Kind: "CreateCodeDeployDeployment", Status: "completed"},
+								{Kind: "ShiftTrafficLinear", Status: "pending"},
+								{Kind: "VerifyServiceStability", Current: true, Status: "current"},
+							},
+						},
+					},
+				},
+			}}, nil
 		},
 	})
 	req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts", nil)
@@ -750,7 +819,7 @@ func TestRouterOverviewAccounts(t *testing.T) {
 	if len(accounts) != 1 || len(accounts[0].Deployments) != 2 || accounts[0].Deployments[0].ExecutionMode != "asgWeightedTargetGroups" {
 		t.Fatalf("unexpected overview accounts: %+v", accounts)
 	}
-	if accounts[0].DeploymentCount != 3 || accounts[0].SyncedCount != 1 || accounts[0].ProgressingCount != 1 || accounts[0].PausedCount != 1 || accounts[0].ErrorCount != 0 {
+	if accounts[0].DeploymentCount != 3 || accounts[0].ProjectCount != 2 || accounts[0].EnvironmentCount != 2 || accounts[0].SyncedCount != 1 || accounts[0].ProgressingCount != 1 || accounts[0].PausedCount != 1 || accounts[0].ErrorCount != 0 {
 		t.Fatalf("expected additive account counts in overview response, got %+v", accounts[0])
 	}
 	if accounts[0].Deployments[0].Rollout == nil || accounts[0].Deployments[0].Rollout.Phase != domain.RolloutPhaseAccepted || accounts[0].Deployments[0].Rollout.CurrentStep != "PromoteCandidateCapacity" || len(accounts[0].Deployments[0].Rollout.Steps) != 3 {
@@ -773,7 +842,7 @@ func TestRouterOverviewAccounts(t *testing.T) {
 	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("failed to decode raw overview accounts payload: %v", err)
 	}
-	if payload[0]["deploymentCount"] != float64(3) || payload[0]["syncedCount"] != float64(1) || payload[0]["progressingCount"] != float64(1) || payload[0]["pausedCount"] != float64(1) || payload[0]["errorCount"] != float64(0) {
+	if payload[0]["deploymentCount"] != float64(3) || payload[0]["projectCount"] != float64(2) || payload[0]["environmentCount"] != float64(2) || payload[0]["syncedCount"] != float64(1) || payload[0]["progressingCount"] != float64(1) || payload[0]["pausedCount"] != float64(1) || payload[0]["errorCount"] != float64(0) {
 		t.Fatalf("expected additive JSON count fields, got %+v", payload[0])
 	}
 	rollout, ok := payload[0]["deployments"].([]any)[0].(map[string]any)["rollout"].(map[string]any)
@@ -960,11 +1029,13 @@ func TestRouterOverviewAccountDetail(t *testing.T) {
 				t.Fatalf("unexpected lookup aws account id: %s", awsAccountID)
 			}
 			return catalog.AccountOverviewDetail{
-				Name:            "prod-core",
-				AWSAccountID:    "123456789012",
-				AllowedRegions:  []string{"ap-northeast-2", "us-west-2"},
-				DeploymentCount: 1,
-				SyncedCount:     1,
+				Name:             "prod-core",
+				AWSAccountID:     "123456789012",
+				AllowedRegions:   []string{"ap-northeast-2", "us-west-2"},
+				DeploymentCount:  1,
+				ProjectCount:     1,
+				EnvironmentCount: 1,
+				SyncedCount:      1,
 				Deployments: []catalog.DeploymentOverview{{
 					Name:           "api-prod",
 					EnvironmentRef: "prod-apne2",
@@ -993,8 +1064,19 @@ func TestRouterOverviewAccountDetail(t *testing.T) {
 	if detail.Name != "prod-core" || detail.AWSAccountID != "123456789012" || len(detail.Deployments) != 1 {
 		t.Fatalf("unexpected overview account detail: %+v", detail)
 	}
+	if detail.ProjectCount != 1 || detail.EnvironmentCount != 1 {
+		t.Fatalf("expected topology count fields in overview account detail: %+v", detail)
+	}
 	if detail.Deployments[0].Name != "api-prod" || detail.Deployments[0].ExecutionMode != "asgWeightedTargetGroups" {
 		t.Fatalf("unexpected overview account deployment detail: %+v", detail.Deployments[0])
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode raw overview account detail payload: %v", err)
+	}
+	if payload["projectCount"] != float64(1) || payload["environmentCount"] != float64(1) {
+		t.Fatalf("expected topology count fields in raw overview account detail payload, got %#v", payload)
 	}
 }
 
