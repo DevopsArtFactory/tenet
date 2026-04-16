@@ -61,6 +61,7 @@ const (
 // RolloutStepSummary captures one controller-derived step in the current rollout plan.
 type RolloutStepSummary struct {
 	Kind    string            `json:"kind"`
+	Detail  string            `json:"detail,omitempty"`
 	Current bool              `json:"current,omitempty"`
 	Status  RolloutStepStatus `json:"status,omitempty"`
 }

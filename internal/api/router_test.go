@@ -940,6 +940,75 @@ func TestRouterOverviewDeployment(t *testing.T) {
 	}
 }
 
+func TestDeploymentOverviewDetailRouteIncludesRolloutStepDetail(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			if name != "api-prod" {
+				t.Fatalf("unexpected lookup name: %s", name)
+			}
+			return catalog.DeploymentOverviewDetail{
+				Name: "api-prod",
+				Rollout: &domain.RolloutSummary{
+					Steps: []domain.RolloutStepSummary{
+						{Kind: "CreateCodeDeployDeployment", Detail: "Creates CodeDeploy deployment for service <api>", Status: domain.RolloutStepStatusCompleted},
+						{Kind: "ShiftTrafficLinear", Detail: "Shifts 10% of production traffic", Current: true, Status: domain.RolloutStepStatusCurrent},
+					},
+				},
+			}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var detail catalog.DeploymentOverviewDetail
+	if err := json.Unmarshal(resp.Body.Bytes(), &detail); err != nil {
+		t.Fatalf("failed to decode overview deployment: %v", err)
+	}
+	if detail.Rollout == nil || len(detail.Rollout.Steps) != 2 {
+		t.Fatalf("expected rollout steps in deployment detail, got %+v", detail)
+	}
+	if detail.Rollout.Steps[0].Detail != "Creates CodeDeploy deployment for service <api>" {
+		t.Fatalf("expected rollout step detail to survive typed decode, got %+v", detail.Rollout.Steps)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode raw overview deployment payload: %v", err)
+	}
+	rollout, ok := payload["rollout"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rollout object in raw payload, got %#v", payload["rollout"])
+	}
+	steps, ok := rollout["steps"].([]any)
+	if !ok || len(steps) != 2 {
+		t.Fatalf("expected rollout.steps array in raw payload, got %#v", rollout["steps"])
+	}
+	firstStep, ok := steps[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rollout.steps[0] object, got %#v", steps[0])
+	}
+	if firstStep["detail"] != "Creates CodeDeploy deployment for service <api>" {
+		t.Fatalf("expected rollout.steps[0].detail field, got %#v", firstStep)
+	}
+	secondStep, ok := steps[1].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rollout.steps[1] object, got %#v", steps[1])
+	}
+	if secondStep["detail"] != "Shifts 10% of production traffic" || secondStep["current"] != true || secondStep["status"] != string(domain.RolloutStepStatusCurrent) {
+		t.Fatalf("expected rollout.steps[1] detail/current/status fields, got %#v", secondStep)
+	}
+	if _, exists := firstStep["Detail"]; exists {
+		t.Fatalf("unexpected Go-style detail field name in %#v", firstStep)
+	}
+}
+
 func TestRouterOverviewDeploymentUnavailable(t *testing.T) {
 	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
 	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod", nil)

@@ -527,6 +527,11 @@
             const stepStatus = rolloutStepStatus(step, index, steps);
             const stepMeta = createElement('span', `detail-step-meta detail-step-meta-${stepStatus}`, rolloutStepStatusLabel(stepStatus));
             item.append(stepMeta);
+            const stepDetail = textOrDash(step.detail);
+            const stepDetailRow = createElement('span', 'detail-condition-meta', `Step detail · ${stepDetail}`);
+            if (step.detail) {
+              item.append(stepDetailRow);
+            }
             stepsList.append(item);
           });
           stepsSection.append(stepsList);

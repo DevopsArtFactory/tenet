@@ -345,8 +345,8 @@ func TestEmbeddedUIDetailHistoryBehaviorWithNodeHarness(t *testing.T) {
 		"region":       "us-west-2",
 		"sync":         map[string]any{"reason": "Traffic shift running"},
 		"rollout": map[string]any{"steps": []map[string]any{
-			{"kind": "CreateCodeDeployDeployment", "status": "completed"},
-			{"kind": "ShiftTrafficCanary", "status": "current"},
+			{"kind": "CreateCodeDeployDeployment", "detail": "Creates deployment group <unsafe>", "status": "completed"},
+			{"kind": "ShiftTrafficCanary", "detail": "Shifts 10 percent of traffic <script>alert(1)</script>", "status": "current"},
 			{"kind": "BakeTraffic", "status": "pending"},
 		}},
 		"history": []map[string]any{
@@ -584,6 +584,12 @@ function collectText(node) {
 	  if (!completedStep || completedStep.textContent !== 'Completed rollout step') throw new Error('expected completed rollout-step status label/class');
 	  if (!currentStep || currentStep.textContent !== 'Current rollout step') throw new Error('expected current rollout-step status label/class');
 	  if (!pendingStep || pendingStep.textContent !== 'Pending rollout step') throw new Error('expected pending rollout-step status label/class');
+
+	  const rolloutHeading = findByText(env.document, 'Rollout steps');
+	  if (!rolloutHeading) throw new Error('expected rollout steps section heading');
+	  const rolloutText = collectText(rolloutHeading.parentNode).join(' | ');
+	  if (!rolloutText.includes('Step detail · Creates deployment group <unsafe>')) throw new Error('expected first rollout-step detail to render literally');
+	  if (!rolloutText.includes('Step detail · Shifts 10 percent of traffic <script>alert(1)</script>')) throw new Error('expected current rollout-step detail to render literally');
 
 	  const emptyEnv = createEnvironment(detailEmptyPayload);
 	  await settle();

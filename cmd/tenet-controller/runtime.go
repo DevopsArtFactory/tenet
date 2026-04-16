@@ -176,6 +176,7 @@ func deriveRolloutSummary(deployment domain.Deployment, status domain.Deployment
 	for index, step := range plan.Steps {
 		steps = append(steps, domain.RolloutStepSummary{
 			Kind:    string(step.Kind),
+			Detail:  rolloutStepDetail(deployment, plan, step.Kind),
 			Current: index == currentIndex && !completed,
 			Status:  rolloutStepStatus(index, currentIndex, completed),
 		})
@@ -224,6 +225,40 @@ func rolloutStepStatus(index int, currentIndex int, completed bool) domain.Rollo
 		}
 	}
 	return domain.RolloutStepStatusPending
+}
+
+func rolloutStepDetail(deployment domain.Deployment, plan reconcile.Plan, kind reconcile.StepKind) string {
+	switch kind {
+	case reconcile.StepCreateCandidateCapacity:
+		return "Create a fresh candidate Auto Scaling Group bootstrapped from userdata before attaching it to the candidate target group."
+	case reconcile.StepShiftTrafficCanary:
+		if plan.ContainsStep(reconcile.StepCreateCodeDeployDeployment) {
+			return "Shift a small canary slice of ECS service traffic to the replacement task set through CodeDeploy before the full cutover."
+		}
+		return "Shift a small canary slice of production traffic to the candidate target group before full promotion."
+	case reconcile.StepShiftTrafficLinear:
+		if plan.ContainsStep(reconcile.StepCreateCodeDeployDeployment) {
+			return "Advance ECS traffic in linear increments through CodeDeploy until the replacement task set serves all traffic."
+		}
+		return "Advance ALB traffic in linear increments toward the candidate target group until promotion is safe."
+	case reconcile.StepShiftTrafficFull:
+		if plan.ContainsStep(reconcile.StepCreateCodeDeployDeployment) {
+			return "Shift all ECS service traffic to the replacement task set through CodeDeploy in a single blue/green cutover."
+		}
+		return "Shift all production traffic from the active target group to the candidate target group in one blue/green cutover."
+	case reconcile.StepUpdateECSService:
+		return "Update the ECS service to start a native rolling deployment that replaces running tasks in place."
+	case reconcile.StepCreateCodeDeployDeployment:
+		if deployment.ExecutionMode == "ecsCodeDeploy" {
+			return "Create a CodeDeploy deployment to coordinate blue/green ECS traffic shifting for the replacement task set."
+		}
+	case reconcile.StepVerifyServiceStability:
+		if plan.ContainsStep(reconcile.StepCreateCodeDeployDeployment) {
+			return "Wait for the ECS service to stabilize after CodeDeploy finishes shifting traffic to the replacement task set."
+		}
+		return "Wait for the ECS service to report a stable native rolling deployment after replacing tasks."
+	}
+	return ""
 }
 
 func deriveRolloutExecutionDetails(deployment domain.Deployment) []domain.RolloutExecutionDetail {
@@ -352,7 +387,7 @@ func rolloutSummaryForStep(status domain.DeploymentStatus, plan reconcile.Plan, 
 	case reconcile.StepCreateCodeDeployDeployment:
 		return "Creating CodeDeploy traffic shift deployment"
 	case reconcile.StepVerifyServiceStability:
-		if planContainsStep(plan, reconcile.StepCreateCodeDeployDeployment) {
+		if plan.ContainsStep(reconcile.StepCreateCodeDeployDeployment) {
 			return "Stabilizing ECS service after CodeDeploy traffic shift"
 		}
 		return "Stabilizing ECS service after rolling update"
@@ -369,19 +404,10 @@ func rolloutSummaryForStep(status domain.DeploymentStatus, plan reconcile.Plan, 
 }
 
 func trafficShiftSummary(plan reconcile.Plan) string {
-	if planContainsStep(plan, reconcile.StepCreateCodeDeployDeployment) {
+	if plan.ContainsStep(reconcile.StepCreateCodeDeployDeployment) {
 		return "Shifting traffic with ECS CodeDeploy"
 	}
 	return "Shifting traffic through weighted target groups"
-}
-
-func planContainsStep(plan reconcile.Plan, kind reconcile.StepKind) bool {
-	for _, step := range plan.Steps {
-		if step.Kind == kind {
-			return true
-		}
-	}
-	return false
 }
 
 func stepSummary(plan reconcile.Plan) string {
