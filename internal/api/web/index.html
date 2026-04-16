@@ -147,6 +147,7 @@
       const runtimeSummaryTimestamp = (runtimeSummary) => runtimeSummary?.timestamp || 'Latest runtime status';
       const runtimeSummaryText = (runtimeSummary) => {
         if (!runtimeSummary) return '—';
+        const labels = changeLabels(runtimeSummary?.changes);
         const parts = [
           runtimeSummary.summary,
           runtimeSummary.sync?.state,
@@ -154,6 +155,7 @@
           runtimeSummary.health?.overall,
           runtimeSummary.health?.summary,
           runtimeSummary.source,
+          labels.length ? labels.join(', ') : '',
           runtimeSummary.rolloutPhase,
           runtimeSummary.currentStep,
           Number.isFinite(runtimeSummary.historyCount) ? `history ${runtimeSummary.historyCount}` : '',
@@ -170,6 +172,11 @@
         const desired = generationValue(value?.desiredGeneration);
         const observed = generationValue(value?.observedGeneration);
         return `desired ${desired} · observed ${observed}`;
+      };
+      const changeLabels = (changes) => (changes || []).filter((change) => typeof change === 'string' && change);
+      const changeLabelsText = (changes) => {
+        const labels = changeLabels(changes);
+        return labels.length ? labels.join(', ') : '—';
       };
       const rolloutStepStatus = (step, index, steps) => {
         if (step.status) {
@@ -505,6 +512,7 @@
           ['Allowed regions', (detail.allowedRegions || []).join(', ') || '—'],
           ['Runtime generations', generationsText(detail.runtimeSummary)],
           ['Runtime source', metricValue(detail.runtimeSummary?.source)],
+          ['Runtime changes', changeLabelsText(detail.runtimeSummary?.changes)],
           ['Rollout generations', detail.rollout ? generationsText(detail.rollout) : `desired — · observed ${generationValue(detail.observedGeneration)}`],
           ['Health summary', `${healthLabel(detail.health)}${detail.health?.summary ? ` · ${detail.health.summary}` : ''}`],
         ].forEach(([label, value]) => {
@@ -529,6 +537,9 @@
               createElement('span', 'detail-condition-meta', `History health · ${healthLabel(entry.health)}${entry.health?.summary ? ` · ${entry.health.summary}` : ''}`),
               createElement('span', 'detail-condition-meta', `History generations · ${generationsText(entry)}`),
             );
+            if (changeLabels(entry.changes).length) {
+              historyMeta.append(createElement('span', 'detail-condition-meta', `History changes · ${changeLabelsText(entry.changes)}`));
+            }
             if (entry.source) {
               historyMeta.append(createElement('span', 'detail-condition-meta', `History source · ${entry.source}`));
             }
@@ -746,6 +757,7 @@
                 ['Desired artifact', artifact(deployment.desiredArtifact)],
                 ['Deployed artifact', artifact(deployment.deployedArtifact)],
                 ['Latest runtime', runtimeSummaryText(deployment.runtimeSummary), 'summary'],
+                ['Latest changes', changeLabelsText(deployment.runtimeSummary?.changes)],
                 ['Runtime timestamp', runtimeSummaryTimestamp(deployment.runtimeSummary)],
                 ['Runtime generations', generationsText(deployment.runtimeSummary)],
                 ['Rollout phase', metricValue(deployment.rollout?.phase)],

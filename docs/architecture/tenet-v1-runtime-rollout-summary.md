@@ -22,9 +22,11 @@ The `rollout` summary exists to expose that operator-facing progress view in a s
 The additive runtime-summary/history view that the UI consumes also preserves controller-owned generation metadata alongside the rollout summary:
 - `runtimeSummary.desiredGeneration`
 - `runtimeSummary.observedGeneration`
+- `runtimeSummary.changes[]` as additive latest-runtime change labels copied into overview/detail read models
 - `runtimeSummary.source` when the latest runtime summary was copied from controller-authored history
 - `history[*].desiredGeneration`
 - `history[*].observedGeneration`
+- `history[*].changes[]` as additive per-entry runtime change labels
 - `history[*].source`
 - `history[*].rolloutPhase`
 
@@ -48,6 +50,7 @@ Each `execution[]` entry is a `domain.RolloutExecutionDetail`:
 - `steps[].detail` is optional controller-derived explanatory text for an ordered plan step. When present it describes what Tenet intends to do next in operator-facing terms, but some terminal steps such as `MarkSynced` intentionally omit it. It is not live AWS execution telemetry.
 - `steps[].status` is additive controller-derived progress metadata for that ordered plan: `completed` means the step is already behind the controller's current view of the plan, including fully finished rollouts that no longer have a current actionable step; `current` marks the controller's current actionable step; and `pending` marks later planned work.
 - `runtimeSummary.desiredGeneration` / `runtimeSummary.observedGeneration` and `history[*].desiredGeneration` / `history[*].observedGeneration` are additive controller-owned freshness markers copied into the overview/detail read models so operators can compare the intended generation with the latest controller-observed generation without opening raw status snapshots.
+- `runtimeSummary.changes[]` and `history[*].changes[]` are additive ordered change-signal labels. `runtimeSummary.changes[]` mirrors the newest history-backed runtime signal when one exists so overview/search consumers can surface the latest labels without traversing `history[*]`, while `history[*].changes[]` preserves the per-entry labels for timeline/detail rendering.
 - `runtimeSummary.source` is only populated when the latest summary was copied from persisted controller-authored history; fallback summaries built only from the current snapshot intentionally omit it instead of inventing synthetic provenance.
 - `history[*].source` and `history[*].rolloutPhase` remain additive optional metadata on controller-authored history entries so detail consumers can show where an entry came from and which rollout lifecycle phase it represented.
 - `execution[]` is an additive ordered list of concrete execution resources or bootstrap inputs that the controller derived for the active execution mode.
@@ -81,7 +84,7 @@ The account overview surface also copies the same summary into each deployment c
 The deployment overview detail surface preserves the same `rollout.execution[]` payload for expanded per-deployment inspection:
 - `GET /v1/overview/deployments/{deploymentName}`
 
-That lets the embedded overview UI show rollout phase, current step, summary text, runtime-summary desired/observed generations, runtime-summary provenance, and planned steps without needing additional API joins in the browser, while preserving the richer EC2 candidate-capacity and ECS CodeDeploy/native-rolling terminology from the planner. Expanded detail panels now render the same runtime-summary generation pair, an additive `Runtime source` metric when available, each history entry's desired/observed generations, each history entry's additive source/rollout-phase metadata when available, each rollout step's status together with its optional controller-derived `detail` text, and the concrete execution resources and descriptions, all with the same payload shape rather than inventing UI-only fields.
+That lets the embedded overview UI show rollout phase, current step, summary text, runtime-summary desired/observed generations, runtime-summary change labels, runtime-summary provenance, and planned steps without needing additional API joins in the browser, while preserving the richer EC2 candidate-capacity and ECS CodeDeploy/native-rolling terminology from the planner. Expanded detail panels now render the same runtime-summary generation pair, an additive `Runtime changes` metric when latest labels are present, an additive `Runtime source` metric when available, each history entry's desired/observed generations, each history entry's additive `changes[]` / source / rollout-phase metadata when available, each rollout step's status together with its optional controller-derived `detail` text, and the concrete execution resources and descriptions, all with the same payload shape rather than inventing UI-only fields.
 
 The `execution[]` list remains a controller-authored read-model summary, not a stream of live AWS observations. Clients should treat the resource names and descriptions as Tenet's intended execution contract for the current plan rather than definitive evidence that AWS has already created, attached, or shifted those resources. The overview builders and API routes preserve the ordered list as-is, so the exact identifier strings above are part of the stable read-model contract rather than documentation-only examples.
 

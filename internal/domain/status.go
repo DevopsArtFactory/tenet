@@ -89,6 +89,7 @@ type StatusHistoryEntry struct {
 	Timestamp          string       `json:"timestamp"`
 	Source             string       `json:"source"`
 	Summary            string       `json:"summary"`
+	Changes            []string     `json:"changes,omitempty"`
 	Sync               Sync         `json:"sync"`
 	Health             Health       `json:"health"`
 	DesiredGeneration  int64        `json:"desiredGeneration"`
@@ -102,6 +103,7 @@ type RuntimeSummary struct {
 	Timestamp          string       `json:"timestamp,omitempty"`
 	Source             string       `json:"source,omitempty"`
 	Summary            string       `json:"summary,omitempty"`
+	Changes            []string     `json:"changes,omitempty"`
 	Sync               Sync         `json:"sync"`
 	Health             Health       `json:"health"`
 	DesiredGeneration  int64        `json:"desiredGeneration"`

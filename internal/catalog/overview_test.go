@@ -3,6 +3,7 @@ package catalog
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/DevopsArtFactory/tenet/internal/domain"
@@ -128,8 +129,8 @@ func TestBuildAccountOverviewsRuntimeSummaryUsesLatestHistory(t *testing.T) {
 				Summary:     "stale rollout",
 			},
 			History: []domain.StatusHistoryEntry{
-				{Timestamp: "2026-04-16T06:15:00Z", Source: "controller", Summary: "Accepted rollout for r7", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "candidate warming"}, DesiredGeneration: 7, ObservedGeneration: 6, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "CreateCandidateCapacity"},
-				{Timestamp: "2026-04-16T06:20:00Z", Source: "controller", Summary: "Shifting canary traffic", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficCanary"},
+				{Timestamp: "2026-04-16T06:15:00Z", Source: "controller", Summary: "Accepted rollout for r7", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "candidate warming"}, DesiredGeneration: 7, ObservedGeneration: 6, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "CreateCandidateCapacity", Changes: []string{"initial"}},
+				{Timestamp: "2026-04-16T06:20:00Z", Source: "controller", Summary: "Shifting canary traffic", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficCanary", Changes: []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep"}},
 			},
 		},
 	}}
@@ -146,7 +147,7 @@ func TestBuildAccountOverviewsRuntimeSummaryUsesLatestHistory(t *testing.T) {
 	if summary == nil {
 		t.Fatalf("expected runtime summary to be surfaced, got %+v", overviews[0].Deployments[0])
 	}
-	if summary.Timestamp != "2026-04-16T06:20:00Z" || summary.Source != "controller" || summary.Summary != "Shifting canary traffic" || summary.Sync.Reason != "progressing" || summary.Health.Summary != "2/3 targets healthy" || summary.DesiredGeneration != 8 || summary.ObservedGeneration != 7 || summary.RolloutPhase != domain.RolloutPhasePromoting || summary.CurrentStep != "ShiftTrafficCanary" || summary.HistoryCount != 2 {
+	if summary.Timestamp != "2026-04-16T06:20:00Z" || summary.Source != "controller" || summary.Summary != "Shifting canary traffic" || summary.Sync.Reason != "progressing" || summary.Health.Summary != "2/3 targets healthy" || summary.DesiredGeneration != 8 || summary.ObservedGeneration != 7 || summary.RolloutPhase != domain.RolloutPhasePromoting || summary.CurrentStep != "ShiftTrafficCanary" || summary.HistoryCount != 2 || !reflect.DeepEqual(summary.Changes, []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep"}) {
 		t.Fatalf("expected latest history entry to drive runtime summary, got %+v", summary)
 	}
 
@@ -367,8 +368,8 @@ func TestBuildDeploymentOverviewDetailRuntimeSummaryUsesLatestHistory(t *testing
 				Summary:     "stale rollout",
 			},
 			History: []domain.StatusHistoryEntry{
-				{Timestamp: "2026-04-16T06:15:00Z", Source: "controller", Summary: "Accepted rollout for r7", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "candidate warming"}, DesiredGeneration: 7, ObservedGeneration: 6, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "CreateCandidateCapacity"},
-				{Timestamp: "2026-04-16T06:20:00Z", Source: "controller", Summary: "Shifting canary traffic", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficCanary"},
+				{Timestamp: "2026-04-16T06:15:00Z", Source: "controller", Summary: "Accepted rollout for r7", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "candidate warming"}, DesiredGeneration: 7, ObservedGeneration: 6, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "CreateCandidateCapacity", Changes: []string{"initial"}},
+				{Timestamp: "2026-04-16T06:20:00Z", Source: "controller", Summary: "Shifting canary traffic", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficCanary", Changes: []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep"}},
 			},
 		},
 	}}
@@ -380,7 +381,7 @@ func TestBuildDeploymentOverviewDetailRuntimeSummaryUsesLatestHistory(t *testing
 	if detail.RuntimeSummary == nil {
 		t.Fatalf("expected runtime summary to be surfaced, got %+v", detail)
 	}
-	if detail.RuntimeSummary.Timestamp != "2026-04-16T06:20:00Z" || detail.RuntimeSummary.Source != "controller" || detail.RuntimeSummary.Summary != "Shifting canary traffic" || detail.RuntimeSummary.Sync.Reason != "progressing" || detail.RuntimeSummary.Health.Summary != "2/3 targets healthy" || detail.RuntimeSummary.DesiredGeneration != 8 || detail.RuntimeSummary.ObservedGeneration != 7 || detail.RuntimeSummary.RolloutPhase != domain.RolloutPhasePromoting || detail.RuntimeSummary.CurrentStep != "ShiftTrafficCanary" || detail.RuntimeSummary.HistoryCount != 2 {
+	if detail.RuntimeSummary.Timestamp != "2026-04-16T06:20:00Z" || detail.RuntimeSummary.Source != "controller" || detail.RuntimeSummary.Summary != "Shifting canary traffic" || detail.RuntimeSummary.Sync.Reason != "progressing" || detail.RuntimeSummary.Health.Summary != "2/3 targets healthy" || detail.RuntimeSummary.DesiredGeneration != 8 || detail.RuntimeSummary.ObservedGeneration != 7 || detail.RuntimeSummary.RolloutPhase != domain.RolloutPhasePromoting || detail.RuntimeSummary.CurrentStep != "ShiftTrafficCanary" || detail.RuntimeSummary.HistoryCount != 2 || !reflect.DeepEqual(detail.RuntimeSummary.Changes, []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep"}) {
 		t.Fatalf("expected latest history entry runtime summary, got %+v", detail.RuntimeSummary)
 	}
 

@@ -211,6 +211,7 @@ func deriveRuntimeSummary(status domain.DeploymentStatus) *domain.RuntimeSummary
 			Timestamp:          latest.Timestamp,
 			Source:             latest.Source,
 			Summary:            latest.Summary,
+			Changes:            append([]string(nil), latest.Changes...),
 			Sync:               latest.Sync,
 			Health:             latest.Health,
 			DesiredGeneration:  latest.DesiredGeneration,
@@ -245,6 +246,7 @@ func cloneRuntimeSummary(summary *domain.RuntimeSummary) *domain.RuntimeSummary 
 		return nil
 	}
 	copy := *summary
+	copy.Changes = append([]string(nil), summary.Changes...)
 	return &copy
 }
 
@@ -259,5 +261,12 @@ func cloneRolloutSummary(summary *domain.RolloutSummary) *domain.RolloutSummary 
 }
 
 func cloneStatusHistory(history []domain.StatusHistoryEntry) []domain.StatusHistoryEntry {
-	return append([]domain.StatusHistoryEntry(nil), history...)
+	if len(history) == 0 {
+		return nil
+	}
+	cloned := append([]domain.StatusHistoryEntry(nil), history...)
+	for i := range cloned {
+		cloned[i].Changes = append([]string(nil), history[i].Changes...)
+	}
+	return cloned
 }

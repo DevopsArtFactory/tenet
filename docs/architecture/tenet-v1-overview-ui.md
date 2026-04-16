@@ -19,6 +19,7 @@ It groups deployments by AWS account and then by project/environment within each
 - additive latest-runtime summary text from `runtimeSummary.summary` plus runtime sync/health/rollout cues when present
 - additive latest-runtime timestamp from `runtimeSummary.timestamp` with a `Latest runtime status` fallback label when no timestamp exists yet
 - additive latest-runtime desired/observed generation metadata from `runtimeSummary.desiredGeneration` / `runtimeSummary.observedGeneration`
+- additive latest-runtime change labels from `runtimeSummary.changes[]`
 - additive latest-runtime provenance text from `runtimeSummary.source` when the summary was derived from controller-authored history
 - rollout phase
 - current rollout step
@@ -43,12 +44,13 @@ Each deployment object in that overview response now also includes an additive `
 - `runtimeSummary.health.summary`
 - `runtimeSummary.desiredGeneration`
 - `runtimeSummary.observedGeneration`
+- `runtimeSummary.changes[]` as additive latest-runtime change labels
 - `runtimeSummary.source` when the newest summary was copied from controller-authored history
 - `runtimeSummary.rolloutPhase`
 - `runtimeSummary.currentStep`
 - `runtimeSummary.historyCount`
 
-The embedded UI renders that latest runtime summary/timestamp directly on the overview card using `document.createElement`, `textContent`, and `replaceChildren`; it also renders a dedicated runtime-generation row from `runtimeSummary.desiredGeneration` / `runtimeSummary.observedGeneration` with the same safe DOM construction, includes `runtimeSummary.source` in the compact overview-card summary/search text when present, and does not inject runtime summary strings with `innerHTML`.
+The embedded UI renders that latest runtime summary/timestamp directly on the overview card using `document.createElement`, `textContent`, and `replaceChildren`; it also renders dedicated runtime-generation and latest-change rows from `runtimeSummary.desiredGeneration` / `runtimeSummary.observedGeneration` and `runtimeSummary.changes[]` with the same safe DOM construction, includes `runtimeSummary.source` and latest change labels in the compact overview-card summary/search text when present, and does not inject runtime summary strings with `innerHTML`.
 
 Each account object now also includes additive per-account runtime counters:
 - `deploymentCount`
@@ -66,9 +68,10 @@ The embedded client also derives a lightweight project/environment topology summ
 - account and region placement metadata
 - `sync.reason`
 - dedicated UI rendering of `runtimeSummary.desiredGeneration` / `runtimeSummary.observedGeneration` as additive controller-owned runtime freshness metadata
+- dedicated UI rendering of `runtimeSummary.changes[]` as additive latest-runtime change labels
 - dedicated UI rendering of `runtimeSummary.source` as an additive `Runtime source` metric when the latest summary came from controller-authored history
 - rollout desired/observed generations
-- `history[*]` controller-authored runtime timeline entries (timestamp, summary, sync, health, desired/observed generations, optional source, optional rollout phase, optional current step)
+- `history[*]` controller-authored runtime timeline entries (timestamp, summary, sync, health, desired/observed generations, optional `changes[]`, optional source, optional rollout phase, optional current step)
 - `rollout.execution[*]`
 - the complete `rollout.steps[*]` list
 - `conditions[*]`
@@ -76,7 +79,7 @@ The embedded client also derives a lightweight project/environment topology summ
 The embedded UI only fetches the deployment-detail endpoint when an operator expands a row.
 
 The overview page also includes a client-side filter toolbar above the summary cards and per-deployment quick links under each card title:
-- a text search that matches account/deployment-visible fields from the `/v1/overview/accounts` payload, including additive `runtimeSummary` text, provenance/source, and timestamp fields
+- a text search that matches account/deployment-visible fields from the `/v1/overview/accounts` payload, including additive `runtimeSummary` text, latest change labels, provenance/source, and timestamp fields
 - a sync-state filter
 - an account filter
 - direct `Overview JSON` and `Status JSON` links that jump to `/v1/overview/deployments/{deploymentName}` and `/v1/status/deployments/{deploymentName}`
@@ -87,7 +90,7 @@ Toolbar state is URL-synced with `history.replaceState` using query params:
 - `sync` for the selected sync-state bucket
 - `account` for the selected stable account identifier (`awsAccountId` in the current embedded UI)
 
-The page re-applies those query params on load so filtered views are shareable/bookmarkable without server-side filtering. Filtering remains client-side against the already-fetched overview payload; no additional overview requests are issued when controls change. Stale or invalid `sync`/`account` query values are normalized back to the default `all` selection before the toolbar renders, so bookmarked URLs cannot leave the control state and the active filter state out of sync. Matching on `runtimeSummary` is additive; it narrows the visible overview cards without changing lazy detail loading or detail-panel history behavior, and the matched summary text now includes `runtimeSummary.source` provenance when present. When the active filter combination removes every deployment, the UI renders the explicit empty state `No deployments match the current filters.`
+The page re-applies those query params on load so filtered views are shareable/bookmarkable without server-side filtering. Filtering remains client-side against the already-fetched overview payload; no additional overview requests are issued when controls change. Stale or invalid `sync`/`account` query values are normalized back to the default `all` selection before the toolbar renders, so bookmarked URLs cannot leave the control state and the active filter state out of sync. Matching on `runtimeSummary` is additive; it narrows the visible overview cards without changing lazy detail loading or detail-panel history behavior, and the matched summary text now includes `runtimeSummary.source` provenance plus `runtimeSummary.changes[]` labels when present. When the active filter combination removes every deployment, the UI renders the explicit empty state `No deployments match the current filters.`
 
 Because the page re-renders the account/deployment cards as filters change, the embedded toolbar preserves focus and the active text-selection/caret position for the typed search field across incremental search re-renders. This keeps free-text filtering usable even though the view is rebuilt client-side.
 
@@ -96,7 +99,7 @@ Each deployment card still surfaces the most operator-useful rollout cues direct
 - `rollout.currentStep`
 - `rollout.steps[*].kind`
 
-The expandable detail panel extends that view without forcing operators to switch to the raw status endpoint for common troubleshooting. It now includes a safe runtime-generation row sourced from `runtimeSummary.desiredGeneration` / `runtimeSummary.observedGeneration`, a `Runtime source` metric sourced from `runtimeSummary.source` when present, plus a recent runtime-history section rendered with safe DOM construction, showing each controller-authored entry's timestamp, summary, sync state, health, desired/observed generations, optional `History source`, optional `History rollout phase`, and optional rollout step, plus an explicit `No recent runtime history is available yet.` empty state when no bounded history has been persisted yet.
+The expandable detail panel extends that view without forcing operators to switch to the raw status endpoint for common troubleshooting. It now includes a safe runtime-generation row sourced from `runtimeSummary.desiredGeneration` / `runtimeSummary.observedGeneration`, a `Runtime changes` metric sourced from `runtimeSummary.changes[]`, a `Runtime source` metric sourced from `runtimeSummary.source` when present, plus a recent runtime-history section rendered with safe DOM construction, showing each controller-authored entry's timestamp, summary, sync state, health, desired/observed generations, optional `History changes`, optional `History source`, optional `History rollout phase`, and optional rollout step, plus an explicit `No recent runtime history is available yet.` empty state when no bounded history has been persisted yet.
 
 The detail rollout-step list now also consumes additive `rollout.steps[*].status` metadata and controller-authored `rollout.steps[*].detail` text from the deployment-detail payload:
 - `completed` marks controller-plan steps that are already behind the current plan view, including fully completed rollouts with no remaining current actionable step
