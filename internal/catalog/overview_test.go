@@ -224,6 +224,114 @@ func TestBuildAccountOverviewsRuntimeSummaryRemainsNilWhenStatusIsEmpty(t *testi
 	}
 }
 
+func TestBuildApplicationOverviews(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts: []domain.Account{
+			{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}},
+			{Name: "staging-core", AWSAccountID: "210987654321", AllowedRegions: []string{"ap-northeast-2"}},
+		},
+		Environments: []domain.Environment{
+			{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"},
+			{Name: "staging-apne2", AccountRef: "staging-core", Region: "ap-northeast-2"},
+		},
+		Deployments: []domain.Deployment{
+			{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2", TargetType: "ec2", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", DesiredArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7"}},
+			{Name: "billing-api-prod", AppRef: "billing-api", EnvironmentRef: "prod-apne2", TargetType: "ec2", Strategy: "blueGreen", ExecutionMode: "asgWeightedTargetGroups", DesiredArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/billing-api/prod/billing-api-linux-amd64-r9"}},
+			{Name: "payments-api-staging", AppRef: "payments-api", EnvironmentRef: "staging-apne2", TargetType: "ecs", Strategy: "linear", ExecutionMode: "ecsCodeDeploy", DesiredArtifact: domain.DeploymentArtifact{Image: "ghcr.io/devopsartfactory/payments-api:staging-20260416"}},
+		},
+	}
+	snapshots := []statusstore.Snapshot{
+		{
+			DeploymentName: "payments-api-prod",
+			Status: domain.DeploymentStatus{
+				ObservedGeneration: 7,
+				Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"},
+				Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"},
+				Conditions:         []domain.Condition{{Type: "Progressing", Status: true, Reason: "RolloutInFlight", Message: "candidate receiving traffic"}},
+				History: []domain.StatusHistoryEntry{{
+					Timestamp:          "2026-04-16T06:20:00Z",
+					Source:             "controller",
+					Summary:            "Shifting canary traffic",
+					Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"},
+					Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"},
+					DesiredGeneration:  8,
+					ObservedGeneration: 7,
+					RolloutPhase:       domain.RolloutPhasePromoting,
+					CurrentStep:        "ShiftTrafficCanary",
+					Changes:            []string{"summary", "sync", "health"},
+				}},
+				DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6"},
+				Rollout: &domain.RolloutSummary{
+					DesiredGeneration:  8,
+					ObservedGeneration: 7,
+					Phase:              domain.RolloutPhasePromoting,
+					CurrentStep:        "ShiftTrafficCanary",
+					Summary:            "Canary is serving 10% of traffic",
+					Steps:              []domain.RolloutStepSummary{{Kind: "CreateCandidateCapacity"}, {Kind: "ShiftTrafficCanary", Current: true}},
+					Execution:          []domain.RolloutExecutionDetail{{Resource: "candidateAutoScalingGroup", Name: "payments-api-prod-candidate", Description: "Candidate Auto Scaling Group Tenet will create for weighted target group rollout"}},
+				},
+			},
+		},
+		{
+			DeploymentName: "billing-api-prod",
+			Status: domain.DeploymentStatus{
+				ObservedGeneration: 9,
+				Sync:               domain.Sync{State: domain.SyncStateSynced, Reason: "stable"},
+				Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "3/3 healthy"},
+				DeployedArtifact:   domain.DeploymentArtifact{Binary: "s3://releases.example.com/billing-api/prod/billing-api-linux-amd64-r9"},
+			},
+		},
+	}
+
+	overviews, err := BuildApplicationOverviews(catalog, snapshots)
+	if err != nil {
+		t.Fatalf("BuildApplicationOverviews returned error: %v", err)
+	}
+	if len(overviews) != 3 {
+		t.Fatalf("expected one application row per deployment, got %+v", overviews)
+	}
+	if overviews[0].Name != "billing-api-prod" || overviews[1].Name != "payments-api-prod" || overviews[2].Name != "payments-api-staging" {
+		t.Fatalf("expected deterministic application sort order, got %+v", overviews)
+	}
+
+	payments := overviews[1]
+	if payments.AppRef != "payments-api" || payments.EnvironmentRef != "prod-apne2" || payments.AccountName != "prod-core" || payments.AWSAccountID != "123456789012" || payments.Region != "ap-northeast-2" {
+		t.Fatalf("expected joined placement metadata to be preserved, got %+v", payments)
+	}
+	if payments.TargetType != "ec2" || payments.Strategy != "canary" || payments.ExecutionMode != "asgWeightedTargetGroups" {
+		t.Fatalf("expected deployment intent fields to be preserved, got %+v", payments)
+	}
+	if payments.DesiredArtifact.Binary != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7" || payments.DeployedArtifact.Binary != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6" {
+		t.Fatalf("expected desired and deployed artifacts to be preserved, got %+v", payments)
+	}
+	if payments.ObservedGeneration != 7 || payments.Sync.Reason != "new artifact" || payments.Health.Summary != "2/3 targets healthy" {
+		t.Fatalf("expected runtime status fields to be preserved, got %+v", payments)
+	}
+	if payments.RuntimeSummary == nil || payments.RuntimeSummary.Summary != "Shifting canary traffic" || payments.RuntimeSummary.CurrentStep != "ShiftTrafficCanary" {
+		t.Fatalf("expected runtime summary to be preserved, got %+v", payments)
+	}
+	if payments.Rollout == nil || payments.Rollout.Phase != domain.RolloutPhasePromoting || payments.Rollout.Execution[0].Name != "payments-api-prod-candidate" {
+		t.Fatalf("expected rollout summary to be preserved, got %+v", payments)
+	}
+	if len(payments.Conditions) != 1 || payments.Conditions[0].Reason != "RolloutInFlight" {
+		t.Fatalf("expected conditions to be preserved, got %+v", payments)
+	}
+
+	snapshots[0].Status.History[0].Summary = "mutated"
+	snapshots[0].Status.Rollout.Execution[0].Name = "mutated"
+	if payments.RuntimeSummary.Summary != "Shifting canary traffic" {
+		t.Fatalf("expected runtime summary to be cloned defensively, got %+v", payments.RuntimeSummary)
+	}
+	if payments.Rollout.Execution[0].Name != "payments-api-prod-candidate" {
+		t.Fatalf("expected rollout summary to be cloned defensively, got %+v", payments.Rollout)
+	}
+
+	staging := overviews[2]
+	if staging.AccountName != "staging-core" || staging.AWSAccountID != "210987654321" || staging.Sync.State != "" || staging.RuntimeSummary != nil || staging.Rollout != nil {
+		t.Fatalf("expected missing snapshot fields to stay zero-valued, got %+v", staging)
+	}
+}
+
 func TestBuildAccountOverviewDetail(t *testing.T) {
 	snapshots := []statusstore.Snapshot{
 		{
@@ -469,7 +577,7 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 			{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"},
 		},
 		Deployments: []domain.Deployment{
-			{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2", TargetType: "ec2", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", DesiredArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7"}},
+			{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2", TargetType: "ec2", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", DesiredArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7"}, UserData: domain.DeploymentUserData{Type: "file", Path: "userdata/payments-api-prod.sh"}},
 		},
 	}
 
@@ -485,6 +593,9 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	}
 	if detail.TargetType != "ec2" || detail.Strategy != "canary" || detail.ExecutionMode != "asgWeightedTargetGroups" {
 		t.Fatalf("expected execution metadata, got %+v", detail)
+	}
+	if detail.UserData.Type != "file" || detail.UserData.Path != "userdata/payments-api-prod.sh" {
+		t.Fatalf("expected userdata metadata, got %+v", detail.UserData)
 	}
 	if detail.DesiredArtifact.Binary != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7" || detail.DeployedArtifact.Binary != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6" {
 		t.Fatalf("expected desired/deployed artifacts, got %+v", detail)

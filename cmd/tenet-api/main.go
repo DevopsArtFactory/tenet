@@ -52,6 +52,53 @@ func newAPIOptions(info buildinfo.Info, repoRoot string, store statusstore.Store
 		options.CatalogAccounts = catalog.RepositoryAccountProvider(repoRoot)
 		options.CatalogPlacements = catalog.RepositoryPlacementProvider(repoRoot)
 		options.CatalogTopology = catalog.RepositoryTopologyProvider(repoRoot)
+		loadSnapshots := func() ([]statusstore.Snapshot, error) {
+			if store == nil {
+				return nil, nil
+			}
+			return store.List(context.Background())
+		}
+		options.OverviewApplications = func() ([]catalog.ApplicationOverview, error) {
+			compiled, err := catalog.LoadFromRepository(repoRoot)
+			if err != nil {
+				return nil, err
+			}
+			snapshots, err := loadSnapshots()
+			if err != nil {
+				return nil, err
+			}
+			return catalog.BuildApplicationOverviews(compiled, snapshots)
+		}
+		options.OverviewAccounts = func() ([]catalog.AccountOverview, error) {
+			compiled, err := catalog.LoadFromRepository(repoRoot)
+			if err != nil {
+				return nil, err
+			}
+			snapshots, err := loadSnapshots()
+			if err != nil {
+				return nil, err
+			}
+			return catalog.BuildAccountOverviews(compiled, snapshots)
+		}
+		options.OverviewAccount = catalog.RepositoryAccountOverviewDetailProvider(repoRoot, loadSnapshots)
+		options.OverviewProjectEnvironment = catalog.RepositoryProjectEnvironmentOverviewDetailProvider(repoRoot, loadSnapshots)
+		options.OverviewDeployment = func(name string) (catalog.DeploymentOverviewDetail, error) {
+			compiled, err := catalog.LoadFromRepository(repoRoot)
+			if err != nil {
+				return catalog.DeploymentOverviewDetail{}, err
+			}
+			if store == nil {
+				return catalog.BuildDeploymentOverviewDetail(compiled, nil, name)
+			}
+			snapshot, err := store.Get(context.Background(), name)
+			if err != nil {
+				if errors.Is(err, statusstore.ErrNotFound) {
+					return catalog.BuildDeploymentOverviewDetail(compiled, nil, name)
+				}
+				return catalog.DeploymentOverviewDetail{}, err
+			}
+			return catalog.BuildDeploymentOverviewDetail(compiled, []statusstore.Snapshot{snapshot}, name)
+		}
 	}
 	if store == nil {
 		return options
@@ -61,40 +108,6 @@ func newAPIOptions(info buildinfo.Info, repoRoot string, store statusstore.Store
 	}
 	options.DeploymentStatus = func(name string) (statusstore.Snapshot, error) {
 		return store.Get(context.Background(), name)
-	}
-	if repoRoot == "" {
-		return options
-	}
-	options.OverviewAccounts = func() ([]catalog.AccountOverview, error) {
-		compiled, err := catalog.LoadFromRepository(repoRoot)
-		if err != nil {
-			return nil, err
-		}
-		snapshots, err := store.List(context.Background())
-		if err != nil {
-			return nil, err
-		}
-		return catalog.BuildAccountOverviews(compiled, snapshots)
-	}
-	options.OverviewAccount = catalog.RepositoryAccountOverviewDetailProvider(repoRoot, func() ([]statusstore.Snapshot, error) {
-		return store.List(context.Background())
-	})
-	options.OverviewProjectEnvironment = catalog.RepositoryProjectEnvironmentOverviewDetailProvider(repoRoot, func() ([]statusstore.Snapshot, error) {
-		return store.List(context.Background())
-	})
-	options.OverviewDeployment = func(name string) (catalog.DeploymentOverviewDetail, error) {
-		compiled, err := catalog.LoadFromRepository(repoRoot)
-		if err != nil {
-			return catalog.DeploymentOverviewDetail{}, err
-		}
-		snapshot, err := store.Get(context.Background(), name)
-		if err != nil {
-			if errors.Is(err, statusstore.ErrNotFound) {
-				return catalog.BuildDeploymentOverviewDetail(compiled, nil, name)
-			}
-			return catalog.DeploymentOverviewDetail{}, err
-		}
-		return catalog.BuildDeploymentOverviewDetail(compiled, []statusstore.Snapshot{snapshot}, name)
 	}
 	return options
 }

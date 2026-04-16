@@ -11,13 +11,11 @@ The UX direction is now a simpler ArgoCD-style drill-down instead of a single de
 
 The implementation remains fully embedded HTML/CSS/JS with no separate frontend toolchain.
 
-The implementation remains static embedded HTML/CSS/JS with no separate frontend toolchain.
-
 ## What shipped so far
 
 ### 1. Applications overview landing page
 
-The dashboard at `/` now starts from `GET /v1/overview/accounts`, but the client flattens that payload into an applications overview instead of showing the full account/group dashboard by default.
+The dashboard at `/` now starts from `GET /v1/overview/applications`, a flattened joined read model that already returns one application row per deployment instead of making the client flatten `GET /v1/overview/accounts` just to render the default landing page. The route intentionally preserves the richer joined runtime/rollout/artifact fields already produced by the account overview builder, even though the landing page currently renders only the application-triage subset.
 
 The first page now focuses on:
 - application name
@@ -27,7 +25,7 @@ The first page now focuses on:
 - health
 - last update
 
-This keeps the first page optimized for triage instead of deep inspection.
+This keeps the first page optimized for triage instead of deep inspection while leaving the joined route useful for search matching and future application-level summary extensions.
 
 ### 2. Argo-inspired visual shell
 
@@ -48,7 +46,7 @@ Managed query params:
 - `q`
 - `sync`
 - `account`
-- `view`
+- `page`
 - `deployment`
 
 Current behavior:
@@ -56,13 +54,13 @@ Current behavior:
 - invalid `sync` and `account` values normalize to `all`
 - unrelated query params/hash fragments are preserved when updating managed filters
 - search input focus and caret position survive rerenders
-- when filters remove all results, the UI renders `No deployments match the current filters.`
+- when filters remove all results, the UI renders `No applications match the current filters.`
 
 ## Current pages
 
 ### Applications overview
 
-The first page now shows only application-level rows plus search/filter controls.
+The first page now shows only application-level rows plus search/filter controls, backed by `/v1/overview/applications`.
 
 Each row surfaces:
 - application name
@@ -72,6 +70,8 @@ Each row surfaces:
 - health
 - last update
 - `Open application` link to `/?page=application&deployment={deploymentName}`
+
+The underlying `/v1/overview/applications` payload is still a richer joined row than the first page renders. It also preserves additive runtime summary, rollout summary, artifact, generation, and condition fields so other UI helpers and future slices can reuse the same route without rejoining `/v1/overview/accounts`.
 
 ### Application detail page
 
@@ -89,6 +89,7 @@ Current behavior:
 
 Resource-list fallback contract:
 - the UI synthesizes fallback rollout resources when `detail.rollout.execution[]` is missing or empty in the deployment-detail payload
+- the deployment-detail payload also carries normalized `userData` metadata so EC2 fallback resources can preserve stable `userDataBootstrapSource` identities before controller-authored `rollout.execution[]` rows appear
 - when `detail.rollout.execution[]` is present and non-empty, the UI preserves the controller-authored list verbatim
 - synthesized fallback resources are limited to the canonical controller rollout contracts:
   - `asgWeightedTargetGroups`: `candidateAutoScalingGroup`, `activeTargetGroup`, `candidateTargetGroup`, `productionListenerRule`, `trafficShiftPlan`, `userDataBootstrapSource`
@@ -125,16 +126,17 @@ Current plan/apply workspace behavior:
 
 ## Quick links
 
-The dashboard now exposes the following navigation affordances:
-- `Account JSON`
-- `Group JSON`
-- `Overview JSON`
-- `Status JSON`
-- `Drift view`
-- `Plan/apply`
+The dashboard now exposes the following navigation affordances across the current drill-down flow:
+- landing page: `Open application`
+- application detail page: `Open resource`
+- resource/workspace drill-down pages: embedded back links that keep operators in the same shell
+- account-oriented JSON surfaces remain available through the API routes (`/v1/overview/accounts/{awsAccountId}`, `/v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}`, `/v1/overview/deployments/{deploymentName}`, `/v1/status/deployments/{deploymentName}`) even though they are no longer first-page quick links
+- deployment workspace shortcuts: `Drift view` and `Plan/apply`
 
-Important implementation constraint:
-- these links are rendered as sibling controls outside the expand-toggle button
+The landing page itself is backed by `GET /v1/overview/applications`, and the application/resource drill-down pages reuse `GET /v1/overview/deployments/{deploymentName}`.
+
+Important implementation constraints:
+- these links are rendered as sibling controls outside the expand-toggle button when they appear in expandable deployment contexts
 - interactive elements are not nested inside the toggle button
 
 ## Runtime-summary contract in the UI

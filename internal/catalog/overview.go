@@ -65,6 +65,27 @@ type accountOverviewAccumulator struct {
 	environmentRefs map[string]struct{}
 }
 
+// ApplicationOverview flattens the account overview read model into one application row per deployment.
+type ApplicationOverview struct {
+	Name               string                    `json:"name"`
+	AppRef             string                    `json:"appRef"`
+	EnvironmentRef     string                    `json:"environmentRef"`
+	AccountName        string                    `json:"accountName"`
+	AWSAccountID       string                    `json:"awsAccountId"`
+	Region             string                    `json:"region"`
+	TargetType         string                    `json:"targetType,omitempty"`
+	Strategy           string                    `json:"strategy,omitempty"`
+	ExecutionMode      string                    `json:"executionMode,omitempty"`
+	DesiredArtifact    domain.DeploymentArtifact `json:"desiredArtifact,omitempty"`
+	DeployedArtifact   domain.DeploymentArtifact `json:"deployedArtifact,omitempty"`
+	ObservedGeneration int64                     `json:"observedGeneration,omitempty"`
+	Sync               domain.Sync               `json:"sync"`
+	Health             domain.Health             `json:"health"`
+	RuntimeSummary     *domain.RuntimeSummary    `json:"runtimeSummary,omitempty"`
+	Rollout            *domain.RolloutSummary    `json:"rollout,omitempty"`
+	Conditions         []domain.Condition        `json:"conditions,omitempty"`
+}
+
 // DeploymentOverview joins desired deployment intent with current runtime status.
 type DeploymentOverview struct {
 	Name               string                    `json:"name"`
@@ -99,6 +120,7 @@ type DeploymentOverviewDetail struct {
 	Strategy           string                      `json:"strategy,omitempty"`
 	ExecutionMode      string                      `json:"executionMode,omitempty"`
 	DesiredArtifact    domain.DeploymentArtifact   `json:"desiredArtifact,omitempty"`
+	UserData           domain.DeploymentUserData   `json:"userData,omitempty"`
 	DeployedArtifact   domain.DeploymentArtifact   `json:"deployedArtifact,omitempty"`
 	ObservedGeneration int64                       `json:"observedGeneration,omitempty"`
 	Sync               domain.Sync                 `json:"sync"`
@@ -198,6 +220,44 @@ func BuildAccountOverviews(c manifest.Catalog, snapshots []statusstore.Snapshot)
 		return accounts[i].Name < accounts[j].Name
 	})
 	return accounts, nil
+}
+
+// BuildApplicationOverviews flattens account overviews into one application row per deployment.
+func BuildApplicationOverviews(c manifest.Catalog, snapshots []statusstore.Snapshot) ([]ApplicationOverview, error) {
+	accounts, err := BuildAccountOverviews(c, snapshots)
+	if err != nil {
+		return nil, err
+	}
+
+	applications := make([]ApplicationOverview, 0)
+	for _, account := range accounts {
+		for _, deployment := range account.Deployments {
+			applications = append(applications, ApplicationOverview{
+				Name:               deployment.Name,
+				AppRef:             deployment.AppRef,
+				EnvironmentRef:     deployment.EnvironmentRef,
+				AccountName:        deployment.AccountName,
+				AWSAccountID:       deployment.AWSAccountID,
+				Region:             deployment.Region,
+				TargetType:         deployment.TargetType,
+				Strategy:           deployment.Strategy,
+				ExecutionMode:      deployment.ExecutionMode,
+				DesiredArtifact:    deployment.DesiredArtifact,
+				DeployedArtifact:   deployment.DeployedArtifact,
+				ObservedGeneration: deployment.ObservedGeneration,
+				Sync:               deployment.Sync,
+				Health:             deployment.Health,
+				RuntimeSummary:     cloneRuntimeSummary(deployment.RuntimeSummary),
+				Rollout:            cloneRolloutSummary(deployment.Rollout),
+				Conditions:         append([]domain.Condition(nil), deployment.Conditions...),
+			})
+		}
+	}
+
+	sort.Slice(applications, func(i, j int) bool {
+		return applications[i].Name < applications[j].Name
+	})
+	return applications, nil
 }
 
 // BuildAccountOverviewDetail returns one account overview by exact AWS account ID.
@@ -335,6 +395,7 @@ func BuildDeploymentOverviewDetail(c manifest.Catalog, snapshots []statusstore.S
 		Strategy:           deployment.Strategy,
 		ExecutionMode:      deployment.ExecutionMode,
 		DesiredArtifact:    deployment.DesiredArtifact,
+		UserData:           deployment.UserData,
 		DeployedArtifact:   status.DeployedArtifact,
 		ObservedGeneration: status.ObservedGeneration,
 		Sync:               status.Sync,
