@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
+	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
 
@@ -34,20 +36,21 @@ func respondLookupError(w http.ResponseWriter, err error) {
 
 // Options configures the API router.
 type Options struct {
-	BuildInfo                  buildinfo.Info
-	CatalogSummary             func() (catalog.Summary, error)
-	CatalogDeployments         func() ([]catalog.DeploymentView, error)
-	CatalogEnvironments        func() ([]catalog.EnvironmentView, error)
-	CatalogAccounts            func() ([]catalog.AccountView, error)
-	CatalogPlacements          func() ([]catalog.PlacementView, error)
-	CatalogTopology            func() (catalog.TopologySnapshot, error)
-	OverviewApplications       func() ([]catalog.ApplicationOverview, error)
-	OverviewAccounts           func() ([]catalog.AccountOverview, error)
-	OverviewAccount            func(string) (catalog.AccountOverviewDetail, error)
-	OverviewProjectEnvironment func(string, string, string) (catalog.ProjectEnvironmentOverviewDetail, error)
-	OverviewDeployment         func(string) (catalog.DeploymentOverviewDetail, error)
-	DeploymentStatuses         func() ([]statusstore.Snapshot, error)
-	DeploymentStatus           func(string) (statusstore.Snapshot, error)
+	BuildInfo                      buildinfo.Info
+	CatalogSummary                 func() (catalog.Summary, error)
+	CatalogDeployments             func() ([]catalog.DeploymentView, error)
+	CatalogEnvironments            func() ([]catalog.EnvironmentView, error)
+	CatalogAccounts                func() ([]catalog.AccountView, error)
+	CatalogPlacements              func() ([]catalog.PlacementView, error)
+	CatalogTopology                func() (catalog.TopologySnapshot, error)
+	OverviewApplications           func() ([]catalog.ApplicationOverview, error)
+	OverviewAccounts               func() ([]catalog.AccountOverview, error)
+	OverviewAccount                func(string) (catalog.AccountOverviewDetail, error)
+	OverviewProjectEnvironment     func(string, string, string) (catalog.ProjectEnvironmentOverviewDetail, error)
+	OverviewDeployment             func(string) (catalog.DeploymentOverviewDetail, error)
+	OverviewDeploymentResourceLogs func(context.Context, string, string, string) (resourcelogs.Result, error)
+	DeploymentStatuses             func() ([]statusstore.Snapshot, error)
+	DeploymentStatus               func(string) (statusstore.Snapshot, error)
 }
 
 // NewRouter builds the API router for the Tenet control plane.
@@ -244,22 +247,61 @@ func NewRouter(options Options) http.Handler {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
-		if options.OverviewDeployment == nil {
-			http.Error(w, "overview deployment unavailable", http.StatusServiceUnavailable)
-			return
+		path := strings.TrimPrefix(r.URL.Path, "/v1/overview/deployments/")
+		switch {
+		case strings.HasSuffix(path, "/resource-logs"):
+			if options.OverviewDeployment == nil {
+				http.Error(w, "overview deployment unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			if options.OverviewDeploymentResourceLogs == nil {
+				http.Error(w, "overview deployment resource logs unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			name := strings.TrimSuffix(path, "/resource-logs")
+			if name == "" || strings.Contains(name, "/") {
+				http.Error(w, "invalid deployment name", http.StatusBadRequest)
+				return
+			}
+			resourceType := strings.TrimSpace(r.URL.Query().Get("resourceType"))
+			if resourceType == "" {
+				http.Error(w, "resourceType is required", http.StatusBadRequest)
+				return
+			}
+			resourceName := strings.TrimSpace(r.URL.Query().Get("resourceName"))
+			if resourceName == "" {
+				http.Error(w, "resourceName is required", http.StatusBadRequest)
+				return
+			}
+			if _, err := options.OverviewDeployment(name); err != nil {
+				respondLookupError(w, err)
+				return
+			}
+			result, err := options.OverviewDeploymentResourceLogs(r.Context(), name, resourceType, resourceName)
+			if err != nil {
+				respondLookupError(w, err)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(result)
+		default:
+			if options.OverviewDeployment == nil {
+				http.Error(w, "overview deployment unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			name := path
+			if name == "" || strings.Contains(name, "/") {
+				http.Error(w, "invalid deployment name", http.StatusBadRequest)
+				return
+			}
+			detail, err := options.OverviewDeployment(name)
+			if err != nil {
+				respondLookupError(w, err)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(detail)
 		}
-		name := strings.TrimPrefix(r.URL.Path, "/v1/overview/deployments/")
-		if name == "" || strings.Contains(name, "/") {
-			http.Error(w, "invalid deployment name", http.StatusBadRequest)
-			return
-		}
-		detail, err := options.OverviewDeployment(name)
-		if err != nil {
-			respondLookupError(w, err)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(detail)
 	})
 	mux.HandleFunc("/v1/status/deployments", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodGet) {

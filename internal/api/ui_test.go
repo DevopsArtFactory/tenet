@@ -1,6 +1,7 @@
 package api
 
 import (
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -304,7 +305,9 @@ func TestIndexHTMLLocksSynthesizedRolloutFallbackContract(t *testing.T) {
 		{resourceID: "candidateTargetGroup", nameFragment: "-candidate", description: "Candidate target group Tenet will register and warm before traffic shifting"},
 		{resourceID: "productionListenerRule", nameFragment: "-prod-listener", description: "Production listener rule operators inspect while Tenet updates weighted forwarding during rollout"},
 		{resourceID: "trafficShiftPlan", nameFragment: "-weighted-routing", description: "Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group"},
+		{resourceID: "serviceAutoScalingGroup", nameFragment: "-service", description: "Service Auto Scaling Group Tenet refreshes in place"},
 		{resourceID: "userDataBootstrapSource", nameFragment: "canonicalUserDataBootstrapSource(detail.userData)", description: "Normalized userdata bootstrap source for candidate EC2 capacity"},
+		{resourceID: "userDataBootstrapSource", nameFragment: "canonicalUserDataBootstrapSource(detail.userData)", description: "Normalized userdata bootstrap source for refreshed EC2 instances"},
 	} {
 		contract := regexp.MustCompile(`(?s)` + regexp.QuoteMeta(expectation.resourceID) + `.*?` + regexp.QuoteMeta(expectation.nameFragment) + `.*?` + regexp.QuoteMeta(expectation.description))
 		if !contract.MatchString(body) {
@@ -568,5 +571,77 @@ func TestEmbeddedUIPreservesToolbarFocusAndRestoresCaretAcrossFilterRerenders(t 
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include %q", fragment)
 		}
+	}
+}
+
+func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const resourceLogStateByKey = new Map();",
+		"const resourceLogCacheKey = (deploymentName, resource) => [deploymentName || '', resource.type || '', resource.name || '', resource.id || ''].join('::');",
+		"const fetchResourceLogs = (deploymentName, resource) => {",
+		"const params = new URLSearchParams({",
+		"resourceType: resource.type || '',",
+		"resourceName: resource.name || '',",
+		"fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-logs?${params.toString()}`)",
+		"if (!response.ok) throw new Error(`resource logs request failed (${response.status})`);",
+		"const renderResourceLogsState = (container, text, className = '') => {",
+		"container.replaceChildren(heading, stateNode);",
+		"const resourceLogsUnavailableReasonText = (reason) => {",
+		"case 'unsupported_resource_type':",
+		"return 'Recent logs are not supported for this resource type.';",
+		"case 'cross_account_not_configured':",
+		"return 'Cross-account access is not configured for this deployment.';",
+		"case 'aws_unavailable':",
+		"return 'AWS access is currently unavailable for recent logs.';",
+		"const unavailableReason = resourceLogsUnavailableReasonText(result?.unavailableReason);",
+		"section.append(createElement('div', 'detail-condition-meta', unavailableReason));",
+		"const renderResourceLogsSection = (section, deploymentName, resource) => {",
+		"const logsKey = resourceLogCacheKey(deploymentName, resource);",
+		"renderResourceLogsState(section, 'Loading recent logs…');",
+		"renderResourceLogsState(section, 'Recent logs are unavailable for this resource.');",
+		"renderResourceLogsState(section, 'No recent logs are available for this resource.');",
+		"renderResourceLogsState(container, `Failed to load recent logs: ${error.message}`, 'error')",
+		"createDetailSection('Recent logs');",
+		"Recent logs",
+		"Logs source",
+		"Log stream",
+		"Log timestamp",
+		"replaceChildren",
+		"textContent",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+
+	for _, unsafe := range []string{
+		"logsSection.innerHTML",
+		"logList.innerHTML",
+		"logItem.innerHTML",
+		"message.innerHTML",
+	} {
+		if strings.Contains(body, unsafe) {
+			t.Fatalf("expected embedded UI to avoid unsafe recent-log rendering %q", unsafe)
+		}
+	}
+}
+
+func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/smoke-local.sh")
+	if err != nil {
+		t.Fatalf("read smoke-local.sh: %v", err)
+	}
+
+	text := string(body)
+	if !strings.Contains(text, "assert 'Recent logs' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains Recent logs")
+	}
+	if !strings.Contains(text, "resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing\")") {
+		t.Fatalf("expected smoke-local.sh to probe the deployment resource-logs route")
+	}
+	if !strings.Contains(text, "assert resource_logs['resourceType'] == 'trafficShiftPlan', resource_logs") {
+		t.Fatalf("expected smoke-local.sh to assert the resource-logs response shape")
 	}
 }

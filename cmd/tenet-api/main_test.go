@@ -5,10 +5,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
+	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
 
@@ -289,6 +291,115 @@ func TestAPIOptionsOverviewDetailProvidersFallBackToCatalogWhenStoreMissing(t *t
 	}
 }
 
+func TestAPIOptionsOverviewDeploymentResourceLogsWiresObserverRoleAndPlacement(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	store := &stubStatusStore{
+		getSnapshot: statusstore.Snapshot{
+			DeploymentName: "api-prod",
+			Status: domain.DeploymentStatus{
+				Rollout: &domain.RolloutSummary{Execution: []domain.RolloutExecutionDetail{{Resource: "ecsService", Name: "api-prod-live-service", Description: "live ECS service"}}},
+			},
+		},
+	}
+	provider := &fakeResourceLogProvider{result: resourcelogs.Result{Available: true}}
+	restore := stubResourceLogProviderFactory(provider)
+	defer restore()
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, store)
+	if options.OverviewDeploymentResourceLogs == nil {
+		t.Fatalf("expected overview deployment resource logs provider")
+	}
+
+	result, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", "ecsService", "api-prod-live-service")
+	if err != nil {
+		t.Fatalf("OverviewDeploymentResourceLogs returned error: %v", err)
+	}
+	if !result.Available {
+		t.Fatalf("expected wired provider result, got %+v", result)
+	}
+	want := resourcelogs.Request{
+		DeploymentName:  "api-prod",
+		ResourceType:    "ecsService",
+		ResourceName:    "api-prod-live-service",
+		TargetAccountID: "123456789012",
+		Region:          "ap-northeast-2",
+		ObserverRoleARN: "arn:aws:iam::123456789012:role/TenetObserverRole",
+	}
+	if !reflect.DeepEqual(provider.lastRequest, want) {
+		t.Fatalf("unexpected resource log request: %+v", provider.lastRequest)
+	}
+}
+
+func TestAPIOptionsOverviewDeploymentResourceLogsRejectsResourcesOutsideDeploymentExecution(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	store := &stubStatusStore{
+		getSnapshot: statusstore.Snapshot{
+			DeploymentName: "api-prod",
+			Status: domain.DeploymentStatus{
+				Rollout: &domain.RolloutSummary{Execution: []domain.RolloutExecutionDetail{{Resource: "ecsService", Name: "api-prod-live-service", Description: "live ECS service"}}},
+			},
+		},
+	}
+	provider := &fakeResourceLogProvider{}
+	restore := stubResourceLogProviderFactory(provider)
+	defer restore()
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, store)
+	_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", "ecsService", "other-service")
+	if !errors.Is(err, statusstore.ErrNotFound) {
+		t.Fatalf("expected not found for unbound resource, got %v", err)
+	}
+	if provider.calls != 0 {
+		t.Fatalf("expected provider not to run for unbound resource, got %d calls", provider.calls)
+	}
+}
+
+func TestAPIOptionsOverviewDeploymentResourceLogsUsesCanonicalFallbackWhenExecutionIsMissing(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	provider := &fakeResourceLogProvider{result: resourcelogs.Result{Available: true}}
+	restore := stubResourceLogProviderFactory(provider)
+	defer restore()
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
+	_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", "ecsService", "api-prod-service")
+	if err != nil {
+		t.Fatalf("expected canonical fallback resource binding to work, got %v", err)
+	}
+	if provider.calls != 1 {
+		t.Fatalf("expected provider to run once for fallback-bound resource, got %d calls", provider.calls)
+	}
+}
+
+func TestAPIOptionsOverviewDeploymentResourceLogsUsesASGInstanceRefreshFallbackWhenExecutionIsMissing(t *testing.T) {
+	repoRoot := writeRollingEC2RepositoryFixture(t)
+	provider := &fakeResourceLogProvider{result: resourcelogs.Result{Available: true}}
+	restore := stubResourceLogProviderFactory(provider)
+	defer restore()
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
+	for _, resource := range []struct {
+		resourceType string
+		resourceName string
+	}{
+		{resourceType: "serviceAutoScalingGroup", resourceName: "api-prod-service"},
+		{resourceType: "userDataBootstrapSource", resourceName: "file:userdata/api-prod-refresh.sh"},
+	} {
+		provider.calls = 0
+		provider.lastRequest = resourcelogs.Request{}
+
+		_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", resource.resourceType, resource.resourceName)
+		if err != nil {
+			t.Fatalf("expected asg instance refresh fallback resource binding for %s/%s, got %v", resource.resourceType, resource.resourceName, err)
+		}
+		if provider.calls != 1 {
+			t.Fatalf("expected provider to run once for %s/%s, got %d calls", resource.resourceType, resource.resourceName, provider.calls)
+		}
+		if provider.lastRequest.ResourceType != resource.resourceType || provider.lastRequest.ResourceName != resource.resourceName {
+			t.Fatalf("unexpected resource log request for %s/%s: %+v", resource.resourceType, resource.resourceName, provider.lastRequest)
+		}
+	}
+}
+
 type stubStatusStore struct {
 	getSnapshot   statusstore.Snapshot
 	listSnapshots []statusstore.Snapshot
@@ -323,13 +434,41 @@ func (s *stubStatusStore) Save(context.Context, []statusstore.Snapshot) error {
 	return nil
 }
 
+type fakeResourceLogProvider struct {
+	result      resourcelogs.Result
+	err         error
+	lastRequest resourcelogs.Request
+	calls       int
+}
+
+func (p *fakeResourceLogProvider) Recent(_ context.Context, req resourcelogs.Request) (resourcelogs.Result, error) {
+	p.calls++
+	p.lastRequest = req
+	return p.result, p.err
+}
+
+func stubResourceLogProviderFactory(provider resourceLogProvider) func() {
+	original := newResourceLogProvider
+	newResourceLogProvider = func() resourceLogProvider { return provider }
+	return func() { newResourceLogProvider = original }
+}
+
 func writeRepositoryFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","observerRoleArn":"arn:aws:iam::123456789012:role/TenetObserverRole","allowedRegions":["ap-northeast-2"]}`)
 	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
 	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","image":"payments-api:v2","target":{"type":"ecs"},"stacks":[{"stack":"api-prod","account":"prod-core","env":"prod-apne2","replacement_type":"linear","capacity":{"desired":1,"min":1,"max":1},"regions":[{"region":"ap-northeast-2"}]}]}`)
 	writeJSON(t, filepath.Join(root, "deployments", "worker-prod.json"), `{"name":"worker-prod","image":"payments-worker:v2","target":{"type":"ecs"},"stacks":[{"stack":"worker-prod","account":"prod-core","env":"prod-apne2","replacement_type":"linear","capacity":{"desired":1,"min":1,"max":1},"regions":[{"region":"ap-northeast-2"}]}]}`)
+	return root
+}
+
+func writeRollingEC2RepositoryFixture(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","observerRoleArn":"arn:aws:iam::123456789012:role/TenetObserverRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"rolling"},"traffic":{"port":443},"capacity":{"desired":2,"min":1,"max":3},"userdata":{"type":"file","path":"userdata/api-prod-refresh.sh"}}`)
 	return root
 }
 

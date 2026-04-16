@@ -121,6 +121,7 @@
     </div>
     <script>
       const detailStateByDeployment = new Map();
+      const resourceLogStateByKey = new Map();
       let allAccounts = [];
       let allApplications = [];
       let currentViewState = { query: '', syncState: 'all', account: 'all' };
@@ -362,6 +363,7 @@
           description,
         };
       };
+      const resourceLogCacheKey = (deploymentName, resource) => [deploymentName || '', resource.type || '', resource.name || '', resource.id || ''].join('::');
       const canonicalUserDataBootstrapSource = (userData) => {
         if (!userData || (!userData.type && !userData.path)) return 'unspecified';
         if (!userData.path) return userData.type || 'unspecified';
@@ -388,6 +390,12 @@
             { resource: 'productionListenerRule', name: `${detail.name}-prod-listener`, description: 'Production listener rule operators inspect while Tenet updates weighted forwarding during rollout' },
             { resource: 'trafficShiftPlan', name: `${detail.name}-weighted-routing`, description: 'Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group' },
             { resource: 'userDataBootstrapSource', name: canonicalUserDataBootstrapSource(detail.userData), description: 'Normalized userdata bootstrap source for candidate EC2 capacity' },
+          ];
+        }
+        if (detail.executionMode === 'asgInstanceRefresh') {
+          return [
+            { resource: 'serviceAutoScalingGroup', name: `${detail.name}-service`, description: 'Service Auto Scaling Group Tenet refreshes in place' },
+            { resource: 'userDataBootstrapSource', name: canonicalUserDataBootstrapSource(detail.userData), description: 'Normalized userdata bootstrap source for refreshed EC2 instances' },
           ];
         }
         return [];
@@ -886,7 +894,10 @@
           conditionsSection.append(conditionList);
         }
 
-        page.append(shell, historySection, executionSection, conditionsSection);
+        const logsSection = createDetailSection('Recent logs');
+        renderResourceLogsSection(logsSection, detail.name || currentPageState.deployment || '', resource).catch(() => {});
+
+        page.append(shell, historySection, executionSection, conditionsSection, logsSection);
         root.replaceChildren(page);
       };
       const renderEmptyState = (message) => {
@@ -902,6 +913,116 @@
         const stateNode = createElement('div', 'detail-state', text);
         if (className) stateNode.classList.add(className);
         container.replaceChildren(stateNode);
+      };
+      const renderResourceLogsState = (container, text, className = '') => {
+        const heading = createElement('h4', '', 'Recent logs');
+        const stateNode = createElement('div', 'detail-state', text);
+        if (className) stateNode.classList.add(className);
+        container.replaceChildren(heading, stateNode);
+      };
+      const resourceLogsUnavailableReasonText = (reason) => {
+        switch (reason) {
+          case 'unsupported_resource_type':
+            return 'Recent logs are not supported for this resource type.';
+          case 'cross_account_not_configured':
+            return 'Cross-account access is not configured for this deployment.';
+          case 'no_log_source':
+            return 'No recent log source is configured for this resource yet.';
+          case 'no_running_tasks':
+            return 'No running tasks were found for this resource.';
+          case 'no_instances':
+            return 'No instances were found for this resource.';
+          case 'resource_not_found':
+            return 'This resource could not be found in the provider.';
+          case 'aws_unavailable':
+            return 'AWS access is currently unavailable for recent logs.';
+          default:
+            return reason || '';
+        }
+      };
+      const fetchResourceLogs = (deploymentName, resource) => {
+        const params = new URLSearchParams({
+          resourceType: resource.type || '',
+          resourceName: resource.name || '',
+        });
+        return fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-logs?${params.toString()}`)
+          .then((response) => {
+            if (!response.ok) throw new Error(`resource logs request failed (${response.status})`);
+            return response.json();
+          });
+      };
+      const renderResourceLogsPayload = (section, result) => {
+        if (!result?.available) {
+          renderResourceLogsState(section, 'Recent logs are unavailable for this resource.');
+          const unavailableReason = resourceLogsUnavailableReasonText(result?.unavailableReason);
+          if (unavailableReason) {
+            section.append(createElement('div', 'detail-condition-meta', unavailableReason));
+          }
+          return;
+        }
+
+        const entries = result.entries || [];
+        if (!entries.length) {
+          renderResourceLogsState(section, 'No recent logs are available for this resource.');
+          return;
+        }
+
+        const fragment = [];
+        const metadata = createElement('div', 'detail-grid');
+        metadata.append(createMetric('Logs source', metricValue(result.source)));
+        fragment.push(metadata);
+
+        const logList = createElement('ol', 'detail-list');
+        entries.forEach((entry) => {
+          const logItem = createElement('li');
+          const message = createElement('strong', '', textOrDash(entry.message));
+          logItem.append(message);
+          const logMeta = createElement('div', 'detail-history-meta');
+          logMeta.append(createElement('span', 'detail-condition-meta', `Log timestamp · ${textOrDash(entry.timestamp)}`));
+          if (entry.stream) {
+            logMeta.append(createElement('span', 'detail-condition-meta', `Log stream · ${entry.stream}`));
+          }
+          logItem.append(logMeta);
+          logList.append(logItem);
+        });
+        fragment.push(logList);
+        section.replaceChildren(createElement('h4', '', 'Recent logs'), ...fragment);
+      };
+      const renderResourceLogsSection = (section, deploymentName, resource) => {
+        const logsKey = resourceLogCacheKey(deploymentName, resource);
+        const cached = resourceLogStateByKey.get(logsKey);
+
+        if (!deploymentName || !resource?.type || !resource?.name) {
+          renderResourceLogsState(section, 'Recent logs are unavailable for this resource.');
+          return Promise.resolve(null);
+        }
+        if (cached?.status === 'ready') {
+          renderResourceLogsPayload(section, cached.result);
+          return Promise.resolve(cached.result);
+        }
+        if (cached?.status === 'loading') {
+          resourceLogStateByKey.set(logsKey, { ...cached, sections: [...(cached.sections || []), section] });
+          renderResourceLogsState(section, 'Loading recent logs…');
+          return cached.promise;
+        }
+
+        renderResourceLogsState(section, 'Loading recent logs…');
+        const promise = fetchResourceLogs(deploymentName, resource)
+          .then((result) => {
+            const current = resourceLogStateByKey.get(logsKey);
+            resourceLogStateByKey.set(logsKey, { status: 'ready', result });
+            (current?.sections || []).forEach((container) => renderResourceLogsPayload(container, result));
+            return result;
+          })
+          .catch((error) => {
+            const current = resourceLogStateByKey.get(logsKey);
+            resourceLogStateByKey.set(logsKey, { status: 'error', error });
+            (current?.sections || []).forEach((container) => renderResourceLogsState(container, `Failed to load recent logs: ${error.message}`, 'error'));
+            throw error;
+          });
+
+        resourceLogStateByKey.set(logsKey, { status: 'loading', promise, sections: [section] });
+        return promise;
       };
       const fetchDeploymentDetail = (deploymentName) => fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}`)
         .then((response) => {
