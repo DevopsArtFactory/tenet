@@ -169,6 +169,21 @@
         ].filter(Boolean);
         return parts.length ? parts.join(' · ') : '';
       };
+      const runtimeArtifactText = (artifactValue) => {
+        const value = artifact(artifactValue);
+        return value === '—' ? '' : value;
+      };
+      const runtimeConditionSummary = (condition) => {
+        const type = typeof condition?.type === 'string' ? condition.type : '';
+        const statusText = typeof condition?.status === 'boolean' ? boolLabel(condition.status) : '';
+        const identity = [type, statusText ? ` = ${statusText}` : ''].join('');
+        const parts = [identity, typeof condition?.reason === 'string' ? condition.reason : ''].filter(Boolean);
+        return parts.join(' · ');
+      };
+      const runtimeConditionsText = (conditions, emptyValue = '—') => {
+        const labels = (conditions || []).map((condition) => runtimeConditionSummary(condition)).filter(Boolean);
+        return labels.length ? labels.join('; ') : emptyValue;
+      };
       const runtimeSummaryText = (runtimeSummary) => {
         if (!runtimeSummary) return '—';
         const labels = changeLabels(runtimeSummary?.changes);
@@ -180,6 +195,8 @@
           runtimeSummary.health?.overall,
           runtimeSummary.health?.summary,
           runtimeContext,
+          runtimeArtifactText(runtimeSummary.deployedArtifact),
+          runtimeConditionsText(runtimeSummary.conditions, ''),
           runtimeSummary.source,
           labels.length ? labels.join(', ') : '',
           runtimeSummary.rolloutPhase,
@@ -828,6 +845,8 @@
           ['Current step', metricValue(detail.rollout?.currentStep)],
           ['Runtime generations', generationsText(detail.runtimeSummary)],
           ['Runtime context', rolloutContextText(detail.runtimeSummary) || '—'],
+          ['Runtime artifact', runtimeArtifactText(detail.runtimeSummary?.deployedArtifact) || '—'],
+          ['Runtime conditions', runtimeConditionsText(detail.runtimeSummary?.conditions)],
           ['Rollout generations', detail.rollout ? generationsText(detail.rollout) : `desired — · observed ${generationValue(detail.observedGeneration)}`],
           ['Runtime timestamp', metricValue(detail.runtimeSummary?.timestamp)],
           ['Runtime source', metricValue(detail.runtimeSummary?.source)],
@@ -853,6 +872,14 @@
             const historyContext = rolloutContextText(entry);
             if (historyContext) {
               historyMeta.append(createElement('span', 'detail-condition-meta', `History context · ${historyContext}`));
+            }
+            const historyArtifact = runtimeArtifactText(entry.deployedArtifact);
+            if (historyArtifact) {
+              historyMeta.append(createElement('span', 'detail-condition-meta', `History artifact · ${historyArtifact}`));
+            }
+            const historyConditions = runtimeConditionsText(entry.conditions, '');
+            if (historyConditions) {
+              historyMeta.append(createElement('span', 'detail-condition-meta', `History conditions · ${historyConditions}`));
             }
             if (entry.source) {
               historyMeta.append(createElement('span', 'detail-condition-meta', `History source · ${entry.source}`));
@@ -1055,6 +1082,8 @@
           ['Runtime context', rolloutContextText(detail.runtimeSummary) || '—'],
           ['Runtime source', metricValue(detail.runtimeSummary?.source)],
           ['Runtime changes', changeLabelsText(detail.runtimeSummary?.changes)],
+          ['Runtime artifact', runtimeArtifactText(detail.runtimeSummary?.deployedArtifact) || '—'],
+          ['Runtime conditions', runtimeConditionsText(detail.runtimeSummary?.conditions)],
           ['Rollout generations', detail.rollout ? generationsText(detail.rollout) : `desired — · observed ${generationValue(detail.observedGeneration)}`],
           ['Health summary', `${healthLabel(detail.health)}${detail.health?.summary ? ` · ${detail.health.summary}` : ''}`],
         ].forEach(([label, value]) => {
@@ -1085,6 +1114,14 @@
             const historyContext = rolloutContextText(entry);
             if (historyContext) {
               historyMeta.append(createElement('span', 'detail-condition-meta', `History context · ${historyContext}`));
+            }
+            const historyArtifact = runtimeArtifactText(entry.deployedArtifact);
+            if (historyArtifact) {
+              historyMeta.append(createElement('span', 'detail-condition-meta', `History artifact · ${historyArtifact}`));
+            }
+            const historyConditions = runtimeConditionsText(entry.conditions, '');
+            if (historyConditions) {
+              historyMeta.append(createElement('span', 'detail-condition-meta', `History conditions · ${historyConditions}`));
             }
             if (entry.source) {
               historyMeta.append(createElement('span', 'detail-condition-meta', `History source · ${entry.source}`));
@@ -1255,6 +1292,8 @@
           ['Runtime context', rolloutContextText(detail.runtimeSummary) || '—'],
           ['Runtime timestamp', metricValue(detail.runtimeSummary?.timestamp)],
           ['Runtime history', Number.isFinite(detail.runtimeSummary?.historyCount) ? String(detail.runtimeSummary.historyCount) : '—'],
+          ['Runtime artifact', runtimeArtifactText(detail.runtimeSummary?.deployedArtifact) || '—'],
+          ['Runtime conditions', runtimeConditionsText(detail.runtimeSummary?.conditions)],
         ].forEach(([label, value]) => {
           runtimeSignals.append(createMetric(label, value));
         });

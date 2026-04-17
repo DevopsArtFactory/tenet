@@ -1257,6 +1257,86 @@ func TestAppendRuntimeHistoryAppendsWhenGenerationsChangeWithoutOtherStatusChang
 	}
 }
 
+func TestAppendRuntimeHistoryTracksArtifactAndConditionChanges(t *testing.T) {
+	previous := domain.DeploymentStatus{
+		ObservedGeneration: 7,
+		Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "traffic shift running"},
+		Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "warming"},
+		Conditions: []domain.Condition{{
+			Type:    "Progressing",
+			Status:  true,
+			Reason:  "CandidateWarming",
+			Message: "candidate target group is still warming",
+		}},
+		DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6"},
+		Rollout: &domain.RolloutSummary{
+			DesiredGeneration:  8,
+			ObservedGeneration: 7,
+			Phase:              domain.RolloutPhaseAccepted,
+			CurrentStep:        "ShiftTrafficCanary",
+			Summary:            "Traffic shift is progressing",
+			TargetType:         "ec2",
+			Strategy:           "canary",
+			ExecutionMode:      "asgWeightedTargetGroups",
+		},
+		History: []domain.StatusHistoryEntry{{
+			Timestamp:          "2026-04-16T05:30:00Z",
+			Source:             runtimeHistorySourceController,
+			Summary:            "Traffic shift is progressing",
+			Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "traffic shift running"},
+			Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "warming"},
+			DesiredGeneration:  8,
+			ObservedGeneration: 7,
+			RolloutPhase:       domain.RolloutPhaseAccepted,
+			CurrentStep:        "ShiftTrafficCanary",
+			TargetType:         "ec2",
+			Strategy:           "canary",
+			ExecutionMode:      "asgWeightedTargetGroups",
+		}},
+	}
+	current := previous
+	current.Conditions = []domain.Condition{{
+		Type:    "Ready",
+		Status:  true,
+		Reason:  "TrafficShiftComplete",
+		Message: "candidate is serving traffic",
+	}}
+	current.DeployedArtifact = domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7"}
+
+	oldNow := runtimeHistoryNow
+	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 35, 0, 0, time.UTC) }
+	defer func() { runtimeHistoryNow = oldNow }()
+
+	got := appendRuntimeHistory(previous, current)
+	if len(got) != 2 {
+		t.Fatalf("expected artifact/condition change to append a new history entry, got %+v", got)
+	}
+	latest := got[len(got)-1]
+	if !reflect.DeepEqual(latest.Changes, []string{"deployedArtifact", "conditions"}) {
+		t.Fatalf("expected artifact/condition change labels, got %+v", latest.Changes)
+	}
+	payload, err := json.Marshal(latest)
+	if err != nil {
+		t.Fatalf("Marshal returned error: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("failed to decode appended history entry JSON: %v", err)
+	}
+	artifact, ok := decoded["deployedArtifact"].(map[string]any)
+	if !ok || artifact["binary"] != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7" {
+		t.Fatalf("expected appended history entry to capture deployedArtifact JSON, got %#v", decoded["deployedArtifact"])
+	}
+	conditions, ok := decoded["conditions"].([]any)
+	if !ok || len(conditions) != 1 {
+		t.Fatalf("expected appended history entry to capture conditions JSON, got %#v", decoded["conditions"])
+	}
+	condition, ok := conditions[0].(map[string]any)
+	if !ok || condition["type"] != "Ready" || condition["status"] != true || condition["reason"] != "TrafficShiftComplete" {
+		t.Fatalf("expected appended history entry condition payload, got %#v", conditions)
+	}
+}
+
 func TestAppendRuntimeHistoryTracksRolloutContextChanges(t *testing.T) {
 	previous := domain.DeploymentStatus{
 		ObservedGeneration: 7,
@@ -1351,6 +1431,53 @@ func TestEmitRuntimePlansCapsRuntimeHistory(t *testing.T) {
 	latest := status.History[len(status.History)-1]
 	if latest.Timestamp != "2026-04-16T06:45:00Z" || latest.Summary != "Creating candidate capacity for weighted target groups" || latest.CurrentStep != "CreateCandidateCapacity" {
 		t.Fatalf("expected newest controller-authored history entry to be retained after trimming, got %+v", latest)
+	}
+}
+
+func TestEmitRuntimePlansBootstrapsHistoryWithArtifactAndConditions(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"conditions":[{"type":"Ready","status":false,"reason":"HealthPending","message":"candidate target group is still warming"}],"deployedArtifact":{"binary":"s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6"}}}]`)
+
+	oldNow := runtimeHistoryNow
+	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 15, 0, 0, time.UTC) }
+	defer func() { runtimeHistoryNow = oldNow }()
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	if len(snapshots) != 1 || len(snapshots[0].Status.History) != 1 {
+		t.Fatalf("expected a single bootstrapped history entry, got %+v", snapshots)
+	}
+	payload, err := json.Marshal(snapshots[0].Status.History[0])
+	if err != nil {
+		t.Fatalf("Marshal returned error: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("failed to decode bootstrapped history entry JSON: %v", err)
+	}
+	artifact, ok := decoded["deployedArtifact"].(map[string]any)
+	if !ok || artifact["binary"] != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6" {
+		t.Fatalf("expected bootstrapped history entry to capture deployedArtifact JSON, got %#v", decoded["deployedArtifact"])
+	}
+	conditions, ok := decoded["conditions"].([]any)
+	if !ok || len(conditions) != 1 {
+		t.Fatalf("expected bootstrapped history entry to capture conditions JSON, got %#v", decoded["conditions"])
+	}
+	condition, ok := conditions[0].(map[string]any)
+	if !ok || condition["type"] != "Ready" || condition["status"] != false || condition["reason"] != "HealthPending" {
+		t.Fatalf("expected bootstrapped history condition payload, got %#v", conditions)
 	}
 }
 

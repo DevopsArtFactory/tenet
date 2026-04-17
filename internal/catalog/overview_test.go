@@ -244,6 +244,163 @@ func TestBuildAccountOverviewsRuntimeSummaryFallsBackToCurrentStatus(t *testing.
 	}
 }
 
+func TestDeriveRuntimeSummaryPrefersLatestHistoryArtifactAndConditions(t *testing.T) {
+	summary := deriveRuntimeSummary(domain.DeploymentStatus{
+		ObservedGeneration: 7,
+		Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "stale-current"},
+		Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "stale health"},
+		Conditions:         []domain.Condition{{Type: "Ready", Status: false, Reason: "CurrentSnapshot", Message: "should not win over latest history"}},
+		DeployedArtifact:   domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6"},
+		Rollout: &domain.RolloutSummary{
+			DesiredGeneration:  8,
+			ObservedGeneration: 7,
+			Phase:              domain.RolloutPhasePromoting,
+			CurrentStep:        "ShiftTrafficCanary",
+			Summary:            "Canary is serving 10% of traffic",
+			TargetType:         "ec2",
+			Strategy:           "canary",
+			ExecutionMode:      "asgWeightedTargetGroups",
+		},
+		History: []domain.StatusHistoryEntry{
+			{Timestamp: "2026-04-16T06:15:00Z", Source: "controller", Summary: "Accepted rollout for r7", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "candidate warming"}, DesiredGeneration: 7, ObservedGeneration: 6, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "CreateCandidateCapacity", TargetType: "ec2", Strategy: "blueGreen", ExecutionMode: "asgInstanceRefresh", DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6"}, Conditions: []domain.Condition{{Type: "Ready", Status: false, Reason: "CandidateWarming", Message: "candidate target group is still warming"}}, Changes: []string{"initial"}},
+			{Timestamp: "2026-04-16T06:20:00Z", Source: "controller", Summary: "Shifting canary traffic", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficCanary", TargetType: "ec2", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7"}, Conditions: []domain.Condition{{Type: "Ready", Status: true, Reason: "TrafficShiftComplete", Message: "candidate target group is now serving canary traffic"}}, Changes: []string{"deployedArtifact", "conditions"}},
+		},
+	})
+	if summary == nil {
+		t.Fatalf("expected runtime summary")
+	}
+	payload, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatalf("Marshal returned error: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("failed to decode runtime summary JSON: %v", err)
+	}
+	artifact, ok := decoded["deployedArtifact"].(map[string]any)
+	if !ok || artifact["binary"] != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7" {
+		t.Fatalf("expected latest history-backed deployedArtifact in runtime summary, got %#v", decoded["deployedArtifact"])
+	}
+	conditions, ok := decoded["conditions"].([]any)
+	if !ok || len(conditions) != 1 {
+		t.Fatalf("expected latest history-backed conditions in runtime summary, got %#v", decoded["conditions"])
+	}
+	condition, ok := conditions[0].(map[string]any)
+	if !ok || condition["type"] != "Ready" || condition["status"] != true || condition["reason"] != "TrafficShiftComplete" {
+		t.Fatalf("expected latest history-backed condition payload in runtime summary, got %#v", conditions)
+	}
+}
+
+func TestDeriveRuntimeSummaryBackfillsCurrentArtifactAndConditionsFromLegacyHistoryWithoutRollout(t *testing.T) {
+	summary := deriveRuntimeSummary(domain.DeploymentStatus{
+		ObservedGeneration: 7,
+		Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "stale-current"},
+		Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "stale health"},
+		Conditions:         []domain.Condition{{Type: "Ready", Status: true, Reason: "Stable", Message: "deployment is healthy"}},
+		DeployedArtifact:   domain.DeploymentArtifact{Image: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1"},
+		History: []domain.StatusHistoryEntry{{
+			Timestamp:          "2026-04-16T06:20:00Z",
+			Source:             "controller",
+			Summary:            "Observed stable capacity",
+			Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"},
+			Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"},
+			DesiredGeneration:  8,
+			ObservedGeneration: 7,
+			RolloutPhase:       domain.RolloutPhasePromoting,
+			CurrentStep:        "ShiftTrafficCanary",
+			Changes:            []string{"summary", "sync", "health"},
+		}},
+	})
+	if summary == nil {
+		t.Fatalf("expected runtime summary")
+	}
+	payload, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatalf("Marshal returned error: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("failed to decode runtime summary JSON: %v", err)
+	}
+	artifact, ok := decoded["deployedArtifact"].(map[string]any)
+	if !ok || artifact["image"] != "ghcr.io/devopsartfactory/payments-api:2026-04-16.1" {
+		t.Fatalf("expected current snapshot deployedArtifact backfill in runtime summary without rollout, got %#v", decoded["deployedArtifact"])
+	}
+	conditions, ok := decoded["conditions"].([]any)
+	if !ok || len(conditions) != 1 {
+		t.Fatalf("expected current snapshot conditions backfill in runtime summary without rollout, got %#v", decoded["conditions"])
+	}
+	condition, ok := conditions[0].(map[string]any)
+	if !ok || condition["type"] != "Ready" || condition["status"] != true || condition["reason"] != "Stable" {
+		t.Fatalf("expected current snapshot condition backfill payload in runtime summary without rollout, got %#v", conditions)
+	}
+	if summary.TargetType != "" || summary.Strategy != "" || summary.ExecutionMode != "" {
+		t.Fatalf("expected rollout-specific backfill to remain absent without rollout, got %+v", summary)
+	}
+}
+
+func TestDeriveRuntimeSummaryFallsBackToCurrentArtifactAndConditionsWithoutHistory(t *testing.T) {
+	summary := deriveRuntimeSummary(domain.DeploymentStatus{
+		ObservedGeneration: 6,
+		Sync:               domain.Sync{State: domain.SyncStateSynced, Reason: "steady"},
+		Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "3/3 healthy"},
+		Conditions:         []domain.Condition{{Type: "Ready", Status: true, Reason: "Stable", Message: "deployment is healthy"}},
+		DeployedArtifact:   domain.DeploymentArtifact{Image: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1"},
+		Rollout: &domain.RolloutSummary{
+			DesiredGeneration:  7,
+			ObservedGeneration: 6,
+			Phase:              domain.RolloutPhaseCompleted,
+			CurrentStep:        "Complete",
+			Summary:            "Serving stable capacity",
+			TargetType:         "ecs",
+			Strategy:           "linear",
+			ExecutionMode:      "ecsCodeDeploy",
+		},
+	})
+	if summary == nil {
+		t.Fatalf("expected runtime summary fallback")
+	}
+	payload, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatalf("Marshal returned error: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("failed to decode runtime summary JSON: %v", err)
+	}
+	artifact, ok := decoded["deployedArtifact"].(map[string]any)
+	if !ok || artifact["image"] != "ghcr.io/devopsartfactory/payments-api:2026-04-16.1" {
+		t.Fatalf("expected current snapshot deployedArtifact fallback in runtime summary, got %#v", decoded["deployedArtifact"])
+	}
+	conditions, ok := decoded["conditions"].([]any)
+	if !ok || len(conditions) != 1 {
+		t.Fatalf("expected current snapshot conditions fallback in runtime summary, got %#v", decoded["conditions"])
+	}
+	condition, ok := conditions[0].(map[string]any)
+	if !ok || condition["type"] != "Ready" || condition["status"] != true || condition["reason"] != "Stable" {
+		t.Fatalf("expected current snapshot condition fallback payload in runtime summary, got %#v", conditions)
+	}
+}
+
+func TestDeriveRuntimeSummaryReturnsArtifactAndConditionsWithoutRolloutOrSyncHealth(t *testing.T) {
+	summary := deriveRuntimeSummary(domain.DeploymentStatus{
+		DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://artifacts.example.com/payments/runtime-only.zip"},
+		Conditions:       []domain.Condition{{Type: "Ready", Status: true, Reason: "Stable", Message: "runtime-only status still carries condition context"}},
+	})
+	if summary == nil {
+		t.Fatalf("expected runtime summary when artifact or conditions are present")
+	}
+	if summary.DeployedArtifact.Binary != "s3://artifacts.example.com/payments/runtime-only.zip" {
+		t.Fatalf("expected deployed artifact to survive runtime-summary fallback, got %+v", summary.DeployedArtifact)
+	}
+	if len(summary.Conditions) != 1 || summary.Conditions[0].Reason != "Stable" {
+		t.Fatalf("expected conditions to survive runtime-summary fallback, got %+v", summary.Conditions)
+	}
+	if summary.Sync != (domain.Sync{}) || summary.Health != (domain.Health{}) || summary.Summary != "" || summary.HistoryCount != 0 {
+		t.Fatalf("expected runtime-only fallback to avoid inventing extra status data, got %+v", summary)
+	}
+}
+
 func TestBuildAccountOverviewsRuntimeSummaryRemainsNilWhenStatusIsEmpty(t *testing.T) {
 	catalog := manifest.Catalog{
 		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},

@@ -93,7 +93,16 @@ func TestApplicationsOverviewPageWithNodeHarness(t *testing.T) {
 			"executionMode":  "ecsCodeDeploy",
 			"sync":           map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
 			"health":         map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy"},
-			"runtimeSummary": map[string]any{"timestamp": "2026-04-16T07:10:00Z"},
+			"runtimeSummary": map[string]any{
+				"timestamp":        "2026-04-16T07:10:00Z",
+				"deployedArtifact": map[string]any{"image": "ghcr.io/example/payments:v2"},
+				"conditions": []map[string]any{{
+					"type":    "Ready",
+					"status":  true,
+					"reason":  "TrafficShiftComplete",
+					"message": "green task set is now serving traffic",
+				}},
+			},
 		},
 	})
 	if err != nil {
@@ -283,6 +292,85 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!appLink) throw new Error('expected applications page link to application detail route');
   if (appLink.target !== '_self') throw new Error('expected applications page link to stay in embedded UI flow');
   if (appLink.rel) throw new Error('expected applications page link to avoid new-tab rel attributes');
+})();
+`
+
+		cmd := exec.Command("node", "-e", nodeProgram)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+		}
+	})
+
+	t.Run("applications overview search matches runtime artifact and condition context", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const sampleApplications = ` + string(applicationsJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const createDocument = () => {
+  const document = new Document();
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  return document;
+};
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+async function render(search) {
+  const document = createDocument();
+  const window = { location: { pathname: '/', search, hash: '' } };
+  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  const fetch = (url) => {
+    if (url === '/v1/overview/applications') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleApplications) });
+    throw new Error('unexpected fetch url: ' + url);
+  };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle();
+  await settle();
+  return collectText(document.getElementById('accounts')).join(' | ');
+}
+(async () => {
+  const artifactText = await render('?q=ghcr.io%2Fexample%2Fpayments%3Av2&sync=all&account=all');
+  if (!artifactText.includes('payments-api-staging')) throw new Error('expected runtime artifact search to match the staging row');
+  if (artifactText.includes('payments-api-prod')) throw new Error('expected runtime artifact search not to match rows without that artifact context');
+  const conditionText = await render('?q=TrafficShiftComplete&sync=all&account=all');
+  if (!conditionText.includes('payments-api-staging')) throw new Error('expected runtime condition search to match the staging row');
+  if (conditionText.includes('payments-api-prod')) throw new Error('expected runtime condition search not to match rows without runtime condition context');
 })();
 `
 
@@ -1716,6 +1804,8 @@ func TestResourceDetailPageWithNodeHarness(t *testing.T) {
 			"desiredGeneration":  12,
 			"observedGeneration": 11,
 			"changes":            []string{"deployment group switched to linear-10-percent-every-minute"},
+			"deployedArtifact":   map[string]any{"image": "ghcr.io/example/payments:v1-runtime"},
+			"conditions":         []map[string]any{{"type": "Available", "status": true, "reason": "RuntimeHealthy", "message": "Runtime summary copied the latest healthy condition"}},
 		},
 		"history": []map[string]any{{
 			"timestamp":          "2026-04-16T07:05:00Z",
@@ -1728,6 +1818,8 @@ func TestResourceDetailPageWithNodeHarness(t *testing.T) {
 			"targetType":         "ecs",
 			"strategy":           "linear",
 			"executionMode":      "ecsCodeDeploy",
+			"deployedArtifact":   map[string]any{"image": "ghcr.io/example/payments:v0"},
+			"conditions":         []map[string]any{{"type": "Progressing", "status": true, "reason": "DeploymentStarted", "message": "CodeDeploy started shifting traffic"}},
 		}},
 		"rollout": map[string]any{
 			"phase":              "Progressing",
@@ -1837,9 +1929,17 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('desired 12 · observed 11')) throw new Error('expected resource page runtime generation values');
   if (!accountsText.includes('Runtime context')) throw new Error('expected resource page runtime context label');
   if (!accountsText.includes('Target ecs · Strategy linear · Execution ecsCodeDeploy')) throw new Error('expected resource page runtime context value');
+  if (!accountsText.includes('Runtime artifact')) throw new Error('expected resource page runtime artifact label');
+  if (!accountsText.includes('ghcr.io/example/payments:v1-runtime')) throw new Error('expected resource page runtime artifact value');
+  if (!accountsText.includes('Runtime conditions')) throw new Error('expected resource page runtime conditions label');
+  if (!accountsText.includes('Available = True · RuntimeHealthy')) throw new Error('expected resource page runtime condition summary');
   if (!accountsText.includes('Runtime history')) throw new Error('expected resource page runtime history section');
   if (!accountsText.includes('Created deployment group revision for v2')) throw new Error('expected resource page history detail');
   if (!accountsText.includes('History context')) throw new Error('expected resource page history context label');
+  if (!accountsText.includes('History artifact')) throw new Error('expected resource page history artifact label');
+  if (!accountsText.includes('ghcr.io/example/payments:v0')) throw new Error('expected resource page history artifact value');
+  if (!accountsText.includes('History conditions')) throw new Error('expected resource page history conditions label');
+  if (!accountsText.includes('Progressing = True · DeploymentStarted')) throw new Error('expected resource page history condition summary');
   if (!accountsText.includes('Conditions')) throw new Error('expected resource page conditions section');
   if (!accountsText.includes('ServiceReady')) throw new Error('expected resource page condition reason');
 })();
@@ -1869,12 +1969,12 @@ func TestResourceDetailPageRecentLogsWithNodeHarness(t *testing.T) {
 		"region":        "ap-northeast-2",
 		"executionMode": "ecsCodeDeploy",
 		"runtimeSummary": map[string]any{
-			"timestamp":    "2026-04-16T07:10:00Z",
-			"source":       "runtime-agent",
-			"targetType":   "ecs",
-			"strategy":     "linear",
+			"timestamp":     "2026-04-16T07:10:00Z",
+			"source":        "runtime-agent",
+			"targetType":    "ecs",
+			"strategy":      "linear",
 			"executionMode": "ecsCodeDeploy",
-			"historyCount": 1,
+			"historyCount":  1,
 		},
 		"rollout": map[string]any{
 			"phase":       "Progressing",
@@ -2355,13 +2455,15 @@ func TestDeploymentWorkspaceDriftViewWithNodeHarness(t *testing.T) {
 		"sync":           map[string]any{"state": "Drifted", "reason": "Service target group differs from desired"},
 		"health":         map[string]any{"overall": "Healthy", "summary": "traffic steady"},
 		"runtimeSummary": map[string]any{
-			"source":       "deployment-controller",
-			"timestamp":    "2026-04-16T06:50:00Z",
-			"targetType":   "ec2",
-			"strategy":     "canary",
-			"executionMode": "asgWeightedTargetGroups",
-			"historyCount": 3,
-			"changes":      []string{"listener rule updated", "target group weight drift"},
+			"source":           "deployment-controller",
+			"timestamp":        "2026-04-16T06:50:00Z",
+			"targetType":       "ec2",
+			"strategy":         "canary",
+			"executionMode":    "asgWeightedTargetGroups",
+			"historyCount":     3,
+			"changes":          []string{"listener rule updated", "target group weight drift"},
+			"deployedArtifact": map[string]any{"binary": "s3://artifacts.example/payments/api-prod-r17"},
+			"conditions":       []map[string]any{{"type": "DriftDetected", "status": true, "reason": "TargetGroupMismatch", "message": "Runtime summary mirrors the drift condition"}},
 		},
 		"rollout": map[string]any{
 			"execution": []map[string]any{{
@@ -2456,6 +2558,10 @@ const collectText = (node) => [node.textContent, ...(node.children || []).flatMa
   if (!text.includes('2026-04-16T06:50:00Z')) throw new Error('expected drift workspace runtime timestamp value');
   if (!text.includes('Runtime history')) throw new Error('expected drift workspace runtime history label');
   if (!/Runtime history \| 3(?: \||$)/.test(text)) throw new Error('expected drift workspace runtime history count');
+  if (!text.includes('Runtime artifact')) throw new Error('expected drift workspace runtime artifact label');
+  if (!text.includes('s3://artifacts.example/payments/api-prod-r17')) throw new Error('expected drift workspace runtime artifact value');
+  if (!text.includes('Runtime conditions')) throw new Error('expected drift workspace runtime conditions label');
+  if (!text.includes('DriftDetected = True · TargetGroupMismatch')) throw new Error('expected drift workspace runtime condition summary');
   if (!text.includes('listener rule updated')) throw new Error('expected drift workspace runtime change entry');
   if (!text.includes('target group weight drift')) throw new Error('expected drift workspace second runtime change entry');
   if (!text.includes('Rollout execution')) throw new Error('expected drift workspace rollout execution section');
@@ -2514,12 +2620,14 @@ func TestDeploymentWorkspacePlanViewWithNodeHarness(t *testing.T) {
 		"desiredArtifact":  map[string]any{"image": "ghcr.io/example/payments:v2"},
 		"deployedArtifact": map[string]any{"image": "ghcr.io/example/payments:v1"},
 		"runtimeSummary": map[string]any{
-			"source":       "runtime-agent",
-			"timestamp":    "2026-04-16T07:10:00Z",
-			"targetType":   "ecs",
-			"strategy":     "linear",
-			"executionMode": "ecsCodeDeploy",
-			"historyCount": 5,
+			"source":           "runtime-agent",
+			"timestamp":        "2026-04-16T07:10:00Z",
+			"targetType":       "ecs",
+			"strategy":         "linear",
+			"executionMode":    "ecsCodeDeploy",
+			"historyCount":     5,
+			"deployedArtifact": map[string]any{"image": "ghcr.io/example/payments:v1-runtime"},
+			"conditions":       []map[string]any{{"type": "Progressing", "status": true, "reason": "TrafficShiftCanary", "message": "Runtime summary tracks the in-flight canary shift"}},
 		},
 		"rollout": map[string]any{
 			"phase":       "Progressing",
@@ -2610,6 +2718,10 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!text.includes('2026-04-16T07:10:00Z')) throw new Error('expected plan workspace runtime timestamp value');
   if (!text.includes('Runtime history')) throw new Error('expected plan workspace runtime history label');
   if (!/Runtime history \| 5(?: \||$)/.test(text)) throw new Error('expected plan workspace runtime history count');
+  if (!text.includes('Runtime artifact')) throw new Error('expected plan workspace runtime artifact label');
+  if (!text.includes('ghcr.io/example/payments:v1-runtime')) throw new Error('expected plan workspace runtime artifact value');
+  if (!text.includes('Runtime conditions')) throw new Error('expected plan workspace runtime conditions label');
+  if (!text.includes('Progressing = True · TrafficShiftCanary')) throw new Error('expected plan workspace runtime condition summary');
   if (!text.includes('No runtime change signals are currently reported.')) throw new Error('expected plan workspace runtime change empty state');
   if (!text.includes('Rollout execution')) throw new Error('expected plan workspace rollout execution section');
   if (!text.includes('No rollout execution resources are currently reported.')) throw new Error('expected plan workspace rollout execution empty state');

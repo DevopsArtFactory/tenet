@@ -1,5 +1,7 @@
 package domain
 
+import "encoding/json"
+
 // SyncState summarizes whether desired and actual state are aligned.
 type SyncState string
 
@@ -89,37 +91,69 @@ type RolloutSummary struct {
 
 // StatusHistoryEntry captures one operator-facing runtime history event.
 type StatusHistoryEntry struct {
-	Timestamp          string       `json:"timestamp"`
-	Source             string       `json:"source"`
-	Summary            string       `json:"summary"`
-	Changes            []string     `json:"changes,omitempty"`
-	Sync               Sync         `json:"sync"`
-	Health             Health       `json:"health"`
-	DesiredGeneration  int64        `json:"desiredGeneration"`
-	ObservedGeneration int64        `json:"observedGeneration"`
-	RolloutPhase       RolloutPhase `json:"rolloutPhase,omitempty"`
-	CurrentStep        string       `json:"currentStep,omitempty"`
-	TargetType         string       `json:"targetType,omitempty"`
-	Strategy           string       `json:"strategy,omitempty"`
-	ExecutionMode      string       `json:"executionMode,omitempty"`
+	Timestamp          string             `json:"timestamp"`
+	Source             string             `json:"source"`
+	Summary            string             `json:"summary"`
+	Changes            []string           `json:"changes,omitempty"`
+	DeployedArtifact   DeploymentArtifact `json:"deployedArtifact,omitempty"`
+	Conditions         []Condition        `json:"conditions,omitempty"`
+	Sync               Sync               `json:"sync"`
+	Health             Health             `json:"health"`
+	DesiredGeneration  int64              `json:"desiredGeneration"`
+	ObservedGeneration int64              `json:"observedGeneration"`
+	RolloutPhase       RolloutPhase       `json:"rolloutPhase,omitempty"`
+	CurrentStep        string             `json:"currentStep,omitempty"`
+	TargetType         string             `json:"targetType,omitempty"`
+	Strategy           string             `json:"strategy,omitempty"`
+	ExecutionMode      string             `json:"executionMode,omitempty"`
+}
+
+// MarshalJSON omits zero-value deployedArtifact while preserving additive status fields.
+func (e StatusHistoryEntry) MarshalJSON() ([]byte, error) {
+	type alias StatusHistoryEntry
+	payload := struct {
+		alias
+		DeployedArtifact *DeploymentArtifact `json:"deployedArtifact,omitempty"`
+	}{alias: alias(e)}
+	if e.DeployedArtifact != (DeploymentArtifact{}) {
+		artifact := e.DeployedArtifact
+		payload.DeployedArtifact = &artifact
+	}
+	return json.Marshal(payload)
 }
 
 // RuntimeSummary captures the latest stable operator-facing runtime metadata.
 type RuntimeSummary struct {
-	Timestamp          string       `json:"timestamp,omitempty"`
-	Source             string       `json:"source,omitempty"`
-	Summary            string       `json:"summary,omitempty"`
-	Changes            []string     `json:"changes,omitempty"`
-	Sync               Sync         `json:"sync"`
-	Health             Health       `json:"health"`
-	DesiredGeneration  int64        `json:"desiredGeneration"`
-	ObservedGeneration int64        `json:"observedGeneration"`
-	RolloutPhase       RolloutPhase `json:"rolloutPhase,omitempty"`
-	CurrentStep        string       `json:"currentStep,omitempty"`
-	TargetType         string       `json:"targetType,omitempty"`
-	Strategy           string       `json:"strategy,omitempty"`
-	ExecutionMode      string       `json:"executionMode,omitempty"`
-	HistoryCount       int          `json:"historyCount"`
+	Timestamp          string             `json:"timestamp,omitempty"`
+	Source             string             `json:"source,omitempty"`
+	Summary            string             `json:"summary,omitempty"`
+	Changes            []string           `json:"changes,omitempty"`
+	DeployedArtifact   DeploymentArtifact `json:"deployedArtifact,omitempty"`
+	Conditions         []Condition        `json:"conditions,omitempty"`
+	Sync               Sync               `json:"sync"`
+	Health             Health             `json:"health"`
+	DesiredGeneration  int64              `json:"desiredGeneration"`
+	ObservedGeneration int64              `json:"observedGeneration"`
+	RolloutPhase       RolloutPhase       `json:"rolloutPhase,omitempty"`
+	CurrentStep        string             `json:"currentStep,omitempty"`
+	TargetType         string             `json:"targetType,omitempty"`
+	Strategy           string             `json:"strategy,omitempty"`
+	ExecutionMode      string             `json:"executionMode,omitempty"`
+	HistoryCount       int                `json:"historyCount"`
+}
+
+// MarshalJSON omits zero-value deployedArtifact while preserving additive runtime summary fields.
+func (s RuntimeSummary) MarshalJSON() ([]byte, error) {
+	type alias RuntimeSummary
+	payload := struct {
+		alias
+		DeployedArtifact *DeploymentArtifact `json:"deployedArtifact,omitempty"`
+	}{alias: alias(s)}
+	if s.DeployedArtifact != (DeploymentArtifact{}) {
+		artifact := s.DeployedArtifact
+		payload.DeployedArtifact = &artifact
+	}
+	return json.Marshal(payload)
 }
 
 // DeploymentStatus captures observed state separate from desired spec.
