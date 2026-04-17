@@ -415,6 +415,8 @@ func deriveRuntimeSummary(status domain.DeploymentStatus) *domain.RuntimeSummary
 			Source:             latest.Source,
 			Summary:            latest.Summary,
 			Changes:            append([]string(nil), latest.Changes...),
+			DeployedArtifact:   latest.DeployedArtifact,
+			Conditions:         append([]domain.Condition(nil), latest.Conditions...),
 			Sync:               latest.Sync,
 			Health:             latest.Health,
 			DesiredGeneration:  latest.DesiredGeneration,
@@ -425,6 +427,12 @@ func deriveRuntimeSummary(status domain.DeploymentStatus) *domain.RuntimeSummary
 			Strategy:           latest.Strategy,
 			ExecutionMode:      latest.ExecutionMode,
 			HistoryCount:       len(status.History),
+		}
+		if summary.DeployedArtifact == (domain.DeploymentArtifact{}) {
+			summary.DeployedArtifact = status.DeployedArtifact
+		}
+		if len(summary.Conditions) == 0 && len(status.Conditions) > 0 {
+			summary.Conditions = append([]domain.Condition(nil), status.Conditions...)
 		}
 		if status.Rollout != nil {
 			if summary.TargetType == "" {
@@ -439,11 +447,13 @@ func deriveRuntimeSummary(status domain.DeploymentStatus) *domain.RuntimeSummary
 		}
 		return summary
 	}
-	if status.Sync == (domain.Sync{}) && status.Health == (domain.Health{}) && status.Rollout == nil {
+	if status.Sync == (domain.Sync{}) && status.Health == (domain.Health{}) && status.Rollout == nil && status.DeployedArtifact == (domain.DeploymentArtifact{}) && len(status.Conditions) == 0 {
 		return nil
 	}
 
 	summary := &domain.RuntimeSummary{
+		DeployedArtifact:   status.DeployedArtifact,
+		Conditions:         append([]domain.Condition(nil), status.Conditions...),
 		Sync:               status.Sync,
 		Health:             status.Health,
 		ObservedGeneration: status.ObservedGeneration,
@@ -468,6 +478,7 @@ func cloneRuntimeSummary(summary *domain.RuntimeSummary) *domain.RuntimeSummary 
 	}
 	copy := *summary
 	copy.Changes = append([]string(nil), summary.Changes...)
+	copy.Conditions = append([]domain.Condition(nil), summary.Conditions...)
 	return &copy
 }
 
@@ -496,6 +507,7 @@ func cloneStatusHistory(history []domain.StatusHistoryEntry) []domain.StatusHist
 	cloned := append([]domain.StatusHistoryEntry(nil), history...)
 	for i := range cloned {
 		cloned[i].Changes = append([]string(nil), history[i].Changes...)
+		cloned[i].Conditions = append([]domain.Condition(nil), history[i].Conditions...)
 	}
 	return cloned
 }

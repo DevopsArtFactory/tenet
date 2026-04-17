@@ -915,8 +915,10 @@ func TestOverviewAccountsResponseIncludesRuntimeSummary(t *testing.T) {
 						TargetType:         "ec2",
 						Strategy:           "canary",
 						ExecutionMode:      "asgWeightedTargetGroups",
+						DeployedArtifact:   domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7"},
+						Conditions:         []domain.Condition{{Type: "Ready", Status: true, Reason: "TrafficShiftComplete", Message: "candidate is serving traffic"}},
 						HistoryCount:       2,
-						Changes:            []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep"},
+						Changes:            []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep", "deployedArtifact", "conditions"},
 					},
 				}},
 			}}, nil
@@ -943,7 +945,7 @@ func TestOverviewAccountsResponseIncludesRuntimeSummary(t *testing.T) {
 		t.Fatalf("expected runtimeSummary fields in overview accounts payload, got %#v", runtimeSummary)
 	}
 	changes, ok := runtimeSummary["changes"].([]any)
-	if !ok || len(changes) != 7 || changes[1] != "sync" || changes[5] != "rolloutPhase" {
+	if !ok || len(changes) != 9 || changes[1] != "sync" || changes[5] != "rolloutPhase" || changes[7] != "deployedArtifact" || changes[8] != "conditions" {
 		t.Fatalf("expected runtimeSummary.changes in overview accounts payload, got %#v", runtimeSummary["changes"])
 	}
 	syncSummary, ok := runtimeSummary["sync"].(map[string]any)
@@ -953,6 +955,18 @@ func TestOverviewAccountsResponseIncludesRuntimeSummary(t *testing.T) {
 	healthSummary, ok := runtimeSummary["health"].(map[string]any)
 	if !ok || healthSummary["overall"] != string(domain.HealthHealthy) || healthSummary["summary"] != "steady" {
 		t.Fatalf("expected runtimeSummary.health fields in overview accounts payload, got %#v", runtimeSummary["health"])
+	}
+	artifact, ok := runtimeSummary["deployedArtifact"].(map[string]any)
+	if !ok || artifact["binary"] != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7" {
+		t.Fatalf("expected runtimeSummary.deployedArtifact fields in overview accounts payload, got %#v", runtimeSummary["deployedArtifact"])
+	}
+	conditions, ok := runtimeSummary["conditions"].([]any)
+	if !ok || len(conditions) != 1 {
+		t.Fatalf("expected runtimeSummary.conditions array in overview accounts payload, got %#v", runtimeSummary["conditions"])
+	}
+	condition, ok := conditions[0].(map[string]any)
+	if !ok || condition["type"] != "Ready" || condition["status"] != true || condition["reason"] != "TrafficShiftComplete" {
+		t.Fatalf("expected runtimeSummary.conditions fields in overview accounts payload, got %#v", conditions)
 	}
 }
 
@@ -1652,6 +1666,8 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 					TargetType:         "ecs-service",
 					Strategy:           "linear",
 					ExecutionMode:      "ecsCodeDeploy",
+					DeployedArtifact:   domain.DeploymentArtifact{Image: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1"},
+					Conditions:         []domain.Condition{{Type: "Ready", Status: true, Reason: "Stable", Message: "deployment is healthy"}},
 					HistoryCount:       3,
 				},
 			}, nil
@@ -1684,6 +1700,18 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 	healthSummary, ok := runtimeSummary["health"].(map[string]any)
 	if !ok || healthSummary["overall"] != string(domain.HealthHealthy) || healthSummary["summary"] != "steady" {
 		t.Fatalf("expected runtimeSummary.health fields in overview deployment payload, got %#v", runtimeSummary["health"])
+	}
+	artifact, ok := runtimeSummary["deployedArtifact"].(map[string]any)
+	if !ok || artifact["image"] != "ghcr.io/devopsartfactory/payments-api:2026-04-16.1" {
+		t.Fatalf("expected runtimeSummary.deployedArtifact fields in overview deployment payload, got %#v", runtimeSummary["deployedArtifact"])
+	}
+	conditions, ok := runtimeSummary["conditions"].([]any)
+	if !ok || len(conditions) != 1 {
+		t.Fatalf("expected runtimeSummary.conditions array in overview deployment payload, got %#v", runtimeSummary["conditions"])
+	}
+	condition, ok := conditions[0].(map[string]any)
+	if !ok || condition["type"] != "Ready" || condition["status"] != true || condition["reason"] != "Stable" {
+		t.Fatalf("expected runtimeSummary.conditions fields in overview deployment payload, got %#v", conditions)
 	}
 }
 

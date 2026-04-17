@@ -167,7 +167,8 @@ func appendRuntimeHistory(previous domain.DeploymentStatus, current domain.Deplo
 	if len(history) > 0 {
 		latest = history[len(history)-1]
 	}
-	normalizedLatest := normalizeRuntimeHistoryEntryContext(latest, entry)
+	normalizedLatest := normalizeRuntimeHistoryEntryContext(latest, deriveRuntimeHistoryEntry(previous))
+	normalizedLatest = normalizeRuntimeHistoryEntryContext(normalizedLatest, entry)
 	if len(history) > 0 && !reflect.DeepEqual(normalizedLatest, history[len(history)-1]) {
 		history[len(history)-1] = normalizedLatest
 	}
@@ -188,6 +189,12 @@ func appendRuntimeHistory(previous domain.DeploymentStatus, current domain.Deplo
 func normalizeRuntimeHistoryEntryContext(entry domain.StatusHistoryEntry, fallback domain.StatusHistoryEntry) domain.StatusHistoryEntry {
 	if entry.Source != runtimeHistorySourceController {
 		return entry
+	}
+	if entry.DeployedArtifact == (domain.DeploymentArtifact{}) {
+		entry.DeployedArtifact = fallback.DeployedArtifact
+	}
+	if len(entry.Conditions) == 0 && len(fallback.Conditions) > 0 {
+		entry.Conditions = append([]domain.Condition(nil), fallback.Conditions...)
 	}
 	if entry.TargetType == "" {
 		entry.TargetType = fallback.TargetType
@@ -211,9 +218,15 @@ func runtimeHistoryHasControllerEntry(history []domain.StatusHistoryEntry) bool 
 }
 
 func runtimeHistoryChanges(previous domain.StatusHistoryEntry, current domain.StatusHistoryEntry) []string {
-	changes := make([]string, 0, 10)
+	changes := make([]string, 0, 12)
 	if previous.Summary != current.Summary {
 		changes = append(changes, "summary")
+	}
+	if previous.DeployedArtifact != current.DeployedArtifact {
+		changes = append(changes, "deployedArtifact")
+	}
+	if !reflect.DeepEqual(previous.Conditions, current.Conditions) {
+		changes = append(changes, "conditions")
 	}
 	if previous.Sync != current.Sync {
 		changes = append(changes, "sync")
@@ -256,6 +269,8 @@ func deriveRuntimeHistoryEntry(status domain.DeploymentStatus) domain.StatusHist
 	entry := domain.StatusHistoryEntry{
 		Source:             runtimeHistorySourceController,
 		Summary:            "Runtime status updated",
+		DeployedArtifact:   status.DeployedArtifact,
+		Conditions:         append([]domain.Condition(nil), status.Conditions...),
 		Sync:               status.Sync,
 		Health:             status.Health,
 		ObservedGeneration: status.ObservedGeneration,
@@ -276,6 +291,8 @@ func deriveRuntimeHistoryEntry(status domain.DeploymentStatus) domain.StatusHist
 func runtimeHistoryMeaningfullyChanged(previous domain.StatusHistoryEntry, current domain.StatusHistoryEntry) bool {
 	return previous.Source != current.Source ||
 		previous.Summary != current.Summary ||
+		previous.DeployedArtifact != current.DeployedArtifact ||
+		!reflect.DeepEqual(previous.Conditions, current.Conditions) ||
 		previous.Sync != current.Sync ||
 		previous.Health != current.Health ||
 		previous.DesiredGeneration != current.DesiredGeneration ||
