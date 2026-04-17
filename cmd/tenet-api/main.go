@@ -14,6 +14,7 @@ import (
 
 	"github.com/DevopsArtFactory/tenet/internal/api"
 	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
+	"github.com/DevopsArtFactory/tenet/internal/auditlog"
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
@@ -200,6 +201,11 @@ func newAPIOptionsWithStores(info buildinfo.Info, repoRoot string, store statuss
 		options.PlanPreview = planService.Get
 		options.CreateApplyRequest = applyService.Create
 		options.ApplyRequest = applyService.Get
+		options.AuditLogs = auditlog.Service{
+			ListPlanPreviews:  func() ([]planpreview.Record, error) { return loadPlanPreviewRecords(planStorePath) },
+			ListApplyRequests: func() ([]applyrequest.Record, error) { return loadApplyRequestRecords(applyStorePath) },
+			ListDeployments:   options.CatalogDeployments,
+		}.List
 	}
 	if store == nil {
 		return options
@@ -219,6 +225,30 @@ func defaultPlanPreviewStorePath() string {
 
 func defaultApplyRequestStorePath() string {
 	return filepath.Join(os.TempDir(), "tenet", "apply-requests.json")
+}
+
+func loadPlanPreviewRecords(path string) ([]planpreview.Record, error) {
+	records, err := planpreview.Load(path)
+	if err == nil {
+		return records, nil
+	}
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) && errors.Is(pathErr.Err, os.ErrNotExist) {
+		return nil, nil
+	}
+	return nil, err
+}
+
+func loadApplyRequestRecords(path string) ([]applyrequest.Record, error) {
+	records, err := applyrequest.Load(path)
+	if err == nil {
+		return records, nil
+	}
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) && errors.Is(pathErr.Err, os.ErrNotExist) {
+		return nil, nil
+	}
+	return nil, err
 }
 
 func newOverviewDeploymentResourceLogsProvider(

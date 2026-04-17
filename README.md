@@ -83,6 +83,7 @@ For the current read-only plan/apply flow, a typical local operator path is:
 - open `http://localhost:8080/?page=plan&deployment=payments-api-prod&planId={planId}` for the bookmarkable plan workspace; `Apply Plan` activates only after that persisted ready preview is loaded with a valid `planId`
 - `POST /v1/applies/plans/{planId}` to persist an immutable apply request derived from that ready preview, then reopen the same workspace at `http://localhost:8080/?page=plan&deployment=payments-api-prod&planId={planId}&applyId={applyId}`
 - `GET /v1/applies/{applyId}` to reopen the stored apply request directly; this backend slice is disabled by default for live execution, so failed immutable apply records are expected and useful because they preserve operator-reviewed intent plus explicit error/details without mutating AWS
+- `GET /v1/audit-logs?limit={n}` to project those persisted immutable plan/apply records into a newest-first local audit timeline; `/v1/audit-logs` is the preferred v1 route shape for this local timeline, and actor information is unavailable because the immutable plan preview and apply request stores do not persist operator identity
 
 Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis. Use `make smoke-docker` when you need to validate `compose.yaml`, confirm the `api`/`controller`/`redis` service contract, and prove the containerized local stack plus representative `Request-Id` headers, correlated structured API request logs, controller logs, deployment events, resource-log routes, immutable plan/apply read models, and embedded operator drill-down labels are reachable end to end.
 
@@ -150,6 +151,12 @@ The backend now also exposes read-only immutable apply-request routes:
 - `GET /v1/applies/{applyId}`
 
 These routes are additive and local-friendly. They persist immutable records to `TENET_APPLY_STORE_PATH` and intentionally stay disabled by default for live execution in this slice.
+
+The same immutable stores also back a read-only audit projection route:
+- `GET /v1/audit-logs`
+- `GET /v1/audit-logs?limit={n}`
+
+This timeline is newest-first, projects persisted plan preview and apply request records, derives `appRef` / `environmentRef` from the local catalog when possible, and keeps actor identity explicit by returning `actor.available=false` because this slice does not persist operator auth data.
 
 Tenet also exposes a read-only deployment events slice for the same drill-down workflow:
 - `GET /v1/overview/deployments/{deploymentName}/events`

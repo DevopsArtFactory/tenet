@@ -123,6 +123,8 @@ Operators can also fetch a read-only deployment event timeline from:
 
 This payload is derived from persisted `status.history` entries the controller authored for runtime changes. It is meant to support operator drill-down and timeline rendering, not to act as a full durable audit system yet.
 
+Separate from that controller-runtime timeline, the backend now exposes `GET /v1/audit-logs` as a local immutable audit projection over persisted plan preview and apply request records. The dashboard does not render that route yet; it exists as a future UI/data contract and keeps `actor.available=false` explicit until operator identity is actually persisted.
+
 Current behavior:
 - returns `deploymentName` plus an explicit `events[]` array
 - returns `200 OK` with `events: []` when the deployment exists but no runtime history has been persisted yet

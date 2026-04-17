@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
+	"github.com/DevopsArtFactory/tenet/internal/auditlog"
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
@@ -244,6 +245,59 @@ func TestAPIOptionsApplyRequestPersistsDisabledRecordAndReadsBack(t *testing.T) 
 	}
 	if fetched.ID != created.Record.ID || fetched.Source.Route != "/v1/plans/"+plan.Record.ID {
 		t.Fatalf("unexpected fetched immutable apply request: %+v", fetched)
+	}
+}
+
+func TestAPIOptionsAuditLogsProjectPersistedPlanAndApplyRecords(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	t.Setenv("TENET_PLAN_STORE_PATH", filepath.Join(t.TempDir(), "plan-previews.json"))
+	t.Setenv("TENET_APPLY_STORE_PATH", filepath.Join(t.TempDir(), "apply-requests.json"))
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
+	if options.CreateDeploymentPlanPreview == nil || options.CreateApplyRequest == nil || options.AuditLogs == nil {
+		t.Fatalf("expected audit log dependencies to be wired")
+	}
+
+	plan, err := options.CreateDeploymentPlanPreview(context.Background(), "api-prod", planpreview.CreateRequest{})
+	if err != nil {
+		t.Fatalf("CreateDeploymentPlanPreview returned error: %v", err)
+	}
+	apply, err := options.CreateApplyRequest(context.Background(), plan.Record.ID)
+	if err != nil {
+		t.Fatalf("CreateApplyRequest returned error: %v", err)
+	}
+
+	result, err := options.AuditLogs(context.Background(), auditlog.Query{Limit: 2})
+	if err != nil {
+		t.Fatalf("AuditLogs returned error: %v", err)
+	}
+	if len(result.Entries) != 2 {
+		t.Fatalf("expected two limited audit entries, got %+v", result.Entries)
+	}
+
+	var applyEntry auditlog.Entry
+	foundApply := false
+	for _, entry := range result.Entries {
+		if entry.ApplyID == apply.Record.ID {
+			applyEntry = entry
+			foundApply = true
+			break
+		}
+	}
+	if !foundApply {
+		t.Fatalf("expected apply audit entry in %+v", result.Entries)
+	}
+	if applyEntry.Action != "apply.requested" || applyEntry.PlanID != plan.Record.ID {
+		t.Fatalf("unexpected audit entry: %+v", applyEntry)
+	}
+	if applyEntry.DeploymentName != "api-prod" || applyEntry.AppRef == "" || applyEntry.EnvironmentRef != "prod-apne2" {
+		t.Fatalf("expected catalog-derived audit context, got %+v", applyEntry)
+	}
+	if applyEntry.Source.RecordRoute != "/v1/applies/"+apply.Record.ID || applyEntry.Source.SourceRoute != "/v1/plans/"+plan.Record.ID {
+		t.Fatalf("unexpected audit source details: %+v", applyEntry.Source)
+	}
+	if applyEntry.Actor.Available {
+		t.Fatalf("expected explicit unavailable actor contract, got %+v", applyEntry.Actor)
 	}
 }
 
