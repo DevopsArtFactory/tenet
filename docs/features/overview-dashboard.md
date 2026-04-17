@@ -137,6 +137,7 @@ Routes:
 - `/?page=drift&deployment={name}`
 - `/?page=plan&deployment={name}`
 - `/?page=plan&deployment={name}&planId={planId}`
+- `/?page=plan&deployment={name}&planId={planId}&applyId={applyId}`
 
 ### Drift workspace
 
@@ -161,7 +162,9 @@ Current plan/apply workspace behavior:
 - enables `Create Plan` to call the immutable plan-preview API (`POST /v1/plans/deployments/{deploymentName}`) with an `ifMatch` fingerprint derived from the currently reviewed deployment/application detail when possible, falling back to the loaded plan preview `source.fingerprint` when the client cannot derive the current one, and immediately renders the returned server-authored immutable preview in place
 - rewrites the page URL to `/?page=plan&deployment={deploymentName}&planId={planId}` after a successful create, then loads `GET /v1/plans/{planId}` whenever a `planId` query param is present and renders ready/failed/unavailable/fetch-error states without hiding the deployment-derived context
 - replaces the stored-preview raw URL text with actionable links: `Open bookmarked workspace` stays in-app via `_self`, while `Plan JSON` remains a read-model route to `GET /v1/plans/{planId}`
-- keeps `Apply Plan` disabled, explicitly labels the workspace as read-only, and still states that mutation APIs are not wired yet
+- activates `Apply Plan` only when the page has loaded a persisted ready preview with a valid `planId`, then POSTs `POST /v1/applies/plans/{planId}` and rewrites the page URL to `/?page=plan&deployment={deploymentName}&planId={planId}&applyId={applyId}`
+- loads `GET /v1/applies/{applyId}` whenever an `applyId` query param is present and renders explicit loading, created/ready, failed, unavailable, and generic fetch-error states without hiding deployment-derived or plan-derived fallback context
+- renders stored immutable apply metadata plus `Open bookmarked apply` (`_self`) and `Apply JSON` links, and explicitly tells operators that live execution remains disabled by default so failed immutable apply records are expected and useful
 - returns to the application detail page through the embedded back link so the drill-down path stays tight
 
 ## Quick links

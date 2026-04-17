@@ -103,8 +103,9 @@ resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-a
 worker_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 ui=$(curl -fsS "http://$HOST:$PORT/")
 plan_ui=$(curl -fsS "http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id")
+apply_ui=$(curl -fsS "http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id&applyId=$apply_id")
 
-SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_EVENTS_FIXTURE_JSON="$deployment_events_fixture" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" APPLY_RECORD_JSON="$apply_record" APPLY_RECORD_GET_JSON="$apply_record_get" STALE_PLAN_PREVIEW_JSON="$stale_plan_preview" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" PLAN_UI_HTML="$plan_ui" python3 - <<'PY'
+SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_EVENTS_FIXTURE_JSON="$deployment_events_fixture" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" APPLY_RECORD_JSON="$apply_record" APPLY_RECORD_GET_JSON="$apply_record_get" STALE_PLAN_PREVIEW_JSON="$stale_plan_preview" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" PLAN_UI_HTML="$plan_ui" APPLY_UI_HTML="$apply_ui" python3 - <<'PY'
 import json, os
 summary = json.loads(os.environ['SUMMARY_JSON'])
 applications = json.loads(os.environ['APPLICATIONS_JSON'])
@@ -124,6 +125,7 @@ resource_logs = json.loads(os.environ['RESOURCE_LOGS_JSON'])
 worker_resource_logs = json.loads(os.environ['WORKER_RESOURCE_LOGS_JSON'])
 ui = os.environ['UI_HTML']
 plan_ui = os.environ['PLAN_UI_HTML']
+apply_ui = os.environ['APPLY_UI_HTML']
 assert summary['accountCount'] == 2, summary
 assert summary['environmentCount'] == 2, summary
 assert summary['deploymentCount'] == 3, summary
@@ -233,15 +235,24 @@ assert "fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/ev
 assert "const ifMatch = detail.sourceFingerprint || await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;" in ui, ui
 assert 'Recent logs' in ui, ui
 assert 'Plan preview actions' in ui, ui
+assert 'Apply request actions' in ui, ui
 assert 'Plan preview approval guidance' in ui, ui
 assert 'Create Plan will POST /v1/plans/deployments/${deploymentName}, store an immutable server-authored preview, and update this workspace URL with a shareable planId.' in ui, ui
 assert 'const buildPlanPreviewRoute = (planId) => `/v1/plans/${encodeURIComponent(planId)}`;' in ui, ui
-assert "createNavLink(buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activePlanRecord.id }), 'Open bookmarked workspace', '_self')" in ui, ui
+assert 'const buildApplyRequestRoute = (applyId) => `/v1/applies/${encodeURIComponent(applyId)}`;' in ui, ui
+assert "createNavLink(buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activePlanRecord.id, applyId: activeApplyRecord?.id || applyState?.applyId || '' }), 'Open bookmarked workspace', '_self')" in ui, ui
 assert "createNavLink(buildPlanPreviewRoute(activePlanRecord.id), 'Plan JSON')" in ui, ui
+assert "createNavLink(buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activeApplyRecord.planId || activePlanRecord?.id || currentPageState.planId, applyId: activeApplyRecord.id }), 'Open bookmarked apply', '_self')" in ui, ui
+assert "createNavLink(buildApplyRequestRoute(activeApplyRecord.id), 'Apply JSON')" in ui, ui
 assert 'Server-authored plan preview loaded from GET /v1/plans/${activePlanRecord.id}.' in ui, ui
+assert 'Apply Plan will POST /v1/applies/plans/${planState.record.id}, persist an immutable apply request, and update this workspace URL with a shareable applyId.' in ui, ui
+assert 'Apply Plan activates only when a loaded persisted ready plan preview with a valid planId is present.' in ui, ui
+assert 'Live execution is intentionally disabled by default, so failed immutable apply records are expected and useful for operator review.' in ui, ui
 assert "params.get('planId') || ''" in ui, ui
+assert "params.get('applyId') || ''" in ui, ui
 
 assert 'planId' in plan_ui, plan_ui
+assert 'applyId' in apply_ui, apply_ui
 print('smoke-local: fixture api path ok')
 PY
 

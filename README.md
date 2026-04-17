@@ -80,9 +80,9 @@ Use `TENET_API_REQUEST_TIMEOUT` to bound request handling. The default is `30s`;
 For the current read-only plan/apply flow, a typical local operator path is:
 - `GET /v1/overview/applications/{deploymentName}` or `GET /v1/overview/deployments/{deploymentName}` to inspect the deployment and capture its additive `sourceFingerprint`
 - `POST /v1/plans/deployments/{deploymentName}` with optional `{"ifMatch":"<sourceFingerprint>"}` to persist an immutable preview for the reviewed state
-- open `http://localhost:8080/?page=plan&deployment=payments-api-prod&planId={planId}` for the bookmarkable plan workspace, then use the stored-preview links for in-app `_self` navigation or the immutable `Plan JSON` read-model route at `GET /v1/plans/{planId}`
-- `POST /v1/applies/plans/{planId}` to persist an immutable apply request derived from that ready preview
-- `GET /v1/applies/{applyId}` to reopen the stored apply request; this backend slice is disabled by default for live execution, so the created record is intentionally stored as `failed` with operator-facing error/details instead of mutating AWS
+- open `http://localhost:8080/?page=plan&deployment=payments-api-prod&planId={planId}` for the bookmarkable plan workspace; `Apply Plan` activates only after that persisted ready preview is loaded with a valid `planId`
+- `POST /v1/applies/plans/{planId}` to persist an immutable apply request derived from that ready preview, then reopen the same workspace at `http://localhost:8080/?page=plan&deployment=payments-api-prod&planId={planId}&applyId={applyId}`
+- `GET /v1/applies/{applyId}` to reopen the stored apply request directly; this backend slice is disabled by default for live execution, so failed immutable apply records are expected and useful because they preserve operator-reviewed intent plus explicit error/details without mutating AWS
 
 Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis. Use `make smoke-docker` when you need to validate `compose.yaml`, confirm the `api`/`controller`/`redis` service contract, and prove the containerized local stack plus representative `Request-Id` headers, correlated structured API request logs, controller logs, deployment events, resource-log routes, and embedded operator drill-down labels are reachable end to end.
 
@@ -143,7 +143,7 @@ Canonical resource-log routes stay stable across rollout modes so operators can 
 
 The same drill-down also includes read-only workspace surfaces:
 - `/?page=drift&deployment={deploymentName}` for derived field-level troubleshooting context
-- `/?page=plan&deployment={deploymentName}` for immutable plan previews, bookmarkable `planId` workspace URLs, and stored-preview quick links to both the embedded workspace (`_self`) and immutable `Plan JSON` read model while apply remains disabled
+- `/?page=plan&deployment={deploymentName}` for immutable plan previews, `Apply Plan` activation once a persisted ready preview is loaded, bookmarkable `planId`/`applyId` workspace URLs, and stored-preview quick links to both the embedded workspace (`_self`) and immutable `Plan JSON` / `Apply JSON` read models
 
 The backend now also exposes read-only immutable apply-request routes:
 - `POST /v1/applies/plans/{planId}`
