@@ -855,7 +855,7 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 		"../../scripts/smoke-docker.sh": {
 			"config --services",
 			"for service in api controller redis; do",
-			"up --build -d",
+			"\"$ROOT/scripts/docker-up.sh\" \"${COMPOSE[@]}\"",
 			"curl -fsS \"$API_BASE_URL/healthz\"",
 			"curl -fsS \"$API_BASE_URL/v1/catalog/summary\"",
 			"curl -fsS \"$API_BASE_URL/v1/overview/applications\"",

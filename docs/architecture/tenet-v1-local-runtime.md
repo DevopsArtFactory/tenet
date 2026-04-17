@@ -47,6 +47,8 @@ docker compose logs controller --tail=20
 make docker-down
 ```
 
+The `make docker-up` preflight intentionally fails fast when `localhost:8080` is already occupied by something other than this Compose stack. When that happens, inspect the listener with `lsof -nP -iTCP:8080 -sTCP:LISTEN`, clear a prior Tenet stack with `make docker-down` if needed, then rerun `docker compose up --build -d`.
+
 ## Deferred work
 
 This slice deliberately does not introduce live AWS reconciliation yet. The next layers still needed are:

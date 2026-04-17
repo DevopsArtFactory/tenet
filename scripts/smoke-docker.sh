@@ -42,7 +42,7 @@ for service in api controller redis; do
   fi
 done
 
-"${COMPOSE[@]}" up --build -d >/dev/null
+"$ROOT/scripts/docker-up.sh" "${COMPOSE[@]}" >/dev/null
 
 for _ in $(seq 1 60); do
   if curl -fsS "$API_BASE_URL/healthz" >/dev/null 2>&1; then
