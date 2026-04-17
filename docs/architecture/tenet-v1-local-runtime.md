@@ -38,7 +38,7 @@ Use `make smoke-local` for the fastest fixture-backed regression check when you 
 make smoke-docker
 ```
 
-Use `make smoke-docker` when you need to validate the containerized local stack itself. The script runs `docker compose config`, asserts the `api`, `controller`, and `redis` services are present in `compose.yaml`, starts the stack, waits for API health, checks representative endpoints, confirms controller logs contain useful startup/reconcile output, and then runs `docker compose down --remove-orphans` even on failure.
+Use `make smoke-docker` when you need to validate the containerized local stack itself. The script runs `docker compose config`, asserts the `api`, `controller`, and `redis` services are present in `compose.yaml`, starts the stack, waits for API health, checks representative endpoints plus deployment-events/resource-logs JSON shapes, confirms the embedded UI still includes current drill-down labels such as `Controller runtime events` and `Recent logs`, confirms controller logs contain useful startup/reconcile output, and then runs `docker compose down --remove-orphans` even on failure.
 
 The same smoke flow also verifies that representative responses carry a `Request-Id` header and that the local API process emits structured request logs. Operators should capture that response ID when an API call fails; Tenet threads the same value through the request context, echoes it back in explicit timeout/panic responses, and logs it on both request-completion and panic-recovery paths so API failures are easy to correlate with backend/provider diagnostics.
 
