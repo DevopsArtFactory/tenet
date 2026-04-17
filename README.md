@@ -11,7 +11,7 @@ Implemented today:
 - Go module bootstrap with `tenet-api` and `tenet-controller`
 - domain, placement, rollout, reconcile, spec, manifest, and catalog foundations
 - parser-light repository loader for `accounts/`, `environments/`, and `deployments/` JSON or YAML manifests
-- deployment manifests can now ingest a goployer-compatible EC2 stack shape while carrying desired binary/image artifact metadata
+- deployment manifests can now ingest a goployer-compatible EC2 stack shape while carrying desired binary/image artifact metadata; EC2 manifests now fail fast unless they provide userdata bootstrap metadata (`type` + normalized non-empty `path`) either at the top level or, when the top-level `userdata` block is omitted/blank, through the first stack fallback
 - validated catalog compilation and repository-backed providers
 - repository-aware controller bootstrap that validates `TENET_REPO_ROOT`, logs catalog counts at startup, and stays alive as a long-running process
 - controller runtime loop that reloads repository and status fixtures on a timer and logs per-deployment planner intents
@@ -70,6 +70,7 @@ Tenet currently expects a repository-like manifest tree:
 The local examples now use YAML deployment manifests that demonstrate both supported manifest shapes:
 - top-level desired-state fields such as `environmentRef`, `target`, `strategy`, `capacity`, `binary`, and `image`
 - a goployer-compatible `stacks` shape for EC2/ECS placement metadata
+- EC2 deployments must provide userdata bootstrap metadata via either top-level `userdata` or, when that top-level block is omitted/blank, the first stack fallback; Tenet trims and normalizes the path and rejects entries that collapse to an empty bootstrap source such as `./`
 - `binary` for EC2 artifact intent
 - `image` for ECS artifact intent
 

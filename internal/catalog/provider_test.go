@@ -15,7 +15,7 @@ func TestRepositorySummaryProviderLoadsAndSummarizesRepository(t *testing.T) {
 	root := t.TempDir()
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole"}`)
 	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2"}`)
-	writeJSON(t, filepath.Join(root, "deployments", "payments-api-prod.json"), `{"name":"payments-api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+	writeJSON(t, filepath.Join(root, "deployments", "payments-api-prod.json"), `{"name":"payments-api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1},"userdata":{"type":"file","path":"userdata/payments-api-prod.sh"}}`)
 
 	provider := RepositorySummaryProvider(root)
 	summary, err := provider()
@@ -44,7 +44,7 @@ func TestRepositoryDeploymentProviderLoadsStableDeploymentListing(t *testing.T) 
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole"}`)
 	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2"}`)
 	writeJSON(t, filepath.Join(root, "deployments", "worker-prod.json"), `{"name":"worker-prod","appRef":"payments-worker","environmentRef":"prod-apne2","target":{"type":"ecs"},"strategy":{"type":"rolling"},"traffic":{"port":8080},"capacity":{"desired":1,"min":1,"max":1}}`)
-	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1},"userdata":{"type":"file","path":"userdata/api-prod.sh"}}`)
 
 	provider := RepositoryDeploymentProvider(root)
 	deployments, err := provider()
@@ -110,7 +110,7 @@ func TestRepositoryPlacementProviderLoadsStablePlacementListing(t *testing.T) {
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
 	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
 	writeJSON(t, filepath.Join(root, "deployments", "worker-prod.json"), `{"name":"worker-prod","appRef":"payments-worker","environmentRef":"prod-apne2","target":{"type":"ecs"},"strategy":{"type":"rolling"},"traffic":{"port":8080},"capacity":{"desired":1,"min":1,"max":1}}`)
-	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1},"userdata":{"type":"file","path":"userdata/api-prod.sh"}}`)
 
 	provider := RepositoryPlacementProvider(root)
 	placements, err := provider()
@@ -129,7 +129,7 @@ func TestRepositoryTopologyProviderLoadsStableTopologySnapshot(t *testing.T) {
 	root := t.TempDir()
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
 	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
-	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1},"userdata":{"type":"file","path":"userdata/api-prod.sh"}}`)
 
 	provider := RepositoryTopologyProvider(root)
 	topology, err := provider()
@@ -146,8 +146,8 @@ func TestRepositoryProjectEnvironmentOverviewDetailProvider(t *testing.T) {
 		root := t.TempDir()
 		writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2","us-west-2"]}`)
 		writeJSON(t, filepath.Join(root, "environments", "prod.json"), `{"name":"prod","accountRef":"prod-core","region":"ap-northeast-2"}`)
-		writeJSON(t, filepath.Join(root, "deployments", "payments-api-prod.json"), `{"name":"payments-api-prod","appRef":"payments-api","environmentRef":"prod","target":{"type":"ec2"},"strategy":{"type":"canary"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
-		writeJSON(t, filepath.Join(root, "deployments", "payments-worker-prod.json"), `{"name":"payments-worker-prod","appRef":"payments-api","environmentRef":"prod","target":{"type":"ec2"},"strategy":{"type":"linear"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+		writeJSON(t, filepath.Join(root, "deployments", "payments-api-prod.json"), `{"name":"payments-api-prod","appRef":"payments-api","environmentRef":"prod","target":{"type":"ec2"},"strategy":{"type":"canary"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1},"userdata":{"type":"file","path":"userdata/payments-api-prod.sh"}}`)
+		writeJSON(t, filepath.Join(root, "deployments", "payments-worker-prod.json"), `{"name":"payments-worker-prod","appRef":"payments-api","environmentRef":"prod","target":{"type":"ec2"},"strategy":{"type":"linear"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1},"userdata":{"type":"file","path":"userdata/payments-worker-prod.sh"}}`)
 
 		provider := RepositoryProjectEnvironmentOverviewDetailProvider(root, func() ([]statusstore.Snapshot, error) {
 			return []statusstore.Snapshot{{DeploymentName: "payments-api-prod", Status: domain.DeploymentStatus{Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "warming"}}}, {DeploymentName: "payments-worker-prod", Status: domain.DeploymentStatus{Sync: domain.Sync{State: domain.SyncStatePaused, Reason: "manual pause"}}}}, nil
@@ -170,7 +170,7 @@ func TestRepositoryAccountOverviewDetailProvider(t *testing.T) {
 		writeJSON(t, filepath.Join(root, "accounts", "shadow.json"), `{"name":"123456789012","awsAccountId":"210987654321","roleArn":"arn:aws:iam::210987654321:role/TenetDeployerRole","allowedRegions":["eu-west-1"]}`)
 		writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2"}`)
 		writeJSON(t, filepath.Join(root, "environments", "shadow-euw1.json"), `{"name":"shadow-euw1","accountRef":"123456789012","region":"eu-west-1"}`)
-		writeJSON(t, filepath.Join(root, "deployments", "payments-api-prod.json"), `{"name":"payments-api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"canary"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+		writeJSON(t, filepath.Join(root, "deployments", "payments-api-prod.json"), `{"name":"payments-api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"canary"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1},"userdata":{"type":"file","path":"userdata/payments-api-prod.sh"}}`)
 		writeJSON(t, filepath.Join(root, "deployments", "shadow-api-prod.json"), `{"name":"shadow-api-prod","appRef":"shadow-api","environmentRef":"shadow-euw1","target":{"type":"ecs"},"strategy":{"type":"rolling"},"traffic":{"port":8080},"capacity":{"desired":1,"min":1,"max":1}}`)
 
 		provider := RepositoryAccountOverviewDetailProvider(root, func() ([]statusstore.Snapshot, error) {
@@ -195,7 +195,7 @@ func TestRepositoryAccountOverviewDetailProvider(t *testing.T) {
 		writeJSON(t, filepath.Join(root, "accounts", "prod-shadow.json"), `{"name":"prod-shadow","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetShadowRole","allowedRegions":["us-west-2"]}`)
 		writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2"}`)
 		writeJSON(t, filepath.Join(root, "environments", "prod-usw2.json"), `{"name":"prod-usw2","accountRef":"prod-shadow","region":"us-west-2"}`)
-		writeJSON(t, filepath.Join(root, "deployments", "payments-api-prod.json"), `{"name":"payments-api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"canary"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+		writeJSON(t, filepath.Join(root, "deployments", "payments-api-prod.json"), `{"name":"payments-api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"canary"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1},"userdata":{"type":"file","path":"userdata/payments-api-prod.sh"}}`)
 		writeJSON(t, filepath.Join(root, "deployments", "shadow-api-prod.json"), `{"name":"shadow-api-prod","appRef":"shadow-api","environmentRef":"prod-usw2","target":{"type":"ecs"},"strategy":{"type":"rolling"},"traffic":{"port":8080},"capacity":{"desired":1,"min":1,"max":1}}`)
 
 		provider := RepositoryAccountOverviewDetailProvider(root, func() ([]statusstore.Snapshot, error) {
