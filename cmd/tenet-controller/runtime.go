@@ -580,7 +580,7 @@ func deriveRolloutExecutionDetails(deployment domain.Deployment) []domain.Rollou
 		return []domain.RolloutExecutionDetail{{
 			Resource:    "candidateAutoScalingGroup",
 			Name:        deployment.Name + "-candidate",
-			Description: "Candidate Auto Scaling Group Tenet will create for weighted target group rollout",
+			Description: weightedTargetGroupCandidateExecutionDescription(deployment),
 		}, {
 			Resource:    "activeTargetGroup",
 			Name:        deployment.Name + "-active",
@@ -596,7 +596,7 @@ func deriveRolloutExecutionDetails(deployment domain.Deployment) []domain.Rollou
 		}, {
 			Resource:    "trafficShiftPlan",
 			Name:        deployment.Name + "-weighted-routing",
-			Description: "Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group",
+			Description: weightedTargetGroupTrafficShiftDescription(deployment),
 		}, {
 			Resource:    "userDataBootstrapSource",
 			Name:        userDataBootstrapSource(deployment.UserData),
@@ -605,7 +605,7 @@ func deriveRolloutExecutionDetails(deployment domain.Deployment) []domain.Rollou
 	case "asgInstanceRefresh":
 		description := "Service Auto Scaling Group Tenet refreshes in place"
 		if batchSize := instanceRefreshBatchSize(deployment); batchSize > 0 {
-			description += fmt.Sprintf(" with batch size %d", batchSize)
+			description += fmt.Sprintf(" with rolling-update batch size %d", batchSize)
 		}
 		return []domain.RolloutExecutionDetail{{
 			Resource:    "serviceAutoScalingGroup",
@@ -620,31 +620,31 @@ func deriveRolloutExecutionDetails(deployment domain.Deployment) []domain.Rollou
 		return []domain.RolloutExecutionDetail{{
 			Resource:    "ecsService",
 			Name:        deployment.Name + "-service",
-			Description: "ECS service Tenet updates during deployment",
+			Description: codeDeployExecutionDescription(deployment, "ECS service Tenet updates during CodeDeploy traffic shifting"),
 		}, {
 			Resource:    "codeDeployApplication",
 			Name:        deployment.Name + "-codedeploy-app",
-			Description: "CodeDeploy application coordinating ECS traffic shifting",
+			Description: codeDeployExecutionDescription(deployment, "CodeDeploy application coordinating ECS traffic shifting"),
 		}, {
 			Resource:    "codeDeployDeploymentGroup",
 			Name:        deployment.Name + "-codedeploy-group",
-			Description: "CodeDeploy deployment group Tenet targets for ECS rollout",
+			Description: codeDeployExecutionDescription(deployment, "CodeDeploy deployment group Tenet targets for ECS rollout"),
 		}, {
 			Resource:    "productionListener",
 			Name:        deployment.Name + "-prod-listener",
-			Description: "Production listener CodeDeploy shifts during ECS blue/green rollout",
+			Description: codeDeployExecutionDescription(deployment, "Production listener CodeDeploy shifts during ECS traffic shifting"),
 		}, {
 			Resource:    "testListener",
 			Name:        deployment.Name + "-test-listener",
-			Description: "Test listener CodeDeploy uses to validate the replacement ECS task set before promotion",
+			Description: codeDeployExecutionDescription(deployment, "Test listener CodeDeploy uses to validate the replacement ECS task set before promotion"),
 		}, {
 			Resource:    "blueTaskSetTargetGroup",
 			Name:        deployment.Name + "-blue",
-			Description: "Blue task set target group CodeDeploy treats as the live ECS traffic destination",
+			Description: codeDeployExecutionDescription(deployment, "Blue task set target group CodeDeploy treats as the live ECS traffic destination"),
 		}, {
 			Resource:    "greenTaskSetTargetGroup",
 			Name:        deployment.Name + "-green",
-			Description: "Green task set target group CodeDeploy warms before shifting ECS traffic",
+			Description: codeDeployExecutionDescription(deployment, "Green task set target group CodeDeploy warms before shifting ECS traffic"),
 		}}
 	case "ecsRolling":
 		description := "ECS service Tenet updates with native rolling deployment"
@@ -698,6 +698,49 @@ func weightedTargetGroupCandidateDetail(deployment domain.Deployment) string {
 	}
 	detail += " before attaching it to the candidate target group."
 	return detail
+}
+
+func weightedTargetGroupCandidateExecutionDescription(deployment domain.Deployment) string {
+	capacity := deployment.RolloutConfig.Capacity
+	description := fmt.Sprintf(
+		"Candidate Auto Scaling Group Tenet creates from normalized userdata source %s with desired %d, min %d, and max %d instances",
+		userDataBootstrapSource(deployment.UserData),
+		capacity.Desired,
+		capacity.Min,
+		capacity.Max,
+	)
+	if warmup := deployment.RolloutConfig.Strategy.WarmupSeconds; warmup > 0 {
+		description += fmt.Sprintf(" and warmup %ds", warmup)
+	}
+	return description + " for weighted target group rollout"
+}
+
+func weightedTargetGroupTrafficShiftDescription(deployment domain.Deployment) string {
+	var description string
+	switch deployment.Strategy {
+	case "canary":
+		description = "Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion"
+	case "linear":
+		description = "Weighted routing plan Tenet follows to advance production traffic from the active target group to the candidate target group in linear increments"
+	default:
+		description = "Weighted routing plan Tenet follows to cut over all production traffic from the active target group to the candidate target group in a single blue/green promotion"
+	}
+	if qualifiers := rolloutStrategyQualifiers(deployment.RolloutConfig.Strategy); len(qualifiers) > 0 {
+		description += " while respecting " + strings.Join(qualifiers, " and ")
+	}
+	return description
+}
+
+func codeDeployExecutionDescription(deployment domain.Deployment, base string) string {
+	style := deployment.Strategy
+	if style == "" {
+		style = "blueGreen"
+	}
+	description := fmt.Sprintf("%s (style: %s", base, style)
+	if qualifiers := rolloutStrategyQualifiers(deployment.RolloutConfig.Strategy); len(qualifiers) > 0 {
+		description += "; qualifiers: " + strings.Join(qualifiers, " and ")
+	}
+	return description + ")"
 }
 
 func codeDeployTrafficShiftDetail(deployment domain.Deployment, base string) string {

@@ -152,26 +152,23 @@ As with rollout-step status/detail rendering, those execution-resource rows are 
 
 To preserve the application/resource drill-down contract for older fixture/local payloads, the UI synthesizes fallback execution resources when `detail.rollout.execution[]` is missing or empty. When the detail payload already includes `rollout.execution[]` as a non-empty array, the controller-authored array is used verbatim.
 
-The synthesized fallback set is intentionally restricted to the controller's canonical rollout contracts:
+The synthesized fallback set is intentionally restricted to the controller's canonical rollout contracts and is kept byte-for-byte aligned with the controller/API fallback text:
 - `asgWeightedTargetGroups`
-  - `candidateAutoScalingGroup` → `{deployment}-candidate` → `Candidate Auto Scaling Group Tenet will create for weighted target group rollout`
+  - `candidateAutoScalingGroup` → `{deployment}-candidate` → config-aware text that preserves the same resource identity while naming the normalized userdata source plus candidate desired/min/max capacity and warmup when configured
   - `activeTargetGroup` → `{deployment}-active` → `Currently active target group receiving production traffic`
   - `candidateTargetGroup` → `{deployment}-candidate` → `Candidate target group Tenet will register and warm before traffic shifting`
   - `productionListenerRule` → `{deployment}-prod-listener` → `Production listener rule operators inspect while Tenet updates weighted forwarding during rollout`
-  - `trafficShiftPlan` → `{deployment}-weighted-routing` → `Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group`
+  - `trafficShiftPlan` → `{deployment}-weighted-routing` → strategy-aware text that differentiates canary vs linear vs single-cutover behavior and appends rollout qualifiers when present
   - `userDataBootstrapSource` → normalized from `userData` as `{type}:{path}`, `{type}`, `{path}`, or `unspecified` → `Normalized userdata bootstrap source for candidate EC2 capacity`
+- `asgInstanceRefresh`
+  - `serviceAutoScalingGroup` → `{deployment}-service` → `Service Auto Scaling Group Tenet refreshes in place`, extended to `... with rolling-update batch size N` when `rolloutConfig.stacks[*].rollingUpdateInstanceCount` is present
+  - `userDataBootstrapSource` → normalized from `userData` as `{type}:{path}`, `{type}`, `{path}`, or `unspecified` → `Normalized userdata bootstrap source for refreshed EC2 instances`
 - `ecsRolling`
   - `ecsService` → `{deployment}-service` → `ECS service Tenet updates with native rolling deployment`, optionally extended with rollout-strategy qualifiers such as `while respecting min healthy 90% and warmup 30s` when `rolloutConfig.strategy.minHealthyPercent` and/or `rolloutConfig.strategy.warmupSeconds` are present on the detail payload
 - `ecsCodeDeploy`
-  - `ecsService` → `{deployment}-service` → `ECS service Tenet updates during deployment`
-  - `codeDeployApplication` → `{deployment}-codedeploy-app` → `CodeDeploy application coordinating ECS traffic shifting`
-  - `codeDeployDeploymentGroup` → `{deployment}-codedeploy-group` → `CodeDeploy deployment group Tenet targets for ECS rollout`
-  - `productionListener` → `{deployment}-prod-listener` → `Production listener CodeDeploy shifts during ECS blue/green rollout`
-  - `testListener` → `{deployment}-test-listener` → `Test listener CodeDeploy uses to validate the replacement ECS task set before promotion`
-  - `blueTaskSetTargetGroup` → `{deployment}-blue` → `Blue task set target group CodeDeploy treats as the live ECS traffic destination`
-  - `greenTaskSetTargetGroup` → `{deployment}-green` → `Green task set target group CodeDeploy warms before shifting ECS traffic`
+  - each fallback description keeps the same `{deployment}-...` resource name but now includes the active traffic-shift style (`blueGreen`, `canary`, or `linear`) and any rollout qualifiers that the detail payload carries
 
-Those fallback names/descriptions intentionally match the controller-authored `rollout.execution[]` metadata so the UI computes the same canonical `resourceId` values and existing bookmarked resource-detail routes stay stable across controller-authored and fixture-backed responses.
+Those fallback names/descriptions intentionally match the controller-authored `rollout.execution[]` metadata so the UI computes the same canonical `resourceId` values and existing bookmarked resource-detail routes stay stable across controller-authored and fixture-backed responses even as description text becomes more config-aware.
 
 ## Detail-panel rendering constraints
 

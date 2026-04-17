@@ -187,13 +187,13 @@ func canonicalRolloutExecutionFallback(detail catalog.DeploymentOverviewDetail) 
 	switch detail.ExecutionMode {
 	case "ecsCodeDeploy":
 		return []domain.RolloutExecutionDetail{
-			{Resource: "ecsService", Name: detail.Name + "-service", Description: "ECS service Tenet updates during deployment"},
-			{Resource: "codeDeployApplication", Name: detail.Name + "-codedeploy-app", Description: "CodeDeploy application coordinating ECS traffic shifting"},
-			{Resource: "codeDeployDeploymentGroup", Name: detail.Name + "-codedeploy-group", Description: "CodeDeploy deployment group Tenet targets for ECS rollout"},
-			{Resource: "productionListener", Name: detail.Name + "-prod-listener", Description: "Production listener CodeDeploy shifts during ECS blue/green rollout"},
-			{Resource: "testListener", Name: detail.Name + "-test-listener", Description: "Test listener CodeDeploy uses to validate the replacement ECS task set before promotion"},
-			{Resource: "blueTaskSetTargetGroup", Name: detail.Name + "-blue", Description: "Blue task set target group CodeDeploy treats as the live ECS traffic destination"},
-			{Resource: "greenTaskSetTargetGroup", Name: detail.Name + "-green", Description: "Green task set target group CodeDeploy warms before shifting ECS traffic"},
+			{Resource: "ecsService", Name: detail.Name + "-service", Description: canonicalCodeDeployExecutionDescription(detail, "ECS service Tenet updates during CodeDeploy traffic shifting")},
+			{Resource: "codeDeployApplication", Name: detail.Name + "-codedeploy-app", Description: canonicalCodeDeployExecutionDescription(detail, "CodeDeploy application coordinating ECS traffic shifting")},
+			{Resource: "codeDeployDeploymentGroup", Name: detail.Name + "-codedeploy-group", Description: canonicalCodeDeployExecutionDescription(detail, "CodeDeploy deployment group Tenet targets for ECS rollout")},
+			{Resource: "productionListener", Name: detail.Name + "-prod-listener", Description: canonicalCodeDeployExecutionDescription(detail, "Production listener CodeDeploy shifts during ECS traffic shifting")},
+			{Resource: "testListener", Name: detail.Name + "-test-listener", Description: canonicalCodeDeployExecutionDescription(detail, "Test listener CodeDeploy uses to validate the replacement ECS task set before promotion")},
+			{Resource: "blueTaskSetTargetGroup", Name: detail.Name + "-blue", Description: canonicalCodeDeployExecutionDescription(detail, "Blue task set target group CodeDeploy treats as the live ECS traffic destination")},
+			{Resource: "greenTaskSetTargetGroup", Name: detail.Name + "-green", Description: canonicalCodeDeployExecutionDescription(detail, "Green task set target group CodeDeploy warms before shifting ECS traffic")},
 		}
 	case "ecsRolling":
 		return []domain.RolloutExecutionDetail{
@@ -201,16 +201,20 @@ func canonicalRolloutExecutionFallback(detail catalog.DeploymentOverviewDetail) 
 		}
 	case "asgWeightedTargetGroups":
 		return []domain.RolloutExecutionDetail{
-			{Resource: "candidateAutoScalingGroup", Name: detail.Name + "-candidate", Description: "Candidate Auto Scaling Group Tenet will create for weighted target group rollout"},
+			{Resource: "candidateAutoScalingGroup", Name: detail.Name + "-candidate", Description: canonicalWeightedTargetGroupCandidateExecutionDescription(detail)},
 			{Resource: "activeTargetGroup", Name: detail.Name + "-active", Description: "Currently active target group receiving production traffic"},
 			{Resource: "candidateTargetGroup", Name: detail.Name + "-candidate", Description: "Candidate target group Tenet will register and warm before traffic shifting"},
 			{Resource: "productionListenerRule", Name: detail.Name + "-prod-listener", Description: "Production listener rule operators inspect while Tenet updates weighted forwarding during rollout"},
-			{Resource: "trafficShiftPlan", Name: detail.Name + "-weighted-routing", Description: "Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group"},
+			{Resource: "trafficShiftPlan", Name: detail.Name + "-weighted-routing", Description: canonicalWeightedTargetGroupTrafficShiftDescription(detail)},
 			{Resource: "userDataBootstrapSource", Name: canonicalUserDataBootstrapSource(detail.UserData), Description: "Normalized userdata bootstrap source for candidate EC2 capacity"},
 		}
 	case "asgInstanceRefresh":
+		description := "Service Auto Scaling Group Tenet refreshes in place"
+		if batchSize := canonicalInstanceRefreshBatchSize(detail.RolloutConfig); batchSize > 0 {
+			description += fmt.Sprintf(" with rolling-update batch size %d", batchSize)
+		}
 		return []domain.RolloutExecutionDetail{
-			{Resource: "serviceAutoScalingGroup", Name: detail.Name + "-service", Description: "Service Auto Scaling Group Tenet refreshes in place"},
+			{Resource: "serviceAutoScalingGroup", Name: detail.Name + "-service", Description: description},
 			{Resource: "userDataBootstrapSource", Name: canonicalUserDataBootstrapSource(detail.UserData), Description: "Normalized userdata bootstrap source for refreshed EC2 instances"},
 		}
 	default:
@@ -237,6 +241,58 @@ func ecsRollingExecutionDescription(strategy domain.DeploymentRolloutStrategy) s
 		description += " while respecting " + strings.Join(qualifiers, " and ")
 	}
 	return description
+}
+
+func canonicalWeightedTargetGroupCandidateExecutionDescription(detail catalog.DeploymentOverviewDetail) string {
+	capacity := detail.RolloutConfig.Capacity
+	description := fmt.Sprintf(
+		"Candidate Auto Scaling Group Tenet creates from normalized userdata source %s with desired %d, min %d, and max %d instances",
+		canonicalUserDataBootstrapSource(detail.UserData),
+		capacity.Desired,
+		capacity.Min,
+		capacity.Max,
+	)
+	if warmup := detail.RolloutConfig.Strategy.WarmupSeconds; warmup > 0 {
+		description += fmt.Sprintf(" and warmup %ds", warmup)
+	}
+	return description + " for weighted target group rollout"
+}
+
+func canonicalWeightedTargetGroupTrafficShiftDescription(detail catalog.DeploymentOverviewDetail) string {
+	var description string
+	switch detail.Strategy {
+	case "canary":
+		description = "Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion"
+	case "linear":
+		description = "Weighted routing plan Tenet follows to advance production traffic from the active target group to the candidate target group in linear increments"
+	default:
+		description = "Weighted routing plan Tenet follows to cut over all production traffic from the active target group to the candidate target group in a single blue/green promotion"
+	}
+	if qualifiers := rolloutStrategyQualifiers(detail.RolloutConfig.Strategy); len(qualifiers) > 0 {
+		description += " while respecting " + strings.Join(qualifiers, " and ")
+	}
+	return description
+}
+
+func canonicalCodeDeployExecutionDescription(detail catalog.DeploymentOverviewDetail, base string) string {
+	style := detail.Strategy
+	if style == "" {
+		style = "blueGreen"
+	}
+	description := fmt.Sprintf("%s (style: %s", base, style)
+	if qualifiers := rolloutStrategyQualifiers(detail.RolloutConfig.Strategy); len(qualifiers) > 0 {
+		description += "; qualifiers: " + strings.Join(qualifiers, " and ")
+	}
+	return description + ")"
+}
+
+func canonicalInstanceRefreshBatchSize(config domain.DeploymentRolloutConfig) int {
+	for _, stack := range config.Stacks {
+		if stack.RollingUpdateInstanceCount > 0 {
+			return stack.RollingUpdateInstanceCount
+		}
+	}
+	return 0
 }
 
 func rolloutStrategyQualifiers(strategy domain.DeploymentRolloutStrategy) []string {

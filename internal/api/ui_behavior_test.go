@@ -1013,6 +1013,7 @@ func TestApplicationsOverviewPageWithNodeHarnessSynthesizesRolloutFallbackResour
 			"targetType":     "ecs",
 			"strategy":       "linear",
 			"executionMode":  "ecsCodeDeploy",
+			"rolloutConfig":  map[string]any{"strategy": map[string]any{"minHealthyPercent": 80, "warmupSeconds": 45}},
 			"sync":           map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
 			"health":         map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy"},
 		})
@@ -1084,12 +1085,12 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
   const expectedResources = [
-    ['payments-api-staging-codedeploy-app', 'codeDeployApplication', 'CodeDeploy application coordinating ECS traffic shifting'],
-    ['payments-api-staging-codedeploy-group', 'codeDeployDeploymentGroup', 'CodeDeploy deployment group Tenet targets for ECS rollout'],
-    ['payments-api-staging-prod-listener', 'productionListener', 'Production listener CodeDeploy shifts during ECS blue/green rollout'],
-    ['payments-api-staging-test-listener', 'testListener', 'Test listener CodeDeploy uses to validate the replacement ECS task set before promotion'],
-    ['payments-api-staging-blue', 'blueTaskSetTargetGroup', 'Blue task set target group CodeDeploy treats as the live ECS traffic destination'],
-    ['payments-api-staging-green', 'greenTaskSetTargetGroup', 'Green task set target group CodeDeploy warms before shifting ECS traffic'],
+    ['payments-api-staging-codedeploy-app', 'codeDeployApplication', 'CodeDeploy application coordinating ECS traffic shifting (style: linear; qualifiers: min healthy 80% and warmup 45s)'],
+    ['payments-api-staging-codedeploy-group', 'codeDeployDeploymentGroup', 'CodeDeploy deployment group Tenet targets for ECS rollout (style: linear; qualifiers: min healthy 80% and warmup 45s)'],
+    ['payments-api-staging-prod-listener', 'productionListener', 'Production listener CodeDeploy shifts during ECS traffic shifting (style: linear; qualifiers: min healthy 80% and warmup 45s)'],
+    ['payments-api-staging-test-listener', 'testListener', 'Test listener CodeDeploy uses to validate the replacement ECS task set before promotion (style: linear; qualifiers: min healthy 80% and warmup 45s)'],
+    ['payments-api-staging-blue', 'blueTaskSetTargetGroup', 'Blue task set target group CodeDeploy treats as the live ECS traffic destination (style: linear; qualifiers: min healthy 80% and warmup 45s)'],
+    ['payments-api-staging-green', 'greenTaskSetTargetGroup', 'Green task set target group CodeDeploy warms before shifting ECS traffic (style: linear; qualifiers: min healthy 80% and warmup 45s)'],
   ];
   for (const [name, type, description] of expectedResources) {
     if (!accountsText.includes(name)) throw new Error('expected ecs fallback resource ' + name);
@@ -1126,6 +1127,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 			"targetType":     "ec2",
 			"strategy":       "canary",
 			"executionMode":  "asgWeightedTargetGroups",
+			"rolloutConfig":  map[string]any{"capacity": map[string]any{"desired": 4, "min": 2, "max": 8}, "strategy": map[string]any{"warmupSeconds": 90}},
 			"userData":       map[string]any{"type": "file", "path": "userdata/payments-api-prod.sh"},
 			"sync":           map[string]any{"state": "OutOfSync", "reason": "weighted rollout in progress"},
 			"health":         map[string]any{"overall": "Progressing", "summary": "candidate fleet bootstrapping"},
@@ -1199,11 +1201,11 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
   const expectedResources = [
-    ['payments-api-prod-candidate', 'candidateAutoScalingGroup', 'Candidate Auto Scaling Group Tenet will create for weighted target group rollout'],
+    ['payments-api-prod-candidate', 'candidateAutoScalingGroup', 'Candidate Auto Scaling Group Tenet creates from normalized userdata source file:userdata/payments-api-prod.sh with desired 4, min 2, and max 8 instances and warmup 90s for weighted target group rollout'],
     ['payments-api-prod-active', 'activeTargetGroup', 'Currently active target group receiving production traffic'],
     ['payments-api-prod-candidate', 'candidateTargetGroup', 'Candidate target group Tenet will register and warm before traffic shifting'],
     ['payments-api-prod-prod-listener', 'productionListenerRule', 'Production listener rule operators inspect while Tenet updates weighted forwarding during rollout'],
-    ['payments-api-prod-weighted-routing', 'trafficShiftPlan', 'Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group'],
+    ['payments-api-prod-weighted-routing', 'trafficShiftPlan', 'Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s'],
     ['file:userdata/payments-api-prod.sh', 'userDataBootstrapSource', 'Normalized userdata bootstrap source for candidate EC2 capacity'],
   ];
   for (const [name, type, description] of expectedResources) {
@@ -1238,6 +1240,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 			"targetType":     "ec2",
 			"strategy":       "rolling",
 			"executionMode":  "asgInstanceRefresh",
+			"rolloutConfig":  map[string]any{"stacks": []map[string]any{{"rollingUpdateInstanceCount": 2}}},
 			"userData":       map[string]any{"type": "file", "path": "userdata/payments-api-refresh.sh"},
 			"sync":           map[string]any{"state": "OutOfSync", "reason": "instance refresh in progress"},
 			"health":         map[string]any{"overall": "Progressing", "summary": "instances replacing in service auto scaling group"},
@@ -1311,7 +1314,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
   const expectedResources = [
-    ['payments-api-refresh-service', 'serviceAutoScalingGroup', 'Service Auto Scaling Group Tenet refreshes in place'],
+    ['payments-api-refresh-service', 'serviceAutoScalingGroup', 'Service Auto Scaling Group Tenet refreshes in place with rolling-update batch size 2'],
     ['file:userdata/payments-api-refresh.sh', 'userDataBootstrapSource', 'Normalized userdata bootstrap source for refreshed EC2 instances'],
   ];
   for (const [name, type, description] of expectedResources) {
@@ -1346,6 +1349,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 			"targetType":     "ecs",
 			"strategy":       "linear",
 			"executionMode":  "ecsCodeDeploy",
+			"rolloutConfig":  map[string]any{"strategy": map[string]any{"minHealthyPercent": 80, "warmupSeconds": 45}},
 			"sync":           map[string]any{"state": "OutOfSync", "reason": "candidate tasks warming"},
 			"health":         map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy while CodeDeploy warms the green task set"},
 			"rollout": map[string]any{
@@ -1714,6 +1718,7 @@ func TestResourceDetailPageUsesStableResourceIDsWithNodeHarness(t *testing.T) {
 		"targetType":       "ec2",
 		"strategy":         "canary",
 		"executionMode":    "asgWeightedTargetGroups",
+		"rolloutConfig":    map[string]any{"capacity": map[string]any{"desired": 4, "min": 2, "max": 8}, "strategy": map[string]any{"warmupSeconds": 90}},
 		"userData":         map[string]any{"type": "file", "path": "userdata/payments-api-prod.sh"},
 		"sync":             map[string]any{"state": "OutOfSync", "reason": "weighted rollout in progress"},
 		"health":           map[string]any{"overall": "Progressing", "summary": "candidate fleet bootstrapping"},
@@ -1747,6 +1752,7 @@ func TestResourceDetailPageUsesStableResourceIDsWithNodeHarness(t *testing.T) {
 		"targetType":       "ec2",
 		"strategy":         "canary",
 		"executionMode":    "asgWeightedTargetGroups",
+		"rolloutConfig":    map[string]any{"capacity": map[string]any{"desired": 4, "min": 2, "max": 8}, "strategy": map[string]any{"warmupSeconds": 90}},
 		"userData":         map[string]any{"type": "file", "path": "userdata/payments-api-prod.sh"},
 		"sync":             map[string]any{"state": "OutOfSync", "reason": "weighted rollout in progress"},
 		"health":           map[string]any{"overall": "Progressing", "summary": "candidate fleet bootstrapping"},
@@ -1765,11 +1771,11 @@ func TestResourceDetailPageUsesStableResourceIDsWithNodeHarness(t *testing.T) {
 			"desiredGeneration":  12,
 			"observedGeneration": 11,
 			"execution": []map[string]any{
-				{"name": "payments-api-prod-candidate", "resource": "candidateAutoScalingGroup", "description": "Candidate Auto Scaling Group Tenet will create for weighted target group rollout"},
+				{"name": "payments-api-prod-candidate", "resource": "candidateAutoScalingGroup", "description": "Candidate Auto Scaling Group Tenet creates from normalized userdata source file:userdata/payments-api-prod.sh with desired 4, min 2, and max 8 instances and warmup 90s for weighted target group rollout"},
 				{"name": "payments-api-prod-active", "resource": "activeTargetGroup", "description": "Currently active target group receiving production traffic"},
 				{"name": "payments-api-prod-candidate", "resource": "candidateTargetGroup", "description": "Candidate target group Tenet will register and warm before traffic shifting"},
 				{"name": "payments-api-prod-prod-listener", "resource": "productionListenerRule", "description": "Production listener rule operators inspect while Tenet updates weighted forwarding during rollout"},
-				{"name": "payments-api-prod-weighted-routing", "resource": "trafficShiftPlan", "description": "Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group"},
+				{"name": "payments-api-prod-weighted-routing", "resource": "trafficShiftPlan", "description": "Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s"},
 				{"name": "file:userdata/payments-api-prod.sh", "resource": "userDataBootstrapSource", "description": "Normalized userdata bootstrap source for candidate EC2 capacity"},
 			},
 		},
@@ -1851,7 +1857,7 @@ const runUI = async (search, detailBody) => {
   const fallbackRun = await runUI('?page=application&deployment=payments-api-prod', fallbackDetailBody);
   if (fallbackRun.fetchCalls.length !== 1 || fallbackRun.fetchCalls[0] !== '/v1/overview/deployments/payments-api-prod') throw new Error('expected fallback application page to load only deployment detail');
   const fallbackLinks = collectNodes(fallbackRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
-  const expectedResourceID = 'trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group';
+  const expectedResourceID = 'trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s';
   const resourceHref = '/?' + new URLSearchParams({
     page: 'resource',
     deployment: 'payments-api-prod',
@@ -1867,7 +1873,7 @@ const runUI = async (search, detailBody) => {
   const accountsText = collectText(canonicalRun.document.getElementById('accounts')).join(' | ');
   if (!summaryText.includes('payments-api-prod-weighted-routing')) throw new Error('expected canonical resource page to resolve trafficShiftPlan resource title');
   if (!summaryText.includes('trafficShiftPlan')) throw new Error('expected canonical resource page to resolve trafficShiftPlan resource type');
-  if (!summaryText.includes('Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group')) throw new Error('expected canonical resource page to resolve trafficShiftPlan resource description');
+  if (!summaryText.includes('Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s')) throw new Error('expected canonical resource page to resolve trafficShiftPlan resource description');
   if (summaryText.includes('No linked resource metadata is available for this selection.')) throw new Error('expected canonical resource page not to fall back to placeholder metadata');
   if (!accountsText.includes('Resource id')) throw new Error('expected canonical resource page to render resource id');
   if (!accountsText.includes(expectedResourceID)) throw new Error('expected canonical resource page to preserve the fallback-generated canonical resource id');
@@ -3240,6 +3246,94 @@ async function render(search) {
   if (!driftText.includes('Runtime change details')) throw new Error('expected drift route runtime change details label');
   if (!driftText.includes('Summary changed to Shifted 10 percent of traffic; Current step changed from CreateCodeDeployDeployment to ShiftTrafficLinear')) throw new Error('expected drift route runtime change details value');
 })();
+`
+
+	cmd := exec.Command("node", "-e", nodeProgram)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+	}
+}
+
+func TestEmbeddedUIRolloutExecutionFallbackContractWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.classList = { add: () => {}, toggle: () => {} };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+}
+class InputElement extends Element { setSelectionRange() {} }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector() { return null; }
+}
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const window = { location: { pathname: '/', search: '', hash: '' } };
+const history = { replaceState() {} };
+const fetch = (url) => {
+  if (url === '/v1/overview/applications') return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+const exported = new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent + '; return { canonicalRolloutExecutionFallback };')(window, document, fetch, history, Element, InputElement);
+const weighted = exported.canonicalRolloutExecutionFallback({
+  name: 'api-prod',
+  executionMode: 'asgWeightedTargetGroups',
+  strategy: 'canary',
+  userData: { type: 'file', path: 'userdata/api-prod.sh' },
+  rolloutConfig: { capacity: { desired: 4, min: 2, max: 8 }, strategy: { warmupSeconds: 90 } },
+});
+const codeDeploy = exported.canonicalRolloutExecutionFallback({
+  name: 'worker-prod',
+  executionMode: 'ecsCodeDeploy',
+  strategy: 'linear',
+  rolloutConfig: { strategy: { minHealthyPercent: 80, warmupSeconds: 45 } },
+});
+const refresh = exported.canonicalRolloutExecutionFallback({
+  name: 'api-prod',
+  executionMode: 'asgInstanceRefresh',
+  userData: { type: 'file', path: 'userdata/api-prod-refresh.sh' },
+  rolloutConfig: { stacks: [{ rollingUpdateInstanceCount: 2 }] },
+});
+const weightedCandidate = weighted.find((item) => item.resource === 'candidateAutoScalingGroup');
+const weightedTraffic = weighted.find((item) => item.resource === 'trafficShiftPlan');
+const codeDeployService = codeDeploy.find((item) => item.resource === 'ecsService');
+const refreshService = refresh.find((item) => item.resource === 'serviceAutoScalingGroup');
+if (!weightedCandidate || weightedCandidate.description !== 'Candidate Auto Scaling Group Tenet creates from normalized userdata source file:userdata/api-prod.sh with desired 4, min 2, and max 8 instances and warmup 90s for weighted target group rollout') throw new Error('unexpected weighted fallback candidate description: ' + (weightedCandidate && weightedCandidate.description));
+if (!weightedTraffic || weightedTraffic.description !== 'Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s') throw new Error('unexpected weighted fallback traffic description: ' + (weightedTraffic && weightedTraffic.description));
+if (!codeDeployService || codeDeployService.description !== 'ECS service Tenet updates during CodeDeploy traffic shifting (style: linear; qualifiers: min healthy 80% and warmup 45s)') throw new Error('unexpected code deploy fallback service description: ' + (codeDeployService && codeDeployService.description));
+if (!refreshService || refreshService.description !== 'Service Auto Scaling Group Tenet refreshes in place with rolling-update batch size 2') throw new Error('unexpected instance refresh fallback description: ' + (refreshService && refreshService.description));
 `
 
 	cmd := exec.Command("node", "-e", nodeProgram)

@@ -390,7 +390,117 @@ func TestAPIOptionsOverviewDeploymentResourceLogsUsesECSRollingFallbackWhenExecu
 	}
 }
 
+func TestAPIOptionsOverviewDeploymentResourceLogsUsesWeightedTargetGroupFallbackWhenExecutionIsMissing(t *testing.T) {
+	repoRoot := writeCanaryEC2RepositoryFixture(t)
+	provider := &fakeResourceLogProvider{result: resourcelogs.Result{Available: true}}
+	restore := stubResourceLogProviderFactory(provider)
+	defer restore()
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
+	for _, resource := range []struct {
+		resourceType string
+		resourceName string
+	}{
+		{resourceType: "candidateAutoScalingGroup", resourceName: "api-prod-candidate"},
+		{resourceType: "trafficShiftPlan", resourceName: "api-prod-weighted-routing"},
+		{resourceType: "userDataBootstrapSource", resourceName: "file:userdata/api-prod.sh"},
+	} {
+		provider.calls = 0
+		provider.lastRequest = resourcelogs.Request{}
+
+		_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", resource.resourceType, resource.resourceName)
+		if err != nil {
+			t.Fatalf("expected weighted target group fallback resource binding for %s/%s, got %v", resource.resourceType, resource.resourceName, err)
+		}
+		if provider.calls != 1 {
+			t.Fatalf("expected provider to run once for %s/%s, got %d calls", resource.resourceType, resource.resourceName, provider.calls)
+		}
+		if provider.lastRequest.ResourceType != resource.resourceType || provider.lastRequest.ResourceName != resource.resourceName {
+			t.Fatalf("unexpected resource log request for %s/%s: %+v", resource.resourceType, resource.resourceName, provider.lastRequest)
+		}
+	}
+}
+
 func TestCanonicalRolloutExecutionFallback(t *testing.T) {
+	t.Run("weighted target groups", func(t *testing.T) {
+		detail := catalog.DeploymentOverviewDetail{
+			Name:          "api-prod",
+			ExecutionMode: "asgWeightedTargetGroups",
+			Strategy:      "canary",
+			UserData:      domain.DeploymentUserData{Type: "file", Path: "userdata/api-prod.sh"},
+			RolloutConfig: domain.DeploymentRolloutConfig{Capacity: domain.DeploymentRolloutCapacity{Desired: 4, Min: 2, Max: 8}, Strategy: domain.DeploymentRolloutStrategy{WarmupSeconds: 90}},
+		}
+		want := []domain.RolloutExecutionDetail{{
+			Resource:    "candidateAutoScalingGroup",
+			Name:        "api-prod-candidate",
+			Description: "Candidate Auto Scaling Group Tenet creates from normalized userdata source file:userdata/api-prod.sh with desired 4, min 2, and max 8 instances and warmup 90s for weighted target group rollout",
+		}, {
+			Resource:    "activeTargetGroup",
+			Name:        "api-prod-active",
+			Description: "Currently active target group receiving production traffic",
+		}, {
+			Resource:    "candidateTargetGroup",
+			Name:        "api-prod-candidate",
+			Description: "Candidate target group Tenet will register and warm before traffic shifting",
+		}, {
+			Resource:    "productionListenerRule",
+			Name:        "api-prod-prod-listener",
+			Description: "Production listener rule operators inspect while Tenet updates weighted forwarding during rollout",
+		}, {
+			Resource:    "trafficShiftPlan",
+			Name:        "api-prod-weighted-routing",
+			Description: "Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s",
+		}, {
+			Resource:    "userDataBootstrapSource",
+			Name:        "file:userdata/api-prod.sh",
+			Description: "Normalized userdata bootstrap source for candidate EC2 capacity",
+		}}
+		if got := canonicalRolloutExecutionFallback(detail); !reflect.DeepEqual(got, want) {
+			t.Fatalf("unexpected weighted target group fallback resources: got %+v want %+v", got, want)
+		}
+	})
+
+	t.Run("ecs code deploy", func(t *testing.T) {
+		detail := catalog.DeploymentOverviewDetail{
+			Name:          "worker-prod",
+			ExecutionMode: "ecsCodeDeploy",
+			Strategy:      "linear",
+			RolloutConfig: domain.DeploymentRolloutConfig{Strategy: domain.DeploymentRolloutStrategy{MinHealthyPercent: 80, WarmupSeconds: 45}},
+		}
+		want := []domain.RolloutExecutionDetail{{
+			Resource:    "ecsService",
+			Name:        "worker-prod-service",
+			Description: "ECS service Tenet updates during CodeDeploy traffic shifting (style: linear; qualifiers: min healthy 80% and warmup 45s)",
+		}, {
+			Resource:    "codeDeployApplication",
+			Name:        "worker-prod-codedeploy-app",
+			Description: "CodeDeploy application coordinating ECS traffic shifting (style: linear; qualifiers: min healthy 80% and warmup 45s)",
+		}, {
+			Resource:    "codeDeployDeploymentGroup",
+			Name:        "worker-prod-codedeploy-group",
+			Description: "CodeDeploy deployment group Tenet targets for ECS rollout (style: linear; qualifiers: min healthy 80% and warmup 45s)",
+		}, {
+			Resource:    "productionListener",
+			Name:        "worker-prod-prod-listener",
+			Description: "Production listener CodeDeploy shifts during ECS traffic shifting (style: linear; qualifiers: min healthy 80% and warmup 45s)",
+		}, {
+			Resource:    "testListener",
+			Name:        "worker-prod-test-listener",
+			Description: "Test listener CodeDeploy uses to validate the replacement ECS task set before promotion (style: linear; qualifiers: min healthy 80% and warmup 45s)",
+		}, {
+			Resource:    "blueTaskSetTargetGroup",
+			Name:        "worker-prod-blue",
+			Description: "Blue task set target group CodeDeploy treats as the live ECS traffic destination (style: linear; qualifiers: min healthy 80% and warmup 45s)",
+		}, {
+			Resource:    "greenTaskSetTargetGroup",
+			Name:        "worker-prod-green",
+			Description: "Green task set target group CodeDeploy warms before shifting ECS traffic (style: linear; qualifiers: min healthy 80% and warmup 45s)",
+		}}
+		if got := canonicalRolloutExecutionFallback(detail); !reflect.DeepEqual(got, want) {
+			t.Fatalf("unexpected ecs code deploy fallback resources: got %+v want %+v", got, want)
+		}
+	})
+
 	t.Run("ecs rolling", func(t *testing.T) {
 		detail := catalog.DeploymentOverviewDetail{
 			Name:          "api-prod",
@@ -404,6 +514,27 @@ func TestCanonicalRolloutExecutionFallback(t *testing.T) {
 		}}
 		if got := canonicalRolloutExecutionFallback(detail); !reflect.DeepEqual(got, want) {
 			t.Fatalf("unexpected ecs rolling fallback resources: got %+v want %+v", got, want)
+		}
+	})
+
+	t.Run("asg instance refresh", func(t *testing.T) {
+		detail := catalog.DeploymentOverviewDetail{
+			Name:          "api-prod",
+			ExecutionMode: "asgInstanceRefresh",
+			UserData:      domain.DeploymentUserData{Type: "file", Path: "userdata/api-prod-refresh.sh"},
+			RolloutConfig: domain.DeploymentRolloutConfig{Stacks: []domain.DeploymentRolloutStack{{RollingUpdateInstanceCount: 2}}},
+		}
+		want := []domain.RolloutExecutionDetail{{
+			Resource:    "serviceAutoScalingGroup",
+			Name:        "api-prod-service",
+			Description: "Service Auto Scaling Group Tenet refreshes in place with rolling-update batch size 2",
+		}, {
+			Resource:    "userDataBootstrapSource",
+			Name:        "file:userdata/api-prod-refresh.sh",
+			Description: "Normalized userdata bootstrap source for refreshed EC2 instances",
+		}}
+		if got := canonicalRolloutExecutionFallback(detail); !reflect.DeepEqual(got, want) {
+			t.Fatalf("unexpected asg instance refresh fallback resources: got %+v want %+v", got, want)
 		}
 	})
 }
@@ -498,6 +629,15 @@ func writeRepositoryFixture(t *testing.T) string {
 	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
 	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","image":"payments-api:v2","target":{"type":"ecs"},"stacks":[{"stack":"api-prod","account":"prod-core","env":"prod-apne2","replacement_type":"linear","capacity":{"desired":1,"min":1,"max":1},"regions":[{"region":"ap-northeast-2"}]}]}`)
 	writeJSON(t, filepath.Join(root, "deployments", "worker-prod.json"), `{"name":"worker-prod","image":"payments-worker:v2","target":{"type":"ecs"},"stacks":[{"stack":"worker-prod","account":"prod-core","env":"prod-apne2","replacement_type":"linear","capacity":{"desired":1,"min":1,"max":1},"regions":[{"region":"ap-northeast-2"}]}]}`)
+	return root
+}
+
+func writeCanaryEC2RepositoryFixture(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","observerRoleArn":"arn:aws:iam::123456789012:role/TenetObserverRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"canary","warmupSeconds":90},"traffic":{"port":443},"capacity":{"desired":4,"min":2,"max":8},"binary":"s3://releases.example.com/payments-api/prod/payments-api-linux-amd64","userdata":{"type":"file","path":"userdata/api-prod.sh"}}`)
 	return root
 }
 
