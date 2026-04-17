@@ -56,13 +56,19 @@ curl -fsS "$API_BASE_URL/healthz" >/dev/null
 summary=$(curl -fsS "$API_BASE_URL/v1/catalog/summary")
 applications=$(curl -fsS "$API_BASE_URL/v1/overview/applications")
 deployment_detail=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod")
+deployment_events=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/events")
+worker_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
+ui=$(curl -fsS "$API_BASE_URL/")
 
-SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" DEPLOYMENT_DETAIL_JSON="$deployment_detail" python3 - <<'PY'
+SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_EVENTS_JSON="$deployment_events" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" python3 - <<'PY'
 import json, os
 
 summary = json.loads(os.environ["SUMMARY_JSON"])
 applications = json.loads(os.environ["APPLICATIONS_JSON"])
 deployment_detail = json.loads(os.environ["DEPLOYMENT_DETAIL_JSON"])
+deployment_events = json.loads(os.environ["DEPLOYMENT_EVENTS_JSON"])
+worker_resource_logs = json.loads(os.environ["WORKER_RESOURCE_LOGS_JSON"])
+ui = os.environ["UI_HTML"]
 
 assert summary["accountCount"] == 2, summary
 assert summary["environmentCount"] == 2, summary
@@ -76,6 +82,44 @@ assert deployment_detail["name"] == "payments-api-prod", deployment_detail
 assert deployment_detail["awsAccountId"] == "123456789012", deployment_detail
 assert deployment_detail["accountName"] == "prod-core", deployment_detail
 assert isinstance((deployment_detail.get("rollout") or {}).get("execution", []), list), deployment_detail
+
+assert deployment_events["deploymentName"] == "payments-api-prod", deployment_events
+assert isinstance(deployment_events.get("events"), list), deployment_events
+for event in deployment_events["events"]:
+    assert isinstance(event.get("timestamp"), str) and event["timestamp"], deployment_events
+    assert isinstance(event.get("source"), str) and event["source"], deployment_events
+    assert isinstance(event.get("summary"), str) and event["summary"], deployment_events
+    assert isinstance((event.get("sync") or {}).get("state"), str) and (event.get("sync") or {}).get("state"), deployment_events
+    assert isinstance((event.get("health") or {}).get("overall"), str) and (event.get("health") or {}).get("overall"), deployment_events
+    assert event.get("changes") is None or isinstance(event.get("changes"), list), deployment_events
+    assert event.get("changeDetails") is None or isinstance(event.get("changeDetails"), list), deployment_events
+
+assert worker_resource_logs["deploymentName"] == "worker-prod", worker_resource_logs
+assert worker_resource_logs["resourceType"] == "ecsService", worker_resource_logs
+assert worker_resource_logs["resourceName"] == "worker-prod-service", worker_resource_logs
+assert isinstance(worker_resource_logs["available"], bool), worker_resource_logs
+assert worker_resource_logs.get("entries") is None or isinstance(worker_resource_logs.get("entries"), list), worker_resource_logs
+if worker_resource_logs["available"]:
+    assert isinstance(worker_resource_logs.get("source"), str) and worker_resource_logs["source"], worker_resource_logs
+    for entry in worker_resource_logs.get("entries") or []:
+        assert isinstance(entry.get("timestamp"), str) and entry["timestamp"], worker_resource_logs
+        assert isinstance(entry.get("message"), str) and entry["message"], worker_resource_logs
+        if "stream" in entry:
+            assert isinstance(entry.get("stream"), str) and entry["stream"], worker_resource_logs
+else:
+    assert isinstance(worker_resource_logs.get("unavailableReason"), str) and worker_resource_logs["unavailableReason"], worker_resource_logs
+
+for fragment in (
+    "Open account",
+    "Open application",
+    "Drift view",
+    "Plan/apply",
+    "Controller runtime events",
+    "Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.",
+    "Recent logs",
+    "fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-logs?${params.toString()}`)",
+):
+    assert fragment in ui, fragment
 PY
 
 controller_logs=""
