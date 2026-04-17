@@ -1605,7 +1605,8 @@
         deploymentEventsStateByDeployment.set(deploymentName, { status: 'loading', promise, sections: [section] });
         return promise;
       };
-      const fetchPlanPreview = (planId) => fetch(`/v1/plans/${encodeURIComponent(planId)}`)
+      const buildPlanPreviewRoute = (planId) => `/v1/plans/${encodeURIComponent(planId)}`;
+      const fetchPlanPreview = (planId) => fetch(buildPlanPreviewRoute(planId))
         .then((response) => {
           if (response.ok) return response.json();
           const fallback = response.status === 503
@@ -2244,6 +2245,7 @@
           if (activePlanRecord) {
             const previewSection = createDetailSection('Stored plan preview');
             const previewGrid = createElement('div', 'detail-grid');
+            const previewLinks = createElement('div', 'row-links');
             [
               ['Plan ID', metricValue(activePlanRecord.id)],
               ['Preview status', textOrDash(activePlanRecord.status)],
@@ -2255,9 +2257,13 @@
             ].forEach(([label, value]) => {
               previewGrid.append(createMetric(label, value));
             });
+            previewLinks.append(
+              createNavLink(buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activePlanRecord.id }), 'Open bookmarked workspace', '_self'),
+              createNavLink(buildPlanPreviewRoute(activePlanRecord.id), 'Plan JSON'),
+            );
             previewSection.append(
               previewGrid,
-              createElement('div', 'detail-state', `Shareable URL · ${buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activePlanRecord.id })}`),
+              previewLinks,
             );
             sections.push(previewSection);
           }

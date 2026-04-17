@@ -3376,10 +3376,14 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Approval required') || !text.includes('Yes')) throw new Error('expected approval required indicator');
   if (!text.includes('Stored plan preview')) throw new Error('expected stored plan preview section');
   if (!text.includes('fp_plan_ready')) throw new Error('expected stored source fingerprint');
-  if (!text.includes('Shareable URL') || !text.includes('/?page=plan&deployment=api-prod&planId=plan_ready_123')) throw new Error('expected shareable URL');
   if (!text.includes('Server-authored plan preview loaded from GET /v1/plans/plan_ready_123.')) throw new Error('expected server-authored operations intro');
   if (!text.includes('server-preview-target')) throw new Error('expected server-authored target');
   if (!text.includes('Server-authored preview summary')) throw new Error('expected server-authored operation summary');
+  const links = collectNodes(root, (node) => node.tagName === 'A');
+  const workspaceLink = links.find((node) => node.href === '/?page=plan&deployment=api-prod&planId=plan_ready_123' && node.textContent === 'Open bookmarked workspace');
+  if (!workspaceLink || workspaceLink.target !== '_self' || workspaceLink.rel) throw new Error('expected bookmarked workspace self link after create');
+  const planJSONLink = links.find((node) => node.href === '/v1/plans/plan_ready_123' && node.textContent === 'Plan JSON');
+  if (!planJSONLink || planJSONLink.target !== '_blank' || planJSONLink.rel !== 'noreferrer noopener') throw new Error('expected plan json read-model link after create');
   buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
   createPlan = buttons.find((node) => node.textContent === 'Create Plan');
   applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');
@@ -3426,7 +3430,11 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Plan preview errors')) throw new Error('expected failed preview errors section');
   if (!text.includes('stale source fingerprint')) throw new Error('expected failed preview error text');
   if (!text.includes('No server-authored plan operations are stored for this preview.')) throw new Error('expected empty stored operations message');
-  if (!text.includes('/?page=plan&deployment=api-prod&planId=plan_failed_123')) throw new Error('expected failed preview shareable URL');
+  const links = collectNodes(root, (node) => node.tagName === 'A');
+  const workspaceLink = links.find((node) => node.href === '/?page=plan&deployment=api-prod&planId=plan_failed_123' && node.textContent === 'Open bookmarked workspace');
+  if (!workspaceLink || workspaceLink.target !== '_self' || workspaceLink.rel) throw new Error('expected failed preview bookmarked workspace self link');
+  const planJSONLink = links.find((node) => node.href === '/v1/plans/plan_failed_123' && node.textContent === 'Plan JSON');
+  if (!planJSONLink || planJSONLink.target !== '_blank' || planJSONLink.rel !== 'noreferrer noopener') throw new Error('expected failed preview plan json read-model link');
   const buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
   const createPlan = buttons.find((node) => node.textContent === 'Create Plan');
   const applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');

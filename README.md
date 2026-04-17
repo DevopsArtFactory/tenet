@@ -80,7 +80,7 @@ Use `TENET_API_REQUEST_TIMEOUT` to bound request handling. The default is `30s`;
 For the current read-only plan/apply flow, a typical local operator path is:
 - `GET /v1/overview/applications/{deploymentName}` or `GET /v1/overview/deployments/{deploymentName}` to inspect the deployment and capture its additive `sourceFingerprint`
 - `POST /v1/plans/deployments/{deploymentName}` with optional `{"ifMatch":"<sourceFingerprint>"}` to persist an immutable preview for the reviewed state
-- `GET /v1/plans/{planId}` or open `http://localhost:8080/?page=plan&deployment=payments-api-prod&planId={planId}` to reopen the stored preview
+- open `http://localhost:8080/?page=plan&deployment=payments-api-prod&planId={planId}` for the bookmarkable plan workspace, then use the stored-preview links for in-app `_self` navigation or the immutable `Plan JSON` read-model route at `GET /v1/plans/{planId}`
 - `POST /v1/applies/plans/{planId}` to persist an immutable apply request derived from that ready preview
 - `GET /v1/applies/{applyId}` to reopen the stored apply request; this backend slice is disabled by default for live execution, so the created record is intentionally stored as `failed` with operator-facing error/details instead of mutating AWS
 
@@ -143,7 +143,7 @@ Canonical resource-log routes stay stable across rollout modes so operators can 
 
 The same drill-down also includes read-only workspace surfaces:
 - `/?page=drift&deployment={deploymentName}` for derived field-level troubleshooting context
-- `/?page=plan&deployment={deploymentName}` for immutable plan previews and shareable `planId` reopen URLs while apply remains disabled
+- `/?page=plan&deployment={deploymentName}` for immutable plan previews, bookmarkable `planId` workspace URLs, and stored-preview quick links to both the embedded workspace (`_self`) and immutable `Plan JSON` read model while apply remains disabled
 
 The backend now also exposes read-only immutable apply-request routes:
 - `POST /v1/applies/plans/{planId}`
