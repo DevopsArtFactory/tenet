@@ -2484,7 +2484,7 @@
                         error: null,
                       };
                       renderPlanWorkspace();
-                      const ifMatch = await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;
+                      const ifMatch = detail.sourceFingerprint || await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;
                       createPlanPreview(detail.name || currentPageState.deployment, ifMatch)
                         .then((record) => {
                           planState = {

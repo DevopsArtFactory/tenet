@@ -175,7 +175,7 @@ assert 'Drift view' in ui, ui
 assert 'Plan/apply' in ui, ui
 assert "createNavLink(buildPageURL('drift', { deployment: detail.name }), 'Drift view', '_self')" in ui, ui
 assert "createNavLink(buildPageURL('plan', { deployment: detail.name }), 'Plan/apply', '_self')" in ui, ui
-assert "const ifMatch = await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;" in ui, ui
+assert "const ifMatch = detail.sourceFingerprint || await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;" in ui, ui
 assert 'Recent logs' in ui, ui
 assert 'Plan preview actions' in ui, ui
 assert 'Plan preview approval guidance' in ui, ui

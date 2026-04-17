@@ -489,7 +489,7 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"No derived plan operations are currently available.",
 		"No server-authored plan operations are stored for this preview.",
 		"const fallbackIfMatch = planState.record?.source?.fingerprint || '';",
-		"const ifMatch = await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;",
+		"const ifMatch = detail.sourceFingerprint || await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;",
 		"if (currentPageState.page === 'application') {",
 		"renderApplicationDetailPage(detail);",
 		"if (currentPageState.page === 'resource') {",
