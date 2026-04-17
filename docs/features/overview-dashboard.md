@@ -137,7 +137,8 @@ Current plan/apply workspace behavior:
 - shows latest runtime context rows for target/strategy/execution mode
 - shows additive runtime artifact/condition rows from `runtimeSummary.deployedArtifact` / `runtimeSummary.conditions`
 - keeps machine-readable `runtimeSummary.changes[]` rows while also rendering human-readable `runtimeSummary.changeDetails[]`
-- shows rollout-plan steps from the deployment detail route
+- derives a read-only `Plan operations` table from `rollout.steps[]`, execution-resource metadata, and the latest runtime summary in the deployment detail route
+- shows a visible derived `high` / `medium` / `low` risk badge plus concise approval guidance from the current read model before any future mutation wiring
 - displays disabled `Create Plan` / `Apply Plan` buttons
 - explicitly states that mutation APIs are not wired yet
 
