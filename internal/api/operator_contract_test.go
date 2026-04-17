@@ -75,3 +75,40 @@ func TestDockerUpOperatorContract(t *testing.T) {
 		}
 	}
 }
+
+func TestReadOnlyApplyOperatorContract(t *testing.T) {
+	script := readRepoFile(t, "scripts/smoke-local.sh")
+	for _, fragment := range []string{
+		`TENET_APPLY_STORE_PATH="$APPLY_STORE_PATH"`,
+		`curl -fsS -X POST "http://$HOST:$PORT/v1/applies/plans/$plan_id"`,
+		`curl -fsS "http://$HOST:$PORT/v1/applies/$apply_id"`,
+		`assert apply_record['error'] == 'apply execution is disabled', apply_record`,
+	} {
+		if !strings.Contains(script, fragment) {
+			t.Fatalf("expected smoke-local apply contract to include %q", fragment)
+		}
+	}
+
+	readme := readRepoFile(t, "README.md")
+	for _, fragment := range []string{
+		"`POST /v1/applies/plans/{planId}`",
+		"`GET /v1/applies/{applyId}`",
+		"`TENET_APPLY_STORE_PATH`",
+		"disabled by default for live execution",
+	} {
+		if !strings.Contains(readme, fragment) {
+			t.Fatalf("expected README apply contract to include %q", fragment)
+		}
+	}
+
+	uiDoc := readRepoFile(t, "docs/architecture/tenet-v1-overview-ui.md")
+	for _, fragment := range []string{
+		"`POST /v1/applies/plans/{planId}`",
+		"`GET /v1/applies/{applyId}`",
+		"failed immutable contract with operator-facing error/details",
+	} {
+		if !strings.Contains(uiDoc, fragment) {
+			t.Fatalf("expected overview UI doc apply contract to include %q", fragment)
+		}
+	}
+}

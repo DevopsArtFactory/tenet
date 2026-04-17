@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
@@ -206,6 +207,43 @@ func TestAPIOptionsPlanPreviewPersistsAndReadsBack(t *testing.T) {
 	}
 	if fetched.ID != created.Record.ID || fetched.Source.Route != "/v1/overview/deployments/api-prod" {
 		t.Fatalf("unexpected fetched immutable plan preview: %+v", fetched)
+	}
+}
+
+func TestAPIOptionsApplyRequestPersistsDisabledRecordAndReadsBack(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	t.Setenv("TENET_PLAN_STORE_PATH", filepath.Join(t.TempDir(), "plan-previews.json"))
+	t.Setenv("TENET_APPLY_STORE_PATH", filepath.Join(t.TempDir(), "apply-requests.json"))
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
+	if options.CreateDeploymentPlanPreview == nil || options.PlanPreview == nil || options.CreateApplyRequest == nil || options.ApplyRequest == nil {
+		t.Fatalf("expected plan/apply providers to be wired")
+	}
+
+	plan, err := options.CreateDeploymentPlanPreview(context.Background(), "api-prod", planpreview.CreateRequest{})
+	if err != nil {
+		t.Fatalf("CreateDeploymentPlanPreview returned error: %v", err)
+	}
+	created, err := options.CreateApplyRequest(context.Background(), plan.Record.ID)
+	if err != nil {
+		t.Fatalf("CreateApplyRequest returned error: %v", err)
+	}
+	if !created.Created || created.Record.ID == "" {
+		t.Fatalf("expected a persisted immutable apply request, got %+v", created)
+	}
+	if created.Record.PlanID != plan.Record.ID || created.Record.Status != applyrequest.StatusFailed {
+		t.Fatalf("unexpected created apply request: %+v", created.Record)
+	}
+	if created.Record.Error != "apply execution is disabled" || len(created.Record.Details) == 0 {
+		t.Fatalf("expected disabled apply contract, got %+v", created.Record)
+	}
+
+	fetched, err := options.ApplyRequest(context.Background(), created.Record.ID)
+	if err != nil {
+		t.Fatalf("ApplyRequest returned error: %v", err)
+	}
+	if fetched.ID != created.Record.ID || fetched.Source.Route != "/v1/plans/"+plan.Record.ID {
+		t.Fatalf("unexpected fetched immutable apply request: %+v", fetched)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
@@ -31,11 +32,19 @@ func respondInternalError(w http.ResponseWriter) {
 }
 
 func respondLookupError(w http.ResponseWriter, err error) {
-	if errors.Is(err, statusstore.ErrNotFound) || errors.Is(err, planpreview.ErrNotFound) {
+	if errors.Is(err, statusstore.ErrNotFound) || errors.Is(err, planpreview.ErrNotFound) || errors.Is(err, applyrequest.ErrNotFound) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 	respondInternalError(w)
+}
+
+func respondApplyCreateError(w http.ResponseWriter, err error) {
+	if errors.Is(err, applyrequest.ErrPlanNotReady) {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	respondLookupError(w, err)
 }
 
 // Options configures the API router.
@@ -59,6 +68,8 @@ type Options struct {
 	OverviewDeploymentResourceLogs func(context.Context, string, string, string) (resourcelogs.Result, error)
 	CreateDeploymentPlanPreview    func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error)
 	PlanPreview                    func(context.Context, string) (planpreview.Record, error)
+	CreateApplyRequest             func(context.Context, string) (applyrequest.CreateResult, error)
+	ApplyRequest                   func(context.Context, string) (applyrequest.Record, error)
 	DeploymentStatuses             func() ([]statusstore.Snapshot, error)
 	DeploymentStatus               func(string) (statusstore.Snapshot, error)
 }
@@ -406,6 +417,52 @@ func NewRouter(options Options) http.Handler {
 			return
 		}
 		record, err := options.PlanPreview(r.Context(), id)
+		if err != nil {
+			respondLookupError(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(record)
+	})
+	mux.HandleFunc("/v1/applies/plans/", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodPost) {
+			return
+		}
+		if options.CreateApplyRequest == nil {
+			http.Error(w, "apply request unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		planID := strings.TrimPrefix(r.URL.Path, "/v1/applies/plans/")
+		if planID == "" || strings.Contains(planID, "/") {
+			http.Error(w, "invalid plan id", http.StatusBadRequest)
+			return
+		}
+		result, err := options.CreateApplyRequest(r.Context(), planID)
+		if err != nil {
+			respondApplyCreateError(w, err)
+			return
+		}
+		w.Header().Set("Location", "/v1/applies/"+result.Record.ID)
+		w.Header().Set("Content-Type", "application/json")
+		if result.Created {
+			w.WriteHeader(http.StatusCreated)
+		}
+		_ = json.NewEncoder(w).Encode(result.Record)
+	})
+	mux.HandleFunc("/v1/applies/", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+		if options.ApplyRequest == nil {
+			http.Error(w, "apply request unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		id := strings.TrimPrefix(r.URL.Path, "/v1/applies/")
+		if id == "" || strings.Contains(id, "/") {
+			http.Error(w, "invalid apply id", http.StatusBadRequest)
+			return
+		}
+		record, err := options.ApplyRequest(r.Context(), id)
 		if err != nil {
 			respondLookupError(w, err)
 			return
