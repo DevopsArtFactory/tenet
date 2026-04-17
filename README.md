@@ -79,16 +79,22 @@ Use `TENET_API_REQUEST_TIMEOUT` to bound request handling. The default is `30s`;
 
 For the current read-only plan/apply flow, a typical local operator path is:
 - `GET /v1/overview/applications/{deploymentName}` or `GET /v1/overview/deployments/{deploymentName}` to inspect the deployment and capture its additive `sourceFingerprint`
-- open `http://localhost:8080/?page=audit` at any point for the bookmarkable audit page backed by `GET /v1/audit-logs`; it renders newest-first immutable plan/apply activity with explicit loading, empty, unavailable, and fetch-error states plus `_self` links back into the application and plan/apply drill-downs. Add `&limit={n}` to the page URL when you want the embedded view to request a smaller newest-first window from the API.
+- open `http://localhost:8080/?page=audit` at any point for the bookmarkable audit page backed by `GET /v1/audit-logs`; it renders newest-first immutable plan/apply activity with explicit loading, empty, unavailable, and fetch-error states plus `_self` links back into the application drill-down and plan/apply workspace. Add `&action=plan.created|apply.requested` to narrow the embedded timeline to one action, and keep using `&limit={n}` when you want a smaller newest-first window from the API.
 - `GET /v1/audit-logs?deployment={deploymentName}` when you want only one deployment's immutable plan/apply entries without changing the route shape
+- `GET /v1/audit-logs?action=plan.created` when you want only immutable plan-preview creation records
+- `GET /v1/audit-logs?action=apply.requested` when you want only immutable apply-request records
+- `GET /v1/audit-logs?action={action}` when you want only one immutable action type; `action` must be exactly `plan.created` or `apply.requested`
 - `POST /v1/plans/deployments/{deploymentName}` with optional `{"ifMatch":"<sourceFingerprint>"}` to persist an immutable preview for the reviewed state
 - open `http://localhost:8080/?page=plan&deployment=payments-api-prod&planId={planId}` for the bookmarkable plan workspace; `Apply Plan` activates only after that persisted ready preview is loaded with a valid `planId`
 - `POST /v1/applies/plans/{planId}` to persist an immutable apply request derived from that ready preview, then reopen the same workspace at `http://localhost:8080/?page=plan&deployment=payments-api-prod&planId={planId}&applyId={applyId}`
 - `GET /v1/applies/{applyId}` to reopen the stored apply request directly; this backend slice is disabled by default for live execution, so failed immutable apply records are expected and useful because they preserve operator-reviewed intent plus explicit error/details without mutating AWS
 - `GET /v1/audit-logs?limit={n}` to project those persisted immutable plan/apply records into a newest-first local audit timeline; `/v1/audit-logs` is the preferred v1 route shape for this local timeline, and actor information is unavailable because the immutable plan preview and apply request stores do not persist operator identity
+- `GET /v1/audit-logs?deployment={deploymentName}&action={action}` when you need one deployment plus one exact action without changing the route family
+- `GET /v1/audit-logs?action={action}&limit={n}` to keep the same newest-first and limit behavior while narrowing the timeline to exactly `plan.created` or `apply.requested`
 - `GET /v1/audit-logs?deployment={deploymentName}&limit={n}` to keep the same newest-first and limit behavior while narrowing the timeline to one deployment; when no persisted audit records match, the API still returns `200 OK` with `entries: []`
+- `GET /v1/audit-logs?deployment={deploymentName}&action={action}&limit={n}` when you need the same deployment-scoped bookmarkability plus one exact action type
 
-Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis. Use `make smoke-docker` when you need to validate `compose.yaml`, confirm the `api`/`controller`/`redis` service contract, and prove the containerized local stack plus representative `Request-Id` headers, correlated structured API request logs, controller logs, deployment events, resource-log routes, `GET /v1/audit-logs`, the bookmarkable `/?page=audit&limit={n}` audit view, immutable plan/apply read models, and embedded operator drill-down labels are reachable end to end.
+Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis. Use `make smoke-docker` when you need to validate `compose.yaml`, confirm the `api`/`controller`/`redis` service contract, and prove the containerized local stack plus representative `Request-Id` headers, correlated structured API request logs, controller logs, deployment events, resource-log routes, `GET /v1/audit-logs`, the bookmarkable `/?page=audit&action={action}&limit={n}` audit view, immutable plan/apply read models, and embedded operator drill-down labels are reachable end to end.
 
 ### Run with Docker
 
@@ -98,7 +104,7 @@ make docker-up
 
 If `make docker-up` exits before starting the stack, `localhost:8080` is already owned by something outside this Compose project. Inspect the listener with `lsof -nP -iTCP:8080 -sTCP:LISTEN`. If you want to clear a prior Tenet stack before retrying, run `make docker-down`, then rerun `docker compose up --build -d`.
 
-Run the dedicated Docker-stack smoke before or instead of manual exploration when you want a single command that validates the Compose config, boots the stack, waits for API health, checks representative endpoints plus deployment-events/resource-logs/audit-log JSON shapes, verifies representative `Request-Id` response headers, fetches `GET /v1/audit-logs`, creates and reloads an immutable plan preview for `payments-api-prod` via `POST /v1/plans/deployments/payments-api-prod` and `GET /v1/plans/{planId}`, creates and reloads the disabled-by-default immutable apply request via `POST /v1/applies/plans/{planId}` and `GET /v1/applies/{applyId}`, fetches the bookmarkable `/?page=audit&limit={n}` audit workspace URL and the bookmarkable `/?page=plan&deployment=payments-api-prod&planId={planId}&applyId={applyId}` workspace URL, confirms the `api` container emits correlated structured `http_request` logs with stable fields such as `request_id`, `method`, `path`, `status`, `duration_ms`, and `result`, confirms the embedded UI still includes current drill-down labels such as `Plan preview actions`, `Apply request actions`, `Controller runtime events`, and `Recent logs`, confirms controller logs are useful, and tears the stack back down:
+Run the dedicated Docker-stack smoke before or instead of manual exploration when you want a single command that validates the Compose config, boots the stack, waits for API health, checks representative endpoints plus deployment-events/resource-logs/audit-log JSON shapes, verifies representative `Request-Id` response headers, fetches `GET /v1/audit-logs`, creates and reloads an immutable plan preview for `payments-api-prod` via `POST /v1/plans/deployments/payments-api-prod` and `GET /v1/plans/{planId}`, creates and reloads the disabled-by-default immutable apply request via `POST /v1/applies/plans/{planId}` and `GET /v1/applies/{applyId}`, fetches the bookmarkable `/?page=audit&action={action}&limit={n}` audit workspace URL and the bookmarkable `/?page=plan&deployment=payments-api-prod&planId={planId}&applyId={applyId}` workspace URL, confirms the `api` container emits correlated structured `http_request` logs with stable fields such as `request_id`, `method`, `path`, `status`, `duration_ms`, and `result`, confirms the embedded UI still includes current drill-down labels such as `Plan preview actions`, `Apply request actions`, `Controller runtime events`, and `Recent logs`, confirms controller logs are useful, and tears the stack back down:
 
 ```bash
 make smoke-docker
@@ -139,9 +145,10 @@ Use the audit page when you need immutable operator activity instead of controll
 
 The page is backed directly by `GET /v1/audit-logs` and currently focuses on:
 - newest-first `plan.created` and `apply.requested` entries
+- a bookmarkable action filter that narrows the page and fetch route to exactly `plan.created` or `apply.requested`
 - deployment / app / environment context
 - explicit actor-unavailable or actor-unknown labeling instead of fabricated identity
-- `_self` links back into `/?page=application&deployment={deploymentName}` and `/?page=plan&deployment={deploymentName}&planId={planId}&applyId={applyId}` when those identifiers exist
+- `_self` links back into `/?page=application&deployment={deploymentName}` as `Open application drill-down` and `/?page=plan&deployment={deploymentName}&planId={planId}&applyId={applyId}` as `Open plan/apply workspace` when those identifiers exist
 
 ### Application detail
 Open one application to see the linked rollout resources grouped into clear sections such as:
@@ -169,10 +176,13 @@ These routes are additive and local-friendly. They persist immutable records to 
 The same immutable stores also back a read-only audit projection route:
 - `GET /v1/audit-logs`
 - `GET /v1/audit-logs?deployment={deploymentName}`
+- `GET /v1/audit-logs?action={action}`
 - `GET /v1/audit-logs?limit={n}`
+- `GET /v1/audit-logs?action={action}&limit={n}`
 - `GET /v1/audit-logs?deployment={deploymentName}&limit={n}`
+- `GET /v1/audit-logs?deployment={deploymentName}&action={action}&limit={n}`
 
-This timeline is newest-first, projects persisted plan preview and apply request records, derives `appRef` / `environmentRef` from the local catalog when possible, and keeps actor identity explicit by returning `actor.available=false` because this slice does not persist operator auth data. `deployment` is optional and must name exactly one deployment when present. A deployment filter with no matching persisted records still returns `200 OK` with `entries: []` so local operators can distinguish "no audit rows yet" from transport failure. The embedded UI now renders that route at `/?page=audit` with explicit loading, empty, unavailable, and generic fetch-error states.
+This timeline is newest-first, projects persisted plan preview and apply request records, derives `appRef` / `environmentRef` from the local catalog when possible, and keeps actor identity explicit by returning `actor.available=false` because this slice does not persist operator auth data. `deployment` is optional and must name exactly one deployment when present. `action` is optional and must be exactly `plan.created` or `apply.requested` when present. A deployment filter with no matching persisted records still returns `200 OK` with `entries: []` so local operators can distinguish "no audit rows yet" from transport failure. The embedded UI now renders that route at `/?page=audit` with explicit loading, empty, unavailable, and generic fetch-error states, plus a safe action filter control that preserves bookmarkable `action` / `deployment` / `limit` URL state.
 
 Tenet also exposes a read-only deployment events slice for the same drill-down workflow:
 - `GET /v1/overview/deployments/{deploymentName}/events`

@@ -12,10 +12,19 @@ import (
 
 const unavailableActorReason = "actor information is unavailable because the immutable plan preview and apply request stores do not persist operator identity"
 
+// Action identifies one supported audit timeline activity.
+type Action string
+
+const (
+	ActionPlanCreated    Action = "plan.created"
+	ActionApplyRequested Action = "apply.requested"
+)
+
 // Query captures optional audit timeline filters.
 type Query struct {
 	Limit          int    `json:"limit,omitempty"`
 	DeploymentName string `json:"deploymentName,omitempty"`
+	Action         Action `json:"action,omitempty"`
 }
 
 // Actor makes missing operator identity explicit instead of inventing auth data.
@@ -100,10 +109,16 @@ func (s Service) List(_ context.Context, query Query) (Result, error) {
 		if query.DeploymentName != "" && record.DeploymentName != query.DeploymentName {
 			continue
 		}
+		if query.Action != "" && query.Action != ActionPlanCreated {
+			continue
+		}
 		entries = append(entries, projectPlan(record, deployments[record.DeploymentName]))
 	}
 	for _, record := range applyRecords {
 		if query.DeploymentName != "" && record.DeploymentName != query.DeploymentName {
+			continue
+		}
+		if query.Action != "" && query.Action != ActionApplyRequested {
 			continue
 		}
 		entries = append(entries, projectApply(record, deployments[record.DeploymentName]))
@@ -203,4 +218,14 @@ func (e Entry) stableID() string {
 		return e.ApplyID
 	}
 	return e.PlanID
+}
+
+// ValidAction reports whether the provided query value is one of the supported audit actions.
+func ValidAction(value string) bool {
+	switch Action(value) {
+	case ActionPlanCreated, ActionApplyRequested:
+		return true
+	default:
+		return false
+	}
 }

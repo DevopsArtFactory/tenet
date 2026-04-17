@@ -27,16 +27,18 @@ The first page focuses on:
 - health
 - last update
 
-The goal is fast triage, not completeness. The denser account/group deployment surface now lives on the secondary `/?page=account&accountId={awsAccountId}` drill-down, where the UI reuses `GET /v1/overview/accounts/{awsAccountId}` plus grouped project/environment sections instead of crowding the landing page. The landing page also exposes a small `_self` link to the dedicated bookmarkable audit route at `/?page=audit` (with optional `&limit={n}` for a smaller newest-first window).
+The goal is fast triage, not completeness. The denser account/group deployment surface now lives on the secondary `/?page=account&accountId={awsAccountId}` drill-down, where the UI reuses `GET /v1/overview/accounts/{awsAccountId}` plus grouped project/environment sections instead of crowding the landing page. The landing page also exposes a small `_self` link to the dedicated bookmarkable audit route at `/?page=audit` (with optional `&action=plan.created|apply.requested` and `&limit={n}` for a narrower newest-first window).
 
 ### 1b. Audit timeline
 The audit page is a sibling operator slice, not a replacement for the application drill-down.
 
 It stays intentionally narrow:
 - fetch `GET /v1/audit-logs`
+- preserve optional bookmarkable `action`, `deployment`, and `limit` URL state on the audit route
+- render a safe action filter control for exactly `plan.created` and `apply.requested`
 - render immutable plan/apply activity newest-first
 - keep actor identity explicit as unavailable or unknown instead of inventing names
-- provide `_self` links back into the existing `application` and `plan` routes when deployment / plan / apply identifiers exist
+- provide `_self` links back into the existing `application` drill-down and `plan` workspace when deployment / plan / apply identifiers exist
 
 This page is for immutable operator activity. It is separate from the controller-derived runtime events rendered on the application detail page.
 
@@ -79,11 +81,13 @@ The neighboring read-only plan-preview flow is also part of the operator contrac
 - `POST /v1/applies/plans/{planId}` persists an immutable apply request derived from an existing ready preview
 - `GET /v1/applies/{applyId}` reopens the exact stored apply request
 - `GET /v1/audit-logs?deployment={deploymentName}` narrows the local audit timeline to one deployment without introducing a second route family
-- `GET /v1/audit-logs` projects persisted plan/apply records into a local audit timeline; the route also accepts `?limit={n}` for a newest-first window
-- the embedded `/?page=audit` route now renders that audit timeline directly with explicit loading, empty, unavailable (`503`), and generic fetch-error states, and it accepts optional `&limit={n}` to request a smaller newest-first window from the API
+- `GET /v1/audit-logs?action={action}` narrows the same local audit timeline to exactly `plan.created` or `apply.requested`
+- `GET /v1/audit-logs` projects persisted plan/apply records into a local audit timeline; the route also accepts `?limit={n}` for a newest-first window and optional `action={action}` for exact action filtering
+- the embedded `/?page=audit` route now renders that audit timeline directly with explicit loading, empty, unavailable (`503`), and generic fetch-error states, and it accepts optional `&action={action}` / `&limit={n}` to request a narrower newest-first window from the API
 - the embedded `/?page=plan&deployment={deploymentName}&planId={planId}` workspace keeps the URL shareable/bookmarkable and prefers the reviewed detail `sourceFingerprint` for optimistic `ifMatch` protection before falling back to a loaded preview fingerprint
 - live execution remains intentionally disabled by default in this backend slice, so the apply-request route records a failed immutable contract with operator-facing error/details instead of contacting AWS
 - actor identity is intentionally explicit rather than invented: `GET /v1/audit-logs` returns `actor.available=false` because the persisted immutable stores do not currently capture operator auth data
+- invalid audit `action` query values fail at the API boundary with `400 Bad Request` instead of silently widening or ignoring the filter
 - a deployment-scoped audit query that finds no persisted records still returns `entries: []` so operators can distinguish an empty immutable timeline from an unavailable route
 
 When `rollout.execution[]` is still missing or empty in a fixture-backed or early controller-authored payload, the resource drill-down keeps the operator contract stable by synthesizing the same fallback rollout resources the controller would eventually publish. That contract includes:

@@ -117,11 +117,16 @@ func TestAuditLogOperatorContract(t *testing.T) {
 	script := readRepoFile(t, "scripts/smoke-local.sh")
 	for _, fragment := range []string{
 		`curl -fsS "http://$HOST:$PORT/v1/audit-logs"`,
+		`curl -fsS "http://$HOST:$PORT/v1/audit-logs?action=apply.requested"`,
 		`curl -fsS "http://$HOST:$PORT/v1/audit-logs?deployment=payments-api-prod&limit=1"`,
 		`curl -fsS "http://$HOST:$PORT/v1/audit-logs?deployment=worker-prod"`,
+		`curl -sS -o "$INVALID_AUDIT_ACTION_BODY" -w "%{http_code}" "http://$HOST:$PORT/v1/audit-logs?action=invalid.action"`,
 		`assert any(entry['action'] == 'apply.requested' for entry in audit_logs['entries']), audit_logs`,
+		`assert len(audit_logs_action_filtered['entries']) == 1, audit_logs_action_filtered`,
+		`assert audit_logs_action_filtered['entries'][0]['action'] == 'apply.requested', audit_logs_action_filtered`,
 		`assert len(audit_logs_filtered['entries']) == 1, audit_logs_filtered`,
 		`assert audit_logs_empty['entries'] == [], audit_logs_empty`,
+		`assert os.environ['INVALID_AUDIT_ACTION_STATUS'] == '400', os.environ['INVALID_AUDIT_ACTION_STATUS']`,
 		`assert entry['actor']['available'] is False, entry`,
 	} {
 		if !strings.Contains(script, fragment) {
@@ -131,8 +136,12 @@ func TestAuditLogOperatorContract(t *testing.T) {
 
 	readme := readRepoFile(t, "README.md")
 	for _, fragment := range []string{
+		"`GET /v1/audit-logs?action=apply.requested`",
+		"`GET /v1/audit-logs?action=plan.created`",
 		"`GET /v1/audit-logs?limit={n}`",
 		"`GET /v1/audit-logs?deployment={deploymentName}`",
+		"`GET /v1/audit-logs?deployment={deploymentName}&action={action}`",
+		"`action` is optional and must be exactly `plan.created` or `apply.requested` when present",
 		"`GET /v1/audit-logs?deployment={deploymentName}&limit={n}`",
 		"`deployment` is optional and must name exactly one deployment when present",
 		"actor information is unavailable because the immutable plan preview and apply request stores do not persist operator identity",
@@ -147,7 +156,9 @@ func TestAuditLogOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		"`GET /v1/audit-logs`",
 		"`GET /v1/audit-logs?deployment={deploymentName}`",
+		"`GET /v1/audit-logs?action={action}`",
 		"`limit` is optional and must be a positive integer when present",
+		"`action` is optional and must be exactly `plan.created` or `apply.requested` when present",
 		"`deployment` is optional and must name exactly one deployment when present",
 		"`entries: []` with `200 OK` when the selected deployment exists but has no persisted audit records yet",
 		"`actor.available` is always `false` in this slice",

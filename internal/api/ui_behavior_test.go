@@ -3720,11 +3720,11 @@ document.byID.set('toolbar', document.createElement('section'));
 document.byID.set('summary', document.createElement('section'));
 document.byID.set('accounts', document.createElement('section'));
 const fetchCalls = [];
-const window = { location: { pathname: '/console', search: '?page=audit&q=payments&sync=OutOfSync&account=210987654321&limit=2', hash: '' } };
+const window = { location: { pathname: '/console', search: '?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2', hash: '' } };
 const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/console'; window.location.search = query ? '?' + query : ''; } };
 const fetch = (url) => {
   fetchCalls.push(String(url));
-  if (url === '/v1/audit-logs?limit=2') return Promise.resolve({ ok: true, json: () => Promise.resolve(auditLogs) });
+  if (url === '/v1/audit-logs?deployment=payments-api-prod&limit=2') return Promise.resolve({ ok: true, json: () => Promise.resolve(auditLogs) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -3734,13 +3734,15 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
   const summaryText = collectText(document.getElementById('summary')).join(' | ');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
-  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/audit-logs?limit=2') throw new Error('expected only audit log fetch on audit page');
+  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/audit-logs?deployment=payments-api-prod&limit=2') throw new Error('expected only filtered audit log fetch on audit page');
   if (!toolbarText.includes('Back to applications')) throw new Error('expected audit page back link');
+  if (!toolbarText.includes('Audit filters: deployment payments-api-prod · limit 2')) throw new Error('expected audit toolbar filters');
   if (!summaryText.includes('Operator audit log')) throw new Error('expected audit page summary title');
   if (!accountsText.includes('Audit timeline')) throw new Error('expected audit page body title');
   if (!accountsText.includes('apply.requested')) throw new Error('expected newest audit entry text');
   if (!accountsText.includes('plan.created')) throw new Error('expected older audit entry text');
   if (!accountsText.includes('2 entries')) throw new Error('expected audit entry count copy');
+  if (!accountsText.includes('deployment payments-api-prod')) throw new Error('expected audit deployment copy');
   if (!accountsText.includes('limit 2')) throw new Error('expected audit limit copy');
   if (!accountsText.includes('Actor detail')) throw new Error('expected explicit actor label');
   if (!accountsText.includes('Unavailable')) throw new Error('expected unavailable actor state');
@@ -3753,10 +3755,63 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const rowTexts = rows.map((node) => collectText(node).join(' | '));
   if (!rowTexts[0].includes('apply.requested')) throw new Error('expected newest audit entry first, got ' + rowTexts.join(' || '));
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
-  const applicationLink = links.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Open application');
+  const applicationLink = links.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Open application drill-down');
   if (!applicationLink || applicationLink.target !== '_self' || applicationLink.rel) throw new Error('expected audit application self link');
-  const workspaceLink = links.find((node) => node.href === '/console?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&planId=plan_ready_123&applyId=apply_failed_123' && node.textContent === 'Open plan/apply');
+  const workspaceLink = links.find((node) => node.href === '/console?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&planId=plan_ready_123&applyId=apply_failed_123' && node.textContent === 'Open plan/apply workspace');
   if (!workspaceLink || workspaceLink.target !== '_self' || workspaceLink.rel) throw new Error('expected audit plan/apply self link');
+})();
+`
+		runNode(t, nodeProgram)
+	})
+
+	t.Run("audit page action filter preserves URL state and fetch route", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const filteredAuditLogs = { entries: [` + `
+  {
+    "timestamp": "2026-04-18T08:00:00Z",
+    "action": "apply.requested",
+    "deploymentName": "payments-api-prod",
+    "appRef": "payments-api",
+    "environmentRef": "prod-apne2",
+    "planId": "plan_ready_123",
+    "applyId": "apply_failed_123",
+    "actor": { "available": false, "reason": "actor information is unavailable because the immutable plan preview and apply request stores do not persist operator identity" },
+    "metadata": { "status": "failed", "planStatus": "ready", "sourceFingerprint": "fp_plan_ready", "error": "apply execution is disabled" },
+    "source": { "kind": "applyRequest", "recordRoute": "/v1/applies/apply_failed_123" }
+  }
+] };
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/console', search: '?page=audit&q=payments&action=plan.created&limit=2', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/console'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/audit-logs?action=plan.created&limit=2') return Promise.resolve({ ok: true, json: () => Promise.resolve({ entries: [] }) });
+  if (url === '/v1/audit-logs?action=apply.requested&limit=2') return Promise.resolve({ ok: true, json: () => Promise.resolve(filteredAuditLogs) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/audit-logs?action=plan.created&limit=2') throw new Error('expected initial action-filtered audit fetch');
+  const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
+  if (!toolbarText.includes('Audit filters: action plan.created · limit 2')) throw new Error('expected action filter in toolbar');
+  const actionSelect = document.querySelector('[data-toolbar-field="Action"]');
+  if (!actionSelect || actionSelect.value !== 'plan.created') throw new Error('expected action select to reflect URL state');
+  actionSelect.value = 'apply.requested';
+  actionSelect.dispatch('change', { target: actionSelect });
+  await settle();
+  await settle();
+  if (fetchCalls.length !== 2 || fetchCalls[1] !== '/v1/audit-logs?action=apply.requested&limit=2') throw new Error('expected updated action-filtered audit fetch');
+  if (window.location.search !== '?page=audit&q=payments&action=apply.requested&limit=2') throw new Error('expected updated bookmarkable audit URL, got ' + window.location.search);
+  const accountsText = collectText(document.getElementById('accounts')).join(' | ');
+  if (!accountsText.includes('apply.requested')) throw new Error('expected updated filtered audit row');
 })();
 `
 		runNode(t, nodeProgram)
