@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tenet v1 Architecture</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
+    :root {
+      --bg: #020617;
+      --panel: #0f172a;
+      --line: #1e293b;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --cyan: #22d3ee;
+      --emerald: #34d399;
+      --violet: #a78bfa;
+      --amber: #fbbf24;
+      --rose: #fb7185;
+      --slate: #94a3b8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      background-image:
+        linear-gradient(rgba(30,41,59,.45) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(30,41,59,.45) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+    .wrap {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 28px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      background: var(--cyan);
+      box-shadow: 0 0 18px rgba(34, 211, 238, 0.65);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.2); opacity: .7; }
+    }
+    h1 {
+      font-size: 26px;
+      margin: 0;
+    }
+    .subtitle {
+      color: var(--muted);
+      margin: 8px 0 18px;
+      line-height: 1.6;
+      max-width: 1000px;
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      border-radius: 20px;
+      padding: 18px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    }
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 18px;
+    }
+    .meta-card {
+      background: rgba(15, 23, 42, 0.88);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      border-radius: 16px;
+      padding: 14px;
+    }
+    .meta-card h3 {
+      margin: 0 0 10px;
+      font-size: 13px;
+      color: var(--text);
+    }
+    .meta-card ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 12px;
+    }
+    svg { width: 100%; height: auto; display: block; }
+    .footer {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div class="dot"></div>
+      <h1>Tenet v1 Architecture</h1>
+    </div>
+    <p class="subtitle">
+      Tenet is a repository-driven deployment control plane for multi-account AWS environments. It turns desired deployment intent and runtime status into operator-friendly read models and a drill-down UI.
+    </p>
+
+    <div class="card">
+      <svg viewBox="0 0 1380 820" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Tenet architecture diagram">
+        <defs>
+          <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8" />
+          </marker>
+        </defs>
+
+        <path d="M 215 150 L 325 150" stroke="#94a3b8" stroke-width="2.2" fill="none" marker-end="url(#arrow)"/>
+        <path d="M 495 150 L 605 150" stroke="#94a3b8" stroke-width="2.2" fill="none" marker-end="url(#arrow)"/>
+        <path d="M 775 150 L 885 150" stroke="#94a3b8" stroke-width="2.2" fill="none" marker-end="url(#arrow)"/>
+        <path d="M 1055 150 L 1165 150" stroke="#fbbf24" stroke-width="2.2" stroke-dasharray="6 4" fill="none" marker-end="url(#arrow)"/>
+
+        <path d="M 930 160 L 760 300" stroke="#94a3b8" stroke-width="2.2" fill="none" marker-end="url(#arrow)"/>
+        <path d="M 650 160 C 620 260, 560 360, 560 470" stroke="#94a3b8" stroke-width="2.2" fill="none" marker-end="url(#arrow)"/>
+        <path d="M 690 390 L 690 470" stroke="#94a3b8" stroke-width="2.2" fill="none" marker-end="url(#arrow)"/>
+        <path d="M 465 590 L 575 590" stroke="#94a3b8" stroke-width="2.2" fill="none" marker-end="url(#arrow)"/>
+        <path d="M 805 590 L 915 590" stroke="#94a3b8" stroke-width="2.2" fill="none" marker-end="url(#arrow)"/>
+
+        <rect x="40" y="70" width="180" height="90" rx="10" fill="#0f172a" />
+        <rect x="40" y="70" width="180" height="90" rx="10" fill="rgba(30,41,59,.5)" stroke="#94a3b8" stroke-width="1.5" />
+        <text x="130" y="105" fill="#e2e8f0" text-anchor="middle" font-size="15" font-weight="700">Git Repository</text>
+        <text x="130" y="128" fill="#94a3b8" text-anchor="middle" font-size="11">accounts / environments / deployments</text>
+
+        <rect x="320" y="70" width="180" height="90" rx="10" fill="#0f172a" />
+        <rect x="320" y="70" width="180" height="90" rx="10" fill="rgba(6,78,59,.4)" stroke="#34d399" stroke-width="1.5" />
+        <text x="410" y="105" fill="#e2e8f0" text-anchor="middle" font-size="15" font-weight="700">Repository Loader</text>
+        <text x="410" y="128" fill="#94a3b8" text-anchor="middle" font-size="11">normalizes and validates desired state</text>
+
+        <rect x="600" y="70" width="180" height="90" rx="10" fill="#0f172a" />
+        <rect x="600" y="70" width="180" height="90" rx="10" fill="rgba(6,78,59,.4)" stroke="#34d399" stroke-width="1.5" />
+        <text x="690" y="105" fill="#e2e8f0" text-anchor="middle" font-size="15" font-weight="700">Compiled Catalog</text>
+        <text x="690" y="128" fill="#94a3b8" text-anchor="middle" font-size="11">placement, strategy, artifact, rollout intent</text>
+
+        <rect x="880" y="70" width="180" height="90" rx="10" fill="#0f172a" />
+        <rect x="880" y="70" width="180" height="90" rx="10" fill="rgba(6,78,59,.4)" stroke="#34d399" stroke-width="1.5" />
+        <text x="970" y="105" fill="#e2e8f0" text-anchor="middle" font-size="15" font-weight="700">Controller</text>
+        <text x="970" y="128" fill="#94a3b8" text-anchor="middle" font-size="11">reconcile loop and rollout reasoning</text>
+
+        <rect x="1160" y="70" width="180" height="90" rx="10" fill="#0f172a" />
+        <rect x="1160" y="70" width="180" height="90" rx="10" fill="rgba(120,53,15,.3)" stroke="#fbbf24" stroke-width="1.5" />
+        <text x="1250" y="105" fill="#e2e8f0" text-anchor="middle" font-size="15" font-weight="700">AWS Targets</text>
+        <text x="1250" y="126" fill="#94a3b8" text-anchor="middle" font-size="11">observed resources today</text>
+        <text x="1250" y="142" fill="#94a3b8" text-anchor="middle" font-size="11">future live execution path</text>
+
+        <rect x="560" y="300" width="260" height="90" rx="10" fill="#0f172a" />
+        <rect x="560" y="300" width="260" height="90" rx="10" fill="rgba(76,29,149,.4)" stroke="#a78bfa" stroke-width="1.5" />
+        <text x="690" y="335" fill="#e2e8f0" text-anchor="middle" font-size="15" font-weight="700">Runtime Status Store</text>
+        <text x="690" y="358" fill="#94a3b8" text-anchor="middle" font-size="11">filesystem or Redis</text>
+        <text x="690" y="374" fill="#94a3b8" text-anchor="middle" font-size="11">sync, health, rollout, history, conditions</text>
+
+        <rect x="500" y="480" width="380" height="110" rx="10" fill="#0f172a" />
+        <rect x="500" y="480" width="380" height="110" rx="10" fill="rgba(6,78,59,.4)" stroke="#34d399" stroke-width="1.5" />
+        <text x="690" y="515" fill="#e2e8f0" text-anchor="middle" font-size="15" font-weight="700">Read Models</text>
+        <text x="690" y="538" fill="#94a3b8" text-anchor="middle" font-size="11">join desired state + runtime state</text>
+        <text x="690" y="554" fill="#94a3b8" text-anchor="middle" font-size="11">application overview, application detail, resource detail</text>
+
+        <rect x="260" y="620" width="210" height="90" rx="10" fill="#0f172a" />
+        <rect x="260" y="620" width="210" height="90" rx="10" fill="rgba(6,78,59,.4)" stroke="#34d399" stroke-width="1.5" />
+        <text x="365" y="655" fill="#e2e8f0" text-anchor="middle" font-size="15" font-weight="700">API</text>
+        <text x="365" y="678" fill="#94a3b8" text-anchor="middle" font-size="11">read-only control-plane surface</text>
+
+        <rect x="910" y="620" width="210" height="90" rx="10" fill="#0f172a" />
+        <rect x="910" y="620" width="210" height="90" rx="10" fill="rgba(8,51,68,.4)" stroke="#22d3ee" stroke-width="1.5" />
+        <text x="1015" y="655" fill="#e2e8f0" text-anchor="middle" font-size="15" font-weight="700">Embedded UI</text>
+        <text x="1015" y="678" fill="#94a3b8" text-anchor="middle" font-size="11">overview → application → resource</text>
+
+        <rect x="1140" y="520" width="190" height="150" rx="12" fill="rgba(120,53,15,.18)" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="8 4"/>
+        <text x="1235" y="550" fill="#fbbf24" text-anchor="middle" font-size="13" font-weight="700">Operator Goals</text>
+        <text x="1235" y="578" fill="#e2e8f0" text-anchor="middle" font-size="11">What needs attention?</text>
+        <text x="1235" y="600" fill="#e2e8f0" text-anchor="middle" font-size="11">Which app/resource?</text>
+        <text x="1235" y="622" fill="#e2e8f0" text-anchor="middle" font-size="11">What explains the state?</text>
+
+        <rect x="40" y="730" width="1280" height="50" rx="10" fill="rgba(30,41,59,.35)" stroke="#94a3b8" stroke-width="1" />
+        <text x="80" y="760" fill="#e2e8f0" font-size="12" font-weight="700">Flow</text>
+        <text x="135" y="760" fill="#94a3b8" font-size="11">Git intent → catalog + runtime status → read models → API/UI → operator decision making</text>
+      </svg>
+    </div>
+
+    <div class="meta">
+      <div class="meta-card">
+        <h3>Desired state</h3>
+        <ul>
+          <li>Repository-backed manifests define what should run</li>
+          <li>Catalog compilation turns that into a stable internal model</li>
+        </ul>
+      </div>
+      <div class="meta-card">
+        <h3>Runtime state</h3>
+        <ul>
+          <li>Status is stored separately from desired configuration</li>
+          <li>Sync, health, rollout, conditions, and history remain explicit</li>
+        </ul>
+      </div>
+      <div class="meta-card">
+        <h3>Operator experience</h3>
+        <ul>
+          <li>UI is designed around drill-down, not dense dashboards</li>
+          <li>Applications overview narrows into application and resource detail</li>
+        </ul>
+      </div>
+    </div>
+
+      <div class="footer">Open this file in any browser. No external runtime is required beyond the font import. Dashed amber execution path indicates future live-execution direction, not fully shipped behavior.</div>
+  </div>
+</body>
+</html>
