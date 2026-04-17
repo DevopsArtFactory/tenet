@@ -37,17 +37,16 @@ Resources are grouped into human-friendly sections such as:
 - Traffic routing
 - Config and access
 
-The page is backed by `GET /v1/overview/applications/{deploymentName}` and keeps the deeper `resource`, `drift`, and `plan` routes anchored to `GET /v1/overview/deployments/{deploymentName}`. Both detail surfaces preserve additive `sourceFingerprint` so the same reviewed payload can feed the read-only plan-preview flow without inventing a second client-side identity model.
+The page is backed by `GET /v1/overview/applications/{deploymentName}` and keeps the deeper `resource`, `drift`, and `plan` routes anchored to `GET /v1/overview/deployments/{deploymentName}`. A narrow controller-runtime-events slice is also rendered here by calling `GET /v1/overview/deployments/{deploymentName}/events` directly so the bookmarkable application detail stays operator-useful without pulling the full deployment-detail payload. Both detail surfaces preserve additive `sourceFingerprint` so the same reviewed payload can feed the read-only plan-preview flow without inventing a second client-side identity model.
 
-This page should help the operator decide which concrete resource to inspect next.
+This page should help the operator decide which concrete resource to inspect next while still exposing the most recent controller-derived runtime timeline in a clearly non-audit section.
 
 ### 3. Resource detail
 The final page is where deeper operational context belongs.
 
-This page is where Tenet can show things like:
+This page is where Tenet can still show the deeper operational slices:
 - rollout state
 - runtime history
-- controller-derived runtime events from `GET /v1/overview/deployments/{deploymentName}/events`
 - conditions
 - artifact context
 - recent logs when available

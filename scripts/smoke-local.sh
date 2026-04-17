@@ -202,8 +202,14 @@ assert "buildPageURL('account', { accountId: deployment.awsAccountId })" in ui, 
 assert "buildPageURL('application', { deployment: deployment.name })" in ui, ui
 assert 'Drift view' in ui, ui
 assert 'Plan/apply' in ui, ui
+assert 'Controller runtime events' in ui, ui
+assert 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.' in ui, ui
+assert 'Loading controller runtime events…' in ui, ui
+assert 'No controller runtime events have been persisted yet.' in ui, ui
+assert 'Controller runtime events are currently unavailable.' in ui, ui
 assert "createNavLink(buildPageURL('drift', { deployment: detail.name }), 'Drift view', '_self')" in ui, ui
 assert "createNavLink(buildPageURL('plan', { deployment: detail.name }), 'Plan/apply', '_self')" in ui, ui
+assert "fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`)" in ui, ui
 assert "const ifMatch = detail.sourceFingerprint || await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;" in ui, ui
 assert 'Recent logs' in ui, ui
 assert 'Plan preview actions' in ui, ui

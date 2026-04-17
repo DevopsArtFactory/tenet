@@ -471,6 +471,7 @@ async function render(search, fetchImpl) {
 
   const applicationView = await render('?page=application&deployment=payments-api-staging&q=payments&sync=OutOfSync&account=210987654321', (url) => {
     if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(applicationDetail) });
+    if (url === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
     throw new Error('unexpected application fetch url: ' + url);
   });
   const applicationLinks = collectNodes(applicationView.document.getElementById('accounts'), (node) => node.tagName === 'A');
@@ -811,6 +812,7 @@ const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
   if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -820,8 +822,12 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/applications/payments-api-staging') {
-    throw new Error('expected application route to load only application detail, got ' + fetchCalls.join(', '));
+  const expectedFetches = [
+    '/v1/overview/applications/payments-api-staging',
+    '/v1/overview/deployments/payments-api-staging/events',
+  ];
+  if (fetchCalls.length !== expectedFetches.length || expectedFetches.some((url, index) => fetchCalls[index] !== url)) {
+    throw new Error('expected application route to load application detail plus deployment events, got ' + fetchCalls.join(', '));
   }
   const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
   const summaryText = collectText(document.getElementById('summary')).join(' | ');
@@ -948,6 +954,7 @@ const history = { replaceState(_state, _title, url) { const [pathname, query = '
 const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/applications/payments-api-rolling') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/overview/deployments/payments-api-rolling/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-rolling', events: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -957,7 +964,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/applications/payments-api-rolling') throw new Error('expected ecs rolling application page to load only application detail');
+  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-rolling' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-rolling/events') throw new Error('expected ecs rolling application page to load application detail plus deployment events');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   if (!accountsText.includes('payments-api-rolling-service')) throw new Error('expected ecs rolling fallback service resource');
   if (!accountsText.includes('ECS service Tenet updates with native rolling deployment while respecting min healthy 90% and warmup 30s')) throw new Error('expected ecs rolling fallback resource description');
@@ -1088,6 +1095,7 @@ const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
   if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -1097,7 +1105,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/applications/payments-api-staging') throw new Error('expected ecs fallback page to load only application detail');
+  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-staging' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-staging/events') throw new Error('expected ecs fallback page to load application detail plus deployment events');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
   const expectedResources = [
@@ -1204,6 +1212,7 @@ const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
   if (url === '/v1/overview/applications/payments-api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/overview/deployments/payments-api-prod/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-prod', events: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -1213,7 +1222,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/applications/payments-api-prod') throw new Error('expected asg fallback page to load only application detail');
+  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-prod' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-prod/events') throw new Error('expected asg fallback page to load application detail plus deployment events');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
   const expectedResources = [
@@ -1317,6 +1326,7 @@ const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
   if (url === '/v1/overview/applications/payments-api-refresh') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/overview/deployments/payments-api-refresh/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-refresh', events: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -1326,7 +1336,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/applications/payments-api-refresh') throw new Error('expected instance refresh fallback page to load only application detail');
+  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-refresh' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-refresh/events') throw new Error('expected instance refresh fallback page to load application detail plus deployment events');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
   const expectedResources = [
@@ -1542,6 +1552,7 @@ const history = { replaceState(_state, _title, url) { const [pathname, query = '
 const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -1554,7 +1565,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const summaryText = collectText(document.getElementById('summary')).join(' | ');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
-  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/applications/payments-api-staging') throw new Error('expected application page to load only application detail');
+  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-staging' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-staging/events') throw new Error('expected application page to load application detail plus deployment events');
   if (!toolbarText.includes('Back to applications')) throw new Error('expected application page back link');
   if (!summaryText.includes('payments-api-staging')) throw new Error('expected application summary title');
   if (!accountsText.includes('Application resources')) throw new Error('expected application resources heading');
@@ -1661,6 +1672,7 @@ const history = { replaceState(_state, _title, url) { const [pathname, query = '
 const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -1669,7 +1681,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/applications/payments-api-staging') throw new Error('expected nameless application page to load only application detail');
+  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-staging' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-staging/events') throw new Error('expected nameless application page to load application detail plus deployment events');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
   if (links.length !== 0) throw new Error('expected nameless application page to suppress broken resource drill-down links');
 })();
@@ -1681,6 +1693,206 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
 		}
 	})
+}
+
+func TestApplicationDetailPageDeploymentEventsTimelineStatesWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	detailJSON, err := json.Marshal(map[string]any{
+		"name":           "payments-api-staging",
+		"accountName":    "staging-core",
+		"awsAccountId":   "210987654321",
+		"region":         "ap-northeast-2",
+		"appRef":         "payments",
+		"environmentRef": "staging-apne2",
+		"targetType":     "ecs",
+		"strategy":       "linear",
+		"executionMode":  "ecsCodeDeploy",
+		"sync":           map[string]any{"state": "OutOfSync", "reason": "traffic shift running"},
+		"health":         map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy"},
+		"rollout": map[string]any{
+			"execution": []map[string]any{
+				{"name": "payments-api-staging ECS Service", "resource": "ecsService", "description": "Primary ECS service for the staging environment"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal application detail body: %v", err)
+	}
+
+	eventsJSON, err := json.Marshal(map[string]any{
+		"deploymentName": "payments-api-staging",
+		"events": []map[string]any{
+			{
+				"timestamp":     "2026-04-16T07:05:00Z",
+				"summary":       "Created deployment group revision for v2",
+				"source":        "controller",
+				"targetType":    "ecs",
+				"strategy":      "linear",
+				"executionMode": "ecsCodeDeploy",
+				"sync":          map[string]any{"state": "OutOfSync"},
+				"health":        map[string]any{"overall": "Progressing", "summary": "warming"},
+				"rolloutPhase":  "Accepted",
+				"currentStep":   "CreateCodeDeployDeployment",
+				"changeDetails": []string{"Created deployment group revision for v2"},
+			},
+			{
+				"timestamp":          "2026-04-16T07:10:00Z",
+				"summary":            "Shifted 50 percent of traffic",
+				"source":             "controller",
+				"targetType":         "ecs",
+				"strategy":           "linear",
+				"executionMode":      "ecsCodeDeploy",
+				"sync":               map[string]any{"state": "OutOfSync", "reason": "traffic shift running"},
+				"health":             map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy"},
+				"rolloutPhase":       "Accepted",
+				"currentStep":        "ShiftTrafficLinear",
+				"deployedArtifact":   map[string]any{"image": "ghcr.io/example/payments:v2"},
+				"changeDetails":      []string{"Current step changed from CreateCodeDeployDeployment to ShiftTrafficLinear"},
+				"conditions":         []map[string]any{{"type": "Progressing", "status": true, "reason": "TrafficShiftLinear", "message": "controller is shifting production traffic"}},
+				"desiredGeneration":  12,
+				"observedGeneration": 11,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal application events body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+const eventsBody = ` + string(eventsJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const createDocument = () => {
+  const document = new Document();
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  return document;
+};
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+async function render(fetchImpl) {
+  const document = createDocument();
+  const fetchCalls = [];
+  const window = { location: { pathname: '/', search: '?page=application&deployment=payments-api-staging', hash: '' } };
+  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  const fetch = (url) => {
+    fetchCalls.push(String(url));
+    return fetchImpl(String(url));
+  };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle();
+  await settle();
+  return { document, fetchCalls };
+}
+(async () => {
+  let resolveEvents;
+  const loadingView = await render((url) => {
+    if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === '/v1/overview/deployments/payments-api-staging/events') {
+      return new Promise((resolve) => { resolveEvents = resolve; });
+    }
+    throw new Error('unexpected fetch url: ' + url);
+  });
+  const loadingText = collectText(loadingView.document.getElementById('accounts')).join(' | ');
+  if (!loadingText.includes('Loading controller runtime events…')) throw new Error('expected loading state while deployment events request is pending');
+  if (loadingView.fetchCalls.length !== 2 || loadingView.fetchCalls[0] !== '/v1/overview/applications/payments-api-staging' || loadingView.fetchCalls[1] !== '/v1/overview/deployments/payments-api-staging/events') throw new Error('expected application detail fetch followed by deployment events fetch');
+  resolveEvents({ ok: true, json: () => Promise.resolve(eventsBody) });
+  await settle();
+  await settle();
+  const readyText = collectText(loadingView.document.getElementById('accounts')).join(' | ');
+  if (!readyText.includes('Controller runtime events')) throw new Error('expected controller runtime events section heading');
+  if (!readyText.includes('Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.')) throw new Error('expected application page to distinguish controller runtime events from audit/auth history');
+  if (!readyText.includes('2 events · newest controller event first')) throw new Error('expected event ordering guidance');
+  if (!readyText.includes('Shifted 50 percent of traffic')) throw new Error('expected newest controller event summary');
+  if (!readyText.includes('Time · 2026-04-16T07:10:00Z')) throw new Error('expected newest controller event timestamp');
+  if (!readyText.includes('Sync · OutOfSync · traffic shift running')) throw new Error('expected sync context');
+  if (!readyText.includes('Health · Progressing · 1/2 tasks healthy')) throw new Error('expected health context');
+  if (!readyText.includes('Context · Target ecs · Strategy linear · Execution ecsCodeDeploy')) throw new Error('expected rollout context');
+  if (!readyText.includes('Rollout phase · Accepted')) throw new Error('expected rollout phase');
+  if (!readyText.includes('Rollout step · ShiftTrafficLinear')) throw new Error('expected rollout step');
+  if (!readyText.includes('Artifact · ghcr.io/example/payments:v2')) throw new Error('expected deployed artifact context');
+  if (!readyText.includes('Conditions · Progressing = True · TrafficShiftLinear')) throw new Error('expected conditions context');
+  if (!readyText.includes('Event details · Current step changed from CreateCodeDeployDeployment to ShiftTrafficLinear')) throw new Error('expected event change details');
+  if (!readyText.includes('Source · controller')) throw new Error('expected controller source metadata');
+  if (readyText.indexOf('Shifted 50 percent of traffic') > readyText.indexOf('Created deployment group revision for v2')) throw new Error('expected newest event to render before older event');
+
+  const emptyView = await render((url) => {
+    if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
+    throw new Error('unexpected fetch url: ' + url);
+  });
+  const emptyText = collectText(emptyView.document.getElementById('accounts')).join(' | ');
+  if (!emptyText.includes('No controller runtime events have been persisted yet.')) throw new Error('expected empty deployment events state');
+
+  const unavailableView = await render((url) => {
+    if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: false, status: 503, text: () => Promise.resolve('overview deployment events unavailable') });
+    throw new Error('unexpected fetch url: ' + url);
+  });
+  const unavailableText = collectText(unavailableView.document.getElementById('accounts')).join(' | ');
+  if (!unavailableText.includes('Controller runtime events are currently unavailable.')) throw new Error('expected unavailable deployment events state');
+  if (!unavailableText.includes('deployment events unavailable (503): overview deployment events unavailable')) throw new Error('expected unavailable deployment events detail');
+
+  const errorView = await render((url) => {
+    if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: false, status: 500, text: () => Promise.resolve('boom') });
+    throw new Error('unexpected fetch url: ' + url);
+  });
+  const errorText = collectText(errorView.document.getElementById('accounts')).join(' | ');
+  if (!errorText.includes('Failed to load controller runtime events: deployment events request failed (500): boom')) throw new Error('expected generic deployment events fetch error state');
+})();
+`
+
+	cmd := exec.Command("node", "-e", nodeProgram)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+	}
 }
 
 func TestResourceDetailPageUsesStableResourceIDsWithNodeHarness(t *testing.T) {
@@ -1846,6 +2058,7 @@ const runUI = async (search, detailBody) => {
   const fetch = (url) => {
     fetchCalls.push(String(url));
     if (url === '/v1/overview/applications/payments-api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === '/v1/overview/deployments/payments-api-prod/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-prod', events: [] }) });
     if (url === '/v1/overview/deployments/payments-api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
     if (url === resourceLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
     throw new Error('unexpected fetch url: ' + url);
@@ -1857,7 +2070,7 @@ const runUI = async (search, detailBody) => {
 };
 (async () => {
   const fallbackRun = await runUI('?page=application&deployment=payments-api-prod', fallbackDetailBody);
-  if (fallbackRun.fetchCalls.length !== 1 || fallbackRun.fetchCalls[0] !== '/v1/overview/applications/payments-api-prod') throw new Error('expected fallback application page to load only application detail');
+  if (fallbackRun.fetchCalls.length !== 2 || fallbackRun.fetchCalls[0] !== '/v1/overview/applications/payments-api-prod' || fallbackRun.fetchCalls[1] !== '/v1/overview/deployments/payments-api-prod/events') throw new Error('expected fallback application page to load application detail plus deployment events');
   const fallbackLinks = collectNodes(fallbackRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
   const expectedResourceID = 'trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s';
   const resourceHref = '/?' + new URLSearchParams({
@@ -2512,6 +2725,7 @@ async function render(search, detailBody) {
   const fetch = (url) => {
     if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
     if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
     if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
     throw new Error('unexpected fetch url: ' + url);
