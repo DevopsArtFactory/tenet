@@ -49,12 +49,13 @@ overview=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts")
 account_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts/123456789012")
 group_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts/123456789012/projects/payments-api/environments/prod-apne2")
 deployment_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod")
+deployment_events_fixture=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/events")
 status=$(curl -fsS "http://$HOST:$PORT/v1/status/deployments/payments-api-prod")
 resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")
 worker_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 ui=$(curl -fsS "http://$HOST:$PORT/")
 
-SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" python3 - <<'PY'
+SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_EVENTS_FIXTURE_JSON="$deployment_events_fixture" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" python3 - <<'PY'
 import json, os
 summary = json.loads(os.environ['SUMMARY_JSON'])
 applications = json.loads(os.environ['APPLICATIONS_JSON'])
@@ -63,6 +64,7 @@ overview = json.loads(os.environ['OVERVIEW_JSON'])
 account_detail = json.loads(os.environ['ACCOUNT_DETAIL_JSON'])
 group_detail = json.loads(os.environ['GROUP_DETAIL_JSON'])
 deployment_detail = json.loads(os.environ['DEPLOYMENT_DETAIL_JSON'])
+deployment_events_fixture = json.loads(os.environ['DEPLOYMENT_EVENTS_FIXTURE_JSON'])
 status = json.loads(os.environ['STATUS_JSON'])
 resource_logs = json.loads(os.environ['RESOURCE_LOGS_JSON'])
 worker_resource_logs = json.loads(os.environ['WORKER_RESOURCE_LOGS_JSON'])
@@ -109,6 +111,9 @@ assert deployment_detail['name'] == 'payments-api-prod', deployment_detail
 assert isinstance(deployment_runtime_summary.get('changeDetails', []), list), deployment_detail
 if deployment_history:
     assert isinstance(deployment_history[0].get('changeDetails', []), list), deployment_detail
+assert deployment_events_fixture['deploymentName'] == 'payments-api-prod', deployment_events_fixture
+assert isinstance(deployment_events_fixture['events'], list), deployment_events_fixture
+assert len(deployment_events_fixture['events']) == 0, deployment_events_fixture
 assert status['deploymentName'] == 'payments-api-prod', status
 assert status['status']['sync']['state'] == 'Synced', status
 assert resource_logs['deploymentName'] == 'payments-api-prod', resource_logs
@@ -157,17 +162,21 @@ CONTROLLER_PID=$!
 controller_ready=0
 for _ in $(seq 1 30); do
   controller_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod" 2>/dev/null || true)
-  if [[ -z "$controller_detail" ]]; then
+  controller_events=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/events" 2>/dev/null || true)
+  if [[ -z "$controller_detail" || -z "$controller_events" ]]; then
     sleep 1
     continue
   fi
-  if CONTROLLER_DETAIL_JSON="$controller_detail" python3 - <<'PY'
+  if CONTROLLER_DETAIL_JSON="$controller_detail" CONTROLLER_EVENTS_JSON="$controller_events" python3 - <<'PY'
 import json, os, sys
 payload = json.loads(os.environ['CONTROLLER_DETAIL_JSON'])
+events_payload = json.loads(os.environ['CONTROLLER_EVENTS_JSON'])
 runtime_change_details = (payload.get('runtimeSummary') or {}).get('changeDetails') or []
 history = payload.get('history') or []
 history_change_details = (history[0].get('changeDetails') if history else []) or []
-if runtime_change_details and history_change_details:
+events = events_payload.get('events') or []
+event_change_details = (events[0].get('changeDetails') if events else []) or []
+if runtime_change_details and history_change_details and events and events_payload.get('deploymentName') == 'payments-api-prod' and events[0].get('source') == 'controller' and event_change_details:
     sys.exit(0)
 sys.exit(1)
 PY
@@ -185,13 +194,22 @@ if [[ "$controller_ready" -ne 1 ]]; then
 fi
 
 controller_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod")
-CONTROLLER_DETAIL_JSON="$controller_detail" python3 - <<'PY'
+controller_events=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/events")
+CONTROLLER_DETAIL_JSON="$controller_detail" CONTROLLER_EVENTS_JSON="$controller_events" python3 - <<'PY'
 import json, os
 payload = json.loads(os.environ['CONTROLLER_DETAIL_JSON'])
+events_payload = json.loads(os.environ['CONTROLLER_EVENTS_JSON'])
 runtime_change_details = (payload.get('runtimeSummary') or {}).get('changeDetails') or []
 history = payload.get('history') or []
 history_change_details = (history[0].get('changeDetails') if history else []) or []
+events = events_payload.get('events') or []
+event = events[0] if events else {}
 assert runtime_change_details, payload
 assert history_change_details, payload
+assert events_payload['deploymentName'] == 'payments-api-prod', events_payload
+assert isinstance(events_payload['events'], list), events_payload
+assert events, events_payload
+assert event.get('source') == 'controller', events_payload
+assert isinstance(event.get('changeDetails', []), list) and event.get('changeDetails'), events_payload
 print('smoke-local: controller changeDetails path ok')
 PY

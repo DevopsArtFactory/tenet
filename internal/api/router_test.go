@@ -1994,6 +1994,181 @@ func TestRouterOverviewDeploymentRejectsInvalidNames(t *testing.T) {
 	}
 }
 
+func TestRouterOverviewDeploymentEvents(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeploymentEvents: func(name string) (catalog.DeploymentOverviewEvents, error) {
+			if name != "api-prod" {
+				return catalog.DeploymentOverviewEvents{}, statusstore.ErrNotFound
+			}
+			return catalog.DeploymentOverviewEvents{
+				DeploymentName: "api-prod",
+				Events: []domain.StatusHistoryEntry{{
+					Timestamp:          "2026-04-16T06:49:00Z",
+					Source:             "controller",
+					Summary:            "Shifted 10 percent of traffic",
+					Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "Traffic shift running"},
+					Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "steady"},
+					DesiredGeneration:  8,
+					ObservedGeneration: 7,
+					Changes:            []string{"summary", "currentStep"},
+					ChangeDetails:      []string{"Summary changed to Shifted 10 percent of traffic", "Current step changed from CreateCodeDeployDeployment to ShiftTrafficLinear"},
+					RolloutPhase:       domain.RolloutPhaseAccepted,
+					CurrentStep:        "ShiftTrafficLinear",
+					TargetType:         "ecs-service",
+					Strategy:           "linear",
+					ExecutionMode:      "ecsCodeDeploy",
+				}},
+			}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/events", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var payload catalog.DeploymentOverviewEvents
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode deployment events payload: %v", err)
+	}
+	if payload.DeploymentName != "api-prod" || len(payload.Events) != 1 {
+		t.Fatalf("unexpected deployment events payload: %+v", payload)
+	}
+	if payload.Events[0].Source != "controller" || payload.Events[0].CurrentStep != "ShiftTrafficLinear" || payload.Events[0].ExecutionMode != "ecsCodeDeploy" {
+		t.Fatalf("expected controller-authored event details, got %+v", payload.Events[0])
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("failed to decode raw deployment events payload: %v", err)
+	}
+	if raw["deploymentName"] != "api-prod" {
+		t.Fatalf("expected deploymentName field, got %#v", raw)
+	}
+	if _, ok := raw["events"].([]any); !ok {
+		t.Fatalf("expected events array field, got %#v", raw["events"])
+	}
+	if _, exists := raw["DeploymentName"]; exists {
+		t.Fatalf("unexpected Go-style deploymentName field in %#v", raw)
+	}
+	events, _ := raw["events"].([]any)
+	event, ok := events[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected events[0] object, got %#v", events[0])
+	}
+	if event["timestamp"] != "2026-04-16T06:49:00Z" || event["source"] != "controller" || event["summary"] != "Shifted 10 percent of traffic" || event["rolloutPhase"] != string(domain.RolloutPhaseAccepted) || event["currentStep"] != "ShiftTrafficLinear" || event["targetType"] != "ecs-service" || event["strategy"] != "linear" || event["executionMode"] != "ecsCodeDeploy" {
+		t.Fatalf("expected event field names/values, got %#v", event)
+	}
+	changeDetails, ok := event["changeDetails"].([]any)
+	if !ok || len(changeDetails) != 2 || changeDetails[0] != "Summary changed to Shifted 10 percent of traffic" {
+		t.Fatalf("expected event changeDetails field, got %#v", event["changeDetails"])
+	}
+	if _, exists := event["CurrentStep"]; exists {
+		t.Fatalf("unexpected Go-style event field names in %#v", event)
+	}
+}
+
+func TestRouterOverviewDeploymentEventsReturnsEmptyList(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeploymentEvents: func(name string) (catalog.DeploymentOverviewEvents, error) {
+			if name != "worker-prod" {
+				t.Fatalf("unexpected lookup name: %s", name)
+			}
+			return catalog.DeploymentOverviewEvents{
+				DeploymentName: "worker-prod",
+				Events:         []domain.StatusHistoryEntry{},
+			}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/worker-prod/events", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("failed to decode raw deployment events payload: %v", err)
+	}
+	events, ok := raw["events"].([]any)
+	if !ok || len(events) != 0 {
+		t.Fatalf("expected explicit empty events array, got %#v", raw["events"])
+	}
+}
+
+func TestRouterOverviewDeploymentEventsUnavailable(t *testing.T) {
+	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/events", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", resp.Code)
+	}
+}
+
+func TestRouterOverviewDeploymentEventsNotFound(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeploymentEvents: func(name string) (catalog.DeploymentOverviewEvents, error) {
+			return catalog.DeploymentOverviewEvents{}, statusstore.ErrNotFound
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/missing/events", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.Code)
+	}
+}
+
+func TestRouterOverviewDeploymentEventsProviderErrorReturnsInternalServerError(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeploymentEvents: func(name string) (catalog.DeploymentOverviewEvents, error) {
+			return catalog.DeploymentOverviewEvents{}, errors.New("boom")
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/events", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.Code)
+	}
+}
+
+func TestRouterOverviewDeploymentEventsRejectsInvalidNames(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeploymentEvents: func(name string) (catalog.DeploymentOverviewEvents, error) {
+			return catalog.DeploymentOverviewEvents{}, nil
+		},
+	})
+	for _, path := range []string{"/v1/overview/deployments/a/b/events", "/v1/overview/deployments/api-prod/extra/events"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 for %s, got %d", path, resp.Code)
+		}
+	}
+}
+
 func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 	t.Run("returns resource log payload", func(t *testing.T) {
 		expected := resourcelogs.Result{
@@ -2324,6 +2499,9 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
 			return catalog.DeploymentOverviewDetail{}, nil
 		},
+		OverviewDeploymentEvents: func(name string) (catalog.DeploymentOverviewEvents, error) {
+			return catalog.DeploymentOverviewEvents{}, nil
+		},
 		OverviewDeploymentResourceLogs: func(context.Context, string, string, string) (resourcelogs.Result, error) {
 			return resourcelogs.Result{}, nil
 		},
@@ -2335,7 +2513,7 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		},
 	})
 
-	paths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/applications", "/v1/overview/applications/api-prod", "/v1/overview/accounts", "/v1/overview/accounts/123456789012", "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod", "/v1/overview/deployments/api-prod", "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
+	paths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/applications", "/v1/overview/applications/api-prod", "/v1/overview/accounts", "/v1/overview/accounts/123456789012", "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod", "/v1/overview/deployments/api-prod", "/v1/overview/deployments/api-prod/events", "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
 	for _, path := range paths {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		resp := httptest.NewRecorder()

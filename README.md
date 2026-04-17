@@ -124,6 +124,11 @@ Open one application to see the linked rollout resources grouped into clear sect
 ### Resource detail
 Open a concrete resource to inspect the deeper operational context for that resource, including rollout and runtime information. Recent logs are surfaced here when the resource type supports them.
 
+Tenet also exposes a read-only deployment events slice for the same drill-down workflow:
+- `GET /v1/overview/deployments/{deploymentName}/events`
+
+This route returns controller-derived runtime events copied from persisted `status.history`. It is intentionally operator-facing and refresh-based, not a full durable audit system yet. When a deployment exists but no controller-authored runtime history has been persisted, the route still returns `200 OK` with `events: []`.
+
 When fixture-backed or early controller payloads have not yet persisted `rollout.execution[]`, Tenet keeps the read-only drill-down contract stable by synthesizing the same fallback rollout resources the operator would otherwise see from the controller-authored payload:
 - `ecsRolling`: `ecsService` (`{deployment}-service`)
 

@@ -49,6 +49,7 @@ type Options struct {
 	OverviewAccount                func(string) (catalog.AccountOverviewDetail, error)
 	OverviewProjectEnvironment     func(string, string, string) (catalog.ProjectEnvironmentOverviewDetail, error)
 	OverviewDeployment             func(string) (catalog.DeploymentOverviewDetail, error)
+	OverviewDeploymentEvents       func(string) (catalog.DeploymentOverviewEvents, error)
 	OverviewDeploymentResourceLogs func(context.Context, string, string, string) (resourcelogs.Result, error)
 	DeploymentStatuses             func() ([]statusstore.Snapshot, error)
 	DeploymentStatus               func(string) (statusstore.Snapshot, error)
@@ -271,6 +272,23 @@ func NewRouter(options Options) http.Handler {
 		}
 		path := strings.TrimPrefix(r.URL.Path, "/v1/overview/deployments/")
 		switch {
+		case strings.HasSuffix(path, "/events"):
+			if options.OverviewDeploymentEvents == nil {
+				http.Error(w, "overview deployment events unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			name := strings.TrimSuffix(path, "/events")
+			if name == "" || strings.Contains(name, "/") {
+				http.Error(w, "invalid deployment name", http.StatusBadRequest)
+				return
+			}
+			events, err := options.OverviewDeploymentEvents(name)
+			if err != nil {
+				respondLookupError(w, err)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(events)
 		case strings.HasSuffix(path, "/resource-logs"):
 			if options.OverviewDeployment == nil {
 				http.Error(w, "overview deployment unavailable", http.StatusServiceUnavailable)

@@ -121,6 +121,75 @@ func TestAPIOptionsOverviewDeploymentReturnsNotFoundForRepoUnknownDeployment(t *
 	}
 }
 
+func TestAPIOptionsOverviewDeploymentEventsUsesNamedSnapshotLookup(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	store := &stubStatusStore{
+		getSnapshot: statusstore.Snapshot{
+			DeploymentName: "api-prod",
+			Status: domain.DeploymentStatus{
+				History: []domain.StatusHistoryEntry{{
+					Timestamp:          "2026-04-16T06:49:00Z",
+					Source:             "controller",
+					Summary:            "Shifted 10 percent of traffic",
+					Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "Traffic shift running"},
+					Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "steady"},
+					DesiredGeneration:  8,
+					ObservedGeneration: 7,
+				}},
+			},
+		},
+	}
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, store)
+	if options.OverviewDeploymentEvents == nil {
+		t.Fatalf("expected overview deployment events provider")
+	}
+
+	events, err := options.OverviewDeploymentEvents("api-prod")
+	if err != nil {
+		t.Fatalf("OverviewDeploymentEvents returned error: %v", err)
+	}
+	if store.getCalls != 1 {
+		t.Fatalf("expected one Get call, got %d", store.getCalls)
+	}
+	if store.gotGetName != "api-prod" {
+		t.Fatalf("expected Get lookup for api-prod, got %q", store.gotGetName)
+	}
+	if store.listCalls != 0 {
+		t.Fatalf("expected no List calls, got %d", store.listCalls)
+	}
+	if events.DeploymentName != "api-prod" || len(events.Events) != 1 || events.Events[0].Source != "controller" {
+		t.Fatalf("unexpected deployment events: %+v", events)
+	}
+}
+
+func TestAPIOptionsOverviewDeploymentEventsReturnsEmptyListWhenSnapshotMissing(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	store := &stubStatusStore{getErr: statusstore.ErrNotFound}
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, store)
+	if options.OverviewDeploymentEvents == nil {
+		t.Fatalf("expected overview deployment events provider")
+	}
+
+	events, err := options.OverviewDeploymentEvents("worker-prod")
+	if err != nil {
+		t.Fatalf("OverviewDeploymentEvents returned error: %v", err)
+	}
+	if store.getCalls != 1 {
+		t.Fatalf("expected one Get call, got %d", store.getCalls)
+	}
+	if store.gotGetName != "worker-prod" {
+		t.Fatalf("expected Get lookup for worker-prod, got %q", store.gotGetName)
+	}
+	if store.listCalls != 0 {
+		t.Fatalf("expected no List calls, got %d", store.listCalls)
+	}
+	if events.DeploymentName != "worker-prod" || events.Events == nil || len(events.Events) != 0 {
+		t.Fatalf("expected explicit empty events payload, got %+v", events)
+	}
+}
+
 func TestAPIOptionsOverviewAccountUsesSnapshotListLookup(t *testing.T) {
 	repoRoot := writeRepositoryFixture(t)
 	store := &stubStatusStore{
@@ -313,6 +382,9 @@ func TestAPIOptionsOverviewDetailProvidersFallBackToCatalogWhenStoreMissing(t *t
 	if options.OverviewDeployment == nil {
 		t.Fatalf("expected overview deployment provider")
 	}
+	if options.OverviewDeploymentEvents == nil {
+		t.Fatalf("expected overview deployment events provider")
+	}
 	if options.OverviewAccounts == nil {
 		t.Fatalf("expected overview accounts provider")
 	}
@@ -329,6 +401,14 @@ func TestAPIOptionsOverviewDetailProvidersFallBackToCatalogWhenStoreMissing(t *t
 	}
 	if deployment.Name != "api-prod" || deployment.AccountName != "prod-core" || deployment.Sync != (domain.Sync{}) || deployment.Health != (domain.Health{}) {
 		t.Fatalf("expected catalog-only deployment detail, got %+v", deployment)
+	}
+
+	events, err := options.OverviewDeploymentEvents("api-prod")
+	if err != nil {
+		t.Fatalf("OverviewDeploymentEvents returned error: %v", err)
+	}
+	if events.DeploymentName != "api-prod" || events.Events == nil || len(events.Events) != 0 {
+		t.Fatalf("expected catalog-only deployment events payload with empty list, got %+v", events)
 	}
 
 	accounts, err := options.OverviewAccounts()

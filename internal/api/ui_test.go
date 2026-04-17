@@ -781,8 +781,12 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Recent logs")
 	}
 	for _, fragment := range []string{
+		"deployment_events_fixture=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/events\")",
 		"resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing\")",
 		"worker_resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service\")",
+		"assert deployment_events_fixture['deploymentName'] == 'payments-api-prod', deployment_events_fixture",
+		"assert isinstance(deployment_events_fixture['events'], list), deployment_events_fixture",
+		"assert len(deployment_events_fixture['events']) == 0, deployment_events_fixture",
 		"assert resource_logs['resourceType'] == 'trafficShiftPlan', resource_logs",
 		"assert worker_resource_logs['deploymentName'] == 'worker-prod', worker_resource_logs",
 		"assert worker_resource_logs['resourceType'] == 'ecsService', worker_resource_logs",
@@ -803,8 +807,14 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert isinstance(deployment_runtime_summary.get('changeDetails', []), list), deployment_detail") {
 		t.Fatalf("expected smoke-local.sh to verify deployment detail runtimeSummary.changeDetails shape")
 	}
+	if !strings.Contains(text, "controller_events=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/events\"") {
+		t.Fatalf("expected smoke-local.sh to hit deployment events after controller starts")
+	}
 	if !strings.Contains(text, "if deployment_history:") || !strings.Contains(text, "assert isinstance(deployment_history[0].get('changeDetails', []), list), deployment_detail") {
 		t.Fatalf("expected smoke-local.sh to verify deployment detail history changeDetails shape")
+	}
+	if !strings.Contains(text, "assert events_payload['deploymentName'] == 'payments-api-prod', events_payload") || !strings.Contains(text, "assert event.get('source') == 'controller', events_payload") {
+		t.Fatalf("expected smoke-local.sh to verify controller-populated deployment events payload")
 	}
 	if !strings.Contains(text, "assert 'Runtime change details' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Runtime change details")

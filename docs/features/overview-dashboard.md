@@ -111,6 +111,18 @@ Resource-list fallback contract:
 
 The existing `Drift view` and `Plan/apply` workspace shells remain available as deeper read-only troubleshooting pages while the new application/resource drill-down flow is being introduced incrementally.
 
+### Deployment runtime events API
+
+Operators can also fetch a read-only deployment event timeline from:
+- `GET /v1/overview/deployments/{deploymentName}/events`
+
+This payload is derived from persisted `status.history` entries the controller authored for runtime changes. It is meant to support operator drill-down and timeline rendering, not to act as a full durable audit system yet.
+
+Current behavior:
+- returns `deploymentName` plus an explicit `events[]` array
+- returns `200 OK` with `events: []` when the deployment exists but no runtime history has been persisted yet
+- never calls live AWS APIs; it only reflects the stored controller/runtime read model
+
 ## Workspace shells
 
 The dashboard now supports lightweight workspace routing inside the same embedded shell.

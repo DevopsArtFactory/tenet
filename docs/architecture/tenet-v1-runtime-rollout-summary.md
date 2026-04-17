@@ -95,9 +95,14 @@ The overview read models also copy the same additive runtime summary into deploy
 The deployment overview detail surface preserves the same `rollout.execution[]` payload for expanded per-deployment inspection:
 - `GET /v1/overview/deployments/{deploymentName}`
 
+The deployment events surface exposes the same persisted controller/runtime timeline as an explicit operator-facing payload:
+- `GET /v1/overview/deployments/{deploymentName}/events`
+
 That lets the embedded overview UI keep the applications landing page focused on narrow triage while still consuming summary text and search/indexable rollout context from the same payload, and lets deeper detail/workspace views show rollout phase, current step, runtime-summary desired/observed generations, explicit runtime-context rows, runtime-summary change labels plus human-readable change details, runtime-summary provenance, and planned steps without needing additional API joins in the browser, while preserving the richer EC2 candidate-capacity and ECS CodeDeploy/native-rolling terminology from the planner. Expanded detail panels now render the same runtime-summary generation pair, an additive `Runtime context` metric sourced from `runtimeSummary.targetType` / `runtimeSummary.strategy` / `runtimeSummary.executionMode`, additive `Runtime changes` / `Runtime change details` metrics when latest labels/details are present, an additive `Runtime source` metric when available, and each history entry's desired/observed generations plus additive `History context` / `changes[]` / `changeDetails[]` / source / rollout-phase metadata when available, each rollout step's status together with its optional controller-derived `detail` text, and the concrete execution resources and descriptions, all with the same payload shape rather than inventing UI-only fields.
 
 The `execution[]` list remains a controller-authored read-model summary, not a stream of live AWS observations. Clients should treat the resource names and descriptions as Tenet's intended execution contract for the current plan rather than definitive evidence that AWS has already created, attached, or shifted those resources. The overview builders and API routes preserve the ordered list and resource identifiers as-is while allowing only description text to evolve, so the exact identifier strings above are part of the stable read-model contract rather than documentation-only examples.
+
+The deployment events route follows the same principle: it is copied from persisted `status.history`, returns `events: []` when no runtime history exists yet for a known deployment, and is not a full durable audit/event system at this stage.
 
 ## Compatibility
 

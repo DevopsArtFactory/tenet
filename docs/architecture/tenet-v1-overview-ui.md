@@ -45,11 +45,14 @@ The final page is where deeper operational context belongs.
 This page is where Tenet can show things like:
 - rollout state
 - runtime history
+- controller-derived runtime events from `GET /v1/overview/deployments/{deploymentName}/events`
 - conditions
 - artifact context
 - recent logs when available
 
 The goal is to make troubleshooting possible without forcing the user to jump directly into raw AWS consoles for the first step.
+
+The deployment-events route is intentionally read-only and controller-derived. It reflects persisted runtime history entries, returns `events: []` when a deployment exists without history yet, and should not be treated as a full durable audit system.
 
 When `rollout.execution[]` is still missing or empty in a fixture-backed or early controller-authored payload, the resource drill-down keeps the operator contract stable by synthesizing the same fallback rollout resources the controller would eventually publish. That contract includes:
 - `ecsRolling`
