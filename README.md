@@ -155,6 +155,8 @@ Bring up the local stack with Docker Compose:
 make docker-up
 ```
 
+If `make docker-up` exits before starting the stack, `localhost:8080` is already owned by something outside this Compose project. Inspect the listener with `lsof -nP -iTCP:8080 -sTCP:LISTEN`. If you want to clear a prior Tenet stack before retrying, run `make docker-down`, then rerun `docker compose up --build -d`.
+
 This starts:
 - `api` on `http://localhost:8080`
 - `controller` as a long-running repo-validating process that now reloads fixtures and logs reconcile plans every few seconds
