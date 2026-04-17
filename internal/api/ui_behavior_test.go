@@ -386,6 +386,7 @@ async function render(search) {
 const scriptContent = ` + string(scriptJSON) + `;
 const sampleApplications = ` + string(applicationsJSON) + `;
 const accountDetail = ` + string(accountDetailJSON) + `;
+const applicationDetail = ` + string(applicationDetailJSON) + `;
 class Element {
   constructor(tagName, ownerDocument) {
     this.tagName = String(tagName).toUpperCase();
@@ -466,6 +467,18 @@ async function render(search, fetchImpl) {
   const accountLinks = collectNodes(accountView.document.getElementById('accounts'), (node) => node.tagName === 'A');
   if (!accountLinks.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Open application' && node.target === '_self')) {
     throw new Error('expected account detail drill-down link to preserve /console pathname');
+  }
+
+  const applicationView = await render('?page=application&deployment=payments-api-staging&q=payments&sync=OutOfSync&account=210987654321', (url) => {
+    if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(applicationDetail) });
+    throw new Error('unexpected application fetch url: ' + url);
+  });
+  const applicationLinks = collectNodes(applicationView.document.getElementById('accounts'), (node) => node.tagName === 'A');
+  if (!applicationLinks.find((node) => node.href === '/console?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Drift view' && node.target === '_self')) {
+    throw new Error('expected application detail drift link to preserve /console pathname');
+  }
+  if (!applicationLinks.find((node) => node.href === '/console?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Plan/apply' && node.target === '_self')) {
+    throw new Error('expected application detail plan link to preserve /console pathname');
   }
 })();
 `
@@ -729,6 +742,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('Account JSON')) throw new Error('expected account page account json link');
   if (!accountsText.includes('Group JSON')) throw new Error('expected account page group json link');
   if (!accountsText.includes('Open application')) throw new Error('expected account page application drill-down links');
+  if (accountsText.includes('Drift view')) throw new Error('expected account page to stop exposing drift workspace shortcut');
+  if (accountsText.includes('Plan/apply')) throw new Error('expected account page to stop exposing plan workspace shortcut');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
   if (!links.find((node) => node.href === '/v1/overview/accounts/210987654321' && node.textContent === 'Account JSON')) throw new Error('expected account json href');
   if (!links.find((node) => node.href === '/v1/overview/accounts/210987654321/projects/payments/environments/staging-apne2' && node.textContent === 'Group JSON')) throw new Error('expected group json href');
@@ -818,6 +833,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!summaryText.includes('payments-api-staging')) throw new Error('expected application route summary title');
   if (!summaryText.includes('Application detail page: show only application-linked resources before the final resource-detail page.')) throw new Error('expected application route drill-down guidance');
   if (!accountsText.includes('Application resources')) throw new Error('expected application route resources body');
+  if (!accountsText.includes('Drift view')) throw new Error('expected application route drift workspace entry');
+  if (!accountsText.includes('Plan/apply')) throw new Error('expected application route plan workspace entry');
   if (!accountsText.includes('Workloads')) throw new Error('expected application route workloads group');
   if (!accountsText.includes('Traffic routing')) throw new Error('expected application route traffic routing group');
   if (!accountsText.includes('payments-api-staging-service')) throw new Error('expected application route synthesized workload resource');
@@ -1547,10 +1564,17 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('payments-api-staging ECS Service')) throw new Error('expected workload resource');
   if (!accountsText.includes('prod listener')) throw new Error('expected traffic routing resource');
   if (!accountsText.includes('bootstrap source')) throw new Error('expected config/access resource');
+  if (!accountsText.includes('Drift view')) throw new Error('expected application page drift workspace link');
+  if (!accountsText.includes('Plan/apply')) throw new Error('expected application page plan workspace link');
   if (accountsText.includes('Runtime history')) throw new Error('application page should not expose deep runtime history yet');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
   const resourceLink = links.find((node) => node.textContent === 'Open resource');
+  const driftLink = links.find((node) => node.textContent === 'Drift view');
+  const planLink = links.find((node) => node.textContent === 'Plan/apply');
   if (!resourceLink) throw new Error('expected resource drill-down link');
+  if (!driftLink || !driftLink.href.includes('/?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging')) throw new Error('expected drift workspace href to include deployment and preserved filters');
+  if (!planLink || !planLink.href.includes('/?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging')) throw new Error('expected plan workspace href to include deployment and preserved filters');
+  if (driftLink.target !== '_self' || planLink.target !== '_self') throw new Error('expected workspace drill-down links to stay in embedded UI flow');
   if (!resourceLink.href.includes('/?page=resource&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging')) throw new Error('expected resource detail href to include deployment and preserved filters');
   if (resourceLink.target !== '_self') throw new Error('expected resource drill-down link to stay in embedded UI flow');
   if (resourceLink.rel) throw new Error('expected resource drill-down link to avoid new-tab rel attributes');
@@ -2827,7 +2851,7 @@ async function render(detail) {
   const text = collectText(run.document.getElementById('accounts')).join(' | ');
   const toolbarText = collectText(run.document.getElementById('toolbar')).join(' | ');
   if (!text.includes('Drift viewer')) throw new Error('expected drift workspace title');
-  if (!toolbarText.includes('Back to overview')) throw new Error('expected workspace back link');
+  if (!toolbarText.includes('Back to application')) throw new Error('expected workspace back link');
   if (!toolbarText.includes('api-prod')) throw new Error('expected workspace active deployment title');
   if (!text.includes('Latest runtime signals')) throw new Error('expected drift workspace runtime signals section');
   if (!text.includes('deployment-controller')) throw new Error('expected drift workspace runtime source value');
@@ -2925,21 +2949,6 @@ func TestDeploymentWorkspacePlanViewWithNodeHarness(t *testing.T) {
 		t.Fatalf("marshal embedded script: %v", err)
 	}
 
-	accountsJSON, err := json.Marshal([]map[string]any{{
-		"name":         "acct-a",
-		"awsAccountId": "111111111111",
-		"deployments": []map[string]any{{
-			"name":           "api-prod",
-			"appRef":         "payments",
-			"environmentRef": "prod",
-			"region":         "us-west-2",
-			"sync":           map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
-		}},
-	}})
-	if err != nil {
-		t.Fatalf("marshal sample accounts: %v", err)
-	}
-
 	detailJSON, err := json.Marshal(map[string]any{
 		"name":             "api-prod",
 		"appRef":           "payments",
@@ -2973,10 +2982,76 @@ func TestDeploymentWorkspacePlanViewWithNodeHarness(t *testing.T) {
 		t.Fatalf("marshal detail body: %v", err)
 	}
 
-	nodeProgram := `
-const scriptContent = ` + string(scriptJSON) + `;
-const sampleAccounts = ` + string(accountsJSON) + `;
-const detailBody = ` + string(detailJSON) + `;
+	planPreviewReadyJSON, err := json.Marshal(map[string]any{
+		"id":             "plan_ready_123",
+		"deploymentName": "api-prod",
+		"status":         "ready",
+		"createdAt":      "2026-04-17T09:00:00Z",
+		"operations": []map[string]any{{
+			"kind":    "ShiftTrafficCanary",
+			"status":  "current",
+			"phase":   "Promoting",
+			"target":  "server-preview-target",
+			"summary": "Server-authored preview summary",
+		}},
+		"risk": map[string]any{
+			"level":    "medium",
+			"label":    "medium risk",
+			"guidance": "Server-authored risk guidance",
+			"reasons":  []string{"server preview risk reason"},
+		},
+		"approval": map[string]any{
+			"required": true,
+			"summary":  "Server-authored approval summary",
+			"reasons":  []string{"change window required"},
+		},
+		"source": map[string]any{
+			"deploymentName":     "api-prod",
+			"route":              "/v1/overview/deployments/api-prod",
+			"fingerprint":        "fp_plan_ready",
+			"runtimeSource":      "runtime-agent",
+			"runtimeTimestamp":   "2026-04-16T07:10:00Z",
+			"desiredGeneration":  7,
+			"observedGeneration": 6,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal ready plan preview: %v", err)
+	}
+
+	planPreviewFailedJSON, err := json.Marshal(map[string]any{
+		"id":             "plan_failed_123",
+		"deploymentName": "api-prod",
+		"status":         "failed",
+		"createdAt":      "2026-04-17T09:05:00Z",
+		"operations":     []map[string]any{},
+		"risk": map[string]any{
+			"level":    "high",
+			"label":    "high risk",
+			"guidance": "Preview failed before approval",
+			"reasons":  []string{"source fingerprint changed"},
+		},
+		"approval": map[string]any{
+			"required": true,
+			"summary":  "Recreate the preview from the latest deployment detail before approval.",
+			"reasons":  []string{"stored preview is stale"},
+		},
+		"source": map[string]any{
+			"deploymentName":     "api-prod",
+			"route":              "/v1/overview/deployments/api-prod",
+			"fingerprint":        "fp_plan_failed",
+			"runtimeSource":      "runtime-agent",
+			"runtimeTimestamp":   "2026-04-16T07:10:00Z",
+			"desiredGeneration":  7,
+			"observedGeneration": 6,
+		},
+		"errors": []string{"stale source fingerprint", "create again from latest deployment detail"},
+	})
+	if err != nil {
+		t.Fatalf("marshal failed plan preview: %v", err)
+	}
+
+	domHarness := `
 class Element {
   constructor(tagName, ownerDocument) {
     this.tagName = String(tagName).toUpperCase();
@@ -3013,79 +3088,185 @@ class Document {
   getElementById(id) { return this.byID.get(id) || null; }
   querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
 }
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+`
+
+	runNode := func(t *testing.T, nodeProgram string) {
+		t.Helper()
+		cmd := exec.Command("node", "-e", nodeProgram)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+		}
+	}
+
+	t.Run("create flow renders server authored preview", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+const planPreview = ` + string(planPreviewReadyJSON) + `;
+` + domHarness + `
 const document = new Document();
 document.byID.set('toolbar', document.createElement('section'));
 document.byID.set('summary', document.createElement('section'));
 document.byID.set('accounts', document.createElement('section'));
 const fetchCalls = [];
+let createRequestOptions = null;
 const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod', hash: '' } };
 const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
-const fetch = (url) => {
+const fetch = (url, options = {}) => {
   fetchCalls.push(String(url));
-  if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
   if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/plans/deployments/api-prod') {
+    createRequestOptions = options;
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+  }
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
-async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
-const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
-const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/deployments/api-prod') {
-    throw new Error('expected plan workspace to load only deployment detail, got ' + fetchCalls.join(', '));
-  }
+  const root = document.getElementById('accounts');
+  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/deployments/api-prod') throw new Error('expected only deployment detail before create, got ' + fetchCalls.join(', '));
+  let text = collectText(root).join(' | ');
+  if (!text.includes('Plan and apply')) throw new Error('expected plan workspace title');
+  if (!text.includes('No stored plan preview yet')) throw new Error('expected idle plan-preview heading');
+  if (!text.includes('Create Plan will POST /v1/plans/deployments/api-prod')) throw new Error('expected idle create-plan guidance');
+  if (!text.includes('No immutable plan preview has been created yet.')) throw new Error('expected derived preview intro before create');
+  if (!text.includes('Plan operations')) throw new Error('expected plan operations section');
+  if (!text.includes('CreateCodeDeployDeployment')) throw new Error('expected derived rollout operation before create');
+  if (!text.includes('Moving 10% traffic to the green task set')) throw new Error('expected derived rollout detail before create');
+  let buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  let createPlan = buttons.find((node) => node.textContent === 'Create Plan');
+  let applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');
+  if (!createPlan || !applyPlan) throw new Error('expected plan workspace action buttons before create');
+  if (createPlan.disabled || !applyPlan.disabled) throw new Error('expected Create Plan enabled and Apply Plan disabled before create');
+  createPlan.dispatch('click');
+  await settle();
+  await settle();
+  await settle();
+  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/deployments/api-prod') throw new Error('unexpected fetch sequence after create: ' + fetchCalls.join(', '));
+  if (!createRequestOptions || createRequestOptions.method !== 'POST') throw new Error('expected Create Plan to POST');
+  if (!createRequestOptions.headers || createRequestOptions.headers['Content-Type'] !== 'application/json') throw new Error('expected Create Plan content type header');
+  const createBody = JSON.parse(createRequestOptions.body || '{}');
+  if (!/^plan_[0-9a-f]{16}$/.test(createBody.ifMatch || '')) throw new Error('expected Create Plan to send derived ifMatch fingerprint, got ' + createRequestOptions.body);
+  if (window.location.search !== '?page=plan&deployment=api-prod&planId=plan_ready_123') throw new Error('expected Create Plan to persist planId in URL, got ' + window.location.search);
+  text = collectText(root).join(' | ');
+  if (!text.includes('Plan preview ready')) throw new Error('expected ready plan-preview heading');
+  if (!text.includes('Immutable plan preview plan_ready_123 is loaded')) throw new Error('expected ready state message');
+  if (!text.includes('Plan preview approval guidance')) throw new Error('expected server-authored approval guidance heading');
+  if (!text.includes('Server-authored approval summary')) throw new Error('expected server-authored approval summary');
+  if (!text.includes('Approval required') || !text.includes('Yes')) throw new Error('expected approval required indicator');
+  if (!text.includes('Stored plan preview')) throw new Error('expected stored plan preview section');
+  if (!text.includes('fp_plan_ready')) throw new Error('expected stored source fingerprint');
+  if (!text.includes('Shareable URL') || !text.includes('/?page=plan&deployment=api-prod&planId=plan_ready_123')) throw new Error('expected shareable URL');
+  if (!text.includes('Server-authored plan preview loaded from GET /v1/plans/plan_ready_123.')) throw new Error('expected server-authored operations intro');
+  if (!text.includes('server-preview-target')) throw new Error('expected server-authored target');
+  if (!text.includes('Server-authored preview summary')) throw new Error('expected server-authored operation summary');
+  buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  createPlan = buttons.find((node) => node.textContent === 'Create Plan');
+  applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');
+  if (!createPlan || !applyPlan) throw new Error('expected plan workspace buttons after create');
+  if (createPlan.disabled || !applyPlan.disabled) throw new Error('expected Create Plan enabled and Apply Plan disabled after preview load');
+})();
+`
+		runNode(t, nodeProgram)
+	})
+
+	t.Run("bookmarked plan id loads stored failed preview", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+const planPreview = ` + string(planPreviewFailedJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod&planId=plan_failed_123', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/plans/plan_failed_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  await settle();
+  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/plan_failed_123') throw new Error('expected deployment detail plus bookmarked plan preview fetch, got ' + fetchCalls.join(', '));
   const root = document.getElementById('accounts');
   const text = collectText(root).join(' | ');
-  if (!text.includes('Plan and apply')) throw new Error('expected plan workspace title');
-  if (!text.includes('Plan/apply controls are not wired to mutation APIs in this read-only slice yet.')) throw new Error('expected plan workspace placeholder guidance');
-  if (!text.includes('Derived approval guidance')) throw new Error('expected plan workspace approval guidance section');
-  if (!text.includes('Derived risk level')) throw new Error('expected plan workspace derived risk label');
-  if (!text.includes('high risk')) throw new Error('expected plan workspace derived high risk indicator');
-  if (!text.includes('Approval should wait for explicit operator review because the current read model shows live-traffic movement, unhealthy runtime signals, or high-severity drift.')) throw new Error('expected plan workspace approval guidance copy');
-  if (!text.includes('Risk factors · current step ShiftTrafficCanary changes live traffic')) throw new Error('expected plan workspace risk factors');
-  if (!text.includes('Plan operations')) throw new Error('expected plan workspace section heading');
-  if (!text.includes('Plan preview is derived from rollout steps, rollout execution resources, and the latest runtime summary in the deployment detail read model.')) throw new Error('expected plan workspace derived plan intro');
-  if (!text.includes('Operation')) throw new Error('expected plan workspace operation column header');
-  if (!text.includes('Phase')) throw new Error('expected plan workspace phase column header');
-  if (!text.includes('Target')) throw new Error('expected plan workspace target column header');
-  if (!text.includes('Operator note')) throw new Error('expected plan workspace note column header');
-  if (!text.includes('Latest runtime signals')) throw new Error('expected plan workspace runtime signals section');
-  if (!text.includes('Runtime source')) throw new Error('expected plan workspace runtime source label');
-  if (!text.includes('runtime-agent')) throw new Error('expected plan workspace runtime source value');
-  if (!text.includes('Runtime context')) throw new Error('expected plan workspace runtime context label');
-  if (!text.includes('Target ecs · Strategy linear · Execution ecsCodeDeploy')) throw new Error('expected plan workspace runtime context value');
-  if (!text.includes('Runtime timestamp')) throw new Error('expected plan workspace runtime timestamp label');
-  if (!text.includes('2026-04-16T07:10:00Z')) throw new Error('expected plan workspace runtime timestamp value');
-  if (!text.includes('Runtime history')) throw new Error('expected plan workspace runtime history label');
-  if (!/Runtime history \| 5(?: \||$)/.test(text)) throw new Error('expected plan workspace runtime history count');
-  if (!text.includes('Runtime artifact')) throw new Error('expected plan workspace runtime artifact label');
-  if (!text.includes('ghcr.io/example/payments:v1-runtime')) throw new Error('expected plan workspace runtime artifact value');
-  if (!text.includes('Runtime conditions')) throw new Error('expected plan workspace runtime conditions label');
-  if (!text.includes('Progressing = True · TrafficShiftCanary')) throw new Error('expected plan workspace runtime condition summary');
-  if (!text.includes('No runtime change signals are currently reported.')) throw new Error('expected plan workspace runtime change empty state');
-  if (!text.includes('Rollout execution')) throw new Error('expected plan workspace rollout execution section');
-  if (!text.includes('No rollout execution resources are currently reported.')) throw new Error('expected plan workspace rollout execution empty state');
-  if (!text.includes('CreateCodeDeployDeployment')) throw new Error('expected plan workspace to surface rollout plan steps');
-  if (!text.includes('ShiftTrafficCanary')) throw new Error('expected plan workspace to surface current rollout step');
-  if (!text.includes('api-prod-codedeploy-group (codeDeployDeploymentGroup)')) throw new Error('expected plan workspace to derive CodeDeploy deployment-group target');
-  if (!text.includes('Created CodeDeploy deployment')) throw new Error('expected plan workspace to surface step detail in derived table');
-  if (!text.includes('Moving 10% traffic to the green task set')) throw new Error('expected plan workspace to surface current step detail in derived table');
-  if (text.includes('No derived plan operations are currently available.')) throw new Error('expected plan workspace to render derived plan operations');
+  if (!text.includes('Plan preview failed')) throw new Error('expected failed plan-preview heading');
+  if (!text.includes('Immutable plan preview plan_failed_123 is recorded as failed.')) throw new Error('expected failed preview message');
+  if (!text.includes('Plan preview approval guidance')) throw new Error('expected preview approval heading for bookmarked plan');
+  if (!text.includes('Recreate the preview from the latest deployment detail before approval.')) throw new Error('expected failed preview approval summary');
+  if (!text.includes('Stored plan preview')) throw new Error('expected stored preview metadata section');
+  if (!text.includes('fp_plan_failed')) throw new Error('expected failed preview fingerprint');
+  if (!text.includes('Plan preview errors')) throw new Error('expected failed preview errors section');
+  if (!text.includes('stale source fingerprint')) throw new Error('expected failed preview error text');
+  if (!text.includes('No server-authored plan operations are stored for this preview.')) throw new Error('expected empty stored operations message');
+  if (!text.includes('/?page=plan&deployment=api-prod&planId=plan_failed_123')) throw new Error('expected failed preview shareable URL');
   const buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
   const createPlan = buttons.find((node) => node.textContent === 'Create Plan');
   const applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');
-  if (!createPlan || !applyPlan) throw new Error('expected plan workspace action buttons');
-  if (!createPlan.disabled || !applyPlan.disabled) throw new Error('expected read-only plan workspace buttons to remain disabled');
+  if (!createPlan || !applyPlan) throw new Error('expected plan workspace action buttons on bookmarked plan');
+  if (createPlan.disabled || !applyPlan.disabled) throw new Error('expected Create Plan enabled and Apply Plan disabled on bookmarked failed plan');
 })();
 `
+		runNode(t, nodeProgram)
+	})
 
-	cmd := exec.Command("node", "-e", nodeProgram)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-	}
+	t.Run("create falls back to loaded preview fingerprint when client cannot derive current fingerprint", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+const planPreview = ` + string(planPreviewFailedJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+let createRequestOptions = null;
+const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod&planId=plan_failed_123', hash: '' }, crypto: {} };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url, options = {}) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/plans/plan_failed_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+  if (url === '/v1/plans/deployments/api-prod') {
+    createRequestOptions = options;
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+  }
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  await settle();
+  const root = document.getElementById('accounts');
+  const buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  const createPlan = buttons.find((node) => node.textContent === 'Create Plan');
+  if (!createPlan) throw new Error('expected Create Plan button on bookmarked failed preview');
+  createPlan.dispatch('click');
+  await settle();
+  await settle();
+  await settle();
+  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/plan_failed_123, /v1/plans/deployments/api-prod') throw new Error('unexpected fetch sequence after fallback create: ' + fetchCalls.join(', '));
+  const createBody = JSON.parse((createRequestOptions && createRequestOptions.body) || '{}');
+  if (createBody.ifMatch !== 'fp_plan_failed') throw new Error('expected Create Plan to fall back to loaded preview fingerprint, got ' + JSON.stringify(createBody));
+})();
+`
+		runNode(t, nodeProgram)
+	})
 }
 
 func TestEmbeddedUIChangeDetailsWithNodeHarness(t *testing.T) {

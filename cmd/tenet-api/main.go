@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/DevopsArtFactory/tenet/internal/api"
@@ -14,6 +15,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/manifestfs"
+	"github.com/DevopsArtFactory/tenet/internal/planpreview"
 	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 	"github.com/redis/go-redis/v9"
@@ -34,11 +36,12 @@ func main() {
 	repoRoot := os.Getenv("TENET_REPO_ROOT")
 	statusBackend := envOrDefault("TENET_STATUS_BACKEND", "file")
 	statusPath := os.Getenv("TENET_STATUS_PATH")
+	planStorePath := envOrDefault("TENET_PLAN_STORE_PATH", defaultPlanPreviewStorePath())
 	redisAddr := os.Getenv("TENET_REDIS_ADDR")
 	statusSeedPath := os.Getenv("TENET_STATUS_SEED_PATH")
 
 	info := buildinfo.Current(version, commit)
-	log.Printf("starting tenet-api version=%s commit=%s addr=%s repo_root=%s status_backend=%s status_path=%s redis_addr=%s", info.Version, info.Commit, addr, repoRoot, statusBackend, statusPath, redisAddr)
+	log.Printf("starting tenet-api version=%s commit=%s addr=%s repo_root=%s status_backend=%s status_path=%s plan_store_path=%s redis_addr=%s", info.Version, info.Commit, addr, repoRoot, statusBackend, statusPath, planStorePath, redisAddr)
 
 	store := mustOpenStatusStore(statusBackend, statusPath, redisAddr)
 	if store != nil {
@@ -46,7 +49,7 @@ func main() {
 			log.Fatalf("seed status store: %v", err)
 		}
 	}
-	options := newAPIOptions(info, repoRoot, store)
+	options := newAPIOptionsWithPlanStore(info, repoRoot, store, planStorePath)
 
 	if err := http.ListenAndServe(addr, api.NewRouter(options)); err != nil {
 		log.Fatal(err)
@@ -54,6 +57,10 @@ func main() {
 }
 
 func newAPIOptions(info buildinfo.Info, repoRoot string, store statusstore.Store) api.Options {
+	return newAPIOptionsWithPlanStore(info, repoRoot, store, envOrDefault("TENET_PLAN_STORE_PATH", defaultPlanPreviewStorePath()))
+}
+
+func newAPIOptionsWithPlanStore(info buildinfo.Info, repoRoot string, store statusstore.Store, planStorePath string) api.Options {
 	options := api.Options{BuildInfo: info}
 	if repoRoot != "" {
 		if _, err := catalog.LoadFromRepository(repoRoot); err != nil {
@@ -160,6 +167,12 @@ func newAPIOptions(info buildinfo.Info, repoRoot string, store statusstore.Store
 			return catalog.BuildDeploymentOverviewEvents(compiled, []statusstore.Snapshot{snapshot}, name)
 		}
 		options.OverviewDeploymentResourceLogs = newOverviewDeploymentResourceLogsProvider(options.OverviewDeployment, loadObserverRoleARN, resourceLogService)
+		planService := planpreview.Service{
+			LoadDetail: options.OverviewDeployment,
+			Store:      planpreview.NewFileStore(planStorePath),
+		}
+		options.CreateDeploymentPlanPreview = planService.Create
+		options.PlanPreview = planService.Get
 	}
 	if store == nil {
 		return options
@@ -171,6 +184,10 @@ func newAPIOptions(info buildinfo.Info, repoRoot string, store statusstore.Store
 		return store.Get(context.Background(), name)
 	}
 	return options
+}
+
+func defaultPlanPreviewStorePath() string {
+	return filepath.Join(os.TempDir(), "tenet", "plan-previews.json")
 }
 
 func newOverviewDeploymentResourceLogsProvider(

@@ -49,7 +49,7 @@ Tenet keeps runtime status separately from desired configuration. Runtime snapsh
 Tenet joins desired state and runtime state into read models that power:
 - the embedded browser UI
 - drill-down pages for applications and resources
-- operational views such as rollout context and recent logs
+- operational views such as rollout context, immutable plan previews, deployment events, and recent logs
 
 The embedded UI is intentionally lightweight: static HTML/CSS/JS served directly by the Go API. That keeps the product easy to run locally while the control-plane model is still evolving.
 
@@ -70,6 +70,11 @@ http://localhost:8080/
 ```
 
 You should land on the applications overview page.
+
+For the current read-only plan preview flow, a typical local operator path is:
+- `GET /v1/overview/applications/{deploymentName}` or `GET /v1/overview/deployments/{deploymentName}` to inspect the deployment and capture its additive `sourceFingerprint`
+- `POST /v1/plans/deployments/{deploymentName}` with optional `{"ifMatch":"<sourceFingerprint>"}` to persist an immutable preview for the reviewed state
+- `GET /v1/plans/{planId}` or open `http://localhost:8080/?page=plan&deployment=payments-api-prod&planId={planId}` to reopen the stored preview
 
 Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis. Use `make smoke-docker` when you need to validate `compose.yaml`, confirm the `api`/`controller`/`redis` service contract, and prove the containerized local stack plus controller logs are reachable end to end.
 
@@ -124,6 +129,10 @@ Open one application to see the linked rollout resources grouped into clear sect
 ### Resource detail
 Open a concrete resource to inspect the deeper operational context for that resource, including rollout and runtime information. Recent logs are surfaced here when the resource type supports them.
 
+The same drill-down also includes read-only workspace surfaces:
+- `/?page=drift&deployment={deploymentName}` for derived field-level troubleshooting context
+- `/?page=plan&deployment={deploymentName}` for immutable plan previews and shareable `planId` reopen URLs while apply remains disabled
+
 Tenet also exposes a read-only deployment events slice for the same drill-down workflow:
 - `GET /v1/overview/deployments/{deploymentName}/events`
 
@@ -158,6 +167,8 @@ Implemented today:
 - read-only API and embedded UI
 - applications -> application -> resource drill-down flow
 - rollout/resource context for EC2 and ECS
+- immutable plan preview creation/readback with stable `planId` and optimistic `ifMatch` support
+- deployment events overview derived from persisted runtime history
 - recent resource-log support for supported resource types
 
 Not implemented yet:

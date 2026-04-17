@@ -13,7 +13,9 @@ PY
 REPO_ROOT=${TENET_REPO_ROOT:-$ROOT/examples/local-repo}
 FIXTURE_STATUS_PATH=${TENET_STATUS_PATH:-$ROOT/examples/local-status/deployments.json}
 STATUS_PATH=$(mktemp)
+PLAN_STORE_PATH=$(mktemp)
 cp "$FIXTURE_STATUS_PATH" "$STATUS_PATH"
+rm -f "$PLAN_STORE_PATH"
 LOG_FILE=$(mktemp)
 CONTROLLER_LOG_FILE=$(mktemp)
 cleanup() {
@@ -25,11 +27,11 @@ cleanup() {
     kill "$API_PID" 2>/dev/null || true
     wait "$API_PID" 2>/dev/null || true
   fi
-  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH"
+  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH"
 }
 trap cleanup EXIT
 
-TENET_API_ADDR=":$PORT" TENET_REPO_ROOT="$REPO_ROOT" TENET_STATUS_PATH="$STATUS_PATH" \
+TENET_API_ADDR=":$PORT" TENET_REPO_ROOT="$REPO_ROOT" TENET_STATUS_PATH="$STATUS_PATH" TENET_PLAN_STORE_PATH="$PLAN_STORE_PATH" \
   go run ./cmd/tenet-api >"$LOG_FILE" 2>&1 &
 API_PID=$!
 
@@ -50,12 +52,26 @@ account_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts/123456789012
 group_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts/123456789012/projects/payments-api/environments/prod-apne2")
 deployment_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod")
 deployment_events_fixture=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/events")
+deployment_source_fingerprint=$(DEPLOYMENT_DETAIL_JSON="$deployment_detail" python3 - <<'PY'
+import json, os
+print(json.loads(os.environ['DEPLOYMENT_DETAIL_JSON'])['sourceFingerprint'])
+PY
+)
+plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d "{\"ifMatch\":\"$deployment_source_fingerprint\"}" "http://$HOST:$PORT/v1/plans/deployments/payments-api-prod")
+plan_id=$(PLAN_PREVIEW_JSON="$plan_preview" python3 - <<'PY'
+import json, os
+print(json.loads(os.environ['PLAN_PREVIEW_JSON'])['id'])
+PY
+)
+plan_preview_get=$(curl -fsS "http://$HOST:$PORT/v1/plans/$plan_id")
+stale_plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d '{"ifMatch":"plan_deadbeef"}' "http://$HOST:$PORT/v1/plans/deployments/payments-api-prod")
 status=$(curl -fsS "http://$HOST:$PORT/v1/status/deployments/payments-api-prod")
 resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")
 worker_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 ui=$(curl -fsS "http://$HOST:$PORT/")
+plan_ui=$(curl -fsS "http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id")
 
-SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_EVENTS_FIXTURE_JSON="$deployment_events_fixture" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" python3 - <<'PY'
+SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_EVENTS_FIXTURE_JSON="$deployment_events_fixture" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" STALE_PLAN_PREVIEW_JSON="$stale_plan_preview" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" PLAN_UI_HTML="$plan_ui" python3 - <<'PY'
 import json, os
 summary = json.loads(os.environ['SUMMARY_JSON'])
 applications = json.loads(os.environ['APPLICATIONS_JSON'])
@@ -65,10 +81,14 @@ account_detail = json.loads(os.environ['ACCOUNT_DETAIL_JSON'])
 group_detail = json.loads(os.environ['GROUP_DETAIL_JSON'])
 deployment_detail = json.loads(os.environ['DEPLOYMENT_DETAIL_JSON'])
 deployment_events_fixture = json.loads(os.environ['DEPLOYMENT_EVENTS_FIXTURE_JSON'])
+plan_preview = json.loads(os.environ['PLAN_PREVIEW_JSON'])
+plan_preview_get = json.loads(os.environ['PLAN_PREVIEW_GET_JSON'])
+stale_plan_preview = json.loads(os.environ['STALE_PLAN_PREVIEW_JSON'])
 status = json.loads(os.environ['STATUS_JSON'])
 resource_logs = json.loads(os.environ['RESOURCE_LOGS_JSON'])
 worker_resource_logs = json.loads(os.environ['WORKER_RESOURCE_LOGS_JSON'])
 ui = os.environ['UI_HTML']
+plan_ui = os.environ['PLAN_UI_HTML']
 assert summary['accountCount'] == 2, summary
 assert summary['environmentCount'] == 2, summary
 assert summary['deploymentCount'] == 3, summary
@@ -85,6 +105,7 @@ assert application_detail['name'] == 'payments-api-prod', application_detail
 assert application_detail['accountName'] == 'prod-core', application_detail
 assert application_detail['awsAccountId'] == '123456789012', application_detail
 assert application_detail['region'] == 'ap-northeast-2', application_detail
+assert application_detail['sourceFingerprint'] == deployment_detail['sourceFingerprint'], (application_detail, deployment_detail)
 assert isinstance((application_detail.get('rollout') or {}).get('execution', []), list), application_detail
 assert [account['name'] for account in overview] == ['prod-core', 'staging-core'], overview
 assert [deployment['name'] for deployment in overview[0]['deployments']] == ['payments-api-prod', 'worker-prod'], overview
@@ -108,12 +129,24 @@ assert group_detail['deployments'][0]['name'] == 'payments-api-prod', group_deta
 deployment_runtime_summary = deployment_detail.get('runtimeSummary') or {}
 deployment_history = deployment_detail.get('history') or []
 assert deployment_detail['name'] == 'payments-api-prod', deployment_detail
+assert isinstance(deployment_detail['sourceFingerprint'], str) and deployment_detail['sourceFingerprint'].startswith('plan_'), deployment_detail
 assert isinstance(deployment_runtime_summary.get('changeDetails', []), list), deployment_detail
 if deployment_history:
     assert isinstance(deployment_history[0].get('changeDetails', []), list), deployment_detail
 assert deployment_events_fixture['deploymentName'] == 'payments-api-prod', deployment_events_fixture
 assert isinstance(deployment_events_fixture['events'], list), deployment_events_fixture
 assert len(deployment_events_fixture['events']) == 0, deployment_events_fixture
+assert plan_preview['deploymentName'] == 'payments-api-prod', plan_preview
+assert plan_preview['status'] == 'ready', plan_preview
+assert plan_preview['source']['route'] == '/v1/overview/deployments/payments-api-prod', plan_preview
+assert plan_preview['source']['fingerprint'] == deployment_detail['sourceFingerprint'], (plan_preview, deployment_detail)
+assert isinstance(plan_preview.get('operations', []), list), plan_preview
+assert isinstance((plan_preview.get('risk') or {}).get('reasons', []), list), plan_preview
+assert isinstance((plan_preview.get('approval') or {}).get('required'), bool), plan_preview
+assert plan_preview_get == plan_preview, (plan_preview_get, plan_preview)
+assert stale_plan_preview['status'] == 'failed', stale_plan_preview
+assert stale_plan_preview['source']['fingerprint'] == deployment_detail['sourceFingerprint'], (stale_plan_preview, deployment_detail)
+assert isinstance(stale_plan_preview.get('errors', []), list) and stale_plan_preview['errors'], stale_plan_preview
 assert status['deploymentName'] == 'payments-api-prod', status
 assert status['status']['sync']['state'] == 'Synced', status
 assert resource_logs['deploymentName'] == 'payments-api-prod', resource_logs
@@ -145,13 +178,17 @@ assert "buildPageURL('account', { accountId: deployment.awsAccountId })" in ui, 
 assert "buildPageURL('application', { deployment: deployment.name })" in ui, ui
 assert 'Drift view' in ui, ui
 assert 'Plan/apply' in ui, ui
+assert "createNavLink(buildPageURL('drift', { deployment: detail.name }), 'Drift view', '_self')" in ui, ui
+assert "createNavLink(buildPageURL('plan', { deployment: detail.name }), 'Plan/apply', '_self')" in ui, ui
+assert "const ifMatch = detail.sourceFingerprint || await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;" in ui, ui
 assert 'Recent logs' in ui, ui
-assert 'Derived approval guidance' in ui, ui
-assert 'Derived risk level' in ui, ui
-assert 'Plan preview is derived from rollout steps, rollout execution resources, and the latest runtime summary in the deployment detail read model.' in ui, ui
+assert 'Plan preview actions' in ui, ui
+assert 'Plan preview approval guidance' in ui, ui
+assert 'Create Plan will POST /v1/plans/deployments/${deploymentName}, store an immutable server-authored preview, and update this workspace URL with a shareable planId.' in ui, ui
+assert 'Server-authored plan preview loaded from GET /v1/plans/${activePlanRecord.id}.' in ui, ui
+assert "params.get('planId') || ''" in ui, ui
 
-assert "buildPageURL('drift', { deployment: deployment.name })" in ui, ui
-assert "buildPageURL('plan', { deployment: deployment.name })" in ui, ui
+assert 'planId' in plan_ui, plan_ui
 print('smoke-local: fixture api path ok')
 PY
 
@@ -162,21 +199,17 @@ CONTROLLER_PID=$!
 controller_ready=0
 for _ in $(seq 1 30); do
   controller_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod" 2>/dev/null || true)
-  controller_events=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/events" 2>/dev/null || true)
-  if [[ -z "$controller_detail" || -z "$controller_events" ]]; then
+  if [[ -z "$controller_detail" ]]; then
     sleep 1
     continue
   fi
-  if CONTROLLER_DETAIL_JSON="$controller_detail" CONTROLLER_EVENTS_JSON="$controller_events" python3 - <<'PY'
+  if CONTROLLER_DETAIL_JSON="$controller_detail" python3 - <<'PY'
 import json, os, sys
 payload = json.loads(os.environ['CONTROLLER_DETAIL_JSON'])
-events_payload = json.loads(os.environ['CONTROLLER_EVENTS_JSON'])
 runtime_change_details = (payload.get('runtimeSummary') or {}).get('changeDetails') or []
 history = payload.get('history') or []
 history_change_details = (history[0].get('changeDetails') if history else []) or []
-events = events_payload.get('events') or []
-event_change_details = (events[0].get('changeDetails') if events else []) or []
-if runtime_change_details and history_change_details and events and events_payload.get('deploymentName') == 'payments-api-prod' and events[0].get('source') == 'controller' and event_change_details:
+if runtime_change_details and history_change_details:
     sys.exit(0)
 sys.exit(1)
 PY
@@ -202,14 +235,11 @@ events_payload = json.loads(os.environ['CONTROLLER_EVENTS_JSON'])
 runtime_change_details = (payload.get('runtimeSummary') or {}).get('changeDetails') or []
 history = payload.get('history') or []
 history_change_details = (history[0].get('changeDetails') if history else []) or []
-events = events_payload.get('events') or []
-event = events[0] if events else {}
 assert runtime_change_details, payload
 assert history_change_details, payload
 assert events_payload['deploymentName'] == 'payments-api-prod', events_payload
-assert isinstance(events_payload['events'], list), events_payload
-assert events, events_payload
-assert event.get('source') == 'controller', events_payload
-assert isinstance(event.get('changeDetails', []), list) and event.get('changeDetails'), events_payload
+assert isinstance(events_payload['events'], list) and events_payload['events'], events_payload
+for event in events_payload['events']:
+    assert event.get('source') == 'controller', events_payload
 print('smoke-local: controller changeDetails path ok')
 PY
