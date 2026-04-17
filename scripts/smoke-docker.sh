@@ -19,6 +19,80 @@ fi
 
 COMPOSE=(docker compose -f "$COMPOSE_FILE")
 
+assert_request_id_header() {
+  local url=$1
+  local headers
+
+  headers=$(curl -fsS -D - -o /dev/null "$url")
+  HEADERS_TEXT="$headers" python3 - <<'PY'
+import os
+
+headers = {}
+for raw in os.environ["HEADERS_TEXT"].splitlines():
+    line = raw.rstrip("\r\n")
+    if not line or ":" not in line:
+        continue
+    name, value = line.split(":", 1)
+    headers[name.strip().lower()] = value.strip()
+
+request_id = headers.get("request-id")
+assert request_id, headers
+print(request_id)
+PY
+}
+
+assert_structured_api_request_logs() {
+  local logs_text=$1
+  local healthz_request_id=$2
+  local summary_request_id=$3
+  local worker_resource_logs_request_id=$4
+  local ui_request_id=$5
+
+  API_LOGS_TEXT="$logs_text" \
+  HEALTHZ_REQUEST_ID="$healthz_request_id" \
+  SUMMARY_REQUEST_ID="$summary_request_id" \
+  WORKER_RESOURCE_LOGS_REQUEST_ID="$worker_resource_logs_request_id" \
+  UI_REQUEST_ID="$ui_request_id" \
+  python3 - <<'PY'
+import json
+import os
+
+entries = []
+for raw in os.environ["API_LOGS_TEXT"].splitlines():
+    line = raw.strip()
+    if not line:
+        continue
+    start = line.find("{")
+    if start == -1:
+        continue
+    try:
+        entry = json.loads(line[start:])
+    except json.JSONDecodeError:
+        continue
+    if entry.get("msg") != "http_request":
+        continue
+    entries.append(entry)
+
+assert entries, "expected structured api request log lines"
+
+expected = [
+    (os.environ["HEALTHZ_REQUEST_ID"], "/healthz"),
+    (os.environ["SUMMARY_REQUEST_ID"], "/v1/catalog/summary"),
+    (os.environ["WORKER_RESOURCE_LOGS_REQUEST_ID"], "/v1/overview/deployments/worker-prod/resource-logs"),
+    (os.environ["UI_REQUEST_ID"], "/"),
+]
+
+for request_id, path in expected:
+    matches = [entry for entry in entries if entry.get("request_id") == request_id and entry.get("path") == path]
+    assert matches, {"request_id": request_id, "path": path, "entries": entries}
+    entry = matches[-1]
+    assert entry.get("method") == "GET", entry
+    assert entry.get("status") == 200, entry
+    assert entry.get("result") == "success", entry
+    assert entry.get("duration_ms") is not None, entry
+PY
+}
+
 cleanup() {
   local exit_code=${1:-0}
 
@@ -52,6 +126,11 @@ for _ in $(seq 1 60); do
 done
 
 curl -fsS "$API_BASE_URL/healthz" >/dev/null
+
+healthz_request_id=$(assert_request_id_header "$API_BASE_URL/healthz")
+summary_request_id=$(assert_request_id_header "$API_BASE_URL/v1/catalog/summary")
+worker_resource_logs_request_id=$(assert_request_id_header "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
+ui_request_id=$(assert_request_id_header "$API_BASE_URL/")
 
 summary=$(curl -fsS "$API_BASE_URL/v1/catalog/summary")
 applications=$(curl -fsS "$API_BASE_URL/v1/overview/applications")
@@ -138,6 +217,20 @@ fi
 
 if [[ "$controller_logs" != *"controller reconcile deployment=payments-api-prod"* ]]; then
   echo "smoke-docker: controller logs missing reconcile line for payments-api-prod" >&2
+  exit 1
+fi
+
+api_logs=""
+for _ in $(seq 1 60); do
+  api_logs=$("${COMPOSE[@]}" logs api --tail=200 2>&1 || true)
+  if assert_structured_api_request_logs "$api_logs" "$healthz_request_id" "$summary_request_id" "$worker_resource_logs_request_id" "$ui_request_id" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+if ! assert_structured_api_request_logs "$api_logs" "$healthz_request_id" "$summary_request_id" "$worker_resource_logs_request_id" "$ui_request_id"; then
+  echo "smoke-docker: api logs missing correlated structured request entries" >&2
   exit 1
 fi
 

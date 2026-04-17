@@ -84,7 +84,7 @@ For the current read-only plan/apply flow, a typical local operator path is:
 - `POST /v1/applies/plans/{planId}` to persist an immutable apply request derived from that ready preview
 - `GET /v1/applies/{applyId}` to reopen the stored apply request; this backend slice is disabled by default for live execution, so the created record is intentionally stored as `failed` with operator-facing error/details instead of mutating AWS
 
-Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis. Use `make smoke-docker` when you need to validate `compose.yaml`, confirm the `api`/`controller`/`redis` service contract, and prove the containerized local stack plus controller logs, deployment events, resource-log routes, and embedded operator drill-down labels are reachable end to end.
+Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis. Use `make smoke-docker` when you need to validate `compose.yaml`, confirm the `api`/`controller`/`redis` service contract, and prove the containerized local stack plus representative `Request-Id` headers, correlated structured API request logs, controller logs, deployment events, resource-log routes, and embedded operator drill-down labels are reachable end to end.
 
 ### Run with Docker
 
@@ -94,7 +94,7 @@ make docker-up
 
 If `make docker-up` exits before starting the stack, `localhost:8080` is already owned by something outside this Compose project. Inspect the listener with `lsof -nP -iTCP:8080 -sTCP:LISTEN`. If you want to clear a prior Tenet stack before retrying, run `make docker-down`, then rerun `docker compose up --build -d`.
 
-Run the dedicated Docker-stack smoke before or instead of manual exploration when you want a single command that validates the Compose config, boots the stack, waits for API health, checks representative endpoints plus deployment-events/resource-logs JSON shapes, confirms the embedded UI still includes current drill-down labels such as `Controller runtime events` and `Recent logs`, confirms controller logs are useful, and tears the stack back down:
+Run the dedicated Docker-stack smoke before or instead of manual exploration when you want a single command that validates the Compose config, boots the stack, waits for API health, checks representative endpoints plus deployment-events/resource-logs JSON shapes, verifies representative `Request-Id` response headers, confirms the `api` container emits correlated structured `http_request` logs with stable fields such as `request_id`, `method`, `path`, `status`, `duration_ms`, and `result`, confirms the embedded UI still includes current drill-down labels such as `Controller runtime events` and `Recent logs`, confirms controller logs are useful, and tears the stack back down:
 
 ```bash
 make smoke-docker
