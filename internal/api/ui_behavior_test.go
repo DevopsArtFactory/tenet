@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -18,6 +19,30 @@ func embeddedUIScriptForTest(t *testing.T) string {
 	}
 
 	return string(matches[1])
+}
+
+func runNodeHarness(t *testing.T, nodeProgram string) {
+	t.Helper()
+
+	scriptFile, err := os.CreateTemp(t.TempDir(), "node-harness-*.js")
+	if err != nil {
+		t.Fatalf("create node harness: %v", err)
+	}
+
+	if _, err := scriptFile.WriteString(nodeProgram); err != nil {
+		_ = scriptFile.Close()
+		t.Fatalf("write node harness: %v", err)
+	}
+
+	if err := scriptFile.Close(); err != nil {
+		t.Fatalf("close node harness: %v", err)
+	}
+
+	cmd := exec.Command("node", scriptFile.Name())
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+	}
 }
 
 func TestUIFilterBehaviorMatchesRuntimeSummaryTextWithNodeHarness(t *testing.T) {
@@ -295,11 +320,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 })();
 `
 
-		cmd := exec.Command("node", "-e", nodeProgram)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-		}
+		runNodeHarness(t, nodeProgram)
 	})
 
 	t.Run("applications overview search matches runtime artifact and condition context", func(t *testing.T) {
@@ -374,11 +395,7 @@ async function render(search) {
 })();
 `
 
-		cmd := exec.Command("node", "-e", nodeProgram)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-		}
+		runNodeHarness(t, nodeProgram)
 	})
 
 	t.Run("embedded drill-down links preserve non-root pathname", func(t *testing.T) {
@@ -484,11 +501,7 @@ async function render(search, fetchImpl) {
 })();
 `
 
-		cmd := exec.Command("node", "-e", nodeProgram)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-		}
+		runNodeHarness(t, nodeProgram)
 	})
 
 	t.Run("missing identifiers suppress broken self-links", func(t *testing.T) {
@@ -663,11 +676,7 @@ async function render(search, fetchImpl) {
 })();
 `
 
-		cmd := exec.Command("node", "-e", nodeProgram)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-		}
+		runNodeHarness(t, nodeProgram)
 	})
 
 	t.Run("account detail route renders embedded overview page", func(t *testing.T) {
@@ -752,11 +761,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 })();
 `
 
-		cmd := exec.Command("node", "-e", nodeProgram)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-		}
+		runNodeHarness(t, nodeProgram)
 	})
 
 	t.Run("application detail route uses application detail fetch", func(t *testing.T) {
@@ -850,11 +855,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 })();
 `
 
-		cmd := exec.Command("node", "-e", nodeProgram)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-		}
+		runNodeHarness(t, nodeProgram)
 	})
 }
 
@@ -983,11 +984,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 })();
 `
 
-	cmd := exec.Command("node", "-e", nodeProgram)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-	}
+	runNodeHarness(t, nodeProgram)
 }
 
 func TestApplicationsOverviewPageWithNodeHarnessSynthesizesRolloutFallbackResources(t *testing.T) {
@@ -1133,11 +1130,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 })();
 `
 
-		cmd := exec.Command("node", "-e", nodeProgram)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-		}
+		runNodeHarness(t, nodeProgram)
 	})
 
 	t.Run("ec2 weighted-target-group fallback resources stay bookmarkable", func(t *testing.T) {
@@ -1247,11 +1240,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 })();
 `
 
-		cmd := exec.Command("node", "-e", nodeProgram)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-		}
+		runNodeHarness(t, nodeProgram)
 	})
 
 	t.Run("ec2 instance-refresh fallback resources stay bookmarkable", func(t *testing.T) {
@@ -1357,11 +1346,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 })();
 `
 
-		cmd := exec.Command("node", "-e", nodeProgram)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-		}
+		runNodeHarness(t, nodeProgram)
 	})
 
 	t.Run("resource detail renders synthesized fallback execution metadata", func(t *testing.T) {
@@ -1459,11 +1444,7 @@ const resourceId = 'testListener::payments-api-staging-test-listener::Test liste
 })();
 `
 
-		cmd := exec.Command("node", "-e", nodeProgram)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-		}
+		runNodeHarness(t, nodeProgram)
 	})
 }
 
@@ -1597,11 +1578,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 })();
 `
 
-	cmd := exec.Command("node", "-e", nodeProgram)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-	}
+	runNodeHarness(t, nodeProgram)
 
 	t.Run("suppresses broken resource links when detail name missing", func(t *testing.T) {
 		detailWithoutNameJSON, err := json.Marshal(map[string]any{
@@ -1690,11 +1667,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 })();
 `
 
-		cmd := exec.Command("node", "-e", nodeProgram)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-		}
+		runNodeHarness(t, nodeProgram)
 	})
 }
 
@@ -1891,11 +1864,7 @@ async function render(fetchImpl) {
 })();
 `
 
-	cmd := exec.Command("node", "-e", nodeProgram)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-	}
+	runNodeHarness(t, nodeProgram)
 }
 
 func TestResourceDetailPageUsesStableResourceIDsWithNodeHarness(t *testing.T) {
@@ -2099,11 +2068,7 @@ const runUI = async (search, detailBody) => {
 })();
 `
 
-	cmd := exec.Command("node", "-e", nodeProgram)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-	}
+	runNodeHarness(t, nodeProgram)
 }
 
 func TestResourceDetailPageWithNodeHarness(t *testing.T) {
@@ -2301,11 +2266,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 })();
 `
 
-	cmd := exec.Command("node", "-e", nodeProgram)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-	}
+	runNodeHarness(t, nodeProgram)
 }
 
 func TestResourceDetailPageRecentLogsWithNodeHarness(t *testing.T) {
@@ -2476,11 +2437,7 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
 })();
 `
 
-	cmd := exec.Command("node", "-e", nodeProgram)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-	}
+	runNodeHarness(t, nodeProgram)
 }
 
 func TestResourceDetailPageWithNodeHarnessResolvesDuplicateSameTypeResources(t *testing.T) {
@@ -2602,11 +2559,7 @@ const collectText = (node) => [node.textContent, ...(node.children || []).flatMa
 })();
 `
 
-	cmd := exec.Command("node", "-e", nodeProgram)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-	}
+	runNodeHarness(t, nodeProgram)
 }
 
 func TestResourceDetailPageWithNodeHarnessResolvesBookmarkedResourceAcrossReorderedExecutionPayloads(t *testing.T) {
@@ -2771,11 +2724,7 @@ async function render(search, detailBody) {
 })();
 `
 
-	cmd := exec.Command("node", "-e", nodeProgram)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-	}
+	runNodeHarness(t, nodeProgram)
 }
 
 func TestEmbeddedUIResourceDetailBookmarkResolutionToleratesDescriptionDriftWithNodeHarness(t *testing.T) {
@@ -2875,11 +2824,7 @@ const oldResourceID = 'codeDeployDeploymentGroup::payments-api-staging Deploymen
 })();
 `
 
-	cmd := exec.Command("node", "-e", nodeProgram)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-	}
+	runNodeHarness(t, nodeProgram)
 }
 
 func TestDeploymentWorkspaceDriftViewWithNodeHarness(t *testing.T) {
@@ -3153,11 +3098,7 @@ async function render(detail) {
 })();
 `
 
-	cmd := exec.Command("node", "-e", nodeProgram)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-	}
+	runNodeHarness(t, nodeProgram)
 }
 
 func TestDeploymentWorkspacePlanViewWithNodeHarness(t *testing.T) {
@@ -3337,15 +3278,6 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
 `
 
-	runNode := func(t *testing.T, nodeProgram string) {
-		t.Helper()
-		cmd := exec.Command("node", "-e", nodeProgram)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-		}
-	}
-
 	t.Run("create flow renders server authored preview", func(t *testing.T) {
 		nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;
@@ -3456,7 +3388,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!applyJSONLink || applyJSONLink.target !== '_blank' || applyJSONLink.rel !== 'noreferrer noopener') throw new Error('expected apply json read-model link after apply create');
 })();
 `
-		runNode(t, nodeProgram)
+		runNodeHarness(t, nodeProgram)
 	})
 
 	t.Run("bookmarked plan id loads stored failed preview", func(t *testing.T) {
@@ -3507,7 +3439,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (createPlan.disabled || !applyPlan.disabled) throw new Error('expected Create Plan enabled and Apply Plan disabled on bookmarked failed plan');
 })();
 `
-		runNode(t, nodeProgram)
+		runNodeHarness(t, nodeProgram)
 	})
 
 	t.Run("bookmarked apply id loads stored immutable apply record", func(t *testing.T) {
@@ -3561,7 +3493,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (createPlan.disabled || applyPlan.disabled) throw new Error('expected Create Plan enabled and Apply Plan enabled on bookmarked apply backed by ready preview');
 })();
 `
-		runNode(t, nodeProgram)
+		runNodeHarness(t, nodeProgram)
 	})
 
 	t.Run("create falls back to loaded preview fingerprint when client cannot derive current fingerprint", func(t *testing.T) {
@@ -3606,7 +3538,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (createBody.ifMatch !== 'fp_plan_failed') throw new Error('expected Create Plan to fall back to loaded preview fingerprint, got ' + JSON.stringify(createBody));
 })();
 `
-		runNode(t, nodeProgram)
+		runNodeHarness(t, nodeProgram)
 	})
 }
 
@@ -3714,15 +3646,6 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
 `
 
-	runNode := func(t *testing.T, nodeProgram string) {
-		t.Helper()
-		cmd := exec.Command("node", "-e", nodeProgram)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-		}
-	}
-
 	t.Run("bookmarkable audit page renders newest first with self links", func(t *testing.T) {
 		nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;
@@ -3778,7 +3701,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!workspaceLink || workspaceLink.target !== '_self' || workspaceLink.rel) throw new Error('expected audit plan/apply self link');
 })();
 `
-		runNode(t, nodeProgram)
+		runNodeHarness(t, nodeProgram)
 	})
 
 	t.Run("audit page bookmarkable action filter renders active copy and preserves URL state", func(t *testing.T) {
@@ -3831,7 +3754,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (window.location.search !== '?page=audit&q=payments&action=plan.created&limit=2') throw new Error('expected updated bookmarkable audit URL, got ' + window.location.search);
 })();
 `
-		runNode(t, nodeProgram)
+		runNodeHarness(t, nodeProgram)
 	})
 
 	t.Run("audit page renders explicit fetch states", func(t *testing.T) {
@@ -3899,7 +3822,7 @@ async function renderWithFetch(fetchImpl, search = '?page=audit') {
   if (!errorText.includes('Failed to load audit log: audit log request failed (500): boom')) throw new Error('expected audit fetch error state');
 })();
 `
-		runNode(t, nodeProgram)
+		runNodeHarness(t, nodeProgram)
 	})
 }
 
@@ -4056,11 +3979,7 @@ async function render(search) {
 })();
 `
 
-	cmd := exec.Command("node", "-e", nodeProgram)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-	}
+	runNodeHarness(t, nodeProgram)
 }
 
 func TestEmbeddedUIRolloutExecutionFallbackContractWithNodeHarness(t *testing.T) {
@@ -4144,9 +4063,5 @@ if (!codeDeployService || codeDeployService.description !== 'ECS service Tenet u
 if (!refreshService || refreshService.description !== 'Service Auto Scaling Group Tenet refreshes in place with rolling-update batch size 2') throw new Error('unexpected instance refresh fallback description: ' + (refreshService && refreshService.description));
 `
 
-	cmd := exec.Command("node", "-e", nodeProgram)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
-	}
+	runNodeHarness(t, nodeProgram)
 }
