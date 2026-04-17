@@ -20,6 +20,8 @@ The local stack uses these inputs:
 
 Both services mount `./examples` read-only. That keeps the runtime deterministic and aligned with the current repo-backed architecture.
 
+For `tenet-api`, the local runtime also enables request-scoped JSON logs for every API/UI request. Operators can rely on the stable fields `request_id`, `method`, `path`, `status`, `duration_ms`, and `result`, plus an `error` field on timeout/panic paths. `TENET_API_REQUEST_TIMEOUT` defaults to `30s`; set it to `0` to disable the timeout wrapper for local debugging.
+
 ## Developer flows
 
 ### Local smoke check without Docker
@@ -38,7 +40,7 @@ make smoke-docker
 
 Use `make smoke-docker` when you need to validate the containerized local stack itself. The script runs `docker compose config`, asserts the `api`, `controller`, and `redis` services are present in `compose.yaml`, starts the stack, waits for API health, checks representative endpoints, confirms controller logs contain useful startup/reconcile output, and then runs `docker compose down --remove-orphans` even on failure.
 
-The same smoke flow also verifies that representative responses carry a `Request-Id` header. Operators should capture that response ID when an API call fails; Tenet threads the same value through the request context so handlers and providers can log `api.RequestIDFromContext(ctx)` and make API failures easy to correlate with backend/provider diagnostics.
+The same smoke flow also verifies that representative responses carry a `Request-Id` header and that the local API process emits structured request logs. Operators should capture that response ID when an API call fails; Tenet threads the same value through the request context, echoes it back in explicit timeout/panic responses, and logs it on both request-completion and panic-recovery paths so API failures are easy to correlate with backend/provider diagnostics.
 
 ### Full Docker stack
 

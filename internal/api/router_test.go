@@ -1,14 +1,17 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
@@ -54,6 +57,142 @@ func TestRouterHealthz(t *testing.T) {
 	assertResponseRequestID(t, resp)
 }
 
+func TestRouterStructuredRequestLoggingCoversAPIAndUIRequests(t *testing.T) {
+	var output bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&output, nil))
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		Logger:    logger,
+	})
+
+	for _, target := range []string{"/healthz", "/"} {
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		req.Header.Set(RequestIDHeader, "client-request-id")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200 for %s, got %d", target, resp.Code)
+		}
+		if got := resp.Header().Get(RequestIDHeader); got != "client-request-id" {
+			t.Fatalf("expected Request-Id echo for %s, got %q", target, got)
+		}
+	}
+
+	entries := decodeStructuredLogLines(t, output.String())
+	if len(entries) != 2 {
+		t.Fatalf("expected one structured log line per request, got %d entries: %#v", len(entries), entries)
+	}
+
+	for index, target := range []string{"/healthz", "/"} {
+		entry := entries[index]
+		if entry["msg"] != "http_request" {
+			t.Fatalf("expected http_request log message, got %#v", entry)
+		}
+		if entry["request_id"] != "client-request-id" || entry["method"] != http.MethodGet || entry["path"] != target {
+			t.Fatalf("expected stable request fields for %s, got %#v", target, entry)
+		}
+		if entry["status"] != float64(http.StatusOK) {
+			t.Fatalf("expected 200 status for %s, got %#v", target, entry["status"])
+		}
+		if entry["result"] != "success" {
+			t.Fatalf("expected success result for %s, got %#v", target, entry["result"])
+		}
+		if _, ok := entry["duration_ms"]; !ok {
+			t.Fatalf("expected duration_ms field for %s, got %#v", target, entry)
+		}
+	}
+}
+
+func TestRouterRecoversPanicsWithCorrelatedResponseAndLogs(t *testing.T) {
+	var output bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&output, nil))
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		Logger:    logger,
+		CatalogSummary: func() (catalog.Summary, error) {
+			panic("boom")
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/summary", nil)
+	req.Header.Set(RequestIDHeader, "panic-request-id")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.Code)
+	}
+	if got := resp.Header().Get(RequestIDHeader); got != "panic-request-id" {
+		t.Fatalf("expected Request-Id echo, got %q", got)
+	}
+	body := resp.Body.String()
+	if !strings.Contains(body, "request_id=panic-request-id") {
+		t.Fatalf("expected correlated panic response body, got %q", body)
+	}
+	if strings.Contains(body, "goroutine") || strings.Contains(body, "panic(") {
+		t.Fatalf("expected panic response body to avoid stack traces, got %q", body)
+	}
+
+	entries := decodeStructuredLogLines(t, output.String())
+	if len(entries) != 2 {
+		t.Fatalf("expected panic log and completion log, got %d entries: %#v", len(entries), entries)
+	}
+	if entries[0]["msg"] != "http_request_panic" || entries[0]["request_id"] != "panic-request-id" {
+		t.Fatalf("expected panic log entry first, got %#v", entries[0])
+	}
+	if entries[1]["msg"] != "http_request" || entries[1]["result"] != "panic" || entries[1]["status"] != float64(http.StatusInternalServerError) {
+		t.Fatalf("expected completion log to classify panic, got %#v", entries[1])
+	}
+}
+
+func TestRouterReturnsExplicitTimeoutResponseAndLogsCorrelation(t *testing.T) {
+	var output bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&output, nil))
+	router := NewRouter(Options{
+		BuildInfo:      buildinfo.Info{Version: "dev", Commit: "abc123"},
+		Logger:         logger,
+		RequestTimeout: 10 * time.Millisecond,
+		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			return catalog.DeploymentOverviewDetail{Name: name}, nil
+		},
+		OverviewDeploymentResourceLogs: func(ctx context.Context, name, resourceType, resourceName string) (resourcelogs.Result, error) {
+			<-ctx.Done()
+			return resourcelogs.Result{}, ctx.Err()
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing", nil)
+	req.Header.Set(RequestIDHeader, "timeout-request-id")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 timeout response, got %d", resp.Code)
+	}
+	if got := resp.Header().Get(RequestIDHeader); got != "timeout-request-id" {
+		t.Fatalf("expected Request-Id echo, got %q", got)
+	}
+	body := resp.Body.String()
+	if !strings.Contains(body, "request timed out") || !strings.Contains(body, "request_id=timeout-request-id") {
+		t.Fatalf("expected explicit correlated timeout response, got %q", body)
+	}
+
+	entries := decodeStructuredLogLines(t, output.String())
+	if len(entries) != 1 {
+		t.Fatalf("expected one completion log for timeout request, got %d entries: %#v", len(entries), entries)
+	}
+	if entries[0]["msg"] != "http_request" || entries[0]["result"] != "timeout" || entries[0]["error"] != "request timed out" {
+		t.Fatalf("expected timeout classification in access log, got %#v", entries[0])
+	}
+	if entries[0]["request_id"] != "timeout-request-id" || entries[0]["status"] != float64(http.StatusServiceUnavailable) {
+		t.Fatalf("expected correlated timeout log entry, got %#v", entries[0])
+	}
+}
+
 func TestRouterSetsRequestIDHeaderAcrossRepresentativeResponses(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -97,6 +236,25 @@ func TestRouterSetsRequestIDHeaderAcrossRepresentativeResponses(t *testing.T) {
 			assertResponseRequestID(t, resp)
 		})
 	}
+}
+
+func decodeStructuredLogLines(t *testing.T, output string) []map[string]any {
+	t.Helper()
+
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	entries := make([]map[string]any, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var entry map[string]any
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatalf("failed to decode structured log line %q: %v", line, err)
+		}
+		entries = append(entries, entry)
+	}
+	return entries
 }
 
 func TestRouterInfo(t *testing.T) {
