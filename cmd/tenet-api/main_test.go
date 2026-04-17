@@ -15,6 +15,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
+	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
@@ -258,11 +259,18 @@ func TestAPIOptionsAuditLogsProjectPersistedPlanAndApplyRecords(t *testing.T) {
 		t.Fatalf("expected audit log dependencies to be wired")
 	}
 
-	plan, err := options.CreateDeploymentPlanPreview(context.Background(), "api-prod", planpreview.CreateRequest{})
+	ctx := requestactor.WithContext(context.Background(), requestactor.Actor{
+		Available: true,
+		ID:        "operator-123",
+		Name:      "Jane Operator",
+		Email:     "jane@example.com",
+	})
+
+	plan, err := options.CreateDeploymentPlanPreview(ctx, "api-prod", planpreview.CreateRequest{})
 	if err != nil {
 		t.Fatalf("CreateDeploymentPlanPreview returned error: %v", err)
 	}
-	apply, err := options.CreateApplyRequest(context.Background(), plan.Record.ID)
+	apply, err := options.CreateApplyRequest(ctx, plan.Record.ID)
 	if err != nil {
 		t.Fatalf("CreateApplyRequest returned error: %v", err)
 	}
@@ -296,8 +304,8 @@ func TestAPIOptionsAuditLogsProjectPersistedPlanAndApplyRecords(t *testing.T) {
 	if applyEntry.Source.RecordRoute != "/v1/applies/"+apply.Record.ID || applyEntry.Source.SourceRoute != "/v1/plans/"+plan.Record.ID {
 		t.Fatalf("unexpected audit source details: %+v", applyEntry.Source)
 	}
-	if applyEntry.Actor.Available {
-		t.Fatalf("expected explicit unavailable actor contract, got %+v", applyEntry.Actor)
+	if !applyEntry.Actor.Available || applyEntry.Actor.Name != "Jane Operator" || applyEntry.Actor.Email != "jane@example.com" {
+		t.Fatalf("expected projected available actor contract, got %+v", applyEntry.Actor)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
+	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 )
 
 const disabledError = "apply execution is disabled"
@@ -56,6 +57,7 @@ func (s Service) Create(ctx context.Context, planID string) (CreateResult, error
 		DeploymentName: plan.DeploymentName,
 		Status:         StatusFailed,
 		CreatedAt:      s.now().UTC().Format(time.RFC3339),
+		Actor:          requestactor.FromContext(ctx),
 		Error:          disabledError,
 		Details: []string{
 			"Tenet persisted this immutable apply request in read-only mode and did not contact AWS.",

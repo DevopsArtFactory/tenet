@@ -556,6 +556,7 @@ func NewRouter(options Options) http.Handler {
 	handler = panicRecoveryMiddleware(logger, handler)
 	handler = requestTimeoutMiddleware(options.RequestTimeout, handler)
 	handler = requestLoggingMiddleware(logger, handler)
+	handler = requestActorMiddleware(handler)
 	handler = requestIDMiddleware(handler)
 	return handler
 }

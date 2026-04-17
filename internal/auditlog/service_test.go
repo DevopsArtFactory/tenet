@@ -8,6 +8,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
+	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 )
 
 func TestServiceListProjectsImmutableRecordsIntoNewestFirstTimeline(t *testing.T) {
@@ -45,6 +46,12 @@ func TestServiceListProjectsImmutableRecordsIntoNewestFirstTimeline(t *testing.T
 					CreatedAt:      "2026-04-18T08:00:00Z",
 					Error:          "apply execution is disabled",
 					Details:        []string{"did not contact AWS"},
+					Actor: requestactor.Actor{
+						Available: true,
+						ID:        "operator-123",
+						Name:      "Jane Operator",
+						Email:     "jane@example.com",
+					},
 					Source: applyrequest.SourceContext{
 						Route:       "/v1/plans/plan_old",
 						PlanStatus:  "ready",
@@ -82,8 +89,8 @@ func TestServiceListProjectsImmutableRecordsIntoNewestFirstTimeline(t *testing.T
 	if newest.Source.RecordRoute != "/v1/applies/apply_newest" || newest.Source.SourceRoute != "/v1/plans/plan_old" {
 		t.Fatalf("unexpected apply source details: %+v", newest.Source)
 	}
-	if newest.Actor.Available || !strings.Contains(newest.Actor.Reason, "do not persist operator identity") {
-		t.Fatalf("expected explicit unavailable actor contract, got %+v", newest.Actor)
+	if !newest.Actor.Available || newest.Actor.Name != "Jane Operator" || newest.Actor.Email != "jane@example.com" {
+		t.Fatalf("expected projected available actor contract, got %+v", newest.Actor)
 	}
 
 	second := result.Entries[1]
@@ -95,6 +102,9 @@ func TestServiceListProjectsImmutableRecordsIntoNewestFirstTimeline(t *testing.T
 	}
 	if second.Source.RecordRoute != "/v1/plans/plan_new" || second.Source.SourceRoute != "/v1/overview/deployments/worker-prod" {
 		t.Fatalf("unexpected plan source details: %+v", second.Source)
+	}
+	if second.Actor.Available || second.Actor.Reason != requestactor.UnavailableReason {
+		t.Fatalf("expected explicit unavailable fallback actor, got %+v", second.Actor)
 	}
 }
 

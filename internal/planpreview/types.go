@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/DevopsArtFactory/tenet/internal/domain"
+	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 )
 
 var ErrNotFound = fmt.Errorf("plan preview not found")
@@ -66,15 +67,16 @@ type SourceContext struct {
 
 // Record is an immutable, deployment-scoped plan preview snapshot.
 type Record struct {
-	ID             string        `json:"id"`
-	DeploymentName string        `json:"deploymentName"`
-	Status         Status        `json:"status"`
-	CreatedAt      string        `json:"createdAt"`
-	Operations     []Operation   `json:"operations,omitempty"`
-	Risk           Risk          `json:"risk"`
-	Approval       Approval      `json:"approval"`
-	Source         SourceContext `json:"source"`
-	Errors         []string      `json:"errors,omitempty"`
+	ID             string             `json:"id"`
+	DeploymentName string             `json:"deploymentName"`
+	Status         Status             `json:"status"`
+	CreatedAt      string             `json:"createdAt"`
+	Actor          requestactor.Actor `json:"actor"`
+	Operations     []Operation        `json:"operations,omitempty"`
+	Risk           Risk               `json:"risk"`
+	Approval       Approval           `json:"approval"`
+	Source         SourceContext      `json:"source"`
+	Errors         []string           `json:"errors,omitempty"`
 }
 
 // Store persists immutable plan preview records.

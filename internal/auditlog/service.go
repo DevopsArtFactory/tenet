@@ -8,9 +8,8 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
+	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 )
-
-const unavailableActorReason = "actor information is unavailable because the immutable plan preview and apply request stores do not persist operator identity"
 
 // Action identifies one supported audit timeline activity.
 type Action string
@@ -28,10 +27,7 @@ type Query struct {
 }
 
 // Actor makes missing operator identity explicit instead of inventing auth data.
-type Actor struct {
-	Available bool   `json:"available"`
-	Reason    string `json:"reason"`
-}
+type Actor = requestactor.Actor
 
 // Metadata captures action-specific audit details from immutable source records.
 type Metadata struct {
@@ -164,10 +160,7 @@ func projectPlan(record planpreview.Record, deployment catalog.DeploymentView) E
 		AppRef:         deployment.AppRef,
 		EnvironmentRef: deployment.EnvironmentRef,
 		PlanID:         record.ID,
-		Actor: Actor{
-			Available: false,
-			Reason:    unavailableActorReason,
-		},
+		Actor:          requestactor.Normalize(record.Actor),
 		Metadata: Metadata{
 			Status:            string(record.Status),
 			SourceFingerprint: record.Source.Fingerprint,
@@ -193,10 +186,7 @@ func projectApply(record applyrequest.Record, deployment catalog.DeploymentView)
 		EnvironmentRef: deployment.EnvironmentRef,
 		PlanID:         record.PlanID,
 		ApplyID:        record.ID,
-		Actor: Actor{
-			Available: false,
-			Reason:    unavailableActorReason,
-		},
+		Actor:          requestactor.Normalize(record.Actor),
 		Metadata: Metadata{
 			Status:            string(record.Status),
 			PlanStatus:        record.Source.PlanStatus,

@@ -50,8 +50,10 @@ The response shape is:
       "planId": "plan_1234abcd",
       "applyId": "apply_5678efgh",
       "actor": {
-        "available": false,
-        "reason": "actor information is unavailable because the immutable plan preview and apply request stores do not persist operator identity"
+        "available": true,
+        "id": "operator-123",
+        "name": "Jane Operator",
+        "email": "jane@example.com"
       },
       "metadata": {
         "status": "failed",
@@ -86,4 +88,9 @@ Important details:
 
 This slice does not introduce fake auth data.
 
-`actor.available` is always `false` in this slice because the currently persisted immutable plan preview and apply request stores do not include operator identity. Future auth work can extend the stored records and this route without changing the basic timeline shape.
+When request-scoped operator context is available, Tenet persists it additively from explicit local-friendly headers:
+- `X-Tenet-Actor-Id`
+- `X-Tenet-Actor-Name`
+- `X-Tenet-Actor-Email`
+
+Those fields appear unchanged on the immutable `plan` / `apply` records and on their projected `GET /v1/audit-logs` entries. When no authenticated request context was present, Tenet keeps the contract explicit by returning `actor.available=false` plus an unavailable reason instead of inventing an identity.

@@ -3631,7 +3631,7 @@ func TestAuditTimelinePageWithNodeHarness(t *testing.T) {
 				"planId":         "plan_ready_123",
 				"actor": map[string]any{
 					"available": false,
-					"reason":    "actor information is unavailable because the immutable plan preview and apply request stores do not persist operator identity",
+					"reason":    "actor information is unavailable because no authenticated request context was available for this local request",
 				},
 				"metadata": map[string]any{
 					"status":            "ready",
@@ -3651,8 +3651,10 @@ func TestAuditTimelinePageWithNodeHarness(t *testing.T) {
 				"planId":         "plan_ready_123",
 				"applyId":        "apply_failed_123",
 				"actor": map[string]any{
-					"available": false,
-					"reason":    "actor information is unavailable because the immutable plan preview and apply request stores do not persist operator identity",
+					"available": true,
+					"id":        "operator-123",
+					"name":      "Jane Operator",
+					"email":     "jane@example.com",
 				},
 				"metadata": map[string]any{
 					"status":            "failed",
@@ -3762,6 +3764,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!accountsText.includes('deployment payments-api-prod')) throw new Error('expected audit deployment copy');
   if (!accountsText.includes('limit 2')) throw new Error('expected audit limit copy');
   if (!accountsText.includes('Actor detail')) throw new Error('expected explicit actor label');
+  if (!accountsText.includes('Recorded')) throw new Error('expected recorded actor state');
+  if (!accountsText.includes('Jane Operator')) throw new Error('expected recorded actor details');
   if (!accountsText.includes('Unavailable')) throw new Error('expected unavailable actor state');
   if (!accountsText.includes('apply execution is disabled')) throw new Error('expected apply metadata in audit row');
   const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
@@ -3793,7 +3797,7 @@ const filteredAuditLogs = { entries: [` + `
     "environmentRef": "prod-apne2",
     "planId": "plan_ready_123",
     "applyId": "apply_failed_123",
-    "actor": { "available": false, "reason": "actor information is unavailable because the immutable plan preview and apply request stores do not persist operator identity" },
+    "actor": { "available": false, "reason": "actor information is unavailable because no authenticated request context was available for this local request" },
     "metadata": { "status": "failed", "planStatus": "ready", "sourceFingerprint": "fp_plan_ready", "error": "apply execution is disabled" },
     "source": { "kind": "applyRequest", "recordRoute": "/v1/applies/apply_failed_123" }
   }
