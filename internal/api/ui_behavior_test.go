@@ -2890,21 +2890,21 @@ func TestDeploymentWorkspaceDriftViewWithNodeHarness(t *testing.T) {
 	}
 
 	driftDetailJSON, err := json.Marshal(map[string]any{
-		"name":              "api-prod",
-		"appRef":            "payments",
-		"environmentRef":    "prod",
-		"region":            "us-west-2",
-		"accountName":       "acct-a",
-		"awsAccountId":      "111111111111",
-		"targetType":        "ecs",
-		"strategy":          "linear",
-		"executionMode":     "ecsCodeDeploy",
-		"desiredGeneration": 9,
+		"name":               "api-prod",
+		"appRef":             "payments",
+		"environmentRef":     "prod",
+		"region":             "us-west-2",
+		"accountName":        "acct-a",
+		"awsAccountId":       "111111111111",
+		"targetType":         "ecs",
+		"strategy":           "linear",
+		"executionMode":      "ecsCodeDeploy",
+		"desiredGeneration":  9,
 		"deployedGeneration": 7,
-		"sync":             map[string]any{"state": "Drifted", "reason": "Service target group differs from desired"},
-		"health":           map[string]any{"overall": "Unhealthy", "summary": "traffic steady but target registration is inconsistent"},
-		"desiredArtifact":  map[string]any{"image": "ghcr.io/example/payments:v9"},
-		"deployedArtifact": map[string]any{"image": "ghcr.io/example/payments:v7"},
+		"sync":               map[string]any{"state": "Drifted", "reason": "Service target group differs from desired"},
+		"health":             map[string]any{"overall": "Unhealthy", "summary": "traffic steady but target registration is inconsistent"},
+		"desiredArtifact":    map[string]any{"image": "ghcr.io/example/payments:v9"},
+		"deployedArtifact":   map[string]any{"image": "ghcr.io/example/payments:v7"},
 		"runtimeSummary": map[string]any{
 			"source":             "deployment-controller",
 			"timestamp":          "2026-04-16T06:50:00Z",
@@ -2916,7 +2916,7 @@ func TestDeploymentWorkspaceDriftViewWithNodeHarness(t *testing.T) {
 			"historyCount":       3,
 			"changes":            []string{"listener rule updated", "target group weight drift"},
 			"deployedArtifact":   map[string]any{"binary": "s3://artifacts.example/payments/api-prod-r17"},
-			"conditions": []map[string]any{{"type": "DriftDetected", "status": true, "reason": "TargetGroupMismatch", "message": "Runtime summary mirrors the drift condition"}, {"type": "Healthy", "status": false, "reason": "TargetDeregistrationLag", "message": "Old targets are still draining"}},
+			"conditions":         []map[string]any{{"type": "DriftDetected", "status": true, "reason": "TargetGroupMismatch", "message": "Runtime summary mirrors the drift condition"}, {"type": "Healthy", "status": false, "reason": "TargetDeregistrationLag", "message": "Old targets are still draining"}},
 		},
 		"rollout": map[string]any{
 			"execution": []map[string]any{{
@@ -2962,18 +2962,18 @@ func TestDeploymentWorkspaceDriftViewWithNodeHarness(t *testing.T) {
 	}
 
 	emptyDetailJSON, err := json.Marshal(map[string]any{
-		"name":           "api-steady",
-		"appRef":         "payments",
-		"environmentRef": "prod",
-		"region":         "us-west-2",
-		"accountName":    "acct-a",
-		"awsAccountId":   "111111111111",
-		"targetType":     "ecs",
-		"strategy":       "linear",
-		"executionMode":  "ecsCodeDeploy",
-		"sync":           map[string]any{"state": "Synced", "reason": "latest desired generation applied"},
-		"health":         map[string]any{"overall": "Healthy", "summary": "service steady"},
-		"desiredArtifact": map[string]any{"image": "ghcr.io/example/payments:v9"},
+		"name":             "api-steady",
+		"appRef":           "payments",
+		"environmentRef":   "prod",
+		"region":           "us-west-2",
+		"accountName":      "acct-a",
+		"awsAccountId":     "111111111111",
+		"targetType":       "ecs",
+		"strategy":         "linear",
+		"executionMode":    "ecsCodeDeploy",
+		"sync":             map[string]any{"state": "Synced", "reason": "latest desired generation applied"},
+		"health":           map[string]any{"overall": "Healthy", "summary": "service steady"},
+		"desiredArtifact":  map[string]any{"image": "ghcr.io/example/payments:v9"},
 		"deployedArtifact": map[string]any{"image": "ghcr.io/example/payments:v9"},
 		"runtimeSummary": map[string]any{
 			"source":             "deployment-controller",
@@ -3591,6 +3591,233 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/plan_failed_123, /v1/plans/deployments/api-prod') throw new Error('unexpected fetch sequence after fallback create: ' + fetchCalls.join(', '));
   const createBody = JSON.parse((createRequestOptions && createRequestOptions.body) || '{}');
   if (createBody.ifMatch !== 'fp_plan_failed') throw new Error('expected Create Plan to fall back to loaded preview fingerprint, got ' + JSON.stringify(createBody));
+})();
+`
+		runNode(t, nodeProgram)
+	})
+}
+
+func TestAuditTimelinePageWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	auditLogsJSON, err := json.Marshal(map[string]any{
+		"entries": []map[string]any{
+			{
+				"timestamp":      "2026-04-17T09:00:00Z",
+				"action":         "plan.created",
+				"deploymentName": "payments-api-prod",
+				"appRef":         "payments-api",
+				"environmentRef": "prod-apne2",
+				"planId":         "plan_ready_123",
+				"actor": map[string]any{
+					"available": false,
+					"reason":    "actor information is unavailable because the immutable plan preview and apply request stores do not persist operator identity",
+				},
+				"metadata": map[string]any{
+					"status":            "ready",
+					"sourceFingerprint": "fp_plan_ready",
+				},
+				"source": map[string]any{
+					"kind":        "planPreview",
+					"recordRoute": "/v1/plans/plan_ready_123",
+				},
+			},
+			{
+				"timestamp":      "2026-04-18T08:00:00Z",
+				"action":         "apply.requested",
+				"deploymentName": "payments-api-prod",
+				"appRef":         "payments-api",
+				"environmentRef": "prod-apne2",
+				"planId":         "plan_ready_123",
+				"applyId":        "apply_failed_123",
+				"actor": map[string]any{
+					"available": false,
+					"reason":    "actor information is unavailable because the immutable plan preview and apply request stores do not persist operator identity",
+				},
+				"metadata": map[string]any{
+					"status":            "failed",
+					"planStatus":        "ready",
+					"sourceFingerprint": "fp_plan_ready",
+					"error":             "apply execution is disabled",
+					"details":           []string{"Tenet persisted this immutable apply request in read-only mode and did not contact AWS."},
+				},
+				"source": map[string]any{
+					"kind":        "applyRequest",
+					"recordRoute": "/v1/applies/apply_failed_123",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal audit logs payload: %v", err)
+	}
+
+	domHarness := `
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+`
+
+	runNode := func(t *testing.T, nodeProgram string) {
+		t.Helper()
+		cmd := exec.Command("node", "-e", nodeProgram)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+		}
+	}
+
+	t.Run("bookmarkable audit page renders newest first with self links", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const auditLogs = ` + string(auditLogsJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/console', search: '?page=audit&q=payments&sync=OutOfSync&account=210987654321&limit=2', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/console'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/audit-logs?limit=2') return Promise.resolve({ ok: true, json: () => Promise.resolve(auditLogs) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
+  const summaryText = collectText(document.getElementById('summary')).join(' | ');
+  const accountsText = collectText(document.getElementById('accounts')).join(' | ');
+  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/audit-logs?limit=2') throw new Error('expected only audit log fetch on audit page');
+  if (!toolbarText.includes('Back to applications')) throw new Error('expected audit page back link');
+  if (!summaryText.includes('Operator audit log')) throw new Error('expected audit page summary title');
+  if (!accountsText.includes('Audit timeline')) throw new Error('expected audit page body title');
+  if (!accountsText.includes('apply.requested')) throw new Error('expected newest audit entry text');
+  if (!accountsText.includes('plan.created')) throw new Error('expected older audit entry text');
+  if (!accountsText.includes('2 entries')) throw new Error('expected audit entry count copy');
+  if (!accountsText.includes('limit 2')) throw new Error('expected audit limit copy');
+  if (!accountsText.includes('Actor detail')) throw new Error('expected explicit actor label');
+  if (!accountsText.includes('Unavailable')) throw new Error('expected unavailable actor state');
+  if (!accountsText.includes('apply execution is disabled')) throw new Error('expected apply metadata in audit row');
+  const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
+  const backLink = toolbarLinks.find((node) => node.href === '/console?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.target === '_self');
+  if (!backLink || backLink.rel) throw new Error('expected audit page back link to preserve filters');
+  const rows = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'DIV' && node.className === 'row');
+  if (rows.length < 2) throw new Error('expected audit page rows');
+  const rowTexts = rows.map((node) => collectText(node).join(' | '));
+  if (!rowTexts[0].includes('apply.requested')) throw new Error('expected newest audit entry first, got ' + rowTexts.join(' || '));
+  const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
+  const applicationLink = links.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Open application');
+  if (!applicationLink || applicationLink.target !== '_self' || applicationLink.rel) throw new Error('expected audit application self link');
+  const workspaceLink = links.find((node) => node.href === '/console?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&planId=plan_ready_123&applyId=apply_failed_123' && node.textContent === 'Open plan/apply');
+  if (!workspaceLink || workspaceLink.target !== '_self' || workspaceLink.rel) throw new Error('expected audit plan/apply self link');
+})();
+`
+		runNode(t, nodeProgram)
+	})
+
+	t.Run("audit page renders explicit fetch states", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+` + domHarness + `
+function createDocument() {
+  const document = new Document();
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  return document;
+}
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
+async function renderWithFetch(fetchImpl, search = '?page=audit') {
+  const document = createDocument();
+  const window = { location: { pathname: '/', search, hash: '' } };
+  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetchImpl, history, Element, InputElement);
+  await settle();
+  return { document, window };
+}
+(async () => {
+  const pending = deferred();
+  const loadingRun = await renderWithFetch(() => pending.promise);
+  const loadingText = collectText(loadingRun.document.getElementById('accounts')).join(' | ');
+  if (!loadingText.includes('Loading audit log…')) throw new Error('expected audit loading state');
+  pending.resolve({ ok: true, json: () => Promise.resolve({ entries: [] }) });
+  await settle();
+  await settle();
+  const emptyText = collectText(loadingRun.document.getElementById('accounts')).join(' | ');
+  if (!emptyText.includes('No audit activity has been persisted yet.')) throw new Error('expected audit empty state after resolve');
+
+  const unavailableRun = await renderWithFetch(() => Promise.resolve({
+    ok: false,
+    status: 503,
+    text: () => Promise.resolve('audit logs unavailable'),
+  }));
+  await settle();
+  await settle();
+  const unavailableText = collectText(unavailableRun.document.getElementById('accounts')).join(' | ');
+  if (!unavailableText.includes('Audit log is currently unavailable.')) throw new Error('expected audit unavailable state');
+  if (!unavailableText.includes('audit log API unavailable (503): audit logs unavailable')) throw new Error('expected audit unavailable detail text');
+
+  const errorRun = await renderWithFetch(() => Promise.resolve({
+    ok: false,
+    status: 500,
+    text: () => Promise.resolve('boom'),
+  }));
+  await settle();
+  await settle();
+  const errorText = collectText(errorRun.document.getElementById('accounts')).join(' | ');
+  if (!errorText.includes('Failed to load audit log: audit log request failed (500): boom')) throw new Error('expected audit fetch error state');
 })();
 `
 		runNode(t, nodeProgram)

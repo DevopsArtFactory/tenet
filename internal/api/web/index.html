@@ -648,6 +648,30 @@
         link.rel = target === '_blank' ? 'noreferrer noopener' : '';
         return link;
       };
+      const sortAuditEntries = (entries) => (entries || [])
+        .map((entry, index) => ({
+          entry,
+          index,
+          timestamp: Date.parse(entry?.timestamp || ''),
+        }))
+        .sort((left, right) => {
+          const leftValid = Number.isFinite(left.timestamp);
+          const rightValid = Number.isFinite(right.timestamp);
+          if (leftValid && rightValid && left.timestamp !== right.timestamp) return right.timestamp - left.timestamp;
+          if (leftValid !== rightValid) return leftValid ? -1 : 1;
+          return left.index - right.index;
+        })
+        .map(({ entry }) => entry);
+      const auditActorStateLabel = (actor) => {
+        if (actor?.available === false) return 'Unavailable';
+        return 'Unknown';
+      };
+      const auditActorReasonText = (actor) => {
+        if (typeof actor?.reason === 'string' && actor.reason) return actor.reason;
+        return actor?.available === false
+          ? 'Actor identity is unavailable for this record.'
+          : 'Actor identity is unknown for this record.';
+      };
       const stableResourceIdentity = (resource) => {
         const type = resource.type || resource.resource || 'resource';
         const name = resource.name || type;
@@ -837,7 +861,8 @@
       const parsePageState = () => {
         const params = new URLSearchParams(window.location.search);
         const page = params.get('page') || params.get('view') || 'applications';
-        const validPages = new Set(['applications', 'application', 'account', 'resource', 'drift', 'plan']);
+        const validPages = new Set(['applications', 'application', 'account', 'resource', 'drift', 'plan', 'audit']);
+        const limit = Number.parseInt(params.get('limit') || '', 10);
         return {
           page: validPages.has(page) ? page : 'applications',
           accountId: params.get('accountId') || '',
@@ -846,6 +871,7 @@
           applyId: params.get('applyId') || '',
           resourceType: params.get('resourceType') || '',
           resourceId: params.get('resourceId') || '',
+          auditLimit: Number.isInteger(limit) && limit > 0 ? limit : 0,
         };
       };
       const normalizeViewState = (applications, state) => {
@@ -974,6 +1000,7 @@
         }
         const actions = createElement('div', 'toolbar-actions');
         actions.append(createElement('div', 'toolbar-active', active.length ? `Active filters: ${active.join(' · ')}` : 'Active filters: none'));
+        actions.append(createNavLink(buildPageURL('audit'), 'Open audit log', '_self'));
         const clearButton = createElement('button', 'toolbar-button', 'Clear filters');
         clearButton.type = 'button';
         clearButton.disabled = !active.length;
@@ -1111,6 +1138,7 @@
           workspaceLinks.append(
             createNavLink(buildPageURL('drift', { deployment: detail.name }), 'Drift view', '_self'),
             createNavLink(buildPageURL('plan', { deployment: detail.name }), 'Plan/apply', '_self'),
+            createNavLink(buildPageURL('audit'), 'Audit log', '_self'),
           );
         }
         page.append(workspaceLinks);
@@ -1461,6 +1489,19 @@
           if (!response.ok) throw new Error(`application detail request failed (${response.status})`);
           return response.json();
         });
+      const fetchAuditLogs = (limit = 0) => {
+        const route = limit > 0 ? `/v1/audit-logs?limit=${encodeURIComponent(String(limit))}` : '/v1/audit-logs';
+        return fetch(route)
+        .then((response) => {
+          if (response.ok) return response.json();
+          const fallback = response.status === 503
+            ? `audit log API unavailable (${response.status})`
+            : `audit log request failed (${response.status})`;
+          return responseErrorMessage(response, fallback).then((message) => {
+            throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);
+          });
+        });
+      };
       const fetchDeploymentEvents = (deploymentName) => fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`)
         .then((response) => {
           if (response.ok) return response.json();
@@ -1613,6 +1654,133 @@
 
         deploymentEventsStateByDeployment.set(deploymentName, { status: 'loading', promise, sections: [section] });
         return promise;
+      };
+      const createAuditLogsIntro = () => createElement('div', 'detail-section-copy', 'Immutable operator audit log from GET /v1/audit-logs. Newest entries first. Actor identity remains explicit when unavailable or unknown.');
+      const renderAuditPageChrome = () => {
+        const toolbar = document.getElementById('toolbar');
+        const summary = document.getElementById('summary');
+        const backLink = createNavLink(buildPageURL('applications'), 'Back to applications', '_self');
+        const toolbarActions = createElement('div', 'toolbar-actions');
+        toolbarActions.append(
+          backLink,
+          createElement('div', 'toolbar-active', 'Audit timeline · immutable plan/apply activity'),
+        );
+        toolbar.replaceChildren(toolbarActions);
+
+        const detailSummary = createElement('article', 'account');
+        detailSummary.append(
+          createElement('div', 'label', 'Audit timeline'),
+          createElement('h2', 'account-name', 'Operator audit log'),
+          createElement('div', 'account-meta', 'Immutable plan preview and apply-request activity rendered from GET /v1/audit-logs.'),
+          createElement('div', 'account-topology', 'Newest entries first. Actor identity remains explicit when unavailable or unknown.'),
+        );
+        summary.replaceChildren(detailSummary);
+      };
+      const renderAuditLogsState = (text, className = '', detailText = '') => {
+        renderAuditPageChrome();
+        const root = document.getElementById('accounts');
+        const page = createElement('article', 'account');
+        page.append(
+          createElement('h2', 'account-name', 'Audit timeline'),
+          createAuditLogsIntro(),
+        );
+        const stateNode = createElement('div', 'detail-state', text);
+        if (className) stateNode.classList.add(className);
+        if (detailText) {
+          page.append(stateNode, createElement('div', 'detail-condition-meta', detailText));
+        } else {
+          page.append(stateNode);
+        }
+        root.replaceChildren(page);
+      };
+      const renderAuditLogsPage = (result) => {
+        renderAuditPageChrome();
+        const root = document.getElementById('accounts');
+        const page = createElement('article', 'account');
+        const entries = sortAuditEntries(result?.entries || []);
+        page.append(
+          createElement('h2', 'account-name', 'Audit timeline'),
+          createAuditLogsIntro(),
+        );
+        if (!entries.length) {
+          page.append(createElement('div', 'detail-state', 'No audit activity has been persisted yet.'));
+          root.replaceChildren(page);
+          return;
+        }
+
+        page.append(createElement('div', 'detail-condition-meta', `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} · newest record first${currentPageState.auditLimit > 0 ? ` · limit ${currentPageState.auditLimit}` : ''}`));
+        const rows = createElement('div', 'rows');
+        entries.forEach((entry) => {
+          const row = createElement('div', 'row');
+          const top = createElement('div', 'row-top');
+          const titleWrap = createElement('div');
+          const deploymentContext = [
+            entry.deploymentName,
+            entry.appRef ? `App ${entry.appRef}` : '',
+            entry.environmentRef ? `Environment ${entry.environmentRef}` : '',
+          ].filter(Boolean).join(' · ') || 'No deployment context recorded';
+          titleWrap.append(
+            createElement('h3', 'row-title', textOrDash(entry.action)),
+            createElement('div', 'row-subtitle', deploymentContext),
+          );
+          const rowPills = createElement('div', 'pills');
+          if (entry.metadata?.status) {
+            rowPills.append(createElement('span', 'pill target', entry.metadata.status));
+          }
+          if (entry.source?.kind) {
+            rowPills.append(createElement('span', 'pill mode', entry.source.kind));
+          }
+          top.append(titleWrap, rowPills);
+
+          const metrics = createElement('div', 'metrics');
+          [
+            ['Action', textOrDash(entry.action)],
+            ['Timestamp', textOrDash(entry.timestamp)],
+            ['Deployment', textOrDash(entry.deploymentName)],
+            ['Application', textOrDash(entry.appRef)],
+            ['Environment', textOrDash(entry.environmentRef)],
+            ['Actor', auditActorStateLabel(entry.actor)],
+            ['Plan ID', textOrDash(entry.planId)],
+            ['Apply ID', textOrDash(entry.applyId)],
+          ].forEach(([label, value]) => {
+            metrics.append(createMetric(label, value));
+          });
+          row.append(top, metrics);
+
+          row.append(createElement('div', 'detail-condition-meta', `Actor detail · ${auditActorReasonText(entry.actor)}`));
+
+          const metadataLabels = [];
+          if (entry.metadata?.planStatus) metadataLabels.push(`Plan status · ${entry.metadata.planStatus}`);
+          if (entry.metadata?.sourceFingerprint) metadataLabels.push(`Source fingerprint · ${entry.metadata.sourceFingerprint}`);
+          if (entry.metadata?.error) metadataLabels.push(`Error · ${entry.metadata.error}`);
+          if (metadataLabels.length) {
+            row.append(createElement('div', 'detail-condition-meta', metadataLabels.join(' · ')));
+          }
+          if (entry.metadata?.details?.length) {
+            row.append(createElement('div', 'detail-condition-meta', `Details · ${entry.metadata.details.join('; ')}`));
+          }
+          if (entry.metadata?.errors?.length) {
+            row.append(createElement('div', 'detail-condition-meta', `Errors · ${entry.metadata.errors.join('; ')}`));
+          }
+
+          const links = createElement('div', 'row-links row-links-shell');
+          if (entry.deploymentName) {
+            links.append(createNavLink(buildPageURL('application', { deployment: entry.deploymentName }), 'Open application', '_self'));
+          }
+          if (entry.deploymentName && (entry.planId || entry.applyId)) {
+            links.append(createNavLink(buildPageURL('plan', {
+              deployment: entry.deploymentName,
+              planId: entry.planId || '',
+              applyId: entry.applyId || '',
+            }), 'Open plan/apply', '_self'));
+          }
+          if (links.children.length) {
+            row.append(links);
+          }
+          rows.append(row);
+        });
+        page.append(rows);
+        root.replaceChildren(page);
       };
       const buildPlanPreviewRoute = (planId) => `/v1/plans/${encodeURIComponent(planId)}`;
       const fetchPlanPreview = (planId) => fetch(buildPlanPreviewRoute(planId))
@@ -2108,6 +2276,7 @@
         const toolbarActions = createElement('div', 'toolbar-actions');
         toolbarActions.append(
           backLink,
+          createNavLink(buildPageURL('audit'), 'Audit log', '_self'),
           createElement('div', 'toolbar-active', `${workspaceTitle} · ${detail.name || currentPageState.deployment || 'deployment'}`),
         );
         toolbar.replaceChildren(toolbarActions);
@@ -2735,6 +2904,19 @@
           })
           .catch((error) => {
             renderEmptyState(`Failed to load overview: ${error.message}`);
+          });
+      } else if (currentPageState.page === 'audit') {
+        renderAuditLogsState('Loading audit log…');
+        fetchAuditLogs(currentPageState.auditLimit)
+          .then((result) => {
+            renderAuditLogsPage(result);
+          })
+          .catch((error) => {
+            if (error?.kind === 'unavailable') {
+              renderAuditLogsState('Audit log is currently unavailable.', 'error', error.message);
+              return;
+            }
+            renderAuditLogsState(`Failed to load audit log: ${error?.message || 'unknown error'}`, 'error');
           });
       } else if (currentPageState.page === 'account') {
         if (!currentPageState.accountId) {

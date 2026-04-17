@@ -79,6 +79,7 @@ Use `TENET_API_REQUEST_TIMEOUT` to bound request handling. The default is `30s`;
 
 For the current read-only plan/apply flow, a typical local operator path is:
 - `GET /v1/overview/applications/{deploymentName}` or `GET /v1/overview/deployments/{deploymentName}` to inspect the deployment and capture its additive `sourceFingerprint`
+- open `http://localhost:8080/?page=audit` at any point for the bookmarkable audit page backed by `GET /v1/audit-logs`; it renders newest-first immutable plan/apply activity with explicit loading, empty, unavailable, and fetch-error states plus `_self` links back into the application and plan/apply drill-downs. Add `&limit={n}` to the page URL when you want the embedded view to request a smaller newest-first window from the API.
 - `POST /v1/plans/deployments/{deploymentName}` with optional `{"ifMatch":"<sourceFingerprint>"}` to persist an immutable preview for the reviewed state
 - open `http://localhost:8080/?page=plan&deployment=payments-api-prod&planId={planId}` for the bookmarkable plan workspace; `Apply Plan` activates only after that persisted ready preview is loaded with a valid `planId`
 - `POST /v1/applies/plans/{planId}` to persist an immutable apply request derived from that ready preview, then reopen the same workspace at `http://localhost:8080/?page=plan&deployment=payments-api-prod&planId={planId}&applyId={applyId}`
@@ -129,6 +130,17 @@ Use the first page to scan:
 - sync and health state
 - last update / current runtime signal
 
+The applications overview also exposes an `_self` `Open audit log` link to the dedicated bookmarkable `/?page=audit` slice.
+
+### Audit timeline
+Use the audit page when you need immutable operator activity instead of controller-derived runtime history.
+
+The page is backed directly by `GET /v1/audit-logs` and currently focuses on:
+- newest-first `plan.created` and `apply.requested` entries
+- deployment / app / environment context
+- explicit actor-unavailable or actor-unknown labeling instead of fabricated identity
+- `_self` links back into `/?page=application&deployment={deploymentName}` and `/?page=plan&deployment={deploymentName}&planId={planId}&applyId={applyId}` when those identifiers exist
+
 ### Application detail
 Open one application to see the linked rollout resources grouped into clear sections such as:
 - workloads
@@ -156,7 +168,7 @@ The same immutable stores also back a read-only audit projection route:
 - `GET /v1/audit-logs`
 - `GET /v1/audit-logs?limit={n}`
 
-This timeline is newest-first, projects persisted plan preview and apply request records, derives `appRef` / `environmentRef` from the local catalog when possible, and keeps actor identity explicit by returning `actor.available=false` because this slice does not persist operator auth data.
+This timeline is newest-first, projects persisted plan preview and apply request records, derives `appRef` / `environmentRef` from the local catalog when possible, and keeps actor identity explicit by returning `actor.available=false` because this slice does not persist operator auth data. The embedded UI now renders that route at `/?page=audit` with explicit loading, empty, unavailable, and generic fetch-error states.
 
 Tenet also exposes a read-only deployment events slice for the same drill-down workflow:
 - `GET /v1/overview/deployments/{deploymentName}/events`

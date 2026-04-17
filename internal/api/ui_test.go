@@ -218,8 +218,10 @@ func TestEmbeddedUIIncludesQuickLinksToDeploymentReadModels(t *testing.T) {
 		"const workspaceLinks = createElement('div', 'row-links row-links-shell');",
 		"createNavLink(buildPageURL('drift', { deployment: detail.name }), 'Drift view', '_self')",
 		"createNavLink(buildPageURL('plan', { deployment: detail.name }), 'Plan/apply', '_self')",
+		"createNavLink(buildPageURL('audit'), 'Audit log', '_self')",
 		"Drift view",
 		"Plan/apply",
+		"Audit log",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include %q", fragment)
@@ -232,14 +234,17 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 
 	for _, fragment := range []string{
 		"const parsePageState = () => {",
-		"const validPages = new Set(['applications', 'application', 'account', 'resource', 'drift', 'plan']);",
 		"const page = params.get('page') || params.get('view') || 'applications';",
+		"const validPages = new Set(['applications', 'application', 'account', 'resource', 'drift', 'plan', 'audit']);",
+		"const limit = Number.parseInt(params.get('limit') || '', 10);",
 		"page: validPages.has(page) ? page : 'applications',",
 		"accountId: params.get('accountId') || '',",
 		"deployment: params.get('deployment') || '',",
 		"planId: params.get('planId') || '',",
 		"applyId: params.get('applyId') || '',",
+		"resourceType: params.get('resourceType') || '',",
 		"resourceId: params.get('resourceId') || '',",
+		"auditLimit: Number.isInteger(limit) && limit > 0 ? limit : 0,",
 		"const buildPageURL = (page, extras = {}) => {",
 		"if (currentViewState.query) params.set('q', currentViewState.query);",
 		"if (currentViewState.syncState && currentViewState.syncState !== 'all') params.set('sync', currentViewState.syncState);",
@@ -250,6 +255,7 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"Application status overview",
 		"Last update",
 		"Search applications",
+		"Open audit log",
 		"Open account",
 		"createNavLink(buildPageURL('account', { accountId: deployment.awsAccountId }), 'Open account', '_self')",
 		"Open application",
@@ -289,8 +295,30 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 	body := string(indexHTML)
 
 	for _, fragment := range []string{
+		"const sortAuditEntries = (entries) => (entries || [])",
+		"const auditActorStateLabel = (actor) => {",
+		"if (actor?.available === false) return 'Unavailable';",
+		"return 'Unknown';",
+		"const auditActorReasonText = (actor) => {",
+		"'Actor identity is unavailable for this record.'",
+		"'Actor identity is unknown for this record.'",
 		"const fetchApplicationDetail = (deploymentName) => fetch(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`)",
 		"if (!response.ok) throw new Error(`application detail request failed (${response.status})`);",
+		"const fetchAuditLogs = (limit = 0) => {",
+		"const route = limit > 0 ? `/v1/audit-logs?limit=${encodeURIComponent(String(limit))}` : '/v1/audit-logs';",
+		"return fetch(route)",
+		"audit log API unavailable (${response.status})",
+		"audit log request failed (${response.status})",
+		"const createAuditLogsIntro = () => createElement('div', 'detail-section-copy', 'Immutable operator audit log from GET /v1/audit-logs. Newest entries first. Actor identity remains explicit when unavailable or unknown.');",
+		"const renderAuditPageChrome = () => {",
+		"Audit timeline · immutable plan/apply activity",
+		"const renderAuditLogsState = (text, className = '', detailText = '') => {",
+		"Loading audit log…",
+		"Audit log is currently unavailable.",
+		"No audit activity has been persisted yet.",
+		"Open plan/apply",
+		"createNavLink(buildPageURL('application', { deployment: entry.deploymentName }), 'Open application', '_self')",
+		"createNavLink(buildPageURL('plan', {",
 		"const fetchDeploymentEvents = (deploymentName) => fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`)",
 		"deployment events unavailable (${response.status})",
 		"deployment events request failed (${response.status})",
@@ -319,6 +347,10 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"body: ifMatch ? JSON.stringify({ ifMatch }) : '{}',",
 		"const applicationDetail = currentPageState.page === 'application' ? fetchApplicationDetail(currentPageState.deployment) : fetchDeploymentDetail(currentPageState.deployment);",
 		"applicationDetail",
+		"} else if (currentPageState.page === 'audit') {",
+		"renderAuditLogsState('Loading audit log…');",
+		"fetchAuditLogs(currentPageState.auditLimit)",
+		"renderAuditLogsPage(result);",
 		"if (currentPageState.page === 'application') {",
 		"renderApplicationDetailPage(detail);",
 		"if (currentPageState.page === 'resource') {",
@@ -866,6 +898,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Controller runtime events' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains controller runtime events")
 	}
+	if !strings.Contains(text, "assert 'Audit timeline' in audit_ui, audit_ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains audit timeline copy")
+	}
 	for _, fragment := range []string{
 		"assert_request_id_header() {",
 		"assert headers.get(\"request-id\"), headers",
@@ -892,6 +927,13 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"assert 'Loading controller runtime events…' in ui, ui",
 		"assert 'No controller runtime events have been persisted yet.' in ui, ui",
 		"assert 'Controller runtime events are currently unavailable.' in ui, ui",
+		"audit_ui=$(curl -fsS \"http://$HOST:$PORT/?page=audit\")",
+		"AUDIT_UI_HTML=\"$audit_ui\"",
+		"audit_ui = os.environ['AUDIT_UI_HTML']",
+		"assert 'Open audit log' in ui, ui",
+		"assert 'Loading audit log…' in audit_ui, audit_ui",
+		"assert 'Audit log is currently unavailable.' in audit_ui, audit_ui",
+		"assert \"const route = limit > 0 ? `/v1/audit-logs?limit=${encodeURIComponent(String(limit))}` : '/v1/audit-logs';\" in audit_ui, audit_ui",
 		"assert \"fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`)\" in ui, ui",
 	} {
 		if !strings.Contains(text, fragment) {

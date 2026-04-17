@@ -70,6 +70,7 @@ Each row surfaces:
 - sync
 - health
 - last update
+- `_self` `Open audit log` link to `/?page=audit`
 - `_self` `Open account` link to `/?page=account&accountId={awsAccountId}`
 - `_self` `Open application` link to `/?page=application&deployment={deploymentName}`
 
@@ -116,6 +117,20 @@ Resource-list fallback contract:
 
 The existing `Drift view` and `Plan/apply` workspace shells remain available as deeper read-only troubleshooting pages, but they are now entered from the application detail page instead of older account-row shortcuts.
 
+### Audit timeline page
+
+The embedded UI now exposes a dedicated bookmarkable audit route:
+- `/?page=audit`
+- `/?page=audit&limit={n}` to request a smaller newest-first window from `GET /v1/audit-logs`
+
+Current behavior:
+- fetches `GET /v1/audit-logs` directly
+- renders explicit `Loading audit log…`, empty, unavailable (`503`), and generic fetch-error states
+- keeps entries newest-first even if the client receives an unsorted payload
+- shows explicit labels for action, deployment/app/environment context, timestamp, actor availability, and plan/apply identifiers
+- keeps actor identity explicit rather than fabricated by rendering `Unavailable` / `Unknown` plus the server-authored reason text
+- exposes `_self` `Open application` and `_self` `Open plan/apply` links when `deploymentName`, `planId`, and `applyId` are present
+
 ### Deployment runtime events API
 
 Operators can also fetch a read-only deployment event timeline from:
@@ -123,7 +138,7 @@ Operators can also fetch a read-only deployment event timeline from:
 
 This payload is derived from persisted `status.history` entries the controller authored for runtime changes. It is meant to support operator drill-down and timeline rendering, not to act as a full durable audit system yet.
 
-Separate from that controller-runtime timeline, the backend now exposes `GET /v1/audit-logs` as a local immutable audit projection over persisted plan preview and apply request records. The dashboard does not render that route yet; it exists as a future UI/data contract and keeps `actor.available=false` explicit until operator identity is actually persisted.
+Separate from that controller-runtime timeline, the backend also exposes `GET /v1/audit-logs` as a local immutable audit projection over persisted plan preview and apply request records. The dedicated `/?page=audit` view now renders that route and keeps `actor.available=false` explicit until operator identity is actually persisted.
 
 Current behavior:
 - returns `deploymentName` plus an explicit `events[]` array
@@ -136,6 +151,8 @@ Current behavior:
 The dashboard now supports lightweight workspace routing inside the same embedded shell.
 
 Routes:
+- `/?page=audit`
+- `/?page=audit&limit={n}`
 - `/?page=drift&deployment={name}`
 - `/?page=plan&deployment={name}`
 - `/?page=plan&deployment={name}&planId={planId}`
@@ -172,9 +189,10 @@ Current plan/apply workspace behavior:
 ## Quick links
 
 The dashboard now exposes the following navigation affordances across the current drill-down flow:
-- landing page: `_self` `Open account`, `_self` `Open application`
+- landing page: `_self` `Open audit log`, `_self` `Open account`, `_self` `Open application`
 - account detail page: `Account JSON`, `Group JSON`, `_self` `Open application`
-- application detail page: `_self` `Drift view`, `_self` `Plan/apply`, `Open resource`
+- application detail page: `_self` `Drift view`, `_self` `Plan/apply`, `_self` `Audit log`, `Open resource`
+- audit page: `_self` `Back to applications`, `_self` `Open application`, `_self` `Open plan/apply`
 - resource/workspace drill-down pages: embedded back links that keep operators in the same shell
 - account-oriented JSON surfaces remain available through the API routes (`/v1/overview/accounts/{awsAccountId}`, `/v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}`, `/v1/overview/deployments/{deploymentName}`, `/v1/status/deployments/{deploymentName}`)
 
