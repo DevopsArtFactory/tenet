@@ -121,6 +121,7 @@ The existing `Drift view` and `Plan/apply` workspace shells remain available as 
 
 The embedded UI now exposes a dedicated bookmarkable audit route:
 - `/?page=audit`
+- `/?page=audit&deployment={deploymentName}` to keep one deployment's audit context visible in the page chrome/body
 - `/?page=audit&action={action}` to narrow the page to exactly `plan.created` or `apply.requested`
 - `/?page=audit&limit={n}` to request a smaller newest-first window from `GET /v1/audit-logs`
 
@@ -129,6 +130,8 @@ Current behavior:
 - preserves optional `deployment`, `action`, and `limit` URL state when present
 - renders a safe action filter control for exactly `plan.created` and `apply.requested`
 - renders explicit `Loading audit log…`, empty, unavailable (`503`), and generic fetch-error states
+- makes an active deployment filter obvious in both the page chrome and body when `deployment={deploymentName}` is present
+- renders deployment-specific empty-state copy when one deployment is selected and no persisted audit entries match, while keeping the generic unfiltered empty state unchanged
 - keeps entries newest-first even if the client receives an unsorted payload
 - shows explicit labels for action, deployment/app/environment context, timestamp, actor availability, and plan/apply identifiers
 - keeps actor identity explicit rather than fabricated by rendering `Unavailable` / `Unknown` plus the server-authored reason text
@@ -155,6 +158,7 @@ The dashboard now supports lightweight workspace routing inside the same embedde
 
 Routes:
 - `/?page=audit`
+- `/?page=audit&deployment={name}`
 - `/?page=audit&action={action}`
 - `/?page=audit&limit={n}`
 - `/?page=drift&deployment={name}`
@@ -172,6 +176,7 @@ Current drift workspace behavior:
 - keeps machine-readable `runtimeSummary.changes[]` rows while also rendering human-readable `runtimeSummary.changeDetails[]`
 - shows deployment context and status conditions
 - derives a real read-only `Field-level drift` table from the deployment-detail payload, comparing desired artifact/generation/runtime intent against current runtime signals and surfacing unhealthy or drift conditions with client-side severity filtering/sorting
+- keeps the toolbar `Audit log` link deployment-scoped so operators land on `/?page=audit&deployment={name}` instead of the global audit slice
 
 ### Plan/apply workspace
 
@@ -189,6 +194,7 @@ Current plan/apply workspace behavior:
 - loads `GET /v1/applies/{applyId}` whenever an `applyId` query param is present and renders explicit loading, created/ready, failed, unavailable, and generic fetch-error states without hiding deployment-derived or plan-derived fallback context
 - renders stored immutable apply metadata plus `Open bookmarked apply` (`_self`) and `Apply JSON` links, and explicitly tells operators that live execution remains disabled by default so failed immutable apply records are expected and useful
 - returns to the application detail page through the embedded back link so the drill-down path stays tight
+- keeps the toolbar `Audit log` link deployment-scoped so operators land on `/?page=audit&deployment={name}` instead of the global audit slice
 
 ## Quick links
 
@@ -196,6 +202,7 @@ The dashboard now exposes the following navigation affordances across the curren
 - landing page: `_self` `Open audit log`, `_self` `Open account`, `_self` `Open application`
 - account detail page: `Account JSON`, `Group JSON`, `_self` `Open application`
 - application detail page: `_self` `Drift view`, `_self` `Plan/apply`, `_self` `Audit log`, `Open resource`
+- application detail `Audit log` now routes to `/?page=audit&deployment={deploymentName}` so the selected deployment stays visible in the bookmarkable audit slice
 - audit page: `_self` `Back to applications`, `_self` `Open application drill-down`, `_self` `Open plan/apply workspace`
 - resource/workspace drill-down pages: embedded back links that keep operators in the same shell
 - account-oriented JSON surfaces remain available through the API routes (`/v1/overview/accounts/{awsAccountId}`, `/v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}`, `/v1/overview/deployments/{deploymentName}`, `/v1/status/deployments/{deploymentName}`)

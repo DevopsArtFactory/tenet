@@ -217,7 +217,8 @@ audit_logs_action_filtered=$(curl -fsS "$API_BASE_URL/v1/audit-logs?action=apply
 invalid_audit_action_status=$(curl -sS -o "$INVALID_AUDIT_ACTION_BODY" -w "%{http_code}" "$API_BASE_URL/v1/audit-logs?action=invalid.action")
 ui=$(curl -fsS "$API_BASE_URL/")
 audit_ui_request_id=$(assert_request_id_header "$API_BASE_URL/?page=audit&action=apply.requested&limit=2")
-audit_ui=$(curl -fsS "$API_BASE_URL/?page=audit&action=apply.requested&limit=2")
+audit_ui_deployment_request_id=$(assert_request_id_header "$API_BASE_URL/?page=audit&deployment=payments-api-prod&action=apply.requested&limit=2")
+audit_ui=$(curl -fsS "$API_BASE_URL/?page=audit&deployment=payments-api-prod&action=apply.requested&limit=2")
 plan_apply_ui=$(curl -fsS "$API_BASE_URL/?page=plan&deployment=payments-api-prod&planId=$plan_id&applyId=$apply_id")
 
 SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" APPLY_RECORD_JSON="$apply_record" APPLY_RECORD_GET_JSON="$apply_record_get" DEPLOYMENT_EVENTS_JSON="$deployment_events" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" AUDIT_LOGS_JSON="$audit_logs" AUDIT_LOGS_ACTION_FILTERED_JSON="$audit_logs_action_filtered" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY="$INVALID_AUDIT_ACTION_BODY" UI_HTML="$ui" AUDIT_UI_HTML="$audit_ui" PLAN_APPLY_UI_HTML="$plan_apply_ui" python3 - <<'PY'
@@ -353,11 +354,15 @@ for fragment in (
 
 for fragment in (
     "Audit timeline",
+    "Deployment audit timeline",
     "Operator audit log",
     "Audit filters: ${activeFilters.join(' · ')}",
+    "Active deployment context",
     "Loading audit log…",
     "Audit log is currently unavailable.",
     "Immutable operator audit log from GET /v1/audit-logs. Newest entries first. Actor identity remains explicit when unavailable or unknown.",
+    "Immutable plan preview and apply-request activity for deployment ${deploymentName} rendered from GET /v1/audit-logs.",
+    "No audit activity has been persisted yet for deployment ${currentPageState.deployment}.",
     "action ${currentPageState.auditAction}",
     "const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {",
     "if (action) params.set('action', action);",

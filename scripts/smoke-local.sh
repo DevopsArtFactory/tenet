@@ -108,7 +108,7 @@ status=$(curl -fsS "http://$HOST:$PORT/v1/status/deployments/payments-api-prod")
 resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")
 worker_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 ui=$(curl -fsS "http://$HOST:$PORT/")
-audit_ui=$(curl -fsS "http://$HOST:$PORT/?page=audit&action=apply.requested&limit=1")
+audit_ui=$(curl -fsS "http://$HOST:$PORT/?page=audit&deployment=payments-api-prod&action=apply.requested&limit=1")
 plan_ui=$(curl -fsS "http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id")
 apply_ui=$(curl -fsS "http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id&applyId=$apply_id")
 
@@ -266,8 +266,13 @@ assert 'No controller runtime events have been persisted yet.' in ui, ui
 assert 'Controller runtime events are currently unavailable.' in ui, ui
 assert "createNavLink(buildPageURL('drift', { deployment: detail.name }), 'Drift view', '_self')" in ui, ui
 assert "createNavLink(buildPageURL('plan', { deployment: detail.name }), 'Plan/apply', '_self')" in ui, ui
-assert "createNavLink(buildPageURL('audit'), 'Audit log', '_self')" in ui, ui
+assert "createNavLink(buildPageURL('audit', { deployment: detail.name }), 'Audit log', '_self')" in ui, ui
+assert "createNavLink(buildPageURL('audit', { deployment: detail.name || currentPageState.deployment || '' }), 'Audit log', '_self')" in ui, ui
 assert 'Audit timeline' in audit_ui, audit_ui
+assert 'Deployment audit timeline' in audit_ui, audit_ui
+assert 'Active deployment context' in audit_ui, audit_ui
+assert 'Immutable plan preview and apply-request activity for deployment ${deploymentName} rendered from GET /v1/audit-logs.' in audit_ui, audit_ui
+assert 'No audit activity has been persisted yet for deployment ${currentPageState.deployment}.' in audit_ui, audit_ui
 assert 'Loading audit log…' in audit_ui, audit_ui
 assert 'Audit log is currently unavailable.' in audit_ui, audit_ui
 assert "const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {" in audit_ui, audit_ui

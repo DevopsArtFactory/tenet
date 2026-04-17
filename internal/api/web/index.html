@@ -1194,7 +1194,7 @@
           workspaceLinks.append(
             createNavLink(buildPageURL('drift', { deployment: detail.name }), 'Drift view', '_self'),
             createNavLink(buildPageURL('plan', { deployment: detail.name }), 'Plan/apply', '_self'),
-            createNavLink(buildPageURL('audit'), 'Audit log', '_self'),
+            createNavLink(buildPageURL('audit', { deployment: detail.name }), 'Audit log', '_self'),
           );
         }
         page.append(workspaceLinks);
@@ -1716,6 +1716,18 @@
         return promise;
       };
       const createAuditLogsIntro = () => createElement('div', 'detail-section-copy', 'Immutable operator audit log from GET /v1/audit-logs. Newest entries first. Actor identity remains explicit when unavailable or unknown.');
+      const auditDeploymentName = () => currentPageState.deployment || '';
+      const createAuditDeploymentContextCallout = () => {
+        const deploymentName = auditDeploymentName();
+        if (!deploymentName) return null;
+        const callout = createElement('div', 'workspace-callout');
+        callout.append(
+          createElement('div', 'workspace-callout-label', 'Active deployment context'),
+          createElement('div', 'workspace-callout-copy', deploymentName),
+          createElement('div', 'workspace-callout-factors', 'Audit rows, in-app drill-down links, and empty-state copy remain scoped to this deployment until the filter is cleared.'),
+        );
+        return callout;
+      };
       const renderAuditPageChrome = () => {
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
@@ -1742,10 +1754,13 @@
         toolbar.replaceChildren(controls, toolbarActions);
 
         const detailSummary = createElement('article', 'account');
+        const deploymentName = auditDeploymentName();
         detailSummary.append(
-          createElement('div', 'label', 'Audit timeline'),
+          createElement('div', 'label', deploymentName ? 'Deployment audit timeline' : 'Audit timeline'),
           createElement('h2', 'account-name', 'Operator audit log'),
-          createElement('div', 'account-meta', 'Immutable plan preview and apply-request activity rendered from GET /v1/audit-logs.'),
+          createElement('div', 'account-meta', deploymentName
+            ? `Immutable plan preview and apply-request activity for deployment ${deploymentName} rendered from GET /v1/audit-logs.`
+            : 'Immutable plan preview and apply-request activity rendered from GET /v1/audit-logs.'),
           createElement('div', 'account-topology', activeFilters.length ? `Newest entries first. Actor identity remains explicit when unavailable or unknown. ${activeFilters.join(' · ')}.` : 'Newest entries first. Actor identity remains explicit when unavailable or unknown.'),
         );
         summary.replaceChildren(detailSummary);
@@ -1758,6 +1773,10 @@
           createElement('h2', 'account-name', 'Audit timeline'),
           createAuditLogsIntro(),
         );
+        const deploymentCallout = createAuditDeploymentContextCallout();
+        if (deploymentCallout) {
+          page.append(deploymentCallout);
+        }
         const stateNode = createElement('div', 'detail-state', text);
         if (className) stateNode.classList.add(className);
         if (detailText) {
@@ -1776,8 +1795,14 @@
           createElement('h2', 'account-name', 'Audit timeline'),
           createAuditLogsIntro(),
         );
+        const deploymentCallout = createAuditDeploymentContextCallout();
+        if (deploymentCallout) {
+          page.append(deploymentCallout);
+        }
         if (!entries.length) {
-          page.append(createElement('div', 'detail-state', 'No audit activity has been persisted yet.'));
+          page.append(createElement('div', 'detail-state', currentPageState.deployment
+            ? `No audit activity has been persisted yet for deployment ${currentPageState.deployment}.`
+            : 'No audit activity has been persisted yet.'));
           root.replaceChildren(page);
           return;
         }
@@ -2369,7 +2394,7 @@
         const toolbarActions = createElement('div', 'toolbar-actions');
         toolbarActions.append(
           backLink,
-          createNavLink(buildPageURL('audit'), 'Audit log', '_self'),
+          createNavLink(buildPageURL('audit', { deployment: detail.name || currentPageState.deployment || '' }), 'Audit log', '_self'),
           createElement('div', 'toolbar-active', `${workspaceTitle} · ${detail.name || currentPageState.deployment || 'deployment'}`),
         );
         toolbar.replaceChildren(toolbarActions);
