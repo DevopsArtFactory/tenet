@@ -51,6 +51,13 @@ This page is where Tenet can show things like:
 
 The goal is to make troubleshooting possible without forcing the user to jump directly into raw AWS consoles for the first step.
 
+When `rollout.execution[]` is still missing or empty in a fixture-backed or early controller-authored payload, the resource drill-down keeps the operator contract stable by synthesizing the same fallback rollout resources the controller would eventually publish. That contract includes:
+- `ecsRolling`
+- `ecsService` → `{deployment}-service` → `ECS service Tenet updates with native rolling deployment`, optionally extended with rollout-strategy qualifiers such as `while respecting min healthy 90% and warmup 30s`
+
+That same fallback identity keeps resource-log drill-downs bookmarkable. Example route:
+- `GET /v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service`
+
 ### Additional operator views
 The current UI also still exposes supporting operator surfaces beyond the main drill-down path:
 - account-oriented views for grouped project/environment context

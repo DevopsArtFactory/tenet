@@ -124,6 +124,12 @@ Open one application to see the linked rollout resources grouped into clear sect
 ### Resource detail
 Open a concrete resource to inspect the deeper operational context for that resource, including rollout and runtime information. Recent logs are surfaced here when the resource type supports them.
 
+When fixture-backed or early controller payloads have not yet persisted `rollout.execution[]`, Tenet keeps the read-only drill-down contract stable by synthesizing the same fallback rollout resources the operator would otherwise see from the controller-authored payload:
+- `ecsRolling`: `ecsService` (`{deployment}-service`)
+
+For the ECS rolling fallback service, the recent-log drill-down stays on the same operator workflow. Example route:
+- `GET /v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service`
+
 ## Repository layout
 
 Tenet currently expects manifests under:
