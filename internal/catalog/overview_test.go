@@ -1151,7 +1151,7 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 		},
 	}
 	catalog := manifest.Catalog{
-		Accounts: []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2", "us-west-2"}}},
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2", "us-west-2"}}},
 		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
 		Deployments: []domain.Deployment{{
 			Name:            "payments-api-prod",
@@ -1180,8 +1180,14 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 	if detail.AccountName != "prod-core" || detail.AWSAccountID != "123456789012" || detail.Region != "ap-northeast-2" {
 		t.Fatalf("expected placement metadata, got %+v", detail)
 	}
+	if deploymentDetail.SourceFingerprint == "" {
+		t.Fatalf("expected deployment detail source fingerprint, got %+v", deploymentDetail)
+	}
 	if !reflect.DeepEqual(detail.AllowedRegions, deploymentDetail.AllowedRegions) {
 		t.Fatalf("expected application detail allowed regions to match deployment detail, got application=%+v deployment=%+v", detail.AllowedRegions, deploymentDetail.AllowedRegions)
+	}
+	if detail.SourceFingerprint != deploymentDetail.SourceFingerprint {
+		t.Fatalf("expected application detail source fingerprint to match deployment detail, got application=%q deployment=%q", detail.SourceFingerprint, deploymentDetail.SourceFingerprint)
 	}
 	if detail.TargetType != "ec2" || detail.Strategy != "canary" || detail.ExecutionMode != "asgWeightedTargetGroups" {
 		t.Fatalf("expected execution metadata, got %+v", detail)
@@ -1226,6 +1232,7 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 		RolloutConfig:      cloneDeploymentRolloutConfig(deploymentDetail.RolloutConfig),
 		DeployedArtifact:   deploymentDetail.DeployedArtifact,
 		ObservedGeneration: deploymentDetail.ObservedGeneration,
+		SourceFingerprint:  deploymentDetail.SourceFingerprint,
 		Sync:               deploymentDetail.Sync,
 		Health:             deploymentDetail.Health,
 		RuntimeSummary:     cloneRuntimeSummary(deploymentDetail.RuntimeSummary),
@@ -1288,7 +1295,7 @@ func TestBuildApplicationOverviewDetailPropagatesPlacementErrors(t *testing.T) {
 	catalog := manifest.Catalog{
 		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"us-west-2"}}},
 		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
-		Deployments: []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
+		Deployments:  []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
 	}
 
 	_, err := BuildApplicationOverviewDetail(catalog, nil, "payments-api-prod")

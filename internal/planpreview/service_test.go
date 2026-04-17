@@ -37,52 +37,57 @@ func (s *memoryStore) Save(_ context.Context, record Record) error {
 
 func TestServiceCreatePersistsImmutableReadyPlanWithStableID(t *testing.T) {
 	store := &memoryStore{}
+	detail := catalog.DeploymentOverviewDetail{
+		Name:               "api-prod",
+		TargetType:         "ecs",
+		Strategy:           "linear",
+		ExecutionMode:      "ecsCodeDeploy",
+		DesiredArtifact:    domain.DeploymentArtifact{Image: "payments-api:v2"},
+		ObservedGeneration: 7,
+		Sync:               domain.Sync{State: domain.SyncStateOutOfSync, Reason: "PendingPromotion"},
+		Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "warming up"},
+		RuntimeSummary: &domain.RuntimeSummary{
+			Timestamp:          "2026-04-16T06:49:00Z",
+			Source:             "controller",
+			Summary:            "Traffic shift is progressing",
+			Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "Traffic shift running"},
+			Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "steady"},
+			DesiredGeneration:  8,
+			ObservedGeneration: 7,
+			CurrentStep:        "ShiftTrafficLinear",
+			HistoryCount:       3,
+		},
+		Rollout: &domain.RolloutSummary{
+			DesiredGeneration:  8,
+			ObservedGeneration: 7,
+			CurrentStep:        "VerifyServiceStability",
+			Steps: []domain.RolloutStepSummary{
+				{Kind: "CreateCodeDeployDeployment", Status: domain.RolloutStepStatusCompleted},
+				{Kind: "ShiftTrafficLinear", Status: domain.RolloutStepStatusPending},
+				{Kind: "VerifyServiceStability", Current: true, Status: domain.RolloutStepStatusCurrent},
+			},
+			Execution: []domain.RolloutExecutionDetail{
+				{Resource: "ecsService", Name: "api-prod-service"},
+				{Resource: "codeDeployDeploymentGroup", Name: "api-prod-codedeploy-group"},
+			},
+		},
+	}
+	fingerprint, err := catalog.DeriveDeploymentSourceFingerprint(detail)
+	if err != nil {
+		t.Fatalf("DeriveDeploymentSourceFingerprint returned error: %v", err)
+	}
 	service := Service{
 		LoadDetail: func(name string) (catalog.DeploymentOverviewDetail, error) {
 			if name != "api-prod" {
 				t.Fatalf("unexpected deployment lookup: %s", name)
 			}
-			return catalog.DeploymentOverviewDetail{
-				Name:               "api-prod",
-				TargetType:         "ecs",
-				Strategy:           "linear",
-				ExecutionMode:      "ecsCodeDeploy",
-				DesiredArtifact:    domain.DeploymentArtifact{Image: "payments-api:v2"},
-				ObservedGeneration: 7,
-				Sync:               domain.Sync{State: domain.SyncStateOutOfSync, Reason: "PendingPromotion"},
-				Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "warming up"},
-				RuntimeSummary: &domain.RuntimeSummary{
-					Timestamp:          "2026-04-16T06:49:00Z",
-					Source:             "controller",
-					Summary:            "Traffic shift is progressing",
-					Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "Traffic shift running"},
-					Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "steady"},
-					DesiredGeneration:  8,
-					ObservedGeneration: 7,
-					CurrentStep:        "ShiftTrafficLinear",
-					HistoryCount:       3,
-				},
-				Rollout: &domain.RolloutSummary{
-					DesiredGeneration:  8,
-					ObservedGeneration: 7,
-					CurrentStep:        "VerifyServiceStability",
-					Steps: []domain.RolloutStepSummary{
-						{Kind: "CreateCodeDeployDeployment", Status: domain.RolloutStepStatusCompleted},
-						{Kind: "ShiftTrafficLinear", Status: domain.RolloutStepStatusPending},
-						{Kind: "VerifyServiceStability", Current: true, Status: domain.RolloutStepStatusCurrent},
-					},
-					Execution: []domain.RolloutExecutionDetail{
-						{Resource: "ecsService", Name: "api-prod-service"},
-						{Resource: "codeDeployDeploymentGroup", Name: "api-prod-codedeploy-group"},
-					},
-				},
-			}, nil
+			return detail, nil
 		},
 		Store: store,
 		Now:   func() time.Time { return time.Date(2026, 4, 17, 8, 0, 0, 0, time.UTC) },
 	}
 
-	first, err := service.Create(context.Background(), "api-prod", CreateRequest{})
+	first, err := service.Create(context.Background(), "api-prod", CreateRequest{IfMatch: fingerprint})
 	if err != nil {
 		t.Fatalf("Create returned error: %v", err)
 	}
@@ -98,11 +103,11 @@ func TestServiceCreatePersistsImmutableReadyPlanWithStableID(t *testing.T) {
 	if first.Record.Risk.Level != "medium" || !first.Record.Approval.Required {
 		t.Fatalf("expected derived medium-risk approval metadata, got %+v %+v", first.Record.Risk, first.Record.Approval)
 	}
-	if first.Record.Source.Fingerprint == "" || first.Record.Source.DesiredGeneration != 8 || first.Record.Source.ObservedGeneration != 7 {
+	if first.Record.Source.Fingerprint != fingerprint || first.Record.Source.DesiredGeneration != 8 || first.Record.Source.ObservedGeneration != 7 {
 		t.Fatalf("unexpected source context: %+v", first.Record.Source)
 	}
 
-	second, err := service.Create(context.Background(), "api-prod", CreateRequest{})
+	second, err := service.Create(context.Background(), "api-prod", CreateRequest{IfMatch: fingerprint})
 	if err != nil {
 		t.Fatalf("second Create returned error: %v", err)
 	}
@@ -154,6 +159,9 @@ func TestServiceCreatePersistsFailedPlanWhenClientFingerprintIsStale(t *testing.
 	if err != nil {
 		t.Fatalf("Create returned error: %v", err)
 	}
+	if !result.Created {
+		t.Fatalf("expected stale preview creation to persist a new failed record")
+	}
 	if result.Record.Status != StatusFailed {
 		t.Fatalf("expected failed stale plan preview, got %+v", result.Record)
 	}
@@ -162,6 +170,13 @@ func TestServiceCreatePersistsFailedPlanWhenClientFingerprintIsStale(t *testing.
 	}
 	if !result.Record.Approval.Required || !strings.Contains(result.Record.Approval.Summary, "refreshes deployment detail") {
 		t.Fatalf("expected blocking approval guidance, got %+v", result.Record.Approval)
+	}
+	fetched, err := service.Get(context.Background(), result.Record.ID)
+	if err != nil {
+		t.Fatalf("Get returned error for failed preview: %v", err)
+	}
+	if fetched.ID != result.Record.ID || fetched.Status != StatusFailed || len(fetched.Errors) != 1 {
+		t.Fatalf("expected failed preview to be persisted, got %+v", fetched)
 	}
 }
 

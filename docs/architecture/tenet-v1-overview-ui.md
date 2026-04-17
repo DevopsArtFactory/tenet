@@ -72,6 +72,7 @@ The account-oriented `/v1/overview/accounts` read model still carries those acco
 For topology, the embedded client prefers authoritative account-level `projectCount` / `environmentCount` values when they are present on the overview payload. To preserve compatibility with older overview responses, it still falls back to deriving the unique project/environment counts from `account.deployments[*]` when either field is absent. Project/environment grouping for the nested deployment sections continues to come from deployment-level `appRef + environmentRef + region` data regardless of whether the authoritative account counters are present.
 
 `/v1/overview/deployments/{deploymentName}` combines catalog placement data with the current deployment status snapshot for one deployment, including:
+- additive `sourceFingerprint` derived from the same rollout/runtime/detail inputs used by plan-preview creation so operators can send optimistic `ifMatch` on the first create call without first creating a preview
 - the same additive `runtimeSummary` object used by the overview cards so API consumers can read a single latest-runtime contract without scraping `history[*]`
 - account and region placement metadata
 - `sync.reason`
@@ -88,7 +89,7 @@ For topology, the embedded client prefers authoritative account-level `projectCo
 - the complete `rollout.steps[*]` list
 - `conditions[*]`
 
-The embedded UI fetches `GET /v1/overview/applications/{deploymentName}` for `?page=application`, while `?page=resource`, `?page=drift`, and `?page=plan` continue to fetch `GET /v1/overview/deployments/{deploymentName}`. The default `/` landing page is the only page that loads `/v1/overview/applications`; deeper drill-down pages no longer depend on `/v1/overview/accounts` just to render detail.
+The embedded UI fetches `GET /v1/overview/applications/{deploymentName}` for `?page=application`, while `?page=resource`, `?page=drift`, and `?page=plan` continue to fetch `GET /v1/overview/deployments/{deploymentName}`. The default `/` landing page is the only page that loads `/v1/overview/applications`; deeper drill-down pages no longer depend on `/v1/overview/accounts` just to render detail. The application-detail route intentionally preserves deployment-detail semantics for shared fields such as `sourceFingerprint`, so consumers can hand the same optimistic-match token into plan-preview creation regardless of which detail route they started from.
 
 The current applications overview page includes a client-side filter toolbar above the application list:
 - a text search matching application/account/project/runtime summary text from `/v1/overview/applications`
@@ -118,7 +119,7 @@ Each plan-preview record is intentionally narrow and read-only:
 - explicit `errors[]` when the server persists a failed preview (for example an optimistic `ifMatch` fingerprint that no longer matches the current deployment detail)
 
 The current `POST /v1/plans/deployments/{deploymentName}` request body is optional and supports one additive optimistic field:
-- `ifMatch`: source fingerprint from a previously fetched deployment detail or plan preview; when it no longer matches the current deployment detail, Tenet persists a `failed` preview instead of a vague server error so operators and future UI polling can tell that the preview went stale
+- `ifMatch`: `sourceFingerprint` from a previously fetched deployment detail, application detail, or plan preview; when it no longer matches the current deployment detail, Tenet persists a `failed` preview instead of a vague server error so operators and future UI polling can tell that the preview went stale
 
 Plan-preview persistence is local, explicit, and compatible with fixture-backed runs: `tenet-api` stores immutable plan previews in `TENET_PLAN_STORE_PATH` (default `${TMPDIR:-/tmp}/tenet/plan-previews.json`) using an atomic filesystem JSON write. Repeating the same create call against unchanged source inputs returns the existing immutable record instead of mutating it in place.
 
