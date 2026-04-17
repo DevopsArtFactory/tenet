@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -96,11 +97,105 @@ type Options struct {
 }
 
 type Service struct {
-	options Options
+	options  Options
+	awsCache *awsClientCache
 }
 
 func NewService(options Options) Service {
-	return Service{options: options}
+	return Service{
+		options:  options,
+		awsCache: newAWSClientCache(defaultAWSClientCacheDeps()),
+	}
+}
+
+type awsClientCacheKey struct {
+	region          string
+	targetAccountID string
+	observerRoleARN string
+}
+
+type awsClients struct {
+	ecs  *ecs.Client
+	logs *cloudwatchlogs.Client
+	asg  *autoscaling.Client
+	ec2  *ec2.Client
+}
+
+type awsClientCacheEntry struct {
+	once    sync.Once
+	clients awsClients
+	err     error
+}
+
+type awsClientCacheDeps struct {
+	loadConfig    func(context.Context, string, string, string) (aws.Config, error)
+	newECSClient  func(aws.Config) *ecs.Client
+	newLogsClient func(aws.Config) *cloudwatchlogs.Client
+	newASGClient  func(aws.Config) *autoscaling.Client
+	newEC2Client  func(aws.Config) *ec2.Client
+}
+
+type awsClientCache struct {
+	deps    awsClientCacheDeps
+	entries sync.Map
+}
+
+func defaultAWSClientCacheDeps() awsClientCacheDeps {
+	return awsClientCacheDeps{
+		loadConfig: loadAWSConfig,
+		newECSClient: func(cfg aws.Config) *ecs.Client {
+			return ecs.NewFromConfig(cfg)
+		},
+		newLogsClient: func(cfg aws.Config) *cloudwatchlogs.Client {
+			return cloudwatchlogs.NewFromConfig(cfg)
+		},
+		newASGClient: func(cfg aws.Config) *autoscaling.Client {
+			return autoscaling.NewFromConfig(cfg)
+		},
+		newEC2Client: func(cfg aws.Config) *ec2.Client {
+			return ec2.NewFromConfig(cfg)
+		},
+	}
+}
+
+func newAWSClientCache(deps awsClientCacheDeps) *awsClientCache {
+	return &awsClientCache{deps: deps}
+}
+
+func (c *awsClientCache) clients(ctx context.Context, region, targetAccountID, observerRoleARN string) (awsClients, error) {
+	key := awsClientCacheKey{
+		region:          strings.TrimSpace(region),
+		targetAccountID: strings.TrimSpace(targetAccountID),
+		observerRoleARN: strings.TrimSpace(observerRoleARN),
+	}
+	actual, _ := c.entries.LoadOrStore(key, &awsClientCacheEntry{})
+	entry := actual.(*awsClientCacheEntry)
+	entry.once.Do(func() {
+		cfg, err := c.deps.loadConfig(ctx, key.region, key.targetAccountID, key.observerRoleARN)
+		if err != nil {
+			entry.err = err
+			return
+		}
+		entry.clients = awsClients{
+			ecs:  c.deps.newECSClient(cfg),
+			logs: c.deps.newLogsClient(cfg),
+			asg:  c.deps.newASGClient(cfg),
+			ec2:  c.deps.newEC2Client(cfg),
+		}
+	})
+	if entry.err != nil {
+		c.entries.Delete(key)
+		return awsClients{}, entry.err
+	}
+	return entry.clients, nil
+}
+
+func (s Service) awsClients(ctx context.Context, region, targetAccountID, observerRoleARN string) (awsClients, error) {
+	cache := s.awsCache
+	if cache == nil {
+		cache = newAWSClientCache(defaultAWSClientCacheDeps())
+	}
+	return cache.clients(ctx, region, targetAccountID, observerRoleARN)
 }
 
 func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
@@ -300,21 +395,19 @@ func formatConsoleEntries(consoles []InstanceConsole, max int) []Entry {
 }
 
 func (s Service) listECSLogEventsFromAWS(ctx context.Context, req ECSRequest) ([]CloudWatchEvent, error) {
-	cfg, err := loadAWSConfig(ctx, req.Region, req.TargetAccountID, req.ObserverRoleARN)
+	clients, err := s.awsClients(ctx, req.Region, req.TargetAccountID, req.ObserverRoleARN)
 	if err != nil {
 		return nil, err
 	}
 
-	ecsClient := ecs.NewFromConfig(cfg)
-	logsClient := cloudwatchlogs.NewFromConfig(cfg)
-	service, clusterARN, err := findECSService(ctx, ecsClient, req.ResourceName)
+	service, clusterARN, err := findECSService(ctx, clients.ecs, req.ResourceName)
 	if err != nil {
 		return nil, err
 	}
 	if service == nil {
 		return nil, unavailableError{reason: UnavailableReasonResourceNotFound}
 	}
-	tasks, err := findRecentRunningTasks(ctx, ecsClient, aws.ToString(clusterARN), aws.ToString(service.ServiceName))
+	tasks, err := findRecentRunningTasks(ctx, clients.ecs, aws.ToString(clusterARN), aws.ToString(service.ServiceName))
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +424,7 @@ func (s Service) listECSLogEventsFromAWS(ctx context.Context, req ECSRequest) ([
 		}
 		taskDefinition, ok := taskDefinitions[taskDefinitionARN]
 		if !ok {
-			out, err := ecsClient.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{TaskDefinition: aws.String(taskDefinitionARN)})
+			out, err := clients.ecs.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{TaskDefinition: aws.String(taskDefinitionARN)})
 			if err != nil {
 				return nil, err
 			}
@@ -341,7 +434,7 @@ func (s Service) listECSLogEventsFromAWS(ctx context.Context, req ECSRequest) ([
 			taskDefinition = *out.TaskDefinition
 			taskDefinitions[taskDefinitionARN] = taskDefinition
 		}
-		taskEvents, err := fetchTaskLogEvents(ctx, logsClient, task, taskDefinition, s.maxEntries())
+		taskEvents, err := fetchTaskLogEvents(ctx, clients.logs, task, taskDefinition, s.maxEntries())
 		if err != nil {
 			return nil, err
 		}
@@ -357,14 +450,12 @@ func (s Service) listECSLogEventsFromAWS(ctx context.Context, req ECSRequest) ([
 }
 
 func (s Service) listASGInstanceConsolesFromAWS(ctx context.Context, req ASGRequest) ([]InstanceConsole, error) {
-	cfg, err := loadAWSConfig(ctx, req.Region, req.TargetAccountID, req.ObserverRoleARN)
+	clients, err := s.awsClients(ctx, req.Region, req.TargetAccountID, req.ObserverRoleARN)
 	if err != nil {
 		return nil, err
 	}
 
-	asgClient := autoscaling.NewFromConfig(cfg)
-	ec2Client := ec2.NewFromConfig(cfg)
-	groupsOut, err := asgClient.DescribeAutoScalingGroups(ctx, &autoscaling.DescribeAutoScalingGroupsInput{AutoScalingGroupNames: []string{req.ResourceName}})
+	groupsOut, err := clients.asg.DescribeAutoScalingGroups(ctx, &autoscaling.DescribeAutoScalingGroupsInput{AutoScalingGroupNames: []string{req.ResourceName}})
 	if err != nil {
 		return nil, err
 	}
@@ -375,14 +466,14 @@ func (s Service) listASGInstanceConsolesFromAWS(ctx context.Context, req ASGRequ
 	if len(group.Instances) == 0 {
 		return nil, unavailableError{reason: UnavailableReasonNoInstances}
 	}
-	instanceID, err := newestInstanceID(ctx, ec2Client, group.Instances)
+	instanceID, err := newestInstanceID(ctx, clients.ec2, group.Instances)
 	if err != nil {
 		return nil, err
 	}
 	if instanceID == "" {
 		return nil, unavailableError{reason: UnavailableReasonNoInstances}
 	}
-	consoleOut, err := ec2Client.GetConsoleOutput(ctx, &ec2.GetConsoleOutputInput{InstanceId: aws.String(instanceID), Latest: aws.Bool(true)})
+	consoleOut, err := clients.ec2.GetConsoleOutput(ctx, &ec2.GetConsoleOutputInput{InstanceId: aws.String(instanceID), Latest: aws.Bool(true)})
 	if err != nil {
 		return nil, err
 	}
