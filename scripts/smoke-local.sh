@@ -13,7 +13,9 @@ PY
 REPO_ROOT=${TENET_REPO_ROOT:-$ROOT/examples/local-repo}
 FIXTURE_STATUS_PATH=${TENET_STATUS_PATH:-$ROOT/examples/local-status/deployments.json}
 STATUS_PATH=$(mktemp)
+PLAN_STORE_PATH=$(mktemp)
 cp "$FIXTURE_STATUS_PATH" "$STATUS_PATH"
+rm -f "$PLAN_STORE_PATH"
 LOG_FILE=$(mktemp)
 CONTROLLER_LOG_FILE=$(mktemp)
 cleanup() {
@@ -25,11 +27,11 @@ cleanup() {
     kill "$API_PID" 2>/dev/null || true
     wait "$API_PID" 2>/dev/null || true
   fi
-  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH"
+  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH"
 }
 trap cleanup EXIT
 
-TENET_API_ADDR=":$PORT" TENET_REPO_ROOT="$REPO_ROOT" TENET_STATUS_PATH="$STATUS_PATH" \
+TENET_API_ADDR=":$PORT" TENET_REPO_ROOT="$REPO_ROOT" TENET_STATUS_PATH="$STATUS_PATH" TENET_PLAN_STORE_PATH="$PLAN_STORE_PATH" \
   go run ./cmd/tenet-api >"$LOG_FILE" 2>&1 &
 API_PID=$!
 
@@ -49,12 +51,19 @@ overview=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts")
 account_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts/123456789012")
 group_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts/123456789012/projects/payments-api/environments/prod-apne2")
 deployment_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod")
+plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d '{}' "http://$HOST:$PORT/v1/plans/deployments/payments-api-prod")
+plan_id=$(PLAN_PREVIEW_JSON="$plan_preview" python3 - <<'PY'
+import json, os
+print(json.loads(os.environ['PLAN_PREVIEW_JSON'])['id'])
+PY
+)
+plan_preview_get=$(curl -fsS "http://$HOST:$PORT/v1/plans/$plan_id")
 status=$(curl -fsS "http://$HOST:$PORT/v1/status/deployments/payments-api-prod")
 resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")
 worker_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 ui=$(curl -fsS "http://$HOST:$PORT/")
 
-SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" python3 - <<'PY'
+SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" python3 - <<'PY'
 import json, os
 summary = json.loads(os.environ['SUMMARY_JSON'])
 applications = json.loads(os.environ['APPLICATIONS_JSON'])
@@ -63,6 +72,8 @@ overview = json.loads(os.environ['OVERVIEW_JSON'])
 account_detail = json.loads(os.environ['ACCOUNT_DETAIL_JSON'])
 group_detail = json.loads(os.environ['GROUP_DETAIL_JSON'])
 deployment_detail = json.loads(os.environ['DEPLOYMENT_DETAIL_JSON'])
+plan_preview = json.loads(os.environ['PLAN_PREVIEW_JSON'])
+plan_preview_get = json.loads(os.environ['PLAN_PREVIEW_GET_JSON'])
 status = json.loads(os.environ['STATUS_JSON'])
 resource_logs = json.loads(os.environ['RESOURCE_LOGS_JSON'])
 worker_resource_logs = json.loads(os.environ['WORKER_RESOURCE_LOGS_JSON'])
@@ -109,6 +120,13 @@ assert deployment_detail['name'] == 'payments-api-prod', deployment_detail
 assert isinstance(deployment_runtime_summary.get('changeDetails', []), list), deployment_detail
 if deployment_history:
     assert isinstance(deployment_history[0].get('changeDetails', []), list), deployment_detail
+assert plan_preview['deploymentName'] == 'payments-api-prod', plan_preview
+assert plan_preview['status'] in {'ready', 'failed'}, plan_preview
+assert plan_preview['source']['route'] == '/v1/overview/deployments/payments-api-prod', plan_preview
+assert isinstance(plan_preview.get('operations', []), list), plan_preview
+assert isinstance((plan_preview.get('risk') or {}).get('reasons', []), list), plan_preview
+assert isinstance((plan_preview.get('approval') or {}).get('required'), bool), plan_preview
+assert plan_preview_get == plan_preview, (plan_preview_get, plan_preview)
 assert status['deploymentName'] == 'payments-api-prod', status
 assert status['status']['sync']['state'] == 'Synced', status
 assert resource_logs['deploymentName'] == 'payments-api-prod', resource_logs

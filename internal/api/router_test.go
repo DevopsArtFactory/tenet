@@ -13,6 +13,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
+	"github.com/DevopsArtFactory/tenet/internal/planpreview"
 	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
@@ -2242,6 +2243,243 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 	})
 }
 
+func TestRouterCreateDeploymentPlanPreview(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		CreateDeploymentPlanPreview: func(ctx context.Context, deploymentName string, req planpreview.CreateRequest) (planpreview.CreateResult, error) {
+			if deploymentName != "api-prod" {
+				t.Fatalf("unexpected deployment plan preview create for %s", deploymentName)
+			}
+			if req.IfMatch != "plan_input" {
+				t.Fatalf("unexpected create request: %+v", req)
+			}
+			return planpreview.CreateResult{
+				Created: true,
+				Record: planpreview.Record{
+					ID:             "plan_1234abcd",
+					DeploymentName: deploymentName,
+					Status:         planpreview.StatusReady,
+					CreatedAt:      "2026-04-17T08:00:00Z",
+					Operations: []planpreview.Operation{{
+						Kind:    "CreateCodeDeployDeployment",
+						Status:  "completed",
+						Phase:   "Provisioning",
+						Target:  "api-prod-codedeploy-group (codeDeployDeploymentGroup)",
+						Summary: "Create the CodeDeploy deployment Tenet will use for traffic shifting.",
+					}},
+					Risk:     planpreview.Risk{Level: "medium", Label: "medium risk", Guidance: "check runtime summary"},
+					Approval: planpreview.Approval{Required: true, Summary: "check runtime summary"},
+					Source:   planpreview.SourceContext{DeploymentName: deploymentName, Route: "/v1/overview/deployments/api-prod", Fingerprint: "plan_input"},
+				},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/plans/deployments/api-prod", strings.NewReader(`{"ifMatch":"plan_input"}`))
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d with body %q", resp.Code, resp.Body.String())
+	}
+	if location := resp.Header().Get("Location"); location != "/v1/plans/plan_1234abcd" {
+		t.Fatalf("expected Location header, got %q", location)
+	}
+	var record planpreview.Record
+	if err := json.Unmarshal(resp.Body.Bytes(), &record); err != nil {
+		t.Fatalf("failed to decode plan preview: %v", err)
+	}
+	if record.ID != "plan_1234abcd" || record.Status != planpreview.StatusReady || len(record.Operations) != 1 {
+		t.Fatalf("unexpected plan preview payload: %+v", record)
+	}
+}
+
+func TestRouterCreateDeploymentPlanPreviewStatusCodes(t *testing.T) {
+	t.Run("unavailable", func(t *testing.T) {
+		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+		req := httptest.NewRequest(http.MethodPost, "/v1/plans/deployments/api-prod", strings.NewReader(`{}`))
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusServiceUnavailable {
+			t.Fatalf("expected 503, got %d", resp.Code)
+		}
+	})
+
+	t.Run("invalid body", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			CreateDeploymentPlanPreview: func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error) {
+				t.Fatalf("create provider should not run on invalid body")
+				return planpreview.CreateResult{}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/plans/deployments/api-prod", strings.NewReader(`{"ifMatch":true}`))
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", resp.Code)
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			CreateDeploymentPlanPreview: func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error) {
+				return planpreview.CreateResult{}, statusstore.ErrNotFound
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/plans/deployments/missing", strings.NewReader(`{}`))
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", resp.Code)
+		}
+	})
+
+	t.Run("provider error", func(t *testing.T) {
+		const upstreamErr = "boom: create details"
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			CreateDeploymentPlanPreview: func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error) {
+				return planpreview.CreateResult{}, errors.New(upstreamErr)
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/plans/deployments/api-prod", strings.NewReader(`{}`))
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		assertInternalServerErrorResponse(t, resp, upstreamErr)
+	})
+
+	for _, path := range []string{"/v1/plans/deployments/", "/v1/plans/deployments/a/b"} {
+		t.Run("invalid path "+path, func(t *testing.T) {
+			router := NewRouter(Options{
+				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+				CreateDeploymentPlanPreview: func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error) {
+					t.Fatalf("create provider should not run on invalid path")
+					return planpreview.CreateResult{}, nil
+				},
+			})
+			req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400 for %s, got %d", path, resp.Code)
+			}
+		})
+	}
+}
+
+func TestRouterPlanPreview(t *testing.T) {
+	record := planpreview.Record{
+		ID:             "plan_1234abcd",
+		DeploymentName: "api-prod",
+		Status:         planpreview.StatusFailed,
+		CreatedAt:      "2026-04-17T08:05:00Z",
+		Errors:         []string{"stale source fingerprint"},
+		Source:         planpreview.SourceContext{DeploymentName: "api-prod", Route: "/v1/overview/deployments/api-prod", Fingerprint: "plan_current"},
+	}
+
+	t.Run("get payload", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			PlanPreview: func(context.Context, string) (planpreview.Record, error) {
+				return record, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/plans/plan_1234abcd", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.Code)
+		}
+		var got planpreview.Record
+		if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+			t.Fatalf("failed to decode plan preview payload: %v", err)
+		}
+		if got.ID != record.ID || got.Status != planpreview.StatusFailed || got.Errors[0] != "stale source fingerprint" {
+			t.Fatalf("unexpected plan preview payload: %+v", got)
+		}
+	})
+
+	t.Run("unavailable", func(t *testing.T) {
+		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+		req := httptest.NewRequest(http.MethodGet, "/v1/plans/plan_1234abcd", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusServiceUnavailable {
+			t.Fatalf("expected 503, got %d", resp.Code)
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			PlanPreview: func(context.Context, string) (planpreview.Record, error) {
+				return planpreview.Record{}, planpreview.ErrNotFound
+			},
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/plans/plan_missing", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", resp.Code)
+		}
+	})
+
+	t.Run("provider error", func(t *testing.T) {
+		const upstreamErr = "boom: plan store"
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			PlanPreview: func(context.Context, string) (planpreview.Record, error) {
+				return planpreview.Record{}, errors.New(upstreamErr)
+			},
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/plans/plan_1234abcd", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		assertInternalServerErrorResponse(t, resp, upstreamErr)
+	})
+
+	for _, path := range []string{"/v1/plans/", "/v1/plans/a/b"} {
+		t.Run("invalid path "+path, func(t *testing.T) {
+			router := NewRouter(Options{
+				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+				PlanPreview: func(context.Context, string) (planpreview.Record, error) {
+					t.Fatalf("plan preview provider should not run on invalid path")
+					return planpreview.Record{}, nil
+				},
+			})
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400 for %s, got %d", path, resp.Code)
+			}
+		})
+	}
+}
+
 func TestRouterRootServesUI(t *testing.T) {
 	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -2327,6 +2565,12 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		OverviewDeploymentResourceLogs: func(context.Context, string, string, string) (resourcelogs.Result, error) {
 			return resourcelogs.Result{}, nil
 		},
+		CreateDeploymentPlanPreview: func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error) {
+			return planpreview.CreateResult{Record: planpreview.Record{ID: "plan_1234abcd"}}, nil
+		},
+		PlanPreview: func(context.Context, string) (planpreview.Record, error) {
+			return planpreview.Record{ID: "plan_1234abcd"}, nil
+		},
 		DeploymentStatuses: func() ([]statusstore.Snapshot, error) {
 			return []statusstore.Snapshot{}, nil
 		},
@@ -2335,8 +2579,8 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		},
 	})
 
-	paths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/applications", "/v1/overview/applications/api-prod", "/v1/overview/accounts", "/v1/overview/accounts/123456789012", "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod", "/v1/overview/deployments/api-prod", "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
-	for _, path := range paths {
+	getPaths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/applications", "/v1/overview/applications/api-prod", "/v1/overview/accounts", "/v1/overview/accounts/123456789012", "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod", "/v1/overview/deployments/api-prod", "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service", "/v1/plans/plan_1234abcd", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
+	for _, path := range getPaths {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		resp := httptest.NewRecorder()
 
@@ -2348,5 +2592,17 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		if allow := resp.Header().Get("Allow"); allow != http.MethodGet {
 			t.Fatalf("expected Allow header for %s, got %q", path, allow)
 		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/plans/deployments/api-prod", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405 for /v1/plans/deployments/api-prod, got %d", resp.Code)
+	}
+	if allow := resp.Header().Get("Allow"); allow != http.MethodPost {
+		t.Fatalf("expected Allow header for /v1/plans/deployments/api-prod, got %q", allow)
 	}
 }
