@@ -135,19 +135,92 @@ ui_request_id=$(assert_request_id_header "$API_BASE_URL/")
 summary=$(curl -fsS "$API_BASE_URL/v1/catalog/summary")
 applications=$(curl -fsS "$API_BASE_URL/v1/overview/applications")
 deployment_detail=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod")
+deployment_source_fingerprint=$(DEPLOYMENT_DETAIL_JSON="$deployment_detail" python3 - <<'PY'
+import json
+import os
+
+print((json.loads(os.environ["DEPLOYMENT_DETAIL_JSON"]).get("sourceFingerprint") or "").strip())
+PY
+)
+plan_preview_request_body=$(DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" python3 - <<'PY'
+import json
+import os
+
+fingerprint = (os.environ.get("DEPLOYMENT_SOURCE_FINGERPRINT") or "").strip()
+print(json.dumps({"ifMatch": fingerprint} if fingerprint else {}))
+PY
+)
+plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d "$plan_preview_request_body" "$API_BASE_URL/v1/plans/deployments/payments-api-prod")
+plan_id=$(PLAN_PREVIEW_JSON="$plan_preview" python3 - <<'PY'
+import json
+import os
+
+print(json.loads(os.environ["PLAN_PREVIEW_JSON"])["id"])
+PY
+)
+plan_preview_get=$(curl -fsS "$API_BASE_URL/v1/plans/$plan_id")
+plan_status=$(PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" python3 - <<'PY'
+import json
+import os
+
+plan_preview = json.loads(os.environ["PLAN_PREVIEW_JSON"])
+plan_preview_get = json.loads(os.environ["PLAN_PREVIEW_GET_JSON"])
+deployment_source_fingerprint = os.environ["DEPLOYMENT_SOURCE_FINGERPRINT"]
+
+assert plan_preview["deploymentName"] == "payments-api-prod", plan_preview
+assert plan_preview["status"] in {"ready", "failed"}, plan_preview
+assert isinstance(plan_preview.get("id"), str) and plan_preview["id"].startswith("plan_"), plan_preview
+assert isinstance(plan_preview.get("createdAt"), str) and plan_preview["createdAt"], plan_preview
+assert plan_preview["source"]["route"] == "/v1/overview/deployments/payments-api-prod", plan_preview
+assert isinstance(plan_preview["source"].get("fingerprint"), str) and plan_preview["source"]["fingerprint"], plan_preview
+if deployment_source_fingerprint:
+    assert plan_preview["source"]["fingerprint"] == deployment_source_fingerprint, (plan_preview, deployment_source_fingerprint)
+assert isinstance(plan_preview.get("operations", []), list), plan_preview
+assert isinstance((plan_preview.get("risk") or {}).get("reasons", []), list), plan_preview
+assert isinstance((plan_preview.get("approval") or {}).get("required"), bool), plan_preview
+if plan_preview["status"] == "ready":
+    assert plan_preview["operations"], plan_preview
+    assert not plan_preview.get("errors"), plan_preview
+else:
+    assert isinstance(plan_preview.get("errors"), list) and plan_preview["errors"], plan_preview
+    assert plan_preview["approval"]["required"] is True, plan_preview
+assert plan_preview_get == plan_preview, (plan_preview_get, plan_preview)
+print(plan_preview["status"])
+PY
+)
+if [[ "$plan_status" != "ready" ]]; then
+  echo "smoke-docker: expected compose stack to return a ready immutable plan preview for payments-api-prod, got $plan_status" >&2
+  exit 1
+fi
+apply_record=$(curl -fsS -X POST "$API_BASE_URL/v1/applies/plans/$plan_id")
+apply_id=$(APPLY_RECORD_JSON="$apply_record" python3 - <<'PY'
+import json
+import os
+
+print(json.loads(os.environ["APPLY_RECORD_JSON"])["id"])
+PY
+)
+apply_record_get=$(curl -fsS "$API_BASE_URL/v1/applies/$apply_id")
 deployment_events=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/events")
 worker_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 ui=$(curl -fsS "$API_BASE_URL/")
+plan_apply_ui=$(curl -fsS "$API_BASE_URL/?page=plan&deployment=payments-api-prod&planId=$plan_id&applyId=$apply_id")
 
-SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_EVENTS_JSON="$deployment_events" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" python3 - <<'PY'
+SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" APPLY_RECORD_JSON="$apply_record" APPLY_RECORD_GET_JSON="$apply_record_get" DEPLOYMENT_EVENTS_JSON="$deployment_events" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" PLAN_APPLY_UI_HTML="$plan_apply_ui" python3 - <<'PY'
 import json, os
 
 summary = json.loads(os.environ["SUMMARY_JSON"])
 applications = json.loads(os.environ["APPLICATIONS_JSON"])
 deployment_detail = json.loads(os.environ["DEPLOYMENT_DETAIL_JSON"])
+deployment_source_fingerprint = os.environ["DEPLOYMENT_SOURCE_FINGERPRINT"]
+plan_preview = json.loads(os.environ["PLAN_PREVIEW_JSON"])
+plan_preview_get = json.loads(os.environ["PLAN_PREVIEW_GET_JSON"])
+apply_record = json.loads(os.environ["APPLY_RECORD_JSON"])
+apply_record_get = json.loads(os.environ["APPLY_RECORD_GET_JSON"])
 deployment_events = json.loads(os.environ["DEPLOYMENT_EVENTS_JSON"])
 worker_resource_logs = json.loads(os.environ["WORKER_RESOURCE_LOGS_JSON"])
 ui = os.environ["UI_HTML"]
+plan_apply_ui = os.environ["PLAN_APPLY_UI_HTML"]
 
 assert summary["accountCount"] == 2, summary
 assert summary["environmentCount"] == 2, summary
@@ -161,6 +234,37 @@ assert deployment_detail["name"] == "payments-api-prod", deployment_detail
 assert deployment_detail["awsAccountId"] == "123456789012", deployment_detail
 assert deployment_detail["accountName"] == "prod-core", deployment_detail
 assert isinstance((deployment_detail.get("rollout") or {}).get("execution", []), list), deployment_detail
+if deployment_source_fingerprint:
+    assert deployment_detail.get("sourceFingerprint") == deployment_source_fingerprint, deployment_detail
+
+assert plan_preview["deploymentName"] == "payments-api-prod", plan_preview
+assert plan_preview["status"] == "ready", plan_preview
+assert isinstance(plan_preview.get("id"), str) and plan_preview["id"].startswith("plan_"), plan_preview
+assert isinstance(plan_preview.get("createdAt"), str) and plan_preview["createdAt"], plan_preview
+assert plan_preview["source"]["route"] == "/v1/overview/deployments/payments-api-prod", plan_preview
+assert isinstance(plan_preview["source"].get("fingerprint"), str) and plan_preview["source"]["fingerprint"], plan_preview
+if deployment_source_fingerprint:
+    assert plan_preview["source"]["fingerprint"] == deployment_source_fingerprint, (plan_preview, deployment_detail)
+assert isinstance(plan_preview.get("operations", []), list) and plan_preview["operations"], plan_preview
+assert isinstance((plan_preview.get("risk") or {}).get("reasons", []), list), plan_preview
+assert isinstance((plan_preview.get("approval") or {}).get("required"), bool), plan_preview
+assert plan_preview_get == plan_preview, (plan_preview_get, plan_preview)
+
+assert apply_record["planId"] == plan_preview["id"], (apply_record, plan_preview)
+assert apply_record["deploymentName"] == "payments-api-prod", apply_record
+assert apply_record["status"] == "failed", apply_record
+assert apply_record["error"] == "apply execution is disabled", apply_record
+assert isinstance(apply_record.get("id"), str) and apply_record["id"].startswith("apply_"), apply_record
+assert isinstance(apply_record.get("createdAt"), str) and apply_record["createdAt"], apply_record
+assert apply_record["details"] == [
+    "Tenet persisted this immutable apply request in read-only mode and did not contact AWS.",
+    "Live execution is intentionally disabled by default for this backend slice.",
+], apply_record
+assert apply_record["source"]["route"] == f"/v1/plans/{plan_preview['id']}", apply_record
+assert apply_record["source"]["planId"] == plan_preview["id"], apply_record
+assert apply_record["source"]["planStatus"] == "ready", apply_record
+assert apply_record["source"]["fingerprint"] == plan_preview["source"]["fingerprint"], (apply_record, plan_preview)
+assert apply_record_get == apply_record, (apply_record_get, apply_record)
 
 assert deployment_events["deploymentName"] == "payments-api-prod", deployment_events
 assert isinstance(deployment_events.get("events"), list), deployment_events
@@ -196,9 +300,41 @@ for fragment in (
     "Controller runtime events",
     "Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.",
     "Recent logs",
+    "Plan preview actions",
+    "Apply request actions",
+    "Plan preview approval guidance",
+    "Apply Plan",
+    "Open bookmarked workspace",
+    "Plan JSON",
+    "Open bookmarked apply",
+    "Apply JSON",
+    "Apply Plan will POST /v1/applies/plans/${planState.record.id}, persist an immutable apply request, and update this workspace URL with a shareable applyId.",
+    "Live execution is intentionally disabled by default, so failed immutable apply records are expected and useful for operator review.",
     "fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-logs?${params.toString()}`)",
+    "params.get('planId') || ''",
+    "params.get('applyId') || ''",
 ):
     assert fragment in ui, fragment
+
+for fragment in (
+    "Plan preview actions",
+    "Apply request actions",
+    "Plan preview approval guidance",
+    "Apply Plan",
+    "Open bookmarked workspace",
+    "Plan JSON",
+    "Open bookmarked apply",
+    "Apply JSON",
+    "Apply Plan activates only when a loaded persisted ready plan preview with a valid planId is present.",
+    "Live execution is intentionally disabled by default, so failed immutable apply records are expected and useful for operator review.",
+    "createNavLink(buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activePlanRecord.id, applyId: activeApplyRecord?.id || applyState?.applyId || '' }), 'Open bookmarked workspace', '_self')",
+    "createNavLink(buildPlanPreviewRoute(activePlanRecord.id), 'Plan JSON')",
+    "createNavLink(buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activeApplyRecord.planId || activePlanRecord?.id || currentPageState.planId, applyId: activeApplyRecord.id }), 'Open bookmarked apply', '_self')",
+    "createNavLink(buildApplyRequestRoute(activeApplyRecord.id), 'Apply JSON')",
+    "params.get('planId') || ''",
+    "params.get('applyId') || ''",
+):
+    assert fragment in plan_apply_ui, fragment
 PY
 
 controller_logs=""
