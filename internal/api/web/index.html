@@ -99,6 +99,15 @@
       .detail-step-meta-current { color: var(--blue); }
       .detail-step-meta-pending { color: var(--muted); }
       .detail-execution-meta, .detail-history-meta { display:grid; gap: 4px; margin-top: 6px; }
+      .drift-table-wrap { overflow-x: auto; }
+      .drift-table { width: 100%; border-collapse: collapse; }
+      .drift-table th, .drift-table td { text-align: left; padding: 12px 10px; border-top: 1px solid rgba(255,255,255,.06); vertical-align: top; font-size: 14px; }
+      .drift-table th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; border-top: 0; }
+      .drift-field { font-weight: 700; }
+      .severity-indicator { display: inline-flex; align-items: center; justify-content: center; min-width: 64px; padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; border: 1px solid transparent; }
+      .severity-indicator-high { background: rgba(255,123,123,.12); color: var(--red); border-color: rgba(255,123,123,.24); }
+      .severity-indicator-medium { background: rgba(244,201,93,.12); color: var(--yellow); border-color: rgba(244,201,93,.28); }
+      .severity-indicator-low { background: rgba(103,183,255,.12); color: var(--blue); border-color: rgba(103,183,255,.24); }
       .empty, .loading { padding: 32px; text-align:center; color: var(--muted); background: var(--panel); border:1px solid var(--line); border-radius:20px; }
       @media (max-width: 720px) {
         .hero, .row-top, .account-head { flex-direction: column; align-items: stretch; }
@@ -227,6 +236,94 @@
       const changeDetailsText = (changeDetails) => {
         const labels = changeDetailLabels(changeDetails);
         return labels.length ? labels.join('; ') : '—';
+      };
+      const driftSeverityRank = (severity) => {
+        switch (severity) {
+          case 'high':
+            return 3;
+          case 'medium':
+            return 2;
+          case 'low':
+            return 1;
+          default:
+            return 0;
+        }
+      };
+      const deriveDeploymentDriftRows = (detail) => {
+        const rows = [];
+        const desiredArtifact = artifact(detail.desiredArtifact);
+        const actualArtifact = artifact(detail.deployedArtifact) !== '—' ? artifact(detail.deployedArtifact) : runtimeArtifactText(detail.runtimeSummary?.deployedArtifact) || '—';
+        if (desiredArtifact !== '—' && actualArtifact !== '—' && desiredArtifact !== actualArtifact) {
+          rows.push({
+            field: 'artifact',
+            desired: desiredArtifact,
+            actual: actualArtifact,
+            severity: 'high',
+            search: [desiredArtifact, actualArtifact, detail.sync?.reason].filter(Boolean).join(' '),
+          });
+        }
+
+        const desiredGeneration = Number.isFinite(detail.desiredGeneration) ? detail.desiredGeneration : detail.runtimeSummary?.desiredGeneration;
+        const observedGeneration = Number.isFinite(detail.runtimeSummary?.observedGeneration) ? detail.runtimeSummary.observedGeneration : detail.observedGeneration;
+        if (Number.isFinite(desiredGeneration) && Number.isFinite(observedGeneration) && desiredGeneration !== observedGeneration) {
+          rows.push({
+            field: 'generation',
+            desired: String(desiredGeneration),
+            actual: String(observedGeneration),
+            severity: 'medium',
+            search: [detail.sync?.reason, detail.runtimeSummary?.summary].filter(Boolean).join(' '),
+          });
+        }
+
+        const runtimeContextSearch = [detail.sync?.reason, detail.runtimeSummary?.source, detail.runtimeSummary?.summary].filter(Boolean).join(' ');
+        if (detail.targetType && detail.runtimeSummary?.targetType && detail.targetType !== detail.runtimeSummary.targetType) {
+          rows.push({
+            field: 'runtimeContext.targetType',
+            desired: detail.targetType,
+            actual: detail.runtimeSummary.targetType,
+            severity: 'medium',
+            search: runtimeContextSearch,
+          });
+        }
+        if (detail.strategy && detail.runtimeSummary?.strategy && detail.strategy !== detail.runtimeSummary.strategy) {
+          rows.push({
+            field: 'runtimeContext.strategy',
+            desired: detail.strategy,
+            actual: detail.runtimeSummary.strategy,
+            severity: 'medium',
+            search: runtimeContextSearch,
+          });
+        }
+        if (detail.executionMode && detail.runtimeSummary?.executionMode && detail.executionMode !== detail.runtimeSummary.executionMode) {
+          rows.push({
+            field: 'runtimeContext.executionMode',
+            desired: detail.executionMode,
+            actual: detail.runtimeSummary.executionMode,
+            severity: 'medium',
+            search: runtimeContextSearch,
+          });
+        }
+
+        (detail.conditions || []).forEach((condition) => {
+          const type = textOrDash(condition.type);
+          const statusText = typeof condition.status === 'boolean' ? boolLabel(condition.status) : 'Unknown';
+          const desired = type === 'Healthy' ? 'True' : 'False';
+          const actual = [statusText, condition.reason, condition.message].filter(Boolean).join(' · ');
+          const severity = condition.type === 'Healthy' ? 'low' : 'high';
+          const driftCondition = condition.type === 'DriftDetected' && condition.status === true;
+          const unhealthyCondition = condition.type === 'Healthy' && condition.status === false;
+          if (driftCondition || unhealthyCondition) {
+            rows.push({
+              field: `condition.${condition.type || 'Unknown'}`,
+              desired,
+              actual,
+              severity,
+              search: [condition.type, condition.reason, condition.message].filter(Boolean).join(' '),
+            });
+          }
+        });
+
+        return rows;
       };
       const latestRuntimeTimestamp = (applications) => applications
         .map((deployment) => deployment.runtimeSummary?.timestamp)
@@ -1387,7 +1484,80 @@
 
         if (mode === 'drift') {
           const driftSection = createDetailSection(emptyTitle);
-          driftSection.append(createElement('div', 'detail-state', 'Field-level drift is not yet available from the current read model.'));
+          const driftRows = deriveDeploymentDriftRows(detail);
+          let driftQuery = '';
+          let driftSeverity = 'all';
+          let driftSort = 'field';
+          const driftControls = createElement('div', 'toolbar-grid');
+          const driftTableWrap = createElement('div', 'drift-table-wrap');
+          const renderDriftRows = () => {
+            const searchNeedle = driftQuery.trim().toLowerCase();
+            const filteredRows = driftRows
+              .filter((row) => driftSeverity === 'all' || row.severity === driftSeverity)
+              .filter((row) => {
+                if (!searchNeedle) return true;
+                return [row.field, row.desired, row.actual, row.severity, row.search].filter(Boolean).join(' ').toLowerCase().includes(searchNeedle);
+              })
+              .sort((left, right) => {
+                if (driftSort === 'severity') {
+                  const severityDiff = driftSeverityRank(right.severity) - driftSeverityRank(left.severity);
+                  if (severityDiff !== 0) return severityDiff;
+                }
+                return left.field.localeCompare(right.field);
+              });
+
+            if (!filteredRows.length) {
+              driftTableWrap.replaceChildren(createElement('div', 'detail-state', 'No field-level drift is currently derived from the deployment read model.'));
+              return;
+            }
+
+            const table = createElement('table', 'drift-table');
+            const headerRow = createElement('tr');
+            ['Field path', 'Desired', 'Actual', 'Severity'].forEach((label) => {
+              headerRow.append(createElement('th', '', label));
+            });
+            const thead = createElement('thead');
+            thead.append(headerRow);
+            const tbody = createElement('tbody');
+            filteredRows.forEach((row) => {
+              const tableRow = createElement('tr');
+              tableRow.append(
+                createElement('td', 'drift-field', row.field),
+                createElement('td', '', row.desired),
+                createElement('td', '', row.actual),
+              );
+              const severityCell = createElement('td');
+              severityCell.append(createElement('span', `severity-indicator severity-indicator-${row.severity}`, row.severity));
+              tableRow.append(severityCell);
+              tbody.append(tableRow);
+            });
+            table.append(thead, tbody);
+            driftTableWrap.replaceChildren(table);
+          };
+          driftControls.append(
+            createInput('Filter drift rows', '', 'Filter by field, value, or condition context', (event) => {
+              driftQuery = event.target.value || '';
+              renderDriftRows();
+            }),
+            createSelect('Severity', 'all', [
+              { value: 'all', label: 'All severities' },
+              { value: 'high', label: 'High' },
+              { value: 'medium', label: 'Medium' },
+              { value: 'low', label: 'Low' },
+            ], (event) => {
+              driftSeverity = event.target.value || 'all';
+              renderDriftRows();
+            }),
+            createSelect('Sort by', 'field', [
+              { value: 'field', label: 'Field path' },
+              { value: 'severity', label: 'Severity' },
+            ], (event) => {
+              driftSort = event.target.value || 'field';
+              renderDriftRows();
+            }),
+          );
+          driftSection.append(driftControls, driftTableWrap);
+          renderDriftRows();
           sections.push(driftSection);
 
           const conditionsSection = createDetailSection('Status conditions');

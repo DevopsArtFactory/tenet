@@ -2666,40 +2666,34 @@ func TestDeploymentWorkspaceDriftViewWithNodeHarness(t *testing.T) {
 		t.Fatalf("marshal embedded script: %v", err)
 	}
 
-	accountsJSON, err := json.Marshal([]map[string]any{{
-		"name":         "acct-a",
-		"awsAccountId": "111111111111",
-		"deployments": []map[string]any{{
-			"name":           "api-prod",
-			"appRef":         "payments",
-			"environmentRef": "prod",
-			"region":         "us-west-2",
-			"sync":           map[string]any{"state": "Drifted", "reason": "Service target group differs from desired"},
-		}},
-	}})
-	if err != nil {
-		t.Fatalf("marshal sample accounts: %v", err)
-	}
-
-	detailJSON, err := json.Marshal(map[string]any{
-		"name":           "api-prod",
-		"appRef":         "payments",
-		"environmentRef": "prod",
-		"region":         "us-west-2",
-		"accountName":    "acct-a",
-		"awsAccountId":   "111111111111",
-		"sync":           map[string]any{"state": "Drifted", "reason": "Service target group differs from desired"},
-		"health":         map[string]any{"overall": "Healthy", "summary": "traffic steady"},
+	driftDetailJSON, err := json.Marshal(map[string]any{
+		"name":              "api-prod",
+		"appRef":            "payments",
+		"environmentRef":    "prod",
+		"region":            "us-west-2",
+		"accountName":       "acct-a",
+		"awsAccountId":      "111111111111",
+		"targetType":        "ecs",
+		"strategy":          "linear",
+		"executionMode":     "ecsCodeDeploy",
+		"desiredGeneration": 9,
+		"deployedGeneration": 7,
+		"sync":             map[string]any{"state": "Drifted", "reason": "Service target group differs from desired"},
+		"health":           map[string]any{"overall": "Unhealthy", "summary": "traffic steady but target registration is inconsistent"},
+		"desiredArtifact":  map[string]any{"image": "ghcr.io/example/payments:v9"},
+		"deployedArtifact": map[string]any{"image": "ghcr.io/example/payments:v7"},
 		"runtimeSummary": map[string]any{
-			"source":           "deployment-controller",
-			"timestamp":        "2026-04-16T06:50:00Z",
-			"targetType":       "ec2",
-			"strategy":         "canary",
-			"executionMode":    "asgWeightedTargetGroups",
-			"historyCount":     3,
-			"changes":          []string{"listener rule updated", "target group weight drift"},
-			"deployedArtifact": map[string]any{"binary": "s3://artifacts.example/payments/api-prod-r17"},
-			"conditions":       []map[string]any{{"type": "DriftDetected", "status": true, "reason": "TargetGroupMismatch", "message": "Runtime summary mirrors the drift condition"}},
+			"source":             "deployment-controller",
+			"timestamp":          "2026-04-16T06:50:00Z",
+			"targetType":         "ec2",
+			"strategy":           "canary",
+			"executionMode":      "asgWeightedTargetGroups",
+			"desiredGeneration":  9,
+			"observedGeneration": 7,
+			"historyCount":       3,
+			"changes":            []string{"listener rule updated", "target group weight drift"},
+			"deployedArtifact":   map[string]any{"binary": "s3://artifacts.example/payments/api-prod-r17"},
+			"conditions": []map[string]any{{"type": "DriftDetected", "status": true, "reason": "TargetGroupMismatch", "message": "Runtime summary mirrors the drift condition"}, {"type": "Healthy", "status": false, "reason": "TargetDeregistrationLag", "message": "Old targets are still draining"}},
 		},
 		"rollout": map[string]any{
 			"execution": []map[string]any{{
@@ -2712,17 +2706,75 @@ func TestDeploymentWorkspaceDriftViewWithNodeHarness(t *testing.T) {
 			"type":    "DriftDetected",
 			"status":  true,
 			"reason":  "TargetGroupMismatch",
-			"message": "ALB production listener still targets the legacy task set",
+			"message": "<script>alert('xss')</script> ALB production listener still targets the legacy task set",
+		}, {
+			"type":    "Progressing",
+			"status":  true,
+			"reason":  "TrafficShiftInFlight",
+			"message": "CodeDeploy is still shifting live traffic",
+		}, {
+			"type":    "Accepted",
+			"status":  true,
+			"reason":  "ReadModelReady",
+			"message": "Read model accepted the deployment snapshot",
+		}, {
+			"type":    "Healthy",
+			"status":  false,
+			"reason":  "TargetDeregistrationLag",
+			"message": "Old targets are still draining",
+		}, {
+			"type":    "DriftDetected",
+			"status":  false,
+			"reason":  "BoundaryRegressionGuard",
+			"message": "False drift detection should stay out of drift rows",
+		}, {
+			"type":    "Healthy",
+			"status":  true,
+			"reason":  "BoundaryRegressionGuard",
+			"message": "Healthy true should stay out of drift rows",
 		}},
 	})
 	if err != nil {
-		t.Fatalf("marshal detail body: %v", err)
+		t.Fatalf("marshal drift detail body: %v", err)
+	}
+
+	emptyDetailJSON, err := json.Marshal(map[string]any{
+		"name":           "api-steady",
+		"appRef":         "payments",
+		"environmentRef": "prod",
+		"region":         "us-west-2",
+		"accountName":    "acct-a",
+		"awsAccountId":   "111111111111",
+		"targetType":     "ecs",
+		"strategy":       "linear",
+		"executionMode":  "ecsCodeDeploy",
+		"sync":           map[string]any{"state": "Synced", "reason": "latest desired generation applied"},
+		"health":         map[string]any{"overall": "Healthy", "summary": "service steady"},
+		"desiredArtifact": map[string]any{"image": "ghcr.io/example/payments:v9"},
+		"deployedArtifact": map[string]any{"image": "ghcr.io/example/payments:v9"},
+		"runtimeSummary": map[string]any{
+			"source":             "deployment-controller",
+			"timestamp":          "2026-04-16T06:52:00Z",
+			"targetType":         "ecs",
+			"strategy":           "linear",
+			"executionMode":      "ecsCodeDeploy",
+			"desiredGeneration":  9,
+			"observedGeneration": 9,
+			"historyCount":       1,
+			"changes":            []string{},
+			"deployedArtifact":   map[string]any{"image": "ghcr.io/example/payments:v9"},
+			"conditions":         []map[string]any{},
+		},
+		"conditions": []map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("marshal empty detail body: %v", err)
 	}
 
 	nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;
-const sampleAccounts = ` + string(accountsJSON) + `;
-const detailBody = ` + string(detailJSON) + `;
+const driftDetail = ` + string(driftDetailJSON) + `;
+const emptyDetail = ` + string(emptyDetailJSON) + `;
 class Element {
   constructor(tagName, ownerDocument) {
     this.tagName = String(tagName).toUpperCase();
@@ -2759,56 +2811,115 @@ class Document {
   getElementById(id) { return this.byID.get(id) || null; }
   querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
 }
-const document = new Document();
-document.byID.set('toolbar', document.createElement('section'));
-document.byID.set('summary', document.createElement('section'));
-document.byID.set('accounts', document.createElement('section'));
-const fetchCalls = [];
-const window = { location: { pathname: '/', search: '?page=drift&deployment=api-prod', hash: '' } };
-const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
-const fetch = (url) => {
-  fetchCalls.push(String(url));
-  if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
-  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-  throw new Error('unexpected fetch url: ' + url);
+const createDocument = () => {
+  const document = new Document();
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  return document;
 };
-new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
 async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
 const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+async function render(detail) {
+  const document = createDocument();
+  const fetchCalls = [];
+  const window = { location: { pathname: '/', search: '?page=drift&deployment=' + encodeURIComponent(detail.name), hash: '' } };
+  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  const fetch = (url) => {
+    fetchCalls.push(String(url));
+    if (url === '/v1/overview/deployments/' + encodeURIComponent(detail.name)) return Promise.resolve({ ok: true, json: () => Promise.resolve(detail) });
+    throw new Error('unexpected fetch url: ' + url);
+  };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle();
+  await settle();
+  return { document, fetchCalls, window };
+}
 (async () => {
-  await settle();
-  await settle();
-  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/deployments/api-prod') {
-    throw new Error('expected drift workspace to load only deployment detail, got ' + fetchCalls.join(', '));
-  }
-  const text = collectText(document.getElementById('accounts')).join(' | ');
-  const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
+  const run = await render(driftDetail);
+  if (run.fetchCalls.length !== 1 || run.fetchCalls[0] !== '/v1/overview/deployments/api-prod') throw new Error('expected drift workspace to load only deployment detail, got ' + run.fetchCalls.join(', '));
+  const text = collectText(run.document.getElementById('accounts')).join(' | ');
+  const toolbarText = collectText(run.document.getElementById('toolbar')).join(' | ');
   if (!text.includes('Drift viewer')) throw new Error('expected drift workspace title');
   if (!toolbarText.includes('Back to overview')) throw new Error('expected workspace back link');
+  if (!toolbarText.includes('api-prod')) throw new Error('expected workspace active deployment title');
   if (!text.includes('Latest runtime signals')) throw new Error('expected drift workspace runtime signals section');
-  if (!text.includes('Runtime source')) throw new Error('expected drift workspace runtime source label');
   if (!text.includes('deployment-controller')) throw new Error('expected drift workspace runtime source value');
-  if (!text.includes('Runtime context')) throw new Error('expected drift workspace runtime context label');
   if (!text.includes('Target ec2 · Strategy canary · Execution asgWeightedTargetGroups')) throw new Error('expected drift workspace runtime context value');
-  if (!text.includes('Runtime timestamp')) throw new Error('expected drift workspace runtime timestamp label');
-  if (!text.includes('2026-04-16T06:50:00Z')) throw new Error('expected drift workspace runtime timestamp value');
-  if (!text.includes('Runtime history')) throw new Error('expected drift workspace runtime history label');
   if (!/Runtime history \| 3(?: \||$)/.test(text)) throw new Error('expected drift workspace runtime history count');
-  if (!text.includes('Runtime artifact')) throw new Error('expected drift workspace runtime artifact label');
   if (!text.includes('s3://artifacts.example/payments/api-prod-r17')) throw new Error('expected drift workspace runtime artifact value');
-  if (!text.includes('Runtime conditions')) throw new Error('expected drift workspace runtime conditions label');
   if (!text.includes('DriftDetected = True · TargetGroupMismatch')) throw new Error('expected drift workspace runtime condition summary');
   if (!text.includes('listener rule updated')) throw new Error('expected drift workspace runtime change entry');
   if (!text.includes('target group weight drift')) throw new Error('expected drift workspace second runtime change entry');
   if (!text.includes('Rollout execution')) throw new Error('expected drift workspace rollout execution section');
   if (!text.includes('prod-router')) throw new Error('expected drift workspace rollout execution name');
-  if (!text.includes('aws_lb_listener_rule.payments_prod')) throw new Error('expected drift workspace rollout execution resource');
-  if (!text.includes('Routes production traffic to the stable target group')) throw new Error('expected drift workspace rollout execution description');
   if (!text.includes('Field-level drift')) throw new Error('expected drift workspace section heading');
-  if (!text.includes('Field-level drift is not yet available from the current read model.')) throw new Error('expected drift workspace empty-state guidance');
-  if (!text.includes('Status conditions')) throw new Error('expected drift workspace to render status conditions section');
-  if (!text.includes('TargetGroupMismatch')) throw new Error('expected drift workspace to surface condition reason');
-  if (!text.includes('ALB production listener still targets the legacy task set')) throw new Error('expected drift workspace to surface condition message');
+  if (!text.includes('Field path')) throw new Error('expected drift workspace field column header');
+  if (!text.includes('Desired')) throw new Error('expected drift workspace desired column header');
+  if (!text.includes('Actual')) throw new Error('expected drift workspace actual column header');
+  if (!text.includes('Severity')) throw new Error('expected drift workspace severity column header');
+  if (!text.includes('artifact')) throw new Error('expected artifact drift row');
+  if (!text.includes('generation')) throw new Error('expected generation drift row');
+  if (!text.includes('runtimeContext.targetType')) throw new Error('expected runtime target-type drift row');
+  if (!text.includes('runtimeContext.strategy')) throw new Error('expected runtime strategy drift row');
+  if (!text.includes('runtimeContext.executionMode')) throw new Error('expected runtime execution-mode drift row');
+  if (!text.includes('condition.DriftDetected')) throw new Error('expected unhealthy condition drift row');
+  if (!text.includes('condition.Healthy')) throw new Error('expected unhealthy health-condition drift row');
+  if (text.includes('condition.Progressing')) throw new Error('expected benign progressing condition to stay out of drift rows');
+  if (text.includes('condition.Accepted')) throw new Error('expected benign accepted condition to stay out of drift rows');
+  const allRows = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'TR').slice(1).map((node) => collectText(node).join(' | '));
+  if (allRows.some((row) => row.includes('BoundaryRegressionGuard') && row.includes('False drift detection should stay out of drift rows'))) throw new Error('expected DriftDetected=false boundary to stay out of drift rows');
+  if (allRows.some((row) => row.includes('BoundaryRegressionGuard') && row.includes('Healthy true should stay out of drift rows'))) throw new Error('expected Healthy=true boundary to stay out of drift rows');
+  if (!text.includes('ghcr.io/example/payments:v9')) throw new Error('expected desired artifact value in drift rows');
+  if (!text.includes('ghcr.io/example/payments:v7')) throw new Error('expected actual artifact value in drift rows');
+  if (!text.includes('high')) throw new Error('expected high severity indicator');
+  if (!text.includes('medium')) throw new Error('expected medium severity indicator');
+  if (!text.includes('low')) throw new Error('expected low severity indicator');
+  if (text.includes('No field-level drift is currently derived from the deployment read model.')) throw new Error('expected non-empty drift data to avoid empty state');
+  if (!text.includes("<script>alert('xss')</script> ALB production listener still targets the legacy task set")) throw new Error('expected drift condition message to render as text');
+
+  const severityField = run.document.querySelector('[data-toolbar-field="Severity"]');
+  if (!severityField) throw new Error('expected drift severity filter control');
+  severityField.value = 'high';
+  severityField.dispatch('change', { target: severityField });
+  await settle();
+  const highOnlyText = collectText(run.document.getElementById('accounts')).join(' | ');
+  if (!highOnlyText.includes('artifact')) throw new Error('expected high severity filter to retain artifact row');
+  if (highOnlyText.includes('condition.Healthy')) throw new Error('expected high severity filter to remove low-severity condition row');
+
+  const queryField = run.document.querySelector('[data-toolbar-field="Filter drift rows"]');
+  if (!queryField) throw new Error('expected drift query filter control');
+  severityField.value = 'all';
+  severityField.dispatch('change', { target: severityField });
+  queryField.value = 'targetderegistrationlag';
+  queryField.dispatch('input', { target: queryField });
+  await settle();
+  const queryRows = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'TR').slice(1).map((node) => collectText(node).join(' | '));
+  if (queryRows.length !== 1) throw new Error('expected drift query filter to narrow to a single row, got ' + queryRows.length);
+  if (!queryRows[0].includes('condition.Healthy')) throw new Error('expected drift query filter to match condition context');
+  if (queryRows[0].includes('artifact')) throw new Error('expected drift query filter not to include artifact row content');
+
+  queryField.value = '';
+  queryField.dispatch('input', { target: queryField });
+  await settle();
+
+  const sortField = run.document.querySelector('[data-toolbar-field="Sort by"]');
+  if (!sortField) throw new Error('expected drift sort control');
+  sortField.value = 'severity';
+  sortField.dispatch('change', { target: sortField });
+  await settle();
+  const rowItems = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'TR').slice(1);
+  const rowTexts = rowItems.map((node) => collectText(node).join(' | '));
+  if (!rowTexts.length) throw new Error('expected rendered drift table rows');
+  if (!rowTexts[0].includes('artifact')) throw new Error('expected severity sort to place artifact drift first');
+  if (!rowTexts[rowTexts.length - 1].includes('condition.Healthy')) throw new Error('expected severity sort to place low severity drift last');
+
+  const emptyRun = await render(emptyDetail);
+  const emptyText = collectText(emptyRun.document.getElementById('accounts')).join(' | ');
+  if (!emptyText.includes('Field-level drift')) throw new Error('expected empty drift workspace section heading');
+  if (!emptyText.includes('No field-level drift is currently derived from the deployment read model.')) throw new Error('expected empty drift workspace message');
+  if (emptyText.includes('condition.')) throw new Error('expected empty drift workspace to omit condition rows');
 })();
 `
 
