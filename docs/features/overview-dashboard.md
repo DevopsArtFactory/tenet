@@ -175,7 +175,8 @@ Current drift workspace behavior:
 - shows additive runtime artifact/condition rows from `runtimeSummary.deployedArtifact` / `runtimeSummary.conditions`
 - keeps machine-readable `runtimeSummary.changes[]` rows while also rendering human-readable `runtimeSummary.changeDetails[]`
 - shows deployment context and status conditions
-- derives a real read-only `Field-level drift` table from the deployment-detail payload, comparing desired artifact/generation/runtime intent against current runtime signals and surfacing unhealthy or drift conditions with client-side severity filtering/sorting
+- prefers backend-authored additive `managedDrift[]` rows from the deployment-detail payload when present, normalizes them into the same safe read-only table, and falls back to the existing client-derived artifact/generation/runtime-intent comparisons for older payloads
+- keeps client-side severity filtering, query filtering, and sorting consistent across both backend-authored and fallback-derived drift rows
 - keeps the toolbar `Audit log` link deployment-scoped so operators land on `/?page=audit&deployment={name}` instead of the global audit slice
 
 ### Plan/apply workspace

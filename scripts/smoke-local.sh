@@ -257,9 +257,12 @@ assert len(group_detail['deployments']) == 1, group_detail
 assert group_detail['deployments'][0]['name'] == 'payments-api-prod', group_detail
 deployment_runtime_summary = deployment_detail.get('runtimeSummary') or {}
 deployment_history = deployment_detail.get('history') or []
+managed_drift = deployment_detail.get('managedDrift')
 assert deployment_detail['name'] == 'payments-api-prod', deployment_detail
 assert isinstance(deployment_detail['sourceFingerprint'], str) and deployment_detail['sourceFingerprint'].startswith('plan_'), deployment_detail
 assert isinstance(deployment_runtime_summary.get('changeDetails', []), list), deployment_detail
+if managed_drift is not None:
+    assert isinstance(managed_drift, list), deployment_detail
 if deployment_history:
     assert isinstance(deployment_history[0].get('changeDetails', []), list), deployment_detail
 assert deployment_events_fixture['deploymentName'] == 'payments-api-prod', deployment_events_fixture
@@ -358,6 +361,7 @@ assert "buildPageURL('account', { accountId: deployment.awsAccountId })" in ui, 
 assert "buildPageURL('application', { deployment: deployment.name })" in ui, ui
 assert 'Drift view' in ui, ui
 assert 'Plan/apply' in ui, ui
+assert 'Backend-authored managed drift rows are preferred when present. Older deployment-detail payloads fall back to client-derived drift from the deployment read model.' in ui, ui
 assert 'Controller runtime events' in ui, ui
 assert 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.' in ui, ui
 assert 'Loading controller runtime events…' in ui, ui
