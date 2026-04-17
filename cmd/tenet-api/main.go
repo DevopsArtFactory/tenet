@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/api"
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
@@ -39,9 +41,14 @@ func main() {
 	planStorePath := envOrDefault("TENET_PLAN_STORE_PATH", defaultPlanPreviewStorePath())
 	redisAddr := os.Getenv("TENET_REDIS_ADDR")
 	statusSeedPath := os.Getenv("TENET_STATUS_SEED_PATH")
+	requestTimeout, err := requestTimeoutFromEnv()
+	if err != nil {
+		log.Fatal(err)
+	}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	info := buildinfo.Current(version, commit)
-	log.Printf("starting tenet-api version=%s commit=%s addr=%s repo_root=%s status_backend=%s status_path=%s plan_store_path=%s redis_addr=%s", info.Version, info.Commit, addr, repoRoot, statusBackend, statusPath, planStorePath, redisAddr)
+	log.Printf("starting tenet-api version=%s commit=%s addr=%s repo_root=%s status_backend=%s status_path=%s plan_store_path=%s redis_addr=%s request_timeout=%s", info.Version, info.Commit, addr, repoRoot, statusBackend, statusPath, planStorePath, redisAddr, requestTimeout)
 
 	store := mustOpenStatusStore(statusBackend, statusPath, redisAddr)
 	if store != nil {
@@ -50,6 +57,8 @@ func main() {
 		}
 	}
 	options := newAPIOptionsWithPlanStore(info, repoRoot, store, planStorePath)
+	options.Logger = logger
+	options.RequestTimeout = requestTimeout
 
 	if err := http.ListenAndServe(addr, api.NewRouter(options)); err != nil {
 		log.Fatal(err)
@@ -385,4 +394,20 @@ func envOrDefault(name, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func requestTimeoutFromEnv() (time.Duration, error) {
+	value := strings.TrimSpace(os.Getenv("TENET_API_REQUEST_TIMEOUT"))
+	if value == "" {
+		return 30 * time.Second, nil
+	}
+
+	timeout, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("parse TENET_API_REQUEST_TIMEOUT: %w", err)
+	}
+	if timeout < 0 {
+		return 0, fmt.Errorf("TENET_API_REQUEST_TIMEOUT must be greater than or equal to 0")
+	}
+	return timeout, nil
 }

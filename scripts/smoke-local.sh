@@ -273,3 +273,29 @@ for event in events_payload['events']:
     assert event.get('source') == 'controller', events_payload
 print('smoke-local: controller changeDetails path ok')
 PY
+
+LOG_FILE_PATH="$LOG_FILE" python3 - <<'PY'
+import json, os
+
+entries = []
+with open(os.environ["LOG_FILE_PATH"], "r", encoding="utf-8") as handle:
+    for raw in handle:
+        line = raw.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if entry.get("msg") == "http_request":
+            entries.append(entry)
+
+assert entries, "expected structured http_request log lines"
+healthz = next((entry for entry in entries if entry.get("path") == "/healthz"), None)
+assert healthz, entries
+for field in ("request_id", "method", "path", "status", "duration_ms", "result"):
+    assert field in healthz, healthz
+assert healthz["method"] == "GET", healthz
+assert healthz["status"] == 200, healthz
+assert healthz["result"] == "success", healthz
+PY

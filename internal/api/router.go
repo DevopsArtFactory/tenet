@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
@@ -39,6 +41,8 @@ func respondLookupError(w http.ResponseWriter, err error) {
 // Options configures the API router.
 type Options struct {
 	BuildInfo                      buildinfo.Info
+	Logger                         *slog.Logger
+	RequestTimeout                 time.Duration
 	CatalogSummary                 func() (catalog.Summary, error)
 	CatalogDeployments             func() ([]catalog.DeploymentView, error)
 	CatalogEnvironments            func() ([]catalog.EnvironmentView, error)
@@ -61,6 +65,11 @@ type Options struct {
 
 // NewRouter builds the API router for the Tenet control plane.
 func NewRouter(options Options) http.Handler {
+	logger := options.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
@@ -442,5 +451,10 @@ func NewRouter(options Options) http.Handler {
 		_ = json.NewEncoder(w).Encode(snapshot)
 	})
 
-	return requestIDMiddleware(mux)
+	handler := http.Handler(mux)
+	handler = panicRecoveryMiddleware(logger, handler)
+	handler = requestTimeoutMiddleware(options.RequestTimeout, handler)
+	handler = requestLoggingMiddleware(logger, handler)
+	handler = requestIDMiddleware(handler)
+	return handler
 }

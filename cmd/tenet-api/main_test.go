@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
@@ -51,6 +52,60 @@ func TestAPIOptionsOverviewDeploymentUsesNamedSnapshotLookup(t *testing.T) {
 	if detail.Name != "api-prod" || detail.DeployedArtifact.Image != "payments-api:v1" || detail.AccountName != "prod-core" {
 		t.Fatalf("unexpected deployment detail: %+v", detail)
 	}
+}
+
+func TestRequestTimeoutFromEnv(t *testing.T) {
+	t.Run("defaults to thirty seconds", func(t *testing.T) {
+		t.Setenv("TENET_API_REQUEST_TIMEOUT", "")
+
+		timeout, err := requestTimeoutFromEnv()
+		if err != nil {
+			t.Fatalf("requestTimeoutFromEnv returned error: %v", err)
+		}
+		if timeout != 30*time.Second {
+			t.Fatalf("expected 30s default, got %s", timeout)
+		}
+	})
+
+	t.Run("accepts explicit disable", func(t *testing.T) {
+		t.Setenv("TENET_API_REQUEST_TIMEOUT", "0")
+
+		timeout, err := requestTimeoutFromEnv()
+		if err != nil {
+			t.Fatalf("requestTimeoutFromEnv returned error: %v", err)
+		}
+		if timeout != 0 {
+			t.Fatalf("expected disabled timeout, got %s", timeout)
+		}
+	})
+
+	t.Run("parses durations", func(t *testing.T) {
+		t.Setenv("TENET_API_REQUEST_TIMEOUT", "45s")
+
+		timeout, err := requestTimeoutFromEnv()
+		if err != nil {
+			t.Fatalf("requestTimeoutFromEnv returned error: %v", err)
+		}
+		if timeout != 45*time.Second {
+			t.Fatalf("expected 45s timeout, got %s", timeout)
+		}
+	})
+
+	t.Run("rejects invalid durations", func(t *testing.T) {
+		t.Setenv("TENET_API_REQUEST_TIMEOUT", "not-a-duration")
+
+		if _, err := requestTimeoutFromEnv(); err == nil {
+			t.Fatalf("expected invalid duration error")
+		}
+	})
+
+	t.Run("rejects negative durations", func(t *testing.T) {
+		t.Setenv("TENET_API_REQUEST_TIMEOUT", "-1s")
+
+		if _, err := requestTimeoutFromEnv(); err == nil {
+			t.Fatalf("expected negative duration error")
+		}
+	})
 }
 
 func TestAPIOptionsOverviewDeploymentReturnsCatalogOnlyDetailWhenSnapshotMissing(t *testing.T) {
