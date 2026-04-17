@@ -244,7 +244,7 @@
         return steps.length ? steps.join(' → ') : '—';
       };
       const metricValue = (value) => value ?? '—';
-      const generationValue = (value) => Number.isFinite(value) ? String(value) : '—';
+      const generationValue = (value) => Number.isFinite(value) && value > 0 ? String(value) : '—';
       const generationsText = (value) => {
         const desired = generationValue(value?.desiredGeneration);
         const observed = generationValue(value?.observedGeneration);
