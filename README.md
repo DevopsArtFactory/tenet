@@ -80,11 +80,13 @@ Use `TENET_API_REQUEST_TIMEOUT` to bound request handling. The default is `30s`;
 For the current read-only plan/apply flow, a typical local operator path is:
 - `GET /v1/overview/applications/{deploymentName}` or `GET /v1/overview/deployments/{deploymentName}` to inspect the deployment and capture its additive `sourceFingerprint`
 - open `http://localhost:8080/?page=audit` at any point for the bookmarkable audit page backed by `GET /v1/audit-logs`; it renders newest-first immutable plan/apply activity with explicit loading, empty, unavailable, and fetch-error states plus `_self` links back into the application and plan/apply drill-downs. Add `&limit={n}` to the page URL when you want the embedded view to request a smaller newest-first window from the API.
+- `GET /v1/audit-logs?deployment={deploymentName}` when you want only one deployment's immutable plan/apply entries without changing the route shape
 - `POST /v1/plans/deployments/{deploymentName}` with optional `{"ifMatch":"<sourceFingerprint>"}` to persist an immutable preview for the reviewed state
 - open `http://localhost:8080/?page=plan&deployment=payments-api-prod&planId={planId}` for the bookmarkable plan workspace; `Apply Plan` activates only after that persisted ready preview is loaded with a valid `planId`
 - `POST /v1/applies/plans/{planId}` to persist an immutable apply request derived from that ready preview, then reopen the same workspace at `http://localhost:8080/?page=plan&deployment=payments-api-prod&planId={planId}&applyId={applyId}`
 - `GET /v1/applies/{applyId}` to reopen the stored apply request directly; this backend slice is disabled by default for live execution, so failed immutable apply records are expected and useful because they preserve operator-reviewed intent plus explicit error/details without mutating AWS
 - `GET /v1/audit-logs?limit={n}` to project those persisted immutable plan/apply records into a newest-first local audit timeline; `/v1/audit-logs` is the preferred v1 route shape for this local timeline, and actor information is unavailable because the immutable plan preview and apply request stores do not persist operator identity
+- `GET /v1/audit-logs?deployment={deploymentName}&limit={n}` to keep the same newest-first and limit behavior while narrowing the timeline to one deployment; when no persisted audit records match, the API still returns `200 OK` with `entries: []`
 
 Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis. Use `make smoke-docker` when you need to validate `compose.yaml`, confirm the `api`/`controller`/`redis` service contract, and prove the containerized local stack plus representative `Request-Id` headers, correlated structured API request logs, controller logs, deployment events, resource-log routes, `GET /v1/audit-logs`, the bookmarkable `/?page=audit&limit={n}` audit view, immutable plan/apply read models, and embedded operator drill-down labels are reachable end to end.
 
@@ -166,9 +168,11 @@ These routes are additive and local-friendly. They persist immutable records to 
 
 The same immutable stores also back a read-only audit projection route:
 - `GET /v1/audit-logs`
+- `GET /v1/audit-logs?deployment={deploymentName}`
 - `GET /v1/audit-logs?limit={n}`
+- `GET /v1/audit-logs?deployment={deploymentName}&limit={n}`
 
-This timeline is newest-first, projects persisted plan preview and apply request records, derives `appRef` / `environmentRef` from the local catalog when possible, and keeps actor identity explicit by returning `actor.available=false` because this slice does not persist operator auth data. The embedded UI now renders that route at `/?page=audit` with explicit loading, empty, unavailable, and generic fetch-error states.
+This timeline is newest-first, projects persisted plan preview and apply request records, derives `appRef` / `environmentRef` from the local catalog when possible, and keeps actor identity explicit by returning `actor.available=false` because this slice does not persist operator auth data. `deployment` is optional and must name exactly one deployment when present. A deployment filter with no matching persisted records still returns `200 OK` with `entries: []` so local operators can distinguish "no audit rows yet" from transport failure. The embedded UI now renders that route at `/?page=audit` with explicit loading, empty, unavailable, and generic fetch-error states.
 
 Tenet also exposes a read-only deployment events slice for the same drill-down workflow:
 - `GET /v1/overview/deployments/{deploymentName}/events`

@@ -5,11 +5,15 @@ Tenet now exposes a small read-only audit timeline derived from the immutable op
 ## Route shape
 
 - `GET /v1/audit-logs`
+- `GET /v1/audit-logs?deployment={deploymentName}`
 - `GET /v1/audit-logs?limit={n}`
+- `GET /v1/audit-logs?deployment={deploymentName}&limit={n}`
 
 `/v1/audit-logs` is the preferred v1 route shape for this slice because the rest of the API already favors direct collection nouns such as `/v1/plans`, `/v1/applies`, and `/v1/catalog/...` instead of introducing an extra `/v1/audit/logs` hierarchy.
 
-`limit` is optional and must be a positive integer when present. The response is always newest-first.
+`limit` is optional and must be a positive integer when present.
+`deployment` is optional and must name exactly one deployment when present.
+The response is always newest-first.
 
 ## Source of truth
 
@@ -20,6 +24,8 @@ The timeline is projected from:
 - immutable apply request records persisted to `TENET_APPLY_STORE_PATH`
 
 When the local repository catalog is available, the projection also enriches entries with `appRef` and `environmentRef` by matching the persisted `deploymentName` against the compiled deployment listing.
+
+Empty filter results stay explicit: the route returns `entries: []` with `200 OK` when the selected deployment exists but has no persisted audit records yet.
 
 ## Response contract
 

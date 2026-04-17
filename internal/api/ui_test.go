@@ -935,6 +935,14 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"assert 'Audit log is currently unavailable.' in audit_ui, audit_ui",
 		"assert \"const route = limit > 0 ? `/v1/audit-logs?limit=${encodeURIComponent(String(limit))}` : '/v1/audit-logs';\" in audit_ui, audit_ui",
 		"assert \"fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`)\" in ui, ui",
+		"audit_logs_filtered=$(curl -fsS \"http://$HOST:$PORT/v1/audit-logs?deployment=payments-api-prod&limit=1\")",
+		"audit_logs_empty=$(curl -fsS \"http://$HOST:$PORT/v1/audit-logs?deployment=worker-prod\")",
+		"AUDIT_LOGS_FILTERED_JSON=\"$audit_logs_filtered\"",
+		"AUDIT_LOGS_EMPTY_JSON=\"$audit_logs_empty\"",
+		"audit_logs_filtered = json.loads(os.environ['AUDIT_LOGS_FILTERED_JSON'])",
+		"audit_logs_empty = json.loads(os.environ['AUDIT_LOGS_EMPTY_JSON'])",
+		"assert len(audit_logs_filtered['entries']) == 1, audit_logs_filtered",
+		"assert audit_logs_empty['entries'] == [], audit_logs_empty",
 	} {
 		if !strings.Contains(text, fragment) {
 			t.Fatalf("expected smoke-local.sh to include %q", fragment)
@@ -1110,6 +1118,8 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis.",
 			"Use `make smoke-docker` when you need to validate `compose.yaml`, confirm the `api`/`controller`/`redis` service contract, and prove the containerized local stack plus representative `Request-Id` headers, correlated structured API request logs, controller logs, deployment events, resource-log routes, `GET /v1/audit-logs`, the bookmarkable `/?page=audit&limit={n}` audit view, immutable plan/apply read models, and embedded operator drill-down labels are reachable end to end.",
 			"checks representative endpoints plus deployment-events/resource-logs/audit-log JSON shapes, verifies representative `Request-Id` response headers, fetches `GET /v1/audit-logs`,",
+			"`GET /v1/audit-logs?deployment={deploymentName}`",
+			"`GET /v1/audit-logs?deployment={deploymentName}&limit={n}`",
 			"fetches the bookmarkable `/?page=audit&limit={n}` audit workspace URL",
 			"POST /v1/plans/deployments/payments-api-prod",
 			"GET /v1/plans/{planId}",

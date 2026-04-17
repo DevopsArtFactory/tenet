@@ -607,7 +607,7 @@ func TestRouterAuditLogs(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 		AuditLogs: func(ctx context.Context, query auditlog.Query) (auditlog.Result, error) {
-			if query.Limit != 2 {
+			if query.Limit != 2 || query.DeploymentName != "api-prod" {
 				t.Fatalf("expected limit=2 query, got %+v", query)
 			}
 			return auditlog.Result{
@@ -626,7 +626,7 @@ func TestRouterAuditLogs(t *testing.T) {
 			}, nil
 		},
 	})
-	req := httptest.NewRequest(http.MethodGet, "/v1/audit-logs?limit=2", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/audit-logs?deployment=api-prod&limit=2", nil)
 	resp := httptest.NewRecorder()
 
 	router.ServeHTTP(resp, req)
@@ -665,6 +665,24 @@ func TestRouterAuditLogsRejectsInvalidLimit(t *testing.T) {
 		},
 	})
 	req := httptest.NewRequest(http.MethodGet, "/v1/audit-logs?limit=0", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.Code)
+	}
+}
+
+func TestRouterAuditLogsRejectsInvalidDeploymentQuery(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		AuditLogs: func(context.Context, auditlog.Query) (auditlog.Result, error) {
+			t.Fatal("expected invalid deployment query to short-circuit before provider")
+			return auditlog.Result{}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/audit-logs?deployment=api/prod", nil)
 	resp := httptest.NewRecorder()
 
 	router.ServeHTTP(resp, req)
