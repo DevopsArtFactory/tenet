@@ -2597,7 +2597,7 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		},
 	})
 
-	getPaths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/applications", "/v1/overview/applications/api-prod", "/v1/overview/accounts", "/v1/overview/accounts/123456789012", "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod", "/v1/overview/deployments/api-prod", "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service", "/v1/plans/plan_1234abcd", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
+	getPaths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/applications", "/v1/overview/applications/api-prod", "/v1/overview/accounts", "/v1/overview/accounts/123456789012", "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod", "/v1/overview/deployments/api-prod", "/v1/overview/deployments/api-prod/events", "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service", "/v1/plans/plan_1234abcd", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
 	for _, path := range getPaths {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		resp := httptest.NewRecorder()

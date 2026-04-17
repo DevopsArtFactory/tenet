@@ -149,6 +149,23 @@ func newAPIOptionsWithPlanStore(info buildinfo.Info, repoRoot string, store stat
 			}
 			return catalog.BuildDeploymentOverviewDetail(compiled, []statusstore.Snapshot{snapshot}, name)
 		}
+		options.OverviewDeploymentEvents = func(name string) (catalog.DeploymentOverviewEvents, error) {
+			compiled, err := catalog.LoadFromRepository(repoRoot)
+			if err != nil {
+				return catalog.DeploymentOverviewEvents{}, err
+			}
+			if store == nil {
+				return catalog.BuildDeploymentOverviewEvents(compiled, nil, name)
+			}
+			snapshot, err := store.Get(context.Background(), name)
+			if err != nil {
+				if errors.Is(err, statusstore.ErrNotFound) {
+					return catalog.BuildDeploymentOverviewEvents(compiled, nil, name)
+				}
+				return catalog.DeploymentOverviewEvents{}, err
+			}
+			return catalog.BuildDeploymentOverviewEvents(compiled, []statusstore.Snapshot{snapshot}, name)
+		}
 		options.OverviewDeploymentResourceLogs = newOverviewDeploymentResourceLogsProvider(options.OverviewDeployment, loadObserverRoleARN, resourceLogService)
 		planService := planpreview.Service{
 			LoadDetail: options.OverviewDeployment,

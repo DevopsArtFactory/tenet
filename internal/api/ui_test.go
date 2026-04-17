@@ -813,8 +813,12 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Recent logs")
 	}
 	for _, fragment := range []string{
+		"deployment_events_fixture=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/events\")",
 		"resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing\")",
 		"worker_resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service\")",
+		"assert deployment_events_fixture['deploymentName'] == 'payments-api-prod', deployment_events_fixture",
+		"assert isinstance(deployment_events_fixture['events'], list), deployment_events_fixture",
+		"assert len(deployment_events_fixture['events']) == 0, deployment_events_fixture",
 		"assert resource_logs['resourceType'] == 'trafficShiftPlan', resource_logs",
 		"assert worker_resource_logs['deploymentName'] == 'worker-prod', worker_resource_logs",
 		"assert worker_resource_logs['resourceType'] == 'ecsService', worker_resource_logs",
@@ -835,8 +839,14 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert isinstance(deployment_runtime_summary.get('changeDetails', []), list), deployment_detail") {
 		t.Fatalf("expected smoke-local.sh to verify deployment detail runtimeSummary.changeDetails shape")
 	}
+	if !strings.Contains(text, "controller_events=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/events\"") {
+		t.Fatalf("expected smoke-local.sh to hit deployment events after controller starts")
+	}
 	if !strings.Contains(text, "if deployment_history:") || !strings.Contains(text, "assert isinstance(deployment_history[0].get('changeDetails', []), list), deployment_detail") {
 		t.Fatalf("expected smoke-local.sh to verify deployment detail history changeDetails shape")
+	}
+	if !strings.Contains(text, "assert events_payload['deploymentName'] == 'payments-api-prod', events_payload") || !strings.Contains(text, "assert event.get('source') == 'controller', events_payload") {
+		t.Fatalf("expected smoke-local.sh to verify controller-populated deployment events payload")
 	}
 	if !strings.Contains(text, "assert 'Runtime change details' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Runtime change details")
@@ -869,6 +879,51 @@ func TestOverviewDocsLockECSRollingFallbackContract(t *testing.T) {
 			"- `ecsRolling`",
 			"- `ecsService` → `{deployment}-service` → `ECS service Tenet updates with native rolling deployment`, optionally extended with rollout-strategy qualifiers such as `while respecting min healthy 90% and warmup 30s`",
 			"worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
+	}
+}
+
+func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
+	files := map[string][]string{
+		"../../scripts/smoke-docker.sh": {
+			"config --services",
+			"for service in api controller redis; do",
+			"\"$ROOT/scripts/docker-up.sh\" \"${COMPOSE[@]}\"",
+			"curl -fsS \"$API_BASE_URL/healthz\"",
+			"curl -fsS \"$API_BASE_URL/v1/catalog/summary\"",
+			"curl -fsS \"$API_BASE_URL/v1/overview/applications\"",
+			"curl -fsS \"$API_BASE_URL/v1/overview/deployments/payments-api-prod\"",
+			"logs controller --tail=50",
+			"down --remove-orphans",
+		},
+		"../../Makefile": {
+			".PHONY: test fmt docker-build docker-up docker-down smoke-local smoke-docker",
+			"smoke-docker:",
+			"./scripts/smoke-docker.sh",
+		},
+		"../../README.md": {
+			"Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis.",
+			"Use `make smoke-docker` when you need to validate `compose.yaml`, confirm the `api`/`controller`/`redis` service contract, and prove the containerized local stack plus controller logs are reachable end to end.",
+			"make smoke-docker",
+		},
+		"../../docs/architecture/tenet-v1-local-runtime.md": {
+			"### Docker stack smoke check",
+			"make smoke-docker",
+			"asserts the `api`, `controller`, and `redis` services are present in `compose.yaml`",
+			"`docker compose down --remove-orphans` even on failure",
 		},
 	}
 

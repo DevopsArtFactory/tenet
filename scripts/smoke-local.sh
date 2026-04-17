@@ -51,6 +51,7 @@ overview=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts")
 account_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts/123456789012")
 group_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts/123456789012/projects/payments-api/environments/prod-apne2")
 deployment_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod")
+deployment_events_fixture=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/events")
 deployment_source_fingerprint=$(DEPLOYMENT_DETAIL_JSON="$deployment_detail" python3 - <<'PY'
 import json, os
 print(json.loads(os.environ['DEPLOYMENT_DETAIL_JSON'])['sourceFingerprint'])
@@ -70,7 +71,7 @@ worker_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/wor
 ui=$(curl -fsS "http://$HOST:$PORT/")
 plan_ui=$(curl -fsS "http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id")
 
-SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" STALE_PLAN_PREVIEW_JSON="$stale_plan_preview" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" PLAN_UI_HTML="$plan_ui" python3 - <<'PY'
+SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_EVENTS_FIXTURE_JSON="$deployment_events_fixture" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" STALE_PLAN_PREVIEW_JSON="$stale_plan_preview" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" PLAN_UI_HTML="$plan_ui" python3 - <<'PY'
 import json, os
 summary = json.loads(os.environ['SUMMARY_JSON'])
 applications = json.loads(os.environ['APPLICATIONS_JSON'])
@@ -79,6 +80,7 @@ overview = json.loads(os.environ['OVERVIEW_JSON'])
 account_detail = json.loads(os.environ['ACCOUNT_DETAIL_JSON'])
 group_detail = json.loads(os.environ['GROUP_DETAIL_JSON'])
 deployment_detail = json.loads(os.environ['DEPLOYMENT_DETAIL_JSON'])
+deployment_events_fixture = json.loads(os.environ['DEPLOYMENT_EVENTS_FIXTURE_JSON'])
 plan_preview = json.loads(os.environ['PLAN_PREVIEW_JSON'])
 plan_preview_get = json.loads(os.environ['PLAN_PREVIEW_GET_JSON'])
 stale_plan_preview = json.loads(os.environ['STALE_PLAN_PREVIEW_JSON'])
@@ -131,6 +133,9 @@ assert isinstance(deployment_detail['sourceFingerprint'], str) and deployment_de
 assert isinstance(deployment_runtime_summary.get('changeDetails', []), list), deployment_detail
 if deployment_history:
     assert isinstance(deployment_history[0].get('changeDetails', []), list), deployment_detail
+assert deployment_events_fixture['deploymentName'] == 'payments-api-prod', deployment_events_fixture
+assert isinstance(deployment_events_fixture['events'], list), deployment_events_fixture
+assert len(deployment_events_fixture['events']) == 0, deployment_events_fixture
 assert plan_preview['deploymentName'] == 'payments-api-prod', plan_preview
 assert plan_preview['status'] == 'ready', plan_preview
 assert plan_preview['source']['route'] == '/v1/overview/deployments/payments-api-prod', plan_preview
@@ -222,13 +227,19 @@ if [[ "$controller_ready" -ne 1 ]]; then
 fi
 
 controller_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod")
-CONTROLLER_DETAIL_JSON="$controller_detail" python3 - <<'PY'
+controller_events=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/events")
+CONTROLLER_DETAIL_JSON="$controller_detail" CONTROLLER_EVENTS_JSON="$controller_events" python3 - <<'PY'
 import json, os
 payload = json.loads(os.environ['CONTROLLER_DETAIL_JSON'])
+events_payload = json.loads(os.environ['CONTROLLER_EVENTS_JSON'])
 runtime_change_details = (payload.get('runtimeSummary') or {}).get('changeDetails') or []
 history = payload.get('history') or []
 history_change_details = (history[0].get('changeDetails') if history else []) or []
 assert runtime_change_details, payload
 assert history_change_details, payload
+assert events_payload['deploymentName'] == 'payments-api-prod', events_payload
+assert isinstance(events_payload['events'], list) and events_payload['events'], events_payload
+for event in events_payload['events']:
+    assert event.get('source') == 'controller', events_payload
 print('smoke-local: controller changeDetails path ok')
 PY
