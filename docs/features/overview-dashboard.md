@@ -90,12 +90,16 @@ Current behavior:
 - breadcrumb/back-link to the applications overview
 - top-level application summary for account/region context
 - `_self` `Drift view` and `_self` `Plan/apply` links so operators enter the deployment workspaces from the application detail page instead of the account rows
+- `Controller runtime events` section backed by `GET /v1/overview/deployments/{deploymentName}/events`
+- explicit `Loading controller runtime events…`, empty, unavailable, and generic fetch-error states for that section
+- event ordering labeled as newest-first with readable time, summary, sync/health context, rollout phase/current step, and optional controller metadata
+- explicitly labels these as controller-derived runtime events, not audit/auth history
 - grouped resource sections:
   - `Workloads`
   - `Traffic routing`
   - `Config and access`
 - `Open resource` links targeting `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}`
-- intentionally keeps artifact/history/generation/log details off this page for now
+- keeps the deeper artifact/history/generation/log drill-down on the final resource page
 
 Resource-list fallback contract:
 - the UI synthesizes fallback rollout resources when `detail.rollout.execution[]` is missing or empty in the application-detail payload
@@ -123,6 +127,7 @@ Current behavior:
 - returns `deploymentName` plus an explicit `events[]` array
 - returns `200 OK` with `events: []` when the deployment exists but no runtime history has been persisted yet
 - never calls live AWS APIs; it only reflects the stored controller/runtime read model
+- the application detail page consumes the same route directly instead of reusing `history[]` from the deeper deployment-detail payload
 
 ## Workspace shells
 

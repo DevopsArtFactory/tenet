@@ -99,6 +99,7 @@
       .detail-step-meta-current { color: var(--blue); }
       .detail-step-meta-pending { color: var(--muted); }
       .detail-execution-meta, .detail-history-meta { display:grid; gap: 4px; margin-top: 6px; }
+      .detail-section-copy { margin: 0 0 12px; color: var(--muted); font-size: 13px; line-height: 1.5; }
       .drift-table-wrap { overflow-x: auto; }
       .drift-table { width: 100%; border-collapse: collapse; }
       .drift-table th, .drift-table td { text-align: left; padding: 12px 10px; border-top: 1px solid rgba(255,255,255,.06); vertical-align: top; font-size: 14px; }
@@ -135,6 +136,7 @@
     </div>
     <script>
       const detailStateByDeployment = new Map();
+      const deploymentEventsStateByDeployment = new Map();
       const resourceLogStateByKey = new Map();
       let allAccounts = [];
       let allApplications = [];
@@ -1078,6 +1080,7 @@
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
         const root = document.getElementById('accounts');
+        const eventsDeploymentName = detail.name || currentPageState.deployment || '';
         const backLink = createNavLink(buildPageURL('applications'), 'Back to applications');
         backLink.target = '_self';
         backLink.rel = '';
@@ -1132,7 +1135,9 @@
           groupSection.append(groupHead, groupRows);
           rows.append(groupSection);
         });
-        page.append(rows);
+        const eventsSection = createDetailSection('Controller runtime events');
+        renderDeploymentEventsSection(eventsSection, eventsDeploymentName).catch(() => {});
+        page.append(rows, eventsSection);
         root.replaceChildren(page);
       };
       const resolveResourceDetail = (detail) => {
@@ -1427,11 +1432,6 @@
         resourceLogStateByKey.set(logsKey, { status: 'loading', promise, sections: [section] });
         return promise;
       };
-      const fetchApplicationDetail = (deploymentName) => fetch(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`)
-        .then((response) => {
-          if (!response.ok) throw new Error(`application detail request failed (${response.status})`);
-          return response.json();
-        });
       const requestError = (kind, message, status = 0) => {
         const error = new Error(message);
         error.kind = kind;
@@ -1447,11 +1447,164 @@
           })
           .catch(() => fallback);
       };
+      const fetchApplicationDetail = (deploymentName) => fetch(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`)
+        .then((response) => {
+          if (!response.ok) throw new Error(`application detail request failed (${response.status})`);
+          return response.json();
+        });
+      const fetchDeploymentEvents = (deploymentName) => fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`)
+        .then((response) => {
+          if (response.ok) return response.json();
+          const fallback = response.status === 503
+            ? `deployment events unavailable (${response.status})`
+            : `deployment events request failed (${response.status})`;
+          return responseErrorMessage(response, fallback).then((message) => {
+            throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);
+          });
+        });
       const fetchDeploymentDetail = (deploymentName) => fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}`)
         .then((response) => {
           if (!response.ok) throw new Error(`detail request failed (${response.status})`);
           return response.json();
         });
+      const createDeploymentEventsIntro = () => createElement('div', 'detail-section-copy', 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.');
+      const sortTimelineEvents = (events) => (events || [])
+        .map((event, index) => ({
+          event,
+          index,
+          timestamp: Date.parse(event?.timestamp || ''),
+        }))
+        .sort((left, right) => {
+          const leftValid = Number.isFinite(left.timestamp);
+          const rightValid = Number.isFinite(right.timestamp);
+          if (leftValid && rightValid && left.timestamp !== right.timestamp) return right.timestamp - left.timestamp;
+          if (leftValid !== rightValid) return leftValid ? -1 : 1;
+          return left.index - right.index;
+        })
+        .map(({ event }) => event);
+      const renderDeploymentEventsState = (section, text, className = '', detailText = '') => {
+        const heading = createElement('h4', '', 'Controller runtime events');
+        const intro = createDeploymentEventsIntro();
+        const stateNode = createElement('div', 'detail-state', text);
+        if (className) stateNode.classList.add(className);
+        if (detailText) {
+          section.replaceChildren(heading, intro, stateNode, createElement('div', 'detail-condition-meta', detailText));
+          return;
+        }
+        section.replaceChildren(heading, intro, stateNode);
+      };
+      const renderDeploymentEventsPayload = (section, result) => {
+        const events = sortTimelineEvents(result?.events || []);
+        if (!events.length) {
+          renderDeploymentEventsState(section, 'No controller runtime events have been persisted yet.');
+          return;
+        }
+
+        const heading = createElement('h4', '', 'Controller runtime events');
+        const intro = createDeploymentEventsIntro();
+        const ordering = createElement('div', 'detail-condition-meta', `${events.length} event${events.length === 1 ? '' : 's'} · newest controller event first`);
+        const eventList = createElement('ol', 'detail-list');
+
+        events.forEach((event) => {
+          const item = createElement('li');
+          const summaryText = textOrDash(event.summary) === '—' ? 'Controller runtime event' : textOrDash(event.summary);
+          item.append(createElement('strong', '', summaryText));
+
+          const eventMeta = createElement('div', 'detail-history-meta');
+          eventMeta.append(createElement('span', 'detail-condition-meta', `Time · ${textOrDash(event.timestamp)}`));
+
+          const syncContext = [event.sync?.state, event.sync?.reason].filter(Boolean).join(' · ');
+          if (syncContext) {
+            eventMeta.append(createElement('span', 'detail-condition-meta', `Sync · ${syncContext}`));
+          }
+
+          if (event.health?.overall || event.health?.summary) {
+            eventMeta.append(createElement('span', 'detail-condition-meta', `Health · ${healthLabel(event.health)}${event.health?.summary ? ` · ${event.health.summary}` : ''}`));
+          }
+
+          const rolloutContext = rolloutContextText(event);
+          if (rolloutContext) {
+            eventMeta.append(createElement('span', 'detail-condition-meta', `Context · ${rolloutContext}`));
+          }
+          if (event.rolloutPhase) {
+            eventMeta.append(createElement('span', 'detail-condition-meta', `Rollout phase · ${event.rolloutPhase}`));
+          }
+          if (event.currentStep) {
+            eventMeta.append(createElement('span', 'detail-condition-meta', `Rollout step · ${event.currentStep}`));
+          }
+
+          const eventArtifact = runtimeArtifactText(event.deployedArtifact);
+          if (eventArtifact) {
+            eventMeta.append(createElement('span', 'detail-condition-meta', `Artifact · ${eventArtifact}`));
+          }
+
+          const eventConditions = runtimeConditionsText(event.conditions, '');
+          if (eventConditions) {
+            eventMeta.append(createElement('span', 'detail-condition-meta', `Conditions · ${eventConditions}`));
+          }
+
+          if (changeDetailLabels(event.changeDetails).length) {
+            eventMeta.append(createElement('span', 'detail-condition-meta', `Event details · ${changeDetailsText(event.changeDetails)}`));
+          }
+          if (event.source) {
+            eventMeta.append(createElement('span', 'detail-condition-meta', `Source · ${event.source}`));
+          }
+
+          item.append(eventMeta);
+          eventList.append(item);
+        });
+
+        section.replaceChildren(heading, intro, ordering, eventList);
+      };
+      const renderDeploymentEventsSection = (section, deploymentName) => {
+        const cached = deploymentEventsStateByDeployment.get(deploymentName);
+
+        if (!deploymentName) {
+          renderDeploymentEventsState(section, 'Controller runtime events are currently unavailable.', 'error', 'Application detail is missing a deployment name for GET /v1/overview/deployments/{deploymentName}/events.');
+          return Promise.resolve(null);
+        }
+        if (cached?.status === 'ready') {
+          renderDeploymentEventsPayload(section, cached.result);
+          return Promise.resolve(cached.result);
+        }
+        if (cached?.status === 'loading') {
+          deploymentEventsStateByDeployment.set(deploymentName, { ...cached, sections: [...(cached.sections || []), section] });
+          renderDeploymentEventsState(section, 'Loading controller runtime events…');
+          return cached.promise;
+        }
+        if (cached?.status === 'error') {
+          if (cached.error?.kind === 'unavailable') {
+            renderDeploymentEventsState(section, 'Controller runtime events are currently unavailable.', 'error', cached.error.message);
+          } else {
+            renderDeploymentEventsState(section, `Failed to load controller runtime events: ${cached.error?.message || 'unknown error'}`, 'error');
+          }
+          return Promise.reject(cached.error);
+        }
+
+        renderDeploymentEventsState(section, 'Loading controller runtime events…');
+        const promise = fetchDeploymentEvents(deploymentName)
+          .then((result) => {
+            const current = deploymentEventsStateByDeployment.get(deploymentName);
+            deploymentEventsStateByDeployment.set(deploymentName, { status: 'ready', result });
+            (current?.sections || []).forEach((container) => renderDeploymentEventsPayload(container, result));
+            return result;
+          })
+          .catch((error) => {
+            const current = deploymentEventsStateByDeployment.get(deploymentName);
+            deploymentEventsStateByDeployment.set(deploymentName, { status: 'error', error });
+            (current?.sections || []).forEach((container) => {
+              if (error?.kind === 'unavailable') {
+                renderDeploymentEventsState(container, 'Controller runtime events are currently unavailable.', 'error', error.message);
+                return;
+              }
+              renderDeploymentEventsState(container, `Failed to load controller runtime events: ${error.message}`, 'error');
+            });
+            throw error;
+          });
+
+        deploymentEventsStateByDeployment.set(deploymentName, { status: 'loading', promise, sections: [section] });
+        return promise;
+      };
       const fetchPlanPreview = (planId) => fetch(`/v1/plans/${encodeURIComponent(planId)}`)
         .then((response) => {
           if (response.ok) return response.json();

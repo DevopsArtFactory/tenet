@@ -268,8 +268,11 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"Config and access",
 		"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')",
 		"const renderApplicationDetailPage = (detail) => {",
+		"const eventsDeploymentName = detail.name || currentPageState.deployment || '';",
 		"Application resources",
 		"Open drift or plan/apply from here before the final resource page.",
+		"const eventsSection = createDetailSection('Controller runtime events');",
+		"renderDeploymentEventsSection(eventsSection, eventsDeploymentName).catch(() => {});",
 		"backLink.target = '_self';",
 		"const renderResourceDetailPage = (detail) => {",
 		"Resource detail",
@@ -287,6 +290,20 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 	for _, fragment := range []string{
 		"const fetchApplicationDetail = (deploymentName) => fetch(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`)",
 		"if (!response.ok) throw new Error(`application detail request failed (${response.status})`);",
+		"const fetchDeploymentEvents = (deploymentName) => fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`)",
+		"deployment events unavailable (${response.status})",
+		"deployment events request failed (${response.status})",
+		"const createDeploymentEventsIntro = () => createElement('div', 'detail-section-copy', 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.');",
+		"const sortTimelineEvents = (events) => (events || [])",
+		"const renderDeploymentEventsState = (section, text, className = '', detailText = '') => {",
+		"const renderDeploymentEventsPayload = (section, result) => {",
+		"No controller runtime events have been persisted yet.",
+		"Controller runtime events are currently unavailable.",
+		"Loading controller runtime events…",
+		"Failed to load controller runtime events: ${error.message}",
+		"Rollout phase · ${event.rolloutPhase}",
+		"Rollout step · ${event.currentStep}",
+		"Event details · ${changeDetailsText(event.changeDetails)}",
 		"const fetchPlanPreview = (planId) => fetch(`/v1/plans/${encodeURIComponent(planId)}`)",
 		"const cloneJSONValue = (value) => {",
 		"const buildPlanSourceFingerprintPayload = (detail) => {",
@@ -812,6 +829,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Recent logs' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Recent logs")
 	}
+	if !strings.Contains(text, "assert 'Controller runtime events' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains controller runtime events")
+	}
 	for _, fragment := range []string{
 		"assert_request_id_header() {",
 		"assert headers.get(\"request-id\"), headers",
@@ -834,6 +854,11 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"if worker_resource_logs['available']:",
 		"assert isinstance(worker_resource_logs.get('source'), str), worker_resource_logs",
 		"assert isinstance(worker_resource_logs.get('unavailableReason'), str) and worker_resource_logs['unavailableReason'], worker_resource_logs",
+		"assert 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.' in ui, ui",
+		"assert 'Loading controller runtime events…' in ui, ui",
+		"assert 'No controller runtime events have been persisted yet.' in ui, ui",
+		"assert 'Controller runtime events are currently unavailable.' in ui, ui",
+		"assert \"fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`)\" in ui, ui",
 	} {
 		if !strings.Contains(text, fragment) {
 			t.Fatalf("expected smoke-local.sh to include %q", fragment)
