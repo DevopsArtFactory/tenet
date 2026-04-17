@@ -274,6 +274,197 @@ func TestDeriveRolloutSummaryLeavesNonActionablePlansPending(t *testing.T) {
 	}
 }
 
+func TestNormalizeRuntimeStatusForPlanningBackfillsObservedGenerationForHealthySyncedSnapshots(t *testing.T) {
+	deployment := domain.Deployment{Generation: 12}
+	status := domain.DeploymentStatus{
+		Sync:   domain.Sync{State: domain.SyncStateSynced, Reason: "seeded sync"},
+		Health: domain.Health{Overall: domain.HealthHealthy, Summary: "seeded health"},
+	}
+
+	got := normalizeRuntimeStatusForPlanning(deployment, status)
+	want := domain.DeploymentStatus{
+		ObservedGeneration: 12,
+		Sync:               domain.Sync{State: domain.SyncStateSynced, Reason: "seeded sync"},
+		Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "seeded health"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected planning normalization %+v, got %+v", want, got)
+	}
+}
+
+func TestNormalizeRuntimeStatusDerivesControllerOwnedDefaults(t *testing.T) {
+	tests := []struct {
+		name       string
+		deployment domain.Deployment
+		status     domain.DeploymentStatus
+		plan       reconcile.Plan
+		want       domain.DeploymentStatus
+	}{
+		{
+			name:       "completed marks synced healthy and observed generation",
+			deployment: domain.Deployment{Generation: 7},
+			plan:       reconcile.Plan{Steps: []reconcile.Step{{Kind: reconcile.StepMarkSynced}}},
+			want: domain.DeploymentStatus{
+				ObservedGeneration: 7,
+				Sync:               domain.Sync{State: domain.SyncStateSynced, Reason: "Controller marked deployment synced"},
+				Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "Deployment is healthy and synced"},
+			},
+		},
+		{
+			name:       "actionable rollout defaults to reconciling and progressing",
+			deployment: domain.Deployment{Generation: 4, Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups"},
+			plan:       reconcile.Plan{Steps: []reconcile.Step{{Kind: reconcile.StepResolvePlacement}, {Kind: reconcile.StepObserveCurrentState}, {Kind: reconcile.StepCreateCandidateCapacity}, {Kind: reconcile.StepVerifyCandidateCapacity}}},
+			want: domain.DeploymentStatus{
+				Sync:   domain.Sync{State: domain.SyncStateReconciling, Reason: "Controller progressing rollout at CreateCandidateCapacity"},
+				Health: domain.Health{Overall: domain.HealthProgressing, Summary: "Creating candidate capacity for weighted target groups"},
+			},
+		},
+		{
+			name:       "paused rollout defaults to paused and unknown",
+			deployment: domain.Deployment{Generation: 4},
+			status:     domain.DeploymentStatus{ObservedGeneration: 4},
+			plan:       reconcile.Plan{Steps: []reconcile.Step{{Kind: reconcile.StepResolvePlacement}, {Kind: reconcile.StepObserveCurrentState}}},
+			want: domain.DeploymentStatus{
+				ObservedGeneration: 4,
+				Sync:               domain.Sync{State: domain.SyncStatePaused, Reason: "Controller paused rollout"},
+				Health:             domain.Health{Overall: domain.HealthUnknown, Summary: "Rollout pending while deployment is paused"},
+			},
+		},
+		{
+			name:       "preserves seeded controller owned fields",
+			deployment: domain.Deployment{Generation: 4, Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups"},
+			status: domain.DeploymentStatus{
+				ObservedGeneration: 99,
+				Sync:               domain.Sync{State: domain.SyncStateOutOfSync, Reason: "seeded sync"},
+				Health:             domain.Health{Overall: domain.HealthUnhealthy, Summary: "seeded health"},
+			},
+			plan: reconcile.Plan{Steps: []reconcile.Step{{Kind: reconcile.StepResolvePlacement}, {Kind: reconcile.StepObserveCurrentState}, {Kind: reconcile.StepCreateCandidateCapacity}, {Kind: reconcile.StepVerifyCandidateCapacity}}},
+			want: domain.DeploymentStatus{
+				ObservedGeneration: 99,
+				Sync:               domain.Sync{State: domain.SyncStateOutOfSync, Reason: "seeded sync"},
+				Health:             domain.Health{Overall: domain.HealthUnhealthy, Summary: "seeded health"},
+			},
+		},
+		{
+			name:       "preserves partially seeded sync and health structs without backfilling subfields",
+			deployment: domain.Deployment{Generation: 4, Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups"},
+			status: domain.DeploymentStatus{
+				Sync:   domain.Sync{State: domain.SyncStateOutOfSync},
+				Health: domain.Health{Overall: domain.HealthUnhealthy},
+			},
+			plan: reconcile.Plan{Steps: []reconcile.Step{{Kind: reconcile.StepResolvePlacement}, {Kind: reconcile.StepObserveCurrentState}, {Kind: reconcile.StepCreateCandidateCapacity}, {Kind: reconcile.StepVerifyCandidateCapacity}}},
+			want: domain.DeploymentStatus{
+				Sync:   domain.Sync{State: domain.SyncStateOutOfSync},
+				Health: domain.Health{Overall: domain.HealthUnhealthy},
+			},
+		},
+		{
+			name:       "completed plan backfills observed generation even when seeded sync and health exist",
+			deployment: domain.Deployment{Generation: 12},
+			status: domain.DeploymentStatus{
+				Sync:   domain.Sync{State: domain.SyncStateSynced, Reason: "seeded sync"},
+				Health: domain.Health{Overall: domain.HealthHealthy, Summary: "seeded health"},
+			},
+			plan: reconcile.Plan{Steps: []reconcile.Step{{Kind: reconcile.StepMarkSynced}}},
+			want: domain.DeploymentStatus{
+				ObservedGeneration: 12,
+				Sync:               domain.Sync{State: domain.SyncStateSynced, Reason: "seeded sync"},
+				Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "seeded health"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeRuntimeStatus(tt.deployment, tt.status, tt.plan); !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("expected normalized status %+v, got %+v", tt.want, got)
+			}
+		})
+	}
+}
+
+func TestEmitRuntimePlansDerivesDefaultSyncAndHealthForNewSnapshots(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"canary"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+
+	store := &recordingRuntimeStore{}
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root}
+
+	oldNow := runtimeHistoryNow
+	runtimeHistoryNow = func() time.Time { return time.Date(2026, time.April, 17, 14, 0, 0, 0, time.UTC) }
+	defer func() { runtimeHistoryNow = oldNow }()
+
+	if err := emitRuntimePlans(context.Background(), logger, config, store); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+	if len(store.snapshots) != 1 {
+		t.Fatalf("expected one persisted snapshot, got %+v", store.snapshots)
+	}
+
+	status := store.snapshots[0].Status
+	if status.Sync != (domain.Sync{State: domain.SyncStateReconciling, Reason: "Controller progressing rollout at CreateCandidateCapacity"}) {
+		t.Fatalf("expected derived sync defaults, got %+v", status.Sync)
+	}
+	if status.Health != (domain.Health{Overall: domain.HealthProgressing, Summary: "Creating candidate capacity for weighted target groups"}) {
+		t.Fatalf("expected derived health defaults, got %+v", status.Health)
+	}
+	if status.ObservedGeneration != 0 {
+		t.Fatalf("expected fresh actionable snapshot to leave observed generation empty, got %d", status.ObservedGeneration)
+	}
+	if status.Rollout == nil || status.Rollout.Summary != "Creating candidate capacity for weighted target groups" || status.Rollout.CurrentStep != "CreateCandidateCapacity" {
+		t.Fatalf("expected rollout summary to inherit normalized defaults, got %+v", status.Rollout)
+	}
+	if len(status.History) != 1 {
+		t.Fatalf("expected bootstrapped runtime history, got %+v", status.History)
+	}
+	latest := status.History[0]
+	if latest.Sync != status.Sync || latest.Health != status.Health || latest.Summary != status.Rollout.Summary {
+		t.Fatalf("expected runtime history to inherit normalized sync/health/summary, got %+v", latest)
+	}
+}
+
+func TestEmitRuntimePlansBackfillsObservedGenerationForSyncedHealthySnapshotBeforePlanning(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+
+	store := &recordingRuntimeStore{snapshots: []statusstore.Snapshot{{
+		DeploymentName: "api-prod",
+		Status: domain.DeploymentStatus{
+			Sync:   domain.Sync{State: domain.SyncStateSynced, Reason: "seeded sync"},
+			Health: domain.Health{Overall: domain.HealthHealthy, Summary: "seeded health"},
+		},
+	}}}
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root}
+
+	if err := emitRuntimePlans(context.Background(), logger, config, store); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+	if len(store.snapshots) != 1 {
+		t.Fatalf("expected one persisted snapshot, got %+v", store.snapshots)
+	}
+
+	status := store.snapshots[0].Status
+	wantGeneration := desiredGenerationForTest(t, root, "api-prod")
+	if status.ObservedGeneration != wantGeneration {
+		t.Fatalf("expected observed generation backfill to %d, got %+v", wantGeneration, status)
+	}
+	if status.Sync != (domain.Sync{State: domain.SyncStateSynced, Reason: "seeded sync"}) {
+		t.Fatalf("expected seeded sync to be preserved, got %+v", status.Sync)
+	}
+	if status.Health != (domain.Health{Overall: domain.HealthHealthy, Summary: "seeded health"}) {
+		t.Fatalf("expected seeded health to be preserved, got %+v", status.Health)
+	}
+	if status.Rollout == nil || status.Rollout.Phase != domain.RolloutPhaseCompleted || status.Rollout.CurrentStep != "" || status.Rollout.Summary != "Deployment is synced and healthy" {
+		t.Fatalf("expected synced rollout summary after pre-planning observed generation backfill, got %+v", status.Rollout)
+	}
+}
+
 func TestEmitRuntimePlansUsesControllerContextForStoreIO(t *testing.T) {
 	root := t.TempDir()
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
@@ -2025,7 +2216,7 @@ func TestEmitRuntimePlansRemovesSnapshotsForDeletedDeployments(t *testing.T) {
 	}
 }
 
-func TestEmitRuntimePlansPersistsNonZeroDesiredGenerationAndZeroObservedGenerationInJSON(t *testing.T) {
+func TestEmitRuntimePlansPersistsNonZeroDesiredGenerationAndBackfilledObservedGenerationInJSON(t *testing.T) {
 	root := t.TempDir()
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
 	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
@@ -2056,8 +2247,47 @@ func TestEmitRuntimePlansPersistsNonZeroDesiredGenerationAndZeroObservedGenerati
 	if value, exists := rollout["desiredGeneration"]; !exists || value != float64(desiredGeneration) {
 		t.Fatalf("expected desiredGeneration=%d to be persisted, got %#v", desiredGeneration, rollout)
 	}
-	if value, exists := rollout["observedGeneration"]; !exists || value != float64(0) {
-		t.Fatalf("expected observedGeneration=0 to be persisted, got %#v", rollout)
+	if value, exists := rollout["observedGeneration"]; !exists || value != float64(desiredGeneration) {
+		t.Fatalf("expected observedGeneration=%d to be backfilled, got %#v", desiredGeneration, rollout)
+	}
+}
+
+func TestCompiledRuntimeStatusForTestPreservesSeededSyncAndHealth(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"canary"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+
+	seeded := domain.DeploymentStatus{
+		ObservedGeneration: 42,
+		Sync:               domain.Sync{State: domain.SyncStateOutOfSync, Reason: "seeded sync"},
+		Health:             domain.Health{Overall: domain.HealthUnhealthy, Summary: "seeded health"},
+		Conditions:         []domain.Condition{{Type: "Ready", Status: false, Reason: "Seeded", Message: "keep me"}},
+		DeployedArtifact:   domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64"},
+	}
+
+	status := compiledRuntimeStatusForTest(t, root, "api-prod", seeded)
+	if status.ObservedGeneration != seeded.ObservedGeneration {
+		t.Fatalf("expected observed generation to be preserved, got %+v", status)
+	}
+	if status.Sync != seeded.Sync {
+		t.Fatalf("expected sync to be preserved, got %+v", status.Sync)
+	}
+	if status.Health != seeded.Health {
+		t.Fatalf("expected health to be preserved, got %+v", status.Health)
+	}
+	if !reflect.DeepEqual(status.Conditions, seeded.Conditions) {
+		t.Fatalf("expected conditions to be preserved, got %+v", status.Conditions)
+	}
+	if status.DeployedArtifact != seeded.DeployedArtifact {
+		t.Fatalf("expected deployed artifact to be preserved, got %+v", status.DeployedArtifact)
+	}
+	if status.Rollout == nil || status.Rollout.Summary != "Creating candidate capacity for weighted target groups" {
+		t.Fatalf("expected rollout summary to still be derived, got %+v", status.Rollout)
+	}
+	latest := status.History[len(status.History)-1]
+	if latest.Sync != seeded.Sync || latest.Health != seeded.Health {
+		t.Fatalf("expected history to inherit seeded sync/health, got %+v", latest)
 	}
 }
 
@@ -2073,7 +2303,9 @@ func compiledRuntimeStatusForTest(t *testing.T, root string, deploymentName stri
 			continue
 		}
 		status := previous
+		status = normalizeRuntimeStatusForPlanning(deployment, status)
 		plan := planner.Build(deployment, status)
+		status = normalizeRuntimeStatus(deployment, status, plan)
 		status.Rollout = deriveRolloutSummary(deployment, status, plan)
 		status.History = appendRuntimeHistory(previous, status)
 		return status
