@@ -218,7 +218,7 @@ func executionMode(target spec.TargetType, strategy spec.StrategyType) string {
 
 func normalizeUserData(deployment spec.DeploymentSpec) domain.DeploymentUserData {
 	userData := deployment.UserData
-	if userData.Type == "" && userData.Path == "" && len(deployment.Stacks) > 0 {
+	if strings.TrimSpace(userData.Type) == "" && strings.TrimSpace(userData.Path) == "" && len(deployment.Stacks) > 0 {
 		userData = deployment.Stacks[0].UserData
 	}
 	return domain.DeploymentUserData{

@@ -2,7 +2,9 @@ package spec
 
 import (
 	"fmt"
+	gopath "path"
 	"regexp"
+	"strings"
 )
 
 var awsAccountIDPattern = regexp.MustCompile(`^\d{12}$`)
@@ -108,6 +110,35 @@ func ValidateDeployment(deployment DeploymentSpec) error {
 	if deployment.Binary != "" && targetType != TargetTypeEC2 {
 		return fmt.Errorf("binary artifact requires ec2 target")
 	}
+	if targetType == TargetTypeEC2 {
+		userData := effectiveUserData(deployment)
+		if strings.TrimSpace(userData.Type) == "" || normalizeUserDataPath(userData.Path) == "" {
+			return fmt.Errorf("EC2 deployments require userdata bootstrap metadata for immutable capacity and rolling replacement capacity: both userdata type and path are required")
+		}
+	}
 
 	return nil
+}
+
+func effectiveUserData(deployment DeploymentSpec) UserDataSpec {
+	userData := deployment.UserData
+	if strings.TrimSpace(userData.Type) == "" && strings.TrimSpace(userData.Path) == "" && len(deployment.Stacks) > 0 {
+		return deployment.Stacks[0].UserData
+	}
+	return userData
+}
+
+func normalizeUserDataPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	cleaned := gopath.Clean(strings.ReplaceAll(path, "\\", "/"))
+	for strings.HasPrefix(cleaned, "./") {
+		cleaned = strings.TrimPrefix(cleaned, "./")
+	}
+	if cleaned == "." {
+		return ""
+	}
+	return cleaned
 }

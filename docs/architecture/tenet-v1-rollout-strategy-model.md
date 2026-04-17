@@ -20,6 +20,7 @@ Recommended execution modes:
 
 Why this shape:
 - `userdata.sh` can bootstrap a new candidate ASG cleanly.
+- EC2 manifests therefore must carry userdata bootstrap metadata (`type` plus a path that remains non-empty after normalization) either at the top level or, when the top-level `userdata` block is omitted/blank, through the first stack fallback; Tenet now rejects EC2 manifests that cannot supply that bootstrap source before compilation.
 - ALB weighted target groups make gradual traffic shifts practical for canary and linear delivery.
 - Blue/green remains a cutover between old and new target groups once the candidate is healthy.
 - The execution-resource contract can therefore keep a stable ordered identifier set while using config-aware descriptions to explain candidate userdata source, candidate sizing/warmup, and canary vs linear vs full-cutover routing semantics.
@@ -67,4 +68,4 @@ Representative runtime step labels now mirror that execution model:
 
 This slice now models and exposes both the execution recommendation and the operator-facing runtime step vocabulary that downstream status summaries reuse.
 
-Tenet does not yet execute AWS rollouts, but the API, controller logs, and UI now show the intended EC2 candidate-capacity / weighted-target-group and ECS CodeDeploy / native-rolling mapping so future controller work can follow a stable contract.
+Tenet does not yet execute AWS rollouts, but the API, controller logs, and UI now show the intended EC2 candidate-capacity / weighted-target-group and ECS CodeDeploy / native-rolling mapping so future controller work can follow a stable contract. That contract is now guarded at manifest-validation time for EC2: if the deployment cannot provide a usable userdata bootstrap source after normalization, compilation stops before the control plane derives a misleading candidate-capacity model.

@@ -30,6 +30,7 @@ func TestCompileReturnsDomainCatalog(t *testing.T) {
 			Traffic:        spec.TrafficSpec{Hostname: "api.example.com", Port: 443},
 			Capacity:       spec.CapacitySpec{Desired: 4, Min: 2, Max: 8},
 			Binary:         "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
+			UserData:       spec.UserDataSpec{Type: "git", Path: "userdata/payments-api.sh"},
 		}},
 	})
 	if err != nil {
@@ -69,6 +70,7 @@ func TestCompileAcceptsGoployerStyleDeploymentManifest(t *testing.T) {
 				Account:         "prod-core",
 				Env:             "prod-apne2",
 				ReplacementType: "blueGreen",
+				UserData:        spec.UserDataSpec{Type: "git", Path: "userdata/payments-api.sh"},
 				Capacity:        spec.CapacitySpec{Desired: 3, Min: 2, Max: 6},
 				Regions:         []spec.RegionSpec{{Region: "ap-northeast-2", InstanceType: "t3.medium"}},
 			}},
@@ -101,6 +103,7 @@ func TestCompileDerivesExecutionModesForEC2AndECS(t *testing.T) {
 					Account:         "prod-core",
 					Env:             "prod-apne2",
 					ReplacementType: "canary",
+					UserData:        spec.UserDataSpec{Type: "git", Path: "userdata/payments-api.sh"},
 					Capacity:        spec.CapacitySpec{Desired: 3, Min: 2, Max: 6},
 					Regions:         []spec.RegionSpec{{Region: "ap-northeast-2"}},
 				}},
@@ -236,6 +239,43 @@ func TestCompilePreservesNormalizedStackUserDataFallbackForEC2(t *testing.T) {
 	}
 }
 
+func TestCompilePreservesNormalizedStackUserDataFallbackWhenTopLevelUserDataIsWhitespaceOnly(t *testing.T) {
+	catalog, err := Compile(CatalogSpec{
+		Accounts: []spec.AccountSpec{{
+			Name:           "prod-core",
+			AWSAccountID:   "123456789012",
+			RoleARN:        "arn:aws:iam::123456789012:role/TenetDeployerRole",
+			AllowedRegions: []string{"ap-northeast-2"},
+		}},
+		Environments: []spec.EnvironmentSpec{{
+			Name:       "prod-apne2",
+			AccountRef: "prod-core",
+			Region:     "ap-northeast-2",
+		}},
+		Deployments: []spec.DeploymentSpec{{
+			Name:     "payments-api-prod",
+			Binary:   "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
+			UserData: spec.UserDataSpec{Type: " \t ", Path: "\n"},
+			Stacks: []spec.StackSpec{{
+				Stack:           "payments-api-prod",
+				Account:         "prod-core",
+				Env:             "prod-apne2",
+				ReplacementType: "blueGreen",
+				UserData:        spec.UserDataSpec{Type: " git ", Path: " ./userdata/bootstrap/../payments-api-prod.sh "},
+				Capacity:        spec.CapacitySpec{Desired: 2, Min: 1, Max: 3},
+				Regions:         []spec.RegionSpec{{Region: "ap-northeast-2"}},
+			}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Compile returned error: %v", err)
+	}
+
+	if got := catalog.Deployments[0].UserData; got.Type != "git" || got.Path != "userdata/payments-api-prod.sh" {
+		t.Fatalf("expected normalized stack userData fallback when top-level userData is whitespace-only, got %+v", got)
+	}
+}
+
 func TestCompilePreservesNormalizedRolloutConfig(t *testing.T) {
 	catalog, err := Compile(CatalogSpec{
 		Accounts: []spec.AccountSpec{{
@@ -257,6 +297,7 @@ func TestCompilePreservesNormalizedRolloutConfig(t *testing.T) {
 			Strategy:       spec.StrategySpec{Type: spec.StrategyTypeBlueGreen, WarmupSeconds: 60, MinHealthyPercent: 90},
 			Capacity:       spec.CapacitySpec{Desired: 4, Min: 2, Max: 8},
 			Binary:         "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
+			UserData:       spec.UserDataSpec{Type: "git", Path: "userdata/payments-api.sh"},
 			Stacks: []spec.StackSpec{{
 				Stack:                      "payments-api-prod",
 				Account:                    "prod-core",

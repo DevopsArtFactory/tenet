@@ -1,6 +1,37 @@
 package spec
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func validEC2DeploymentForValidationTests(strategy StrategyType) DeploymentSpec {
+	return DeploymentSpec{
+		Name:           "payments-api-prod",
+		AppRef:         "payments-api",
+		EnvironmentRef: "prod-apne2",
+		Target:         TargetSpec{Type: TargetTypeEC2},
+		Strategy:       StrategySpec{Type: strategy, WarmupSeconds: 60, MinHealthyPercent: 100},
+		Traffic:        TrafficSpec{Port: 443, Hostname: "api.example.com"},
+		Capacity:       CapacitySpec{Desired: 4, Min: 2, Max: 8},
+		Binary:         "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
+	}
+}
+
+func validGoployerStyleEC2DeploymentForValidationTests(replacementType string) DeploymentSpec {
+	return DeploymentSpec{
+		Name:   "payments-api-prod",
+		Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
+		Stacks: []StackSpec{{
+			Stack:           "payments-api-prod",
+			Account:         "prod-core",
+			Env:             "prod-apne2",
+			ReplacementType: replacementType,
+			Capacity:        CapacitySpec{Desired: 3, Min: 2, Max: 6},
+			Regions:         []RegionSpec{{Region: "ap-northeast-2", InstanceType: "t3.medium", AMIID: "ami-1234567890abcdef0"}},
+		}},
+	}
+}
 
 func TestValidateAccountSpecAcceptsMinimalMultiAccountConfiguration(t *testing.T) {
 	account := AccountSpec{
@@ -30,16 +61,8 @@ func TestValidateEnvironmentSpecRequiresPlacementFields(t *testing.T) {
 }
 
 func TestValidateDeploymentSpecAcceptsEC2BlueGreen(t *testing.T) {
-	deployment := DeploymentSpec{
-		Name:           "payments-api-prod",
-		AppRef:         "payments-api",
-		EnvironmentRef: "prod-apne2",
-		Target:         TargetSpec{Type: TargetTypeEC2},
-		Strategy:       StrategySpec{Type: StrategyTypeBlueGreen, WarmupSeconds: 60, MinHealthyPercent: 100},
-		Traffic:        TrafficSpec{Port: 443, Hostname: "api.example.com"},
-		Capacity:       CapacitySpec{Desired: 4, Min: 2, Max: 8},
-		Binary:         "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
-	}
+	deployment := validEC2DeploymentForValidationTests(StrategyTypeBlueGreen)
+	deployment.UserData = UserDataSpec{Type: "git", Path: "userdata/payments-api.sh"}
 
 	if err := ValidateDeployment(deployment); err != nil {
 		t.Fatalf("ValidateDeployment returned error: %v", err)
@@ -47,19 +70,8 @@ func TestValidateDeploymentSpecAcceptsEC2BlueGreen(t *testing.T) {
 }
 
 func TestValidateDeploymentSpecAcceptsGoployerStyleEC2Manifest(t *testing.T) {
-	deployment := DeploymentSpec{
-		Name:     "payments-api-prod",
-		Binary:   "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
-		UserData: UserDataSpec{Type: "git", Path: "userdata/payments-api.sh"},
-		Stacks: []StackSpec{{
-			Stack:           "payments-api-prod",
-			Account:         "prod-core",
-			Env:             "prod-apne2",
-			ReplacementType: "blueGreen",
-			Capacity:        CapacitySpec{Desired: 3, Min: 2, Max: 6},
-			Regions:         []RegionSpec{{Region: "ap-northeast-2", InstanceType: "t3.medium", AMIID: "ami-1234567890abcdef0"}},
-		}},
-	}
+	deployment := validGoployerStyleEC2DeploymentForValidationTests("blueGreen")
+	deployment.Stacks[0].UserData = UserDataSpec{Type: "git", Path: "userdata/payments-api.sh"}
 
 	if err := ValidateDeployment(deployment); err != nil {
 		t.Fatalf("ValidateDeployment returned error for goployer-style manifest: %v", err)
@@ -86,22 +98,120 @@ func TestValidateDeploymentSpecAcceptsECSImageManifest(t *testing.T) {
 	}
 }
 
-func TestValidateDeploymentSpecAcceptsEC2CanaryManifest(t *testing.T) {
+
+func TestValidateDeploymentSpecRejectsEC2MissingUserDataBootstrap(t *testing.T) {
+	testCases := []struct {
+		name       string
+		deployment DeploymentSpec
+	}{
+		{name: "top-level blueGreen", deployment: validEC2DeploymentForValidationTests(StrategyTypeBlueGreen)},
+		{name: "top-level rolling", deployment: validEC2DeploymentForValidationTests(StrategyTypeRolling)},
+		{name: "stack canary", deployment: validGoployerStyleEC2DeploymentForValidationTests("canary")},
+		{name: "stack linear", deployment: validGoployerStyleEC2DeploymentForValidationTests("linear")},
+		{name: "stack rolling", deployment: validGoployerStyleEC2DeploymentForValidationTests("rolling")},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateDeployment(tc.deployment)
+			if err == nil {
+				t.Fatalf("expected missing userdata bootstrap validation error")
+			}
+			if !strings.Contains(err.Error(), "EC2 deployments require userdata bootstrap metadata for immutable capacity") {
+				t.Fatalf("expected EC2 userdata bootstrap validation error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateDeploymentSpecRejectsEC2IncompleteUserDataBootstrap(t *testing.T) {
+	testCases := []struct {
+		name       string
+		deployment DeploymentSpec
+	}{
+		{
+			name:       "missing type at deployment level",
+			deployment: validEC2DeploymentForValidationTests(StrategyTypeBlueGreen),
+		},
+		{
+			name:       "missing path at deployment level",
+			deployment: validEC2DeploymentForValidationTests(StrategyTypeRolling),
+		},
+		{
+			name:       "missing type in stack fallback",
+			deployment: validGoployerStyleEC2DeploymentForValidationTests("linear"),
+		},
+		{
+			name:       "missing path in stack fallback",
+			deployment: validGoployerStyleEC2DeploymentForValidationTests("canary"),
+		},
+	}
+
+	testCases[0].deployment.UserData = UserDataSpec{Path: "userdata/payments-api.sh"}
+	testCases[1].deployment.UserData = UserDataSpec{Type: "git"}
+	testCases[2].deployment.Stacks[0].UserData = UserDataSpec{Path: "userdata/payments-api.sh"}
+	testCases[3].deployment.Stacks[0].UserData = UserDataSpec{Type: "git"}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateDeployment(tc.deployment)
+			if err == nil {
+				t.Fatalf("expected incomplete userdata bootstrap validation error")
+			}
+			if !strings.Contains(err.Error(), "EC2 deployments require userdata bootstrap metadata for immutable capacity") {
+				t.Fatalf("expected EC2 userdata bootstrap validation error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateDeploymentSpecAcceptsEC2CanaryManifestWithStackUserDataFallback(t *testing.T) {
+	deployment := validGoployerStyleEC2DeploymentForValidationTests("canary")
+	deployment.Stacks[0].UserData = UserDataSpec{Type: "git", Path: "userdata/payments-api.sh"}
+
+	if err := ValidateDeployment(deployment); err != nil {
+		t.Fatalf("ValidateDeployment returned error for EC2 canary manifest with stack userdata fallback: %v", err)
+	}
+}
+
+func TestValidateDeploymentSpecAcceptsEC2StackUserDataFallbackWhenTopLevelUserDataIsWhitespaceOnly(t *testing.T) {
+	deployment := validGoployerStyleEC2DeploymentForValidationTests("blueGreen")
+	deployment.UserData = UserDataSpec{Type: " ", Path: "\t"}
+	deployment.Stacks[0].UserData = UserDataSpec{Type: "git", Path: "userdata/payments-api.sh"}
+
+	if err := ValidateDeployment(deployment); err != nil {
+		t.Fatalf("ValidateDeployment returned error for EC2 manifest with whitespace-only top-level userdata and stack fallback: %v", err)
+	}
+}
+
+func TestValidateDeploymentSpecRejectsEC2UserDataPathThatNormalizesEmpty(t *testing.T) {
+	deployment := validGoployerStyleEC2DeploymentForValidationTests("blueGreen")
+	deployment.UserData = UserDataSpec{Type: "git", Path: "./"}
+	deployment.Stacks[0].UserData = UserDataSpec{Type: "git", Path: "userdata/payments-api.sh"}
+
+	err := ValidateDeployment(deployment)
+	if err == nil {
+		t.Fatalf("expected normalized-empty userdata path validation error")
+	}
+	if !strings.Contains(err.Error(), "EC2 deployments require userdata bootstrap metadata for immutable capacity") {
+		t.Fatalf("expected EC2 userdata bootstrap validation error, got %v", err)
+	}
+}
+
+func TestValidateDeploymentSpecAcceptsECSWithoutUserDataBootstrap(t *testing.T) {
 	deployment := DeploymentSpec{
-		Name:   "payments-api-prod",
-		Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
-		Stacks: []StackSpec{{
-			Stack:           "payments-api-prod",
-			Account:         "prod-core",
-			Env:             "prod-apne2",
-			ReplacementType: "canary",
-			Capacity:        CapacitySpec{Desired: 3, Min: 2, Max: 6},
-			Regions:         []RegionSpec{{Region: "ap-northeast-2"}},
-		}},
+		Name:           "payments-api-staging",
+		AppRef:         "payments-api",
+		EnvironmentRef: "staging-apne2",
+		Target:         TargetSpec{Type: TargetTypeECS},
+		Strategy:       StrategySpec{Type: StrategyTypeRolling, WarmupSeconds: 30, MinHealthyPercent: 50},
+		Traffic:        TrafficSpec{Port: 8080},
+		Capacity:       CapacitySpec{Desired: 2, Min: 1, Max: 3},
+		Image:          "ghcr.io/devopsartfactory/payments-api:staging-20260415",
 	}
 
 	if err := ValidateDeployment(deployment); err != nil {
-		t.Fatalf("ValidateDeployment returned error for EC2 canary manifest: %v", err)
+		t.Fatalf("ValidateDeployment returned error for ECS deployment without userdata bootstrap: %v", err)
 	}
 }
 
