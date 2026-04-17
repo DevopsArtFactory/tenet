@@ -103,10 +103,11 @@ status=$(curl -fsS "http://$HOST:$PORT/v1/status/deployments/payments-api-prod")
 resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")
 worker_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 ui=$(curl -fsS "http://$HOST:$PORT/")
+audit_ui=$(curl -fsS "http://$HOST:$PORT/?page=audit")
 plan_ui=$(curl -fsS "http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id")
 apply_ui=$(curl -fsS "http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id&applyId=$apply_id")
 
-SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_EVENTS_FIXTURE_JSON="$deployment_events_fixture" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" APPLY_RECORD_JSON="$apply_record" APPLY_RECORD_GET_JSON="$apply_record_get" STALE_PLAN_PREVIEW_JSON="$stale_plan_preview" AUDIT_LOGS_JSON="$audit_logs" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" PLAN_UI_HTML="$plan_ui" APPLY_UI_HTML="$apply_ui" python3 - <<'PY'
+SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_EVENTS_FIXTURE_JSON="$deployment_events_fixture" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" APPLY_RECORD_JSON="$apply_record" APPLY_RECORD_GET_JSON="$apply_record_get" STALE_PLAN_PREVIEW_JSON="$stale_plan_preview" AUDIT_LOGS_JSON="$audit_logs" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" AUDIT_UI_HTML="$audit_ui" PLAN_UI_HTML="$plan_ui" APPLY_UI_HTML="$apply_ui" python3 - <<'PY'
 import json, os
 summary = json.loads(os.environ['SUMMARY_JSON'])
 applications = json.loads(os.environ['APPLICATIONS_JSON'])
@@ -126,6 +127,7 @@ status = json.loads(os.environ['STATUS_JSON'])
 resource_logs = json.loads(os.environ['RESOURCE_LOGS_JSON'])
 worker_resource_logs = json.loads(os.environ['WORKER_RESOURCE_LOGS_JSON'])
 ui = os.environ['UI_HTML']
+audit_ui = os.environ['AUDIT_UI_HTML']
 plan_ui = os.environ['PLAN_UI_HTML']
 apply_ui = os.environ['APPLY_UI_HTML']
 assert summary['accountCount'] == 2, summary
@@ -232,6 +234,7 @@ assert '/v1/overview/applications' in ui, ui
 assert '/v1/overview/applications/${encodeURIComponent(deploymentName)}' in ui, ui
 assert 'Open account' in ui, ui
 assert 'Open application' in ui, ui
+assert 'Open audit log' in ui, ui
 assert 'Runtime change details' in ui, ui
 assert 'History change details' in ui, ui
 assert "buildPageURL('account', { accountId: deployment.awsAccountId })" in ui, ui
@@ -245,6 +248,11 @@ assert 'No controller runtime events have been persisted yet.' in ui, ui
 assert 'Controller runtime events are currently unavailable.' in ui, ui
 assert "createNavLink(buildPageURL('drift', { deployment: detail.name }), 'Drift view', '_self')" in ui, ui
 assert "createNavLink(buildPageURL('plan', { deployment: detail.name }), 'Plan/apply', '_self')" in ui, ui
+assert "createNavLink(buildPageURL('audit'), 'Audit log', '_self')" in ui, ui
+assert 'Audit timeline' in audit_ui, audit_ui
+assert 'Loading audit log…' in audit_ui, audit_ui
+assert 'Audit log is currently unavailable.' in audit_ui, audit_ui
+assert "const route = limit > 0 ? `/v1/audit-logs?limit=${encodeURIComponent(String(limit))}` : '/v1/audit-logs';" in audit_ui, audit_ui
 assert "fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`)" in ui, ui
 assert "const ifMatch = detail.sourceFingerprint || await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;" in ui, ui
 assert 'Recent logs' in ui, ui

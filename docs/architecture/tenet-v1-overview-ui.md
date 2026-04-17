@@ -27,7 +27,18 @@ The first page focuses on:
 - health
 - last update
 
-The goal is fast triage, not completeness. The denser account/group deployment surface now lives on the secondary `/?page=account&accountId={awsAccountId}` drill-down, where the UI reuses `GET /v1/overview/accounts/{awsAccountId}` plus grouped project/environment sections instead of crowding the landing page.
+The goal is fast triage, not completeness. The denser account/group deployment surface now lives on the secondary `/?page=account&accountId={awsAccountId}` drill-down, where the UI reuses `GET /v1/overview/accounts/{awsAccountId}` plus grouped project/environment sections instead of crowding the landing page. The landing page also exposes a small `_self` link to the dedicated bookmarkable audit route at `/?page=audit` (with optional `&limit={n}` for a smaller newest-first window).
+
+### 1b. Audit timeline
+The audit page is a sibling operator slice, not a replacement for the application drill-down.
+
+It stays intentionally narrow:
+- fetch `GET /v1/audit-logs`
+- render immutable plan/apply activity newest-first
+- keep actor identity explicit as unavailable or unknown instead of inventing names
+- provide `_self` links back into the existing `application` and `plan` routes when deployment / plan / apply identifiers exist
+
+This page is for immutable operator activity. It is separate from the controller-derived runtime events rendered on the application detail page.
 
 ### 2. Application detail
 The second page focuses on one application and the resources that matter for understanding its rollout.
@@ -67,7 +78,8 @@ The neighboring read-only plan-preview flow is also part of the operator contrac
 - `GET /v1/plans/{planId}` reopens the exact stored preview
 - `POST /v1/applies/plans/{planId}` persists an immutable apply request derived from an existing ready preview
 - `GET /v1/applies/{applyId}` reopens the exact stored apply request
-- `GET /v1/audit-logs` projects persisted plan/apply records into a local audit timeline for future UI work; the route also accepts `?limit={n}` for a newest-first window
+- `GET /v1/audit-logs` projects persisted plan/apply records into a local audit timeline; the route also accepts `?limit={n}` for a newest-first window
+- the embedded `/?page=audit` route now renders that audit timeline directly with explicit loading, empty, unavailable (`503`), and generic fetch-error states, and it accepts optional `&limit={n}` to request a smaller newest-first window from the API
 - the embedded `/?page=plan&deployment={deploymentName}&planId={planId}` workspace keeps the URL shareable/bookmarkable and prefers the reviewed detail `sourceFingerprint` for optimistic `ifMatch` protection before falling back to a loaded preview fingerprint
 - live execution remains intentionally disabled by default in this backend slice, so the apply-request route records a failed immutable contract with operator-facing error/details instead of contacting AWS
 - actor identity is intentionally explicit rather than invented: `GET /v1/audit-logs` returns `actor.available=false` because the persisted immutable stores do not currently capture operator auth data
@@ -82,6 +94,7 @@ That same fallback identity keeps resource-log drill-downs bookmarkable. Example
 ### Additional operator views
 The current UI also still exposes supporting operator surfaces beyond the main drill-down path:
 - account-oriented views for grouped project/environment context
+- audit timeline for immutable plan/apply history
 - drift workspace for troubleshooting
 - plan/apply workspace for read-only rollout planning context
 
