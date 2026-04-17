@@ -187,6 +187,7 @@
       const runtimeSummaryText = (runtimeSummary) => {
         if (!runtimeSummary) return '—';
         const labels = changeLabels(runtimeSummary?.changes);
+        const changeDetails = changeDetailLabels(runtimeSummary?.changeDetails);
         const runtimeContext = rolloutContextText(runtimeSummary);
         const parts = [
           runtimeSummary.summary,
@@ -199,6 +200,7 @@
           runtimeConditionsText(runtimeSummary.conditions, ''),
           runtimeSummary.source,
           labels.length ? labels.join(', ') : '',
+          changeDetails.length ? changeDetails.join('; ') : '',
           runtimeSummary.rolloutPhase,
           runtimeSummary.currentStep,
           Number.isFinite(runtimeSummary.historyCount) ? `history ${runtimeSummary.historyCount}` : '',
@@ -220,6 +222,11 @@
       const changeLabelsText = (changes) => {
         const labels = changeLabels(changes);
         return labels.length ? labels.join(', ') : '—';
+      };
+      const changeDetailLabels = (changeDetails) => (changeDetails || []).filter((detail) => typeof detail === 'string' && detail);
+      const changeDetailsText = (changeDetails) => {
+        const labels = changeDetailLabels(changeDetails);
+        return labels.length ? labels.join('; ') : '—';
       };
       const latestRuntimeTimestamp = (applications) => applications
         .map((deployment) => deployment.runtimeSummary?.timestamp)
@@ -847,6 +854,7 @@
           ['Runtime context', rolloutContextText(detail.runtimeSummary) || '—'],
           ['Runtime artifact', runtimeArtifactText(detail.runtimeSummary?.deployedArtifact) || '—'],
           ['Runtime conditions', runtimeConditionsText(detail.runtimeSummary?.conditions)],
+          ['Runtime change details', changeDetailsText(detail.runtimeSummary?.changeDetails)],
           ['Rollout generations', detail.rollout ? generationsText(detail.rollout) : `desired — · observed ${generationValue(detail.observedGeneration)}`],
           ['Runtime timestamp', metricValue(detail.runtimeSummary?.timestamp)],
           ['Runtime source', metricValue(detail.runtimeSummary?.source)],
@@ -883,6 +891,9 @@
             }
             if (entry.source) {
               historyMeta.append(createElement('span', 'detail-condition-meta', `History source · ${entry.source}`));
+            }
+            if (changeDetailLabels(entry.changeDetails).length) {
+              historyMeta.append(createElement('span', 'detail-condition-meta', `History change details · ${changeDetailsText(entry.changeDetails)}`));
             }
             if (entry.rolloutPhase) {
               historyMeta.append(createElement('span', 'detail-condition-meta', `History rollout phase · ${entry.rolloutPhase}`));
@@ -1082,6 +1093,7 @@
           ['Runtime context', rolloutContextText(detail.runtimeSummary) || '—'],
           ['Runtime source', metricValue(detail.runtimeSummary?.source)],
           ['Runtime changes', changeLabelsText(detail.runtimeSummary?.changes)],
+          ['Runtime change details', changeDetailsText(detail.runtimeSummary?.changeDetails)],
           ['Runtime artifact', runtimeArtifactText(detail.runtimeSummary?.deployedArtifact) || '—'],
           ['Runtime conditions', runtimeConditionsText(detail.runtimeSummary?.conditions)],
           ['Rollout generations', detail.rollout ? generationsText(detail.rollout) : `desired — · observed ${generationValue(detail.observedGeneration)}`],
@@ -1125,6 +1137,9 @@
             }
             if (entry.source) {
               historyMeta.append(createElement('span', 'detail-condition-meta', `History source · ${entry.source}`));
+            }
+            if (changeDetailLabels(entry.changeDetails).length) {
+              historyMeta.append(createElement('span', 'detail-condition-meta', `History change details · ${changeDetailsText(entry.changeDetails)}`));
             }
             if (entry.rolloutPhase) {
               historyMeta.append(createElement('span', 'detail-condition-meta', `History rollout phase · ${entry.rolloutPhase}`));
@@ -1292,6 +1307,7 @@
           ['Runtime context', rolloutContextText(detail.runtimeSummary) || '—'],
           ['Runtime timestamp', metricValue(detail.runtimeSummary?.timestamp)],
           ['Runtime history', Number.isFinite(detail.runtimeSummary?.historyCount) ? String(detail.runtimeSummary.historyCount) : '—'],
+          ['Runtime change details', changeDetailsText(detail.runtimeSummary?.changeDetails)],
           ['Runtime artifact', runtimeArtifactText(detail.runtimeSummary?.deployedArtifact) || '—'],
           ['Runtime conditions', runtimeConditionsText(detail.runtimeSummary?.conditions)],
         ].forEach(([label, value]) => {

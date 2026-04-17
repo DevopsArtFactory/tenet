@@ -95,6 +95,7 @@ type StatusHistoryEntry struct {
 	Source             string             `json:"source"`
 	Summary            string             `json:"summary"`
 	Changes            []string           `json:"changes,omitempty"`
+	ChangeDetails      []string           `json:"changeDetails,omitempty"`
 	DeployedArtifact   DeploymentArtifact `json:"deployedArtifact,omitempty"`
 	Conditions         []Condition        `json:"conditions,omitempty"`
 	Sync               Sync               `json:"sync"`
@@ -128,6 +129,7 @@ type RuntimeSummary struct {
 	Source             string             `json:"source,omitempty"`
 	Summary            string             `json:"summary,omitempty"`
 	Changes            []string           `json:"changes,omitempty"`
+	ChangeDetails      []string           `json:"changeDetails,omitempty"`
 	DeployedArtifact   DeploymentArtifact `json:"deployedArtifact,omitempty"`
 	Conditions         []Condition        `json:"conditions,omitempty"`
 	Sync               Sync               `json:"sync"`

@@ -157,17 +157,18 @@ func runtimeStatusBatchWriter(store statusstore.Store) statusstore.BatchWriter {
 func appendRuntimeHistory(previous domain.DeploymentStatus, current domain.DeploymentStatus) []domain.StatusHistoryEntry {
 	history := append([]domain.StatusHistoryEntry(nil), current.History...)
 	entry := deriveRuntimeHistoryEntry(current)
+	previousEntry := deriveRuntimeHistoryEntry(previous)
 	if len(history) == 0 {
 		entry.Timestamp = runtimeHistoryNow().UTC().Format(time.RFC3339)
-		entry.Changes = []string{"initial"}
+		entry.Changes, entry.ChangeDetails = runtimeHistoryInitialDiff(previousEntry, entry)
 		return []domain.StatusHistoryEntry{entry}
 	}
 
-	latest := deriveRuntimeHistoryEntry(previous)
+	latest := previousEntry
 	if len(history) > 0 {
 		latest = history[len(history)-1]
 	}
-	normalizedLatest := normalizeRuntimeHistoryEntryContext(latest, deriveRuntimeHistoryEntry(previous))
+	normalizedLatest := normalizeRuntimeHistoryEntryContext(latest, previousEntry)
 	normalizedLatest = normalizeRuntimeHistoryEntryContext(normalizedLatest, entry)
 	if len(history) > 0 && !reflect.DeepEqual(normalizedLatest, history[len(history)-1]) {
 		history[len(history)-1] = normalizedLatest
@@ -178,9 +179,9 @@ func appendRuntimeHistory(previous domain.DeploymentStatus, current domain.Deplo
 
 	entry.Timestamp = runtimeHistoryNow().UTC().Format(time.RFC3339)
 	if !runtimeHistoryHasControllerEntry(history) {
-		entry.Changes = []string{"initial"}
+		entry.Changes, entry.ChangeDetails = runtimeHistoryInitialDiff(normalizedLatest, entry)
 	} else {
-		entry.Changes = runtimeHistoryChanges(normalizedLatest, entry)
+		entry.Changes, entry.ChangeDetails = runtimeHistoryDiff(normalizedLatest, entry)
 	}
 	history = append(history, entry)
 	return capRuntimeHistory(history)
@@ -194,7 +195,9 @@ func normalizeRuntimeHistoryEntryContext(entry domain.StatusHistoryEntry, fallba
 		entry.DeployedArtifact = fallback.DeployedArtifact
 	}
 	if len(entry.Conditions) == 0 && len(fallback.Conditions) > 0 {
-		entry.Conditions = append([]domain.Condition(nil), fallback.Conditions...)
+		entry.Conditions = normalizeRuntimeHistoryConditions(fallback.Conditions)
+	} else {
+		entry.Conditions = normalizeRuntimeHistoryConditions(entry.Conditions)
 	}
 	if entry.TargetType == "" {
 		entry.TargetType = fallback.TargetType
@@ -218,44 +221,147 @@ func runtimeHistoryHasControllerEntry(history []domain.StatusHistoryEntry) bool 
 }
 
 func runtimeHistoryChanges(previous domain.StatusHistoryEntry, current domain.StatusHistoryEntry) []string {
-	changes := make([]string, 0, 12)
+	changes, _ := runtimeHistoryDiff(previous, current)
+	return changes
+}
+
+func runtimeHistoryChangeDetails(previous domain.StatusHistoryEntry, current domain.StatusHistoryEntry) []string {
+	_, details := runtimeHistoryDiff(previous, current)
+	return details
+}
+
+func runtimeHistoryInitialDiff(previous domain.StatusHistoryEntry, current domain.StatusHistoryEntry) ([]string, []string) {
+	changes := []string{"initial"}
+	details := []string{"Initial controller-authored history entry"}
+	diffChanges, diffDetails := runtimeHistoryDiff(previous, current)
+	return append(changes, diffChanges...), append(details, diffDetails...)
+}
+
+func runtimeHistoryDiff(previous domain.StatusHistoryEntry, current domain.StatusHistoryEntry) ([]string, []string) {
+	changes := make([]string, 0, 13)
+	details := make([]string, 0, 13)
 	if previous.Summary != current.Summary {
 		changes = append(changes, "summary")
+		details = append(details, fmt.Sprintf("Summary changed to %s", valueOrUnknown(current.Summary)))
 	}
 	if previous.DeployedArtifact != current.DeployedArtifact {
 		changes = append(changes, "deployedArtifact")
+		details = append(details, fmt.Sprintf("Artifact changed to %s", describeDeploymentArtifact(current.DeployedArtifact)))
 	}
-	if !reflect.DeepEqual(previous.Conditions, current.Conditions) {
+	if !runtimeHistoryConditionsEqual(previous.Conditions, current.Conditions) {
 		changes = append(changes, "conditions")
+		details = append(details, fmt.Sprintf("Conditions changed to %s", describeConditions(current.Conditions)))
 	}
 	if previous.Sync != current.Sync {
 		changes = append(changes, "sync")
+		details = append(details, fmt.Sprintf("Sync changed to %s%s", valueOrUnknown(string(current.Sync.State)), suffixWithColon(current.Sync.Reason)))
 	}
 	if previous.Health != current.Health {
 		changes = append(changes, "health")
+		details = append(details, fmt.Sprintf("Health changed to %s%s", valueOrUnknown(string(current.Health.Overall)), suffixWithColon(current.Health.Summary)))
 	}
 	if previous.DesiredGeneration != current.DesiredGeneration {
 		changes = append(changes, "desiredGeneration")
+		details = append(details, fmt.Sprintf("Desired generation changed from %d to %d", previous.DesiredGeneration, current.DesiredGeneration))
 	}
 	if previous.ObservedGeneration != current.ObservedGeneration {
 		changes = append(changes, "observedGeneration")
+		details = append(details, fmt.Sprintf("Observed generation changed from %d to %d", previous.ObservedGeneration, current.ObservedGeneration))
 	}
 	if previous.RolloutPhase != current.RolloutPhase {
 		changes = append(changes, "rolloutPhase")
+		details = append(details, fmt.Sprintf("Rollout phase changed from %s to %s", valueOrUnknown(string(previous.RolloutPhase)), valueOrUnknown(string(current.RolloutPhase))))
 	}
 	if previous.CurrentStep != current.CurrentStep {
 		changes = append(changes, "currentStep")
+		details = append(details, fmt.Sprintf("Current step changed from %s to %s", valueOrUnknown(previous.CurrentStep), valueOrUnknown(current.CurrentStep)))
 	}
 	if previous.TargetType != current.TargetType {
 		changes = append(changes, "targetType")
+		details = append(details, fmt.Sprintf("Target type changed from %s to %s", valueOrUnknown(previous.TargetType), valueOrUnknown(current.TargetType)))
 	}
 	if previous.Strategy != current.Strategy {
 		changes = append(changes, "strategy")
+		details = append(details, fmt.Sprintf("Strategy changed from %s to %s", valueOrUnknown(previous.Strategy), valueOrUnknown(current.Strategy)))
 	}
 	if previous.ExecutionMode != current.ExecutionMode {
 		changes = append(changes, "executionMode")
+		details = append(details, fmt.Sprintf("Execution mode changed from %s to %s", valueOrUnknown(previous.ExecutionMode), valueOrUnknown(current.ExecutionMode)))
 	}
-	return changes
+	return changes, details
+}
+
+func describeDeploymentArtifact(artifact domain.DeploymentArtifact) string {
+	switch {
+	case artifact.Binary != "":
+		return artifact.Binary
+	case artifact.Image != "":
+		return artifact.Image
+	default:
+		return "none"
+	}
+}
+
+func describeConditions(conditions []domain.Condition) string {
+	if len(conditions) == 0 {
+		return "none"
+	}
+	parts := make([]string, 0, len(conditions))
+	for _, condition := range normalizeRuntimeHistoryConditions(conditions) {
+		part := fmt.Sprintf("%s=%s", valueOrUnknown(condition.Type), boolLabel(condition.Status))
+		if condition.Reason != "" {
+			part += fmt.Sprintf(" (%s)", condition.Reason)
+		}
+		parts = append(parts, part)
+	}
+	return strings.Join(parts, ", ")
+}
+
+func normalizeRuntimeHistoryConditions(conditions []domain.Condition) []domain.Condition {
+	if len(conditions) == 0 {
+		return nil
+	}
+	normalized := append([]domain.Condition(nil), conditions...)
+	sort.Slice(normalized, func(i, j int) bool {
+		left := normalized[i]
+		right := normalized[j]
+		if left.Type != right.Type {
+			return left.Type < right.Type
+		}
+		if left.Status != right.Status {
+			return !left.Status && right.Status
+		}
+		if left.Reason != right.Reason {
+			return left.Reason < right.Reason
+		}
+		return left.Message < right.Message
+	})
+	return normalized
+}
+
+func runtimeHistoryConditionsEqual(previous []domain.Condition, current []domain.Condition) bool {
+	return reflect.DeepEqual(normalizeRuntimeHistoryConditions(previous), normalizeRuntimeHistoryConditions(current))
+}
+
+func boolLabel(value bool) string {
+	if value {
+		return "True"
+	}
+	return "False"
+}
+
+func suffixWithColon(value string) string {
+	if value == "" {
+		return ""
+	}
+	return ": " + value
+}
+
+func valueOrUnknown(value string) string {
+	if value == "" {
+		return "Unknown"
+	}
+	return value
 }
 
 func capRuntimeHistory(history []domain.StatusHistoryEntry) []domain.StatusHistoryEntry {
@@ -270,7 +376,7 @@ func deriveRuntimeHistoryEntry(status domain.DeploymentStatus) domain.StatusHist
 		Source:             runtimeHistorySourceController,
 		Summary:            "Runtime status updated",
 		DeployedArtifact:   status.DeployedArtifact,
-		Conditions:         append([]domain.Condition(nil), status.Conditions...),
+		Conditions:         normalizeRuntimeHistoryConditions(status.Conditions),
 		Sync:               status.Sync,
 		Health:             status.Health,
 		ObservedGeneration: status.ObservedGeneration,
@@ -292,7 +398,7 @@ func runtimeHistoryMeaningfullyChanged(previous domain.StatusHistoryEntry, curre
 	return previous.Source != current.Source ||
 		previous.Summary != current.Summary ||
 		previous.DeployedArtifact != current.DeployedArtifact ||
-		!reflect.DeepEqual(previous.Conditions, current.Conditions) ||
+		!runtimeHistoryConditionsEqual(previous.Conditions, current.Conditions) ||
 		previous.Sync != current.Sync ||
 		previous.Health != current.Health ||
 		previous.DesiredGeneration != current.DesiredGeneration ||

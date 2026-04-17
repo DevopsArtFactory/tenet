@@ -80,7 +80,7 @@ The account drill-down page consumes `GET /v1/overview/accounts/{awsAccountId}` 
 - sibling `Account JSON`, `Group JSON`, and `_self` `Open application` links outside the expandable row toggle
 - expandable deployment rows that still lazy-load `GET /v1/overview/deployments/{deploymentName}` for deep detail
 
-The underlying `/v1/overview/applications` payload is still a richer joined row than the first page renders. It also preserves additive runtime summary, rollout summary, artifact, generation, condition, and rollout-context fields (`runtimeSummary.targetType` / `runtimeSummary.strategy` / `runtimeSummary.executionMode`) so other UI helpers and future slices can reuse the same route without rejoining `/v1/overview/accounts`. Client-side search now also matches additive `runtimeSummary.deployedArtifact` and concise `runtimeSummary.conditions[]` summaries when those fields are present, but it intentionally skips placeholder `—` text so missing runtime context does not create noisy matches.
+The underlying `/v1/overview/applications` payload is still a richer joined row than the first page renders. It also preserves additive runtime summary, rollout summary, artifact, generation, condition, rollout-context fields (`runtimeSummary.targetType` / `runtimeSummary.strategy` / `runtimeSummary.executionMode`), and the latest human-readable `runtimeSummary.changeDetails[]` copied from controller-authored runtime history when present, so other UI helpers and future slices can reuse the same route without rejoining `/v1/overview/accounts`. Client-side search now also matches additive `runtimeSummary.deployedArtifact`, concise `runtimeSummary.conditions[]` summaries, and `runtimeSummary.changeDetails[]` when those fields are present, but it intentionally skips placeholder `—` text so missing runtime context does not create noisy matches.
 
 ### Application detail page
 
@@ -124,6 +124,7 @@ Current drift workspace behavior:
 - lazy-loads deployment detail
 - shows latest runtime context rows for target/strategy/execution mode
 - shows additive runtime artifact/condition rows from `runtimeSummary.deployedArtifact` / `runtimeSummary.conditions`
+- keeps machine-readable `runtimeSummary.changes[]` rows while also rendering human-readable `runtimeSummary.changeDetails[]`
 - shows deployment context and status conditions
 - explicitly states that field-level drift rows are not yet available in the read model
 
@@ -133,6 +134,7 @@ Current plan/apply workspace behavior:
 - reuses the embedded shell
 - shows latest runtime context rows for target/strategy/execution mode
 - shows additive runtime artifact/condition rows from `runtimeSummary.deployedArtifact` / `runtimeSummary.conditions`
+- keeps machine-readable `runtimeSummary.changes[]` rows while also rendering human-readable `runtimeSummary.changeDetails[]`
 - shows rollout-plan steps from the deployment detail route
 - displays disabled `Create Plan` / `Apply Plan` buttons
 - explicitly states that mutation APIs are not wired yet
@@ -170,6 +172,7 @@ Current operator-visible fields include:
 - `runtimeSummary.strategy`
 - `runtimeSummary.executionMode`
 - `runtimeSummary.changes[]`
+- `runtimeSummary.changeDetails[]`
 - `runtimeSummary.deployedArtifact`
 - `runtimeSummary.conditions[]`
 - `runtimeSummary.source`
@@ -183,7 +186,7 @@ UI rendering rules:
 - missing generation fields render as `—`, not `0`
 - runtime context rows are rendered as concise `Target … · Strategy … · Execution …` text sourced from runtimeSummary/history fields, not reconstructed from HTML snippets
 - runtime artifact/condition summaries are rendered only when present; search/index text never includes placeholder `—` entries for missing runtime artifact/condition context
-- latest change labels are additive string arrays, not objects
+- latest change labels/details are additive string arrays, not objects
 
 ## Testing and verification
 

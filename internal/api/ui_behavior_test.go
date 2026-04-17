@@ -2741,3 +2741,163 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
 	}
 }
+
+func TestEmbeddedUIChangeDetailsWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	detailJSON, err := json.Marshal(map[string]any{
+		"name":             "payments-api-staging",
+		"appRef":           "payments",
+		"environmentRef":   "staging-apne2",
+		"region":           "ap-northeast-2",
+		"accountName":      "staging-core",
+		"awsAccountId":     "210987654321",
+		"targetType":       "ecs",
+		"strategy":         "linear",
+		"executionMode":    "ecsCodeDeploy",
+		"sync":             map[string]any{"state": "OutOfSync", "reason": "traffic shift running"},
+		"health":           map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy"},
+		"desiredArtifact":  map[string]any{"image": "ghcr.io/example/payments:v2"},
+		"deployedArtifact": map[string]any{"image": "ghcr.io/example/payments:v1"},
+		"runtimeSummary": map[string]any{
+			"source":           "deployment-controller",
+			"timestamp":        "2026-04-16T07:10:00Z",
+			"targetType":       "ecs",
+			"strategy":         "linear",
+			"executionMode":    "ecsCodeDeploy",
+			"historyCount":     2,
+			"changes":          []string{"summary", "currentStep"},
+			"changeDetails":    []string{"Summary changed to Shifted 10 percent of traffic", "Current step changed from CreateCodeDeployDeployment to ShiftTrafficLinear"},
+			"deployedArtifact": map[string]any{"image": "ghcr.io/example/payments:v1-runtime"},
+			"conditions":       []map[string]any{{"type": "Progressing", "status": true, "reason": "TrafficShiftLinear", "message": "runtime summary tracks the in-flight linear shift"}},
+		},
+		"history": []map[string]any{{
+			"timestamp":         "2026-04-16T07:05:00Z",
+			"summary":           "Created deployment group revision for v2",
+			"source":            "deployment-controller",
+			"targetType":        "ecs",
+			"strategy":          "linear",
+			"executionMode":     "ecsCodeDeploy",
+			"changes":           []string{"summary", "currentStep"},
+			"changeDetails":     []string{"Summary changed to Created deployment group revision for v2", "Current step changed from VerifyServiceStability to ShiftTrafficLinear"},
+			"deployedArtifact":  map[string]any{"image": "ghcr.io/example/payments:v0"},
+			"conditions":        []map[string]any{{"type": "Progressing", "status": true, "reason": "DeploymentStarted", "message": "CodeDeploy deployment created"}},
+			"sync":              map[string]any{"state": "OutOfSync"},
+			"health":            map[string]any{"overall": "Progressing", "summary": "warming"},
+			"desiredGeneration": 12,
+			"observedGeneration": 11,
+			"rolloutPhase":      "Accepted",
+			"currentStep":       "ShiftTrafficLinear",
+		}},
+		"conditions": []map[string]any{{"type": "Available", "status": true, "reason": "ServiceReady", "message": "Service is ready"}},
+		"rollout": map[string]any{
+			"phase":       "Accepted",
+			"currentStep": "ShiftTrafficLinear",
+			"execution": []map[string]any{{
+				"name":        "payments-api-staging Deployment Group",
+				"resource":    "codeDeployDeploymentGroup",
+				"description": "Linear traffic shifting deployment group",
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal detail body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const createDocument = () => {
+  const document = new Document();
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  return document;
+};
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const resourceID = 'codeDeployDeploymentGroup::payments-api-staging Deployment Group::Linear traffic shifting deployment group';
+async function render(search) {
+  const document = createDocument();
+  const window = { location: { pathname: '/', search, hash: '' } };
+  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  const fetchCalls = [];
+  const logsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging+Deployment+Group';
+  const fetch = (url) => {
+    fetchCalls.push(String(url));
+    if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    throw new Error('unexpected fetch url: ' + url);
+  };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle();
+  await settle();
+  return { document, fetchCalls };
+}
+(async () => {
+  const resourceRun = await render('?page=resource&deployment=payments-api-staging&resourceType=codeDeployDeploymentGroup&resourceId=' + encodeURIComponent(resourceID));
+  if (!resourceRun.fetchCalls.includes('/v1/overview/deployments/payments-api-staging')) throw new Error('expected resource route to load deployment detail');
+  const resourceText = collectText(resourceRun.document.getElementById('accounts')).join(' | ');
+  if (!resourceText.includes('Runtime change details')) throw new Error('expected resource route runtime change details label');
+  if (!resourceText.includes('Summary changed to Shifted 10 percent of traffic; Current step changed from CreateCodeDeployDeployment to ShiftTrafficLinear')) throw new Error('expected resource route runtime change details value');
+  if (!resourceText.includes('History change details')) throw new Error('expected resource route history change details label');
+  if (!resourceText.includes('Summary changed to Created deployment group revision for v2; Current step changed from VerifyServiceStability to ShiftTrafficLinear')) throw new Error('expected resource route history change details value');
+
+  const driftRun = await render('?page=drift&deployment=payments-api-staging');
+  if (driftRun.fetchCalls.length !== 1 || driftRun.fetchCalls[0] !== '/v1/overview/deployments/payments-api-staging') throw new Error('expected drift route to load only deployment detail');
+  const driftText = collectText(driftRun.document.getElementById('accounts')).join(' | ');
+  if (!driftText.includes('summary')) throw new Error('expected drift route existing runtime change labels');
+  if (!driftText.includes('Runtime change details')) throw new Error('expected drift route runtime change details label');
+  if (!driftText.includes('Summary changed to Shifted 10 percent of traffic; Current step changed from CreateCodeDeployDeployment to ShiftTrafficLinear')) throw new Error('expected drift route runtime change details value');
+})();
+`
+
+	cmd := exec.Command("node", "-e", nodeProgram)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+	}
+}

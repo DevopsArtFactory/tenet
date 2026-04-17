@@ -645,6 +645,25 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUIIncludesRuntimeAndHistoryChangeDetailsRendering(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const changeDetailLabels = (changeDetails) => (changeDetails || []).filter((detail) => typeof detail === 'string' && detail);",
+		"const changeDetailsText = (changeDetails) => {",
+		"const labels = changeDetailLabels(changeDetails);",
+		"return labels.length ? labels.join('; ') : '—';",
+		"['Runtime change details', changeDetailsText(detail.runtimeSummary?.changeDetails)],",
+		"History change details",
+		"changeDetailLabels(entry.changeDetails).length",
+		"changeDetailsText(entry.changeDetails)",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+}
+
 func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	body, err := os.ReadFile("../../scripts/smoke-local.sh")
 	if err != nil {
@@ -660,5 +679,17 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert resource_logs['resourceType'] == 'trafficShiftPlan', resource_logs") {
 		t.Fatalf("expected smoke-local.sh to assert the resource-logs response shape")
+	}
+	if !strings.Contains(text, "assert isinstance(runtime_summary.get('changeDetails', []), list), overview") {
+		t.Fatalf("expected smoke-local.sh to verify overview runtimeSummary.changeDetails shape")
+	}
+	if !strings.Contains(text, "assert isinstance(deployment_runtime_summary.get('changeDetails', []), list), deployment_detail") {
+		t.Fatalf("expected smoke-local.sh to verify deployment detail runtimeSummary.changeDetails shape")
+	}
+	if !strings.Contains(text, "if deployment_history:") || !strings.Contains(text, "assert isinstance(deployment_history[0].get('changeDetails', []), list), deployment_detail") {
+		t.Fatalf("expected smoke-local.sh to verify deployment detail history changeDetails shape")
+	}
+	if !strings.Contains(text, "assert 'Runtime change details' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains Runtime change details")
 	}
 }
