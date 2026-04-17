@@ -14,7 +14,8 @@ const unavailableActorReason = "actor information is unavailable because the imm
 
 // Query captures optional audit timeline filters.
 type Query struct {
-	Limit int `json:"limit,omitempty"`
+	Limit          int    `json:"limit,omitempty"`
+	DeploymentName string `json:"deploymentName,omitempty"`
 }
 
 // Actor makes missing operator identity explicit instead of inventing auth data.
@@ -96,9 +97,15 @@ func (s Service) List(_ context.Context, query Query) (Result, error) {
 
 	entries := make([]Entry, 0, len(planRecords)+len(applyRecords))
 	for _, record := range planRecords {
+		if query.DeploymentName != "" && record.DeploymentName != query.DeploymentName {
+			continue
+		}
 		entries = append(entries, projectPlan(record, deployments[record.DeploymentName]))
 	}
 	for _, record := range applyRecords {
+		if query.DeploymentName != "" && record.DeploymentName != query.DeploymentName {
+			continue
+		}
 		entries = append(entries, projectApply(record, deployments[record.DeploymentName]))
 	}
 

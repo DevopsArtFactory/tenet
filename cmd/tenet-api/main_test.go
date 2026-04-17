@@ -301,6 +301,33 @@ func TestAPIOptionsAuditLogsProjectPersistedPlanAndApplyRecords(t *testing.T) {
 	}
 }
 
+func TestAPIOptionsAuditLogsDeploymentFilterReturnsExplicitEmptyEntries(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	t.Setenv("TENET_PLAN_STORE_PATH", filepath.Join(t.TempDir(), "plan-previews.json"))
+	t.Setenv("TENET_APPLY_STORE_PATH", filepath.Join(t.TempDir(), "apply-requests.json"))
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
+	if options.CreateDeploymentPlanPreview == nil || options.CreateApplyRequest == nil || options.AuditLogs == nil {
+		t.Fatalf("expected audit log dependencies to be wired")
+	}
+
+	plan, err := options.CreateDeploymentPlanPreview(context.Background(), "api-prod", planpreview.CreateRequest{})
+	if err != nil {
+		t.Fatalf("CreateDeploymentPlanPreview returned error: %v", err)
+	}
+	if _, err := options.CreateApplyRequest(context.Background(), plan.Record.ID); err != nil {
+		t.Fatalf("CreateApplyRequest returned error: %v", err)
+	}
+
+	result, err := options.AuditLogs(context.Background(), auditlog.Query{DeploymentName: "worker-prod"})
+	if err != nil {
+		t.Fatalf("AuditLogs returned error: %v", err)
+	}
+	if len(result.Entries) != 0 {
+		t.Fatalf("expected empty filtered audit entries, got %+v", result.Entries)
+	}
+}
+
 func TestAPIOptionsOverviewDeploymentEventsUsesNamedSnapshotLookup(t *testing.T) {
 	repoRoot := writeRepositoryFixture(t)
 	store := &stubStatusStore{

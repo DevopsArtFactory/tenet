@@ -379,6 +379,14 @@ func NewRouter(options Options) http.Handler {
 			return
 		}
 		query := auditlog.Query{}
+		if _, ok := r.URL.Query()["deployment"]; ok {
+			deploymentName := strings.TrimSpace(r.URL.Query().Get("deployment"))
+			if deploymentName == "" || strings.Contains(deploymentName, "/") {
+				http.Error(w, "invalid deployment query", http.StatusBadRequest)
+				return
+			}
+			query.DeploymentName = deploymentName
+		}
 		if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
 			limit, err := strconv.Atoi(raw)
 			if err != nil || limit < 1 {

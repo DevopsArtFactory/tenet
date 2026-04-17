@@ -99,6 +99,8 @@ PY
 apply_record_get=$(curl -fsS "http://$HOST:$PORT/v1/applies/$apply_id")
 stale_plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d '{"ifMatch":"plan_deadbeef"}' "http://$HOST:$PORT/v1/plans/deployments/payments-api-prod")
 audit_logs=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs")
+audit_logs_filtered=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs?deployment=payments-api-prod&limit=1")
+audit_logs_empty=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs?deployment=worker-prod")
 status=$(curl -fsS "http://$HOST:$PORT/v1/status/deployments/payments-api-prod")
 resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")
 worker_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
@@ -107,7 +109,7 @@ audit_ui=$(curl -fsS "http://$HOST:$PORT/?page=audit")
 plan_ui=$(curl -fsS "http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id")
 apply_ui=$(curl -fsS "http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id&applyId=$apply_id")
 
-SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_EVENTS_FIXTURE_JSON="$deployment_events_fixture" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" APPLY_RECORD_JSON="$apply_record" APPLY_RECORD_GET_JSON="$apply_record_get" STALE_PLAN_PREVIEW_JSON="$stale_plan_preview" AUDIT_LOGS_JSON="$audit_logs" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" AUDIT_UI_HTML="$audit_ui" PLAN_UI_HTML="$plan_ui" APPLY_UI_HTML="$apply_ui" python3 - <<'PY'
+SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_EVENTS_FIXTURE_JSON="$deployment_events_fixture" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" APPLY_RECORD_JSON="$apply_record" APPLY_RECORD_GET_JSON="$apply_record_get" STALE_PLAN_PREVIEW_JSON="$stale_plan_preview" AUDIT_LOGS_JSON="$audit_logs" AUDIT_LOGS_FILTERED_JSON="$audit_logs_filtered" AUDIT_LOGS_EMPTY_JSON="$audit_logs_empty" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" AUDIT_UI_HTML="$audit_ui" PLAN_UI_HTML="$plan_ui" APPLY_UI_HTML="$apply_ui" python3 - <<'PY'
 import json, os
 summary = json.loads(os.environ['SUMMARY_JSON'])
 applications = json.loads(os.environ['APPLICATIONS_JSON'])
@@ -123,6 +125,8 @@ apply_record = json.loads(os.environ['APPLY_RECORD_JSON'])
 apply_record_get = json.loads(os.environ['APPLY_RECORD_GET_JSON'])
 stale_plan_preview = json.loads(os.environ['STALE_PLAN_PREVIEW_JSON'])
 audit_logs = json.loads(os.environ['AUDIT_LOGS_JSON'])
+audit_logs_filtered = json.loads(os.environ['AUDIT_LOGS_FILTERED_JSON'])
+audit_logs_empty = json.loads(os.environ['AUDIT_LOGS_EMPTY_JSON'])
 status = json.loads(os.environ['STATUS_JSON'])
 resource_logs = json.loads(os.environ['RESOURCE_LOGS_JSON'])
 worker_resource_logs = json.loads(os.environ['WORKER_RESOURCE_LOGS_JSON'])
@@ -209,6 +213,11 @@ for entry in audit_logs['entries']:
     assert 'do not persist operator identity' in entry['actor']['reason'], entry
     assert isinstance(entry.get('metadata', {}), dict), entry
     assert isinstance(entry.get('source', {}), dict), entry
+assert isinstance(audit_logs_filtered.get('entries', []), list), audit_logs_filtered
+assert len(audit_logs_filtered['entries']) == 1, audit_logs_filtered
+assert audit_logs_filtered['entries'][0]['deploymentName'] == 'payments-api-prod', audit_logs_filtered
+assert isinstance(audit_logs_empty.get('entries', []), list), audit_logs_empty
+assert audit_logs_empty['entries'] == [], audit_logs_empty
 assert status['deploymentName'] == 'payments-api-prod', status
 assert status['status']['sync']['state'] == 'Synced', status
 assert resource_logs['deploymentName'] == 'payments-api-prod', resource_logs
