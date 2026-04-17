@@ -824,7 +824,7 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 			{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"},
 		},
 		Deployments: []domain.Deployment{
-			{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2", TargetType: "ec2", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", DesiredArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7"}, UserData: domain.DeploymentUserData{Type: "file", Path: "userdata/payments-api-prod.sh"}},
+			{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2", TargetType: "ec2", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", DesiredArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7"}, UserData: domain.DeploymentUserData{Type: "file", Path: "userdata/payments-api-prod.sh"}, RolloutConfig: domain.DeploymentRolloutConfig{Strategy: domain.DeploymentRolloutStrategy{WarmupSeconds: 30, MinHealthyPercent: 90}}},
 		},
 	}
 
@@ -843,6 +843,9 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	}
 	if detail.UserData.Type != "file" || detail.UserData.Path != "userdata/payments-api-prod.sh" {
 		t.Fatalf("expected userdata metadata, got %+v", detail.UserData)
+	}
+	if detail.RolloutConfig.Strategy.WarmupSeconds != 30 || detail.RolloutConfig.Strategy.MinHealthyPercent != 90 {
+		t.Fatalf("expected rollout config metadata, got %+v", detail.RolloutConfig)
 	}
 	if detail.DesiredArtifact.Binary != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7" || detail.DeployedArtifact.Binary != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6" {
 		t.Fatalf("expected desired/deployed artifacts, got %+v", detail)

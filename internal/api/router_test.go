@@ -1369,7 +1369,7 @@ func TestRouterOverviewDeployment(t *testing.T) {
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
 			if name != "api-prod" {
-				t.Fatalf("unexpected lookup name: %s", name)
+				return catalog.DeploymentOverviewDetail{}, statusstore.ErrNotFound
 			}
 			return catalog.DeploymentOverviewDetail{
 				Name:               "api-prod",
@@ -1384,6 +1384,7 @@ func TestRouterOverviewDeployment(t *testing.T) {
 				ExecutionMode:      "ecsCodeDeploy",
 				DesiredArtifact:    domain.DeploymentArtifact{Image: "payments-api:v2"},
 				UserData:           domain.DeploymentUserData{Type: "file", Path: "userdata/payments-api-prod.sh"},
+				RolloutConfig:      domain.DeploymentRolloutConfig{Strategy: domain.DeploymentRolloutStrategy{MinHealthyPercent: 90, WarmupSeconds: 30}},
 				DeployedArtifact:   domain.DeploymentArtifact{Image: "payments-api:v1"},
 				ObservedGeneration: 7,
 				Sync:               domain.Sync{State: domain.SyncStateOutOfSync, Reason: "PendingPromotion"},
@@ -1436,6 +1437,9 @@ func TestRouterOverviewDeployment(t *testing.T) {
 	if detail.UserData.Type != "file" || detail.UserData.Path != "userdata/payments-api-prod.sh" {
 		t.Fatalf("expected userdata metadata in deployment detail, got %+v", detail.UserData)
 	}
+	if detail.RolloutConfig.Strategy.MinHealthyPercent != 90 || detail.RolloutConfig.Strategy.WarmupSeconds != 30 {
+		t.Fatalf("expected rollout config metadata in deployment detail, got %+v", detail.RolloutConfig)
+	}
 	if detail.Rollout == nil || detail.Rollout.CurrentStep != "VerifyServiceStability" || len(detail.Rollout.Steps) != 3 {
 		t.Fatalf("expected rollout summary in deployment detail, got %+v", detail)
 	}
@@ -1464,6 +1468,14 @@ func TestRouterOverviewDeployment(t *testing.T) {
 	userData, ok := payload["userData"].(map[string]any)
 	if !ok || userData["type"] != "file" || userData["path"] != "userdata/payments-api-prod.sh" {
 		t.Fatalf("expected userData object in raw payload, got %#v", payload["userData"])
+	}
+	rolloutConfig, ok := payload["rolloutConfig"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected rolloutConfig object in raw payload, got %#v", payload["rolloutConfig"])
+	}
+	rolloutStrategy, ok := rolloutConfig["strategy"].(map[string]any)
+	if !ok || rolloutStrategy["minHealthyPercent"] != float64(90) || rolloutStrategy["warmupSeconds"] != float64(30) {
+		t.Fatalf("expected rolloutConfig.strategy object in raw payload, got %#v", payload["rolloutConfig"])
 	}
 	if runtimeSummary["timestamp"] != "2026-04-16T06:49:00Z" || runtimeSummary["source"] != "controller" || runtimeSummary["summary"] != "Traffic shift is progressing" || runtimeSummary["desiredGeneration"] != float64(8) || runtimeSummary["observedGeneration"] != float64(7) || runtimeSummary["currentStep"] != "ShiftTrafficLinear" || runtimeSummary["targetType"] != "ecs-service" || runtimeSummary["strategy"] != "linear" || runtimeSummary["executionMode"] != "ecsCodeDeploy" || runtimeSummary["historyCount"] != float64(3) || runtimeSummary["rolloutPhase"] != string(domain.RolloutPhaseAccepted) {
 		t.Fatalf("expected runtimeSummary JSON fields in raw payload, got %#v", runtimeSummary)

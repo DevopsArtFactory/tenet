@@ -1,0 +1,12 @@
+name: worker-prod
+appRef: worker
+environmentRef: prod-apne2
+target:
+  type: ecs
+strategy:
+  type: rolling
+image: ghcr.io/devopsartfactory/worker:prod-20260415
+capacity:
+  desired: 2
+  min: 1
+  max: 4

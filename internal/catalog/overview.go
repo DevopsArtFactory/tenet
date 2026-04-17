@@ -109,26 +109,27 @@ type DeploymentOverview struct {
 
 // DeploymentOverviewDetail joins one deployment's desired intent, placement, and observed state.
 type DeploymentOverviewDetail struct {
-	Name               string                      `json:"name"`
-	AppRef             string                      `json:"appRef"`
-	EnvironmentRef     string                      `json:"environmentRef"`
-	AccountName        string                      `json:"accountName"`
-	AWSAccountID       string                      `json:"awsAccountId"`
-	AllowedRegions     []string                    `json:"allowedRegions,omitempty"`
-	Region             string                      `json:"region"`
-	TargetType         string                      `json:"targetType,omitempty"`
-	Strategy           string                      `json:"strategy,omitempty"`
-	ExecutionMode      string                      `json:"executionMode,omitempty"`
-	DesiredArtifact    domain.DeploymentArtifact   `json:"desiredArtifact,omitempty"`
-	UserData           domain.DeploymentUserData   `json:"userData,omitempty"`
-	DeployedArtifact   domain.DeploymentArtifact   `json:"deployedArtifact,omitempty"`
-	ObservedGeneration int64                       `json:"observedGeneration,omitempty"`
-	Sync               domain.Sync                 `json:"sync"`
-	Health             domain.Health               `json:"health"`
-	RuntimeSummary     *domain.RuntimeSummary      `json:"runtimeSummary,omitempty"`
-	Rollout            *domain.RolloutSummary      `json:"rollout,omitempty"`
-	Conditions         []domain.Condition          `json:"conditions,omitempty"`
-	History            []domain.StatusHistoryEntry `json:"history,omitempty"`
+	Name               string                         `json:"name"`
+	AppRef             string                         `json:"appRef"`
+	EnvironmentRef     string                         `json:"environmentRef"`
+	AccountName        string                         `json:"accountName"`
+	AWSAccountID       string                         `json:"awsAccountId"`
+	AllowedRegions     []string                       `json:"allowedRegions,omitempty"`
+	Region             string                         `json:"region"`
+	TargetType         string                         `json:"targetType,omitempty"`
+	Strategy           string                         `json:"strategy,omitempty"`
+	ExecutionMode      string                         `json:"executionMode,omitempty"`
+	DesiredArtifact    domain.DeploymentArtifact      `json:"desiredArtifact,omitempty"`
+	UserData           domain.DeploymentUserData      `json:"userData,omitempty"`
+	RolloutConfig      domain.DeploymentRolloutConfig `json:"rolloutConfig,omitempty"`
+	DeployedArtifact   domain.DeploymentArtifact      `json:"deployedArtifact,omitempty"`
+	ObservedGeneration int64                          `json:"observedGeneration,omitempty"`
+	Sync               domain.Sync                    `json:"sync"`
+	Health             domain.Health                  `json:"health"`
+	RuntimeSummary     *domain.RuntimeSummary         `json:"runtimeSummary,omitempty"`
+	Rollout            *domain.RolloutSummary         `json:"rollout,omitempty"`
+	Conditions         []domain.Condition             `json:"conditions,omitempty"`
+	History            []domain.StatusHistoryEntry    `json:"history,omitempty"`
 }
 
 // BuildAccountOverviews groups placement-aware deployment state by account.
@@ -400,6 +401,7 @@ func BuildDeploymentOverviewDetail(c manifest.Catalog, snapshots []statusstore.S
 		ExecutionMode:      deployment.ExecutionMode,
 		DesiredArtifact:    deployment.DesiredArtifact,
 		UserData:           deployment.UserData,
+		RolloutConfig:      cloneDeploymentRolloutConfig(deployment.RolloutConfig),
 		DeployedArtifact:   status.DeployedArtifact,
 		ObservedGeneration: status.ObservedGeneration,
 		Sync:               status.Sync,
@@ -504,6 +506,12 @@ func cloneRolloutSummary(summary *domain.RolloutSummary) *domain.RolloutSummary 
 	copy.Steps = append([]domain.RolloutStepSummary(nil), summary.Steps...)
 	copy.Execution = append([]domain.RolloutExecutionDetail(nil), summary.Execution...)
 	return &copy
+}
+
+func cloneDeploymentRolloutConfig(config domain.DeploymentRolloutConfig) domain.DeploymentRolloutConfig {
+	copy := config
+	copy.Stacks = append([]domain.DeploymentRolloutStack(nil), config.Stacks...)
+	return copy
 }
 
 func cloneStatusHistory(history []domain.StatusHistoryEntry) []domain.StatusHistoryEntry {

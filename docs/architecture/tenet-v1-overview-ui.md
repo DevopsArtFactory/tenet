@@ -124,6 +124,8 @@ The current resource-log route intentionally supports only the resource types ba
 - `candidateAutoScalingGroup`
 - `serviceAutoScalingGroup`
 
+The local verification path now explicitly exercises the ECS rolling route shape with `GET /v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service`, asserting the same stable `available`, `entries`, `source`, and `unavailableReason` JSON contract used for other resource-log checks.
+
 Other resource types remain visible as resource-detail pages, but their `Recent logs` section renders an explicit unavailable state rather than inventing log data. The same unavailable contract is used when AWS credentials, assume-role access, task/container log configuration, running tasks/instances, or EC2 console-output access are not available from the current API process.
 
 The detail rollout-step list now also consumes additive `rollout.steps[*].status` metadata and controller-authored `rollout.steps[*].detail` text from the deployment-detail payload:
@@ -158,6 +160,8 @@ The synthesized fallback set is intentionally restricted to the controller's can
   - `productionListenerRule` → `{deployment}-prod-listener` → `Production listener rule operators inspect while Tenet updates weighted forwarding during rollout`
   - `trafficShiftPlan` → `{deployment}-weighted-routing` → `Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group`
   - `userDataBootstrapSource` → normalized from `userData` as `{type}:{path}`, `{type}`, `{path}`, or `unspecified` → `Normalized userdata bootstrap source for candidate EC2 capacity`
+- `ecsRolling`
+  - `ecsService` → `{deployment}-service` → `ECS service Tenet updates with native rolling deployment`, optionally extended with rollout-strategy qualifiers such as `while respecting min healthy 90% and warmup 30s` when `rolloutConfig.strategy.minHealthyPercent` and/or `rolloutConfig.strategy.warmupSeconds` are present on the detail payload
 - `ecsCodeDeploy`
   - `ecsService` → `{deployment}-service` → `ECS service Tenet updates during deployment`
   - `codeDeployApplication` → `{deployment}-codedeploy-app` → `CodeDeploy application coordinating ECS traffic shifting`
