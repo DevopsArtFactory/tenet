@@ -49,7 +49,7 @@ Tenet keeps runtime status separately from desired configuration. Runtime snapsh
 Tenet joins desired state and runtime state into read models that power:
 - the embedded browser UI
 - drill-down pages for applications and resources
-- operational views such as rollout context, immutable plan previews, deployment events, and recent logs
+- operational views such as rollout context, immutable plan previews, immutable apply requests, deployment events, and recent logs
 
 The embedded UI is intentionally lightweight: static HTML/CSS/JS served directly by the Go API. That keeps the product easy to run locally while the control-plane model is still evolving.
 
@@ -77,10 +77,12 @@ Every HTTP response from `tenet-api` also carries a `Request-Id` header. If your
 
 Use `TENET_API_REQUEST_TIMEOUT` to bound request handling. The default is `30s`; set `TENET_API_REQUEST_TIMEOUT=0` to disable the request timeout middleware. When a request times out, Tenet returns an explicit correlated `503` response and emits the matching request log with `result=timeout`.
 
-For the current read-only plan preview flow, a typical local operator path is:
+For the current read-only plan/apply flow, a typical local operator path is:
 - `GET /v1/overview/applications/{deploymentName}` or `GET /v1/overview/deployments/{deploymentName}` to inspect the deployment and capture its additive `sourceFingerprint`
 - `POST /v1/plans/deployments/{deploymentName}` with optional `{"ifMatch":"<sourceFingerprint>"}` to persist an immutable preview for the reviewed state
 - `GET /v1/plans/{planId}` or open `http://localhost:8080/?page=plan&deployment=payments-api-prod&planId={planId}` to reopen the stored preview
+- `POST /v1/applies/plans/{planId}` to persist an immutable apply request derived from that ready preview
+- `GET /v1/applies/{applyId}` to reopen the stored apply request; this backend slice is disabled by default for live execution, so the created record is intentionally stored as `failed` with operator-facing error/details instead of mutating AWS
 
 Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis. Use `make smoke-docker` when you need to validate `compose.yaml`, confirm the `api`/`controller`/`redis` service contract, and prove the containerized local stack plus controller logs, deployment events, resource-log routes, and embedded operator drill-down labels are reachable end to end.
 
@@ -143,6 +145,12 @@ The same drill-down also includes read-only workspace surfaces:
 - `/?page=drift&deployment={deploymentName}` for derived field-level troubleshooting context
 - `/?page=plan&deployment={deploymentName}` for immutable plan previews and shareable `planId` reopen URLs while apply remains disabled
 
+The backend now also exposes read-only immutable apply-request routes:
+- `POST /v1/applies/plans/{planId}`
+- `GET /v1/applies/{applyId}`
+
+These routes are additive and local-friendly. They persist immutable records to `TENET_APPLY_STORE_PATH` and intentionally stay disabled by default for live execution in this slice.
+
 Tenet also exposes a read-only deployment events slice for the same drill-down workflow:
 - `GET /v1/overview/deployments/{deploymentName}/events`
 
@@ -178,6 +186,7 @@ Implemented today:
 - applications -> application -> resource drill-down flow
 - rollout/resource context for EC2 and ECS
 - immutable plan preview creation/readback with stable `planId` and optimistic `ifMatch` support
+- immutable apply-request creation/readback with stable `applyId`, plan validation, and disabled-by-default live execution semantics
 - deployment events overview derived from persisted runtime history
 - recent resource-log support for supported resource types
 

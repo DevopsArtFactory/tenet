@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
@@ -2756,6 +2757,245 @@ func TestRouterPlanPreview(t *testing.T) {
 	}
 }
 
+func TestRouterCreateApplyRequest(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		CreateApplyRequest: func(ctx context.Context, planID string) (applyrequest.CreateResult, error) {
+			if planID != "plan_1234abcd" {
+				t.Fatalf("unexpected apply create for %s", planID)
+			}
+			return applyrequest.CreateResult{
+				Created: true,
+				Record: applyrequest.Record{
+					ID:             "apply_1234abcd",
+					PlanID:         planID,
+					DeploymentName: "api-prod",
+					Status:         applyrequest.StatusFailed,
+					CreatedAt:      "2026-04-18T08:00:00Z",
+					Error:          "apply execution is disabled",
+					Details:        []string{"Tenet persisted this immutable apply request in read-only mode and did not contact AWS."},
+					Source:         applyrequest.SourceContext{PlanID: planID, Route: "/v1/plans/plan_1234abcd", PlanStatus: "ready", Fingerprint: "plan_input"},
+				},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/applies/plans/plan_1234abcd", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d with body %q", resp.Code, resp.Body.String())
+	}
+	if location := resp.Header().Get("Location"); location != "/v1/applies/apply_1234abcd" {
+		t.Fatalf("expected Location header, got %q", location)
+	}
+	var record applyrequest.Record
+	if err := json.Unmarshal(resp.Body.Bytes(), &record); err != nil {
+		t.Fatalf("failed to decode apply request: %v", err)
+	}
+	if record.ID != "apply_1234abcd" || record.Status != applyrequest.StatusFailed || record.Error != "apply execution is disabled" {
+		t.Fatalf("unexpected apply request payload: %+v", record)
+	}
+}
+
+func TestRouterCreateApplyRequestStatusCodes(t *testing.T) {
+	t.Run("unavailable", func(t *testing.T) {
+		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/plans/plan_1234abcd", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusServiceUnavailable {
+			t.Fatalf("expected 503, got %d", resp.Code)
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			CreateApplyRequest: func(context.Context, string) (applyrequest.CreateResult, error) {
+				return applyrequest.CreateResult{}, planpreview.ErrNotFound
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/plans/plan_missing", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", resp.Code)
+		}
+	})
+
+	t.Run("plan not ready", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			CreateApplyRequest: func(context.Context, string) (applyrequest.CreateResult, error) {
+				return applyrequest.CreateResult{}, applyrequest.ErrPlanNotReady
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/plans/plan_failed_1234abcd", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusConflict {
+			t.Fatalf("expected 409, got %d", resp.Code)
+		}
+	})
+
+	t.Run("provider error", func(t *testing.T) {
+		const upstreamErr = "boom: apply request details"
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			CreateApplyRequest: func(context.Context, string) (applyrequest.CreateResult, error) {
+				return applyrequest.CreateResult{}, errors.New(upstreamErr)
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/plans/plan_1234abcd", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		assertInternalServerErrorResponse(t, resp, upstreamErr)
+	})
+
+	for _, path := range []string{"/v1/applies/plans/", "/v1/applies/plans/a/b"} {
+		t.Run("invalid path "+path, func(t *testing.T) {
+			router := NewRouter(Options{
+				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+				CreateApplyRequest: func(context.Context, string) (applyrequest.CreateResult, error) {
+					t.Fatalf("apply create provider should not run on invalid path")
+					return applyrequest.CreateResult{}, nil
+				},
+			})
+			req := httptest.NewRequest(http.MethodPost, path, nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400 for %s, got %d", path, resp.Code)
+			}
+		})
+	}
+}
+
+func TestRouterApplyRequest(t *testing.T) {
+	record := applyrequest.Record{
+		ID:             "apply_1234abcd",
+		PlanID:         "plan_1234abcd",
+		DeploymentName: "api-prod",
+		Status:         applyrequest.StatusFailed,
+		CreatedAt:      "2026-04-18T08:05:00Z",
+		Error:          "apply execution is disabled",
+		Details:        []string{"Tenet persisted this immutable apply request in read-only mode and did not contact AWS."},
+		Source:         applyrequest.SourceContext{PlanID: "plan_1234abcd", Route: "/v1/plans/plan_1234abcd", PlanStatus: "ready", Fingerprint: "plan_input"},
+	}
+
+	t.Run("get payload", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
+				return record, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/applies/apply_1234abcd", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.Code)
+		}
+		var got applyrequest.Record
+		if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+			t.Fatalf("failed to decode apply request payload: %v", err)
+		}
+		if got.ID != record.ID || got.PlanID != record.PlanID || got.Error != record.Error {
+			t.Fatalf("unexpected apply request payload: %+v", got)
+		}
+
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw apply request payload: %v", err)
+		}
+		for _, key := range []string{"id", "planId", "deploymentName", "status", "createdAt", "error", "details", "source"} {
+			if _, ok := raw[key]; !ok {
+				t.Fatalf("expected apply request payload to include %q, got %#v", key, raw)
+			}
+		}
+	})
+
+	t.Run("unavailable", func(t *testing.T) {
+		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+		req := httptest.NewRequest(http.MethodGet, "/v1/applies/apply_1234abcd", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusServiceUnavailable {
+			t.Fatalf("expected 503, got %d", resp.Code)
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
+				return applyrequest.Record{}, applyrequest.ErrNotFound
+			},
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/applies/apply_missing", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", resp.Code)
+		}
+	})
+
+	t.Run("provider error", func(t *testing.T) {
+		const upstreamErr = "boom: apply store"
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
+				return applyrequest.Record{}, errors.New(upstreamErr)
+			},
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/applies/apply_1234abcd", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		assertInternalServerErrorResponse(t, resp, upstreamErr)
+	})
+
+	for _, path := range []string{"/v1/applies/", "/v1/applies/a/b"} {
+		t.Run("invalid path "+path, func(t *testing.T) {
+			router := NewRouter(Options{
+				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+				ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
+					t.Fatalf("apply request provider should not run on invalid path")
+					return applyrequest.Record{}, nil
+				},
+			})
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400 for %s, got %d", path, resp.Code)
+			}
+		})
+	}
+}
+
 func TestRouterRootServesUI(t *testing.T) {
 	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -2847,6 +3087,12 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		PlanPreview: func(context.Context, string) (planpreview.Record, error) {
 			return planpreview.Record{ID: "plan_1234abcd"}, nil
 		},
+		CreateApplyRequest: func(context.Context, string) (applyrequest.CreateResult, error) {
+			return applyrequest.CreateResult{Record: applyrequest.Record{ID: "apply_1234abcd"}}, nil
+		},
+		ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
+			return applyrequest.Record{ID: "apply_1234abcd"}, nil
+		},
 		DeploymentStatuses: func() ([]statusstore.Snapshot, error) {
 			return []statusstore.Snapshot{}, nil
 		},
@@ -2855,7 +3101,7 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		},
 	})
 
-	getPaths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/applications", "/v1/overview/applications/api-prod", "/v1/overview/accounts", "/v1/overview/accounts/123456789012", "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod", "/v1/overview/deployments/api-prod", "/v1/overview/deployments/api-prod/events", "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service", "/v1/plans/plan_1234abcd", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
+	getPaths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/applications", "/v1/overview/applications/api-prod", "/v1/overview/accounts", "/v1/overview/accounts/123456789012", "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod", "/v1/overview/deployments/api-prod", "/v1/overview/deployments/api-prod/events", "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service", "/v1/plans/plan_1234abcd", "/v1/applies/apply_1234abcd", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
 	for _, path := range getPaths {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		resp := httptest.NewRecorder()
@@ -2880,5 +3126,17 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 	}
 	if allow := resp.Header().Get("Allow"); allow != http.MethodPost {
 		t.Fatalf("expected Allow header for /v1/plans/deployments/api-prod, got %q", allow)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/v1/applies/plans/plan_1234abcd", nil)
+	resp = httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405 for /v1/applies/plans/plan_1234abcd, got %d", resp.Code)
+	}
+	if allow := resp.Header().Get("Allow"); allow != http.MethodPost {
+		t.Fatalf("expected Allow header for /v1/applies/plans/plan_1234abcd, got %q", allow)
 	}
 }
