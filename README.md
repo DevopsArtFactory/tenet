@@ -147,12 +147,20 @@ Run the local smoke check:
 make smoke-local
 ```
 
+Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis. Use `make smoke-docker` when you need to validate `compose.yaml`, confirm the `api`/`controller`/`redis` service contract, and prove the containerized local stack plus controller logs are reachable end to end.
+
 ## Docker runtime
 
 Bring up the local stack with Docker Compose:
 
 ```bash
 make docker-up
+```
+
+Run the dedicated Docker-stack smoke before or instead of manual exploration when you want a single command that validates the Compose config, boots the stack, waits for API health, checks representative endpoints, confirms controller logs are useful, and tears the stack back down:
+
+```bash
+make smoke-docker
 ```
 
 This starts:
