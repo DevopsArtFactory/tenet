@@ -132,6 +132,12 @@ type DeploymentOverviewDetail struct {
 	History            []domain.StatusHistoryEntry    `json:"history,omitempty"`
 }
 
+// DeploymentOverviewEvents exposes controller-derived runtime history for one deployment.
+type DeploymentOverviewEvents struct {
+	DeploymentName string                      `json:"deploymentName"`
+	Events         []domain.StatusHistoryEntry `json:"events"`
+}
+
 // ApplicationOverviewDetail makes the application page contract explicit while preserving deployment detail semantics.
 type ApplicationOverviewDetail struct {
 	Name               string                         `json:"name"`
@@ -467,6 +473,24 @@ func BuildDeploymentOverviewDetail(c manifest.Catalog, snapshots []statusstore.S
 		Rollout:            cloneRolloutSummary(status.Rollout),
 		Conditions:         append([]domain.Condition(nil), status.Conditions...),
 		History:            cloneStatusHistory(status.History),
+	}, nil
+}
+
+// BuildDeploymentOverviewEvents returns the controller-derived runtime history timeline for one deployment.
+func BuildDeploymentOverviewEvents(c manifest.Catalog, snapshots []statusstore.Snapshot, deploymentName string) (DeploymentOverviewEvents, error) {
+	detail, err := BuildDeploymentOverviewDetail(c, snapshots, deploymentName)
+	if err != nil {
+		return DeploymentOverviewEvents{}, err
+	}
+
+	events := detail.History
+	if len(events) == 0 {
+		events = []domain.StatusHistoryEntry{}
+	}
+
+	return DeploymentOverviewEvents{
+		DeploymentName: detail.Name,
+		Events:         events,
 	}, nil
 }
 
