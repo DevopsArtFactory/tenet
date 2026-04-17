@@ -44,6 +44,7 @@ Tenet keeps runtime status separately from desired configuration. Runtime snapsh
 - rollout progress
 - conditions
 - bounded runtime history
+- additive controller-authored `managedDrift[]` rows for deterministic fields Tenet already understands, such as artifact, generation, and rollout/runtime intent
 
 ### 4. Read models and operator UI
 Tenet joins desired state and runtime state into read models that power:
@@ -171,7 +172,7 @@ Canonical resource-log routes stay stable across rollout modes so operators can 
 Behind those routes, the built-in AWS-backed recent-log provider now reuses SDK config/client setup per `(region, target account, observer role)` key inside a running Tenet API process instead of rebuilding ECS / CloudWatch Logs / Auto Scaling / EC2 clients on every fetch.
 
 The same drill-down also includes read-only workspace surfaces:
-- `/?page=drift&deployment={deploymentName}` for derived field-level troubleshooting context
+- `/?page=drift&deployment={deploymentName}` for derived field-level troubleshooting context; the deployment-detail route now also carries additive controller-authored `managedDrift[]` rows on the current snapshot, latest runtime summary, and persisted history entries so the drift workspace can prefer backend-authored rows when they exist and fall back to the current client-derived view for older snapshots
 - `/?page=plan&deployment={deploymentName}` for immutable plan previews, `Apply Plan` activation once a persisted ready preview is loaded, bookmarkable `planId`/`applyId` workspace URLs, and stored-preview quick links to both the embedded workspace (`_self`) and immutable `Plan JSON` / `Apply JSON` read models
 
 The backend now also exposes read-only immutable apply-request routes:

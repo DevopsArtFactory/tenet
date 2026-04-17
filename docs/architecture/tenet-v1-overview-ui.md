@@ -103,7 +103,7 @@ That same fallback identity keeps resource-log drill-downs bookmarkable. Example
 The current UI also still exposes supporting operator surfaces beyond the main drill-down path:
 - account-oriented views for grouped project/environment context
 - audit timeline for immutable plan/apply history
-- drift workspace for troubleshooting
+- drift workspace for troubleshooting; the backing deployment-detail read model now also carries additive controller-authored `managedDrift[]` rows on the current snapshot, latest runtime summary, and persisted history entries so the UI can migrate from purely client-derived field rows without needing a second drift-only API route
 - plan/apply workspace for read-only rollout planning context
 
 These should remain secondary to the main applications -> application -> resource flow, but they are still important operator tools.

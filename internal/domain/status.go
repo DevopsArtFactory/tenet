@@ -75,6 +75,23 @@ type RolloutExecutionDetail struct {
 	Description string `json:"description,omitempty"`
 }
 
+// ManagedDriftSeverity classifies how urgently operators should inspect a drift item.
+type ManagedDriftSeverity string
+
+const (
+	ManagedDriftSeverityHigh   ManagedDriftSeverity = "high"
+	ManagedDriftSeverityMedium ManagedDriftSeverity = "medium"
+	ManagedDriftSeverityLow    ManagedDriftSeverity = "low"
+)
+
+// ManagedDriftItem captures one controller-authored field-level drift item for Tenet-managed runtime fields.
+type ManagedDriftItem struct {
+	Field    string               `json:"field"`
+	Desired  string               `json:"desired,omitempty"`
+	Actual   string               `json:"actual,omitempty"`
+	Severity ManagedDriftSeverity `json:"severity,omitempty"`
+}
+
 // RolloutSummary captures the controller-owned rollout view for a deployment.
 type RolloutSummary struct {
 	DesiredGeneration  int64                    `json:"desiredGeneration"`
@@ -96,6 +113,7 @@ type StatusHistoryEntry struct {
 	Summary            string             `json:"summary"`
 	Changes            []string           `json:"changes,omitempty"`
 	ChangeDetails      []string           `json:"changeDetails,omitempty"`
+	ManagedDrift       []ManagedDriftItem `json:"managedDrift,omitempty"`
 	DeployedArtifact   DeploymentArtifact `json:"deployedArtifact,omitempty"`
 	Conditions         []Condition        `json:"conditions,omitempty"`
 	Sync               Sync               `json:"sync"`
@@ -130,6 +148,7 @@ type RuntimeSummary struct {
 	Summary            string             `json:"summary,omitempty"`
 	Changes            []string           `json:"changes,omitempty"`
 	ChangeDetails      []string           `json:"changeDetails,omitempty"`
+	ManagedDrift       []ManagedDriftItem `json:"managedDrift,omitempty"`
 	DeployedArtifact   DeploymentArtifact `json:"deployedArtifact,omitempty"`
 	Conditions         []Condition        `json:"conditions,omitempty"`
 	Sync               Sync               `json:"sync"`
@@ -164,6 +183,7 @@ type DeploymentStatus struct {
 	Sync               Sync                 `json:"sync"`
 	Health             Health               `json:"health"`
 	Conditions         []Condition          `json:"conditions"`
+	ManagedDrift       []ManagedDriftItem   `json:"managedDrift,omitempty"`
 	History            []StatusHistoryEntry `json:"history,omitempty"`
 	DeployedArtifact   DeploymentArtifact   `json:"deployedArtifact,omitempty"`
 	Rollout            *RolloutSummary      `json:"rollout,omitempty"`
