@@ -67,18 +67,22 @@ func Save(path string, records []Record) error {
 		return fmt.Errorf("create temp plan preview store: %w", err)
 	}
 	tempPath := tempFile.Name()
-	defer os.Remove(tempPath)
+	defer func() {
+		if tempFile != nil {
+			_ = tempFile.Close()
+		}
+		_ = os.Remove(tempPath)
+	}()
 	if err := tempFile.Chmod(fileMode); err != nil {
-		tempFile.Close()
 		return fmt.Errorf("chmod temp plan preview store: %w", err)
 	}
 	if _, err := tempFile.Write(content); err != nil {
-		tempFile.Close()
 		return fmt.Errorf("write temp plan preview store: %w", err)
 	}
 	if err := tempFile.Close(); err != nil {
 		return fmt.Errorf("close temp plan preview store: %w", err)
 	}
+	tempFile = nil
 	if err := renameFile(tempPath, path); err != nil {
 		return fmt.Errorf("rename plan preview store: %w", err)
 	}

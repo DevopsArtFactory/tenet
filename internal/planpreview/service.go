@@ -14,6 +14,10 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/reconcile"
 )
 
+var (
+	marshalStableRecordPayload = json.Marshal
+)
+
 // DetailProvider resolves the canonical deployment overview detail used to derive previews.
 type DetailProvider func(string) (catalog.DeploymentOverviewDetail, error)
 
@@ -77,7 +81,10 @@ func (s Service) Create(ctx context.Context, deploymentName string, req CreateRe
 		record.Approval.Summary = "Approval should stop until Tenet can derive rollout operations from the deployment detail."
 		record.Approval.Reasons = append(record.Approval.Reasons, "derived plan operations are empty")
 	}
-	record.ID = stableRecordID(record)
+	record.ID, err = stableRecordID(record)
+	if err != nil {
+		return CreateResult{}, err
+	}
 
 	existing, err := s.Store.Get(ctx, record.ID)
 	if err == nil {
@@ -173,7 +180,7 @@ func deriveSourceContext(detail catalog.DeploymentOverviewDetail) (SourceContext
 	}, nil
 }
 
-func stableRecordID(record Record) string {
+func stableRecordID(record Record) (string, error) {
 	payload := struct {
 		DeploymentName string        `json:"deploymentName"`
 		Status         Status        `json:"status"`
@@ -191,9 +198,12 @@ func stableRecordID(record Record) string {
 		Source:         record.Source,
 		Errors:         record.Errors,
 	}
-	content, _ := json.Marshal(payload)
+	content, err := marshalStableRecordPayload(payload)
+	if err != nil {
+		return "", fmt.Errorf("encode stable plan preview id: %w", err)
+	}
 	sum := sha256.Sum256(content)
-	return "plan_" + hex.EncodeToString(sum[:8])
+	return "plan_" + hex.EncodeToString(sum[:8]), nil
 }
 
 func derivePlanOperations(detail catalog.DeploymentOverviewDetail) []Operation {

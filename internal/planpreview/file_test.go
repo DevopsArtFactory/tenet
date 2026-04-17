@@ -3,6 +3,7 @@ package planpreview
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,5 +74,38 @@ func TestFileStoreGetReturnsNotFoundWhenMissing(t *testing.T) {
 	_, err := store.Get(context.Background(), "missing")
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestSaveClosesTempFileOnRenameError(t *testing.T) {
+	originalCreateTempFile := createTempFile
+	originalRenameFile := renameFile
+	defer func() {
+		createTempFile = originalCreateTempFile
+		renameFile = originalRenameFile
+	}()
+
+	var createdTempFile *os.File
+	createTempFile = func(dir, pattern string) (*os.File, error) {
+		file, err := os.CreateTemp(dir, pattern)
+		if err != nil {
+			return nil, err
+		}
+		createdTempFile = file
+		return file, nil
+	}
+	renameFile = func(string, string) error {
+		return fmt.Errorf("rename failed")
+	}
+
+	err := Save(filepath.Join(t.TempDir(), "plans", "previews.json"), []Record{{ID: "plan_a", DeploymentName: "api-prod", Status: StatusReady}})
+	if err == nil || !strings.Contains(err.Error(), "rename plan preview store") {
+		t.Fatalf("expected rename error, got %v", err)
+	}
+	if createdTempFile == nil {
+		t.Fatalf("expected temp file to be created")
+	}
+	if _, writeErr := createdTempFile.Write([]byte("x")); !errors.Is(writeErr, os.ErrClosed) {
+		t.Fatalf("expected temp file to be closed after Save failure, got %v", writeErr)
 	}
 }

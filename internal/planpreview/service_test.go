@@ -3,6 +3,7 @@ package planpreview
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -175,5 +176,40 @@ func TestServiceCreatePropagatesDeploymentLookupErrors(t *testing.T) {
 	_, err := service.Create(context.Background(), "missing", CreateRequest{})
 	if !errors.Is(err, statusstore.ErrNotFound) {
 		t.Fatalf("expected deployment lookup error, got %v", err)
+	}
+}
+
+func TestServiceCreateReturnsStableRecordIDEncodingErrors(t *testing.T) {
+	originalMarshal := marshalStableRecordPayload
+	marshalStableRecordPayload = func(any) ([]byte, error) {
+		return nil, fmt.Errorf("boom")
+	}
+	t.Cleanup(func() {
+		marshalStableRecordPayload = originalMarshal
+	})
+
+	service := Service{
+		LoadDetail: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			return catalog.DeploymentOverviewDetail{
+				Name:          name,
+				TargetType:    "ec2",
+				Strategy:      "canary",
+				ExecutionMode: "asgWeightedTargetGroups",
+				Sync:          domain.Sync{State: domain.SyncStateSynced},
+				Health:        domain.Health{Overall: domain.HealthHealthy},
+				Rollout: &domain.RolloutSummary{
+					Steps: []domain.RolloutStepSummary{
+						{Kind: "CreateCandidateCapacity", Status: domain.RolloutStepStatusCompleted},
+					},
+				},
+			}, nil
+		},
+		Store: &memoryStore{},
+		Now:   func() time.Time { return time.Date(2026, 4, 17, 8, 10, 0, 0, time.UTC) },
+	}
+
+	_, err := service.Create(context.Background(), "api-prod", CreateRequest{})
+	if err == nil || !strings.Contains(err.Error(), "encode stable plan preview id") {
+		t.Fatalf("expected stable id encoding error, got %v", err)
 	}
 }
