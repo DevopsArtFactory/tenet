@@ -28,9 +28,9 @@ Both services mount `./examples` read-only. That keeps the runtime deterministic
 make smoke-local
 ```
 
-This boots `tenet-api` against the committed example fixtures, checks `/healthz`, and validates representative JSON payloads from the catalog and status endpoints.
+This is the fast smoke layer. It boots `tenet-api` and `tenet-controller` directly against the committed example fixtures, checks `/healthz`, and validates representative JSON payloads from the catalog, overview, status, and embedded UI paths without involving Docker.
 
-### Full Docker stack
+### Full Docker stack lifecycle
 
 ```bash
 make docker-up
@@ -38,6 +38,23 @@ curl http://localhost:8080/v1/catalog/summary
 docker compose logs controller --tail=20
 make docker-down
 ```
+
+`make docker-up` routes through `scripts/docker-up.sh`. That shared helper refuses to start if port `8080` is already listening, then runs `docker compose up --build -d` only when the host port is clear.
+
+### Compose-backed smoke verification
+
+```bash
+make smoke-docker
+```
+
+This is the full-stack smoke layer. It:
+
+- validates `docker compose config`
+- starts the stack through the shared `docker-up` helper and port-`8080` preflight
+- confirms `api`, `controller`, and `redis` are present
+- checks `/healthz`, `/v1/catalog/summary`, `/v1/overview/accounts`, `/v1/overview/deployments/payments-api-prod`, `/v1/status/deployments/payments-api-prod`, and `/`
+- captures useful controller/API startup and reconcile evidence from `docker compose logs`
+- tears the stack down with `docker compose down --remove-orphans`
 
 ## Deferred work
 

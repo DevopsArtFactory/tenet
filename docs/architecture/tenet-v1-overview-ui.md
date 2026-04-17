@@ -49,6 +49,11 @@ This page is where Tenet can show things like:
 - artifact context
 - recent logs when available
 
+The current recent-log fallback contract includes:
+- `ecsRolling`
+- `ecsService` → `{deployment}-service` → `ECS service Tenet updates with native rolling deployment`, optionally extended with rollout-strategy qualifiers such as `while respecting min healthy 90% and warmup 30s`
+- `/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service`
+
 The goal is to make troubleshooting possible without forcing the user to jump directly into raw AWS consoles for the first step.
 
 ### Additional operator views

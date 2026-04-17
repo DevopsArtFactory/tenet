@@ -78,6 +78,7 @@ make docker-up
 ```
 
 This starts the local stack, including the API, controller, and Redis-backed runtime state.
+`make docker-up` now routes through `scripts/docker-up.sh`, which fails fast with a friendly message if port `8080` is already listening before it runs `docker compose up --build -d`.
 
 Open:
 
@@ -90,6 +91,14 @@ To stop it:
 ```bash
 make docker-down
 ```
+
+For a full Docker-backed verification pass instead of a long-running stack, use:
+
+```bash
+make smoke-docker
+```
+
+That smoke path validates `docker compose config`, starts the stack through the same `docker-up` preflight, checks representative API/UI endpoints plus controller/API log evidence, and then tears the stack back down with `docker compose down --remove-orphans`.
 
 ## Using the UI
 
@@ -110,6 +119,12 @@ Open one application to see the linked rollout resources grouped into clear sect
 
 ### Resource detail
 Open a concrete resource to inspect the deeper operational context for that resource, including rollout and runtime information. Recent logs are surfaced here when the resource type supports them.
+
+For the current embedded fallback inventory, the rolling ECS path resolves to:
+- `ecsRolling`: `ecsService` (`{deployment}-service`)
+
+Example resource-log route:
+- `/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service`
 
 ## Repository layout
 
@@ -160,7 +175,12 @@ Run the main verification suite with:
 ```bash
 go test ./...
 make smoke-local
+make smoke-docker
 ```
+
+The two smoke layers serve different operator loops:
+- `make smoke-local` runs the API/controller directly against the committed example fixtures without Docker. It is the fastest path for local API/UI contract checks.
+- `make smoke-docker` exercises the compose stack end-to-end. It verifies the rendered compose config, reuses the shared port-`8080` preflight from `scripts/docker-up.sh`, confirms `api`/`controller`/`redis`, checks representative endpoints, inspects useful controller/API logs, and always tears the stack down afterward.
 
 ## Open Source
 - [Contributing Guide](./CONTRIBUTING.md)

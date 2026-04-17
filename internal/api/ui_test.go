@@ -820,6 +820,57 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 }
 
+func TestDockerSmokeScriptsLockComposeWorkflowContract(t *testing.T) {
+	dockerUpBody, err := os.ReadFile("../../scripts/docker-up.sh")
+	if err != nil {
+		t.Fatalf("read docker-up.sh: %v", err)
+	}
+	dockerUpText := string(dockerUpBody)
+	for _, fragment := range []string{
+		"tenet_docker_compose() {",
+		"tenet_port_8080_is_listening() {",
+		"Tenet docker-up refused to start because port 8080 is already listening.",
+		"run 'make docker-down' if the compose stack is already running.",
+		"lsof -nP -iTCP:8080 -sTCP:LISTEN",
+		"tenet_docker_compose up --build -d",
+	} {
+		if !strings.Contains(dockerUpText, fragment) {
+			t.Fatalf("expected docker-up.sh to include %q", fragment)
+		}
+	}
+
+	smokeBody, err := os.ReadFile("../../scripts/smoke-docker.sh")
+	if err != nil {
+		t.Fatalf("read smoke-docker.sh: %v", err)
+	}
+	smokeText := string(smokeBody)
+	for _, fragment := range []string{
+		"source \"$ROOT/scripts/docker-up.sh\"",
+		"tenet_docker_compose config >/dev/null",
+		"tenet_docker_up",
+		"tenet_docker_compose down --remove-orphans",
+		"tenet_docker_compose ps --services --status running",
+		"wait_for_http \"http://$HOST:$PORT/healthz\"",
+		"summary=$(curl -fsS \"http://$HOST:$PORT/v1/catalog/summary\")",
+		"overview=$(curl -fsS \"http://$HOST:$PORT/v1/overview/accounts\")",
+		"deployment_detail=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod\")",
+		"status=$(curl -fsS \"http://$HOST:$PORT/v1/status/deployments/payments-api-prod\")",
+		"ui=$(curl -fsS \"http://$HOST:$PORT/\")",
+		"api_logs=$(wait_for_logs api \"starting tenet-api\")",
+		"controller_logs=$(wait_for_logs controller \"controller reconcile deployment=payments-api-prod\")",
+		"assert {\"api\", \"controller\", \"redis\"}.issubset(services), services",
+		"assert \"starting tenet-controller\" in controller_logs, controller_logs",
+		"print(\"smoke-docker: compose stack ok\")",
+	} {
+		if !strings.Contains(smokeText, fragment) {
+			t.Fatalf("expected smoke-docker.sh to include %q", fragment)
+		}
+	}
+	if strings.Contains(smokeText, "docker compose up --build -d") {
+		t.Fatalf("expected smoke-docker.sh to reuse docker-up.sh instead of calling raw docker compose up")
+	}
+}
+
 func TestOverviewDocsLockECSRollingFallbackContract(t *testing.T) {
 	files := map[string][]string{
 		"../../README.md": {
@@ -833,6 +884,44 @@ func TestOverviewDocsLockECSRollingFallbackContract(t *testing.T) {
 			"- `ecsRolling`",
 			"- `ecsService` → `{deployment}-service` → `ECS service Tenet updates with native rolling deployment`, optionally extended with rollout-strategy qualifiers such as `while respecting min healthy 90% and warmup 30s`",
 			"worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
+	}
+}
+
+func TestLocalRuntimeDocsLockDockerSmokeWorkflowContract(t *testing.T) {
+	files := map[string][]string{
+		"../../Makefile": {
+			"DOCKER_COMPOSE=\"$(DOCKER_COMPOSE)\" ./scripts/docker-up.sh",
+			"smoke-docker:",
+			"DOCKER_COMPOSE=\"$(DOCKER_COMPOSE)\" ./scripts/smoke-docker.sh",
+		},
+		"../../README.md": {
+			"`make docker-up` now routes through `scripts/docker-up.sh`",
+			"port `8080` is already listening",
+			"`make smoke-docker`",
+			"The two smoke layers serve different operator loops:",
+			"`make smoke-local` runs the API/controller directly",
+			"`make smoke-docker` exercises the compose stack end-to-end.",
+		},
+		"../../docs/architecture/tenet-v1-local-runtime.md": {
+			"This is the fast smoke layer.",
+			"`make docker-up` routes through `scripts/docker-up.sh`.",
+			"### Compose-backed smoke verification",
+			"starts the stack through the shared `docker-up` helper and port-`8080` preflight",
+			"tears the stack down with `docker compose down --remove-orphans`",
 		},
 	}
 
