@@ -3764,7 +3764,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
 		runNode(t, nodeProgram)
 	})
 
-	t.Run("audit page action filter preserves URL state and fetch route", func(t *testing.T) {
+	t.Run("audit page bookmarkable action filter renders active copy and preserves URL state", func(t *testing.T) {
 		nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;
 const filteredAuditLogs = { entries: [` + `
@@ -3787,31 +3787,31 @@ document.byID.set('toolbar', document.createElement('section'));
 document.byID.set('summary', document.createElement('section'));
 document.byID.set('accounts', document.createElement('section'));
 const fetchCalls = [];
-const window = { location: { pathname: '/console', search: '?page=audit&q=payments&action=plan.created&limit=2', hash: '' } };
+const window = { location: { pathname: '/console', search: '?page=audit&q=payments&action=apply.requested&limit=2', hash: '' } };
 const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/console'; window.location.search = query ? '?' + query : ''; } };
 const fetch = (url) => {
   fetchCalls.push(String(url));
-  if (url === '/v1/audit-logs?action=plan.created&limit=2') return Promise.resolve({ ok: true, json: () => Promise.resolve({ entries: [] }) });
   if (url === '/v1/audit-logs?action=apply.requested&limit=2') return Promise.resolve({ ok: true, json: () => Promise.resolve(filteredAuditLogs) });
+  if (url === '/v1/audit-logs?action=plan.created&limit=2') return Promise.resolve({ ok: true, json: () => Promise.resolve({ entries: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/audit-logs?action=plan.created&limit=2') throw new Error('expected initial action-filtered audit fetch');
+  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/audit-logs?action=apply.requested&limit=2') throw new Error('expected initial action-filtered audit fetch');
   const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
-  if (!toolbarText.includes('Audit filters: action plan.created · limit 2')) throw new Error('expected action filter in toolbar');
+  if (!toolbarText.includes('Audit filters: action apply.requested · limit 2')) throw new Error('expected action filter in toolbar');
+  const accountsText = collectText(document.getElementById('accounts')).join(' | ');
+  if (!accountsText.includes('1 entry · newest record first · action apply.requested · limit 2')) throw new Error('expected active action filter copy in audit timeline');
   const actionSelect = document.querySelector('[data-toolbar-field="Action"]');
-  if (!actionSelect || actionSelect.value !== 'plan.created') throw new Error('expected action select to reflect URL state');
-  actionSelect.value = 'apply.requested';
+  if (!actionSelect || actionSelect.value !== 'apply.requested') throw new Error('expected action select to reflect URL state');
+  actionSelect.value = 'plan.created';
   actionSelect.dispatch('change', { target: actionSelect });
   await settle();
   await settle();
-  if (fetchCalls.length !== 2 || fetchCalls[1] !== '/v1/audit-logs?action=apply.requested&limit=2') throw new Error('expected updated action-filtered audit fetch');
-  if (window.location.search !== '?page=audit&q=payments&action=apply.requested&limit=2') throw new Error('expected updated bookmarkable audit URL, got ' + window.location.search);
-  const accountsText = collectText(document.getElementById('accounts')).join(' | ');
-  if (!accountsText.includes('apply.requested')) throw new Error('expected updated filtered audit row');
+  if (fetchCalls.length !== 2 || fetchCalls[1] !== '/v1/audit-logs?action=plan.created&limit=2') throw new Error('expected updated action-filtered audit fetch');
+  if (window.location.search !== '?page=audit&q=payments&action=plan.created&limit=2') throw new Error('expected updated bookmarkable audit URL, got ' + window.location.search);
 })();
 `
 		runNode(t, nodeProgram)

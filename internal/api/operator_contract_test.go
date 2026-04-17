@@ -145,6 +145,7 @@ func TestAuditLogOperatorContract(t *testing.T) {
 		"`GET /v1/audit-logs?deployment={deploymentName}&limit={n}`",
 		"`deployment` is optional and must name exactly one deployment when present",
 		"actor information is unavailable because the immutable plan preview and apply request stores do not persist operator identity",
+		"`Audit filters: action apply.requested · limit 2`",
 		"`/v1/audit-logs` is the preferred v1 route shape for this local timeline",
 	} {
 		if !strings.Contains(readme, fragment) {
@@ -160,11 +161,24 @@ func TestAuditLogOperatorContract(t *testing.T) {
 		"`limit` is optional and must be a positive integer when present",
 		"`action` is optional and must be exactly `plan.created` or `apply.requested` when present",
 		"`deployment` is optional and must name exactly one deployment when present",
+		"`GET /v1/audit-logs?action=apply.requested&limit=2`",
+		"`action=invalid.action` with `400 Bad Request`",
 		"`entries: []` with `200 OK` when the selected deployment exists but has no persisted audit records yet",
 		"`actor.available` is always `false` in this slice",
 	} {
 		if !strings.Contains(auditDoc, fragment) {
 			t.Fatalf("expected audit architecture doc to include %q", fragment)
+		}
+	}
+
+	overviewUIDoc := readRepoFile(t, "docs/architecture/tenet-v1-overview-ui.md")
+	for _, fragment := range []string{
+		"`/?page=audit` route now renders that audit timeline directly",
+		"`Audit filters: action apply.requested · limit 2`",
+		"accepts optional `&action={action}` / `&limit={n}`",
+	} {
+		if !strings.Contains(overviewUIDoc, fragment) {
+			t.Fatalf("expected overview UI doc to include %q", fragment)
 		}
 	}
 }
