@@ -13,7 +13,7 @@ docker-build:
 	$(DOCKER_COMPOSE) build
 
 docker-up:
-	$(DOCKER_COMPOSE) up --build -d
+	./scripts/docker-up.sh $(DOCKER_COMPOSE)
 
 docker-down:
 	$(DOCKER_COMPOSE) down --remove-orphans
