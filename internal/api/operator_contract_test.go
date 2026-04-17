@@ -122,8 +122,8 @@ func TestAuditLogOperatorContract(t *testing.T) {
 		`curl -fsS "http://$HOST:$PORT/v1/audit-logs?deployment=worker-prod"`,
 		`curl -sS -o "$INVALID_AUDIT_ACTION_BODY" -w "%{http_code}" "http://$HOST:$PORT/v1/audit-logs?action=invalid.action"`,
 		`assert any(entry['action'] == 'apply.requested' for entry in audit_logs['entries']), audit_logs`,
-		`assert len(audit_logs_action_filtered['entries']) == 1, audit_logs_action_filtered`,
-		`assert audit_logs_action_filtered['entries'][0]['action'] == 'apply.requested', audit_logs_action_filtered`,
+		`assert len(audit_logs_action_filtered['entries']) >= 2, audit_logs_action_filtered`,
+		`assert all(entry['action'] == 'apply.requested' for entry in audit_logs_action_filtered['entries']), audit_logs_action_filtered`,
 		`assert len(audit_logs_filtered['entries']) == 1, audit_logs_filtered`,
 		`assert audit_logs_empty['entries'] == [], audit_logs_empty`,
 		`assert os.environ['INVALID_AUDIT_ACTION_STATUS'] == '400', os.environ['INVALID_AUDIT_ACTION_STATUS']`,
@@ -144,7 +144,10 @@ func TestAuditLogOperatorContract(t *testing.T) {
 		"`action` is optional and must be exactly `plan.created` or `apply.requested` when present",
 		"`GET /v1/audit-logs?deployment={deploymentName}&limit={n}`",
 		"`deployment` is optional and must name exactly one deployment when present",
-		"actor information is unavailable because the immutable plan preview and apply request stores do not persist operator identity",
+		"`X-Tenet-Actor-Id`",
+		"`X-Tenet-Actor-Name`",
+		"`X-Tenet-Actor-Email`",
+		"actor information is unavailable because no authenticated request context was available for this local request",
 		"`Audit filters: action apply.requested · limit 2`",
 		"`/v1/audit-logs` is the preferred v1 route shape for this local timeline",
 	} {
@@ -164,7 +167,10 @@ func TestAuditLogOperatorContract(t *testing.T) {
 		"`GET /v1/audit-logs?action=apply.requested&limit=2`",
 		"`action=invalid.action` with `400 Bad Request`",
 		"`entries: []` with `200 OK` when the selected deployment exists but has no persisted audit records yet",
-		"`actor.available` is always `false` in this slice",
+		"`X-Tenet-Actor-Id`",
+		"`X-Tenet-Actor-Name`",
+		"`X-Tenet-Actor-Email`",
+		"`actor.available=false` plus an unavailable reason",
 	} {
 		if !strings.Contains(auditDoc, fragment) {
 			t.Fatalf("expected audit architecture doc to include %q", fragment)

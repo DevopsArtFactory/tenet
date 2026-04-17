@@ -332,7 +332,7 @@ for entry in audit_logs["entries"]:
     assert entry["appRef"] == "payments-api", entry
     assert entry["environmentRef"] == "prod-apne2", entry
     assert entry["actor"]["available"] is False, entry
-    assert "do not persist operator identity" in entry["actor"]["reason"], entry
+    assert "no authenticated request context" in entry["actor"]["reason"], entry
     assert isinstance(entry.get("metadata", {}), dict), entry
     assert isinstance(entry.get("source", {}), dict), entry
 

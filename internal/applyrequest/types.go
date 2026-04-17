@@ -3,6 +3,8 @@ package applyrequest
 import (
 	"context"
 	"fmt"
+
+	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 )
 
 var (
@@ -29,14 +31,15 @@ type SourceContext struct {
 
 // Record is one immutable apply request derived from a persisted ready plan preview.
 type Record struct {
-	ID             string        `json:"id"`
-	PlanID         string        `json:"planId"`
-	DeploymentName string        `json:"deploymentName"`
-	Status         Status        `json:"status"`
-	CreatedAt      string        `json:"createdAt"`
-	Error          string        `json:"error,omitempty"`
-	Details        []string      `json:"details,omitempty"`
-	Source         SourceContext `json:"source"`
+	ID             string             `json:"id"`
+	PlanID         string             `json:"planId"`
+	DeploymentName string             `json:"deploymentName"`
+	Status         Status             `json:"status"`
+	CreatedAt      string             `json:"createdAt"`
+	Actor          requestactor.Actor `json:"actor"`
+	Error          string             `json:"error,omitempty"`
+	Details        []string           `json:"details,omitempty"`
+	Source         SourceContext      `json:"source"`
 }
 
 // Store persists immutable apply-request records.
