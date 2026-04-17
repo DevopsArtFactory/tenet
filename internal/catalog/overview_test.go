@@ -130,7 +130,7 @@ func TestBuildAccountOverviewsRuntimeSummaryUsesLatestHistory(t *testing.T) {
 			},
 			History: []domain.StatusHistoryEntry{
 				{Timestamp: "2026-04-16T06:15:00Z", Source: "controller", Summary: "Accepted rollout for r7", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "candidate warming"}, DesiredGeneration: 7, ObservedGeneration: 6, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "CreateCandidateCapacity", TargetType: "ec2", Strategy: "blueGreen", ExecutionMode: "asgInstanceRefresh", Changes: []string{"initial"}},
-				{Timestamp: "2026-04-16T06:20:00Z", Source: "controller", Summary: "Shifting canary traffic", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficCanary", TargetType: "ec2", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", Changes: []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep", "strategy", "executionMode"}},
+				{Timestamp: "2026-04-16T06:20:00Z", Source: "controller", Summary: "Shifting canary traffic", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficCanary", TargetType: "ec2", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", Changes: []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep", "strategy", "executionMode"}, ChangeDetails: []string{"Sync changed to Reconciling: progressing", "Health changed to Progressing: 2/3 targets healthy", "Desired generation changed from 7 to 8", "Observed generation changed from 6 to 7", "Rollout phase changed from Accepted to Promoting", "Current step changed from CreateCandidateCapacity to ShiftTrafficCanary", "Strategy changed from blueGreen to canary", "Execution mode changed from asgInstanceRefresh to asgWeightedTargetGroups"}},
 			},
 		},
 	}}
@@ -150,10 +150,23 @@ func TestBuildAccountOverviewsRuntimeSummaryUsesLatestHistory(t *testing.T) {
 	if summary.Timestamp != "2026-04-16T06:20:00Z" || summary.Source != "controller" || summary.Summary != "Shifting canary traffic" || summary.Sync.Reason != "progressing" || summary.Health.Summary != "2/3 targets healthy" || summary.DesiredGeneration != 8 || summary.ObservedGeneration != 7 || summary.RolloutPhase != domain.RolloutPhasePromoting || summary.CurrentStep != "ShiftTrafficCanary" || summary.TargetType != "ec2" || summary.Strategy != "canary" || summary.ExecutionMode != "asgWeightedTargetGroups" || summary.HistoryCount != 2 || !reflect.DeepEqual(summary.Changes, []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep", "strategy", "executionMode"}) {
 		t.Fatalf("expected latest history entry to drive runtime summary, got %+v", summary)
 	}
+	assertStringSliceContainsAll(t, summary.ChangeDetails,
+		"Sync changed to Reconciling: progressing",
+		"Strategy changed from blueGreen to canary",
+		"Execution mode changed from asgInstanceRefresh to asgWeightedTargetGroups",
+	)
 
 	snapshots[0].Status.History[1].Summary = "mutated"
+	snapshots[0].Status.History[1].ChangeDetails[0] = "mutated"
 	if overviews[0].Deployments[0].RuntimeSummary.Summary != "Shifting canary traffic" {
 		t.Fatalf("expected runtime summary to be cloned defensively, got %+v", overviews[0].Deployments[0].RuntimeSummary)
+	}
+	if overviews[0].Deployments[0].RuntimeSummary.ChangeDetails[0] != "Sync changed to Reconciling: progressing" {
+		t.Fatalf("expected runtime summary changeDetails to be cloned defensively, got %+v", overviews[0].Deployments[0].RuntimeSummary.ChangeDetails)
+	}
+	overviews[0].Deployments[0].RuntimeSummary.ChangeDetails[0] = "mutated-by-caller"
+	if snapshots[0].Status.History[1].ChangeDetails[0] != "mutated" {
+		t.Fatalf("expected caller mutations to avoid mutating stored history changeDetails, got %+v", snapshots[0].Status.History[1].ChangeDetails)
 	}
 }
 
@@ -602,6 +615,10 @@ func TestBuildAccountOverviewDetail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildAccountOverviewDetail returned error: %v", err)
 	}
+	accounts, err := BuildAccountOverviews(catalog, snapshots)
+	if err != nil {
+		t.Fatalf("BuildAccountOverviews returned error: %v", err)
+	}
 	if detail.Name != "prod-core" || detail.AWSAccountID != "123456789012" {
 		t.Fatalf("expected account identity fields, got %+v", detail)
 	}
@@ -633,6 +650,19 @@ func TestBuildAccountOverviewDetail(t *testing.T) {
 	}
 	if detail.Deployments[1].RuntimeSummary.Summary != "Shifting canary traffic" {
 		t.Fatalf("expected runtime summary to be cloned defensively, got %+v", detail.Deployments[1].RuntimeSummary)
+	}
+
+	detail.Deployments[1].Rollout.Execution[0].Name = "detail-mutated"
+	detail.Deployments[1].Conditions[0].Reason = "detail-mutated"
+	detail.Deployments[1].RuntimeSummary.Summary = "detail-mutated"
+	if accounts[0].Deployments[1].Rollout.Execution[0].Name != "payments-api-prod-candidate" {
+		t.Fatalf("expected account detail rollout execution to avoid aliasing account overviews, got %+v", accounts[0].Deployments[1].Rollout.Execution)
+	}
+	if accounts[0].Deployments[1].Conditions[0].Reason != "RolloutInFlight" {
+		t.Fatalf("expected account detail conditions to avoid aliasing account overviews, got %+v", accounts[0].Deployments[1].Conditions)
+	}
+	if accounts[0].Deployments[1].RuntimeSummary.Summary != "Shifting canary traffic" {
+		t.Fatalf("expected account detail runtime summary to avoid aliasing account overviews, got %+v", accounts[0].Deployments[1].RuntimeSummary)
 	}
 }
 
@@ -748,6 +778,7 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 						ObservedGeneration: 6,
 						RolloutPhase:       domain.RolloutPhaseAccepted,
 						CurrentStep:        "CreateCandidateCapacity",
+						ChangeDetails:      []string{"Summary changed to Accepted rollout for r7"},
 					},
 					{
 						Timestamp:          "2026-04-16T06:20:00Z",
@@ -759,6 +790,7 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 						ObservedGeneration: 7,
 						RolloutPhase:       domain.RolloutPhasePromoting,
 						CurrentStep:        "ShiftTrafficCanary",
+						ChangeDetails:      []string{"Sync changed to Reconciling: new artifact", "Current step changed from CreateCandidateCapacity to ShiftTrafficCanary"},
 					},
 				},
 				DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6"},
@@ -833,12 +865,17 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	if got := detail.History; got[0].Timestamp != "2026-04-16T06:15:00Z" || got[0].Source != "controller" || got[0].Summary != "Accepted rollout for r7" || got[0].Sync.Reason != "new artifact" || got[0].Health.Summary != "candidate is warming" || got[0].DesiredGeneration != 7 || got[0].ObservedGeneration != 6 || got[0].RolloutPhase != domain.RolloutPhaseAccepted || got[0].CurrentStep != "CreateCandidateCapacity" || got[1].DesiredGeneration != 8 || got[1].ObservedGeneration != 7 || got[1].RolloutPhase != domain.RolloutPhasePromoting || got[1].CurrentStep != "ShiftTrafficCanary" {
 		t.Fatalf("expected runtime history details, got %+v", got)
 	}
+	assertStringSliceContainsAll(t, detail.History[0].ChangeDetails, "Summary changed to Accepted rollout for r7")
+	assertStringSliceContainsAll(t, detail.History[1].ChangeDetails,
+		"Sync changed to Reconciling: new artifact",
+		"Current step changed from CreateCandidateCapacity to ShiftTrafficCanary",
+	)
 
 	snapshots[0].Status.Rollout.Steps[0].Kind = "mutated"
 	snapshots[0].Status.Rollout.Execution[0].Name = "mutated"
 	snapshots[0].Status.Conditions[0].Reason = "Mutated"
 	snapshots[0].Status.History[0].Summary = "mutated"
-	detail.History[1].CurrentStep = "mutated-by-caller"
+	snapshots[0].Status.History[1].ChangeDetails[0] = "mutated"
 	if detail.Rollout.Steps[0].Kind != "CreateCandidateCapacity" {
 		t.Fatalf("expected rollout summary to be cloned defensively, got %+v", detail.Rollout)
 	}
@@ -851,8 +888,16 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	if detail.History[0].Summary != "Accepted rollout for r7" {
 		t.Fatalf("expected runtime history to be cloned from stored status, got %+v", detail.History)
 	}
+	if detail.History[1].ChangeDetails[0] != "Sync changed to Reconciling: new artifact" {
+		t.Fatalf("expected runtime history changeDetails to be cloned from stored status, got %+v", detail.History[1].ChangeDetails)
+	}
+	detail.History[1].CurrentStep = "mutated-by-caller"
+	detail.History[1].ChangeDetails[0] = "mutated-by-caller"
 	if snapshots[0].Status.History[1].CurrentStep != "ShiftTrafficCanary" {
 		t.Fatalf("expected caller mutations to avoid mutating stored history, got %+v", snapshots[0].Status.History)
+	}
+	if snapshots[0].Status.History[1].ChangeDetails[0] != "mutated" {
+		t.Fatalf("expected caller mutations to avoid mutating stored history changeDetails, got %+v", snapshots[0].Status.History[1].ChangeDetails)
 	}
 }
 
@@ -874,7 +919,7 @@ func TestBuildDeploymentOverviewDetailRuntimeSummaryUsesLatestHistory(t *testing
 			},
 			History: []domain.StatusHistoryEntry{
 				{Timestamp: "2026-04-16T06:15:00Z", Source: "controller", Summary: "Accepted rollout for r7", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "candidate warming"}, DesiredGeneration: 7, ObservedGeneration: 6, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "CreateCandidateCapacity", TargetType: "ec2", Strategy: "blueGreen", ExecutionMode: "asgInstanceRefresh", Changes: []string{"initial"}},
-				{Timestamp: "2026-04-16T06:20:00Z", Source: "controller", Summary: "Shifting canary traffic", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficCanary", TargetType: "ec2", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", Changes: []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep", "strategy", "executionMode"}},
+				{Timestamp: "2026-04-16T06:20:00Z", Source: "controller", Summary: "Shifting canary traffic", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficCanary", TargetType: "ec2", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups", Changes: []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep", "strategy", "executionMode"}, ChangeDetails: []string{"Sync changed to Reconciling: progressing", "Strategy changed from blueGreen to canary", "Execution mode changed from asgInstanceRefresh to asgWeightedTargetGroups"}},
 			},
 		},
 	}}
@@ -889,10 +934,23 @@ func TestBuildDeploymentOverviewDetailRuntimeSummaryUsesLatestHistory(t *testing
 	if detail.RuntimeSummary.Timestamp != "2026-04-16T06:20:00Z" || detail.RuntimeSummary.Source != "controller" || detail.RuntimeSummary.Summary != "Shifting canary traffic" || detail.RuntimeSummary.Sync.Reason != "progressing" || detail.RuntimeSummary.Health.Summary != "2/3 targets healthy" || detail.RuntimeSummary.DesiredGeneration != 8 || detail.RuntimeSummary.ObservedGeneration != 7 || detail.RuntimeSummary.RolloutPhase != domain.RolloutPhasePromoting || detail.RuntimeSummary.CurrentStep != "ShiftTrafficCanary" || detail.RuntimeSummary.TargetType != "ec2" || detail.RuntimeSummary.Strategy != "canary" || detail.RuntimeSummary.ExecutionMode != "asgWeightedTargetGroups" || detail.RuntimeSummary.HistoryCount != 2 || !reflect.DeepEqual(detail.RuntimeSummary.Changes, []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep", "strategy", "executionMode"}) {
 		t.Fatalf("expected latest history entry runtime summary, got %+v", detail.RuntimeSummary)
 	}
+	assertStringSliceContainsAll(t, detail.RuntimeSummary.ChangeDetails,
+		"Sync changed to Reconciling: progressing",
+		"Strategy changed from blueGreen to canary",
+		"Execution mode changed from asgInstanceRefresh to asgWeightedTargetGroups",
+	)
 
 	snapshots[0].Status.History[1].CurrentStep = "mutated"
+	snapshots[0].Status.History[1].ChangeDetails[0] = "mutated"
 	if detail.RuntimeSummary.CurrentStep != "ShiftTrafficCanary" {
 		t.Fatalf("expected runtime summary to be cloned defensively, got %+v", detail.RuntimeSummary)
+	}
+	if detail.RuntimeSummary.ChangeDetails[0] != "Sync changed to Reconciling: progressing" {
+		t.Fatalf("expected runtime summary changeDetails to be cloned defensively, got %+v", detail.RuntimeSummary.ChangeDetails)
+	}
+	detail.RuntimeSummary.ChangeDetails[0] = "mutated-by-caller"
+	if snapshots[0].Status.History[1].ChangeDetails[0] != "mutated" {
+		t.Fatalf("expected caller mutations to avoid mutating stored history changeDetails, got %+v", snapshots[0].Status.History[1].ChangeDetails)
 	}
 }
 
@@ -1015,6 +1073,22 @@ func jsonContainsKey(payload []byte, key string) bool {
 	}
 	_, ok := decoded[key]
 	return ok
+}
+
+func assertStringSliceContainsAll(t *testing.T, got []string, want ...string) {
+	t.Helper()
+	for _, needle := range want {
+		found := false
+		for _, candidate := range got {
+			if candidate == needle {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected %q in %v", needle, got)
+		}
+	}
 }
 
 func TestBuildDeploymentOverviewDetailReturnsNotFound(t *testing.T) {

@@ -1257,8 +1257,9 @@ func TestEmitRuntimePlansBootstrapsRuntimeHistoryForLegacyRolloutOnlySnapshot(t 
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
 	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
 	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1}}`)
+	desiredGeneration := desiredGenerationForTest(t, root, "api-prod")
 	statusPath := filepath.Join(root, "status", "deployments.json")
-	writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"conditions":[],"rollout":{"desiredGeneration":2681220996861709023,"observedGeneration":-1,"phase":"Provisioning","currentStep":"CreateCandidateCapacity","summary":"Creating candidate capacity for weighted target groups","steps":[{"kind":"ResolvePlacement"},{"kind":"ObserveCurrentState"},{"kind":"CreateCandidateCapacity","current":true},{"kind":"VerifyCandidateCapacity"},{"kind":"ShiftTrafficFull"},{"kind":"PromoteCandidateCapacity"}]},"history":[]}}]`)
+	writeJSON(t, statusPath, fmt.Sprintf(`[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"conditions":[],"rollout":{"desiredGeneration":%d,"observedGeneration":-1,"phase":"Provisioning","currentStep":"CreateCandidateCapacity","summary":"Creating candidate capacity for weighted target groups","steps":[{"kind":"ResolvePlacement"},{"kind":"ObserveCurrentState"},{"kind":"CreateCandidateCapacity","current":true},{"kind":"VerifyCandidateCapacity"},{"kind":"ShiftTrafficFull"},{"kind":"PromoteCandidateCapacity"}]},"history":[]}}]`, desiredGeneration))
 
 	oldNow := runtimeHistoryNow
 	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 15, 0, 0, time.UTC) }
@@ -1294,8 +1295,16 @@ func TestEmitRuntimePlansBootstrapsRuntimeHistoryForLegacyRolloutOnlySnapshot(t 
 	if latest.RolloutPhase != domain.RolloutPhaseProvisioning || latest.CurrentStep != "CreateCandidateCapacity" {
 		t.Fatalf("expected rollout phase/current step in bootstrapped history entry, got %+v", latest)
 	}
-	if !reflect.DeepEqual(latest.Changes, []string{"initial"}) {
-		t.Fatalf("expected first controller-authored history entry to be labeled initial, got %+v", latest.Changes)
+	if !reflect.DeepEqual(latest.Changes, []string{"initial", "targetType", "strategy", "executionMode"}) {
+		t.Fatalf("expected first controller-authored history entry to preserve initial labeling and aligned rollout context changes, got %+v", latest.Changes)
+	}
+	if !reflect.DeepEqual(latest.ChangeDetails, []string{
+		"Initial controller-authored history entry",
+		"Target type changed from Unknown to ec2",
+		"Strategy changed from Unknown to blueGreen",
+		"Execution mode changed from Unknown to asgWeightedTargetGroups",
+	}) {
+		t.Fatalf("expected initial history entry changeDetails to align with rollout context changes, got %+v", latest.ChangeDetails)
 	}
 }
 
@@ -1400,6 +1409,102 @@ func TestAppendRuntimeHistoryAppendsWhenGenerationsChangeWithoutOtherStatusChang
 	}
 }
 
+func TestAppendRuntimeHistoryIncludesChangeDetails(t *testing.T) {
+	previous := domain.DeploymentStatus{
+		ObservedGeneration: 7,
+		Sync:               domain.Sync{State: domain.SyncStateOutOfSync, Reason: "waiting for candidate"},
+		Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "candidate fleet bootstrapping"},
+		Conditions: []domain.Condition{{
+			Type:    "Ready",
+			Status:  false,
+			Reason:  "CandidateBootstrapping",
+			Message: "candidate instances are still bootstrapping",
+		}},
+		DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7"},
+		Rollout: &domain.RolloutSummary{
+			DesiredGeneration:  8,
+			ObservedGeneration: 7,
+			Phase:              domain.RolloutPhaseProvisioning,
+			CurrentStep:        "CreateCandidateCapacity",
+			Summary:            "Creating candidate capacity for weighted target groups",
+			TargetType:         "ec2",
+			Strategy:           "canary",
+			ExecutionMode:      "asgWeightedTargetGroups",
+		},
+	}
+	current := domain.DeploymentStatus{
+		ObservedGeneration: 8,
+		Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "Traffic shift running"},
+		Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "candidate fleet healthy enough for canary"},
+		Conditions: []domain.Condition{{
+			Type:    "Ready",
+			Status:  true,
+			Reason:  "TrafficShiftReady",
+			Message: "candidate target group can receive canary traffic",
+		}},
+		DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r8"},
+		Rollout: &domain.RolloutSummary{
+			DesiredGeneration:  9,
+			ObservedGeneration: 8,
+			Phase:              domain.RolloutPhasePromoting,
+			CurrentStep:        "ShiftTrafficCanary",
+			Summary:            "Traffic shift is progressing",
+			TargetType:         "ec2",
+			Strategy:           "canary",
+			ExecutionMode:      "asgWeightedTargetGroups",
+		},
+	}
+
+	oldNow := runtimeHistoryNow
+	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 45, 0, 0, time.UTC) }
+	defer func() { runtimeHistoryNow = oldNow }()
+
+	history := appendRuntimeHistory(previous, current)
+	if len(history) != 1 {
+		t.Fatalf("expected appended controller-authored history entry, got %+v", history)
+	}
+
+	payload, err := json.Marshal(history[0])
+	if err != nil {
+		t.Fatalf("Marshal returned error: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("failed to decode runtime history entry JSON: %v", err)
+	}
+	changeDetails, ok := decoded["changeDetails"].([]any)
+	if !ok || len(changeDetails) != 10 {
+		t.Fatalf("expected additive changeDetails in controller-authored history entry, got %#v", decoded["changeDetails"])
+	}
+	changes, ok := decoded["changes"].([]any)
+	if !ok || len(changes) != len(changeDetails) {
+		t.Fatalf("expected changes and changeDetails to stay aligned, got changes=%#v changeDetails=%#v", decoded["changes"], decoded["changeDetails"])
+	}
+	want := []string{
+		"Initial controller-authored history entry",
+		"Summary changed to Traffic shift is progressing",
+		"Artifact changed to s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r8",
+		"Conditions changed to Ready=True (TrafficShiftReady)",
+		"Sync changed to Reconciling: Traffic shift running",
+		"Health changed to Progressing: candidate fleet healthy enough for canary",
+		"Desired generation changed from 8 to 9",
+		"Observed generation changed from 7 to 8",
+		"Rollout phase changed from Provisioning to Promoting",
+		"Current step changed from CreateCandidateCapacity to ShiftTrafficCanary",
+	}
+	for i, item := range want {
+		if changeDetails[i] != item {
+			t.Fatalf("expected changeDetails[%d] = %q, got %#v", i, item, changeDetails)
+		}
+	}
+	wantChanges := []string{"initial", "summary", "deployedArtifact", "conditions", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep"}
+	for i, item := range wantChanges {
+		if changes[i] != item {
+			t.Fatalf("expected changes[%d] = %q, got %#v", i, item, changes)
+		}
+	}
+}
+
 func TestAppendRuntimeHistoryTracksArtifactAndConditionChanges(t *testing.T) {
 	previous := domain.DeploymentStatus{
 		ObservedGeneration: 7,
@@ -1477,6 +1582,45 @@ func TestAppendRuntimeHistoryTracksArtifactAndConditionChanges(t *testing.T) {
 	condition, ok := conditions[0].(map[string]any)
 	if !ok || condition["type"] != "Ready" || condition["status"] != true || condition["reason"] != "TrafficShiftComplete" {
 		t.Fatalf("expected appended history entry condition payload, got %#v", conditions)
+	}
+}
+
+func TestAppendRuntimeHistoryIgnoresConditionOrderChanges(t *testing.T) {
+	previous := domain.DeploymentStatus{
+		ObservedGeneration: 7,
+		Conditions: []domain.Condition{
+			{Type: "Ready", Status: true, Reason: "TrafficShiftReady", Message: "candidate can receive traffic"},
+			{Type: "Progressing", Status: false, Reason: "CandidateStable", Message: "candidate finished warming"},
+		},
+		History: []domain.StatusHistoryEntry{{
+			Timestamp: "2026-04-16T05:30:00Z",
+			Source:    runtimeHistorySourceController,
+			Summary:   "Runtime status updated",
+			Conditions: []domain.Condition{
+				{Type: "Ready", Status: true, Reason: "TrafficShiftReady", Message: "candidate can receive traffic"},
+				{Type: "Progressing", Status: false, Reason: "CandidateStable", Message: "candidate finished warming"},
+			},
+			ObservedGeneration: 7,
+		}},
+	}
+	current := previous
+	current.Conditions = []domain.Condition{
+		{Type: "Progressing", Status: false, Reason: "CandidateStable", Message: "candidate finished warming"},
+		{Type: "Ready", Status: true, Reason: "TrafficShiftReady", Message: "candidate can receive traffic"},
+	}
+
+	got := appendRuntimeHistory(previous, current)
+	if len(got) != 1 {
+		t.Fatalf("expected reordered conditions to avoid runtime history churn, got %+v", got)
+	}
+	if !reflect.DeepEqual(got[0].Conditions, []domain.Condition{
+		{Type: "Progressing", Status: false, Reason: "CandidateStable", Message: "candidate finished warming"},
+		{Type: "Ready", Status: true, Reason: "TrafficShiftReady", Message: "candidate can receive traffic"},
+	}) {
+		t.Fatalf("expected controller history conditions to be normalized deterministically, got %+v", got[0].Conditions)
+	}
+	if details := runtimeHistoryChangeDetails(domain.StatusHistoryEntry{}, domain.StatusHistoryEntry{Conditions: current.Conditions}); !reflect.DeepEqual(details, []string{"Conditions changed to Progressing=False (CandidateStable), Ready=True (TrafficShiftReady)"}) {
+		t.Fatalf("expected deterministic condition changeDetails ordering, got %+v", details)
 	}
 }
 
@@ -1757,15 +1901,33 @@ func TestAppendRuntimeHistoryLabelsFirstControllerEntryInitialAfterLegacyEntries
 		ObservedGeneration: 7,
 		Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "waiting for candidate"},
 		Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "warming"},
+		Rollout: &domain.RolloutSummary{
+			DesiredGeneration:  8,
+			ObservedGeneration: 7,
+			Phase:              domain.RolloutPhaseProvisioning,
+			CurrentStep:        "CreateCandidateCapacity",
+			Summary:            "Creating candidate capacity",
+		},
 	}
 	current := previous
+	current.Sync = domain.Sync{State: domain.SyncStateReconciling, Reason: "traffic shift running"}
+	current.Rollout = &domain.RolloutSummary{
+		DesiredGeneration:  8,
+		ObservedGeneration: 7,
+		Phase:              domain.RolloutPhaseAccepted,
+		CurrentStep:        "ShiftTrafficCanary",
+		Summary:            "Traffic shift is progressing",
+	}
 	current.History = []domain.StatusHistoryEntry{{
 		Timestamp:          "2026-04-16T05:30:00Z",
 		Source:             "operator",
-		Summary:            "Runtime status updated",
-		Sync:               previous.Sync,
+		Summary:            "Candidate created",
+		Sync:               domain.Sync{State: domain.SyncStateOutOfSync, Reason: "candidate pending"},
 		Health:             previous.Health,
 		ObservedGeneration: previous.ObservedGeneration,
+		DesiredGeneration:  8,
+		RolloutPhase:       domain.RolloutPhaseProvisioning,
+		CurrentStep:        "CreateCandidateCapacity",
 	}}
 
 	oldNow := runtimeHistoryNow
@@ -1783,8 +1945,17 @@ func TestAppendRuntimeHistoryLabelsFirstControllerEntryInitialAfterLegacyEntries
 	if latest.Source != runtimeHistorySourceController {
 		t.Fatalf("expected appended history entry to be controller-authored, got %+v", latest)
 	}
-	if !reflect.DeepEqual(latest.Changes, []string{"initial"}) {
-		t.Fatalf("expected first controller-authored history entry to be labeled initial even after legacy entries, got %+v", latest.Changes)
+	if !reflect.DeepEqual(latest.Changes, []string{"initial", "summary", "sync", "rolloutPhase", "currentStep"}) {
+		t.Fatalf("expected first controller-authored history entry to preserve initial labeling and aligned changes after legacy entries, got %+v", latest.Changes)
+	}
+	if !reflect.DeepEqual(latest.ChangeDetails, []string{
+		"Initial controller-authored history entry",
+		"Summary changed to Traffic shift is progressing",
+		"Sync changed to Reconciling: traffic shift running",
+		"Rollout phase changed from Provisioning to Accepted",
+		"Current step changed from CreateCandidateCapacity to ShiftTrafficCanary",
+	}) {
+		t.Fatalf("expected first controller-authored history entry to retain meaningful aligned changeDetails after legacy entries, got %+v", latest.ChangeDetails)
 	}
 }
 

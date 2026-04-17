@@ -919,6 +919,7 @@ func TestOverviewAccountsResponseIncludesRuntimeSummary(t *testing.T) {
 						Conditions:         []domain.Condition{{Type: "Ready", Status: true, Reason: "TrafficShiftComplete", Message: "candidate is serving traffic"}},
 						HistoryCount:       2,
 						Changes:            []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep", "deployedArtifact", "conditions"},
+						ChangeDetails:      []string{"Sync changed to Reconciling: Traffic shift running", "Health changed to Healthy: steady", "Desired generation changed from 7 to 8", "Observed generation changed from 6 to 7", "Current step changed from CreateCandidateCapacity to ShiftTrafficCanary", "Artifact changed to s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7", "Conditions changed to Ready=True (TrafficShiftComplete)"},
 					},
 				}},
 			}}, nil
@@ -947,6 +948,10 @@ func TestOverviewAccountsResponseIncludesRuntimeSummary(t *testing.T) {
 	changes, ok := runtimeSummary["changes"].([]any)
 	if !ok || len(changes) != 9 || changes[1] != "sync" || changes[5] != "rolloutPhase" || changes[7] != "deployedArtifact" || changes[8] != "conditions" {
 		t.Fatalf("expected runtimeSummary.changes in overview accounts payload, got %#v", runtimeSummary["changes"])
+	}
+	changeDetails, ok := runtimeSummary["changeDetails"].([]any)
+	if !ok || len(changeDetails) != 7 || changeDetails[0] != "Sync changed to Reconciling: Traffic shift running" || changeDetails[5] != "Artifact changed to s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7" || changeDetails[6] != "Conditions changed to Ready=True (TrafficShiftComplete)" {
+		t.Fatalf("expected runtimeSummary.changeDetails in overview accounts payload, got %#v", runtimeSummary["changeDetails"])
 	}
 	syncSummary, ok := runtimeSummary["sync"].(map[string]any)
 	if !ok || syncSummary["state"] != string(domain.SyncStateReconciling) || syncSummary["reason"] != "Traffic shift running" {
@@ -1576,6 +1581,86 @@ func TestDeploymentOverviewDetailRouteOmitsRuntimeSummarySourceWithoutHistory(t 
 	}
 	if _, ok := runtimeSummary["source"]; ok {
 		t.Fatalf("expected runtimeSummary.source to be omitted without history, got %#v", runtimeSummary)
+	}
+}
+
+func TestRouterOverviewDeploymentChangeDetails(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			if name != "api-prod" {
+				t.Fatalf("unexpected lookup name: %s", name)
+			}
+			return catalog.DeploymentOverviewDetail{
+				Name: "api-prod",
+				RuntimeSummary: &domain.RuntimeSummary{
+					Timestamp:          "2026-04-16T06:49:00Z",
+					Source:             "controller",
+					Summary:            "Traffic shift is progressing",
+					Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "Traffic shift running"},
+					Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "steady"},
+					DesiredGeneration:  8,
+					ObservedGeneration: 7,
+					RolloutPhase:       domain.RolloutPhaseAccepted,
+					CurrentStep:        "ShiftTrafficLinear",
+					TargetType:         "ecs-service",
+					Strategy:           "linear",
+					ExecutionMode:      "ecsCodeDeploy",
+					HistoryCount:       3,
+					Changes:            []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep"},
+					ChangeDetails:      []string{"Sync changed to Reconciling: Traffic shift running", "Health changed to Healthy: steady", "Desired generation changed from 7 to 8", "Observed generation changed from 6 to 7", "Rollout phase changed from Provisioning to Accepted", "Current step changed from CreateCodeDeployDeployment to ShiftTrafficLinear"},
+				},
+				History: []domain.StatusHistoryEntry{{
+					Timestamp:          "2026-04-16T06:49:00Z",
+					Source:             "controller",
+					Summary:            "Shifted 10 percent of traffic",
+					Sync:               domain.Sync{State: domain.SyncStateReconciling},
+					Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "steady"},
+					DesiredGeneration:  8,
+					ObservedGeneration: 7,
+					Changes:            []string{"summary", "currentStep"},
+					ChangeDetails:      []string{"Summary changed to Shifted 10 percent of traffic", "Current step changed from CreateCodeDeployDeployment to ShiftTrafficLinear"},
+					RolloutPhase:       domain.RolloutPhaseAccepted,
+					CurrentStep:        "ShiftTrafficLinear",
+					TargetType:         "ecs-service",
+					Strategy:           "linear",
+					ExecutionMode:      "ecsCodeDeploy",
+				}},
+			}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode raw overview deployment payload: %v", err)
+	}
+	runtimeSummary, ok := payload["runtimeSummary"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected runtimeSummary object in raw payload, got %#v", payload["runtimeSummary"])
+	}
+	changeDetails, ok := runtimeSummary["changeDetails"].([]any)
+	if !ok || len(changeDetails) != 6 || changeDetails[0] != "Sync changed to Reconciling: Traffic shift running" || changeDetails[5] != "Current step changed from CreateCodeDeployDeployment to ShiftTrafficLinear" {
+		t.Fatalf("expected runtimeSummary.changeDetails in raw payload, got %#v", runtimeSummary["changeDetails"])
+	}
+	history, ok := payload["history"].([]any)
+	if !ok || len(history) != 1 {
+		t.Fatalf("expected history array in raw payload, got %#v", payload["history"])
+	}
+	historyEntry, ok := history[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected history[0] object, got %#v", history[0])
+	}
+	historyChangeDetails, ok := historyEntry["changeDetails"].([]any)
+	if !ok || len(historyChangeDetails) != 2 || historyChangeDetails[0] != "Summary changed to Shifted 10 percent of traffic" || historyChangeDetails[1] != "Current step changed from CreateCodeDeployDeployment to ShiftTrafficLinear" {
+		t.Fatalf("expected history[0].changeDetails in raw payload, got %#v", historyEntry["changeDetails"])
 	}
 }
 

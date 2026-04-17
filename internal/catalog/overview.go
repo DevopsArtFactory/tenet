@@ -281,6 +281,10 @@ func BuildAccountOverviewDetail(c manifest.Catalog, snapshots []statusstore.Snap
 		found = true
 	}
 	if found {
+		deployments := make([]DeploymentOverview, 0, len(matched.Deployments))
+		for _, deployment := range matched.Deployments {
+			deployments = append(deployments, cloneDeploymentOverview(deployment))
+		}
 		return AccountOverviewDetail{
 			Name:             matched.Name,
 			AWSAccountID:     matched.AWSAccountID,
@@ -292,7 +296,7 @@ func BuildAccountOverviewDetail(c manifest.Catalog, snapshots []statusstore.Snap
 			ProgressingCount: matched.ProgressingCount,
 			PausedCount:      matched.PausedCount,
 			ErrorCount:       matched.ErrorCount,
-			Deployments:      append([]DeploymentOverview(nil), matched.Deployments...),
+			Deployments:      deployments,
 		}, nil
 	}
 	return AccountOverviewDetail{}, fmt.Errorf("%w: %s", statusstore.ErrNotFound, awsAccountID)
@@ -415,6 +419,7 @@ func deriveRuntimeSummary(status domain.DeploymentStatus) *domain.RuntimeSummary
 			Source:             latest.Source,
 			Summary:            latest.Summary,
 			Changes:            append([]string(nil), latest.Changes...),
+			ChangeDetails:      append([]string(nil), latest.ChangeDetails...),
 			DeployedArtifact:   latest.DeployedArtifact,
 			Conditions:         append([]domain.Condition(nil), latest.Conditions...),
 			Sync:               latest.Sync,
@@ -478,6 +483,7 @@ func cloneRuntimeSummary(summary *domain.RuntimeSummary) *domain.RuntimeSummary 
 	}
 	copy := *summary
 	copy.Changes = append([]string(nil), summary.Changes...)
+	copy.ChangeDetails = append([]string(nil), summary.ChangeDetails...)
 	copy.Conditions = append([]domain.Condition(nil), summary.Conditions...)
 	return &copy
 }
@@ -507,6 +513,7 @@ func cloneStatusHistory(history []domain.StatusHistoryEntry) []domain.StatusHist
 	cloned := append([]domain.StatusHistoryEntry(nil), history...)
 	for i := range cloned {
 		cloned[i].Changes = append([]string(nil), history[i].Changes...)
+		cloned[i].ChangeDetails = append([]string(nil), history[i].ChangeDetails...)
 		cloned[i].Conditions = append([]domain.Condition(nil), history[i].Conditions...)
 	}
 	return cloned
