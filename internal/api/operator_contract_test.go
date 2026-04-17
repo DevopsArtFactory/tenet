@@ -112,3 +112,38 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		}
 	}
 }
+
+func TestAuditLogOperatorContract(t *testing.T) {
+	script := readRepoFile(t, "scripts/smoke-local.sh")
+	for _, fragment := range []string{
+		`curl -fsS "http://$HOST:$PORT/v1/audit-logs"`,
+		`assert any(entry['action'] == 'apply.requested' for entry in audit_logs['entries']), audit_logs`,
+		`assert entry['actor']['available'] is False, entry`,
+	} {
+		if !strings.Contains(script, fragment) {
+			t.Fatalf("expected smoke-local audit contract to include %q", fragment)
+		}
+	}
+
+	readme := readRepoFile(t, "README.md")
+	for _, fragment := range []string{
+		"`GET /v1/audit-logs?limit={n}`",
+		"actor information is unavailable because the immutable plan preview and apply request stores do not persist operator identity",
+		"`/v1/audit-logs` is the preferred v1 route shape for this local timeline",
+	} {
+		if !strings.Contains(readme, fragment) {
+			t.Fatalf("expected README audit contract to include %q", fragment)
+		}
+	}
+
+	auditDoc := readRepoFile(t, "docs/architecture/tenet-v1-audit-log-api.md")
+	for _, fragment := range []string{
+		"`GET /v1/audit-logs`",
+		"`limit` is optional and must be a positive integer when present",
+		"`actor.available` is always `false` in this slice",
+	} {
+		if !strings.Contains(auditDoc, fragment) {
+			t.Fatalf("expected audit architecture doc to include %q", fragment)
+		}
+	}
+}

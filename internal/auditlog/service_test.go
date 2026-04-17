@@ -1,0 +1,111 @@
+package auditlog
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
+	"github.com/DevopsArtFactory/tenet/internal/catalog"
+	"github.com/DevopsArtFactory/tenet/internal/planpreview"
+)
+
+func TestServiceListProjectsImmutableRecordsIntoNewestFirstTimeline(t *testing.T) {
+	service := Service{
+		ListPlanPreviews: func() ([]planpreview.Record, error) {
+			return []planpreview.Record{
+				{
+					ID:             "plan_old",
+					DeploymentName: "api-prod",
+					Status:         planpreview.StatusReady,
+					CreatedAt:      "2026-04-17T08:00:00Z",
+					Risk:           planpreview.Risk{Level: "medium"},
+					Approval:       planpreview.Approval{Required: true},
+					Source:         planpreview.SourceContext{Route: "/v1/overview/deployments/api-prod", Fingerprint: "plan_fp_old"},
+				},
+				{
+					ID:             "plan_new",
+					DeploymentName: "worker-prod",
+					Status:         planpreview.StatusFailed,
+					CreatedAt:      "2026-04-18T07:59:00Z",
+					Risk:           planpreview.Risk{Level: "high"},
+					Approval:       planpreview.Approval{Required: true},
+					Errors:         []string{"stale source fingerprint"},
+					Source:         planpreview.SourceContext{Route: "/v1/overview/deployments/worker-prod", Fingerprint: "plan_fp_new"},
+				},
+			}, nil
+		},
+		ListApplyRequests: func() ([]applyrequest.Record, error) {
+			return []applyrequest.Record{
+				{
+					ID:             "apply_newest",
+					PlanID:         "plan_old",
+					DeploymentName: "api-prod",
+					Status:         applyrequest.StatusFailed,
+					CreatedAt:      "2026-04-18T08:00:00Z",
+					Error:          "apply execution is disabled",
+					Details:        []string{"did not contact AWS"},
+					Source: applyrequest.SourceContext{
+						Route:       "/v1/plans/plan_old",
+						PlanStatus:  "ready",
+						Fingerprint: "plan_fp_old",
+					},
+				},
+			}, nil
+		},
+		ListDeployments: func() ([]catalog.DeploymentView, error) {
+			return []catalog.DeploymentView{
+				{Name: "api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"},
+				{Name: "worker-prod", AppRef: "worker", EnvironmentRef: "prod-apne2"},
+			}, nil
+		},
+	}
+
+	result, err := service.List(context.Background(), Query{Limit: 2})
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	if len(result.Entries) != 2 {
+		t.Fatalf("expected two limited entries, got %+v", result.Entries)
+	}
+
+	newest := result.Entries[0]
+	if newest.Action != "apply.requested" || newest.ApplyID != "apply_newest" {
+		t.Fatalf("expected newest apply entry first, got %+v", newest)
+	}
+	if newest.AppRef != "payments-api" || newest.EnvironmentRef != "prod-apne2" {
+		t.Fatalf("expected deployment context enrichment, got %+v", newest)
+	}
+	if newest.Metadata.PlanStatus != "ready" || newest.Metadata.Error != "apply execution is disabled" {
+		t.Fatalf("unexpected apply metadata: %+v", newest.Metadata)
+	}
+	if newest.Source.RecordRoute != "/v1/applies/apply_newest" || newest.Source.SourceRoute != "/v1/plans/plan_old" {
+		t.Fatalf("unexpected apply source details: %+v", newest.Source)
+	}
+	if newest.Actor.Available || !strings.Contains(newest.Actor.Reason, "do not persist operator identity") {
+		t.Fatalf("expected explicit unavailable actor contract, got %+v", newest.Actor)
+	}
+
+	second := result.Entries[1]
+	if second.Action != "plan.created" || second.PlanID != "plan_new" {
+		t.Fatalf("expected newer plan entry second, got %+v", second)
+	}
+	if second.Metadata.RiskLevel != "high" || len(second.Metadata.Errors) != 1 {
+		t.Fatalf("unexpected plan metadata: %+v", second.Metadata)
+	}
+	if second.Source.RecordRoute != "/v1/plans/plan_new" || second.Source.SourceRoute != "/v1/overview/deployments/worker-prod" {
+		t.Fatalf("unexpected plan source details: %+v", second.Source)
+	}
+}
+
+func TestServiceListRejectsNegativeLimit(t *testing.T) {
+	service := Service{
+		ListPlanPreviews:  func() ([]planpreview.Record, error) { return nil, nil },
+		ListApplyRequests: func() ([]applyrequest.Record, error) { return nil, nil },
+	}
+
+	_, err := service.List(context.Background(), Query{Limit: -1})
+	if err == nil || !strings.Contains(err.Error(), "greater than zero") {
+		t.Fatalf("expected invalid limit error, got %v", err)
+	}
+}

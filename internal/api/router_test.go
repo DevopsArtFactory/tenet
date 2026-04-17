@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
+	"github.com/DevopsArtFactory/tenet/internal/auditlog"
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
@@ -599,6 +600,97 @@ func TestRouterCatalogTopologyPropagatesErrors(t *testing.T) {
 
 	if resp.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d", resp.Code)
+	}
+}
+
+func TestRouterAuditLogs(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		AuditLogs: func(ctx context.Context, query auditlog.Query) (auditlog.Result, error) {
+			if query.Limit != 2 {
+				t.Fatalf("expected limit=2 query, got %+v", query)
+			}
+			return auditlog.Result{
+				Entries: []auditlog.Entry{{
+					Timestamp:      "2026-04-18T08:00:00Z",
+					Action:         "apply.requested",
+					DeploymentName: "api-prod",
+					AppRef:         "payments-api",
+					EnvironmentRef: "prod-apne2",
+					PlanID:         "plan_1234",
+					ApplyID:        "apply_5678",
+					Actor:          auditlog.Actor{Available: false, Reason: "actor information is unavailable"},
+					Metadata:       auditlog.Metadata{Status: "failed", PlanStatus: "ready", Error: "apply execution is disabled"},
+					Source:         auditlog.Source{Kind: "applyRequest", Store: "applyRequestStore", RecordRoute: "/v1/applies/apply_5678", SourceRoute: "/v1/plans/plan_1234"},
+				}},
+			}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/audit-logs?limit=2", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+
+	var result auditlog.Result
+	if err := json.Unmarshal(resp.Body.Bytes(), &result); err != nil {
+		t.Fatalf("failed to decode audit logs: %v", err)
+	}
+	if len(result.Entries) != 1 || result.Entries[0].ApplyID != "apply_5678" {
+		t.Fatalf("unexpected audit logs payload: %+v", result)
+	}
+}
+
+func TestRouterAuditLogsUnavailable(t *testing.T) {
+	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+	req := httptest.NewRequest(http.MethodGet, "/v1/audit-logs", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", resp.Code)
+	}
+}
+
+func TestRouterAuditLogsRejectsInvalidLimit(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		AuditLogs: func(context.Context, auditlog.Query) (auditlog.Result, error) {
+			t.Fatal("expected invalid limit to short-circuit before provider")
+			return auditlog.Result{}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/audit-logs?limit=0", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.Code)
+	}
+}
+
+func TestRouterAuditLogsMethodNotAllowed(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		AuditLogs: func(context.Context, auditlog.Query) (auditlog.Result, error) {
+			return auditlog.Result{}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/audit-logs", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d", resp.Code)
+	}
+	if allow := resp.Header().Get("Allow"); allow != http.MethodGet {
+		t.Fatalf("expected Allow GET, got %q", allow)
 	}
 }
 

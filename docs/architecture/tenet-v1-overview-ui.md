@@ -67,8 +67,10 @@ The neighboring read-only plan-preview flow is also part of the operator contrac
 - `GET /v1/plans/{planId}` reopens the exact stored preview
 - `POST /v1/applies/plans/{planId}` persists an immutable apply request derived from an existing ready preview
 - `GET /v1/applies/{applyId}` reopens the exact stored apply request
+- `GET /v1/audit-logs` projects persisted plan/apply records into a local audit timeline for future UI work; the route also accepts `?limit={n}` for a newest-first window
 - the embedded `/?page=plan&deployment={deploymentName}&planId={planId}` workspace keeps the URL shareable/bookmarkable and prefers the reviewed detail `sourceFingerprint` for optimistic `ifMatch` protection before falling back to a loaded preview fingerprint
 - live execution remains intentionally disabled by default in this backend slice, so the apply-request route records a failed immutable contract with operator-facing error/details instead of contacting AWS
+- actor identity is intentionally explicit rather than invented: `GET /v1/audit-logs` returns `actor.available=false` because the persisted immutable stores do not currently capture operator auth data
 
 When `rollout.execution[]` is still missing or empty in a fixture-backed or early controller-authored payload, the resource drill-down keeps the operator contract stable by synthesizing the same fallback rollout resources the controller would eventually publish. That contract includes:
 - `ecsRolling`

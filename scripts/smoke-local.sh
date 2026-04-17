@@ -98,6 +98,7 @@ PY
 )
 apply_record_get=$(curl -fsS "http://$HOST:$PORT/v1/applies/$apply_id")
 stale_plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d '{"ifMatch":"plan_deadbeef"}' "http://$HOST:$PORT/v1/plans/deployments/payments-api-prod")
+audit_logs=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs")
 status=$(curl -fsS "http://$HOST:$PORT/v1/status/deployments/payments-api-prod")
 resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")
 worker_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
@@ -105,7 +106,7 @@ ui=$(curl -fsS "http://$HOST:$PORT/")
 plan_ui=$(curl -fsS "http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id")
 apply_ui=$(curl -fsS "http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id&applyId=$apply_id")
 
-SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_EVENTS_FIXTURE_JSON="$deployment_events_fixture" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" APPLY_RECORD_JSON="$apply_record" APPLY_RECORD_GET_JSON="$apply_record_get" STALE_PLAN_PREVIEW_JSON="$stale_plan_preview" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" PLAN_UI_HTML="$plan_ui" APPLY_UI_HTML="$apply_ui" python3 - <<'PY'
+SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_EVENTS_FIXTURE_JSON="$deployment_events_fixture" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" APPLY_RECORD_JSON="$apply_record" APPLY_RECORD_GET_JSON="$apply_record_get" STALE_PLAN_PREVIEW_JSON="$stale_plan_preview" AUDIT_LOGS_JSON="$audit_logs" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" PLAN_UI_HTML="$plan_ui" APPLY_UI_HTML="$apply_ui" python3 - <<'PY'
 import json, os
 summary = json.loads(os.environ['SUMMARY_JSON'])
 applications = json.loads(os.environ['APPLICATIONS_JSON'])
@@ -120,6 +121,7 @@ plan_preview_get = json.loads(os.environ['PLAN_PREVIEW_GET_JSON'])
 apply_record = json.loads(os.environ['APPLY_RECORD_JSON'])
 apply_record_get = json.loads(os.environ['APPLY_RECORD_GET_JSON'])
 stale_plan_preview = json.loads(os.environ['STALE_PLAN_PREVIEW_JSON'])
+audit_logs = json.loads(os.environ['AUDIT_LOGS_JSON'])
 status = json.loads(os.environ['STATUS_JSON'])
 resource_logs = json.loads(os.environ['RESOURCE_LOGS_JSON'])
 worker_resource_logs = json.loads(os.environ['WORKER_RESOURCE_LOGS_JSON'])
@@ -193,6 +195,18 @@ assert apply_record_get == apply_record, (apply_record_get, apply_record)
 assert stale_plan_preview['status'] == 'failed', stale_plan_preview
 assert stale_plan_preview['source']['fingerprint'] == deployment_detail['sourceFingerprint'], (stale_plan_preview, deployment_detail)
 assert isinstance(stale_plan_preview.get('errors', []), list) and stale_plan_preview['errors'], stale_plan_preview
+assert isinstance(audit_logs.get('entries', []), list), audit_logs
+assert len(audit_logs['entries']) >= 2, audit_logs
+assert any(entry['action'] == 'apply.requested' for entry in audit_logs['entries']), audit_logs
+assert any(entry['action'] == 'plan.created' for entry in audit_logs['entries']), audit_logs
+for entry in audit_logs['entries']:
+    assert entry['deploymentName'] == 'payments-api-prod', entry
+    assert entry['appRef'] == 'payments-api', entry
+    assert entry['environmentRef'] == 'prod-apne2', entry
+    assert entry['actor']['available'] is False, entry
+    assert 'do not persist operator identity' in entry['actor']['reason'], entry
+    assert isinstance(entry.get('metadata', {}), dict), entry
+    assert isinstance(entry.get('source', {}), dict), entry
 assert status['deploymentName'] == 'payments-api-prod', status
 assert status['status']['sync']['state'] == 'Synced', status
 assert resource_logs['deploymentName'] == 'payments-api-prod', resource_logs

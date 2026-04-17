@@ -7,10 +7,12 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
+	"github.com/DevopsArtFactory/tenet/internal/auditlog"
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
@@ -66,6 +68,7 @@ type Options struct {
 	OverviewDeployment             func(string) (catalog.DeploymentOverviewDetail, error)
 	OverviewDeploymentEvents       func(string) (catalog.DeploymentOverviewEvents, error)
 	OverviewDeploymentResourceLogs func(context.Context, string, string, string) (resourcelogs.Result, error)
+	AuditLogs                      func(context.Context, auditlog.Query) (auditlog.Result, error)
 	CreateDeploymentPlanPreview    func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error)
 	PlanPreview                    func(context.Context, string) (planpreview.Record, error)
 	CreateApplyRequest             func(context.Context, string) (applyrequest.CreateResult, error)
@@ -366,6 +369,31 @@ func NewRouter(options Options) http.Handler {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(detail)
 		}
+	})
+	mux.HandleFunc("/v1/audit-logs", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+		if options.AuditLogs == nil {
+			http.Error(w, "audit logs unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		query := auditlog.Query{}
+		if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+			limit, err := strconv.Atoi(raw)
+			if err != nil || limit < 1 {
+				http.Error(w, "invalid limit query", http.StatusBadRequest)
+				return
+			}
+			query.Limit = limit
+		}
+		result, err := options.AuditLogs(r.Context(), query)
+		if err != nil {
+			respondInternalError(w)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(result)
 	})
 	mux.HandleFunc("/v1/plans/deployments/", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodPost) {
