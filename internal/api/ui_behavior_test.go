@@ -3265,6 +3265,29 @@ func TestDeploymentWorkspacePlanViewWithNodeHarness(t *testing.T) {
 		t.Fatalf("marshal failed plan preview: %v", err)
 	}
 
+	applyRecordFailedJSON, err := json.Marshal(map[string]any{
+		"id":             "apply_failed_123",
+		"planId":         "plan_ready_123",
+		"deploymentName": "api-prod",
+		"status":         "failed",
+		"createdAt":      "2026-04-18T08:00:00Z",
+		"error":          "apply execution is disabled",
+		"details": []string{
+			"Tenet persisted this immutable apply request in read-only mode and did not contact AWS.",
+			"Live execution is intentionally disabled by default for this backend slice.",
+		},
+		"source": map[string]any{
+			"planId":        "plan_ready_123",
+			"route":         "/v1/plans/plan_ready_123",
+			"planStatus":    "ready",
+			"planCreatedAt": "2026-04-17T09:00:00Z",
+			"fingerprint":   "fp_plan_ready",
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal failed apply record: %v", err)
+	}
+
 	domHarness := `
 class Element {
   constructor(tagName, ownerDocument) {
@@ -3321,6 +3344,7 @@ async function settle() { await Promise.resolve(); await new Promise((resolve) =
 const scriptContent = ` + string(scriptJSON) + `;
 const detailBody = ` + string(detailJSON) + `;
 const planPreview = ` + string(planPreviewReadyJSON) + `;
+const applyRecord = ` + string(applyRecordFailedJSON) + `;
 ` + domHarness + `
 const document = new Document();
 document.byID.set('toolbar', document.createElement('section'));
@@ -3328,6 +3352,7 @@ document.byID.set('summary', document.createElement('section'));
 document.byID.set('accounts', document.createElement('section'));
 const fetchCalls = [];
 let createRequestOptions = null;
+let createApplyRequestOptions = null;
 const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod', hash: '' } };
 const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
 const fetch = (url, options = {}) => {
@@ -3336,6 +3361,10 @@ const fetch = (url, options = {}) => {
   if (url === '/v1/plans/deployments/api-prod') {
     createRequestOptions = options;
     return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+  }
+  if (url === '/v1/applies/plans/plan_ready_123') {
+    createApplyRequestOptions = options;
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(applyRecord) });
   }
   throw new Error('unexpected fetch url: ' + url);
 };
@@ -3349,6 +3378,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Plan and apply')) throw new Error('expected plan workspace title');
   if (!text.includes('No stored plan preview yet')) throw new Error('expected idle plan-preview heading');
   if (!text.includes('Create Plan will POST /v1/plans/deployments/api-prod')) throw new Error('expected idle create-plan guidance');
+  if (!text.includes('Apply Plan activates only when a loaded persisted ready plan preview with a valid planId is present.')) throw new Error('expected idle apply gating guidance');
   if (!text.includes('No immutable plan preview has been created yet.')) throw new Error('expected derived preview intro before create');
   if (!text.includes('Plan operations')) throw new Error('expected plan operations section');
   if (!text.includes('CreateCodeDeployDeployment')) throw new Error('expected derived rollout operation before create');
@@ -3388,7 +3418,29 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   createPlan = buttons.find((node) => node.textContent === 'Create Plan');
   applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');
   if (!createPlan || !applyPlan) throw new Error('expected plan workspace buttons after create');
-  if (createPlan.disabled || !applyPlan.disabled) throw new Error('expected Create Plan enabled and Apply Plan disabled after preview load');
+  if (createPlan.disabled || applyPlan.disabled) throw new Error('expected Create Plan enabled and Apply Plan enabled after ready preview load');
+  applyPlan.dispatch('click');
+  await settle();
+  await settle();
+  await settle();
+  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/deployments/api-prod, /v1/applies/plans/plan_ready_123') throw new Error('unexpected fetch sequence after apply create: ' + fetchCalls.join(', '));
+  if (!createApplyRequestOptions || createApplyRequestOptions.method !== 'POST') throw new Error('expected Apply Plan to POST');
+  if (window.location.search !== '?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123') throw new Error('expected Apply Plan to persist applyId in URL, got ' + window.location.search);
+  text = collectText(root).join(' | ');
+  if (!text.includes('Apply request failed')) throw new Error('expected apply failed heading after create');
+  if (!text.includes('Immutable apply request apply_failed_123 was created and recorded as failed.')) throw new Error('expected apply failed create message');
+  if (!text.includes('Stored apply request')) throw new Error('expected stored apply request section');
+  if (!text.includes('Apply request details')) throw new Error('expected apply request details section');
+  if (!text.includes('apply execution is disabled')) throw new Error('expected apply failure reason');
+  if (!text.includes('Tenet persisted this immutable apply request in read-only mode and did not contact AWS.')) throw new Error('expected immutable apply detail');
+  if (!text.includes('Live execution is intentionally disabled by default for this backend slice.')) throw new Error('expected disabled-by-default apply detail');
+  const applyLinks = collectNodes(root, (node) => node.tagName === 'A');
+  const updatedWorkspaceLink = applyLinks.find((node) => node.href === '/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123' && node.textContent === 'Open bookmarked workspace');
+  if (!updatedWorkspaceLink || updatedWorkspaceLink.target !== '_self' || updatedWorkspaceLink.rel) throw new Error('expected bookmarked workspace self link to include applyId after apply create');
+  const bookmarkedApplyLink = applyLinks.find((node) => node.href === '/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123' && node.textContent === 'Open bookmarked apply');
+  if (!bookmarkedApplyLink || bookmarkedApplyLink.target !== '_self' || bookmarkedApplyLink.rel) throw new Error('expected bookmarked apply self link after apply create');
+  const applyJSONLink = applyLinks.find((node) => node.href === '/v1/applies/apply_failed_123' && node.textContent === 'Apply JSON');
+  if (!applyJSONLink || applyJSONLink.target !== '_blank' || applyJSONLink.rel !== 'noreferrer noopener') throw new Error('expected apply json read-model link after apply create');
 })();
 `
 		runNode(t, nodeProgram)
@@ -3440,6 +3492,60 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');
   if (!createPlan || !applyPlan) throw new Error('expected plan workspace action buttons on bookmarked plan');
   if (createPlan.disabled || !applyPlan.disabled) throw new Error('expected Create Plan enabled and Apply Plan disabled on bookmarked failed plan');
+})();
+`
+		runNode(t, nodeProgram)
+	})
+
+	t.Run("bookmarked apply id loads stored immutable apply record", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+const planPreview = ` + string(planPreviewReadyJSON) + `;
+const applyRecord = ` + string(applyRecordFailedJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/plans/plan_ready_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+  if (url === '/v1/applies/apply_failed_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(applyRecord) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  await settle();
+  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/plan_ready_123, /v1/applies/apply_failed_123') throw new Error('expected deployment detail plus bookmarked plan/apply fetches, got ' + fetchCalls.join(', '));
+  if (window.location.search !== '?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123') throw new Error('expected bookmarked apply URL to stay stable, got ' + window.location.search);
+  const root = document.getElementById('accounts');
+  const text = collectText(root).join(' | ');
+  if (!text.includes('Plan preview ready')) throw new Error('expected ready plan preview heading on bookmarked apply');
+  if (!text.includes('Apply request failed')) throw new Error('expected failed apply heading on bookmarked apply');
+  if (!text.includes('Immutable apply request apply_failed_123 is loaded and recorded as failed.')) throw new Error('expected loaded failed apply message');
+  if (!text.includes('Stored apply request')) throw new Error('expected stored apply request section');
+  if (!text.includes('Apply request details')) throw new Error('expected apply request details section');
+  if (!text.includes('apply execution is disabled')) throw new Error('expected stored apply error');
+  if (!text.includes('Tenet persisted this immutable apply request in read-only mode and did not contact AWS.')) throw new Error('expected immutable apply detail on bookmarked apply');
+  const links = collectNodes(root, (node) => node.tagName === 'A');
+  const workspaceLink = links.find((node) => node.href === '/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123' && node.textContent === 'Open bookmarked workspace');
+  if (!workspaceLink || workspaceLink.target !== '_self' || workspaceLink.rel) throw new Error('expected bookmarked workspace self link to retain applyId');
+  const bookmarkedApplyLink = links.find((node) => node.href === '/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123' && node.textContent === 'Open bookmarked apply');
+  if (!bookmarkedApplyLink || bookmarkedApplyLink.target !== '_self' || bookmarkedApplyLink.rel) throw new Error('expected bookmarked apply self link');
+  const applyJSONLink = links.find((node) => node.href === '/v1/applies/apply_failed_123' && node.textContent === 'Apply JSON');
+  if (!applyJSONLink || applyJSONLink.target !== '_blank' || applyJSONLink.rel !== 'noreferrer noopener') throw new Error('expected bookmarked apply json link');
+  const buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  const createPlan = buttons.find((node) => node.textContent === 'Create Plan');
+  const applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');
+  if (!createPlan || !applyPlan) throw new Error('expected plan workspace action buttons on bookmarked apply');
+  if (createPlan.disabled || applyPlan.disabled) throw new Error('expected Create Plan enabled and Apply Plan enabled on bookmarked apply backed by ready preview');
 })();
 `
 		runNode(t, nodeProgram)
