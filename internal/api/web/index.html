@@ -104,6 +104,11 @@
       .drift-table th, .drift-table td { text-align: left; padding: 12px 10px; border-top: 1px solid rgba(255,255,255,.06); vertical-align: top; font-size: 14px; }
       .drift-table th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; border-top: 0; }
       .drift-field { font-weight: 700; }
+      .workspace-callout { display:grid; gap: 10px; padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.03); }
+      .workspace-callout-head { display:flex; flex-wrap:wrap; align-items:center; gap: 10px; }
+      .workspace-callout-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+      .workspace-callout-copy { color: var(--text); line-height: 1.5; }
+      .workspace-callout-factors { color: var(--muted); font-size: 13px; line-height: 1.5; }
       .severity-indicator { display: inline-flex; align-items: center; justify-content: center; min-width: 64px; padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; border: 1px solid transparent; }
       .severity-indicator-high { background: rgba(255,123,123,.12); color: var(--red); border-color: rgba(255,123,123,.24); }
       .severity-indicator-medium { background: rgba(244,201,93,.12); color: var(--yellow); border-color: rgba(244,201,93,.28); }
@@ -325,6 +330,163 @@
 
         return rows;
       };
+      const rolloutPhaseForStepKind = (stepKind) => {
+        switch (stepKind) {
+          case 'CreateCandidateCapacity':
+          case 'StartInstanceRefresh':
+          case 'CreateCodeDeployDeployment':
+          case 'UpdateECSService':
+            return 'Provisioning';
+          case 'VerifyCandidateCapacity':
+            return 'Health checking';
+          case 'ShiftTrafficCanary':
+          case 'ShiftTrafficLinear':
+          case 'ShiftTrafficFull':
+          case 'PromoteCandidateCapacity':
+            return 'Promoting';
+          case 'VerifyReplacementCapacity':
+          case 'VerifyServiceStability':
+            return 'Stabilizing';
+          case 'MarkSynced':
+            return 'Completed';
+          default:
+            return 'Accepted';
+        }
+      };
+      const effectiveRolloutContext = (detail) => ({
+        targetType: detail.runtimeSummary?.targetType || detail.targetType || '',
+        strategy: detail.runtimeSummary?.strategy || detail.strategy || '',
+        executionMode: detail.runtimeSummary?.executionMode || detail.executionMode || '',
+      });
+      const stepTargetResourceTypes = (stepKind, detail) => {
+        const context = effectiveRolloutContext(detail);
+        switch (stepKind) {
+          case 'CreateCandidateCapacity':
+          case 'VerifyCandidateCapacity':
+          case 'PromoteCandidateCapacity':
+            return ['candidateAutoScalingGroup', 'serviceAutoScalingGroup'];
+          case 'ShiftTrafficCanary':
+          case 'ShiftTrafficLinear':
+          case 'ShiftTrafficFull':
+            if (context.executionMode === 'ecsCodeDeploy') return ['codeDeployDeploymentGroup', 'productionListener', 'testListener'];
+            return ['trafficShiftPlan', 'productionListenerRule', 'activeTargetGroup', 'candidateTargetGroup'];
+          case 'StartInstanceRefresh':
+          case 'VerifyReplacementCapacity':
+            return ['serviceAutoScalingGroup'];
+          case 'UpdateECSService':
+          case 'VerifyServiceStability':
+            return ['ecsService', 'codeDeployDeploymentGroup'];
+          case 'CreateCodeDeployDeployment':
+            return ['codeDeployDeploymentGroup', 'codeDeployApplication'];
+          default:
+            return [];
+        }
+      };
+      const derivePlanOperationTarget = (detail, stepKind, executionResources) => {
+        const preferredTypes = stepTargetResourceTypes(stepKind, detail);
+        const match = executionResources.find((resource) => preferredTypes.includes(resource.type));
+        if (match) return `${match.name} (${match.type})`;
+        switch (stepKind) {
+          case 'MarkSynced':
+            return `${detail.name} deployment read model`;
+          default:
+            return `${detail.name} deployment`;
+        }
+      };
+      const derivePlanOperationSummary = (detail, step) => {
+        const context = effectiveRolloutContext(detail);
+        if (step.detail) return step.detail;
+        switch (step.kind) {
+          case 'CreateCandidateCapacity':
+            return 'Prepare fresh candidate EC2 capacity before traffic shifting.';
+          case 'VerifyCandidateCapacity':
+            return 'Confirm the candidate EC2 capacity is healthy enough for live traffic.';
+          case 'ShiftTrafficCanary':
+            return context.executionMode === 'ecsCodeDeploy'
+              ? 'Shift a small live ECS traffic slice through CodeDeploy before wider promotion.'
+              : 'Shift a small live EC2 traffic slice through weighted target groups before wider promotion.';
+          case 'ShiftTrafficLinear':
+            return context.executionMode === 'ecsCodeDeploy'
+              ? 'Advance ECS traffic in controller-defined CodeDeploy increments.'
+              : 'Advance EC2 traffic in controller-defined weighted target-group increments.';
+          case 'ShiftTrafficFull':
+            return context.executionMode === 'ecsCodeDeploy'
+              ? 'Cut all ECS traffic to the replacement task set in one promotion step.'
+              : 'Cut all EC2 traffic to the candidate target group in one promotion step.';
+          case 'PromoteCandidateCapacity':
+            return 'Promote the candidate EC2 capacity to become the steady-state fleet.';
+          case 'StartInstanceRefresh':
+            return 'Start the EC2 instance refresh against the existing service Auto Scaling Group.';
+          case 'VerifyReplacementCapacity':
+            return 'Confirm refreshed EC2 instances are ready before the rollout is considered stable.';
+          case 'UpdateECSService':
+            return 'Update the ECS service to create the replacement deployment.';
+          case 'CreateCodeDeployDeployment':
+            return 'Create the CodeDeploy deployment Tenet will use for traffic shifting.';
+          case 'VerifyServiceStability':
+            return context.executionMode === 'ecsCodeDeploy'
+              ? 'Confirm the ECS service stays healthy after the CodeDeploy traffic shift.'
+              : 'Confirm the ECS service stays healthy after the rolling update.';
+          case 'MarkSynced':
+            return 'No further rollout mutation is implied by the current read model.';
+          default:
+            return 'Await the next controller-authored rollout detail.';
+        }
+      };
+      const derivePlanOperations = (detail) => {
+        const steps = detail.rollout?.steps || [];
+        const executionResources = rolloutExecutionResources(detail).map((resource) => normalizeResource(resource));
+        return steps.map((step, index) => {
+          const status = rolloutStepStatus(step, index, steps);
+          return {
+            kind: textOrDash(step.kind),
+            status,
+            statusLabel: rolloutStepStatusLabel(status),
+            phase: rolloutPhaseForStepKind(step.kind),
+            target: derivePlanOperationTarget(detail, step.kind, executionResources),
+            summary: derivePlanOperationSummary(detail, step),
+          };
+        });
+      };
+      const derivePlanRisk = (detail) => {
+        const driftRows = deriveDeploymentDriftRows(detail);
+        const reasons = [];
+        const currentStep = detail.rollout?.currentStep || detail.runtimeSummary?.currentStep || '';
+        const hasHighDrift = driftRows.some((row) => row.severity === 'high');
+        const hasMediumDrift = driftRows.some((row) => row.severity === 'medium');
+        const activeTrafficShift = currentStep.startsWith('ShiftTraffic') || currentStep === 'PromoteCandidateCapacity';
+        const unhealthy = detail.health?.overall === 'Unhealthy';
+        const errorState = detail.sync?.state === 'Error';
+
+        let level = 'low';
+        if (errorState || unhealthy || hasHighDrift || activeTrafficShift) {
+          level = 'high';
+        } else if (hasMediumDrift || ['Reconciling', 'OutOfSync', 'Drifted', 'Paused'].includes(detail.sync?.state) || (detail.rollout?.steps || []).length > 1) {
+          level = 'medium';
+        }
+
+        if (activeTrafficShift) reasons.push(`current step ${currentStep} changes live traffic`);
+        if (hasHighDrift) reasons.push('high-severity drift is present in the deployment read model');
+        if (hasMediumDrift) reasons.push('generation or runtime-intent drift is still visible');
+        if (unhealthy) reasons.push('runtime health is unhealthy');
+        if (errorState) reasons.push('sync state is Error');
+        if (!reasons.length && detail.sync?.state && detail.sync.state !== 'Synced') reasons.push(`sync state is ${detail.sync.state}`);
+        if (!reasons.length) reasons.push('desired and runtime signals currently look stable');
+
+        let guidance = 'Approval can stay lightweight because the read model does not show active drift, unhealthy runtime signals, or traffic movement.';
+        if (level === 'medium') {
+          guidance = 'Approval should confirm the latest runtime summary, target resource, and step detail before enabling plan creation or apply flows.';
+        } else if (level === 'high') {
+          guidance = 'Approval should wait for explicit operator review because the current read model shows live-traffic movement, unhealthy runtime signals, or high-severity drift.';
+        }
+
+        return {
+          level,
+          label: `${level} risk`,
+          guidance,
+          reasons,
+        };
+      };
       const latestRuntimeTimestamp = (applications) => applications
         .map((deployment) => deployment.runtimeSummary?.timestamp)
         .filter((value) => typeof value === 'string' && value)
@@ -528,8 +690,9 @@
         return `${description} for weighted target group rollout`;
       };
       const weightedTargetGroupTrafficShiftDescription = (detail) => {
+        const context = effectiveRolloutContext(detail);
         let description;
-        switch (detail.strategy) {
+        switch (context.strategy) {
           case 'canary':
             description = 'Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion';
             break;
@@ -545,7 +708,8 @@
         return description;
       };
       const codeDeployExecutionDescription = (detail, base) => {
-        const style = detail.strategy || 'blueGreen';
+        const context = effectiveRolloutContext(detail);
+        const style = context.strategy || 'blueGreen';
         const qualifiers = rolloutStrategyQualifiers(detail.rolloutConfig?.strategy);
         if (!qualifiers.length) return `${base} (style: ${style})`;
         return `${base} (style: ${style}; qualifiers: ${qualifiers.join(' and ')})`;
@@ -559,7 +723,8 @@
         return 0;
       };
       const canonicalRolloutExecutionFallback = (detail) => {
-        if (detail.executionMode === 'ecsCodeDeploy') {
+        const context = effectiveRolloutContext(detail);
+        if (context.executionMode === 'ecsCodeDeploy') {
           return [
             { resource: 'ecsService', name: `${detail.name}-service`, description: codeDeployExecutionDescription(detail, 'ECS service Tenet updates during CodeDeploy traffic shifting') },
             { resource: 'codeDeployApplication', name: `${detail.name}-codedeploy-app`, description: codeDeployExecutionDescription(detail, 'CodeDeploy application coordinating ECS traffic shifting') },
@@ -570,12 +735,12 @@
             { resource: 'greenTaskSetTargetGroup', name: `${detail.name}-green`, description: codeDeployExecutionDescription(detail, 'Green task set target group CodeDeploy warms before shifting ECS traffic') },
           ];
         }
-        if (detail.executionMode === 'ecsRolling') {
+        if (context.executionMode === 'ecsRolling') {
           return [
             { resource: 'ecsService', name: `${detail.name}-service`, description: ecsRollingExecutionDescription(detail) },
           ];
         }
-        if (detail.executionMode === 'asgWeightedTargetGroups') {
+        if (context.executionMode === 'asgWeightedTargetGroups') {
           return [
             { resource: 'candidateAutoScalingGroup', name: `${detail.name}-candidate`, description: weightedTargetGroupCandidateExecutionDescription(detail) },
             { resource: 'activeTargetGroup', name: `${detail.name}-active`, description: 'Currently active target group receiving production traffic' },
@@ -585,7 +750,7 @@
             { resource: 'userDataBootstrapSource', name: canonicalUserDataBootstrapSource(detail.userData), description: 'Normalized userdata bootstrap source for candidate EC2 capacity' },
           ];
         }
-        if (detail.executionMode === 'asgInstanceRefresh') {
+        if (context.executionMode === 'asgInstanceRefresh') {
           const batchSize = instanceRefreshBatchSize(detail);
           const description = batchSize > 0
             ? `Service Auto Scaling Group Tenet refreshes in place with rolling-update batch size ${batchSize}`
@@ -1628,6 +1793,22 @@
           }
           sections.push(conditionsSection);
         } else {
+          const approvalSection = createDetailSection('Derived approval guidance');
+          const planRisk = derivePlanRisk(detail);
+          const approvalCallout = createElement('div', 'workspace-callout');
+          const approvalHead = createElement('div', 'workspace-callout-head');
+          approvalHead.append(
+            createElement('span', 'workspace-callout-label', 'Derived risk level'),
+            createElement('span', `severity-indicator severity-indicator-${planRisk.level}`, planRisk.label),
+          );
+          approvalCallout.append(
+            approvalHead,
+            createElement('div', 'workspace-callout-copy', planRisk.guidance),
+            createElement('div', 'workspace-callout-factors', `Risk factors · ${planRisk.reasons.join('; ')}`),
+          );
+          approvalSection.append(approvalCallout);
+          sections.push(approvalSection);
+
           const actionsSection = createDetailSection('Plan/apply actions');
           const actionBar = createElement('div', 'row-links');
           const createPlanButton = createElement('button', 'toolbar-button', 'Create Plan');
@@ -1644,22 +1825,38 @@
           sections.push(actionsSection);
 
           const planSection = createDetailSection(emptyTitle);
-          const steps = detail.rollout?.steps || [];
-          if (!steps.length) {
-            planSection.append(createElement('div', 'detail-state', 'No rollout plan steps are currently available.'));
+          const operations = derivePlanOperations(detail);
+          if (!operations.length) {
+            planSection.append(createElement('div', 'detail-state', 'No derived plan operations are currently available.'));
           } else {
-            const stepList = createElement('ol', 'detail-list');
-            steps.forEach((step, index) => {
-              const item = createElement('li');
-              item.append(createElement('strong', '', textOrDash(step.kind)));
-              const stepStatus = rolloutStepStatus(step, index, steps);
-              item.append(createElement('span', `detail-step-meta detail-step-meta-${stepStatus}`, rolloutStepStatusLabel(stepStatus)));
-              if (step.detail) {
-                item.append(createElement('span', 'detail-condition-meta', `Step detail · ${step.detail}`));
-              }
-              stepList.append(item);
+            const operationsIntro = createElement('div', 'detail-state', 'Plan preview is derived from rollout steps, rollout execution resources, and the latest runtime summary in the deployment detail read model.');
+            const tableWrap = createElement('div', 'drift-table-wrap');
+            const table = createElement('table', 'drift-table');
+            const headerRow = createElement('tr');
+            ['Operation', 'Phase', 'Target', 'Operator note'].forEach((label) => {
+              headerRow.append(createElement('th', '', label));
             });
-            planSection.append(stepList);
+            const thead = createElement('thead');
+            thead.append(headerRow);
+            const tbody = createElement('tbody');
+            operations.forEach((operation) => {
+              const row = createElement('tr');
+              const operationCell = createElement('td', 'drift-field');
+              operationCell.append(
+                createElement('strong', '', operation.kind),
+                createElement('span', `detail-step-meta detail-step-meta-${operation.status}`, operation.statusLabel),
+              );
+              row.append(
+                operationCell,
+                createElement('td', '', operation.phase),
+                createElement('td', '', operation.target),
+                createElement('td', '', operation.summary),
+              );
+              tbody.append(row);
+            });
+            table.append(thead, tbody);
+            tableWrap.append(table);
+            planSection.append(operationsIntro, tableWrap);
           }
           sections.push(planSection);
         }

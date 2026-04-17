@@ -427,6 +427,11 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"const emptyTitle = mode === 'drift' ? 'Field-level drift' : 'Plan operations';",
 		"const driftSeverityRank = (severity) => {",
 		"const deriveDeploymentDriftRows = (detail) => {",
+		"const rolloutPhaseForStepKind = (stepKind) => {",
+		"const effectiveRolloutContext = (detail) => ({",
+		"detail.runtimeSummary?.executionMode || detail.executionMode || ''",
+		"const derivePlanOperations = (detail) => {",
+		"const derivePlanRisk = (detail) => {",
 		"const driftCondition = condition.type === 'DriftDetected' && condition.status === true;",
 		"const unhealthyCondition = condition.type === 'Healthy' && condition.status === false;",
 		"if (driftCondition || unhealthyCondition) {",
@@ -444,8 +449,17 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"Severity",
 		"No field-level drift is currently derived from the deployment read model.",
 		"Plan/apply controls are not wired to mutation APIs in this read-only slice yet.",
+		"const approvalSection = createDetailSection('Derived approval guidance');",
+		"Derived risk level",
+		"Risk factors · ${planRisk.reasons.join('; ')}",
 		"Create Plan",
 		"Apply Plan",
+		"Plan preview is derived from rollout steps, rollout execution resources, and the latest runtime summary in the deployment detail read model.",
+		"Operation",
+		"Phase",
+		"Target",
+		"Operator note",
+		"No derived plan operations are currently available.",
 		"if (currentPageState.page === 'application') {",
 		"renderApplicationDetailPage(detail);",
 		"if (currentPageState.page === 'resource') {",
@@ -794,6 +808,15 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert 'Runtime change details' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Runtime change details")
+	}
+	for _, fragment := range []string{
+		"assert 'Derived approval guidance' in ui, ui",
+		"assert 'Derived risk level' in ui, ui",
+		"assert 'Plan preview is derived from rollout steps, rollout execution resources, and the latest runtime summary in the deployment detail read model.' in ui, ui",
+	} {
+		if !strings.Contains(text, fragment) {
+			t.Fatalf("expected smoke-local.sh to include %q", fragment)
+		}
 	}
 }
 

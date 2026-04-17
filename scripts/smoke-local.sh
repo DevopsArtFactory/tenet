@@ -141,6 +141,9 @@ assert "buildPageURL('application', { deployment: deployment.name })" in ui, ui
 assert 'Drift view' in ui, ui
 assert 'Plan/apply' in ui, ui
 assert 'Recent logs' in ui, ui
+assert 'Derived approval guidance' in ui, ui
+assert 'Derived risk level' in ui, ui
+assert 'Plan preview is derived from rollout steps, rollout execution resources, and the latest runtime summary in the deployment detail read model.' in ui, ui
 
 assert "buildPageURL('drift', { deployment: deployment.name })" in ui, ui
 assert "buildPageURL('plan', { deployment: deployment.name })" in ui, ui

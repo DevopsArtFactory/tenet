@@ -3040,7 +3040,17 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const text = collectText(root).join(' | ');
   if (!text.includes('Plan and apply')) throw new Error('expected plan workspace title');
   if (!text.includes('Plan/apply controls are not wired to mutation APIs in this read-only slice yet.')) throw new Error('expected plan workspace placeholder guidance');
+  if (!text.includes('Derived approval guidance')) throw new Error('expected plan workspace approval guidance section');
+  if (!text.includes('Derived risk level')) throw new Error('expected plan workspace derived risk label');
+  if (!text.includes('high risk')) throw new Error('expected plan workspace derived high risk indicator');
+  if (!text.includes('Approval should wait for explicit operator review because the current read model shows live-traffic movement, unhealthy runtime signals, or high-severity drift.')) throw new Error('expected plan workspace approval guidance copy');
+  if (!text.includes('Risk factors · current step ShiftTrafficCanary changes live traffic')) throw new Error('expected plan workspace risk factors');
   if (!text.includes('Plan operations')) throw new Error('expected plan workspace section heading');
+  if (!text.includes('Plan preview is derived from rollout steps, rollout execution resources, and the latest runtime summary in the deployment detail read model.')) throw new Error('expected plan workspace derived plan intro');
+  if (!text.includes('Operation')) throw new Error('expected plan workspace operation column header');
+  if (!text.includes('Phase')) throw new Error('expected plan workspace phase column header');
+  if (!text.includes('Target')) throw new Error('expected plan workspace target column header');
+  if (!text.includes('Operator note')) throw new Error('expected plan workspace note column header');
   if (!text.includes('Latest runtime signals')) throw new Error('expected plan workspace runtime signals section');
   if (!text.includes('Runtime source')) throw new Error('expected plan workspace runtime source label');
   if (!text.includes('runtime-agent')) throw new Error('expected plan workspace runtime source value');
@@ -3059,6 +3069,10 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!text.includes('No rollout execution resources are currently reported.')) throw new Error('expected plan workspace rollout execution empty state');
   if (!text.includes('CreateCodeDeployDeployment')) throw new Error('expected plan workspace to surface rollout plan steps');
   if (!text.includes('ShiftTrafficCanary')) throw new Error('expected plan workspace to surface current rollout step');
+  if (!text.includes('api-prod-codedeploy-group (codeDeployDeploymentGroup)')) throw new Error('expected plan workspace to derive CodeDeploy deployment-group target');
+  if (!text.includes('Created CodeDeploy deployment')) throw new Error('expected plan workspace to surface step detail in derived table');
+  if (!text.includes('Moving 10% traffic to the green task set')) throw new Error('expected plan workspace to surface current step detail in derived table');
+  if (text.includes('No derived plan operations are currently available.')) throw new Error('expected plan workspace to render derived plan operations');
   const buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
   const createPlan = buttons.find((node) => node.textContent === 'Create Plan');
   const applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');
