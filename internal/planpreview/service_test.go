@@ -10,6 +10,7 @@ import (
 
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
+	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
 
@@ -102,6 +103,9 @@ func TestServiceCreatePersistsImmutableReadyPlanWithStableID(t *testing.T) {
 	}
 	if first.Record.Risk.Level != "medium" || !first.Record.Approval.Required {
 		t.Fatalf("expected derived medium-risk approval metadata, got %+v %+v", first.Record.Risk, first.Record.Approval)
+	}
+	if first.Record.Actor.Available || first.Record.Actor.Reason != requestactor.UnavailableReason {
+		t.Fatalf("expected explicit unavailable actor, got %+v", first.Record.Actor)
 	}
 	if first.Record.Source.Fingerprint != fingerprint || first.Record.Source.DesiredGeneration != 8 || first.Record.Source.ObservedGeneration != 7 {
 		t.Fatalf("unexpected source context: %+v", first.Record.Source)
@@ -226,5 +230,49 @@ func TestServiceCreateReturnsStableRecordIDEncodingErrors(t *testing.T) {
 	_, err := service.Create(context.Background(), "api-prod", CreateRequest{})
 	if err == nil || !strings.Contains(err.Error(), "encode stable plan preview id") {
 		t.Fatalf("expected stable id encoding error, got %v", err)
+	}
+}
+
+func TestServiceCreatePersistsAvailableActorFromRequestContext(t *testing.T) {
+	store := &memoryStore{}
+	service := Service{
+		LoadDetail: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			return catalog.DeploymentOverviewDetail{
+				Name:          name,
+				TargetType:    "ec2",
+				Strategy:      "canary",
+				ExecutionMode: "asgWeightedTargetGroups",
+				Sync:          domain.Sync{State: domain.SyncStateSynced},
+				Health:        domain.Health{Overall: domain.HealthHealthy},
+				Rollout: &domain.RolloutSummary{
+					Steps: []domain.RolloutStepSummary{
+						{Kind: "CreateCandidateCapacity", Status: domain.RolloutStepStatusCompleted},
+					},
+				},
+			}, nil
+		},
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, 4, 17, 8, 12, 0, 0, time.UTC) },
+	}
+
+	ctx := requestactor.WithContext(context.Background(), requestactor.Actor{
+		Available: true,
+		ID:        "operator-123",
+		Name:      "Jane Operator",
+		Email:     "jane@example.com",
+	})
+
+	result, err := service.Create(ctx, "api-prod", CreateRequest{})
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	if !result.Record.Actor.Available {
+		t.Fatalf("expected available actor, got %+v", result.Record.Actor)
+	}
+	if result.Record.Actor.ID != "operator-123" || result.Record.Actor.Name != "Jane Operator" || result.Record.Actor.Email != "jane@example.com" {
+		t.Fatalf("unexpected available actor details: %+v", result.Record.Actor)
+	}
+	if result.Record.Actor.Reason != "" {
+		t.Fatalf("expected no unavailable reason for available actor, got %+v", result.Record.Actor)
 	}
 }

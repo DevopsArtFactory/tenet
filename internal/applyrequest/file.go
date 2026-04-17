@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+
+	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 )
 
 var (
@@ -35,6 +37,9 @@ func Load(path string) ([]Record, error) {
 	var records []Record
 	if err := json.Unmarshal(content, &records); err != nil {
 		return nil, fmt.Errorf("decode apply request store: %w", err)
+	}
+	for i := range records {
+		records[i].Actor = requestactor.Normalize(records[i].Actor)
 	}
 	sort.Slice(records, func(i, j int) bool {
 		return records[i].ID < records[j].ID

@@ -108,11 +108,36 @@ print(json.loads(os.environ['APPLY_RECORD_JSON'])['id'])
 PY
 )
 apply_record_get=$(curl -fsS "http://$HOST:$PORT/v1/applies/$apply_id")
+actor_plan_preview=$(curl -fsS -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-Tenet-Actor-Id: operator-123" \
+  -H "X-Tenet-Actor-Name: Jane Operator" \
+  -H "X-Tenet-Actor-Email: jane@example.com" \
+  -d '{}' \
+  "http://$HOST:$PORT/v1/plans/deployments/payments-api-staging")
+actor_plan_id=$(ACTOR_PLAN_PREVIEW_JSON="$actor_plan_preview" python3 - <<'PY'
+import json, os
+print(json.loads(os.environ['ACTOR_PLAN_PREVIEW_JSON'])['id'])
+PY
+)
+actor_plan_preview_get=$(curl -fsS "http://$HOST:$PORT/v1/plans/$actor_plan_id")
+actor_apply_record=$(curl -fsS -X POST \
+  -H "X-Tenet-Actor-Id: operator-123" \
+  -H "X-Tenet-Actor-Name: Jane Operator" \
+  -H "X-Tenet-Actor-Email: jane@example.com" \
+  "http://$HOST:$PORT/v1/applies/plans/$actor_plan_id")
+actor_apply_id=$(ACTOR_APPLY_RECORD_JSON="$actor_apply_record" python3 - <<'PY'
+import json, os
+print(json.loads(os.environ['ACTOR_APPLY_RECORD_JSON'])['id'])
+PY
+)
+actor_apply_record_get=$(curl -fsS "http://$HOST:$PORT/v1/applies/$actor_apply_id")
 stale_plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d '{"ifMatch":"plan_deadbeef"}' "http://$HOST:$PORT/v1/plans/deployments/payments-api-prod")
 audit_logs=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs")
 audit_logs_action_filtered=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs?action=apply.requested")
 audit_logs_filtered=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs?deployment=payments-api-prod&limit=1")
 audit_logs_empty=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs?deployment=worker-prod")
+actor_audit_logs=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs?deployment=payments-api-staging&action=apply.requested&limit=1")
 invalid_audit_action_status=$(curl -sS -o "$INVALID_AUDIT_ACTION_BODY" -w "%{http_code}" "http://$HOST:$PORT/v1/audit-logs?action=invalid.action")
 status=$(curl -fsS "http://$HOST:$PORT/v1/status/deployments/payments-api-prod")
 resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")
@@ -134,11 +159,16 @@ plan_preview_path=$(write_payload plan-preview.json "$plan_preview")
 plan_preview_get_path=$(write_payload plan-preview-get.json "$plan_preview_get")
 apply_record_path=$(write_payload apply-record.json "$apply_record")
 apply_record_get_path=$(write_payload apply-record-get.json "$apply_record_get")
+actor_plan_preview_path=$(write_payload actor-plan-preview.json "$actor_plan_preview")
+actor_plan_preview_get_path=$(write_payload actor-plan-preview-get.json "$actor_plan_preview_get")
+actor_apply_record_path=$(write_payload actor-apply-record.json "$actor_apply_record")
+actor_apply_record_get_path=$(write_payload actor-apply-record-get.json "$actor_apply_record_get")
 stale_plan_preview_path=$(write_payload stale-plan-preview.json "$stale_plan_preview")
 audit_logs_path=$(write_payload audit-logs.json "$audit_logs")
 audit_logs_action_filtered_path=$(write_payload audit-logs-action-filtered.json "$audit_logs_action_filtered")
 audit_logs_filtered_path=$(write_payload audit-logs-filtered.json "$audit_logs_filtered")
 audit_logs_empty_path=$(write_payload audit-logs-empty.json "$audit_logs_empty")
+actor_audit_logs_path=$(write_payload actor-audit-logs.json "$actor_audit_logs")
 status_json_path=$(write_payload status.json "$status")
 resource_logs_path=$(write_payload resource-logs.json "$resource_logs")
 worker_resource_logs_path=$(write_payload worker-resource-logs.json "$worker_resource_logs")
@@ -147,7 +177,7 @@ audit_ui_path=$(write_payload audit-ui.html "$audit_ui")
 plan_ui_path=$(write_payload plan-ui.html "$plan_ui")
 apply_ui_path=$(write_payload apply-ui.html "$apply_ui")
 
-SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" RESOURCE_LOGS_PATH="$resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" UI_PATH="$ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" python3 - <<'PY'
+SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" RESOURCE_LOGS_PATH="$resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" UI_PATH="$ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" python3 - <<'PY'
 import json, os
 
 def read_json(path_env):
@@ -171,11 +201,16 @@ plan_preview = read_json('PLAN_PREVIEW_PATH')
 plan_preview_get = read_json('PLAN_PREVIEW_GET_PATH')
 apply_record = read_json('APPLY_RECORD_PATH')
 apply_record_get = read_json('APPLY_RECORD_GET_PATH')
+actor_plan_preview = read_json('ACTOR_PLAN_PREVIEW_PATH')
+actor_plan_preview_get = read_json('ACTOR_PLAN_PREVIEW_GET_PATH')
+actor_apply_record = read_json('ACTOR_APPLY_RECORD_PATH')
+actor_apply_record_get = read_json('ACTOR_APPLY_RECORD_GET_PATH')
 stale_plan_preview = read_json('STALE_PLAN_PREVIEW_PATH')
 audit_logs = read_json('AUDIT_LOGS_PATH')
 audit_logs_action_filtered = read_json('AUDIT_LOGS_ACTION_FILTERED_PATH')
 audit_logs_filtered = read_json('AUDIT_LOGS_FILTERED_PATH')
 audit_logs_empty = read_json('AUDIT_LOGS_EMPTY_PATH')
+actor_audit_logs = read_json('ACTOR_AUDIT_LOGS_PATH')
 status = read_json('STATUS_JSON_PATH')
 resource_logs = read_json('RESOURCE_LOGS_PATH')
 worker_resource_logs = read_json('WORKER_RESOURCE_LOGS_PATH')
@@ -247,24 +282,42 @@ assert apply_record['source']['route'] == f"/v1/plans/{plan_preview['id']}", app
 assert apply_record['source']['planStatus'] == 'ready', apply_record
 assert apply_record['source']['fingerprint'] == plan_preview['source']['fingerprint'], (apply_record, plan_preview)
 assert apply_record_get == apply_record, (apply_record_get, apply_record)
+assert actor_plan_preview['deploymentName'] == 'payments-api-staging', actor_plan_preview
+assert actor_plan_preview['actor']['available'] is True, actor_plan_preview
+assert actor_plan_preview['actor']['name'] == 'Jane Operator', actor_plan_preview
+assert actor_plan_preview['actor']['email'] == 'jane@example.com', actor_plan_preview
+assert actor_plan_preview_get == actor_plan_preview, (actor_plan_preview_get, actor_plan_preview)
+assert actor_apply_record['deploymentName'] == 'payments-api-staging', actor_apply_record
+assert actor_apply_record['actor']['available'] is True, actor_apply_record
+assert actor_apply_record['actor']['name'] == 'Jane Operator', actor_apply_record
+assert actor_apply_record['actor']['email'] == 'jane@example.com', actor_apply_record
+assert actor_apply_record_get == actor_apply_record, (actor_apply_record_get, actor_apply_record)
 assert stale_plan_preview['status'] == 'failed', stale_plan_preview
 assert stale_plan_preview['source']['fingerprint'] == deployment_detail['sourceFingerprint'], (stale_plan_preview, deployment_detail)
 assert isinstance(stale_plan_preview.get('errors', []), list) and stale_plan_preview['errors'], stale_plan_preview
 assert isinstance(audit_logs.get('entries', []), list), audit_logs
-assert len(audit_logs['entries']) >= 2, audit_logs
+assert len(audit_logs['entries']) >= 4, audit_logs
 assert any(entry['action'] == 'apply.requested' for entry in audit_logs['entries']), audit_logs
 assert any(entry['action'] == 'plan.created' for entry in audit_logs['entries']), audit_logs
 assert isinstance(audit_logs_action_filtered.get('entries', []), list), audit_logs_action_filtered
-assert len(audit_logs_action_filtered['entries']) == 1, audit_logs_action_filtered
-assert audit_logs_action_filtered['entries'][0]['action'] == 'apply.requested', audit_logs_action_filtered
+assert len(audit_logs_action_filtered['entries']) >= 2, audit_logs_action_filtered
+assert all(entry['action'] == 'apply.requested' for entry in audit_logs_action_filtered['entries']), audit_logs_action_filtered
 for entry in audit_logs['entries']:
-    assert entry['deploymentName'] == 'payments-api-prod', entry
     assert entry['appRef'] == 'payments-api', entry
-    assert entry['environmentRef'] == 'prod-apne2', entry
-    assert entry['actor']['available'] is False, entry
-    assert 'do not persist operator identity' in entry['actor']['reason'], entry
+    assert entry['environmentRef'] in {'prod-apne2', 'staging-apne2'}, entry
     assert isinstance(entry.get('metadata', {}), dict), entry
     assert isinstance(entry.get('source', {}), dict), entry
+fallback_entries = [entry for entry in audit_logs['entries'] if entry['deploymentName'] == 'payments-api-prod']
+assert fallback_entries, audit_logs
+for entry in fallback_entries:
+    assert entry['actor']['available'] is False, entry
+    assert 'no authenticated request context' in entry['actor']['reason'], entry
+assert isinstance(actor_audit_logs.get('entries', []), list), actor_audit_logs
+assert len(actor_audit_logs['entries']) == 1, actor_audit_logs
+assert actor_audit_logs['entries'][0]['deploymentName'] == 'payments-api-staging', actor_audit_logs
+assert actor_audit_logs['entries'][0]['actor']['available'] is True, actor_audit_logs
+assert actor_audit_logs['entries'][0]['actor']['name'] == 'Jane Operator', actor_audit_logs
+assert actor_audit_logs['entries'][0]['actor']['email'] == 'jane@example.com', actor_audit_logs
 assert isinstance(audit_logs_filtered.get('entries', []), list), audit_logs_filtered
 assert len(audit_logs_filtered['entries']) == 1, audit_logs_filtered
 assert audit_logs_filtered['entries'][0]['deploymentName'] == 'payments-api-prod', audit_logs_filtered

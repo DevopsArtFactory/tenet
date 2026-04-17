@@ -671,10 +671,15 @@
         })
         .map(({ entry }) => entry);
       const auditActorStateLabel = (actor) => {
+        if (actor?.available === true) return 'Recorded';
         if (actor?.available === false) return 'Unavailable';
         return 'Unknown';
       };
       const auditActorReasonText = (actor) => {
+        if (actor?.available === true) {
+          const details = [actor.name, actor.email, actor.id].filter((value) => typeof value === 'string' && value);
+          return details.length ? details.join(' · ') : 'Actor identity was recorded for this request.';
+        }
         if (typeof actor?.reason === 'string' && actor.reason) return actor.reason;
         return actor?.available === false
           ? 'Actor identity is unavailable for this record.'

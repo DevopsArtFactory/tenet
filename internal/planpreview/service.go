@@ -12,6 +12,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/reconcile"
+	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 )
 
 var (
@@ -56,6 +57,7 @@ func (s Service) Create(ctx context.Context, deploymentName string, req CreateRe
 		DeploymentName: detail.Name,
 		Status:         StatusReady,
 		CreatedAt:      s.now().UTC().Format(time.RFC3339),
+		Actor:          requestactor.FromContext(ctx),
 		Operations:     derivePlanOperations(detail),
 		Risk:           derivePlanRisk(detail),
 		Source:         source,

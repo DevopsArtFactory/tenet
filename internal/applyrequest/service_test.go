@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
+	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 )
 
 type memoryStore struct {
@@ -65,6 +66,9 @@ func TestServiceCreatePersistsImmutableFailedApplyRequestWhenExecutionIsDisabled
 	}
 	if first.Record.PlanID != plan.ID || first.Record.Source.Route != "/v1/plans/"+plan.ID {
 		t.Fatalf("unexpected apply source context: %+v", first.Record)
+	}
+	if first.Record.Actor.Available || first.Record.Actor.Reason != requestactor.UnavailableReason {
+		t.Fatalf("expected explicit unavailable actor, got %+v", first.Record.Actor)
 	}
 	if first.Record.Error != disabledError || len(first.Record.Details) != 2 {
 		t.Fatalf("expected disabled error/details, got %+v", first.Record)
@@ -146,5 +150,40 @@ func TestServiceCreateReturnsStableRecordIDEncodingErrors(t *testing.T) {
 	_, err := service.Create(context.Background(), "plan_ready_1234abcd")
 	if err == nil || !strings.Contains(err.Error(), "encode stable apply request id") {
 		t.Fatalf("expected stable id encoding error, got %v", err)
+	}
+}
+
+func TestServiceCreatePersistsAvailableActorFromRequestContext(t *testing.T) {
+	store := &memoryStore{}
+	plan := planpreview.Record{
+		ID:             "plan_ready_1234abcd",
+		DeploymentName: "api-prod",
+		Status:         planpreview.StatusReady,
+		CreatedAt:      "2026-04-17T08:00:00Z",
+	}
+	service := Service{
+		LoadPlan: func(context.Context, string) (planpreview.Record, error) {
+			return plan, nil
+		},
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, 4, 18, 8, 12, 0, 0, time.UTC) },
+	}
+
+	ctx := requestactor.WithContext(context.Background(), requestactor.Actor{
+		Available: true,
+		ID:        "operator-123",
+		Name:      "Jane Operator",
+		Email:     "jane@example.com",
+	})
+
+	result, err := service.Create(ctx, plan.ID)
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	if !result.Record.Actor.Available {
+		t.Fatalf("expected available actor, got %+v", result.Record.Actor)
+	}
+	if result.Record.Actor.ID != "operator-123" || result.Record.Actor.Name != "Jane Operator" || result.Record.Actor.Email != "jane@example.com" {
+		t.Fatalf("unexpected available actor details: %+v", result.Record.Actor)
 	}
 }
