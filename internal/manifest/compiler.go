@@ -106,7 +106,8 @@ func Compile(input CatalogSpec) (Catalog, error) {
 				Binary: deployment.Binary,
 				Image:  deployment.Image,
 			},
-			UserData: normalizeUserData(deployment),
+			UserData:      normalizeUserData(deployment),
+			RolloutConfig: normalizeRolloutConfig(deployment),
 		}
 		environment := environmentIndex[environmentRef]
 		account := accountIndex[environment.AccountRef]
@@ -129,20 +130,19 @@ func Compile(input CatalogSpec) (Catalog, error) {
 
 func deploymentGeneration(deployment domain.Deployment, desired spec.DeploymentSpec, environment domain.Environment, account domain.Account) int64 {
 	payload, err := json.Marshal(struct {
-		Name            string                    `json:"name"`
-		AppRef          string                    `json:"appRef"`
-		EnvironmentRef  string                    `json:"environmentRef"`
-		Environment     deploymentEnvironmentHash `json:"environment"`
-		Account         deploymentAccountHash     `json:"account"`
-		Target          spec.TargetSpec           `json:"target"`
-		Strategy        spec.StrategySpec         `json:"strategy"`
-		ExecutionMode   string                    `json:"executionMode"`
-		DesiredArtifact domain.DeploymentArtifact `json:"desiredArtifact"`
-		Traffic         spec.TrafficSpec          `json:"traffic"`
-		Capacity        spec.CapacitySpec         `json:"capacity"`
-		UserData        spec.UserDataSpec         `json:"userData"`
-		Tags            []string                  `json:"tags"`
-		Stacks          []spec.StackSpec          `json:"stacks"`
+		Name            string                         `json:"name"`
+		AppRef          string                         `json:"appRef"`
+		EnvironmentRef  string                         `json:"environmentRef"`
+		Environment     deploymentEnvironmentHash      `json:"environment"`
+		Account         deploymentAccountHash          `json:"account"`
+		TargetType      string                         `json:"targetType"`
+		Strategy        string                         `json:"strategy"`
+		ExecutionMode   string                         `json:"executionMode"`
+		DesiredArtifact domain.DeploymentArtifact      `json:"desiredArtifact"`
+		Traffic         spec.TrafficSpec               `json:"traffic"`
+		RolloutConfig   domain.DeploymentRolloutConfig `json:"rolloutConfig"`
+		UserData        domain.DeploymentUserData      `json:"userData"`
+		Tags            []string                       `json:"tags"`
 	}{
 		Name:           deployment.Name,
 		AppRef:         deployment.AppRef,
@@ -159,19 +159,14 @@ func deploymentGeneration(deployment domain.Deployment, desired spec.DeploymentS
 			AWSAccountID:   account.AWSAccountID,
 			AllowedRegions: append([]string(nil), account.AllowedRegions...),
 		},
-		Target: spec.TargetSpec{Type: desired.NormalizedTargetType()},
-		Strategy: spec.StrategySpec{
-			Type:              desired.NormalizedStrategy(),
-			WarmupSeconds:     desired.Strategy.WarmupSeconds,
-			MinHealthyPercent: desired.Strategy.MinHealthyPercent,
-		},
+		TargetType:      deployment.TargetType,
+		Strategy:        deployment.Strategy,
 		ExecutionMode:   deployment.ExecutionMode,
 		DesiredArtifact: deployment.DesiredArtifact,
 		Traffic:         desired.Traffic,
-		Capacity:        desired.NormalizedCapacity(),
-		UserData:        desired.UserData,
+		RolloutConfig:   deployment.RolloutConfig,
+		UserData:        deployment.UserData,
 		Tags:            append([]string(nil), desired.Tags...),
-		Stacks:          append([]spec.StackSpec(nil), desired.Stacks...),
 	})
 	if err != nil {
 		panic(fmt.Sprintf("marshal deployment generation payload: %v", err))
@@ -230,6 +225,29 @@ func normalizeUserData(deployment spec.DeploymentSpec) domain.DeploymentUserData
 		Type: strings.TrimSpace(userData.Type),
 		Path: normalizeUserDataPath(userData.Path),
 	}
+}
+
+func normalizeRolloutConfig(deployment spec.DeploymentSpec) domain.DeploymentRolloutConfig {
+	capacity := deployment.NormalizedCapacity()
+	config := domain.DeploymentRolloutConfig{
+		Strategy: domain.DeploymentRolloutStrategy{
+			WarmupSeconds:     deployment.Strategy.WarmupSeconds,
+			MinHealthyPercent: deployment.Strategy.MinHealthyPercent,
+		},
+		Capacity: domain.DeploymentRolloutCapacity{
+			Desired: capacity.Desired,
+			Min:     capacity.Min,
+			Max:     capacity.Max,
+		},
+		Stacks: make([]domain.DeploymentRolloutStack, 0, len(deployment.Stacks)),
+	}
+	for _, stack := range deployment.Stacks {
+		config.Stacks = append(config.Stacks, domain.DeploymentRolloutStack{
+			TerminationDelayRate:       stack.TerminationDelayRate,
+			RollingUpdateInstanceCount: stack.RollingUpdateInstanceCount,
+		})
+	}
+	return config
 }
 
 func normalizeUserDataPath(path string) string {
