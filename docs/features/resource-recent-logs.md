@@ -29,6 +29,8 @@ Behavior by type:
 - `ecsService` reads recent CloudWatch log events from the newest running task/container streams when the ECS task definition and awslogs configuration can be resolved.
 - `candidateAutoScalingGroup` and `serviceAutoScalingGroup` read recent EC2 instance console/bootstrap output from the newest instance in the Auto Scaling Group.
 
+Inside one Tenet API process, the built-in AWS-backed provider now reuses SDK config/client setup per `(region, targetAccountID, observerRoleARN)` key. That keeps repeated operator refreshes on the same deployment/resource from rebuilding ECS, CloudWatch Logs, Auto Scaling, and EC2 clients for every request.
+
 Unsupported resource types do not hard-fail the API. They return `available=false` with a stable `unavailableReason` code so the embedded UI can show an explicit unavailable state.
 
 ## Embedded UI behavior

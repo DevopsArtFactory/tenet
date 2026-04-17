@@ -164,6 +164,8 @@ Canonical resource-log routes stay stable across rollout modes so operators can 
 - `asgWeightedTargetGroups`: `trafficShiftPlan` (`{deployment}-weighted-routing`)
 - `ecsRolling`: `ecsService` (`{deployment}-service`)
 
+Behind those routes, the built-in AWS-backed recent-log provider now reuses SDK config/client setup per `(region, target account, observer role)` key inside a running Tenet API process instead of rebuilding ECS / CloudWatch Logs / Auto Scaling / EC2 clients on every fetch.
+
 The same drill-down also includes read-only workspace surfaces:
 - `/?page=drift&deployment={deploymentName}` for derived field-level troubleshooting context
 - `/?page=plan&deployment={deploymentName}` for immutable plan previews, `Apply Plan` activation once a persisted ready preview is loaded, bookmarkable `planId`/`applyId` workspace URLs, and stored-preview quick links to both the embedded workspace (`_self`) and immutable `Plan JSON` / `Apply JSON` read models
