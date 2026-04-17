@@ -973,7 +973,7 @@ func TestEmitRuntimePlansPersistsWeightedTargetGroupRolloutSummaryExecutionDetai
 	want := []domain.RolloutExecutionDetail{{
 		Resource:    "candidateAutoScalingGroup",
 		Name:        "api-prod-candidate",
-		Description: "Candidate Auto Scaling Group Tenet will create for weighted target group rollout",
+		Description: "Candidate Auto Scaling Group Tenet creates from normalized userdata source file:userdata/api-prod.sh with desired 1, min 1, and max 1 instances for weighted target group rollout",
 	}, {
 		Resource:    "activeTargetGroup",
 		Name:        "api-prod-active",
@@ -989,7 +989,7 @@ func TestEmitRuntimePlansPersistsWeightedTargetGroupRolloutSummaryExecutionDetai
 	}, {
 		Resource:    "trafficShiftPlan",
 		Name:        "api-prod-weighted-routing",
-		Description: "Weighted routing plan Tenet follows to move production traffic from the active target group to the candidate target group",
+		Description: "Weighted routing plan Tenet follows to cut over all production traffic from the active target group to the candidate target group in a single blue/green promotion",
 	}, {
 		Resource:    "userDataBootstrapSource",
 		Name:        "file:userdata/api-prod.sh",
@@ -1026,31 +1026,31 @@ func TestEmitRuntimePlansPersistsCodeDeployRolloutSummaryExecutionDetails(t *tes
 	want := []domain.RolloutExecutionDetail{{
 		Resource:    "ecsService",
 		Name:        "worker-prod-service",
-		Description: "ECS service Tenet updates during deployment",
+		Description: "ECS service Tenet updates during CodeDeploy traffic shifting (style: linear)",
 	}, {
 		Resource:    "codeDeployApplication",
 		Name:        "worker-prod-codedeploy-app",
-		Description: "CodeDeploy application coordinating ECS traffic shifting",
+		Description: "CodeDeploy application coordinating ECS traffic shifting (style: linear)",
 	}, {
 		Resource:    "codeDeployDeploymentGroup",
 		Name:        "worker-prod-codedeploy-group",
-		Description: "CodeDeploy deployment group Tenet targets for ECS rollout",
+		Description: "CodeDeploy deployment group Tenet targets for ECS rollout (style: linear)",
 	}, {
 		Resource:    "productionListener",
 		Name:        "worker-prod-prod-listener",
-		Description: "Production listener CodeDeploy shifts during ECS blue/green rollout",
+		Description: "Production listener CodeDeploy shifts during ECS traffic shifting (style: linear)",
 	}, {
 		Resource:    "testListener",
 		Name:        "worker-prod-test-listener",
-		Description: "Test listener CodeDeploy uses to validate the replacement ECS task set before promotion",
+		Description: "Test listener CodeDeploy uses to validate the replacement ECS task set before promotion (style: linear)",
 	}, {
 		Resource:    "blueTaskSetTargetGroup",
 		Name:        "worker-prod-blue",
-		Description: "Blue task set target group CodeDeploy treats as the live ECS traffic destination",
+		Description: "Blue task set target group CodeDeploy treats as the live ECS traffic destination (style: linear)",
 	}, {
 		Resource:    "greenTaskSetTargetGroup",
 		Name:        "worker-prod-green",
-		Description: "Green task set target group CodeDeploy warms before shifting ECS traffic",
+		Description: "Green task set target group CodeDeploy warms before shifting ECS traffic (style: linear)",
 	}}
 	assertRolloutExecutionDetails(t, status.Rollout.Execution, want)
 }
@@ -1092,7 +1092,7 @@ func TestEmitRuntimePlansPersistsInstanceRefreshRolloutSummaryForEC2RollingDeplo
 	root := t.TempDir()
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
 	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
-	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"rolling"},"traffic":{"port":443},"capacity":{"desired":2,"min":1,"max":3},"userdata":{"type":"file","path":"userdata/api-prod-refresh.sh"}}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"rolling"},"traffic":{"port":443},"capacity":{"desired":2,"min":1,"max":3},"userdata":{"type":"file","path":"userdata/api-prod-refresh.sh"},"stacks":[{"stack":"api-prod","account":"prod-core","env":"prod-apne2","replacement_type":"rolling_update","rolling_update_instance_count":2,"regions":[{"region":"ap-northeast-2"}]}]}`)
 	statusPath := filepath.Join(root, "status", "deployments.json")
 	writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"refresh pending"},"health":{"overall":"Progressing","summary":"replacement capacity pending"},"conditions":[]}}]`)
 
@@ -1116,7 +1116,7 @@ func TestEmitRuntimePlansPersistsInstanceRefreshRolloutSummaryForEC2RollingDeplo
 	if status.Rollout.Phase != domain.RolloutPhaseProvisioning {
 		t.Fatalf("expected instance refresh rollout phase %q, got %+v", domain.RolloutPhaseProvisioning, status.Rollout)
 	}
-	if status.Rollout.Summary != "Starting EC2 instance refresh" {
+	if status.Rollout.Summary != "Starting EC2 instance refresh with batch size 2" {
 		t.Fatalf("expected instance refresh rollout summary, got %+v", status.Rollout)
 	}
 	if len(status.Rollout.Steps) != 4 || status.Rollout.Steps[2].Kind != "StartInstanceRefresh" || status.Rollout.Steps[3].Kind != "VerifyReplacementCapacity" {
@@ -1125,7 +1125,7 @@ func TestEmitRuntimePlansPersistsInstanceRefreshRolloutSummaryForEC2RollingDeplo
 	want := []domain.RolloutExecutionDetail{{
 		Resource:    "serviceAutoScalingGroup",
 		Name:        "api-prod-service",
-		Description: "Service Auto Scaling Group Tenet refreshes in place",
+		Description: "Service Auto Scaling Group Tenet refreshes in place with rolling-update batch size 2",
 	}, {
 		Resource:    "userDataBootstrapSource",
 		Name:        "file:userdata/api-prod-refresh.sh",

@@ -22,6 +22,7 @@ Why this shape:
 - `userdata.sh` can bootstrap a new candidate ASG cleanly.
 - ALB weighted target groups make gradual traffic shifts practical for canary and linear delivery.
 - Blue/green remains a cutover between old and new target groups once the candidate is healthy.
+- The execution-resource contract can therefore keep a stable ordered identifier set while using config-aware descriptions to explain candidate userdata source, candidate sizing/warmup, and canary vs linear vs full-cutover routing semantics.
 
 Representative runtime step labels now mirror that execution model:
 - `canary` / `linear` / `blueGreen` with `asgWeightedTargetGroups`:
