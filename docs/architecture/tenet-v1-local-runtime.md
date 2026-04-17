@@ -38,6 +38,8 @@ make smoke-docker
 
 Use `make smoke-docker` when you need to validate the containerized local stack itself. The script runs `docker compose config`, asserts the `api`, `controller`, and `redis` services are present in `compose.yaml`, starts the stack, waits for API health, checks representative endpoints, confirms controller logs contain useful startup/reconcile output, and then runs `docker compose down --remove-orphans` even on failure.
 
+The same smoke flow also verifies that representative responses carry a `Request-Id` header. Operators should capture that response ID when an API call fails; Tenet threads the same value through the request context so handlers and providers can log `api.RequestIDFromContext(ctx)` and make API failures easy to correlate with backend/provider diagnostics.
+
 ### Full Docker stack
 
 ```bash

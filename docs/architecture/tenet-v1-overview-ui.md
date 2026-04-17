@@ -56,6 +56,13 @@ The goal is to make troubleshooting possible without forcing the user to jump di
 
 The deployment-events route is intentionally read-only and controller-derived. It reflects persisted runtime history entries, returns `events: []` when a deployment exists without history yet, and should not be treated as a full durable audit system.
 
+Canonical fallback resource-detail bindings remain stable so operators can share or bookmark the exact resource page they need:
+- `asgWeightedTargetGroups`
+- `asgInstanceRefresh`
+- `ecsRolling`
+- `ecsCodeDeploy`
+- `ecsService` → `{deployment}-service` → `ECS service Tenet updates with native rolling deployment`, optionally extended with rollout-strategy qualifiers such as `while respecting min healthy 90% and warmup 30s`
+
 The neighboring read-only plan-preview flow is also part of the operator contract now:
 - `POST /v1/plans/deployments/{deploymentName}` persists an immutable preview derived from the current deployment detail
 - `GET /v1/plans/{planId}` reopens the exact stored preview

@@ -71,6 +71,8 @@ http://localhost:8080/
 
 You should land on the applications overview page.
 
+Every HTTP response from `tenet-api` also carries a `Request-Id` header. If your client already sends `request-id`, Tenet echoes it back; otherwise it generates one. Capture that value when an API call fails and use the same ID to correlate any request-scoped handler or provider logs that read `api.RequestIDFromContext(ctx)`.
+
 For the current read-only plan preview flow, a typical local operator path is:
 - `GET /v1/overview/applications/{deploymentName}` or `GET /v1/overview/deployments/{deploymentName}` to inspect the deployment and capture its additive `sourceFingerprint`
 - `POST /v1/plans/deployments/{deploymentName}` with optional `{"ifMatch":"<sourceFingerprint>"}` to persist an immutable preview for the reviewed state
@@ -128,6 +130,10 @@ Open one application to see the linked rollout resources grouped into clear sect
 
 ### Resource detail
 Open a concrete resource to inspect the deeper operational context for that resource, including rollout and runtime information. Recent logs are surfaced here when the resource type supports them.
+
+Canonical resource-log routes stay stable across rollout modes so operators can bookmark or script them:
+- `asgWeightedTargetGroups`: `trafficShiftPlan` (`{deployment}-weighted-routing`)
+- `ecsRolling`: `ecsService` (`{deployment}-service`)
 
 The same drill-down also includes read-only workspace surfaces:
 - `/?page=drift&deployment={deploymentName}` for derived field-level troubleshooting context

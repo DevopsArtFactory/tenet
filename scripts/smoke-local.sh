@@ -31,6 +31,26 @@ cleanup() {
 }
 trap cleanup EXIT
 
+assert_request_id_header() {
+  local url=$1
+  local headers
+
+  headers=$(curl -fsS -D - -o /dev/null "$url")
+  HEADERS_TEXT="$headers" python3 - <<'PY'
+import os
+
+headers = {}
+for raw in os.environ["HEADERS_TEXT"].splitlines():
+    line = raw.rstrip("\r\n")
+    if not line or ":" not in line:
+        continue
+    name, value = line.split(":", 1)
+    headers[name.strip().lower()] = value.strip()
+
+assert headers.get("request-id"), headers
+PY
+}
+
 TENET_API_ADDR=":$PORT" TENET_REPO_ROOT="$REPO_ROOT" TENET_STATUS_PATH="$STATUS_PATH" TENET_PLAN_STORE_PATH="$PLAN_STORE_PATH" \
   go run ./cmd/tenet-api >"$LOG_FILE" 2>&1 &
 API_PID=$!
@@ -43,6 +63,10 @@ for _ in $(seq 1 30); do
 done
 
 curl -fsS "http://$HOST:$PORT/healthz" >/dev/null
+assert_request_id_header "http://$HOST:$PORT/healthz"
+assert_request_id_header "http://$HOST:$PORT/v1/catalog/summary"
+assert_request_id_header "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing"
+assert_request_id_header "http://$HOST:$PORT/"
 
 summary=$(curl -fsS "http://$HOST:$PORT/v1/catalog/summary")
 applications=$(curl -fsS "http://$HOST:$PORT/v1/overview/applications")

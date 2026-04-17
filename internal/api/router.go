@@ -442,5 +442,5 @@ func NewRouter(options Options) http.Handler {
 		_ = json.NewEncoder(w).Encode(snapshot)
 	})
 
-	return mux
+	return requestIDMiddleware(mux)
 }
