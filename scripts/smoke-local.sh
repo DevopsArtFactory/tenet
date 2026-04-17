@@ -160,6 +160,9 @@ assert "buildPageURL('account', { accountId: deployment.awsAccountId })" in ui, 
 assert "buildPageURL('application', { deployment: deployment.name })" in ui, ui
 assert 'Drift view' in ui, ui
 assert 'Plan/apply' in ui, ui
+assert "createNavLink(buildPageURL('drift', { deployment: detail.name }), 'Drift view', '_self')" in ui, ui
+assert "createNavLink(buildPageURL('plan', { deployment: detail.name }), 'Plan/apply', '_self')" in ui, ui
+assert "const ifMatch = await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;" in ui, ui
 assert 'Recent logs' in ui, ui
 assert 'Plan preview actions' in ui, ui
 assert 'Plan preview approval guidance' in ui, ui
@@ -167,8 +170,6 @@ assert 'Create Plan will POST /v1/plans/deployments/${deploymentName}, store an 
 assert 'Server-authored plan preview loaded from GET /v1/plans/${activePlanRecord.id}.' in ui, ui
 assert "params.get('planId') || ''" in ui, ui
 
-assert "buildPageURL('drift', { deployment: deployment.name })" in ui, ui
-assert "buildPageURL('plan', { deployment: deployment.name })" in ui, ui
 assert 'planId' in plan_ui, plan_ui
 print('smoke-local: fixture api path ok')
 PY

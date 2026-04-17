@@ -386,6 +386,7 @@ async function render(search) {
 const scriptContent = ` + string(scriptJSON) + `;
 const sampleApplications = ` + string(applicationsJSON) + `;
 const accountDetail = ` + string(accountDetailJSON) + `;
+const applicationDetail = ` + string(applicationDetailJSON) + `;
 class Element {
   constructor(tagName, ownerDocument) {
     this.tagName = String(tagName).toUpperCase();
@@ -466,6 +467,18 @@ async function render(search, fetchImpl) {
   const accountLinks = collectNodes(accountView.document.getElementById('accounts'), (node) => node.tagName === 'A');
   if (!accountLinks.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Open application' && node.target === '_self')) {
     throw new Error('expected account detail drill-down link to preserve /console pathname');
+  }
+
+  const applicationView = await render('?page=application&deployment=payments-api-staging&q=payments&sync=OutOfSync&account=210987654321', (url) => {
+    if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(applicationDetail) });
+    throw new Error('unexpected application fetch url: ' + url);
+  });
+  const applicationLinks = collectNodes(applicationView.document.getElementById('accounts'), (node) => node.tagName === 'A');
+  if (!applicationLinks.find((node) => node.href === '/console?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Drift view' && node.target === '_self')) {
+    throw new Error('expected application detail drift link to preserve /console pathname');
+  }
+  if (!applicationLinks.find((node) => node.href === '/console?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Plan/apply' && node.target === '_self')) {
+    throw new Error('expected application detail plan link to preserve /console pathname');
   }
 })();
 `
@@ -729,6 +742,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('Account JSON')) throw new Error('expected account page account json link');
   if (!accountsText.includes('Group JSON')) throw new Error('expected account page group json link');
   if (!accountsText.includes('Open application')) throw new Error('expected account page application drill-down links');
+  if (accountsText.includes('Drift view')) throw new Error('expected account page to stop exposing drift workspace shortcut');
+  if (accountsText.includes('Plan/apply')) throw new Error('expected account page to stop exposing plan workspace shortcut');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
   if (!links.find((node) => node.href === '/v1/overview/accounts/210987654321' && node.textContent === 'Account JSON')) throw new Error('expected account json href');
   if (!links.find((node) => node.href === '/v1/overview/accounts/210987654321/projects/payments/environments/staging-apne2' && node.textContent === 'Group JSON')) throw new Error('expected group json href');
@@ -818,6 +833,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!summaryText.includes('payments-api-staging')) throw new Error('expected application route summary title');
   if (!summaryText.includes('Application detail page: show only application-linked resources before the final resource-detail page.')) throw new Error('expected application route drill-down guidance');
   if (!accountsText.includes('Application resources')) throw new Error('expected application route resources body');
+  if (!accountsText.includes('Drift view')) throw new Error('expected application route drift workspace entry');
+  if (!accountsText.includes('Plan/apply')) throw new Error('expected application route plan workspace entry');
   if (!accountsText.includes('Workloads')) throw new Error('expected application route workloads group');
   if (!accountsText.includes('Traffic routing')) throw new Error('expected application route traffic routing group');
   if (!accountsText.includes('payments-api-staging-service')) throw new Error('expected application route synthesized workload resource');
@@ -1547,10 +1564,17 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('payments-api-staging ECS Service')) throw new Error('expected workload resource');
   if (!accountsText.includes('prod listener')) throw new Error('expected traffic routing resource');
   if (!accountsText.includes('bootstrap source')) throw new Error('expected config/access resource');
+  if (!accountsText.includes('Drift view')) throw new Error('expected application page drift workspace link');
+  if (!accountsText.includes('Plan/apply')) throw new Error('expected application page plan workspace link');
   if (accountsText.includes('Runtime history')) throw new Error('application page should not expose deep runtime history yet');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
   const resourceLink = links.find((node) => node.textContent === 'Open resource');
+  const driftLink = links.find((node) => node.textContent === 'Drift view');
+  const planLink = links.find((node) => node.textContent === 'Plan/apply');
   if (!resourceLink) throw new Error('expected resource drill-down link');
+  if (!driftLink || !driftLink.href.includes('/?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging')) throw new Error('expected drift workspace href to include deployment and preserved filters');
+  if (!planLink || !planLink.href.includes('/?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging')) throw new Error('expected plan workspace href to include deployment and preserved filters');
+  if (driftLink.target !== '_self' || planLink.target !== '_self') throw new Error('expected workspace drill-down links to stay in embedded UI flow');
   if (!resourceLink.href.includes('/?page=resource&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging')) throw new Error('expected resource detail href to include deployment and preserved filters');
   if (resourceLink.target !== '_self') throw new Error('expected resource drill-down link to stay in embedded UI flow');
   if (resourceLink.rel) throw new Error('expected resource drill-down link to avoid new-tab rel attributes');
@@ -2827,7 +2851,7 @@ async function render(detail) {
   const text = collectText(run.document.getElementById('accounts')).join(' | ');
   const toolbarText = collectText(run.document.getElementById('toolbar')).join(' | ');
   if (!text.includes('Drift viewer')) throw new Error('expected drift workspace title');
-  if (!toolbarText.includes('Back to overview')) throw new Error('expected workspace back link');
+  if (!toolbarText.includes('Back to application')) throw new Error('expected workspace back link');
   if (!toolbarText.includes('api-prod')) throw new Error('expected workspace active deployment title');
   if (!text.includes('Latest runtime signals')) throw new Error('expected drift workspace runtime signals section');
   if (!text.includes('deployment-controller')) throw new Error('expected drift workspace runtime source value');
@@ -3127,7 +3151,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/deployments/api-prod') throw new Error('unexpected fetch sequence after create: ' + fetchCalls.join(', '));
   if (!createRequestOptions || createRequestOptions.method !== 'POST') throw new Error('expected Create Plan to POST');
   if (!createRequestOptions.headers || createRequestOptions.headers['Content-Type'] !== 'application/json') throw new Error('expected Create Plan content type header');
-  if (createRequestOptions.body !== '{}') throw new Error('expected Create Plan empty JSON body');
+  const createBody = JSON.parse(createRequestOptions.body || '{}');
+  if (!/^plan_[0-9a-f]{16}$/.test(createBody.ifMatch || '')) throw new Error('expected Create Plan to send derived ifMatch fingerprint, got ' + createRequestOptions.body);
   if (window.location.search !== '?page=plan&deployment=api-prod&planId=plan_ready_123') throw new Error('expected Create Plan to persist planId in URL, got ' + window.location.search);
   text = collectText(root).join(' | ');
   if (!text.includes('Plan preview ready')) throw new Error('expected ready plan-preview heading');
@@ -3193,6 +3218,51 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');
   if (!createPlan || !applyPlan) throw new Error('expected plan workspace action buttons on bookmarked plan');
   if (createPlan.disabled || !applyPlan.disabled) throw new Error('expected Create Plan enabled and Apply Plan disabled on bookmarked failed plan');
+})();
+`
+		runNode(t, nodeProgram)
+	})
+
+	t.Run("create falls back to loaded preview fingerprint when client cannot derive current fingerprint", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+const planPreview = ` + string(planPreviewFailedJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+let createRequestOptions = null;
+const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod&planId=plan_failed_123', hash: '' }, crypto: {} };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url, options = {}) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/plans/plan_failed_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+  if (url === '/v1/plans/deployments/api-prod') {
+    createRequestOptions = options;
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+  }
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  await settle();
+  const root = document.getElementById('accounts');
+  const buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  const createPlan = buttons.find((node) => node.textContent === 'Create Plan');
+  if (!createPlan) throw new Error('expected Create Plan button on bookmarked failed preview');
+  createPlan.dispatch('click');
+  await settle();
+  await settle();
+  await settle();
+  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/plan_failed_123, /v1/plans/deployments/api-prod') throw new Error('unexpected fetch sequence after fallback create: ' + fetchCalls.join(', '));
+  const createBody = JSON.parse((createRequestOptions && createRequestOptions.body) || '{}');
+  if (createBody.ifMatch !== 'fp_plan_failed') throw new Error('expected Create Plan to fall back to loaded preview fingerprint, got ' + JSON.stringify(createBody));
 })();
 `
 		runNode(t, nodeProgram)

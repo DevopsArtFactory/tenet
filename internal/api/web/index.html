@@ -1092,8 +1092,16 @@
         const page = createElement('article', 'account');
         page.append(
           createElement('h2', 'account-name', 'Application resources'),
-          createElement('div', 'account-meta', 'Grouped linked resources for the selected application. Deep rollout/history details stay on the final resource page.'),
+          createElement('div', 'account-meta', 'Grouped linked resources for the selected application. Open drift or plan/apply from here before the final resource page.'),
         );
+        const workspaceLinks = createElement('div', 'row-links row-links-shell');
+        if (detail.name) {
+          workspaceLinks.append(
+            createNavLink(buildPageURL('drift', { deployment: detail.name }), 'Drift view', '_self'),
+            createNavLink(buildPageURL('plan', { deployment: detail.name }), 'Plan/apply', '_self'),
+          );
+        }
+        page.append(workspaceLinks);
         const rows = createElement('div', 'rows');
         groupResourceSections(detail).forEach((group) => {
           const groupSection = createElement('section', 'deployment-group');
@@ -1454,10 +1462,131 @@
             throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);
           });
         });
-      const createPlanPreview = (deploymentName) => fetch(`/v1/plans/deployments/${encodeURIComponent(deploymentName)}`, {
+      const cloneJSONValue = (value) => {
+        if (Array.isArray(value)) return value.map((entry) => cloneJSONValue(entry));
+        if (!value || typeof value !== 'object') return value;
+        return Object.entries(value).reduce((result, [key, entry]) => {
+          if (entry === undefined) return result;
+          result[key] = cloneJSONValue(entry);
+          return result;
+        }, {});
+      };
+      const hasArtifactValue = (value) => Boolean(value && typeof value === 'object' && ['binary', 'image'].some((key) => typeof value[key] === 'string' && value[key]));
+      const planSourceObservedGeneration = (detail) => {
+        const runtimeObserved = Number(detail.runtimeSummary?.observedGeneration);
+        if (runtimeObserved > 0) return runtimeObserved;
+        const deploymentObserved = Number(detail.observedGeneration);
+        return deploymentObserved > 0 ? deploymentObserved : 0;
+      };
+      const planSourceDesiredGeneration = (detail) => {
+        const rolloutDesired = Number(detail.rollout?.desiredGeneration || 0);
+        if (rolloutDesired > 0) return rolloutDesired;
+        const runtimeDesired = Number(detail.runtimeSummary?.desiredGeneration || 0);
+        if (runtimeDesired > 0) return runtimeDesired;
+        const observed = planSourceObservedGeneration(detail);
+        if (observed > 0 && detail.sync?.state === 'Synced' && detail.health?.overall === 'Healthy') return observed;
+        if (observed > 0) return observed + 1;
+        return 1;
+      };
+      const planSourceCurrentStep = (detail) => detail.rollout?.currentStep || detail.runtimeSummary?.currentStep || '';
+      const planSourceRuntimeTimestamp = (detail) => detail.runtimeSummary?.timestamp || '';
+      const planSourceRuntimeSource = (detail) => detail.runtimeSummary?.source || '';
+      const planSourceChanges = (detail) => Array.isArray(detail.runtimeSummary?.changes) ? detail.runtimeSummary.changes.filter((value) => typeof value === 'string' && value) : [];
+      const planSourceChangeDetails = (detail) => Array.isArray(detail.runtimeSummary?.changeDetails) ? detail.runtimeSummary.changeDetails.filter((value) => typeof value === 'string' && value) : [];
+      const planSourceExecutionResources = (detail) => {
+        const execution = detail.rollout?.execution || [];
+        if (execution.length) {
+          return execution.map((resource) => {
+            const entry = {
+              resource: resource.resource || '',
+              name: resource.name || '',
+            };
+            if (resource.description) entry.description = resource.description;
+            return entry;
+          });
+        }
+        if (!detail.executionMode) return [];
+        switch (detail.executionMode) {
+          case 'ecsCodeDeploy':
+            return [
+              { resource: 'ecsService', name: `${detail.name}-service` },
+              { resource: 'codeDeployApplication', name: `${detail.name}-codedeploy-app` },
+              { resource: 'codeDeployDeploymentGroup', name: `${detail.name}-codedeploy-group` },
+              { resource: 'productionListener', name: `${detail.name}-prod-listener` },
+              { resource: 'testListener', name: `${detail.name}-test-listener` },
+              { resource: 'blueTaskSetTargetGroup', name: `${detail.name}-blue` },
+              { resource: 'greenTaskSetTargetGroup', name: `${detail.name}-green` },
+            ];
+          case 'ecsRolling':
+            return [{ resource: 'ecsService', name: `${detail.name}-service` }];
+          case 'asgWeightedTargetGroups':
+            return [
+              { resource: 'candidateAutoScalingGroup', name: `${detail.name}-candidate` },
+              { resource: 'activeTargetGroup', name: `${detail.name}-active` },
+              { resource: 'candidateTargetGroup', name: `${detail.name}-candidate` },
+              { resource: 'productionListenerRule', name: `${detail.name}-prod-listener` },
+              { resource: 'trafficShiftPlan', name: `${detail.name}-weighted-routing` },
+              { resource: 'userDataBootstrapSource', name: canonicalUserDataBootstrapSource(detail.userData) },
+            ];
+          case 'asgInstanceRefresh':
+            return [
+              { resource: 'serviceAutoScalingGroup', name: `${detail.name}-service` },
+              { resource: 'userDataBootstrapSource', name: canonicalUserDataBootstrapSource(detail.userData) },
+            ];
+          default:
+            return [];
+        }
+      };
+      const buildPlanSourceFingerprintPayload = (detail) => {
+        const rolloutSteps = Array.isArray(detail.rollout?.steps) ? detail.rollout.steps : [];
+        if (!detail?.name || !rolloutSteps.length) return null;
+
+        const payload = {
+          deploymentName: detail.name,
+          sync: cloneJSONValue(detail.sync || {}),
+          health: cloneJSONValue(detail.health || {}),
+        };
+        if (detail.targetType) payload.targetType = detail.targetType;
+        if (detail.strategy) payload.strategy = detail.strategy;
+        if (detail.executionMode) payload.executionMode = detail.executionMode;
+        if (hasArtifactValue(detail.desiredArtifact)) payload.desiredArtifact = cloneJSONValue(detail.desiredArtifact);
+        const effectiveDeployedArtifact = hasArtifactValue(detail.deployedArtifact)
+          ? detail.deployedArtifact
+          : detail.runtimeSummary?.deployedArtifact;
+        if (hasArtifactValue(effectiveDeployedArtifact)) payload.deployedArtifact = cloneJSONValue(effectiveDeployedArtifact);
+        const runtimeTimestamp = planSourceRuntimeTimestamp(detail);
+        if (runtimeTimestamp) payload.runtimeTimestamp = runtimeTimestamp;
+        const runtimeSource = planSourceRuntimeSource(detail);
+        if (runtimeSource) payload.runtimeSource = runtimeSource;
+        const currentStep = planSourceCurrentStep(detail);
+        if (currentStep) payload.currentStep = currentStep;
+        const desiredGeneration = planSourceDesiredGeneration(detail);
+        if (desiredGeneration > 0) payload.desiredGeneration = desiredGeneration;
+        const observedGeneration = planSourceObservedGeneration(detail);
+        if (observedGeneration > 0) payload.observedGeneration = observedGeneration;
+        if (Array.isArray(detail.conditions) && detail.conditions.length) payload.conditions = cloneJSONValue(detail.conditions);
+        const runtimeChanges = planSourceChanges(detail);
+        if (runtimeChanges.length) payload.runtimeChanges = cloneJSONValue(runtimeChanges);
+        const runtimeDetails = planSourceChangeDetails(detail);
+        if (runtimeDetails.length) payload.runtimeChangeDetails = cloneJSONValue(runtimeDetails);
+        payload.rolloutSteps = cloneJSONValue(rolloutSteps);
+        const execution = planSourceExecutionResources(detail);
+        if (execution.length) payload.rolloutExecution = cloneJSONValue(execution);
+        return payload;
+      };
+      const derivePlanSourceFingerprint = async (detail) => {
+        const payload = buildPlanSourceFingerprintPayload(detail);
+        const cryptoAPI = (typeof window !== 'undefined' && window.crypto) ? window.crypto : (typeof globalThis !== 'undefined' ? globalThis.crypto : null);
+        if (!payload || !cryptoAPI?.subtle || typeof TextEncoder === 'undefined') return '';
+        const content = JSON.stringify(payload);
+        const digest = await cryptoAPI.subtle.digest('SHA-256', new TextEncoder().encode(content));
+        const hex = Array.from(new Uint8Array(digest)).map((value) => value.toString(16).padStart(2, '0')).join('');
+        return hex ? `plan_${hex.slice(0, 16)}` : '';
+      };
+      const createPlanPreview = (deploymentName, ifMatch = '') => fetch(`/v1/plans/deployments/${encodeURIComponent(deploymentName)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: '{}',
+        body: ifMatch ? JSON.stringify({ ifMatch }) : '{}',
       }).then((response) => {
         if (response.ok) return response.json();
         const fallback = response.status === 503
@@ -1723,7 +1852,7 @@
         });
         head.append(titleWrap, pills);
 
-        const backLink = createNavLink(buildPageURL('applications'), 'Back to overview');
+        const backLink = createNavLink(buildPageURL('application', { deployment: detail.name || currentPageState.deployment || '' }), 'Back to application');
         backLink.target = '_self';
         backLink.rel = '';
         const toolbarActions = createElement('div', 'toolbar-actions');
@@ -2181,8 +2310,6 @@
                   createNavLink(buildPageURL('application', { deployment: deployment.name }), 'Open application', '_self'),
                   createNavLink(`/v1/overview/deployments/${encodeURIComponent(deployment.name)}`, 'Overview JSON'),
                   createNavLink(`/v1/status/deployments/${encodeURIComponent(deployment.name)}`, 'Status JSON'),
-                  createNavLink(buildPageURL('drift', { deployment: deployment.name }), 'Drift view'),
-                  createNavLink(buildPageURL('plan', { deployment: deployment.name }), 'Plan/apply'),
                 );
               }
 
@@ -2347,7 +2474,8 @@
                 const renderPlanWorkspace = () => {
                   renderDeploymentWorkspace('plan', detail, {
                     ...planState,
-                    onCreatePlan: () => {
+                    onCreatePlan: async () => {
+                      const fallbackIfMatch = planState.record?.source?.fingerprint || '';
                       planState = {
                         ...planState,
                         status: 'loading',
@@ -2356,7 +2484,8 @@
                         error: null,
                       };
                       renderPlanWorkspace();
-                      createPlanPreview(detail.name || currentPageState.deployment)
+                      const ifMatch = await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;
+                      createPlanPreview(detail.name || currentPageState.deployment, ifMatch)
                         .then((record) => {
                           planState = {
                             ...planState,

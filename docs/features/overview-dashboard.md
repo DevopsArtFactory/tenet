@@ -89,6 +89,7 @@ The application-detail route now loads `GET /v1/overview/applications/{deploymen
 Current behavior:
 - breadcrumb/back-link to the applications overview
 - top-level application summary for account/region context
+- `_self` `Drift view` and `_self` `Plan/apply` links so operators enter the deployment workspaces from the application detail page instead of the account rows
 - grouped resource sections:
   - `Workloads`
   - `Traffic routing`
@@ -109,7 +110,7 @@ Resource-list fallback contract:
 
 ### Deployment workspaces
 
-The existing `Drift view` and `Plan/apply` workspace shells remain available as deeper read-only troubleshooting pages while the new application/resource drill-down flow is being introduced incrementally.
+The existing `Drift view` and `Plan/apply` workspace shells remain available as deeper read-only troubleshooting pages, but they are now entered from the application detail page instead of older account-row shortcuts.
 
 ## Workspace shells
 
@@ -139,20 +140,20 @@ Current plan/apply workspace behavior:
 - shows additive runtime artifact/condition rows from `runtimeSummary.deployedArtifact` / `runtimeSummary.conditions`
 - keeps machine-readable `runtimeSummary.changes[]` rows while also rendering human-readable `runtimeSummary.changeDetails[]`
 - keeps deployment-derived `Plan operations` and risk/approval context visible before any preview exists so the page stays useful before mutation work
-- enables `Create Plan` to call `POST /v1/plans/deployments/{deploymentName}` and immediately render the returned server-authored immutable preview in place
+- enables `Create Plan` to call `POST /v1/plans/deployments/{deploymentName}` with an `ifMatch` fingerprint derived from the currently reviewed deployment detail when possible, falling back to the loaded plan preview `source.fingerprint` when the client cannot derive the current one, and immediately render the returned server-authored immutable preview in place
 - rewrites the page URL to `/?page=plan&deployment={deploymentName}&planId={planId}` after a successful create so operators can bookmark or share the exact stored preview
 - loads `GET /v1/plans/{planId}` whenever a `planId` query param is present and renders ready/failed/unavailable/fetch-error states without hiding the deployment-derived context
 - keeps `Apply Plan` disabled and explicitly labels the workspace as read-only
+- returns to the application detail page through the embedded back link so the drill-down path stays tight
 
 ## Quick links
 
 The dashboard now exposes the following navigation affordances across the current drill-down flow:
 - landing page: `_self` `Open account`, `_self` `Open application`
 - account detail page: `Account JSON`, `Group JSON`, `_self` `Open application`
-- application detail page: `Open resource`
+- application detail page: `_self` `Drift view`, `_self` `Plan/apply`, `Open resource`
 - resource/workspace drill-down pages: embedded back links that keep operators in the same shell
 - account-oriented JSON surfaces remain available through the API routes (`/v1/overview/accounts/{awsAccountId}`, `/v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}`, `/v1/overview/deployments/{deploymentName}`, `/v1/status/deployments/{deploymentName}`)
-- deployment workspace shortcuts: `Drift view` and `Plan/apply`
 
 The landing page itself is backed by `GET /v1/overview/applications`; the application-detail page uses `GET /v1/overview/applications/{deploymentName}`, while the deeper resource/workspace drill-down pages continue to reuse `GET /v1/overview/deployments/{deploymentName}`.
 
