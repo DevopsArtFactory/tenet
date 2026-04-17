@@ -7,6 +7,7 @@ HOST=${TENET_DOCKER_SMOKE_HOST:-127.0.0.1}
 PORT=${TENET_DOCKER_SMOKE_PORT:-8080}
 API_BASE_URL=${TENET_DOCKER_SMOKE_API_BASE_URL:-http://$HOST:$PORT}
 INVALID_AUDIT_ACTION_BODY=$(mktemp)
+PAYLOAD_DIR=$(mktemp -d)
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "smoke-docker: docker is required" >&2
@@ -111,9 +112,18 @@ cleanup() {
 
   "${COMPOSE[@]}" down --remove-orphans >/dev/null 2>&1 || true
   rm -f "$INVALID_AUDIT_ACTION_BODY"
+  rm -rf "$PAYLOAD_DIR"
 }
 
 trap 'cleanup "$?"' EXIT
+
+write_payload() {
+  local name=$1
+  local content=$2
+  local path="$PAYLOAD_DIR/$name"
+  printf '%s' "$content" >"$path"
+  printf '%s' "$path"
+}
 
 "${COMPOSE[@]}" config >/dev/null
 services=$("${COMPOSE[@]}" config --services)
@@ -220,25 +230,49 @@ audit_ui_request_id=$(assert_request_id_header "$API_BASE_URL/?page=audit&action
 audit_ui=$(curl -fsS "$API_BASE_URL/?page=audit&action=apply.requested&limit=2")
 plan_apply_ui=$(curl -fsS "$API_BASE_URL/?page=plan&deployment=payments-api-prod&planId=$plan_id&applyId=$apply_id")
 
-SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" APPLY_RECORD_JSON="$apply_record" APPLY_RECORD_GET_JSON="$apply_record_get" DEPLOYMENT_EVENTS_JSON="$deployment_events" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" AUDIT_LOGS_JSON="$audit_logs" AUDIT_LOGS_ACTION_FILTERED_JSON="$audit_logs_action_filtered" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY="$INVALID_AUDIT_ACTION_BODY" UI_HTML="$ui" AUDIT_UI_HTML="$audit_ui" PLAN_APPLY_UI_HTML="$plan_apply_ui" python3 - <<'PY'
+summary_path=$(write_payload summary.json "$summary")
+applications_path=$(write_payload applications.json "$applications")
+deployment_detail_path=$(write_payload deployment-detail.json "$deployment_detail")
+plan_preview_path=$(write_payload plan-preview.json "$plan_preview")
+plan_preview_get_path=$(write_payload plan-preview-get.json "$plan_preview_get")
+apply_record_path=$(write_payload apply-record.json "$apply_record")
+apply_record_get_path=$(write_payload apply-record-get.json "$apply_record_get")
+deployment_events_path=$(write_payload deployment-events.json "$deployment_events")
+worker_resource_logs_path=$(write_payload worker-resource-logs.json "$worker_resource_logs")
+audit_logs_path=$(write_payload audit-logs.json "$audit_logs")
+audit_logs_action_filtered_path=$(write_payload audit-logs-action-filtered.json "$audit_logs_action_filtered")
+ui_path=$(write_payload ui.html "$ui")
+audit_ui_path=$(write_payload audit-ui.html "$audit_ui")
+plan_apply_ui_path=$(write_payload plan-apply-ui.html "$plan_apply_ui")
+
+SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" DEPLOYMENT_EVENTS_PATH="$deployment_events_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" UI_PATH="$ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_APPLY_UI_PATH="$plan_apply_ui_path" python3 - <<'PY'
 import json, os
 
-summary = json.loads(os.environ["SUMMARY_JSON"])
-applications = json.loads(os.environ["APPLICATIONS_JSON"])
-deployment_detail = json.loads(os.environ["DEPLOYMENT_DETAIL_JSON"])
+def read_json(path_env):
+    with open(os.environ[path_env], encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def read_text(path_env):
+    with open(os.environ[path_env], encoding="utf-8") as fh:
+        return fh.read()
+
+summary = read_json("SUMMARY_PATH")
+applications = read_json("APPLICATIONS_PATH")
+deployment_detail = read_json("DEPLOYMENT_DETAIL_PATH")
 deployment_source_fingerprint = os.environ["DEPLOYMENT_SOURCE_FINGERPRINT"]
-plan_preview = json.loads(os.environ["PLAN_PREVIEW_JSON"])
-plan_preview_get = json.loads(os.environ["PLAN_PREVIEW_GET_JSON"])
-apply_record = json.loads(os.environ["APPLY_RECORD_JSON"])
-apply_record_get = json.loads(os.environ["APPLY_RECORD_GET_JSON"])
-deployment_events = json.loads(os.environ["DEPLOYMENT_EVENTS_JSON"])
-worker_resource_logs = json.loads(os.environ["WORKER_RESOURCE_LOGS_JSON"])
-audit_logs = json.loads(os.environ["AUDIT_LOGS_JSON"])
-audit_logs_action_filtered = json.loads(os.environ["AUDIT_LOGS_ACTION_FILTERED_JSON"])
-invalid_audit_action_body = open(os.environ["INVALID_AUDIT_ACTION_BODY"], encoding="utf-8").read()
-ui = os.environ["UI_HTML"]
-audit_ui = os.environ["AUDIT_UI_HTML"]
-plan_apply_ui = os.environ["PLAN_APPLY_UI_HTML"]
+plan_preview = read_json("PLAN_PREVIEW_PATH")
+plan_preview_get = read_json("PLAN_PREVIEW_GET_PATH")
+apply_record = read_json("APPLY_RECORD_PATH")
+apply_record_get = read_json("APPLY_RECORD_GET_PATH")
+deployment_events = read_json("DEPLOYMENT_EVENTS_PATH")
+worker_resource_logs = read_json("WORKER_RESOURCE_LOGS_PATH")
+audit_logs = read_json("AUDIT_LOGS_PATH")
+audit_logs_action_filtered = read_json("AUDIT_LOGS_ACTION_FILTERED_PATH")
+invalid_audit_action_body = read_text("INVALID_AUDIT_ACTION_BODY_PATH")
+ui = read_text("UI_PATH")
+audit_ui = read_text("AUDIT_UI_PATH")
+plan_apply_ui = read_text("PLAN_APPLY_UI_PATH")
 
 assert summary["accountCount"] == 2, summary
 assert summary["environmentCount"] == 2, summary
