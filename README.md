@@ -96,6 +96,8 @@ For the current read-only plan/apply flow, a typical local operator path is:
 
 Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis. Use `make smoke-docker` when you need to validate `compose.yaml`, confirm the `api`/`controller`/`redis` service contract, and prove the containerized local stack plus representative `Request-Id` headers, correlated structured API request logs, controller logs, deployment events, resource-log routes, `GET /v1/audit-logs`, `GET /v1/audit-logs?action=apply.requested&limit=2`, the invalid-action `400 Bad Request` boundary, the bookmarkable `/?page=audit&action={action}&limit={n}` audit view, immutable plan/apply read models, and embedded operator drill-down labels are reachable end to end.
 
+GitHub Actions mirrors those checks in two lanes under `.github/workflows/ci-smoke.yml`. The fast lane runs on every pull request plus pushes to `main`, pins the Go toolchain from `go.mod`, then runs `go test ./...` and `make smoke-local`. The slower Docker lane stays outside the PR fast path and runs `make smoke-docker` only on pushes to `main` and manual `workflow_dispatch` runs.
+
 ### Run with Docker
 
 ```bash
