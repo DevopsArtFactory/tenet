@@ -15,6 +15,7 @@ FIXTURE_STATUS_PATH=${TENET_STATUS_PATH:-$ROOT/examples/local-status/deployments
 STATUS_PATH=$(mktemp)
 PLAN_STORE_PATH=$(mktemp)
 APPLY_STORE_PATH=$(mktemp)
+PAYLOAD_DIR=$(mktemp -d)
 cp "$FIXTURE_STATUS_PATH" "$STATUS_PATH"
 rm -f "$PLAN_STORE_PATH"
 rm -f "$APPLY_STORE_PATH"
@@ -31,8 +32,17 @@ cleanup() {
     wait "$API_PID" 2>/dev/null || true
   fi
   rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY"
+  rm -rf "$PAYLOAD_DIR"
 }
 trap cleanup EXIT
+
+write_payload() {
+  local name=$1
+  local content=$2
+  local path="$PAYLOAD_DIR/$name"
+  printf '%s' "$content" >"$path"
+  printf '%s' "$path"
+}
 
 assert_request_id_header() {
   local url=$1
@@ -112,32 +122,67 @@ audit_ui=$(curl -fsS "http://$HOST:$PORT/?page=audit&deployment=payments-api-pro
 plan_ui=$(curl -fsS "http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id")
 apply_ui=$(curl -fsS "http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id&applyId=$apply_id")
 
-SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_EVENTS_FIXTURE_JSON="$deployment_events_fixture" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" APPLY_RECORD_JSON="$apply_record" APPLY_RECORD_GET_JSON="$apply_record_get" STALE_PLAN_PREVIEW_JSON="$stale_plan_preview" AUDIT_LOGS_JSON="$audit_logs" AUDIT_LOGS_ACTION_FILTERED_JSON="$audit_logs_action_filtered" AUDIT_LOGS_FILTERED_JSON="$audit_logs_filtered" AUDIT_LOGS_EMPTY_JSON="$audit_logs_empty" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY="$(cat "$INVALID_AUDIT_ACTION_BODY")" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" AUDIT_UI_HTML="$audit_ui" PLAN_UI_HTML="$plan_ui" APPLY_UI_HTML="$apply_ui" python3 - <<'PY'
+summary_path=$(write_payload summary.json "$summary")
+applications_path=$(write_payload applications.json "$applications")
+application_detail_path=$(write_payload application-detail.json "$application_detail")
+overview_path=$(write_payload overview.json "$overview")
+account_detail_path=$(write_payload account-detail.json "$account_detail")
+group_detail_path=$(write_payload group-detail.json "$group_detail")
+deployment_detail_path=$(write_payload deployment-detail.json "$deployment_detail")
+deployment_events_fixture_path=$(write_payload deployment-events-fixture.json "$deployment_events_fixture")
+plan_preview_path=$(write_payload plan-preview.json "$plan_preview")
+plan_preview_get_path=$(write_payload plan-preview-get.json "$plan_preview_get")
+apply_record_path=$(write_payload apply-record.json "$apply_record")
+apply_record_get_path=$(write_payload apply-record-get.json "$apply_record_get")
+stale_plan_preview_path=$(write_payload stale-plan-preview.json "$stale_plan_preview")
+audit_logs_path=$(write_payload audit-logs.json "$audit_logs")
+audit_logs_action_filtered_path=$(write_payload audit-logs-action-filtered.json "$audit_logs_action_filtered")
+audit_logs_filtered_path=$(write_payload audit-logs-filtered.json "$audit_logs_filtered")
+audit_logs_empty_path=$(write_payload audit-logs-empty.json "$audit_logs_empty")
+status_json_path=$(write_payload status.json "$status")
+resource_logs_path=$(write_payload resource-logs.json "$resource_logs")
+worker_resource_logs_path=$(write_payload worker-resource-logs.json "$worker_resource_logs")
+ui_path=$(write_payload ui.html "$ui")
+audit_ui_path=$(write_payload audit-ui.html "$audit_ui")
+plan_ui_path=$(write_payload plan-ui.html "$plan_ui")
+apply_ui_path=$(write_payload apply-ui.html "$apply_ui")
+
+SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" RESOURCE_LOGS_PATH="$resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" UI_PATH="$ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" python3 - <<'PY'
 import json, os
-summary = json.loads(os.environ['SUMMARY_JSON'])
-applications = json.loads(os.environ['APPLICATIONS_JSON'])
-application_detail = json.loads(os.environ['APPLICATION_DETAIL_JSON'])
-overview = json.loads(os.environ['OVERVIEW_JSON'])
-account_detail = json.loads(os.environ['ACCOUNT_DETAIL_JSON'])
-group_detail = json.loads(os.environ['GROUP_DETAIL_JSON'])
-deployment_detail = json.loads(os.environ['DEPLOYMENT_DETAIL_JSON'])
-deployment_events_fixture = json.loads(os.environ['DEPLOYMENT_EVENTS_FIXTURE_JSON'])
-plan_preview = json.loads(os.environ['PLAN_PREVIEW_JSON'])
-plan_preview_get = json.loads(os.environ['PLAN_PREVIEW_GET_JSON'])
-apply_record = json.loads(os.environ['APPLY_RECORD_JSON'])
-apply_record_get = json.loads(os.environ['APPLY_RECORD_GET_JSON'])
-stale_plan_preview = json.loads(os.environ['STALE_PLAN_PREVIEW_JSON'])
-audit_logs = json.loads(os.environ['AUDIT_LOGS_JSON'])
-audit_logs_action_filtered = json.loads(os.environ['AUDIT_LOGS_ACTION_FILTERED_JSON'])
-audit_logs_filtered = json.loads(os.environ['AUDIT_LOGS_FILTERED_JSON'])
-audit_logs_empty = json.loads(os.environ['AUDIT_LOGS_EMPTY_JSON'])
-status = json.loads(os.environ['STATUS_JSON'])
-resource_logs = json.loads(os.environ['RESOURCE_LOGS_JSON'])
-worker_resource_logs = json.loads(os.environ['WORKER_RESOURCE_LOGS_JSON'])
-ui = os.environ['UI_HTML']
-audit_ui = os.environ['AUDIT_UI_HTML']
-plan_ui = os.environ['PLAN_UI_HTML']
-apply_ui = os.environ['APPLY_UI_HTML']
+
+def read_json(path_env):
+    with open(os.environ[path_env], encoding='utf-8') as fh:
+        return json.load(fh)
+
+
+def read_text(path_env):
+    with open(os.environ[path_env], encoding='utf-8') as fh:
+        return fh.read()
+
+summary = read_json('SUMMARY_PATH')
+applications = read_json('APPLICATIONS_PATH')
+application_detail = read_json('APPLICATION_DETAIL_PATH')
+overview = read_json('OVERVIEW_PATH')
+account_detail = read_json('ACCOUNT_DETAIL_PATH')
+group_detail = read_json('GROUP_DETAIL_PATH')
+deployment_detail = read_json('DEPLOYMENT_DETAIL_PATH')
+deployment_events_fixture = read_json('DEPLOYMENT_EVENTS_FIXTURE_PATH')
+plan_preview = read_json('PLAN_PREVIEW_PATH')
+plan_preview_get = read_json('PLAN_PREVIEW_GET_PATH')
+apply_record = read_json('APPLY_RECORD_PATH')
+apply_record_get = read_json('APPLY_RECORD_GET_PATH')
+stale_plan_preview = read_json('STALE_PLAN_PREVIEW_PATH')
+audit_logs = read_json('AUDIT_LOGS_PATH')
+audit_logs_action_filtered = read_json('AUDIT_LOGS_ACTION_FILTERED_PATH')
+audit_logs_filtered = read_json('AUDIT_LOGS_FILTERED_PATH')
+audit_logs_empty = read_json('AUDIT_LOGS_EMPTY_PATH')
+status = read_json('STATUS_JSON_PATH')
+resource_logs = read_json('RESOURCE_LOGS_PATH')
+worker_resource_logs = read_json('WORKER_RESOURCE_LOGS_PATH')
+ui = read_text('UI_PATH')
+audit_ui = read_text('AUDIT_UI_PATH')
+plan_ui = read_text('PLAN_UI_PATH')
+apply_ui = read_text('APPLY_UI_PATH')
 assert summary['accountCount'] == 2, summary
 assert summary['environmentCount'] == 2, summary
 assert summary['deploymentCount'] == 3, summary
@@ -226,7 +271,8 @@ assert audit_logs_filtered['entries'][0]['deploymentName'] == 'payments-api-prod
 assert isinstance(audit_logs_empty.get('entries', []), list), audit_logs_empty
 assert audit_logs_empty['entries'] == [], audit_logs_empty
 assert os.environ['INVALID_AUDIT_ACTION_STATUS'] == '400', os.environ['INVALID_AUDIT_ACTION_STATUS']
-assert 'invalid action query' in os.environ['INVALID_AUDIT_ACTION_BODY'], os.environ['INVALID_AUDIT_ACTION_BODY']
+invalid_audit_action = read_text('INVALID_AUDIT_ACTION_BODY_PATH')
+assert 'invalid action query' in invalid_audit_action, invalid_audit_action
 assert status['deploymentName'] == 'payments-api-prod', status
 assert status['status']['sync']['state'] == 'Synced', status
 assert resource_logs['deploymentName'] == 'payments-api-prod', resource_logs
