@@ -118,6 +118,7 @@ The dashboard now supports lightweight workspace routing inside the same embedde
 Routes:
 - `/?page=drift&deployment={name}`
 - `/?page=plan&deployment={name}`
+- `/?page=plan&deployment={name}&planId={planId}`
 
 ### Drift workspace
 
@@ -137,11 +138,11 @@ Current plan/apply workspace behavior:
 - shows latest runtime context rows for target/strategy/execution mode
 - shows additive runtime artifact/condition rows from `runtimeSummary.deployedArtifact` / `runtimeSummary.conditions`
 - keeps machine-readable `runtimeSummary.changes[]` rows while also rendering human-readable `runtimeSummary.changeDetails[]`
-- derives a read-only `Plan operations` table from `rollout.steps[]`, execution-resource metadata, and the latest runtime summary in the deployment detail route
-- shows a visible derived `high` / `medium` / `low` risk badge plus concise approval guidance from the current read model before any future mutation wiring
-- has a backend dependency on the new immutable plan-preview API (`POST /v1/plans/deployments/{deploymentName}` + `GET /v1/plans/{planId}`), which now persists server-authored read-only previews with stable IDs, source fingerprints, generations, and derived risk/approval metadata for future UI wiring
-- displays disabled `Create Plan` / `Apply Plan` buttons
-- explicitly states that mutation APIs are not wired yet
+- keeps deployment-derived `Plan operations` and risk/approval context visible before any preview exists so the page stays useful before mutation work
+- enables `Create Plan` to call `POST /v1/plans/deployments/{deploymentName}` and immediately render the returned server-authored immutable preview in place
+- rewrites the page URL to `/?page=plan&deployment={deploymentName}&planId={planId}` after a successful create so operators can bookmark or share the exact stored preview
+- loads `GET /v1/plans/{planId}` whenever a `planId` query param is present and renders ready/failed/unavailable/fetch-error states without hiding the deployment-derived context
+- keeps `Apply Plan` disabled and explicitly labels the workspace as read-only
 
 ## Quick links
 

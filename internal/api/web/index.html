@@ -832,6 +832,7 @@
           page: validPages.has(page) ? page : 'applications',
           accountId: params.get('accountId') || '',
           deployment: params.get('deployment') || '',
+          planId: params.get('planId') || '',
           resourceType: params.get('resourceType') || '',
           resourceId: params.get('resourceId') || '',
         };
@@ -1423,11 +1424,113 @@
           if (!response.ok) throw new Error(`application detail request failed (${response.status})`);
           return response.json();
         });
+      const requestError = (kind, message, status = 0) => {
+        const error = new Error(message);
+        error.kind = kind;
+        error.status = status;
+        return error;
+      };
+      const responseErrorMessage = (response, fallback) => {
+        if (!response || typeof response.text !== 'function') return Promise.resolve(fallback);
+        return response.text()
+          .then((body) => {
+            const trimmed = String(body || '').trim();
+            return trimmed ? `${fallback}: ${trimmed}` : fallback;
+          })
+          .catch(() => fallback);
+      };
       const fetchDeploymentDetail = (deploymentName) => fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}`)
         .then((response) => {
           if (!response.ok) throw new Error(`detail request failed (${response.status})`);
           return response.json();
         });
+      const fetchPlanPreview = (planId) => fetch(`/v1/plans/${encodeURIComponent(planId)}`)
+        .then((response) => {
+          if (response.ok) return response.json();
+          const fallback = response.status === 503
+            ? `plan preview API unavailable (${response.status})`
+            : `plan preview request failed (${response.status})`;
+          return responseErrorMessage(response, fallback).then((message) => {
+            throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);
+          });
+        });
+      const createPlanPreview = (deploymentName) => fetch(`/v1/plans/deployments/${encodeURIComponent(deploymentName)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      }).then((response) => {
+        if (response.ok) return response.json();
+        const fallback = response.status === 503
+          ? `plan preview API unavailable (${response.status})`
+          : `plan preview create failed (${response.status})`;
+        return responseErrorMessage(response, fallback).then((message) => {
+          throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);
+        });
+      });
+      const normalizePlanOperationStatus = (status) => {
+        const normalized = String(status || '').toLowerCase();
+        return ['completed', 'current', 'pending'].includes(normalized) ? normalized : 'pending';
+      };
+      const planOperationStatusLabel = (status) => rolloutStepStatusLabel(normalizePlanOperationStatus(status));
+      const previewOperations = (record) => (record?.operations || []).map((operation) => ({
+        kind: textOrDash(operation.kind),
+        status: normalizePlanOperationStatus(operation.status),
+        statusLabel: planOperationStatusLabel(operation.status),
+        phase: textOrDash(operation.phase),
+        target: textOrDash(operation.target),
+        summary: textOrDash(operation.summary),
+      }));
+      const planPreviewStateMessage = (planState, detail) => {
+        const deploymentName = detail.name || currentPageState.deployment || 'deployment';
+        const activePlanRecord = planState?.record || null;
+        const activePlanId = activePlanRecord?.id || planState?.planId || '';
+        switch (planState?.status) {
+          case 'loading':
+            if (planState.request === 'load' && activePlanId) {
+              return `Loading immutable plan preview ${activePlanId} from GET /v1/plans/${activePlanId}. Deployment-derived context remains visible below while the record loads.`;
+            }
+            return `Creating immutable plan preview via POST /v1/plans/deployments/${deploymentName}. Deployment-derived context remains visible below while Tenet stores the server-authored preview.`;
+          case 'ready':
+            return `Immutable plan preview ${activePlanId} is loaded and this workspace now shows the server-authored preview. Apply Plan remains disabled in this read-only slice.`;
+          case 'failed':
+            return `Immutable plan preview ${activePlanId} is recorded as failed. Review the server-authored errors below before retrying Create Plan; Apply Plan remains disabled.`;
+          case 'unavailable':
+            if (planState.request === 'load' && activePlanId) {
+              return `GET /v1/plans/${activePlanId} is currently unavailable. Deployment-derived context is still shown below and Apply Plan remains disabled.`;
+            }
+            return `POST /v1/plans/deployments/${deploymentName} is currently unavailable. Deployment-derived context is still shown below and Apply Plan remains disabled.`;
+          case 'fetch-error':
+            return `${planState.request === 'load' ? 'Failed to load the selected plan preview' : 'Failed to create a plan preview'}: ${planState.error?.message || 'unknown error'}. Deployment-derived context is still shown below and Apply Plan remains disabled.`;
+          default:
+            return `Create Plan will POST /v1/plans/deployments/${deploymentName}, store an immutable server-authored preview, and update this workspace URL with a shareable planId. Until then, the deployment-derived context below stays available for operator review while Apply Plan remains disabled.`;
+        }
+      };
+      const planPreviewStateClassName = (planState) => {
+        switch (planState?.status) {
+          case 'failed':
+          case 'unavailable':
+          case 'fetch-error':
+            return 'error';
+          default:
+            return '';
+        }
+      };
+      const planPreviewStatusHeading = (planState) => {
+        switch (planState?.status) {
+          case 'loading':
+            return 'Loading plan preview';
+          case 'ready':
+            return 'Plan preview ready';
+          case 'failed':
+            return 'Plan preview failed';
+          case 'unavailable':
+            return 'Plan preview unavailable';
+          case 'fetch-error':
+            return 'Plan preview fetch error';
+          default:
+            return 'No stored plan preview yet';
+        }
+      };
       const renderDeploymentDetail = (container, detail) => {
         const detailGrid = createElement('div', 'detail-grid');
         [
@@ -1595,7 +1698,7 @@
         detailStateByDeployment.set(deploymentName, { status: 'loading', promise, container });
         return promise;
       };
-      const renderDeploymentWorkspace = (mode, detail) => {
+      const renderDeploymentWorkspace = (mode, detail, planState = null) => {
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
         const root = document.getElementById('accounts');
@@ -1793,43 +1896,114 @@
           }
           sections.push(conditionsSection);
         } else {
-          const approvalSection = createDetailSection('Derived approval guidance');
-          const planRisk = derivePlanRisk(detail);
+          const activePlanRecord = planState?.record && (planState.status === 'ready' || planState.status === 'failed')
+            ? planState.record
+            : null;
+          const planRisk = activePlanRecord?.risk || derivePlanRisk(detail);
+          const approvalSummary = activePlanRecord?.approval?.summary || planRisk.guidance;
+          const approvalReasons = (activePlanRecord?.approval?.reasons || []).filter(Boolean);
+          const riskReasons = (planRisk.reasons || []).filter(Boolean);
+          const approvalSection = createDetailSection(activePlanRecord ? 'Plan preview approval guidance' : 'Derived approval guidance');
           const approvalCallout = createElement('div', 'workspace-callout');
           const approvalHead = createElement('div', 'workspace-callout-head');
           approvalHead.append(
-            createElement('span', 'workspace-callout-label', 'Derived risk level'),
+            createElement('span', 'workspace-callout-label', activePlanRecord ? 'Plan preview risk level' : 'Derived risk level'),
             createElement('span', `severity-indicator severity-indicator-${planRisk.level}`, planRisk.label),
           );
           approvalCallout.append(
             approvalHead,
-            createElement('div', 'workspace-callout-copy', planRisk.guidance),
-            createElement('div', 'workspace-callout-factors', `Risk factors · ${planRisk.reasons.join('; ')}`),
+            createElement('div', 'workspace-callout-copy', approvalSummary),
           );
+          if (activePlanRecord) {
+            approvalCallout.append(
+              createElement('div', 'workspace-callout-factors', `Approval required · ${activePlanRecord.approval?.required ? 'Yes' : 'No'}`),
+            );
+          }
+          if (approvalReasons.length) {
+            approvalCallout.append(createElement('div', 'workspace-callout-factors', `Approval factors · ${approvalReasons.join('; ')}`));
+          }
+          if (riskReasons.length) {
+            approvalCallout.append(createElement('div', 'workspace-callout-factors', `Risk factors · ${riskReasons.join('; ')}`));
+          }
           approvalSection.append(approvalCallout);
           sections.push(approvalSection);
 
-          const actionsSection = createDetailSection('Plan/apply actions');
+          const actionsSection = createDetailSection('Plan preview actions');
           const actionBar = createElement('div', 'row-links');
-          const createPlanButton = createElement('button', 'toolbar-button', 'Create Plan');
+          const createPlanButton = createElement(
+            'button',
+            'toolbar-button',
+            planState?.status === 'loading' && planState.request === 'create' ? 'Creating plan…' : 'Create Plan',
+          );
           createPlanButton.type = 'button';
-          createPlanButton.disabled = true;
+          createPlanButton.disabled = planState?.status === 'loading';
+          if (typeof planState?.onCreatePlan === 'function') {
+            createPlanButton.addEventListener('click', () => {
+              if (createPlanButton.disabled) return;
+              planState.onCreatePlan();
+            });
+          }
           const applyPlanButton = createElement('button', 'toolbar-button', 'Apply Plan');
           applyPlanButton.type = 'button';
           applyPlanButton.disabled = true;
           actionBar.append(createPlanButton, applyPlanButton);
+          const planStateCallout = createElement('div', 'detail-state', planPreviewStateMessage(planState, detail));
+          const planStateClassName = planPreviewStateClassName(planState);
+          if (planStateClassName) {
+            planStateCallout.classList.add(planStateClassName);
+          }
           actionsSection.append(
             actionBar,
-            createElement('div', 'detail-state', 'Plan/apply controls are not wired to mutation APIs in this read-only slice yet.'),
+            createElement('div', 'workspace-callout-label', planPreviewStatusHeading(planState)),
+            planStateCallout,
           );
           sections.push(actionsSection);
 
+          if (activePlanRecord) {
+            const previewSection = createDetailSection('Stored plan preview');
+            const previewGrid = createElement('div', 'detail-grid');
+            [
+              ['Plan ID', metricValue(activePlanRecord.id)],
+              ['Preview status', textOrDash(activePlanRecord.status)],
+              ['Created at', metricValue(activePlanRecord.createdAt)],
+              ['Source route', metricValue(activePlanRecord.source?.route)],
+              ['Source fingerprint', metricValue(activePlanRecord.source?.fingerprint)],
+              ['Source runtime', [metricValue(activePlanRecord.source?.runtimeSource), metricValue(activePlanRecord.source?.runtimeTimestamp)].join(' · ')],
+              ['Source generations', `desired ${generationValue(activePlanRecord.source?.desiredGeneration)} · observed ${generationValue(activePlanRecord.source?.observedGeneration)}`],
+            ].forEach(([label, value]) => {
+              previewGrid.append(createMetric(label, value));
+            });
+            previewSection.append(
+              previewGrid,
+              createElement('div', 'detail-state', `Shareable URL · ${buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activePlanRecord.id })}`),
+            );
+            sections.push(previewSection);
+          }
+
+          if (activePlanRecord?.errors?.length) {
+            const errorsSection = createDetailSection('Plan preview errors');
+            const errorList = createElement('ul', 'detail-list');
+            activePlanRecord.errors.forEach((entry) => {
+              errorList.append(createElement('li', '', textOrDash(entry)));
+            });
+            errorsSection.append(errorList);
+            sections.push(errorsSection);
+          }
+
           const planSection = createDetailSection(emptyTitle);
-          const operations = derivePlanOperations(detail);
+          const operations = activePlanRecord ? previewOperations(activePlanRecord) : derivePlanOperations(detail);
           if (!operations.length) {
-            planSection.append(createElement('div', 'detail-state', 'No derived plan operations are currently available.'));
+            planSection.append(createElement('div', 'detail-state', activePlanRecord
+              ? 'No server-authored plan operations are stored for this preview.'
+              : 'No derived plan operations are currently available.'));
           } else {
-            const operationsIntro = createElement('div', 'detail-state', 'Plan preview is derived from rollout steps, rollout execution resources, and the latest runtime summary in the deployment detail read model.');
+            const operationsIntro = createElement(
+              'div',
+              'detail-state',
+              activePlanRecord
+                ? `Server-authored plan preview loaded from GET /v1/plans/${activePlanRecord.id}.`
+                : 'No immutable plan preview has been created yet. The table below is derived from rollout steps, rollout execution resources, and the latest runtime summary in the deployment detail read model so operators can inspect likely changes before creating a server-authored preview.',
+            );
             const tableWrap = createElement('div', 'drift-table-wrap');
             const table = createElement('table', 'drift-table');
             const headerRow = createElement('tr');
@@ -2149,8 +2323,101 @@
                 renderResourceDetailPage(detail);
                 return;
               }
-              if (currentPageState.page === 'drift' || currentPageState.page === 'plan') {
+              if (currentPageState.page === 'drift') {
                 renderDeploymentWorkspace(currentPageState.page, detail);
+                return;
+              }
+              if (currentPageState.page === 'plan') {
+                let planState = {
+                  status: 'idle',
+                  request: 'idle',
+                  planId: currentPageState.planId,
+                  record: null,
+                  error: null,
+                };
+                const syncPlanPageURL = (planId) => {
+                  currentPageState = { ...currentPageState, planId: planId || '' };
+                  const query = buildPageURL('plan', {
+                    deployment: detail.name || currentPageState.deployment,
+                    planId: planId || '',
+                  });
+                  const hash = window.location.hash || '';
+                  history.replaceState({}, '', `${query}${hash}`);
+                };
+                const renderPlanWorkspace = () => {
+                  renderDeploymentWorkspace('plan', detail, {
+                    ...planState,
+                    onCreatePlan: () => {
+                      planState = {
+                        ...planState,
+                        status: 'loading',
+                        request: 'create',
+                        record: null,
+                        error: null,
+                      };
+                      renderPlanWorkspace();
+                      createPlanPreview(detail.name || currentPageState.deployment)
+                        .then((record) => {
+                          planState = {
+                            ...planState,
+                            status: record.status === 'failed' ? 'failed' : 'ready',
+                            request: 'create',
+                            planId: record.id,
+                            record,
+                            error: null,
+                          };
+                          syncPlanPageURL(record.id);
+                          renderPlanWorkspace();
+                        })
+                        .catch((error) => {
+                          planState = {
+                            ...planState,
+                            status: error.kind === 'unavailable' ? 'unavailable' : 'fetch-error',
+                            request: 'create',
+                            error,
+                          };
+                          renderPlanWorkspace();
+                        });
+                    },
+                  });
+                };
+
+                renderPlanWorkspace();
+                if (currentPageState.planId) {
+                  planState = {
+                    ...planState,
+                    status: 'loading',
+                    request: 'load',
+                    planId: currentPageState.planId,
+                    error: null,
+                  };
+                  renderPlanWorkspace();
+                  fetchPlanPreview(currentPageState.planId)
+                    .then((record) => {
+                      if (record.deploymentName && detail.name && record.deploymentName !== detail.name) {
+                        throw requestError('fetch-error', `plan preview ${record.id} belongs to ${record.deploymentName}, not ${detail.name}`);
+                      }
+                      planState = {
+                        ...planState,
+                        status: record.status === 'failed' ? 'failed' : 'ready',
+                        request: 'load',
+                        planId: record.id,
+                        record,
+                        error: null,
+                      };
+                      syncPlanPageURL(record.id);
+                      renderPlanWorkspace();
+                    })
+                    .catch((error) => {
+                      planState = {
+                        ...planState,
+                        status: error.kind === 'unavailable' ? 'unavailable' : 'fetch-error',
+                        request: 'load',
+                        error,
+                      };
+                      renderPlanWorkspace();
+                    });
+                }
                 return;
               }
               throw new Error(`unsupported page ${currentPageState.page}`);
