@@ -84,7 +84,7 @@ The underlying `/v1/overview/applications` payload is still a richer joined row 
 
 ### Application detail page
 
-The application-detail route now loads `GET /v1/overview/deployments/{deploymentName}` and renders grouped linked resources instead of deep deployment internals.
+The application-detail route now loads `GET /v1/overview/applications/{deploymentName}` and renders grouped linked resources instead of deep deployment internals.
 
 Current behavior:
 - breadcrumb/back-link to the applications overview
@@ -97,11 +97,12 @@ Current behavior:
 - intentionally keeps artifact/history/generation/log details off this page for now
 
 Resource-list fallback contract:
-- the UI synthesizes fallback rollout resources when `detail.rollout.execution[]` is missing or empty in the deployment-detail payload
-- the deployment-detail payload also carries normalized `userData` metadata so EC2 fallback resources can preserve stable `userDataBootstrapSource` identities before controller-authored `rollout.execution[]` rows appear
+- the UI synthesizes fallback rollout resources when `detail.rollout.execution[]` is missing or empty in the application-detail payload
+- the application-detail payload also carries normalized `userData` metadata so EC2 fallback resources can preserve stable `userDataBootstrapSource` identities before controller-authored `rollout.execution[]` rows appear
 - when `detail.rollout.execution[]` is present and non-empty, the UI preserves the controller-authored list verbatim
 - synthesized fallback resources are limited to the canonical controller rollout contracts:
   - `asgWeightedTargetGroups`: `candidateAutoScalingGroup`, `activeTargetGroup`, `candidateTargetGroup`, `productionListenerRule`, `trafficShiftPlan`, `userDataBootstrapSource`
+  - `asgInstanceRefresh`: `serviceAutoScalingGroup`, `userDataBootstrapSource`
   - `ecsRolling`: `ecsService`
   - `ecsCodeDeploy`: `ecsService`, `codeDeployApplication`, `codeDeployDeploymentGroup`, `productionListener`, `testListener`, `blueTaskSetTargetGroup`, `greenTaskSetTargetGroup`
 - fallback names/descriptions stay aligned with the controller-authored `rollout.execution[]` metadata so derived `resourceId` values remain stable and bookmarked resource-detail routes keep resolving across fixture-backed and controller-authored payloads
@@ -127,7 +128,7 @@ Current drift workspace behavior:
 - shows additive runtime artifact/condition rows from `runtimeSummary.deployedArtifact` / `runtimeSummary.conditions`
 - keeps machine-readable `runtimeSummary.changes[]` rows while also rendering human-readable `runtimeSummary.changeDetails[]`
 - shows deployment context and status conditions
-- explicitly states that field-level drift rows are not yet available in the read model
+- derives a real read-only `Field-level drift` table from the deployment-detail payload, comparing desired artifact/generation/runtime intent against current runtime signals and surfacing unhealthy or drift conditions with client-side severity filtering/sorting
 
 ### Plan/apply workspace
 
@@ -150,7 +151,7 @@ The dashboard now exposes the following navigation affordances across the curren
 - account-oriented JSON surfaces remain available through the API routes (`/v1/overview/accounts/{awsAccountId}`, `/v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}`, `/v1/overview/deployments/{deploymentName}`, `/v1/status/deployments/{deploymentName}`)
 - deployment workspace shortcuts: `Drift view` and `Plan/apply`
 
-The landing page itself is backed by `GET /v1/overview/applications`, and the application/resource drill-down pages reuse `GET /v1/overview/deployments/{deploymentName}`.
+The landing page itself is backed by `GET /v1/overview/applications`; the application-detail page uses `GET /v1/overview/applications/{deploymentName}`, while the deeper resource/workspace drill-down pages continue to reuse `GET /v1/overview/deployments/{deploymentName}`.
 
 Important implementation constraints:
 - these links are rendered as sibling controls outside the expand-toggle button when they appear in expandable deployment contexts
@@ -218,8 +219,8 @@ When changing the overview UI, preserve all of the following:
 ## Near-term next steps
 
 Likely next UI slices:
-- richer drift rows once the read model exposes field-level drift
+- richer runtime history navigation and event timelines
 - real plan/apply mutations once write APIs exist
 - account/group summary sparklines or event cues
-- better runtime history navigation and event timelines
+- deeper drift diagnostics once the backend exposes richer live drift sources beyond the current derived read model
 - eventual extraction into a dedicated frontend only if the current read-model/UI surface becomes too large for embedded HTML

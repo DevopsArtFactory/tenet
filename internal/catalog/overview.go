@@ -132,6 +132,31 @@ type DeploymentOverviewDetail struct {
 	History            []domain.StatusHistoryEntry    `json:"history,omitempty"`
 }
 
+// ApplicationOverviewDetail makes the application page contract explicit while preserving deployment detail semantics.
+type ApplicationOverviewDetail struct {
+	Name               string                         `json:"name"`
+	AppRef             string                         `json:"appRef"`
+	EnvironmentRef     string                         `json:"environmentRef"`
+	AccountName        string                         `json:"accountName"`
+	AWSAccountID       string                         `json:"awsAccountId"`
+	AllowedRegions     []string                       `json:"allowedRegions,omitempty"`
+	Region             string                         `json:"region"`
+	TargetType         string                         `json:"targetType,omitempty"`
+	Strategy           string                         `json:"strategy,omitempty"`
+	ExecutionMode      string                         `json:"executionMode,omitempty"`
+	DesiredArtifact    domain.DeploymentArtifact      `json:"desiredArtifact,omitempty"`
+	UserData           domain.DeploymentUserData      `json:"userData,omitempty"`
+	RolloutConfig      domain.DeploymentRolloutConfig `json:"rolloutConfig,omitempty"`
+	DeployedArtifact   domain.DeploymentArtifact      `json:"deployedArtifact,omitempty"`
+	ObservedGeneration int64                          `json:"observedGeneration,omitempty"`
+	Sync               domain.Sync                    `json:"sync"`
+	Health             domain.Health                  `json:"health"`
+	RuntimeSummary     *domain.RuntimeSummary         `json:"runtimeSummary,omitempty"`
+	Rollout            *domain.RolloutSummary         `json:"rollout,omitempty"`
+	Conditions         []domain.Condition             `json:"conditions,omitempty"`
+	History            []domain.StatusHistoryEntry    `json:"history,omitempty"`
+}
+
 // BuildAccountOverviews groups placement-aware deployment state by account.
 func BuildAccountOverviews(c manifest.Catalog, snapshots []statusstore.Snapshot) ([]AccountOverview, error) {
 	placementViews, err := ListPlacements(c)
@@ -356,6 +381,38 @@ func BuildProjectEnvironmentOverviewDetail(c manifest.Catalog, snapshots []statu
 	})
 
 	return detail, nil
+}
+
+// BuildApplicationOverviewDetail makes the application-page detail contract explicit while preserving deployment detail semantics.
+func BuildApplicationOverviewDetail(c manifest.Catalog, snapshots []statusstore.Snapshot, deploymentName string) (ApplicationOverviewDetail, error) {
+	detail, err := BuildDeploymentOverviewDetail(c, snapshots, deploymentName)
+	if err != nil {
+		return ApplicationOverviewDetail{}, err
+	}
+
+	return ApplicationOverviewDetail{
+		Name:               detail.Name,
+		AppRef:             detail.AppRef,
+		EnvironmentRef:     detail.EnvironmentRef,
+		AccountName:        detail.AccountName,
+		AWSAccountID:       detail.AWSAccountID,
+		AllowedRegions:     append([]string(nil), detail.AllowedRegions...),
+		Region:             detail.Region,
+		TargetType:         detail.TargetType,
+		Strategy:           detail.Strategy,
+		ExecutionMode:      detail.ExecutionMode,
+		DesiredArtifact:    detail.DesiredArtifact,
+		UserData:           detail.UserData,
+		RolloutConfig:      cloneDeploymentRolloutConfig(detail.RolloutConfig),
+		DeployedArtifact:   detail.DeployedArtifact,
+		ObservedGeneration: detail.ObservedGeneration,
+		Sync:               detail.Sync,
+		Health:             detail.Health,
+		RuntimeSummary:     cloneRuntimeSummary(detail.RuntimeSummary),
+		Rollout:            cloneRolloutSummary(detail.Rollout),
+		Conditions:         append([]domain.Condition(nil), detail.Conditions...),
+		History:            cloneStatusHistory(detail.History),
+	}, nil
 }
 
 // BuildDeploymentOverviewDetail joins one deployment's placement-aware desired and observed state.

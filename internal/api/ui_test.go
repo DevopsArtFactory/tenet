@@ -278,6 +278,28 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const fetchApplicationDetail = (deploymentName) => fetch(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`)",
+		"if (!response.ok) throw new Error(`application detail request failed (${response.status})`);",
+		"const applicationDetail = currentPageState.page === 'application' ? fetchApplicationDetail(currentPageState.deployment) : fetchDeploymentDetail(currentPageState.deployment);",
+		"applicationDetail",
+		"if (currentPageState.page === 'application') {",
+		"renderApplicationDetailPage(detail);",
+		"if (currentPageState.page === 'resource') {",
+		"renderResourceDetailPage(detail);",
+		"if (currentPageState.page === 'drift' || currentPageState.page === 'plan') {",
+		"renderDeploymentWorkspace(currentPageState.page, detail);",
+		"fetchDeploymentDetail(currentPageState.deployment)",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+}
+
 func TestIndexHTMLIncludesECSRollingFallbackBranch(t *testing.T) {
 	body := string(indexHTML)
 

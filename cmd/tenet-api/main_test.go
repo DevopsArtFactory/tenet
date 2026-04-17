@@ -237,6 +237,75 @@ func TestAPIOptionsOverviewApplicationsFallsBackToCatalogWhenStoreMissing(t *tes
 	}
 }
 
+func TestAPIOptionsOverviewApplication(t *testing.T) {
+	t.Run("uses named snapshot lookup", func(t *testing.T) {
+		repoRoot := writeRepositoryFixture(t)
+		store := &stubStatusStore{
+			getSnapshot: statusstore.Snapshot{
+				DeploymentName: "api-prod",
+				Status: domain.DeploymentStatus{
+					ObservedGeneration: 7,
+					Sync:               domain.Sync{State: domain.SyncStateOutOfSync, Reason: "PendingPromotion"},
+					Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "warming up"},
+					DeployedArtifact:   domain.DeploymentArtifact{Image: "payments-api:v1"},
+				},
+			},
+		}
+
+		options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, store)
+		if options.OverviewApplication == nil {
+			t.Fatalf("expected overview application provider")
+		}
+
+		detail, err := options.OverviewApplication("api-prod")
+		if err != nil {
+			t.Fatalf("OverviewApplication returned error: %v", err)
+		}
+		if store.getCalls != 1 {
+			t.Fatalf("expected one Get call, got %d", store.getCalls)
+		}
+		if store.gotGetName != "api-prod" {
+			t.Fatalf("expected Get lookup for api-prod, got %q", store.gotGetName)
+		}
+		if store.listCalls != 0 {
+			t.Fatalf("expected no List calls, got %d", store.listCalls)
+		}
+		if detail.Name != "api-prod" || detail.DeployedArtifact.Image != "payments-api:v1" || detail.AccountName != "prod-core" {
+			t.Fatalf("unexpected application detail: %+v", detail)
+		}
+	})
+
+	t.Run("returns catalog only detail when snapshot missing", func(t *testing.T) {
+		repoRoot := writeRepositoryFixture(t)
+		store := &stubStatusStore{getErr: statusstore.ErrNotFound}
+
+		options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, store)
+		if options.OverviewApplication == nil {
+			t.Fatalf("expected overview application provider")
+		}
+
+		detail, err := options.OverviewApplication("worker-prod")
+		if err != nil {
+			t.Fatalf("OverviewApplication returned error: %v", err)
+		}
+		if store.getCalls != 1 {
+			t.Fatalf("expected one Get call, got %d", store.getCalls)
+		}
+		if store.gotGetName != "worker-prod" {
+			t.Fatalf("expected Get lookup for worker-prod, got %q", store.gotGetName)
+		}
+		if store.listCalls != 0 {
+			t.Fatalf("expected no List calls, got %d", store.listCalls)
+		}
+		if detail.Name != "worker-prod" || detail.AccountName != "prod-core" || detail.DesiredArtifact.Image != "payments-worker:v2" {
+			t.Fatalf("unexpected application detail: %+v", detail)
+		}
+		if detail.DeployedArtifact != (domain.DeploymentArtifact{}) || detail.ObservedGeneration != 0 || detail.Sync != (domain.Sync{}) || detail.Health != (domain.Health{}) {
+			t.Fatalf("expected zero runtime fields in catalog-only detail, got %+v", detail)
+		}
+	})
+}
+
 func TestAPIOptionsOverviewDetailProvidersFallBackToCatalogWhenStoreMissing(t *testing.T) {
 	repoRoot := writeRepositoryFixture(t)
 
