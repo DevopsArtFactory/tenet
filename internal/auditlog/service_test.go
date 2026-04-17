@@ -162,6 +162,50 @@ func TestServiceListFiltersByDeploymentBeforeSortingAndLimit(t *testing.T) {
 	}
 }
 
+func TestServiceListFiltersByActionBeforeSortingAndLimit(t *testing.T) {
+	service := Service{
+		ListPlanPreviews: func() ([]planpreview.Record, error) {
+			return []planpreview.Record{
+				{
+					ID:             "plan_api_old",
+					DeploymentName: "api-prod",
+					Status:         planpreview.StatusReady,
+					CreatedAt:      "2026-04-17T08:00:00Z",
+					Approval:       planpreview.Approval{Required: true},
+					Source:         planpreview.SourceContext{Route: "/v1/overview/deployments/api-prod", Fingerprint: "fp_api_old"},
+				},
+			}, nil
+		},
+		ListApplyRequests: func() ([]applyrequest.Record, error) {
+			return []applyrequest.Record{
+				{
+					ID:             "apply_api_newest",
+					PlanID:         "plan_api_old",
+					DeploymentName: "api-prod",
+					Status:         applyrequest.StatusFailed,
+					CreatedAt:      "2026-04-18T08:30:00Z",
+					Source: applyrequest.SourceContext{
+						Route:       "/v1/plans/plan_api_old",
+						PlanStatus:  "ready",
+						Fingerprint: "fp_api_old",
+					},
+				},
+			}, nil
+		},
+	}
+
+	result, err := service.List(context.Background(), Query{Action: ActionApplyRequested, Limit: 1})
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	if len(result.Entries) != 1 {
+		t.Fatalf("expected one filtered entry, got %+v", result.Entries)
+	}
+	if entry := result.Entries[0]; entry.Action != string(ActionApplyRequested) || entry.ApplyID != "apply_api_newest" {
+		t.Fatalf("expected newest apply entry after action filtering, got %+v", entry)
+	}
+}
+
 func TestServiceListReturnsExplicitEmptyEntriesForDeploymentWithoutAuditRecords(t *testing.T) {
 	service := Service{
 		ListPlanPreviews: func() ([]planpreview.Record, error) {

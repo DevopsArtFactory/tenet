@@ -6,12 +6,17 @@ Tenet now exposes a small read-only audit timeline derived from the immutable op
 
 - `GET /v1/audit-logs`
 - `GET /v1/audit-logs?deployment={deploymentName}`
+- `GET /v1/audit-logs?action={action}`
 - `GET /v1/audit-logs?limit={n}`
+- `GET /v1/audit-logs?deployment={deploymentName}&action={action}`
+- `GET /v1/audit-logs?action={action}&limit={n}`
 - `GET /v1/audit-logs?deployment={deploymentName}&limit={n}`
+- `GET /v1/audit-logs?deployment={deploymentName}&action={action}&limit={n}`
 
 `/v1/audit-logs` is the preferred v1 route shape for this slice because the rest of the API already favors direct collection nouns such as `/v1/plans`, `/v1/applies`, and `/v1/catalog/...` instead of introducing an extra `/v1/audit/logs` hierarchy.
 
 `limit` is optional and must be a positive integer when present.
+`action` is optional and must be exactly `plan.created` or `apply.requested` when present.
 `deployment` is optional and must name exactly one deployment when present.
 The response is always newest-first.
 
@@ -68,6 +73,7 @@ The response shape is:
 
 Important details:
 - `action` is stable and action-oriented (`plan.created`, `apply.requested`)
+- the optional query `action` filter only supports those two exact values and rejects anything else with `400 Bad Request`
 - `timestamp` is copied from the persisted immutable record
 - `deploymentName`, `appRef`, and `environmentRef` help local operators and a future UI group related rows without reopening every record
 - `planId` / `applyId` link the timeline back to the immutable read models Tenet already exposes

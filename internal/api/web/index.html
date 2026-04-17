@@ -149,7 +149,15 @@
         applyId: '',
         resourceType: '',
         resourceId: '',
+        auditAction: '',
+        auditLimit: 0,
       };
+      const auditActionOptions = [
+        { value: '', label: 'All actions' },
+        { value: 'plan.created', label: 'plan.created' },
+        { value: 'apply.requested', label: 'apply.requested' },
+      ];
+      const validAuditActions = new Set(auditActionOptions.map((option) => option.value).filter(Boolean));
 
       const statusClass = (state) => {
         switch (state) {
@@ -850,6 +858,10 @@
           node.setSelectionRange(focusState.selectionStart, focusState.selectionEnd);
         }
       };
+      const normalizeAuditAction = (value) => {
+        const action = String(value || '').trim();
+        return validAuditActions.has(action) ? action : '';
+      };
       const parseViewState = () => {
         const params = new URLSearchParams(window.location.search);
         return {
@@ -871,8 +883,52 @@
           applyId: params.get('applyId') || '',
           resourceType: params.get('resourceType') || '',
           resourceId: params.get('resourceId') || '',
+          auditAction: normalizeAuditAction(params.get('action') || ''),
           auditLimit: Number.isInteger(limit) && limit > 0 ? limit : 0,
         };
+      };
+      const syncAuditPageState = () => {
+        const params = new URLSearchParams(window.location.search);
+        params.set('page', 'audit');
+        if (currentViewState.query) {
+          params.set('q', currentViewState.query);
+        } else {
+          params.delete('q');
+        }
+        if (currentViewState.syncState && currentViewState.syncState !== 'all') {
+          params.set('sync', currentViewState.syncState);
+        } else {
+          params.delete('sync');
+        }
+        if (currentViewState.account && currentViewState.account !== 'all') {
+          params.set('account', currentViewState.account);
+        } else {
+          params.delete('account');
+        }
+        if (currentPageState.deployment) {
+          params.set('deployment', currentPageState.deployment);
+        } else {
+          params.delete('deployment');
+        }
+        if (currentPageState.auditAction) {
+          params.set('action', currentPageState.auditAction);
+        } else {
+          params.delete('action');
+        }
+        if (currentPageState.auditLimit > 0) {
+          params.set('limit', String(currentPageState.auditLimit));
+        } else {
+          params.delete('limit');
+        }
+        params.delete('accountId');
+        params.delete('planId');
+        params.delete('applyId');
+        params.delete('resourceType');
+        params.delete('resourceId');
+        const query = params.toString();
+        const hash = window.location.hash || '';
+        const nextURL = query ? `${window.location.pathname}?${query}${hash}` : `${window.location.pathname}${hash}`;
+        history.replaceState({}, '', nextURL);
       };
       const normalizeViewState = (applications, state) => {
         const validSyncStates = new Set([
@@ -1489,8 +1545,12 @@
           if (!response.ok) throw new Error(`application detail request failed (${response.status})`);
           return response.json();
         });
-      const fetchAuditLogs = (limit = 0) => {
-        const route = limit > 0 ? `/v1/audit-logs?limit=${encodeURIComponent(String(limit))}` : '/v1/audit-logs';
+      const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {
+        const params = new URLSearchParams();
+        if (deploymentName) params.set('deployment', deploymentName);
+        if (action) params.set('action', action);
+        if (limit > 0) params.set('limit', String(limit));
+        const route = params.toString() ? `/v1/audit-logs?${params.toString()}` : '/v1/audit-logs';
         return fetch(route)
         .then((response) => {
           if (response.ok) return response.json();
@@ -1660,19 +1720,33 @@
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
         const backLink = createNavLink(buildPageURL('applications'), 'Back to applications', '_self');
+        const controls = createElement('div', 'toolbar-grid');
+        controls.append(createSelect('Action', currentPageState.auditAction, auditActionOptions, (event) => {
+          currentPageState = {
+            ...currentPageState,
+            page: 'audit',
+            auditAction: normalizeAuditAction(event.target.value),
+          };
+          syncAuditPageState();
+          loadAuditLogsPage();
+        }));
+        const activeFilters = [];
+        if (currentPageState.deployment) activeFilters.push(`deployment ${currentPageState.deployment}`);
+        if (currentPageState.auditAction) activeFilters.push(`action ${currentPageState.auditAction}`);
+        if (currentPageState.auditLimit > 0) activeFilters.push(`limit ${currentPageState.auditLimit}`);
         const toolbarActions = createElement('div', 'toolbar-actions');
         toolbarActions.append(
           backLink,
-          createElement('div', 'toolbar-active', 'Audit timeline · immutable plan/apply activity'),
+          createElement('div', 'toolbar-active', activeFilters.length ? `Audit filters: ${activeFilters.join(' · ')}` : 'Audit filters: none'),
         );
-        toolbar.replaceChildren(toolbarActions);
+        toolbar.replaceChildren(controls, toolbarActions);
 
         const detailSummary = createElement('article', 'account');
         detailSummary.append(
           createElement('div', 'label', 'Audit timeline'),
           createElement('h2', 'account-name', 'Operator audit log'),
           createElement('div', 'account-meta', 'Immutable plan preview and apply-request activity rendered from GET /v1/audit-logs.'),
-          createElement('div', 'account-topology', 'Newest entries first. Actor identity remains explicit when unavailable or unknown.'),
+          createElement('div', 'account-topology', activeFilters.length ? `Newest entries first. Actor identity remains explicit when unavailable or unknown. ${activeFilters.join(' · ')}.` : 'Newest entries first. Actor identity remains explicit when unavailable or unknown.'),
         );
         summary.replaceChildren(detailSummary);
       };
@@ -1708,7 +1782,7 @@
           return;
         }
 
-        page.append(createElement('div', 'detail-condition-meta', `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} · newest record first${currentPageState.auditLimit > 0 ? ` · limit ${currentPageState.auditLimit}` : ''}`));
+        page.append(createElement('div', 'detail-condition-meta', `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} · newest record first${currentPageState.deployment ? ` · deployment ${currentPageState.deployment}` : ''}${currentPageState.auditAction ? ` · action ${currentPageState.auditAction}` : ''}${currentPageState.auditLimit > 0 ? ` · limit ${currentPageState.auditLimit}` : ''}`));
         const rows = createElement('div', 'rows');
         entries.forEach((entry) => {
           const row = createElement('div', 'row');
@@ -1765,22 +1839,41 @@
 
           const links = createElement('div', 'row-links row-links-shell');
           if (entry.deploymentName) {
-            links.append(createNavLink(buildPageURL('application', { deployment: entry.deploymentName }), 'Open application', '_self'));
+            links.append(createNavLink(buildPageURL('application', { deployment: entry.deploymentName }), 'Open application drill-down', '_self'));
           }
           if (entry.deploymentName && (entry.planId || entry.applyId)) {
             links.append(createNavLink(buildPageURL('plan', {
               deployment: entry.deploymentName,
               planId: entry.planId || '',
               applyId: entry.applyId || '',
-            }), 'Open plan/apply', '_self'));
+            }), 'Open plan/apply workspace', '_self'));
           }
           if (links.children.length) {
+            row.append(createElement('div', 'row-hint', 'Continue in app'));
             row.append(links);
           }
           rows.append(row);
         });
         page.append(rows);
         root.replaceChildren(page);
+      };
+      const loadAuditLogsPage = () => {
+        renderAuditLogsState('Loading audit log…');
+        fetchAuditLogs({
+          deploymentName: currentPageState.deployment,
+          action: currentPageState.auditAction,
+          limit: currentPageState.auditLimit,
+        })
+          .then((result) => {
+            renderAuditLogsPage(result);
+          })
+          .catch((error) => {
+            if (error?.kind === 'unavailable') {
+              renderAuditLogsState('Audit log is currently unavailable.', 'error', error.message);
+              return;
+            }
+            renderAuditLogsState(`Failed to load audit log: ${error?.message || 'unknown error'}`, 'error');
+          });
       };
       const buildPlanPreviewRoute = (planId) => `/v1/plans/${encodeURIComponent(planId)}`;
       const fetchPlanPreview = (planId) => fetch(buildPlanPreviewRoute(planId))
@@ -2906,18 +2999,7 @@
             renderEmptyState(`Failed to load overview: ${error.message}`);
           });
       } else if (currentPageState.page === 'audit') {
-        renderAuditLogsState('Loading audit log…');
-        fetchAuditLogs(currentPageState.auditLimit)
-          .then((result) => {
-            renderAuditLogsPage(result);
-          })
-          .catch((error) => {
-            if (error?.kind === 'unavailable') {
-              renderAuditLogsState('Audit log is currently unavailable.', 'error', error.message);
-              return;
-            }
-            renderAuditLogsState(`Failed to load audit log: ${error?.message || 'unknown error'}`, 'error');
-          });
+        loadAuditLogsPage();
       } else if (currentPageState.page === 'account') {
         if (!currentPageState.accountId) {
           renderEmptyState('account page is missing an accountId query parameter');

@@ -212,8 +212,8 @@ worker_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-p
 audit_logs_request_id=$(assert_request_id_header "$API_BASE_URL/v1/audit-logs?limit=2")
 audit_logs=$(curl -fsS "$API_BASE_URL/v1/audit-logs?limit=2")
 ui=$(curl -fsS "$API_BASE_URL/")
-audit_ui_request_id=$(assert_request_id_header "$API_BASE_URL/?page=audit&limit=2")
-audit_ui=$(curl -fsS "$API_BASE_URL/?page=audit&limit=2")
+audit_ui_request_id=$(assert_request_id_header "$API_BASE_URL/?page=audit&action=apply.requested&limit=2")
+audit_ui=$(curl -fsS "$API_BASE_URL/?page=audit&action=apply.requested&limit=2")
 plan_apply_ui=$(curl -fsS "$API_BASE_URL/?page=plan&deployment=payments-api-prod&planId=$plan_id&applyId=$apply_id")
 
 SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" APPLY_RECORD_JSON="$apply_record" APPLY_RECORD_GET_JSON="$apply_record_get" DEPLOYMENT_EVENTS_JSON="$deployment_events" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" AUDIT_LOGS_JSON="$audit_logs" UI_HTML="$ui" AUDIT_UI_HTML="$audit_ui" PLAN_APPLY_UI_HTML="$plan_apply_ui" python3 - <<'PY'
@@ -346,7 +346,9 @@ for fragment in (
     "Loading audit log…",
     "Audit log is currently unavailable.",
     "Immutable operator audit log from GET /v1/audit-logs. Newest entries first. Actor identity remains explicit when unavailable or unknown.",
-    "const route = limit > 0 ? `/v1/audit-logs?limit=${encodeURIComponent(String(limit))}` : '/v1/audit-logs';",
+    "const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {",
+    "if (action) params.set('action', action);",
+    "createSelect('Action', currentPageState.auditAction, auditActionOptions, (event) => {",
 ):
     assert fragment in audit_ui, fragment
 

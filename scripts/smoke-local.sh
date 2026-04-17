@@ -20,6 +20,7 @@ rm -f "$PLAN_STORE_PATH"
 rm -f "$APPLY_STORE_PATH"
 LOG_FILE=$(mktemp)
 CONTROLLER_LOG_FILE=$(mktemp)
+INVALID_AUDIT_ACTION_BODY=$(mktemp)
 cleanup() {
   if [[ -n "${CONTROLLER_PID:-}" ]] && kill -0 "$CONTROLLER_PID" 2>/dev/null; then
     kill "$CONTROLLER_PID" 2>/dev/null || true
@@ -29,7 +30,7 @@ cleanup() {
     kill "$API_PID" 2>/dev/null || true
     wait "$API_PID" 2>/dev/null || true
   fi
-  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH"
+  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY"
 }
 trap cleanup EXIT
 
@@ -99,17 +100,19 @@ PY
 apply_record_get=$(curl -fsS "http://$HOST:$PORT/v1/applies/$apply_id")
 stale_plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d '{"ifMatch":"plan_deadbeef"}' "http://$HOST:$PORT/v1/plans/deployments/payments-api-prod")
 audit_logs=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs")
+audit_logs_action_filtered=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs?action=apply.requested")
 audit_logs_filtered=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs?deployment=payments-api-prod&limit=1")
 audit_logs_empty=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs?deployment=worker-prod")
+invalid_audit_action_status=$(curl -sS -o "$INVALID_AUDIT_ACTION_BODY" -w "%{http_code}" "http://$HOST:$PORT/v1/audit-logs?action=invalid.action")
 status=$(curl -fsS "http://$HOST:$PORT/v1/status/deployments/payments-api-prod")
 resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")
 worker_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 ui=$(curl -fsS "http://$HOST:$PORT/")
-audit_ui=$(curl -fsS "http://$HOST:$PORT/?page=audit")
+audit_ui=$(curl -fsS "http://$HOST:$PORT/?page=audit&action=apply.requested&limit=1")
 plan_ui=$(curl -fsS "http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id")
 apply_ui=$(curl -fsS "http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id&applyId=$apply_id")
 
-SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_EVENTS_FIXTURE_JSON="$deployment_events_fixture" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" APPLY_RECORD_JSON="$apply_record" APPLY_RECORD_GET_JSON="$apply_record_get" STALE_PLAN_PREVIEW_JSON="$stale_plan_preview" AUDIT_LOGS_JSON="$audit_logs" AUDIT_LOGS_FILTERED_JSON="$audit_logs_filtered" AUDIT_LOGS_EMPTY_JSON="$audit_logs_empty" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" AUDIT_UI_HTML="$audit_ui" PLAN_UI_HTML="$plan_ui" APPLY_UI_HTML="$apply_ui" python3 - <<'PY'
+SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_EVENTS_FIXTURE_JSON="$deployment_events_fixture" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" APPLY_RECORD_JSON="$apply_record" APPLY_RECORD_GET_JSON="$apply_record_get" STALE_PLAN_PREVIEW_JSON="$stale_plan_preview" AUDIT_LOGS_JSON="$audit_logs" AUDIT_LOGS_ACTION_FILTERED_JSON="$audit_logs_action_filtered" AUDIT_LOGS_FILTERED_JSON="$audit_logs_filtered" AUDIT_LOGS_EMPTY_JSON="$audit_logs_empty" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY="$(cat "$INVALID_AUDIT_ACTION_BODY")" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" AUDIT_UI_HTML="$audit_ui" PLAN_UI_HTML="$plan_ui" APPLY_UI_HTML="$apply_ui" python3 - <<'PY'
 import json, os
 summary = json.loads(os.environ['SUMMARY_JSON'])
 applications = json.loads(os.environ['APPLICATIONS_JSON'])
@@ -125,6 +128,7 @@ apply_record = json.loads(os.environ['APPLY_RECORD_JSON'])
 apply_record_get = json.loads(os.environ['APPLY_RECORD_GET_JSON'])
 stale_plan_preview = json.loads(os.environ['STALE_PLAN_PREVIEW_JSON'])
 audit_logs = json.loads(os.environ['AUDIT_LOGS_JSON'])
+audit_logs_action_filtered = json.loads(os.environ['AUDIT_LOGS_ACTION_FILTERED_JSON'])
 audit_logs_filtered = json.loads(os.environ['AUDIT_LOGS_FILTERED_JSON'])
 audit_logs_empty = json.loads(os.environ['AUDIT_LOGS_EMPTY_JSON'])
 status = json.loads(os.environ['STATUS_JSON'])
@@ -205,6 +209,9 @@ assert isinstance(audit_logs.get('entries', []), list), audit_logs
 assert len(audit_logs['entries']) >= 2, audit_logs
 assert any(entry['action'] == 'apply.requested' for entry in audit_logs['entries']), audit_logs
 assert any(entry['action'] == 'plan.created' for entry in audit_logs['entries']), audit_logs
+assert isinstance(audit_logs_action_filtered.get('entries', []), list), audit_logs_action_filtered
+assert len(audit_logs_action_filtered['entries']) == 1, audit_logs_action_filtered
+assert audit_logs_action_filtered['entries'][0]['action'] == 'apply.requested', audit_logs_action_filtered
 for entry in audit_logs['entries']:
     assert entry['deploymentName'] == 'payments-api-prod', entry
     assert entry['appRef'] == 'payments-api', entry
@@ -218,6 +225,8 @@ assert len(audit_logs_filtered['entries']) == 1, audit_logs_filtered
 assert audit_logs_filtered['entries'][0]['deploymentName'] == 'payments-api-prod', audit_logs_filtered
 assert isinstance(audit_logs_empty.get('entries', []), list), audit_logs_empty
 assert audit_logs_empty['entries'] == [], audit_logs_empty
+assert os.environ['INVALID_AUDIT_ACTION_STATUS'] == '400', os.environ['INVALID_AUDIT_ACTION_STATUS']
+assert 'invalid action query' in os.environ['INVALID_AUDIT_ACTION_BODY'], os.environ['INVALID_AUDIT_ACTION_BODY']
 assert status['deploymentName'] == 'payments-api-prod', status
 assert status['status']['sync']['state'] == 'Synced', status
 assert resource_logs['deploymentName'] == 'payments-api-prod', resource_logs
@@ -261,7 +270,11 @@ assert "createNavLink(buildPageURL('audit'), 'Audit log', '_self')" in ui, ui
 assert 'Audit timeline' in audit_ui, audit_ui
 assert 'Loading audit log…' in audit_ui, audit_ui
 assert 'Audit log is currently unavailable.' in audit_ui, audit_ui
-assert "const route = limit > 0 ? `/v1/audit-logs?limit=${encodeURIComponent(String(limit))}` : '/v1/audit-logs';" in audit_ui, audit_ui
+assert "const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {" in audit_ui, audit_ui
+assert "if (action) params.set('action', action);" in audit_ui, audit_ui
+assert "createSelect('Action', currentPageState.auditAction, auditActionOptions, (event) => {" in audit_ui, audit_ui
+assert 'Open application drill-down' in audit_ui, audit_ui
+assert 'Open plan/apply workspace' in audit_ui, audit_ui
 assert "fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`)" in ui, ui
 assert "const ifMatch = detail.sourceFingerprint || await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;" in ui, ui
 assert 'Recent logs' in ui, ui

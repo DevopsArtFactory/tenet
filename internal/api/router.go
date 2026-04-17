@@ -387,6 +387,14 @@ func NewRouter(options Options) http.Handler {
 			}
 			query.DeploymentName = deploymentName
 		}
+		if _, ok := r.URL.Query()["action"]; ok {
+			action := strings.TrimSpace(r.URL.Query().Get("action"))
+			if !auditlog.ValidAction(action) {
+				http.Error(w, "invalid action query", http.StatusBadRequest)
+				return
+			}
+			query.Action = auditlog.Action(action)
+		}
 		if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
 			limit, err := strconv.Atoi(raw)
 			if err != nil || limit < 1 {
