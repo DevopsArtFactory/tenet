@@ -31,6 +31,15 @@ func assertInternalServerErrorResponse(t *testing.T, resp *httptest.ResponseReco
 	}
 }
 
+func assertResponseRequestID(t *testing.T, resp *httptest.ResponseRecorder) string {
+	t.Helper()
+	requestID := resp.Header().Get(RequestIDHeader)
+	if requestID == "" {
+		t.Fatalf("expected %s response header to be set", RequestIDHeader)
+	}
+	return requestID
+}
+
 func TestRouterHealthz(t *testing.T) {
 	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
@@ -40,6 +49,52 @@ func TestRouterHealthz(t *testing.T) {
 
 	if resp.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+	assertResponseRequestID(t, resp)
+}
+
+func TestRouterSetsRequestIDHeaderAcrossRepresentativeResponses(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		options    Options
+		method     string
+		target     string
+		wantStatus int
+	}{
+		{
+			name:       "not found",
+			options:    Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}},
+			method:     http.MethodGet,
+			target:     "/missing",
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name:       "method not allowed",
+			options:    Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}},
+			method:     http.MethodPost,
+			target:     "/healthz",
+			wantStatus: http.StatusMethodNotAllowed,
+		},
+		{
+			name:       "service unavailable",
+			options:    Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}},
+			method:     http.MethodGet,
+			target:     "/v1/catalog/summary",
+			wantStatus: http.StatusServiceUnavailable,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			router := NewRouter(tc.options)
+			req := httptest.NewRequest(tc.method, tc.target, nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != tc.wantStatus {
+				t.Fatalf("expected %d, got %d", tc.wantStatus, resp.Code)
+			}
+			assertResponseRequestID(t, resp)
+		})
 	}
 }
 
@@ -2013,6 +2068,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 			deploymentName string
 			resourceType   string
 			resourceName   string
+			requestID      string
 		}
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
@@ -2026,6 +2082,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 				gotRequest.deploymentName = deploymentName
 				gotRequest.resourceType = resourceType
 				gotRequest.resourceName = resourceName
+				gotRequest.requestID = RequestIDFromContext(ctx)
 				return expected, nil
 			},
 		})
@@ -2038,11 +2095,13 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		if resp.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
 		}
+		responseRequestID := assertResponseRequestID(t, resp)
 		if !reflect.DeepEqual(gotRequest, struct {
 			deploymentName string
 			resourceType   string
 			resourceName   string
-		}{deploymentName: "api-prod", resourceType: "ecsService", resourceName: "payments-api-prod-service"}) {
+			requestID      string
+		}{deploymentName: "api-prod", resourceType: "ecsService", resourceName: "payments-api-prod-service", requestID: responseRequestID}) {
 			t.Fatalf("unexpected provider request: %+v", gotRequest)
 		}
 
@@ -2077,6 +2136,47 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		}
 		if _, ok := entry["stream"]; ok {
 			t.Fatalf("expected optional stream to be omitted when empty, got %#v", entries[1])
+		}
+	})
+
+	t.Run("honors inbound request-id header", func(t *testing.T) {
+		const inboundRequestID = "operator-correlation-123"
+
+		var providerRequestID string
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "api-prod" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+				providerRequestID = RequestIDFromContext(ctx)
+				return resourcelogs.Result{
+					DeploymentName: deploymentName,
+					ResourceType:   resourceType,
+					ResourceName:   resourceName,
+					Available:      false,
+					Entries:        []resourcelogs.Entry{},
+				}, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service", nil)
+		req.Header.Set("request-id", inboundRequestID)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if got := resp.Header().Get(RequestIDHeader); got != inboundRequestID {
+			t.Fatalf("expected response %s %q, got %q", RequestIDHeader, inboundRequestID, got)
+		}
+		if providerRequestID != inboundRequestID {
+			t.Fatalf("expected provider context request ID %q, got %q", inboundRequestID, providerRequestID)
 		}
 	})
 

@@ -71,6 +71,8 @@ http://localhost:8080/
 
 You should land on the applications overview page.
 
+Every HTTP response from `tenet-api` also carries a `Request-Id` header. If your client already sends `request-id`, Tenet echoes it back; otherwise it generates one. Capture that value when an API call fails and use the same ID to correlate any request-scoped handler or provider logs that read `api.RequestIDFromContext(ctx)`.
+
 ### Run with Docker
 
 ```bash
@@ -110,6 +112,13 @@ Open one application to see the linked rollout resources grouped into clear sect
 
 ### Resource detail
 Open a concrete resource to inspect the deeper operational context for that resource, including rollout and runtime information. Recent logs are surfaced here when the resource type supports them.
+
+Canonical resource-log routes stay stable across rollout modes so operators can bookmark or script them:
+- `asgWeightedTargetGroups`: `trafficShiftPlan` (`{deployment}-weighted-routing`)
+- `ecsRolling`: `ecsService` (`{deployment}-service`)
+
+Example:
+- `/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service`
 
 ## Repository layout
 

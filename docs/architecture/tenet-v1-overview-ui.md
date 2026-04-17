@@ -51,6 +51,16 @@ This page is where Tenet can show things like:
 
 The goal is to make troubleshooting possible without forcing the user to jump directly into raw AWS consoles for the first step.
 
+Canonical fallback resource-detail bindings remain stable so operators can share or bookmark the exact resource page they need:
+- `asgWeightedTargetGroups`
+- `asgInstanceRefresh`
+- `ecsRolling`
+- `ecsCodeDeploy`
+- `ecsService` → `{deployment}-service` → `ECS service Tenet updates with native rolling deployment`, optionally extended with rollout-strategy qualifiers such as `while respecting min healthy 90% and warmup 30s`
+
+Example resource-log route:
+- `/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service`
+
 ### Additional operator views
 The current UI also still exposes supporting operator surfaces beyond the main drill-down path:
 - account-oriented views for grouped project/environment context

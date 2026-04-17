@@ -30,6 +30,8 @@ make smoke-local
 
 This boots `tenet-api` against the committed example fixtures, checks `/healthz`, and validates representative JSON payloads from the catalog and status endpoints.
 
+The same smoke flow also verifies that representative responses carry a `Request-Id` header. Operators should capture that response ID when an API call fails; Tenet threads the same value through the request context so handlers and providers can log `api.RequestIDFromContext(ctx)` and make API failures easy to correlate with backend/provider diagnostics.
+
 ### Full Docker stack
 
 ```bash

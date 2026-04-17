@@ -781,6 +781,12 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Recent logs")
 	}
 	for _, fragment := range []string{
+		"assert_request_id_header() {",
+		"assert headers.get(\"request-id\"), headers",
+		"assert_request_id_header \"http://$HOST:$PORT/healthz\"",
+		"assert_request_id_header \"http://$HOST:$PORT/v1/catalog/summary\"",
+		"assert_request_id_header \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing\"",
+		"assert_request_id_header \"http://$HOST:$PORT/\"",
 		"resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing\")",
 		"worker_resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service\")",
 		"assert resource_logs['resourceType'] == 'trafficShiftPlan', resource_logs",
