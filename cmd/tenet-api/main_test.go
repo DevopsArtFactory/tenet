@@ -11,6 +11,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
+	"github.com/DevopsArtFactory/tenet/internal/planpreview"
 	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
@@ -118,6 +119,38 @@ func TestAPIOptionsOverviewDeploymentReturnsNotFoundForRepoUnknownDeployment(t *
 	}
 	if store.listCalls != 0 {
 		t.Fatalf("expected no List calls, got %d", store.listCalls)
+	}
+}
+
+func TestAPIOptionsPlanPreviewPersistsAndReadsBack(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	t.Setenv("TENET_PLAN_STORE_PATH", filepath.Join(t.TempDir(), "plan-previews.json"))
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
+	if options.CreateDeploymentPlanPreview == nil || options.PlanPreview == nil {
+		t.Fatalf("expected plan preview providers to be wired")
+	}
+
+	created, err := options.CreateDeploymentPlanPreview(context.Background(), "api-prod", planpreview.CreateRequest{})
+	if err != nil {
+		t.Fatalf("CreateDeploymentPlanPreview returned error: %v", err)
+	}
+	if !created.Created || created.Record.ID == "" {
+		t.Fatalf("expected a persisted immutable plan preview, got %+v", created)
+	}
+	if created.Record.DeploymentName != "api-prod" || created.Record.Status != planpreview.StatusReady {
+		t.Fatalf("unexpected created plan preview: %+v", created.Record)
+	}
+	if len(created.Record.Operations) == 0 {
+		t.Fatalf("expected derived plan operations, got %+v", created.Record)
+	}
+
+	fetched, err := options.PlanPreview(context.Background(), created.Record.ID)
+	if err != nil {
+		t.Fatalf("PlanPreview returned error: %v", err)
+	}
+	if fetched.ID != created.Record.ID || fetched.Source.Route != "/v1/overview/deployments/api-prod" {
+		t.Fatalf("unexpected fetched immutable plan preview: %+v", fetched)
 	}
 }
 

@@ -139,6 +139,7 @@ Current plan/apply workspace behavior:
 - keeps machine-readable `runtimeSummary.changes[]` rows while also rendering human-readable `runtimeSummary.changeDetails[]`
 - derives a read-only `Plan operations` table from `rollout.steps[]`, execution-resource metadata, and the latest runtime summary in the deployment detail route
 - shows a visible derived `high` / `medium` / `low` risk badge plus concise approval guidance from the current read model before any future mutation wiring
+- has a backend dependency on the new immutable plan-preview API (`POST /v1/plans/deployments/{deploymentName}` + `GET /v1/plans/{planId}`), which now persists server-authored read-only previews with stable IDs, source fingerprints, generations, and derived risk/approval metadata for future UI wiring; the matching optimistic token is exposed directly on deployment/application detail as `sourceFingerprint`
 - displays disabled `Create Plan` / `Apply Plan` buttons
 - explicitly states that mutation APIs are not wired yet
 
