@@ -1582,10 +1582,13 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const resourceLink = links.find((node) => node.textContent === 'Open resource');
   const driftLink = links.find((node) => node.textContent === 'Drift view');
   const planLink = links.find((node) => node.textContent === 'Plan/apply');
+  const auditLink = links.find((node) => node.textContent === 'Audit log');
   if (!resourceLink) throw new Error('expected resource drill-down link');
   if (!driftLink || !driftLink.href.includes('/?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging')) throw new Error('expected drift workspace href to include deployment and preserved filters');
   if (!planLink || !planLink.href.includes('/?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging')) throw new Error('expected plan workspace href to include deployment and preserved filters');
+  if (!auditLink || !auditLink.href.includes('/?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging')) throw new Error('expected audit workspace href to include deployment and preserved filters');
   if (driftLink.target !== '_self' || planLink.target !== '_self') throw new Error('expected workspace drill-down links to stay in embedded UI flow');
+  if (auditLink.target !== '_self') throw new Error('expected audit workspace link to stay in embedded UI flow');
   if (!resourceLink.href.includes('/?page=resource&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging')) throw new Error('expected resource detail href to include deployment and preserved filters');
   if (resourceLink.target !== '_self') throw new Error('expected resource drill-down link to stay in embedded UI flow');
   if (resourceLink.rel) throw new Error('expected resource drill-down link to avoid new-tab rel attributes');
@@ -3066,6 +3069,7 @@ async function render(detail) {
   const toolbarText = collectText(run.document.getElementById('toolbar')).join(' | ');
   if (!text.includes('Drift viewer')) throw new Error('expected drift workspace title');
   if (!toolbarText.includes('Back to application')) throw new Error('expected workspace back link');
+  if (!toolbarText.includes('Audit log')) throw new Error('expected workspace audit link');
   if (!toolbarText.includes('api-prod')) throw new Error('expected workspace active deployment title');
   if (!text.includes('Latest runtime signals')) throw new Error('expected drift workspace runtime signals section');
   if (!text.includes('deployment-controller')) throw new Error('expected drift workspace runtime source value');
@@ -3096,6 +3100,9 @@ async function render(detail) {
   if (allRows.some((row) => row.includes('BoundaryRegressionGuard') && row.includes('Healthy true should stay out of drift rows'))) throw new Error('expected Healthy=true boundary to stay out of drift rows');
   if (!text.includes('ghcr.io/example/payments:v9')) throw new Error('expected desired artifact value in drift rows');
   if (!text.includes('ghcr.io/example/payments:v7')) throw new Error('expected actual artifact value in drift rows');
+  const toolbarLinks = collectNodes(run.document.getElementById('toolbar'), (node) => node.tagName === 'A');
+  const auditLink = toolbarLinks.find((node) => node.textContent === 'Audit log');
+  if (!auditLink || auditLink.href !== '/?page=audit&deployment=api-prod' || auditLink.target !== '_self' || auditLink.rel) throw new Error('expected drift workspace audit link to preserve deployment context');
   if (!text.includes('high')) throw new Error('expected high severity indicator');
   if (!text.includes('medium')) throw new Error('expected medium severity indicator');
   if (!text.includes('low')) throw new Error('expected low severity indicator');
@@ -3375,6 +3382,9 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const root = document.getElementById('accounts');
   if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/deployments/api-prod') throw new Error('expected only deployment detail before create, got ' + fetchCalls.join(', '));
   let text = collectText(root).join(' | ');
+  let toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
+  let auditLink = toolbarLinks.find((node) => node.textContent === 'Audit log');
+  if (!auditLink || auditLink.href !== '/?page=audit&deployment=api-prod' || auditLink.target !== '_self' || auditLink.rel) throw new Error('expected plan workspace audit link to preserve deployment context');
   if (!text.includes('Plan and apply')) throw new Error('expected plan workspace title');
   if (!text.includes('No stored plan preview yet')) throw new Error('expected idle plan-preview heading');
   if (!text.includes('Create Plan will POST /v1/plans/deployments/api-prod')) throw new Error('expected idle create-plan guidance');
@@ -3427,6 +3437,9 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!createApplyRequestOptions || createApplyRequestOptions.method !== 'POST') throw new Error('expected Apply Plan to POST');
   if (window.location.search !== '?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123') throw new Error('expected Apply Plan to persist applyId in URL, got ' + window.location.search);
   text = collectText(root).join(' | ');
+  toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
+  auditLink = toolbarLinks.find((node) => node.textContent === 'Audit log');
+  if (!auditLink || auditLink.href !== '/?page=audit&deployment=api-prod' || auditLink.target !== '_self' || auditLink.rel) throw new Error('expected plan workspace audit link to preserve deployment context after create');
   if (!text.includes('Apply request failed')) throw new Error('expected apply failed heading after create');
   if (!text.includes('Immutable apply request apply_failed_123 was created and recorded as failed.')) throw new Error('expected apply failed create message');
   if (!text.includes('Stored apply request')) throw new Error('expected stored apply request section');
@@ -3738,7 +3751,11 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!toolbarText.includes('Back to applications')) throw new Error('expected audit page back link');
   if (!toolbarText.includes('Audit filters: deployment payments-api-prod · limit 2')) throw new Error('expected audit toolbar filters');
   if (!summaryText.includes('Operator audit log')) throw new Error('expected audit page summary title');
+  if (!summaryText.includes('Deployment audit timeline')) throw new Error('expected deployment-scoped audit summary label');
+  if (!summaryText.includes('Immutable plan preview and apply-request activity for deployment payments-api-prod rendered from GET /v1/audit-logs.')) throw new Error('expected deployment-scoped audit summary copy');
   if (!accountsText.includes('Audit timeline')) throw new Error('expected audit page body title');
+  if (!accountsText.includes('Active deployment context')) throw new Error('expected deployment context callout');
+  if (!accountsText.includes('payments-api-prod')) throw new Error('expected deployment context value');
   if (!accountsText.includes('apply.requested')) throw new Error('expected newest audit entry text');
   if (!accountsText.includes('plan.created')) throw new Error('expected older audit entry text');
   if (!accountsText.includes('2 entries')) throw new Error('expected audit entry count copy');
@@ -3852,6 +3869,13 @@ async function renderWithFetch(fetchImpl, search = '?page=audit') {
   await settle();
   const emptyText = collectText(loadingRun.document.getElementById('accounts')).join(' | ');
   if (!emptyText.includes('No audit activity has been persisted yet.')) throw new Error('expected audit empty state after resolve');
+
+  const deploymentEmptyRun = await renderWithFetch(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ entries: [] }) }), '?page=audit&deployment=worker-prod');
+  await settle();
+  await settle();
+  const deploymentEmptyText = collectText(deploymentEmptyRun.document.getElementById('accounts')).join(' | ');
+  if (!deploymentEmptyText.includes('Active deployment context')) throw new Error('expected deployment-scoped empty state context callout');
+  if (!deploymentEmptyText.includes('No audit activity has been persisted yet for deployment worker-prod.')) throw new Error('expected deployment-scoped audit empty state');
 
   const unavailableRun = await renderWithFetch(() => Promise.resolve({
     ok: false,

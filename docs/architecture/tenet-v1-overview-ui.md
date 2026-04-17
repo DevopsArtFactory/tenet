@@ -27,7 +27,7 @@ The first page focuses on:
 - health
 - last update
 
-The goal is fast triage, not completeness. The denser account/group deployment surface now lives on the secondary `/?page=account&accountId={awsAccountId}` drill-down, where the UI reuses `GET /v1/overview/accounts/{awsAccountId}` plus grouped project/environment sections instead of crowding the landing page. The landing page also exposes a small `_self` link to the dedicated bookmarkable audit route at `/?page=audit` (with optional `&action=plan.created|apply.requested` and `&limit={n}` for a narrower newest-first window).
+The goal is fast triage, not completeness. The denser account/group deployment surface now lives on the secondary `/?page=account&accountId={awsAccountId}` drill-down, where the UI reuses `GET /v1/overview/accounts/{awsAccountId}` plus grouped project/environment sections instead of crowding the landing page. The landing page also exposes a small `_self` link to the dedicated bookmarkable audit route at `/?page=audit` (with optional `&deployment={deploymentName}`, `&action=plan.created|apply.requested`, and `&limit={n}` for a narrower newest-first window).
 
 ### 1b. Audit timeline
 The audit page is a sibling operator slice, not a replacement for the application drill-down.
@@ -37,6 +37,8 @@ It stays intentionally narrow:
 - preserve optional bookmarkable `action`, `deployment`, and `limit` URL state on the audit route
 - render a safe action filter control for exactly `plan.created` and `apply.requested`
 - render immutable plan/apply activity newest-first
+- make a selected deployment obvious in both the audit chrome and the audit body when `deployment={deploymentName}` is present
+- swap to deployment-specific empty-state copy when one deployment is selected and no audit entries match, while keeping the generic unfiltered empty state unchanged
 - keep actor identity explicit as unavailable or unknown instead of inventing names
 - provide `_self` links back into the existing `application` drill-down and `plan` workspace when deployment / plan / apply identifiers exist
 
@@ -50,7 +52,7 @@ Resources are grouped into human-friendly sections such as:
 - Traffic routing
 - Config and access
 
-The page is backed by `GET /v1/overview/applications/{deploymentName}` and keeps the deeper `resource`, `drift`, and `plan` routes anchored to `GET /v1/overview/deployments/{deploymentName}`. A narrow controller-runtime-events slice is also rendered here by calling `GET /v1/overview/deployments/{deploymentName}/events` directly so the bookmarkable application detail stays operator-useful without pulling the full deployment-detail payload. Both detail surfaces preserve additive `sourceFingerprint` so the same reviewed payload can feed the read-only plan-preview flow without inventing a second client-side identity model.
+The page is backed by `GET /v1/overview/applications/{deploymentName}` and keeps the deeper `resource`, `drift`, and `plan` routes anchored to `GET /v1/overview/deployments/{deploymentName}`. A narrow controller-runtime-events slice is also rendered here by calling `GET /v1/overview/deployments/{deploymentName}/events` directly so the bookmarkable application detail stays operator-useful without pulling the full deployment-detail payload. Both detail surfaces preserve additive `sourceFingerprint` so the same reviewed payload can feed the read-only plan-preview flow without inventing a second client-side identity model. The companion `_self` `Audit log` link now opens `/?page=audit&deployment={deploymentName}` so the operator keeps the same deployment context when switching into the immutable audit slice.
 
 This page should help the operator decide which concrete resource to inspect next while still exposing the most recent controller-derived runtime timeline in a clearly non-audit section.
 
@@ -83,7 +85,7 @@ The neighboring read-only plan-preview flow is also part of the operator contrac
 - `GET /v1/audit-logs?deployment={deploymentName}` narrows the local audit timeline to one deployment without introducing a second route family
 - `GET /v1/audit-logs?action={action}` narrows the same local audit timeline to exactly `plan.created` or `apply.requested`
 - `GET /v1/audit-logs` projects persisted plan/apply records into a local audit timeline; the route also accepts `?limit={n}` for a newest-first window and optional `action={action}` for exact action filtering
-- the embedded `/?page=audit` route now renders that audit timeline directly with explicit loading, empty, unavailable (`503`), and generic fetch-error states, accepts optional `&action={action}` / `&limit={n}` to request a narrower newest-first window from the API, and shows active filter copy such as `Audit filters: action apply.requested · limit 2` when reopened from the URL
+- the embedded `/?page=audit` route now renders that audit timeline directly with explicit loading, empty, unavailable (`503`), and generic fetch-error states, accepts optional `&action={action}` / `&limit={n}` for action-only bookmarks and optional `&deployment={deploymentName}` / `&action={action}` / `&limit={n}` for deployment-scoped bookmarks, shows active filter copy such as `Audit filters: action apply.requested · limit 2` for action-only bookmarks and `Audit filters: deployment payments-api-prod · action apply.requested · limit 2` for deployment-scoped bookmarks, and keeps deployment-scoped copy obvious in both the page chrome and body
 - the embedded `/?page=plan&deployment={deploymentName}&planId={planId}` workspace keeps the URL shareable/bookmarkable and prefers the reviewed detail `sourceFingerprint` for optimistic `ifMatch` protection before falling back to a loaded preview fingerprint
 - live execution remains intentionally disabled by default in this backend slice, so the apply-request route records a failed immutable contract with operator-facing error/details instead of contacting AWS
 - actor identity is intentionally explicit rather than invented: `GET /v1/audit-logs` returns `actor.available=false` because the persisted immutable stores do not currently capture operator auth data
