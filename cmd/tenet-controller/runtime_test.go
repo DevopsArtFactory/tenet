@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -940,6 +941,148 @@ func TestEmitRuntimePlansPersistsInstanceRefreshRolloutSummaryForEC2RollingDeplo
 		Description: "Normalized userdata bootstrap source for refreshed EC2 instances",
 	}}
 	assertRolloutExecutionDetails(t, status.Rollout.Execution, want)
+}
+
+func TestEmitRuntimePlansPersistsConfigAwareWeightedTargetGroupRolloutSummary(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"canary","warmupSeconds":90},"traffic":{"port":443},"capacity":{"desired":4,"min":2,"max":8},"binary":"s3://releases.example.com/payments-api/prod/payments-api-linux-amd64","userdata":{"type":" file ","path":" ./userdata/bootstrap/../api-prod.sh "}}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"conditions":[]}}]`)
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	status := snapshots[0].Status
+	if status.Rollout == nil {
+		t.Fatalf("expected rollout summary to be persisted")
+	}
+	got := status.Rollout.Steps[2].Detail
+	for _, want := range []string{"desired 4", "min 2", "max 8", "file:userdata/api-prod.sh", "warmup 90s"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected weighted target group candidate detail to mention %q, got %q", want, got)
+		}
+	}
+}
+
+func TestWeightedTargetGroupCandidateDetailIncludesConfiguredUserDataWithoutZeroWarmupNoise(t *testing.T) {
+	deployment := domain.Deployment{
+		UserData: domain.DeploymentUserData{Type: "file", Path: "userdata/api-prod.sh"},
+		RolloutConfig: domain.DeploymentRolloutConfig{
+			Capacity: domain.DeploymentRolloutCapacity{Desired: 4, Min: 2, Max: 8},
+		},
+	}
+
+	got := weightedTargetGroupCandidateDetail(deployment)
+	if !strings.Contains(got, "file:userdata/api-prod.sh") {
+		t.Fatalf("expected weighted target group detail to include normalized userdata source, got %q", got)
+	}
+	if !strings.Contains(got, "desired 4, min 2, and max 8 instances") {
+		t.Fatalf("expected weighted target group detail to include capacity bounds, got %q", got)
+	}
+	if strings.Contains(got, "warmup 0s") {
+		t.Fatalf("expected weighted target group detail to omit zero warmup noise, got %q", got)
+	}
+}
+
+func TestEmitRuntimePlansPersistsConfigAwareECSCodeDeployRolloutSummary(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "worker-prod.json"), `{"name":"worker-prod","appRef":"payments-worker","environmentRef":"prod-apne2","target":{"type":"ecs"},"strategy":{"type":"linear","warmupSeconds":45,"minHealthyPercent":80},"traffic":{"port":8080},"capacity":{"desired":1,"min":1,"max":2},"image":"ghcr.io/devopsartfactory/payments-worker:1.2.3"}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, `[{"deploymentName":"worker-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"task set missing"},"health":{"overall":"Progressing","summary":"deployment pending"},"conditions":[]}}]`)
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	status := snapshots[0].Status
+	if status.Rollout == nil {
+		t.Fatalf("expected rollout summary to be persisted")
+	}
+	got := status.Rollout.Steps[3].Detail
+	for _, want := range []string{"min healthy 80%", "warmup 45s"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected ECS CodeDeploy traffic-shift detail to mention %q, got %q", want, got)
+		}
+	}
+}
+
+func TestEmitRuntimePlansPersistsConfigAwareRollingRolloutSummary(t *testing.T) {
+	t.Run("ec2 instance refresh", func(t *testing.T) {
+		root := t.TempDir()
+		writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+		writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+		writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"rolling"},"traffic":{"port":443},"capacity":{"desired":2,"min":1,"max":3},"userdata":{"type":"file","path":"userdata/api-prod-refresh.sh"},"stacks":[{"stack":"api-prod","account":"prod-core","env":"prod-apne2","replacement_type":"rolling_update","rolling_update_instance_count":2,"regions":[{"region":"ap-northeast-2"}]}]}`)
+		statusPath := filepath.Join(root, "status", "deployments.json")
+		writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"refresh pending"},"health":{"overall":"Progressing","summary":"replacement capacity pending"},"conditions":[]}}]`)
+
+		logger := log.New(&bytes.Buffer{}, "", 0)
+		config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+		if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+			t.Fatalf("emitRuntimePlans returned error: %v", err)
+		}
+
+		snapshots, err := statusstore.Load(statusPath)
+		if err != nil {
+			t.Fatalf("failed to load status snapshots: %v", err)
+		}
+		status := snapshots[0].Status
+		if status.Rollout == nil {
+			t.Fatalf("expected rollout summary to be persisted")
+		}
+		if !strings.Contains(status.Rollout.Summary, "batch size 2") {
+			t.Fatalf("expected EC2 rolling summary to mention batch size, got %q", status.Rollout.Summary)
+		}
+		if !strings.Contains(status.Rollout.Execution[0].Description, "batch size 2") {
+			t.Fatalf("expected EC2 rolling execution detail to mention batch size, got %+v", status.Rollout.Execution)
+		}
+	})
+
+	t.Run("ecs rolling", func(t *testing.T) {
+		root := t.TempDir()
+		writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+		writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+		writeJSON(t, filepath.Join(root, "deployments", "worker-prod.json"), `{"name":"worker-prod","appRef":"payments-worker","environmentRef":"prod-apne2","target":{"type":"ecs"},"strategy":{"type":"rolling","minHealthyPercent":75},"traffic":{"port":8080},"capacity":{"desired":1,"min":1,"max":2},"image":"ghcr.io/devopsartfactory/payments-worker:1.2.3"}`)
+		statusPath := filepath.Join(root, "status", "deployments.json")
+		writeJSON(t, statusPath, `[{"deploymentName":"worker-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"service update pending"},"health":{"overall":"Progressing","summary":"deployment pending"},"conditions":[]}}]`)
+
+		logger := log.New(&bytes.Buffer{}, "", 0)
+		config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+		if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+			t.Fatalf("emitRuntimePlans returned error: %v", err)
+		}
+
+		snapshots, err := statusstore.Load(statusPath)
+		if err != nil {
+			t.Fatalf("failed to load status snapshots: %v", err)
+		}
+		status := snapshots[0].Status
+		if status.Rollout == nil {
+			t.Fatalf("expected rollout summary to be persisted")
+		}
+		if !strings.Contains(status.Rollout.Summary, "min healthy 75%") {
+			t.Fatalf("expected ECS rolling summary to mention min healthy percent, got %q", status.Rollout.Summary)
+		}
+		if !strings.Contains(status.Rollout.Execution[0].Description, "min healthy 75%") {
+			t.Fatalf("expected ECS rolling execution detail to mention min healthy percent, got %+v", status.Rollout.Execution)
+		}
+	})
 }
 
 func TestEmitRuntimePlansBootstrapsMissingFileBackedStatusStore(t *testing.T) {

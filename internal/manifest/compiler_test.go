@@ -236,6 +236,103 @@ func TestCompilePreservesNormalizedStackUserDataFallbackForEC2(t *testing.T) {
 	}
 }
 
+func TestCompilePreservesNormalizedRolloutConfig(t *testing.T) {
+	catalog, err := Compile(CatalogSpec{
+		Accounts: []spec.AccountSpec{{
+			Name:           "prod-core",
+			AWSAccountID:   "123456789012",
+			RoleARN:        "arn:aws:iam::123456789012:role/TenetDeployerRole",
+			AllowedRegions: []string{"ap-northeast-2"},
+		}},
+		Environments: []spec.EnvironmentSpec{{
+			Name:       "prod-apne2",
+			AccountRef: "prod-core",
+			Region:     "ap-northeast-2",
+		}},
+		Deployments: []spec.DeploymentSpec{{
+			Name:           "payments-api-prod",
+			AppRef:         "payments-api",
+			EnvironmentRef: "prod-apne2",
+			Target:         spec.TargetSpec{Type: spec.TargetTypeEC2},
+			Strategy:       spec.StrategySpec{Type: spec.StrategyTypeBlueGreen, WarmupSeconds: 60, MinHealthyPercent: 90},
+			Capacity:       spec.CapacitySpec{Desired: 4, Min: 2, Max: 8},
+			Binary:         "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
+			Stacks: []spec.StackSpec{{
+				Stack:                      "payments-api-prod",
+				Account:                    "prod-core",
+				Env:                        "prod-apne2",
+				ReplacementType:            "blueGreen",
+				TerminationDelayRate:       30,
+				RollingUpdateInstanceCount: 2,
+				Capacity:                   spec.CapacitySpec{Desired: 5, Min: 3, Max: 9},
+				Regions:                    []spec.RegionSpec{{Region: "ap-northeast-2"}},
+			}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Compile returned error: %v", err)
+	}
+
+	got := catalog.Deployments[0].RolloutConfig
+	if got.Strategy.WarmupSeconds != 60 || got.Strategy.MinHealthyPercent != 90 {
+		t.Fatalf("expected normalized strategy rollout config, got %+v", got.Strategy)
+	}
+	if got.Capacity.Desired != 4 || got.Capacity.Min != 2 || got.Capacity.Max != 8 {
+		t.Fatalf("expected normalized top-level capacity rollout config, got %+v", got.Capacity)
+	}
+	if len(got.Stacks) != 1 {
+		t.Fatalf("expected one normalized stack rollout config, got %+v", got.Stacks)
+	}
+	if got.Stacks[0].TerminationDelayRate != 30 || got.Stacks[0].RollingUpdateInstanceCount != 2 {
+		t.Fatalf("expected normalized stack rollout config, got %+v", got.Stacks[0])
+	}
+}
+
+func TestCompilePreservesNormalizedStackRolloutConfigFallback(t *testing.T) {
+	catalog, err := Compile(CatalogSpec{
+		Accounts: []spec.AccountSpec{{
+			Name:           "prod-core",
+			AWSAccountID:   "123456789012",
+			RoleARN:        "arn:aws:iam::123456789012:role/TenetDeployerRole",
+			AllowedRegions: []string{"ap-northeast-2"},
+		}},
+		Environments: []spec.EnvironmentSpec{{
+			Name:       "prod-apne2",
+			AccountRef: "prod-core",
+			Region:     "ap-northeast-2",
+		}},
+		Deployments: []spec.DeploymentSpec{{
+			Name:   "payments-api-prod",
+			Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
+			Stacks: []spec.StackSpec{{
+				Stack:                      "payments-api-prod",
+				Account:                    "prod-core",
+				Env:                        "prod-apne2",
+				ReplacementType:            "rolling_update",
+				TerminationDelayRate:       45,
+				RollingUpdateInstanceCount: 1,
+				UserData:                   spec.UserDataSpec{Type: " git ", Path: " ./userdata/bootstrap/../payments-api-prod.sh "},
+				Capacity:                   spec.CapacitySpec{Desired: 2, Min: 1, Max: 3},
+				Regions:                    []spec.RegionSpec{{Region: "ap-northeast-2"}},
+			}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Compile returned error: %v", err)
+	}
+
+	got := catalog.Deployments[0]
+	if got.RolloutConfig.Capacity.Desired != 2 || got.RolloutConfig.Capacity.Min != 1 || got.RolloutConfig.Capacity.Max != 3 {
+		t.Fatalf("expected stack capacity fallback in rollout config, got %+v", got.RolloutConfig.Capacity)
+	}
+	if len(got.RolloutConfig.Stacks) != 1 || got.RolloutConfig.Stacks[0].TerminationDelayRate != 45 || got.RolloutConfig.Stacks[0].RollingUpdateInstanceCount != 1 {
+		t.Fatalf("expected stack rollout config fallback, got %+v", got.RolloutConfig.Stacks)
+	}
+	if got.UserData.Type != "git" || got.UserData.Path != "userdata/payments-api-prod.sh" {
+		t.Fatalf("expected userData fallback to remain normalized, got %+v", got.UserData)
+	}
+}
+
 func TestCompileAssignsStableNonZeroDesiredGeneration(t *testing.T) {
 	input := testCompileGenerationCatalogSpec()
 
@@ -265,6 +362,77 @@ func TestCompileAssignsStableNonZeroDesiredGeneration(t *testing.T) {
 	}
 }
 
+func TestCompileNormalizesDesiredGeneration(t *testing.T) {
+	base := testCompileGenerationCatalogSpec()
+
+	t.Run("equivalent normalized userData paths yield the same generation", func(t *testing.T) {
+		first, err := Compile(base)
+		if err != nil {
+			t.Fatalf("first Compile returned error: %v", err)
+		}
+
+		variant := testCompileGenerationCatalogSpec()
+		variant.Deployments[0].UserData = spec.UserDataSpec{Type: " file ", Path: " ./userdata/bootstrap/../payments-api-prod.sh "}
+		variant.Deployments[0].Stacks[0].UserData = spec.UserDataSpec{Type: " file ", Path: " ./userdata/bootstrap/../payments-api-prod.sh "}
+		second, err := Compile(variant)
+		if err != nil {
+			t.Fatalf("second Compile returned error: %v", err)
+		}
+
+		if second.Deployments[0].Generation != first.Deployments[0].Generation {
+			t.Fatalf("expected desired generation to stay stable for normalized-equivalent userData, got %d and %d", first.Deployments[0].Generation, second.Deployments[0].Generation)
+		}
+	})
+
+	t.Run("equivalent replacement_type aliases yield the same generation", func(t *testing.T) {
+		firstInput := testCompileGenerationCatalogSpec()
+		firstInput.Deployments[0].Strategy = spec.StrategySpec{}
+		firstInput.Deployments[0].Capacity = spec.CapacitySpec{}
+		firstInput.Deployments[0].UserData = spec.UserDataSpec{}
+		firstInput.Deployments[0].Stacks[0].ReplacementType = "rollingUpdate"
+		first, err := Compile(firstInput)
+		if err != nil {
+			t.Fatalf("first Compile returned error: %v", err)
+		}
+
+		secondInput := testCompileGenerationCatalogSpec()
+		secondInput.Deployments[0].Strategy = spec.StrategySpec{}
+		secondInput.Deployments[0].Capacity = spec.CapacitySpec{}
+		secondInput.Deployments[0].UserData = spec.UserDataSpec{}
+		secondInput.Deployments[0].Stacks[0].ReplacementType = "rolling_update"
+		second, err := Compile(secondInput)
+		if err != nil {
+			t.Fatalf("second Compile returned error: %v", err)
+		}
+
+		if second.Deployments[0].Generation != first.Deployments[0].Generation {
+			t.Fatalf("expected desired generation to stay stable for normalized-equivalent replacement_type aliases, got %d and %d", first.Deployments[0].Generation, second.Deployments[0].Generation)
+		}
+	})
+
+	t.Run("equivalent top-level and stack fallback rollout config yield the same generation", func(t *testing.T) {
+		firstInput := testCompileGenerationCatalogSpec()
+		firstInput.Deployments[0].Stacks[0].Capacity = spec.CapacitySpec{}
+		firstInput.Deployments[0].Stacks[0].UserData = spec.UserDataSpec{}
+		first, err := Compile(firstInput)
+		if err != nil {
+			t.Fatalf("first Compile returned error: %v", err)
+		}
+
+		secondInput := testCompileGenerationCatalogSpec()
+		secondInput.Deployments[0].Capacity = spec.CapacitySpec{}
+		secondInput.Deployments[0].UserData = spec.UserDataSpec{}
+		second, err := Compile(secondInput)
+		if err != nil {
+			t.Fatalf("second Compile returned error: %v", err)
+		}
+
+		if second.Deployments[0].Generation != first.Deployments[0].Generation {
+			t.Fatalf("expected desired generation to stay stable for normalized-equivalent rollout config fallback, got %d and %d", first.Deployments[0].Generation, second.Deployments[0].Generation)
+		}
+	})
+}
+
 func TestCompileChangesDesiredGenerationWhenCapacityChanges(t *testing.T) {
 	input := testCompileGenerationCatalogSpec()
 
@@ -282,6 +450,84 @@ func TestCompileChangesDesiredGenerationWhenCapacityChanges(t *testing.T) {
 	if second.Deployments[0].Generation == first.Deployments[0].Generation {
 		t.Fatalf("expected desired generation to change when capacity changes, got %d", second.Deployments[0].Generation)
 	}
+}
+
+func TestCompileChangesDesiredGenerationWhenRolloutConfigChanges(t *testing.T) {
+	t.Run("warmup seconds", func(t *testing.T) {
+		input := testCompileGenerationCatalogSpec()
+
+		first, err := Compile(input)
+		if err != nil {
+			t.Fatalf("first Compile returned error: %v", err)
+		}
+
+		input.Deployments[0].Strategy.WarmupSeconds = 90
+		second, err := Compile(input)
+		if err != nil {
+			t.Fatalf("second Compile returned error: %v", err)
+		}
+
+		if second.Deployments[0].Generation == first.Deployments[0].Generation {
+			t.Fatalf("expected desired generation to change when warmup seconds change, got %d", second.Deployments[0].Generation)
+		}
+	})
+
+	t.Run("min healthy percent", func(t *testing.T) {
+		input := testCompileGenerationCatalogSpec()
+
+		first, err := Compile(input)
+		if err != nil {
+			t.Fatalf("first Compile returned error: %v", err)
+		}
+
+		input.Deployments[0].Strategy.MinHealthyPercent = 95
+		second, err := Compile(input)
+		if err != nil {
+			t.Fatalf("second Compile returned error: %v", err)
+		}
+
+		if second.Deployments[0].Generation == first.Deployments[0].Generation {
+			t.Fatalf("expected desired generation to change when minHealthyPercent changes, got %d", second.Deployments[0].Generation)
+		}
+	})
+
+	t.Run("termination delay rate", func(t *testing.T) {
+		input := testCompileGenerationCatalogSpec()
+
+		first, err := Compile(input)
+		if err != nil {
+			t.Fatalf("first Compile returned error: %v", err)
+		}
+
+		input.Deployments[0].Stacks[0].TerminationDelayRate = 45
+		second, err := Compile(input)
+		if err != nil {
+			t.Fatalf("second Compile returned error: %v", err)
+		}
+
+		if second.Deployments[0].Generation == first.Deployments[0].Generation {
+			t.Fatalf("expected desired generation to change when termination delay rate changes, got %d", second.Deployments[0].Generation)
+		}
+	})
+
+	t.Run("rolling update instance count", func(t *testing.T) {
+		input := testCompileGenerationCatalogSpec()
+
+		first, err := Compile(input)
+		if err != nil {
+			t.Fatalf("first Compile returned error: %v", err)
+		}
+
+		input.Deployments[0].Stacks[0].RollingUpdateInstanceCount = 2
+		second, err := Compile(input)
+		if err != nil {
+			t.Fatalf("second Compile returned error: %v", err)
+		}
+
+		if second.Deployments[0].Generation == first.Deployments[0].Generation {
+			t.Fatalf("expected desired generation to change when rolling update instance count changes, got %d", second.Deployments[0].Generation)
+		}
+	})
 }
 
 func TestCompileChangesDesiredGenerationWhenTagsChange(t *testing.T) {

@@ -333,7 +333,7 @@ func deriveRolloutSummary(deployment domain.Deployment, status domain.Deployment
 		ObservedGeneration: status.ObservedGeneration,
 		Phase:              rolloutPhaseForStep(plan, currentIndex),
 		CurrentStep:        currentStep,
-		Summary:            rolloutSummaryForStep(status, plan, currentIndex),
+		Summary:            rolloutSummaryForStep(deployment, status, plan, currentIndex),
 		TargetType:         deployment.TargetType,
 		Strategy:           deployment.Strategy,
 		ExecutionMode:      deployment.ExecutionMode,
@@ -379,24 +379,27 @@ func rolloutStepStatus(index int, currentIndex int, completed bool) domain.Rollo
 func rolloutStepDetail(deployment domain.Deployment, plan reconcile.Plan, kind reconcile.StepKind) string {
 	switch kind {
 	case reconcile.StepCreateCandidateCapacity:
+		if detail := weightedTargetGroupCandidateDetail(deployment); detail != "" {
+			return detail
+		}
 		return "Create a fresh candidate Auto Scaling Group bootstrapped from userdata before attaching it to the candidate target group."
 	case reconcile.StepShiftTrafficCanary:
 		if plan.ContainsStep(reconcile.StepCreateCodeDeployDeployment) {
-			return "Shift a small canary slice of ECS service traffic to the replacement task set through CodeDeploy before the full cutover."
+			return codeDeployTrafficShiftDetail(deployment, "Shift a small canary slice of ECS service traffic to the replacement task set through CodeDeploy before the full cutover.")
 		}
 		return "Shift a small canary slice of production traffic to the candidate target group before full promotion."
 	case reconcile.StepShiftTrafficLinear:
 		if plan.ContainsStep(reconcile.StepCreateCodeDeployDeployment) {
-			return "Advance ECS traffic in linear increments through CodeDeploy until the replacement task set serves all traffic."
+			return codeDeployTrafficShiftDetail(deployment, "Advance ECS traffic in linear increments through CodeDeploy until the replacement task set serves all traffic.")
 		}
 		return "Advance ALB traffic in linear increments toward the candidate target group until promotion is safe."
 	case reconcile.StepShiftTrafficFull:
 		if plan.ContainsStep(reconcile.StepCreateCodeDeployDeployment) {
-			return "Shift all ECS service traffic to the replacement task set through CodeDeploy in a single blue/green cutover."
+			return codeDeployTrafficShiftDetail(deployment, "Shift all ECS service traffic to the replacement task set through CodeDeploy in a single blue/green cutover.")
 		}
 		return "Shift all production traffic from the active target group to the candidate target group in one blue/green cutover."
 	case reconcile.StepUpdateECSService:
-		return "Update the ECS service to start a native rolling deployment that replaces running tasks in place."
+		return ecsRollingUpdateDetail(deployment)
 	case reconcile.StepCreateCodeDeployDeployment:
 		if deployment.ExecutionMode == "ecsCodeDeploy" {
 			return "Create a CodeDeploy deployment to coordinate blue/green ECS traffic shifting for the replacement task set."
@@ -439,10 +442,14 @@ func deriveRolloutExecutionDetails(deployment domain.Deployment) []domain.Rollou
 			Description: "Normalized userdata bootstrap source for candidate EC2 capacity",
 		}}
 	case "asgInstanceRefresh":
+		description := "Service Auto Scaling Group Tenet refreshes in place"
+		if batchSize := instanceRefreshBatchSize(deployment); batchSize > 0 {
+			description += fmt.Sprintf(" with batch size %d", batchSize)
+		}
 		return []domain.RolloutExecutionDetail{{
 			Resource:    "serviceAutoScalingGroup",
 			Name:        deployment.Name + "-service",
-			Description: "Service Auto Scaling Group Tenet refreshes in place",
+			Description: description,
 		}, {
 			Resource:    "userDataBootstrapSource",
 			Name:        userDataBootstrapSource(deployment.UserData),
@@ -479,10 +486,14 @@ func deriveRolloutExecutionDetails(deployment domain.Deployment) []domain.Rollou
 			Description: "Green task set target group CodeDeploy warms before shifting ECS traffic",
 		}}
 	case "ecsRolling":
+		description := "ECS service Tenet updates with native rolling deployment"
+		if qualifiers := rolloutStrategyQualifiers(deployment.RolloutConfig.Strategy); len(qualifiers) > 0 {
+			description += " while respecting " + strings.Join(qualifiers, " and ")
+		}
 		return []domain.RolloutExecutionDetail{{
 			Resource:    "ecsService",
 			Name:        deployment.Name + "-service",
-			Description: "ECS service Tenet updates with native rolling deployment",
+			Description: description,
 		}}
 	default:
 		return nil
@@ -500,6 +511,69 @@ func userDataBootstrapSource(userData domain.DeploymentUserData) string {
 		return userData.Path
 	}
 	return userData.Type + ":" + userData.Path
+}
+
+func weightedTargetGroupCandidateDetail(deployment domain.Deployment) string {
+	capacity := deployment.RolloutConfig.Capacity
+	warmup := deployment.RolloutConfig.Strategy.WarmupSeconds
+	bootstrap := userDataBootstrapSource(deployment.UserData)
+	hasCapacity := capacity.Desired > 1 || capacity.Min > 1 || capacity.Max > 1
+	if warmup == 0 && !hasCapacity {
+		return ""
+	}
+
+	parts := []string{"Create a fresh candidate Auto Scaling Group"}
+	if bootstrap != "unspecified" {
+		parts = append(parts, fmt.Sprintf("bootstrapped from normalized userdata source %s", bootstrap))
+	} else {
+		parts = append(parts, "bootstrapped from userdata")
+	}
+	if hasCapacity {
+		parts = append(parts, fmt.Sprintf("with desired %d, min %d, and max %d instances", capacity.Desired, capacity.Min, capacity.Max))
+	}
+	detail := strings.Join(parts, " ")
+	if warmup > 0 {
+		detail += fmt.Sprintf(", then complete a warmup %ds", warmup)
+	}
+	detail += " before attaching it to the candidate target group."
+	return detail
+}
+
+func codeDeployTrafficShiftDetail(deployment domain.Deployment, base string) string {
+	qualifiers := rolloutStrategyQualifiers(deployment.RolloutConfig.Strategy)
+	if len(qualifiers) == 0 {
+		return base
+	}
+	return base[:len(base)-1] + " while respecting " + strings.Join(qualifiers, " and ") + "."
+}
+
+func ecsRollingUpdateDetail(deployment domain.Deployment) string {
+	base := "Update the ECS service to start a native rolling deployment that replaces running tasks in place."
+	qualifiers := rolloutStrategyQualifiers(deployment.RolloutConfig.Strategy)
+	if len(qualifiers) == 0 {
+		return base
+	}
+	return base[:len(base)-1] + " while respecting " + strings.Join(qualifiers, " and ") + "."
+}
+
+func rolloutStrategyQualifiers(strategy domain.DeploymentRolloutStrategy) []string {
+	qualifiers := make([]string, 0, 2)
+	if strategy.MinHealthyPercent > 0 {
+		qualifiers = append(qualifiers, fmt.Sprintf("min healthy %d%%", strategy.MinHealthyPercent))
+	}
+	if strategy.WarmupSeconds > 0 {
+		qualifiers = append(qualifiers, fmt.Sprintf("warmup %ds", strategy.WarmupSeconds))
+	}
+	return qualifiers
+}
+
+func instanceRefreshBatchSize(deployment domain.Deployment) int {
+	for _, stack := range deployment.RolloutConfig.Stacks {
+		if stack.RollingUpdateInstanceCount > 0 {
+			return stack.RollingUpdateInstanceCount
+		}
+	}
+	return 0
 }
 
 func rolloutPhaseForStep(plan reconcile.Plan, currentIndex int) domain.RolloutPhase {
@@ -529,7 +603,7 @@ func rolloutPhaseForStep(plan reconcile.Plan, currentIndex int) domain.RolloutPh
 	}
 }
 
-func rolloutSummaryForStep(status domain.DeploymentStatus, plan reconcile.Plan, currentIndex int) string {
+func rolloutSummaryForStep(deployment domain.Deployment, status domain.DeploymentStatus, plan reconcile.Plan, currentIndex int) string {
 	if currentIndex < 0 || len(plan.Steps) == 0 {
 		return "Rollout pending"
 	}
@@ -552,10 +626,16 @@ func rolloutSummaryForStep(status domain.DeploymentStatus, plan reconcile.Plan, 
 	case reconcile.StepPromoteCandidateCapacity:
 		return "Promoting candidate capacity through weighted target groups"
 	case reconcile.StepStartInstanceRefresh:
+		if batchSize := instanceRefreshBatchSize(deployment); batchSize > 0 {
+			return fmt.Sprintf("Starting EC2 instance refresh with batch size %d", batchSize)
+		}
 		return "Starting EC2 instance refresh"
 	case reconcile.StepVerifyReplacementCapacity:
 		return "Verifying replacement capacity during instance refresh"
 	case reconcile.StepUpdateECSService:
+		if qualifiers := rolloutStrategyQualifiers(deployment.RolloutConfig.Strategy); len(qualifiers) > 0 {
+			return "Updating ECS service deployment while respecting " + strings.Join(qualifiers, " and ")
+		}
 		return "Updating ECS service deployment"
 	case reconcile.StepCreateCodeDeployDeployment:
 		return "Creating CodeDeploy traffic shift deployment"
