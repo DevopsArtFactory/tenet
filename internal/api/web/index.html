@@ -272,7 +272,25 @@
             return 0;
         }
       };
-      const deriveDeploymentDriftRows = (detail) => {
+      const driftValueText = (value) => value == null || value === '' ? '—' : String(value);
+      const normalizeManagedDriftRow = (row) => {
+        if (!row || typeof row !== 'object') return null;
+        const field = typeof row.field === 'string' ? row.field.trim() : '';
+        if (!field) return null;
+        const severity = typeof row.severity === 'string' ? row.severity.toLowerCase() : '';
+        return {
+          field,
+          desired: driftValueText(row.desired),
+          actual: driftValueText(row.actual),
+          severity: ['high', 'medium', 'low'].includes(severity) ? severity : 'low',
+          search: [field, row.desired, row.actual, row.severity].filter((value) => value != null && value !== '').join(' '),
+        };
+      };
+      const managedDeploymentDriftRows = (detail) => {
+        if (!Array.isArray(detail?.managedDrift)) return null;
+        return detail.managedDrift.map((row) => normalizeManagedDriftRow(row)).filter(Boolean);
+      };
+      const deriveFallbackDeploymentDriftRows = (detail) => {
         const rows = [];
         const desiredArtifact = artifact(detail.desiredArtifact);
         const actualArtifact = artifact(detail.deployedArtifact) !== '—' ? artifact(detail.deployedArtifact) : runtimeArtifactText(detail.runtimeSummary?.deployedArtifact) || '—';
@@ -347,6 +365,11 @@
         });
 
         return rows;
+      };
+      const deploymentDriftRows = (detail) => {
+        const managedRows = managedDeploymentDriftRows(detail);
+        if (managedRows) return managedRows;
+        return deriveFallbackDeploymentDriftRows(detail);
       };
       const rolloutPhaseForStepKind = (stepKind) => {
         switch (stepKind) {
@@ -467,7 +490,7 @@
         });
       };
       const derivePlanRisk = (detail) => {
-        const driftRows = deriveDeploymentDriftRows(detail);
+        const driftRows = deploymentDriftRows(detail);
         const reasons = [];
         const currentStep = detail.rollout?.currentStep || detail.runtimeSummary?.currentStep || '';
         const hasHighDrift = driftRows.some((row) => row.severity === 'high');
@@ -2469,7 +2492,8 @@
 
         if (mode === 'drift') {
           const driftSection = createDetailSection(emptyTitle);
-          const driftRows = deriveDeploymentDriftRows(detail);
+          const driftRows = deploymentDriftRows(detail);
+          const driftUsesManagedRows = Array.isArray(detail?.managedDrift);
           let driftQuery = '';
           let driftSeverity = 'all';
           let driftSort = 'field';
@@ -2492,7 +2516,12 @@
               });
 
             if (!filteredRows.length) {
-              driftTableWrap.replaceChildren(createElement('div', 'detail-state', 'No field-level drift is currently derived from the deployment read model.'));
+              const emptyMessage = driftRows.length
+                ? 'No field-level drift rows match the current filters.'
+                : driftUsesManagedRows
+                  ? 'No backend-authored field-level drift rows are currently reported for this deployment.'
+                  : 'No field-level drift is currently derived from the deployment read model.';
+              driftTableWrap.replaceChildren(createElement('div', 'detail-state', emptyMessage));
               return;
             }
 
@@ -2541,6 +2570,7 @@
               renderDriftRows();
             }),
           );
+          driftSection.append(createElement('div', 'detail-section-copy', 'Backend-authored managed drift rows are preferred when present. Older deployment-detail payloads fall back to client-derived drift from the deployment read model.'));
           driftSection.append(driftControls, driftTableWrap);
           renderDriftRows();
           sections.push(driftSection);

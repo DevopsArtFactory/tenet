@@ -3073,6 +3073,113 @@ func TestDeploymentWorkspaceDriftViewWithNodeHarness(t *testing.T) {
 		t.Fatalf("marshal embedded script: %v", err)
 	}
 
+	managedDetailJSON, err := json.Marshal(map[string]any{
+		"name":               "api-managed",
+		"appRef":             "payments",
+		"environmentRef":     "prod",
+		"region":             "us-west-2",
+		"accountName":        "acct-a",
+		"awsAccountId":       "111111111111",
+		"targetType":         "ecs",
+		"strategy":           "linear",
+		"executionMode":      "ecsCodeDeploy",
+		"desiredGeneration":  9,
+		"observedGeneration": 7,
+		"sync":               map[string]any{"state": "Drifted", "reason": "Managed drift rows were published from the deployment detail"},
+		"health":             map[string]any{"overall": "Unhealthy", "summary": "weighted routing is still inconsistent"},
+		"desiredArtifact":    map[string]any{"image": "ghcr.io/example/payments:v9"},
+		"deployedArtifact":   map[string]any{"image": "ghcr.io/example/payments:v7"},
+		"managedDrift": []map[string]any{
+			{
+				"field":    "listener.weight",
+				"desired":  "stable=100 canary=0",
+				"actual":   "<script>alert('xss')</script> stable=80 canary=20",
+				"severity": "high",
+			},
+			{
+				"field":    "service.taskDefinition",
+				"desired":  "payments:42",
+				"actual":   "payments:41",
+				"severity": "medium",
+			},
+		},
+		"runtimeSummary": map[string]any{
+			"source":             "deployment-controller",
+			"timestamp":          "2026-04-16T06:48:00Z",
+			"targetType":         "ec2",
+			"strategy":           "canary",
+			"executionMode":      "asgWeightedTargetGroups",
+			"desiredGeneration":  9,
+			"observedGeneration": 7,
+			"historyCount":       2,
+			"changes":            []string{"managed drift row emitted"},
+			"deployedArtifact":   map[string]any{"binary": "s3://artifacts.example/payments/api-managed-r17"},
+			"conditions":         []map[string]any{{"type": "DriftDetected", "status": true, "reason": "TargetGroupMismatch", "message": "Runtime summary still shows drift"}},
+		},
+		"rollout": map[string]any{
+			"execution": []map[string]any{{
+				"name":        "prod-router",
+				"resource":    "aws_lb_listener_rule.payments_prod",
+				"description": "Routes production traffic to the stable target group",
+			}},
+		},
+		"conditions": []map[string]any{{
+			"type":    "DriftDetected",
+			"status":  true,
+			"reason":  "TargetGroupMismatch",
+			"message": "Fallback-derived drift rows should be suppressed when managedDrift is present",
+		}, {
+			"type":    "Healthy",
+			"status":  false,
+			"reason":  "TargetDeregistrationLag",
+			"message": "Fallback-derived health drift rows should be suppressed when managedDrift is present",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal managed drift detail body: %v", err)
+	}
+
+	managedEmptyDetailJSON, err := json.Marshal(map[string]any{
+		"name":               "api-managed-empty",
+		"appRef":             "payments",
+		"environmentRef":     "prod",
+		"region":             "us-west-2",
+		"accountName":        "acct-a",
+		"awsAccountId":       "111111111111",
+		"targetType":         "ecs",
+		"strategy":           "linear",
+		"executionMode":      "ecsCodeDeploy",
+		"desiredGeneration":  9,
+		"observedGeneration": 7,
+		"sync":               map[string]any{"state": "Drifted", "reason": "Managed drift rows are empty for this deployment"},
+		"health":             map[string]any{"overall": "Unhealthy", "summary": "weighted routing is still inconsistent"},
+		"desiredArtifact":    map[string]any{"image": "ghcr.io/example/payments:v9"},
+		"deployedArtifact":   map[string]any{"image": "ghcr.io/example/payments:v7"},
+		"managedDrift":       []map[string]any{},
+		"runtimeSummary": map[string]any{
+			"source":             "deployment-controller",
+			"timestamp":          "2026-04-16T06:49:00Z",
+			"targetType":         "ec2",
+			"strategy":           "canary",
+			"executionMode":      "asgWeightedTargetGroups",
+			"desiredGeneration":  9,
+			"observedGeneration": 7,
+			"historyCount":       2,
+			"changes":            []string{"managed drift empty"},
+			"deployedArtifact":   map[string]any{"binary": "s3://artifacts.example/payments/api-managed-empty-r17"},
+			"conditions":         []map[string]any{{"type": "DriftDetected", "status": true, "reason": "TargetGroupMismatch", "message": "Fallback-derived drift rows should stay suppressed when managedDrift is empty"}},
+		},
+		"conditions": []map[string]any{{
+			"type":    "DriftDetected",
+			"status":  true,
+			"reason":  "TargetGroupMismatch",
+			"message": "Fallback-derived drift rows should stay suppressed when managedDrift is empty",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal managed empty drift detail body: %v", err)
+	}
+
 	driftDetailJSON, err := json.Marshal(map[string]any{
 		"name":               "api-prod",
 		"appRef":             "payments",
@@ -3180,6 +3287,8 @@ func TestDeploymentWorkspaceDriftViewWithNodeHarness(t *testing.T) {
 
 	nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;
+const managedDetail = ` + string(managedDetailJSON) + `;
+const managedEmptyDetail = ` + string(managedEmptyDetailJSON) + `;
 const driftDetail = ` + string(driftDetailJSON) + `;
 const emptyDetail = ` + string(emptyDetailJSON) + `;
 class Element {
@@ -3244,6 +3353,31 @@ async function render(detail) {
   return { document, fetchCalls, window };
 }
 (async () => {
+  const managedRun = await render(managedDetail);
+  const managedText = collectText(managedRun.document.getElementById('accounts')).join(' | ');
+  const managedRows = collectNodes(managedRun.document.getElementById('accounts'), (node) => node.tagName === 'TR').slice(1).map((node) => collectText(node).join(' | '));
+  if (!managedText.includes('Backend-authored managed drift rows are preferred when present. Older deployment-detail payloads fall back to client-derived drift from the deployment read model.')) throw new Error('expected managed drift workspace source-selection copy');
+  if (!managedRows.some((row) => row.includes('listener.weight'))) throw new Error('expected backend-authored managed drift row');
+  if (!managedRows.some((row) => row.includes('service.taskDefinition'))) throw new Error('expected second backend-authored managed drift row');
+  if (managedRows.some((row) => row.includes('artifact'))) throw new Error('expected managed drift rows to suppress fallback artifact derivation');
+  if (managedRows.some((row) => row.includes('condition.DriftDetected'))) throw new Error('expected managed drift rows to suppress fallback condition derivation');
+  if (!managedText.includes("<script>alert('xss')</script> stable=80 canary=20")) throw new Error('expected managed drift value to render as safe text');
+  const managedSeverityField = managedRun.document.querySelector('[data-toolbar-field="Severity"]');
+  if (!managedSeverityField) throw new Error('expected managed drift severity filter control');
+  managedSeverityField.value = 'high';
+  managedSeverityField.dispatch('change', { target: managedSeverityField });
+  await settle();
+  const managedHighRows = collectNodes(managedRun.document.getElementById('accounts'), (node) => node.tagName === 'TR').slice(1).map((node) => collectText(node).join(' | '));
+  if (managedHighRows.length !== 1) throw new Error('expected managed drift severity filter to narrow to one row, got ' + managedHighRows.length);
+  if (!managedHighRows[0].includes('listener.weight')) throw new Error('expected managed drift severity filter to retain the high severity row');
+
+  const managedEmptyRun = await render(managedEmptyDetail);
+  const managedEmptyText = collectText(managedEmptyRun.document.getElementById('accounts')).join(' | ');
+  const managedEmptyRows = collectNodes(managedEmptyRun.document.getElementById('accounts'), (node) => node.tagName === 'TR').slice(1);
+  if (!managedEmptyText.includes('No backend-authored field-level drift rows are currently reported for this deployment.')) throw new Error('expected explicit backend-authored empty drift message');
+  if (managedEmptyText.includes('condition.DriftDetected')) throw new Error('expected empty managed drift state to suppress fallback condition rows');
+  if (managedEmptyRows.length !== 0) throw new Error('expected empty managed drift state to suppress fallback drift table rows');
+
   const run = await render(driftDetail);
   if (run.fetchCalls.length !== 1 || run.fetchCalls[0] !== '/v1/overview/deployments/api-prod') throw new Error('expected drift workspace to load only deployment detail, got ' + run.fetchCalls.join(', '));
   const text = collectText(run.document.getElementById('accounts')).join(' | ');

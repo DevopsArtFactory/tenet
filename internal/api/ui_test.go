@@ -506,7 +506,14 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"backLink.rel = '';",
 		"const emptyTitle = mode === 'drift' ? 'Field-level drift' : 'Plan operations';",
 		"const driftSeverityRank = (severity) => {",
-		"const deriveDeploymentDriftRows = (detail) => {",
+		"const driftValueText = (value) => value == null || value === '' ? '—' : String(value);",
+		"const normalizeManagedDriftRow = (row) => {",
+		"const managedDeploymentDriftRows = (detail) => {",
+		"if (!Array.isArray(detail?.managedDrift)) return null;",
+		"const deriveFallbackDeploymentDriftRows = (detail) => {",
+		"const deploymentDriftRows = (detail) => {",
+		"const managedRows = managedDeploymentDriftRows(detail);",
+		"if (managedRows) return managedRows;",
 		"const rolloutPhaseForStepKind = (stepKind) => {",
 		"const effectiveRolloutContext = (detail) => ({",
 		"detail.runtimeSummary?.executionMode || detail.executionMode || ''",
@@ -519,7 +526,8 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"field: 'generation',",
 		"field: 'runtimeContext.executionMode',",
 		"field: `condition.${condition.type || 'Unknown'}`",
-		"const driftRows = deriveDeploymentDriftRows(detail);",
+		"const driftRows = deploymentDriftRows(detail);",
+		"const driftUsesManagedRows = Array.isArray(detail?.managedDrift);",
 		"createInput('Filter drift rows', '', 'Filter by field, value, or condition context', (event) => {",
 		"createSelect('Severity', 'all', [",
 		"createSelect('Sort by', 'field', [",
@@ -527,7 +535,10 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"Desired",
 		"Actual",
 		"Severity",
+		"No field-level drift rows match the current filters.",
+		"No backend-authored field-level drift rows are currently reported for this deployment.",
 		"No field-level drift is currently derived from the deployment read model.",
+		"Backend-authored managed drift rows are preferred when present. Older deployment-detail payloads fall back to client-derived drift from the deployment read model.",
 		"const requestError = (kind, message, status = 0) => {",
 		"const responseErrorMessage = (response, fallback) => {",
 		"const buildPlanPreviewRoute = (planId) => `/v1/plans/${encodeURIComponent(planId)}`;",
@@ -998,6 +1009,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert isinstance(deployment_runtime_summary.get('changeDetails', []), list), deployment_detail") {
 		t.Fatalf("expected smoke-local.sh to verify deployment detail runtimeSummary.changeDetails shape")
 	}
+	if !strings.Contains(text, "managed_drift = deployment_detail.get('managedDrift')") || !strings.Contains(text, "if managed_drift is not None:") || !strings.Contains(text, "assert isinstance(managed_drift, list), deployment_detail") {
+		t.Fatalf("expected smoke-local.sh to verify deployment detail managedDrift shape when present")
+	}
 	if !strings.Contains(text, "controller_events=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/events\"") {
 		t.Fatalf("expected smoke-local.sh to hit deployment events after controller starts")
 	}
@@ -1009,6 +1023,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert 'Runtime change details' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Runtime change details")
+	}
+	if !strings.Contains(text, "assert 'Backend-authored managed drift rows are preferred when present. Older deployment-detail payloads fall back to client-derived drift from the deployment read model.' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains mixed-mode drift workspace copy")
 	}
 	for _, fragment := range []string{
 		"assert 'Plan preview actions' in ui, ui",
