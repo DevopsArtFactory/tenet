@@ -6,6 +6,7 @@ COMPOSE_FILE=${TENET_COMPOSE_FILE:-$ROOT/compose.yaml}
 HOST=${TENET_DOCKER_SMOKE_HOST:-127.0.0.1}
 PORT=${TENET_DOCKER_SMOKE_PORT:-8080}
 API_BASE_URL=${TENET_DOCKER_SMOKE_API_BASE_URL:-http://$HOST:$PORT}
+INVALID_AUDIT_ACTION_BODY=$(mktemp)
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "smoke-docker: docker is required" >&2
@@ -109,6 +110,7 @@ cleanup() {
   fi
 
   "${COMPOSE[@]}" down --remove-orphans >/dev/null 2>&1 || true
+  rm -f "$INVALID_AUDIT_ACTION_BODY"
 }
 
 trap 'cleanup "$?"' EXIT
@@ -137,6 +139,7 @@ healthz_request_id=$(assert_request_id_header "$API_BASE_URL/healthz")
 summary_request_id=$(assert_request_id_header "$API_BASE_URL/v1/catalog/summary")
 worker_resource_logs_request_id=$(assert_request_id_header "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 ui_request_id=$(assert_request_id_header "$API_BASE_URL/")
+audit_logs_request_id=$(assert_request_id_header "$API_BASE_URL/v1/audit-logs?action=apply.requested&limit=2")
 
 summary=$(curl -fsS "$API_BASE_URL/v1/catalog/summary")
 applications=$(curl -fsS "$API_BASE_URL/v1/overview/applications")
@@ -209,14 +212,15 @@ PY
 apply_record_get=$(curl -fsS "$API_BASE_URL/v1/applies/$apply_id")
 deployment_events=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/events")
 worker_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
-audit_logs_request_id=$(assert_request_id_header "$API_BASE_URL/v1/audit-logs?limit=2")
 audit_logs=$(curl -fsS "$API_BASE_URL/v1/audit-logs?limit=2")
+audit_logs_action_filtered=$(curl -fsS "$API_BASE_URL/v1/audit-logs?action=apply.requested&limit=2")
+invalid_audit_action_status=$(curl -sS -o "$INVALID_AUDIT_ACTION_BODY" -w "%{http_code}" "$API_BASE_URL/v1/audit-logs?action=invalid.action")
 ui=$(curl -fsS "$API_BASE_URL/")
 audit_ui_request_id=$(assert_request_id_header "$API_BASE_URL/?page=audit&action=apply.requested&limit=2")
 audit_ui=$(curl -fsS "$API_BASE_URL/?page=audit&action=apply.requested&limit=2")
 plan_apply_ui=$(curl -fsS "$API_BASE_URL/?page=plan&deployment=payments-api-prod&planId=$plan_id&applyId=$apply_id")
 
-SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" APPLY_RECORD_JSON="$apply_record" APPLY_RECORD_GET_JSON="$apply_record_get" DEPLOYMENT_EVENTS_JSON="$deployment_events" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" AUDIT_LOGS_JSON="$audit_logs" UI_HTML="$ui" AUDIT_UI_HTML="$audit_ui" PLAN_APPLY_UI_HTML="$plan_apply_ui" python3 - <<'PY'
+SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" DEPLOYMENT_DETAIL_JSON="$deployment_detail" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" APPLY_RECORD_JSON="$apply_record" APPLY_RECORD_GET_JSON="$apply_record_get" DEPLOYMENT_EVENTS_JSON="$deployment_events" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" AUDIT_LOGS_JSON="$audit_logs" AUDIT_LOGS_ACTION_FILTERED_JSON="$audit_logs_action_filtered" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY="$INVALID_AUDIT_ACTION_BODY" UI_HTML="$ui" AUDIT_UI_HTML="$audit_ui" PLAN_APPLY_UI_HTML="$plan_apply_ui" python3 - <<'PY'
 import json, os
 
 summary = json.loads(os.environ["SUMMARY_JSON"])
@@ -230,6 +234,8 @@ apply_record_get = json.loads(os.environ["APPLY_RECORD_GET_JSON"])
 deployment_events = json.loads(os.environ["DEPLOYMENT_EVENTS_JSON"])
 worker_resource_logs = json.loads(os.environ["WORKER_RESOURCE_LOGS_JSON"])
 audit_logs = json.loads(os.environ["AUDIT_LOGS_JSON"])
+audit_logs_action_filtered = json.loads(os.environ["AUDIT_LOGS_ACTION_FILTERED_JSON"])
+invalid_audit_action_body = open(os.environ["INVALID_AUDIT_ACTION_BODY"], encoding="utf-8").read()
 ui = os.environ["UI_HTML"]
 audit_ui = os.environ["AUDIT_UI_HTML"]
 plan_apply_ui = os.environ["PLAN_APPLY_UI_HTML"]
@@ -281,6 +287,11 @@ assert apply_record_get == apply_record, (apply_record_get, apply_record)
 assert isinstance(audit_logs.get("entries"), list), audit_logs
 assert len(audit_logs["entries"]) == 2, audit_logs
 assert {entry["action"] for entry in audit_logs["entries"]} == {"apply.requested", "plan.created"}, audit_logs
+assert isinstance(audit_logs_action_filtered.get("entries"), list), audit_logs_action_filtered
+assert len(audit_logs_action_filtered["entries"]) == 1, audit_logs_action_filtered
+assert audit_logs_action_filtered["entries"][0]["action"] == "apply.requested", audit_logs_action_filtered
+assert os.environ["INVALID_AUDIT_ACTION_STATUS"] == "400", os.environ["INVALID_AUDIT_ACTION_STATUS"]
+assert "invalid action query" in invalid_audit_action_body, invalid_audit_action_body
 for entry in audit_logs["entries"]:
     assert entry["deploymentName"] == "payments-api-prod", entry
     assert entry["appRef"] == "payments-api", entry
@@ -343,9 +354,11 @@ for fragment in (
 for fragment in (
     "Audit timeline",
     "Operator audit log",
+    "Audit filters: ${activeFilters.join(' · ')}",
     "Loading audit log…",
     "Audit log is currently unavailable.",
     "Immutable operator audit log from GET /v1/audit-logs. Newest entries first. Actor identity remains explicit when unavailable or unknown.",
+    "action ${currentPageState.auditAction}",
     "const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {",
     "if (action) params.set('action', action);",
     "createSelect('Action', currentPageState.auditAction, auditActionOptions, (event) => {",
