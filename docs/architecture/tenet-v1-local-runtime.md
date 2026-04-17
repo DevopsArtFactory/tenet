@@ -28,7 +28,15 @@ Both services mount `./examples` read-only. That keeps the runtime deterministic
 make smoke-local
 ```
 
-This boots `tenet-api` against the committed example fixtures, checks `/healthz`, and validates representative JSON payloads from the catalog and status endpoints.
+Use `make smoke-local` for the fastest fixture-backed regression check when you only need direct-process validation. It boots `tenet-api` against the committed example fixtures, checks `/healthz`, and validates representative JSON payloads from the catalog and status endpoints.
+
+### Docker stack smoke check
+
+```bash
+make smoke-docker
+```
+
+Use `make smoke-docker` when you need to validate the containerized local stack itself. The script runs `docker compose config`, asserts the `api`, `controller`, and `redis` services are present in `compose.yaml`, starts the stack, waits for API health, checks representative endpoints, confirms controller logs contain useful startup/reconcile output, and then runs `docker compose down --remove-orphans` even on failure.
 
 ### Full Docker stack
 

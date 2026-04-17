@@ -1,7 +1,7 @@
 GO ?= go
 DOCKER_COMPOSE ?= docker compose
 
-.PHONY: test fmt docker-build docker-up docker-down smoke-local
+.PHONY: test fmt docker-build docker-up docker-down smoke-local smoke-docker
 
 test:
 	$(GO) test ./...
@@ -20,3 +20,6 @@ docker-down:
 
 smoke-local:
 	./scripts/smoke-local.sh
+
+smoke-docker:
+	./scripts/smoke-docker.sh

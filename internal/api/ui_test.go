@@ -849,3 +849,48 @@ func TestOverviewDocsLockECSRollingFallbackContract(t *testing.T) {
 		}
 	}
 }
+
+func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
+	files := map[string][]string{
+		"../../scripts/smoke-docker.sh": {
+			"config --services",
+			"for service in api controller redis; do",
+			"\"$ROOT/scripts/docker-up.sh\" \"${COMPOSE[@]}\"",
+			"curl -fsS \"$API_BASE_URL/healthz\"",
+			"curl -fsS \"$API_BASE_URL/v1/catalog/summary\"",
+			"curl -fsS \"$API_BASE_URL/v1/overview/applications\"",
+			"curl -fsS \"$API_BASE_URL/v1/overview/deployments/payments-api-prod\"",
+			"logs controller --tail=50",
+			"down --remove-orphans",
+		},
+		"../../Makefile": {
+			".PHONY: test fmt docker-build docker-up docker-down smoke-local smoke-docker",
+			"smoke-docker:",
+			"./scripts/smoke-docker.sh",
+		},
+		"../../README.md": {
+			"Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis.",
+			"Use `make smoke-docker` when you need to validate `compose.yaml`, confirm the `api`/`controller`/`redis` service contract, and prove the containerized local stack plus controller logs are reachable end to end.",
+			"make smoke-docker",
+		},
+		"../../docs/architecture/tenet-v1-local-runtime.md": {
+			"### Docker stack smoke check",
+			"make smoke-docker",
+			"asserts the `api`, `controller`, and `redis` services are present in `compose.yaml`",
+			"`docker compose down --remove-orphans` even on failure",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
+	}
+}

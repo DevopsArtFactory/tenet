@@ -71,6 +71,8 @@ http://localhost:8080/
 
 You should land on the applications overview page.
 
+Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis. Use `make smoke-docker` when you need to validate `compose.yaml`, confirm the `api`/`controller`/`redis` service contract, and prove the containerized local stack plus controller logs are reachable end to end.
+
 ### Run with Docker
 
 ```bash
@@ -78,6 +80,12 @@ make docker-up
 ```
 
 If `make docker-up` exits before starting the stack, `localhost:8080` is already owned by something outside this Compose project. Inspect the listener with `lsof -nP -iTCP:8080 -sTCP:LISTEN`. If you want to clear a prior Tenet stack before retrying, run `make docker-down`, then rerun `docker compose up --build -d`.
+
+Run the dedicated Docker-stack smoke before or instead of manual exploration when you want a single command that validates the Compose config, boots the stack, waits for API health, checks representative endpoints, confirms controller logs are useful, and tears the stack back down:
+
+```bash
+make smoke-docker
+```
 
 This starts the local stack:
 - `api` on `http://localhost:8080`
