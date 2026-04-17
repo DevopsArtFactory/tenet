@@ -58,7 +58,7 @@ func TestEmbeddedUIUsesSafeDetailRenderingAndPreservesFalsyMetrics(t *testing.T)
 
 	for _, fragment := range []string{
 		"const metricValue = (value) => value ?? '—';",
-		"const generationValue = (value) => Number.isFinite(value) ? String(value) : '—';",
+		"const generationValue = (value) => Number.isFinite(value) && value > 0 ? String(value) : '—';",
 		"const generationsText = (value) => {",
 		"const desired = generationValue(value?.desiredGeneration);",
 		"const observed = generationValue(value?.observedGeneration);",
@@ -129,6 +129,7 @@ func TestEmbeddedUIUsesSafeDetailRenderingAndPreservesFalsyMetrics(t *testing.T)
 		"detail.rollout.desiredGeneration || 0",
 		"detail.rollout.observedGeneration || 0",
 		"detail.observedGeneration || 0",
+		"Number.isFinite(value) ? String(value) : '—';",
 		"String(deployment.observedGeneration || 0)",
 		"change?.label",
 	} {
@@ -708,7 +709,7 @@ func TestUIOverviewCardsRenderRuntimeSummaryContract(t *testing.T) {
 		"const runtimeSummaryTimestamp = (runtimeSummary) => runtimeSummary?.timestamp || 'Latest runtime status';",
 		"const latestRuntimeTimestamp = (applications) => applications",
 		"deployment.runtimeSummary?.timestamp",
-		"const generationValue = (value) => Number.isFinite(value) ? String(value) : '—';",
+		"const generationValue = (value) => Number.isFinite(value) && value > 0 ? String(value) : '—';",
 		"const generationsText = (value) => {",
 		"const runtimeArtifactText = (artifactValue) => {",
 		"const runtimeConditionsText = (conditions, emptyValue = '—') => {",
