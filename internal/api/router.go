@@ -44,6 +44,7 @@ type Options struct {
 	CatalogPlacements              func() ([]catalog.PlacementView, error)
 	CatalogTopology                func() (catalog.TopologySnapshot, error)
 	OverviewApplications           func() ([]catalog.ApplicationOverview, error)
+	OverviewApplication            func(string) (catalog.ApplicationOverviewDetail, error)
 	OverviewAccounts               func() ([]catalog.AccountOverview, error)
 	OverviewAccount                func(string) (catalog.AccountOverviewDetail, error)
 	OverviewProjectEnvironment     func(string, string, string) (catalog.ProjectEnvironmentOverviewDetail, error)
@@ -191,6 +192,27 @@ func NewRouter(options Options) http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(applications)
+	})
+	mux.HandleFunc("/v1/overview/applications/", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+		if options.OverviewApplication == nil {
+			http.Error(w, "overview application unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		name := strings.TrimPrefix(r.URL.Path, "/v1/overview/applications/")
+		if name == "" || strings.Contains(name, "/") {
+			http.Error(w, "invalid deployment name", http.StatusBadRequest)
+			return
+		}
+		detail, err := options.OverviewApplication(name)
+		if err != nil {
+			respondLookupError(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(detail)
 	})
 	mux.HandleFunc("/v1/overview/accounts", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodGet) {

@@ -44,6 +44,7 @@ curl -fsS "http://$HOST:$PORT/healthz" >/dev/null
 
 summary=$(curl -fsS "http://$HOST:$PORT/v1/catalog/summary")
 applications=$(curl -fsS "http://$HOST:$PORT/v1/overview/applications")
+application_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/applications/payments-api-prod")
 overview=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts")
 account_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts/123456789012")
 group_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts/123456789012/projects/payments-api/environments/prod-apne2")
@@ -53,10 +54,11 @@ resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-a
 worker_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 ui=$(curl -fsS "http://$HOST:$PORT/")
 
-SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" python3 - <<'PY'
+SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" python3 - <<'PY'
 import json, os
 summary = json.loads(os.environ['SUMMARY_JSON'])
 applications = json.loads(os.environ['APPLICATIONS_JSON'])
+application_detail = json.loads(os.environ['APPLICATION_DETAIL_JSON'])
 overview = json.loads(os.environ['OVERVIEW_JSON'])
 account_detail = json.loads(os.environ['ACCOUNT_DETAIL_JSON'])
 group_detail = json.loads(os.environ['GROUP_DETAIL_JSON'])
@@ -77,6 +79,11 @@ assert applications[0]['executionMode'] in {'asgWeightedTargetGroups', 'asgInsta
 assert applications[2]['executionMode'] == 'ecsRolling', applications
 assert applications[2]['appRef'] == 'worker', applications
 assert applications[2]['environmentRef'] == 'prod-apne2', applications
+assert application_detail['name'] == 'payments-api-prod', application_detail
+assert application_detail['accountName'] == 'prod-core', application_detail
+assert application_detail['awsAccountId'] == '123456789012', application_detail
+assert application_detail['region'] == 'ap-northeast-2', application_detail
+assert isinstance((application_detail.get('rollout') or {}).get('execution', []), list), application_detail
 assert [account['name'] for account in overview] == ['prod-core', 'staging-core'], overview
 assert [deployment['name'] for deployment in overview[0]['deployments']] == ['payments-api-prod', 'worker-prod'], overview
 runtime_summary = overview[0]['deployments'][0].get('runtimeSummary') or {}
@@ -124,6 +131,7 @@ else:
     assert isinstance(worker_resource_logs.get('unavailableReason'), str) and worker_resource_logs['unavailableReason'], worker_resource_logs
 assert 'Application status overview' in ui, ui
 assert '/v1/overview/applications' in ui, ui
+assert '/v1/overview/applications/${encodeURIComponent(deploymentName)}' in ui, ui
 assert 'Open account' in ui, ui
 assert 'Open application' in ui, ui
 assert 'Runtime change details' in ui, ui

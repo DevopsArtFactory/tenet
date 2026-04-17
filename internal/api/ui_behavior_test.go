@@ -743,7 +743,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 		}
 	})
 
-	t.Run("application detail route reuses deployment detail fetch", func(t *testing.T) {
+	t.Run("application detail route uses application detail fetch", func(t *testing.T) {
 		nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;
 const sampleApplications = ` + string(applicationsJSON) + `;
@@ -795,7 +795,7 @@ const history = { replaceState(_state, _title, url) { const [pathname, query = '
 const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
-  if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -805,8 +805,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/deployments/payments-api-staging') {
-    throw new Error('expected application route to load only deployment detail, got ' + fetchCalls.join(', '));
+  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/applications/payments-api-staging') {
+    throw new Error('expected application route to load only application detail, got ' + fetchCalls.join(', '));
   }
   const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
   const summaryText = collectText(document.getElementById('summary')).join(' | ');
@@ -930,8 +930,7 @@ const window = { location: { pathname: '/', search: '?page=application&deploymen
 const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
 const fetch = (url) => {
   fetchCalls.push(String(url));
-  if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
-  if (url === '/v1/overview/deployments/payments-api-rolling') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/overview/applications/payments-api-rolling') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -941,7 +940,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/deployments/payments-api-rolling') throw new Error('expected ecs rolling application page to load only deployment detail');
+  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/applications/payments-api-rolling') throw new Error('expected ecs rolling application page to load only application detail');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   if (!accountsText.includes('payments-api-rolling-service')) throw new Error('expected ecs rolling fallback service resource');
   if (!accountsText.includes('ECS service Tenet updates with native rolling deployment while respecting min healthy 90% and warmup 30s')) throw new Error('expected ecs rolling fallback resource description');
@@ -1071,7 +1070,7 @@ const history = { replaceState(_state, _title, url) { const [pathname, query = '
 const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
-  if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -1081,7 +1080,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/deployments/payments-api-staging') throw new Error('expected ecs fallback page to load only deployment detail');
+  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/applications/payments-api-staging') throw new Error('expected ecs fallback page to load only application detail');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
   const expectedResources = [
@@ -1187,7 +1186,7 @@ const history = { replaceState(_state, _title, url) { const [pathname, query = '
 const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
-  if (url === '/v1/overview/deployments/payments-api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/overview/applications/payments-api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -1197,7 +1196,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/deployments/payments-api-prod') throw new Error('expected asg fallback page to load only deployment detail');
+  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/applications/payments-api-prod') throw new Error('expected asg fallback page to load only application detail');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
   const expectedResources = [
@@ -1300,7 +1299,7 @@ const history = { replaceState(_state, _title, url) { const [pathname, query = '
 const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
-  if (url === '/v1/overview/deployments/payments-api-refresh') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/overview/applications/payments-api-refresh') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -1310,7 +1309,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/deployments/payments-api-refresh') throw new Error('expected instance refresh fallback page to load only deployment detail');
+  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/applications/payments-api-refresh') throw new Error('expected instance refresh fallback page to load only application detail');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
   const expectedResources = [
@@ -1451,25 +1450,6 @@ func TestApplicationDetailPageWithNodeHarness(t *testing.T) {
 		t.Fatalf("marshal embedded script: %v", err)
 	}
 
-	accountsJSON, err := json.Marshal([]map[string]any{{
-		"name":         "staging-core",
-		"awsAccountId": "210987654321",
-		"deployments": []map[string]any{{
-			"name":           "payments-api-staging",
-			"appRef":         "payments",
-			"environmentRef": "staging-apne2",
-			"region":         "ap-northeast-2",
-			"targetType":     "ecs",
-			"strategy":       "linear",
-			"executionMode":  "ecsCodeDeploy",
-			"sync":           map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
-			"health":         map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy"},
-		}},
-	}})
-	if err != nil {
-		t.Fatalf("marshal sample accounts: %v", err)
-	}
-
 	detailJSON, err := json.Marshal(map[string]any{
 		"name":           "payments-api-staging",
 		"accountName":    "staging-core",
@@ -1498,7 +1478,6 @@ func TestApplicationDetailPageWithNodeHarness(t *testing.T) {
 
 	nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;
-const sampleAccounts = ` + string(accountsJSON) + `;
 const detailBody = ` + string(detailJSON) + `;
 class Element {
   constructor(tagName, ownerDocument) {
@@ -1545,8 +1524,7 @@ const window = { location: { pathname: '/', search: '?page=application&deploymen
 const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
 const fetch = (url) => {
   fetchCalls.push(String(url));
-  if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
-  if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -1559,7 +1537,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const summaryText = collectText(document.getElementById('summary')).join(' | ');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
-  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/deployments/payments-api-staging') throw new Error('expected application page to load only deployment detail');
+  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/applications/payments-api-staging') throw new Error('expected application page to load only application detail');
   if (!toolbarText.includes('Back to applications')) throw new Error('expected application page back link');
   if (!summaryText.includes('payments-api-staging')) throw new Error('expected application summary title');
   if (!accountsText.includes('Application resources')) throw new Error('expected application resources heading');
@@ -1658,7 +1636,7 @@ const window = { location: { pathname: '/', search: '?page=application&deploymen
 const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
 const fetch = (url) => {
   fetchCalls.push(String(url));
-  if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -1667,7 +1645,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/deployments/payments-api-staging') throw new Error('expected nameless application page to load only deployment detail');
+  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/applications/payments-api-staging') throw new Error('expected nameless application page to load only application detail');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
   if (links.length !== 0) throw new Error('expected nameless application page to suppress broken resource drill-down links');
 })();
@@ -1843,7 +1821,7 @@ const runUI = async (search, detailBody) => {
   const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
   const fetch = (url) => {
     fetchCalls.push(String(url));
-    if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
+    if (url === '/v1/overview/applications/payments-api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
     if (url === '/v1/overview/deployments/payments-api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
     if (url === resourceLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
     throw new Error('unexpected fetch url: ' + url);
@@ -1855,7 +1833,7 @@ const runUI = async (search, detailBody) => {
 };
 (async () => {
   const fallbackRun = await runUI('?page=application&deployment=payments-api-prod', fallbackDetailBody);
-  if (fallbackRun.fetchCalls.length !== 1 || fallbackRun.fetchCalls[0] !== '/v1/overview/deployments/payments-api-prod') throw new Error('expected fallback application page to load only deployment detail');
+  if (fallbackRun.fetchCalls.length !== 1 || fallbackRun.fetchCalls[0] !== '/v1/overview/applications/payments-api-prod') throw new Error('expected fallback application page to load only application detail');
   const fallbackLinks = collectNodes(fallbackRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
   const expectedResourceID = 'trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s';
   const resourceHref = '/?' + new URLSearchParams({
@@ -2509,6 +2487,7 @@ async function render(search, detailBody) {
   const logsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=productionListener&resourceName=test+listener';
   const fetch = (url) => {
     if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
+    if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
     if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
     throw new Error('unexpected fetch url: ' + url);

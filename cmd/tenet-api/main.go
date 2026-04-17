@@ -95,6 +95,23 @@ func newAPIOptions(info buildinfo.Info, repoRoot string, store statusstore.Store
 			}
 			return catalog.BuildApplicationOverviews(compiled, snapshots)
 		}
+		options.OverviewApplication = func(name string) (catalog.ApplicationOverviewDetail, error) {
+			compiled, err := catalog.LoadFromRepository(repoRoot)
+			if err != nil {
+				return catalog.ApplicationOverviewDetail{}, err
+			}
+			if store == nil {
+				return catalog.BuildApplicationOverviewDetail(compiled, nil, name)
+			}
+			snapshot, err := store.Get(context.Background(), name)
+			if err != nil {
+				if errors.Is(err, statusstore.ErrNotFound) {
+					return catalog.BuildApplicationOverviewDetail(compiled, nil, name)
+				}
+				return catalog.ApplicationOverviewDetail{}, err
+			}
+			return catalog.BuildApplicationOverviewDetail(compiled, []statusstore.Snapshot{snapshot}, name)
+		}
 		options.OverviewAccounts = func() ([]catalog.AccountOverview, error) {
 			compiled, err := catalog.LoadFromRepository(repoRoot)
 			if err != nil {

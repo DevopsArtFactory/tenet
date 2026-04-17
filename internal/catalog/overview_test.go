@@ -1094,6 +1094,215 @@ func assertStringSliceContainsAll(t *testing.T, got []string, want ...string) {
 	}
 }
 
+func TestBuildApplicationOverviewDetail(t *testing.T) {
+	snapshots := []statusstore.Snapshot{
+		{
+			DeploymentName: "payments-api-prod",
+			Status: domain.DeploymentStatus{
+				ObservedGeneration: 7,
+				Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"},
+				Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"},
+				Conditions: []domain.Condition{
+					{Type: "Progressing", Status: true, Reason: "RolloutInFlight", Message: "candidate receiving traffic"},
+				},
+				History: []domain.StatusHistoryEntry{
+					{
+						Timestamp:          "2026-04-16T06:15:00Z",
+						Source:             "controller",
+						Summary:            "Accepted rollout for r7",
+						Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"},
+						Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "candidate is warming"},
+						DesiredGeneration:  7,
+						ObservedGeneration: 6,
+						RolloutPhase:       domain.RolloutPhaseAccepted,
+						CurrentStep:        "CreateCandidateCapacity",
+						ChangeDetails:      []string{"Summary changed to Accepted rollout for r7"},
+					},
+					{
+						Timestamp:          "2026-04-16T06:20:00Z",
+						Source:             "controller",
+						Summary:            "Shifting canary traffic",
+						Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "progressing"},
+						Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"},
+						DesiredGeneration:  8,
+						ObservedGeneration: 7,
+						RolloutPhase:       domain.RolloutPhasePromoting,
+						CurrentStep:        "ShiftTrafficCanary",
+						ChangeDetails:      []string{"Sync changed to Reconciling: progressing", "Current step changed from CreateCandidateCapacity to ShiftTrafficCanary"},
+					},
+				},
+				DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6"},
+				Rollout: &domain.RolloutSummary{
+					DesiredGeneration:  8,
+					ObservedGeneration: 7,
+					Phase:              domain.RolloutPhasePromoting,
+					CurrentStep:        "ShiftTrafficCanary",
+					Summary:            "Canary is serving 10% of traffic",
+					Steps: []domain.RolloutStepSummary{
+						{Kind: "CreateCandidateCapacity"},
+						{Kind: "ShiftTrafficCanary", Current: true},
+					},
+					Execution: []domain.RolloutExecutionDetail{
+						{Resource: "candidateAutoScalingGroup", Name: "payments-api-prod-candidate", Description: "Candidate Auto Scaling Group Tenet will create for weighted target group rollout"},
+						{Resource: "activeTargetGroup", Name: "payments-api-prod-active", Description: "Currently active target group receiving production traffic"},
+					},
+				},
+			},
+		},
+	}
+	catalog := manifest.Catalog{
+		Accounts: []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2", "us-west-2"}}},
+		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments: []domain.Deployment{{
+			Name:            "payments-api-prod",
+			AppRef:          "payments-api",
+			EnvironmentRef:  "prod-apne2",
+			TargetType:      "ec2",
+			Strategy:        "canary",
+			ExecutionMode:   "asgWeightedTargetGroups",
+			DesiredArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7"},
+			UserData:        domain.DeploymentUserData{Type: "file", Path: "userdata/payments-api-prod.sh"},
+			RolloutConfig:   domain.DeploymentRolloutConfig{Strategy: domain.DeploymentRolloutStrategy{WarmupSeconds: 30, MinHealthyPercent: 90}},
+		}},
+	}
+
+	detail, err := BuildApplicationOverviewDetail(catalog, snapshots, "payments-api-prod")
+	if err != nil {
+		t.Fatalf("BuildApplicationOverviewDetail returned error: %v", err)
+	}
+	deploymentDetail, err := BuildDeploymentOverviewDetail(catalog, snapshots, "payments-api-prod")
+	if err != nil {
+		t.Fatalf("BuildDeploymentOverviewDetail returned error: %v", err)
+	}
+	if detail.Name != "payments-api-prod" || detail.AppRef != "payments-api" || detail.EnvironmentRef != "prod-apne2" {
+		t.Fatalf("expected application identity fields, got %+v", detail)
+	}
+	if detail.AccountName != "prod-core" || detail.AWSAccountID != "123456789012" || detail.Region != "ap-northeast-2" {
+		t.Fatalf("expected placement metadata, got %+v", detail)
+	}
+	if !reflect.DeepEqual(detail.AllowedRegions, deploymentDetail.AllowedRegions) {
+		t.Fatalf("expected application detail allowed regions to match deployment detail, got application=%+v deployment=%+v", detail.AllowedRegions, deploymentDetail.AllowedRegions)
+	}
+	if detail.TargetType != "ec2" || detail.Strategy != "canary" || detail.ExecutionMode != "asgWeightedTargetGroups" {
+		t.Fatalf("expected execution metadata, got %+v", detail)
+	}
+	if detail.DesiredArtifact.Binary != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7" || detail.DeployedArtifact.Binary != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6" {
+		t.Fatalf("expected desired/deployed artifacts, got %+v", detail)
+	}
+	if detail.UserData.Type != "file" || detail.UserData.Path != "userdata/payments-api-prod.sh" {
+		t.Fatalf("expected userdata metadata for application page, got %+v", detail.UserData)
+	}
+	if detail.RolloutConfig.Strategy.WarmupSeconds != 30 || detail.RolloutConfig.Strategy.MinHealthyPercent != 90 {
+		t.Fatalf("expected rollout config metadata for application page, got %+v", detail.RolloutConfig)
+	}
+	if detail.ObservedGeneration != 7 || detail.Sync.Reason != "new artifact" || detail.Health.Summary != "2/3 targets healthy" {
+		t.Fatalf("expected runtime status summary fields, got %+v", detail)
+	}
+	if detail.RuntimeSummary == nil || detail.RuntimeSummary.CurrentStep != "ShiftTrafficCanary" || detail.RuntimeSummary.HistoryCount != 2 {
+		t.Fatalf("expected runtime summary fields for application page, got %+v", detail.RuntimeSummary)
+	}
+	if detail.Rollout == nil || detail.Rollout.Phase != domain.RolloutPhasePromoting || detail.Rollout.CurrentStep != "ShiftTrafficCanary" || len(detail.Rollout.Steps) != 2 {
+		t.Fatalf("expected rollout summary fields for application page, got %+v", detail.Rollout)
+	}
+	if len(detail.Conditions) != 1 || detail.Conditions[0].Reason != "RolloutInFlight" {
+		t.Fatalf("expected conditions for application page, got %+v", detail.Conditions)
+	}
+	if len(detail.History) != 2 || detail.History[1].CurrentStep != "ShiftTrafficCanary" {
+		t.Fatalf("expected history for application page, got %+v", detail.History)
+	}
+	expected := ApplicationOverviewDetail{
+		Name:               deploymentDetail.Name,
+		AppRef:             deploymentDetail.AppRef,
+		EnvironmentRef:     deploymentDetail.EnvironmentRef,
+		AccountName:        deploymentDetail.AccountName,
+		AWSAccountID:       deploymentDetail.AWSAccountID,
+		AllowedRegions:     append([]string(nil), deploymentDetail.AllowedRegions...),
+		Region:             deploymentDetail.Region,
+		TargetType:         deploymentDetail.TargetType,
+		Strategy:           deploymentDetail.Strategy,
+		ExecutionMode:      deploymentDetail.ExecutionMode,
+		DesiredArtifact:    deploymentDetail.DesiredArtifact,
+		UserData:           deploymentDetail.UserData,
+		RolloutConfig:      cloneDeploymentRolloutConfig(deploymentDetail.RolloutConfig),
+		DeployedArtifact:   deploymentDetail.DeployedArtifact,
+		ObservedGeneration: deploymentDetail.ObservedGeneration,
+		Sync:               deploymentDetail.Sync,
+		Health:             deploymentDetail.Health,
+		RuntimeSummary:     cloneRuntimeSummary(deploymentDetail.RuntimeSummary),
+		Rollout:            cloneRolloutSummary(deploymentDetail.Rollout),
+		Conditions:         append([]domain.Condition(nil), deploymentDetail.Conditions...),
+		History:            cloneStatusHistory(deploymentDetail.History),
+	}
+	if !reflect.DeepEqual(detail, expected) {
+		t.Fatalf("expected application detail to preserve deployment detail semantics, got application=%+v expected=%+v", detail, expected)
+	}
+
+	snapshots[0].Status.History[1].CurrentStep = "mutated"
+	snapshots[0].Status.History[1].ChangeDetails[0] = "mutated"
+	snapshots[0].Status.Rollout.Steps[0].Kind = "mutated"
+	snapshots[0].Status.Rollout.Execution[0].Name = "mutated"
+	snapshots[0].Status.Conditions[0].Reason = "mutated"
+	if detail.RuntimeSummary.CurrentStep != "ShiftTrafficCanary" || detail.RuntimeSummary.ChangeDetails[0] != "Sync changed to Reconciling: progressing" {
+		t.Fatalf("expected runtime summary to be cloned defensively, got %+v", detail.RuntimeSummary)
+	}
+	if detail.Rollout.Steps[0].Kind != "CreateCandidateCapacity" || detail.Rollout.Execution[0].Name != "payments-api-prod-candidate" {
+		t.Fatalf("expected rollout summary to be cloned defensively, got %+v", detail.Rollout)
+	}
+	if detail.Conditions[0].Reason != "RolloutInFlight" {
+		t.Fatalf("expected conditions to be cloned defensively, got %+v", detail.Conditions)
+	}
+	if detail.History[1].CurrentStep != "ShiftTrafficCanary" || detail.History[1].ChangeDetails[0] != "Sync changed to Reconciling: progressing" {
+		t.Fatalf("expected history to be cloned defensively, got %+v", detail.History)
+	}
+
+	detail.RuntimeSummary.ChangeDetails[0] = "mutated-by-caller"
+	detail.Rollout.Execution[0].Name = "mutated-by-caller"
+	detail.Conditions[0].Reason = "mutated-by-caller"
+	detail.History[1].CurrentStep = "mutated-by-caller"
+	refetched, err := BuildApplicationOverviewDetail(catalog, snapshots, "payments-api-prod")
+	if err != nil {
+		t.Fatalf("BuildApplicationOverviewDetail returned error on refetch: %v", err)
+	}
+	if refetched.RuntimeSummary.ChangeDetails[0] != "mutated" {
+		t.Fatalf("expected application detail runtime summary to avoid caller aliasing, got %+v", refetched.RuntimeSummary.ChangeDetails)
+	}
+	if refetched.Rollout.Execution[0].Name != "mutated" {
+		t.Fatalf("expected application detail rollout to avoid caller aliasing, got %+v", refetched.Rollout.Execution)
+	}
+	if refetched.Conditions[0].Reason != "mutated" {
+		t.Fatalf("expected application detail conditions to avoid caller aliasing, got %+v", refetched.Conditions)
+	}
+	if refetched.History[1].CurrentStep != "mutated" {
+		t.Fatalf("expected application detail history to avoid caller aliasing, got %+v", refetched.History)
+	}
+}
+
+func TestBuildApplicationOverviewDetailReturnsNotFound(t *testing.T) {
+	_, err := BuildApplicationOverviewDetail(manifest.Catalog{}, nil, "missing")
+	if !errors.Is(err, statusstore.ErrNotFound) {
+		t.Fatalf("expected not found error, got %v", err)
+	}
+}
+
+func TestBuildApplicationOverviewDetailPropagatesPlacementErrors(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"us-west-2"}}},
+		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments: []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
+	}
+
+	_, err := BuildApplicationOverviewDetail(catalog, nil, "payments-api-prod")
+	if err == nil {
+		t.Fatal("expected placement resolution error, got nil")
+	}
+	if errors.Is(err, statusstore.ErrNotFound) {
+		t.Fatalf("expected placement error to be preserved, got %v", err)
+	}
+	if err.Error() != "region \"ap-northeast-2\" is not allowed for account \"prod-core\"" {
+		t.Fatalf("expected disallowed region error, got %v", err)
+	}
+}
+
 func TestBuildDeploymentOverviewDetailReturnsNotFound(t *testing.T) {
 	_, err := BuildDeploymentOverviewDetail(manifest.Catalog{}, nil, "missing")
 	if !errors.Is(err, statusstore.ErrNotFound) {

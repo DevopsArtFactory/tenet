@@ -1253,6 +1253,11 @@
         resourceLogStateByKey.set(logsKey, { status: 'loading', promise, sections: [section] });
         return promise;
       };
+      const fetchApplicationDetail = (deploymentName) => fetch(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`)
+        .then((response) => {
+          if (!response.ok) throw new Error(`application detail request failed (${response.status})`);
+          return response.json();
+        });
       const fetchDeploymentDetail = (deploymentName) => fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}`)
         .then((response) => {
           if (!response.ok) throw new Error(`detail request failed (${response.status})`);
@@ -1936,7 +1941,8 @@
         if (!currentPageState.deployment) {
           renderEmptyState('deployment page is missing a deployment query parameter');
         } else {
-          fetchDeploymentDetail(currentPageState.deployment)
+          const applicationDetail = currentPageState.page === 'application' ? fetchApplicationDetail(currentPageState.deployment) : fetchDeploymentDetail(currentPageState.deployment);
+          applicationDetail
             .then((detail) => {
               if (currentPageState.page === 'application') {
                 renderApplicationDetailPage(detail);
