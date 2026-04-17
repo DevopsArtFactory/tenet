@@ -84,7 +84,9 @@ func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupCon
 	for _, deployment := range compiled.Deployments {
 		status := statuses[deployment.Name]
 		previousStatus := status
+		status = normalizeRuntimeStatusForPlanning(deployment, status)
 		plan := planner.Build(deployment, status)
+		status = normalizeRuntimeStatus(deployment, status, plan)
 		status.Rollout = deriveRolloutSummary(deployment, status, plan)
 		status.History = appendRuntimeHistory(previousStatus, status)
 		currentStatuses[deployment.Name] = status
@@ -415,6 +417,59 @@ func syncStateLabel(state domain.SyncState) string {
 		return "Unknown"
 	}
 	return string(state)
+}
+
+func normalizeRuntimeStatusForPlanning(deployment domain.Deployment, status domain.DeploymentStatus) domain.DeploymentStatus {
+	if status.ObservedGeneration == 0 && status.Sync.State == domain.SyncStateSynced && status.Health.Overall == domain.HealthHealthy {
+		status.ObservedGeneration = deployment.Generation
+	}
+	return status
+}
+
+func normalizeRuntimeStatus(deployment domain.Deployment, status domain.DeploymentStatus, plan reconcile.Plan) domain.DeploymentStatus {
+	currentIndex := currentRolloutStepIndex(plan)
+	completed := completedRolloutStep(plan, currentIndex)
+	syncEmpty := status.Sync == (domain.Sync{})
+	healthEmpty := status.Health == (domain.Health{})
+
+	switch {
+	case completed:
+		if syncEmpty {
+			status.Sync = domain.Sync{State: domain.SyncStateSynced, Reason: "Controller marked deployment synced"}
+		}
+		if healthEmpty {
+			status.Health = domain.Health{Overall: domain.HealthHealthy, Summary: "Deployment is healthy and synced"}
+		}
+		if status.ObservedGeneration == 0 {
+			status.ObservedGeneration = deployment.Generation
+		}
+	case currentIndex >= 0:
+		if syncEmpty {
+			status.Sync = domain.Sync{State: domain.SyncStateReconciling, Reason: controllerRuntimeSyncReason(plan, currentIndex)}
+		}
+		if healthEmpty {
+			status.Health = domain.Health{Overall: domain.HealthProgressing, Summary: rolloutSummaryForStep(deployment, status, plan, currentIndex)}
+		}
+	default:
+		if syncEmpty {
+			status.Sync = domain.Sync{State: domain.SyncStatePaused, Reason: "Controller paused rollout"}
+		}
+		if healthEmpty {
+			status.Health = domain.Health{Overall: domain.HealthUnknown, Summary: "Rollout pending while deployment is paused"}
+		}
+	}
+
+	return status
+}
+
+func controllerRuntimeSyncReason(plan reconcile.Plan, currentIndex int) string {
+	if currentIndex < 0 || currentIndex >= len(plan.Steps) {
+		return "Controller paused rollout"
+	}
+	if plan.Steps[currentIndex].Kind == reconcile.StepMarkSynced {
+		return "Controller marked deployment synced"
+	}
+	return fmt.Sprintf("Controller progressing rollout at %s", plan.Steps[currentIndex].Kind)
 }
 
 func deriveRolloutSummary(deployment domain.Deployment, status domain.DeploymentStatus, plan reconcile.Plan) *domain.RolloutSummary {
