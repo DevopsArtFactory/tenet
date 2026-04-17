@@ -211,12 +211,13 @@ func TestEmbeddedUIIncludesQuickLinksToDeploymentReadModels(t *testing.T) {
 		"const detailLinks = createElement('div', 'row-links row-links-shell');",
 		"createNavLink(`/v1/overview/deployments/${encodeURIComponent(deployment.name)}`, 'Overview JSON')",
 		"createNavLink(`/v1/status/deployments/${encodeURIComponent(deployment.name)}`, 'Status JSON')",
-		"createNavLink(buildPageURL('drift', { deployment: deployment.name }), 'Drift view')",
-		"createNavLink(buildPageURL('plan', { deployment: deployment.name }), 'Plan/apply')",
 		"detailLinks.append(",
 		"row.append(toggle, detailLinks, detailPanel);",
 		"Overview JSON",
 		"Status JSON",
+		"const workspaceLinks = createElement('div', 'row-links row-links-shell');",
+		"createNavLink(buildPageURL('drift', { deployment: detail.name }), 'Drift view', '_self')",
+		"createNavLink(buildPageURL('plan', { deployment: detail.name }), 'Plan/apply', '_self')",
 		"Drift view",
 		"Plan/apply",
 	} {
@@ -236,6 +237,7 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"page: validPages.has(page) ? page : 'applications',",
 		"accountId: params.get('accountId') || '',",
 		"deployment: params.get('deployment') || '',",
+		"planId: params.get('planId') || '',",
 		"resourceId: params.get('resourceId') || '',",
 		"const buildPageURL = (page, extras = {}) => {",
 		"if (currentViewState.query) params.set('q', currentViewState.query);",
@@ -267,6 +269,7 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')",
 		"const renderApplicationDetailPage = (detail) => {",
 		"Application resources",
+		"Open drift or plan/apply from here before the final resource page.",
 		"backLink.target = '_self';",
 		"const renderResourceDetailPage = (detail) => {",
 		"Resource detail",
@@ -284,14 +287,25 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 	for _, fragment := range []string{
 		"const fetchApplicationDetail = (deploymentName) => fetch(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`)",
 		"if (!response.ok) throw new Error(`application detail request failed (${response.status})`);",
+		"const fetchPlanPreview = (planId) => fetch(`/v1/plans/${encodeURIComponent(planId)}`)",
+		"const cloneJSONValue = (value) => {",
+		"const buildPlanSourceFingerprintPayload = (detail) => {",
+		"const derivePlanSourceFingerprint = async (detail) => {",
+		"const createPlanPreview = (deploymentName, ifMatch = '') => fetch(`/v1/plans/deployments/${encodeURIComponent(deploymentName)}`, {",
+		"method: 'POST',",
+		"headers: { 'Content-Type': 'application/json' },",
+		"body: ifMatch ? JSON.stringify({ ifMatch }) : '{}',",
 		"const applicationDetail = currentPageState.page === 'application' ? fetchApplicationDetail(currentPageState.deployment) : fetchDeploymentDetail(currentPageState.deployment);",
 		"applicationDetail",
 		"if (currentPageState.page === 'application') {",
 		"renderApplicationDetailPage(detail);",
 		"if (currentPageState.page === 'resource') {",
 		"renderResourceDetailPage(detail);",
-		"if (currentPageState.page === 'drift' || currentPageState.page === 'plan') {",
+		"if (currentPageState.page === 'drift') {",
 		"renderDeploymentWorkspace(currentPageState.page, detail);",
+		"if (currentPageState.page === 'plan') {",
+		"renderDeploymentWorkspace('plan', detail, {",
+		"syncPlanPageURL(record.id);",
 		"fetchDeploymentDetail(currentPageState.deployment)",
 	} {
 		if !strings.Contains(body, fragment) {
@@ -410,7 +424,7 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 	body := string(indexHTML)
 
 	for _, fragment := range []string{
-		"const renderDeploymentWorkspace = (mode, detail) => {",
+		"const renderDeploymentWorkspace = (mode, detail, planState = null) => {",
 		"const workspaceTitle = mode === 'drift' ? 'Drift viewer' : 'Plan and apply';",
 		"const runtimeSignalsSection = createDetailSection('Latest runtime signals');",
 		"['Runtime source', metricValue(detail.runtimeSummary?.source)]",
@@ -421,7 +435,7 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"const executionSection = createDetailSection('Rollout execution');",
 		"rolloutExecutionResources(detail).filter((item) => normalizeResource(item).id === resource.id)",
 		"No rollout execution resources are currently reported.",
-		"const backLink = createNavLink(buildPageURL('applications'), 'Back to overview');",
+		"const backLink = createNavLink(buildPageURL('application', { deployment: detail.name || currentPageState.deployment || '' }), 'Back to application');",
 		"backLink.target = '_self';",
 		"backLink.rel = '';",
 		"const emptyTitle = mode === 'drift' ? 'Field-level drift' : 'Plan operations';",
@@ -448,24 +462,42 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"Actual",
 		"Severity",
 		"No field-level drift is currently derived from the deployment read model.",
-		"Plan/apply controls are not wired to mutation APIs in this read-only slice yet.",
-		"const approvalSection = createDetailSection('Derived approval guidance');",
-		"Derived risk level",
-		"Risk factors · ${planRisk.reasons.join('; ')}",
+		"const requestError = (kind, message, status = 0) => {",
+		"const responseErrorMessage = (response, fallback) => {",
+		"const fetchPlanPreview = (planId) => fetch(`/v1/plans/${encodeURIComponent(planId)}`)",
+		"const createPlanPreview = (deploymentName, ifMatch = '') => fetch(`/v1/plans/deployments/${encodeURIComponent(deploymentName)}`, {",
+		"body: ifMatch ? JSON.stringify({ ifMatch }) : '{}',",
+		"const planPreviewStateMessage = (planState, detail) => {",
+		"Create Plan will POST /v1/plans/deployments/${deploymentName}, store an immutable server-authored preview, and update this workspace URL with a shareable planId.",
+		"Loading immutable plan preview ${activePlanId} from GET /v1/plans/${activePlanId}.",
+		"const approvalSection = createDetailSection(activePlanRecord ? 'Plan preview approval guidance' : 'Derived approval guidance');",
+		"Plan preview risk level",
+		"Risk factors · ${riskReasons.join('; ')}",
+		"Approval required · ${activePlanRecord.approval?.required ? 'Yes' : 'No'}",
 		"Create Plan",
 		"Apply Plan",
-		"Plan preview is derived from rollout steps, rollout execution resources, and the latest runtime summary in the deployment detail read model.",
+		"Plan preview actions",
+		"Stored plan preview",
+		"Shareable URL · ${buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activePlanRecord.id })}",
+		"Plan preview errors",
+		"Server-authored plan preview loaded from GET /v1/plans/${activePlanRecord.id}.",
+		"No immutable plan preview has been created yet. The table below is derived from rollout steps, rollout execution resources, and the latest runtime summary in the deployment detail read model so operators can inspect likely changes before creating a server-authored preview.",
 		"Operation",
 		"Phase",
 		"Target",
 		"Operator note",
 		"No derived plan operations are currently available.",
+		"No server-authored plan operations are stored for this preview.",
+		"const fallbackIfMatch = planState.record?.source?.fingerprint || '';",
+		"const ifMatch = detail.sourceFingerprint || await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;",
 		"if (currentPageState.page === 'application') {",
 		"renderApplicationDetailPage(detail);",
 		"if (currentPageState.page === 'resource') {",
 		"renderResourceDetailPage(detail);",
-		"if (currentPageState.page === 'drift' || currentPageState.page === 'plan') {",
+		"if (currentPageState.page === 'drift') {",
 		"renderDeploymentWorkspace(currentPageState.page, detail);",
+		"if (currentPageState.page === 'plan') {",
+		"renderDeploymentWorkspace('plan', detail, {",
 		"fetchDeploymentDetail(currentPageState.deployment)",
 	} {
 		if !strings.Contains(body, fragment) {
@@ -787,8 +819,12 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"assert_request_id_header \"http://$HOST:$PORT/v1/catalog/summary\"",
 		"assert_request_id_header \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing\"",
 		"assert_request_id_header \"http://$HOST:$PORT/\"",
+		"deployment_events_fixture=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/events\")",
 		"resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing\")",
 		"worker_resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service\")",
+		"assert deployment_events_fixture['deploymentName'] == 'payments-api-prod', deployment_events_fixture",
+		"assert isinstance(deployment_events_fixture['events'], list), deployment_events_fixture",
+		"assert len(deployment_events_fixture['events']) == 0, deployment_events_fixture",
 		"assert resource_logs['resourceType'] == 'trafficShiftPlan', resource_logs",
 		"assert worker_resource_logs['deploymentName'] == 'worker-prod', worker_resource_logs",
 		"assert worker_resource_logs['resourceType'] == 'ecsService', worker_resource_logs",
@@ -809,16 +845,26 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert isinstance(deployment_runtime_summary.get('changeDetails', []), list), deployment_detail") {
 		t.Fatalf("expected smoke-local.sh to verify deployment detail runtimeSummary.changeDetails shape")
 	}
+	if !strings.Contains(text, "controller_events=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/events\"") {
+		t.Fatalf("expected smoke-local.sh to hit deployment events after controller starts")
+	}
 	if !strings.Contains(text, "if deployment_history:") || !strings.Contains(text, "assert isinstance(deployment_history[0].get('changeDetails', []), list), deployment_detail") {
 		t.Fatalf("expected smoke-local.sh to verify deployment detail history changeDetails shape")
+	}
+	if !strings.Contains(text, "assert events_payload['deploymentName'] == 'payments-api-prod', events_payload") || !strings.Contains(text, "assert event.get('source') == 'controller', events_payload") {
+		t.Fatalf("expected smoke-local.sh to verify controller-populated deployment events payload")
 	}
 	if !strings.Contains(text, "assert 'Runtime change details' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Runtime change details")
 	}
 	for _, fragment := range []string{
-		"assert 'Derived approval guidance' in ui, ui",
-		"assert 'Derived risk level' in ui, ui",
-		"assert 'Plan preview is derived from rollout steps, rollout execution resources, and the latest runtime summary in the deployment detail read model.' in ui, ui",
+		"assert 'Plan preview actions' in ui, ui",
+		"assert 'Plan preview approval guidance' in ui, ui",
+		"assert 'Create Plan will POST /v1/plans/deployments/${deploymentName}, store an immutable server-authored preview, and update this workspace URL with a shareable planId.' in ui, ui",
+		"assert 'Server-authored plan preview loaded from GET /v1/plans/${activePlanRecord.id}.' in ui, ui",
+		"assert \"params.get('planId') || ''\" in ui, ui",
+		"plan_ui=$(curl -fsS \"http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id\")",
+		"assert 'planId' in plan_ui, plan_ui",
 	} {
 		if !strings.Contains(text, fragment) {
 			t.Fatalf("expected smoke-local.sh to include %q", fragment)
@@ -839,6 +885,51 @@ func TestOverviewDocsLockECSRollingFallbackContract(t *testing.T) {
 			"- `ecsRolling`",
 			"- `ecsService` → `{deployment}-service` → `ECS service Tenet updates with native rolling deployment`, optionally extended with rollout-strategy qualifiers such as `while respecting min healthy 90% and warmup 30s`",
 			"worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
+	}
+}
+
+func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
+	files := map[string][]string{
+		"../../scripts/smoke-docker.sh": {
+			"config --services",
+			"for service in api controller redis; do",
+			"\"$ROOT/scripts/docker-up.sh\" \"${COMPOSE[@]}\"",
+			"curl -fsS \"$API_BASE_URL/healthz\"",
+			"curl -fsS \"$API_BASE_URL/v1/catalog/summary\"",
+			"curl -fsS \"$API_BASE_URL/v1/overview/applications\"",
+			"curl -fsS \"$API_BASE_URL/v1/overview/deployments/payments-api-prod\"",
+			"logs controller --tail=50",
+			"down --remove-orphans",
+		},
+		"../../Makefile": {
+			".PHONY: test fmt docker-build docker-up docker-down smoke-local smoke-docker",
+			"smoke-docker:",
+			"./scripts/smoke-docker.sh",
+		},
+		"../../README.md": {
+			"Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis.",
+			"Use `make smoke-docker` when you need to validate `compose.yaml`, confirm the `api`/`controller`/`redis` service contract, and prove the containerized local stack plus controller logs are reachable end to end.",
+			"make smoke-docker",
+		},
+		"../../docs/architecture/tenet-v1-local-runtime.md": {
+			"### Docker stack smoke check",
+			"make smoke-docker",
+			"asserts the `api`, `controller`, and `redis` services are present in `compose.yaml`",
+			"`docker compose down --remove-orphans` even on failure",
 		},
 	}
 

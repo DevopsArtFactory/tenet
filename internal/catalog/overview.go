@@ -124,12 +124,19 @@ type DeploymentOverviewDetail struct {
 	RolloutConfig      domain.DeploymentRolloutConfig `json:"rolloutConfig,omitempty"`
 	DeployedArtifact   domain.DeploymentArtifact      `json:"deployedArtifact,omitempty"`
 	ObservedGeneration int64                          `json:"observedGeneration,omitempty"`
+	SourceFingerprint  string                         `json:"sourceFingerprint,omitempty"`
 	Sync               domain.Sync                    `json:"sync"`
 	Health             domain.Health                  `json:"health"`
 	RuntimeSummary     *domain.RuntimeSummary         `json:"runtimeSummary,omitempty"`
 	Rollout            *domain.RolloutSummary         `json:"rollout,omitempty"`
 	Conditions         []domain.Condition             `json:"conditions,omitempty"`
 	History            []domain.StatusHistoryEntry    `json:"history,omitempty"`
+}
+
+// DeploymentOverviewEvents exposes controller-derived runtime history for one deployment.
+type DeploymentOverviewEvents struct {
+	DeploymentName string                      `json:"deploymentName"`
+	Events         []domain.StatusHistoryEntry `json:"events"`
 }
 
 // ApplicationOverviewDetail makes the application page contract explicit while preserving deployment detail semantics.
@@ -149,6 +156,7 @@ type ApplicationOverviewDetail struct {
 	RolloutConfig      domain.DeploymentRolloutConfig `json:"rolloutConfig,omitempty"`
 	DeployedArtifact   domain.DeploymentArtifact      `json:"deployedArtifact,omitempty"`
 	ObservedGeneration int64                          `json:"observedGeneration,omitempty"`
+	SourceFingerprint  string                         `json:"sourceFingerprint,omitempty"`
 	Sync               domain.Sync                    `json:"sync"`
 	Health             domain.Health                  `json:"health"`
 	RuntimeSummary     *domain.RuntimeSummary         `json:"runtimeSummary,omitempty"`
@@ -406,6 +414,7 @@ func BuildApplicationOverviewDetail(c manifest.Catalog, snapshots []statusstore.
 		RolloutConfig:      cloneDeploymentRolloutConfig(detail.RolloutConfig),
 		DeployedArtifact:   detail.DeployedArtifact,
 		ObservedGeneration: detail.ObservedGeneration,
+		SourceFingerprint:  detail.SourceFingerprint,
 		Sync:               detail.Sync,
 		Health:             detail.Health,
 		RuntimeSummary:     cloneRuntimeSummary(detail.RuntimeSummary),
@@ -445,7 +454,7 @@ func BuildDeploymentOverviewDetail(c manifest.Catalog, snapshots []statusstore.S
 	account := accountByName[resolved.AccountName]
 	status := statusByDeployment[deploymentName]
 
-	return DeploymentOverviewDetail{
+	detail := DeploymentOverviewDetail{
 		Name:               deployment.Name,
 		AppRef:             deployment.AppRef,
 		EnvironmentRef:     deployment.EnvironmentRef,
@@ -467,6 +476,30 @@ func BuildDeploymentOverviewDetail(c manifest.Catalog, snapshots []statusstore.S
 		Rollout:            cloneRolloutSummary(status.Rollout),
 		Conditions:         append([]domain.Condition(nil), status.Conditions...),
 		History:            cloneStatusHistory(status.History),
+	}
+	fingerprint, err := DeriveDeploymentSourceFingerprint(detail)
+	if err != nil {
+		return DeploymentOverviewDetail{}, err
+	}
+	detail.SourceFingerprint = fingerprint
+	return detail, nil
+}
+
+// BuildDeploymentOverviewEvents returns the controller-derived runtime history timeline for one deployment.
+func BuildDeploymentOverviewEvents(c manifest.Catalog, snapshots []statusstore.Snapshot, deploymentName string) (DeploymentOverviewEvents, error) {
+	detail, err := BuildDeploymentOverviewDetail(c, snapshots, deploymentName)
+	if err != nil {
+		return DeploymentOverviewEvents{}, err
+	}
+
+	events := detail.History
+	if len(events) == 0 {
+		events = []domain.StatusHistoryEntry{}
+	}
+
+	return DeploymentOverviewEvents{
+		DeploymentName: detail.Name,
+		Events:         events,
 	}, nil
 }
 

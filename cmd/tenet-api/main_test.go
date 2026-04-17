@@ -11,6 +11,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
+	"github.com/DevopsArtFactory/tenet/internal/planpreview"
 	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
@@ -118,6 +119,107 @@ func TestAPIOptionsOverviewDeploymentReturnsNotFoundForRepoUnknownDeployment(t *
 	}
 	if store.listCalls != 0 {
 		t.Fatalf("expected no List calls, got %d", store.listCalls)
+	}
+}
+
+func TestAPIOptionsPlanPreviewPersistsAndReadsBack(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	t.Setenv("TENET_PLAN_STORE_PATH", filepath.Join(t.TempDir(), "plan-previews.json"))
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
+	if options.CreateDeploymentPlanPreview == nil || options.PlanPreview == nil {
+		t.Fatalf("expected plan preview providers to be wired")
+	}
+
+	created, err := options.CreateDeploymentPlanPreview(context.Background(), "api-prod", planpreview.CreateRequest{})
+	if err != nil {
+		t.Fatalf("CreateDeploymentPlanPreview returned error: %v", err)
+	}
+	if !created.Created || created.Record.ID == "" {
+		t.Fatalf("expected a persisted immutable plan preview, got %+v", created)
+	}
+	if created.Record.DeploymentName != "api-prod" || created.Record.Status != planpreview.StatusReady {
+		t.Fatalf("unexpected created plan preview: %+v", created.Record)
+	}
+	if len(created.Record.Operations) == 0 {
+		t.Fatalf("expected derived plan operations, got %+v", created.Record)
+	}
+
+	fetched, err := options.PlanPreview(context.Background(), created.Record.ID)
+	if err != nil {
+		t.Fatalf("PlanPreview returned error: %v", err)
+	}
+	if fetched.ID != created.Record.ID || fetched.Source.Route != "/v1/overview/deployments/api-prod" {
+		t.Fatalf("unexpected fetched immutable plan preview: %+v", fetched)
+	}
+}
+
+func TestAPIOptionsOverviewDeploymentEventsUsesNamedSnapshotLookup(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	store := &stubStatusStore{
+		getSnapshot: statusstore.Snapshot{
+			DeploymentName: "api-prod",
+			Status: domain.DeploymentStatus{
+				History: []domain.StatusHistoryEntry{{
+					Timestamp:          "2026-04-16T06:49:00Z",
+					Source:             "controller",
+					Summary:            "Shifted 10 percent of traffic",
+					Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "Traffic shift running"},
+					Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "steady"},
+					DesiredGeneration:  8,
+					ObservedGeneration: 7,
+				}},
+			},
+		},
+	}
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, store)
+	if options.OverviewDeploymentEvents == nil {
+		t.Fatalf("expected overview deployment events provider")
+	}
+
+	events, err := options.OverviewDeploymentEvents("api-prod")
+	if err != nil {
+		t.Fatalf("OverviewDeploymentEvents returned error: %v", err)
+	}
+	if store.getCalls != 1 {
+		t.Fatalf("expected one Get call, got %d", store.getCalls)
+	}
+	if store.gotGetName != "api-prod" {
+		t.Fatalf("expected Get lookup for api-prod, got %q", store.gotGetName)
+	}
+	if store.listCalls != 0 {
+		t.Fatalf("expected no List calls, got %d", store.listCalls)
+	}
+	if events.DeploymentName != "api-prod" || len(events.Events) != 1 || events.Events[0].Source != "controller" {
+		t.Fatalf("unexpected deployment events: %+v", events)
+	}
+}
+
+func TestAPIOptionsOverviewDeploymentEventsReturnsEmptyListWhenSnapshotMissing(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	store := &stubStatusStore{getErr: statusstore.ErrNotFound}
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, store)
+	if options.OverviewDeploymentEvents == nil {
+		t.Fatalf("expected overview deployment events provider")
+	}
+
+	events, err := options.OverviewDeploymentEvents("worker-prod")
+	if err != nil {
+		t.Fatalf("OverviewDeploymentEvents returned error: %v", err)
+	}
+	if store.getCalls != 1 {
+		t.Fatalf("expected one Get call, got %d", store.getCalls)
+	}
+	if store.gotGetName != "worker-prod" {
+		t.Fatalf("expected Get lookup for worker-prod, got %q", store.gotGetName)
+	}
+	if store.listCalls != 0 {
+		t.Fatalf("expected no List calls, got %d", store.listCalls)
+	}
+	if events.DeploymentName != "worker-prod" || events.Events == nil || len(events.Events) != 0 {
+		t.Fatalf("expected explicit empty events payload, got %+v", events)
 	}
 }
 

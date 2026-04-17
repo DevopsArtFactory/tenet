@@ -49,7 +49,7 @@ Tenet keeps runtime status separately from desired configuration. Runtime snapsh
 Tenet joins desired state and runtime state into read models that power:
 - the embedded browser UI
 - drill-down pages for applications and resources
-- operational views such as rollout context and recent logs
+- operational views such as rollout context, immutable plan previews, deployment events, and recent logs
 
 The embedded UI is intentionally lightweight: static HTML/CSS/JS served directly by the Go API. That keeps the product easy to run locally while the control-plane model is still evolving.
 
@@ -73,13 +73,31 @@ You should land on the applications overview page.
 
 Every HTTP response from `tenet-api` also carries a `Request-Id` header. If your client already sends `request-id`, Tenet echoes it back; otherwise it generates one. Capture that value when an API call fails and use the same ID to correlate any request-scoped handler or provider logs that read `api.RequestIDFromContext(ctx)`.
 
+For the current read-only plan preview flow, a typical local operator path is:
+- `GET /v1/overview/applications/{deploymentName}` or `GET /v1/overview/deployments/{deploymentName}` to inspect the deployment and capture its additive `sourceFingerprint`
+- `POST /v1/plans/deployments/{deploymentName}` with optional `{"ifMatch":"<sourceFingerprint>"}` to persist an immutable preview for the reviewed state
+- `GET /v1/plans/{planId}` or open `http://localhost:8080/?page=plan&deployment=payments-api-prod&planId={planId}` to reopen the stored preview
+
+Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis. Use `make smoke-docker` when you need to validate `compose.yaml`, confirm the `api`/`controller`/`redis` service contract, and prove the containerized local stack plus controller logs are reachable end to end.
+
 ### Run with Docker
 
 ```bash
 make docker-up
 ```
 
-This starts the local stack, including the API, controller, and Redis-backed runtime state.
+If `make docker-up` exits before starting the stack, `localhost:8080` is already owned by something outside this Compose project. Inspect the listener with `lsof -nP -iTCP:8080 -sTCP:LISTEN`. If you want to clear a prior Tenet stack before retrying, run `make docker-down`, then rerun `docker compose up --build -d`.
+
+Run the dedicated Docker-stack smoke before or instead of manual exploration when you want a single command that validates the Compose config, boots the stack, waits for API health, checks representative endpoints, confirms controller logs are useful, and tears the stack back down:
+
+```bash
+make smoke-docker
+```
+
+This starts the local stack:
+- `api` on `http://localhost:8080`
+- `controller` as a long-running repo-validating process that now reloads fixtures and logs reconcile plans every few seconds
+- `redis` as the active runtime status backend, seeded from `examples/local-status/deployments.json` when empty
 
 Open:
 
@@ -117,8 +135,20 @@ Canonical resource-log routes stay stable across rollout modes so operators can 
 - `asgWeightedTargetGroups`: `trafficShiftPlan` (`{deployment}-weighted-routing`)
 - `ecsRolling`: `ecsService` (`{deployment}-service`)
 
-Example:
-- `/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service`
+The same drill-down also includes read-only workspace surfaces:
+- `/?page=drift&deployment={deploymentName}` for derived field-level troubleshooting context
+- `/?page=plan&deployment={deploymentName}` for immutable plan previews and shareable `planId` reopen URLs while apply remains disabled
+
+Tenet also exposes a read-only deployment events slice for the same drill-down workflow:
+- `GET /v1/overview/deployments/{deploymentName}/events`
+
+This route returns controller-derived runtime events copied from persisted `status.history`. It is intentionally operator-facing and refresh-based, not a full durable audit system yet. When a deployment exists but no controller-authored runtime history has been persisted, the route still returns `200 OK` with `events: []`.
+
+When fixture-backed or early controller payloads have not yet persisted `rollout.execution[]`, Tenet keeps the read-only drill-down contract stable by synthesizing the same fallback rollout resources the operator would otherwise see from the controller-authored payload:
+- `ecsRolling`: `ecsService` (`{deployment}-service`)
+
+For the ECS rolling fallback service, the recent-log drill-down stays on the same operator workflow. Example route:
+- `GET /v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service`
 
 ## Repository layout
 
@@ -143,6 +173,8 @@ Implemented today:
 - read-only API and embedded UI
 - applications -> application -> resource drill-down flow
 - rollout/resource context for EC2 and ECS
+- immutable plan preview creation/readback with stable `planId` and optimistic `ifMatch` support
+- deployment events overview derived from persisted runtime history
 - recent resource-log support for supported resource types
 
 Not implemented yet:

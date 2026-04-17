@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
+	"github.com/DevopsArtFactory/tenet/internal/planpreview"
 	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
@@ -27,7 +29,7 @@ func respondInternalError(w http.ResponseWriter) {
 }
 
 func respondLookupError(w http.ResponseWriter, err error) {
-	if errors.Is(err, statusstore.ErrNotFound) {
+	if errors.Is(err, statusstore.ErrNotFound) || errors.Is(err, planpreview.ErrNotFound) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
@@ -49,7 +51,10 @@ type Options struct {
 	OverviewAccount                func(string) (catalog.AccountOverviewDetail, error)
 	OverviewProjectEnvironment     func(string, string, string) (catalog.ProjectEnvironmentOverviewDetail, error)
 	OverviewDeployment             func(string) (catalog.DeploymentOverviewDetail, error)
+	OverviewDeploymentEvents       func(string) (catalog.DeploymentOverviewEvents, error)
 	OverviewDeploymentResourceLogs func(context.Context, string, string, string) (resourcelogs.Result, error)
+	CreateDeploymentPlanPreview    func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error)
+	PlanPreview                    func(context.Context, string) (planpreview.Record, error)
 	DeploymentStatuses             func() ([]statusstore.Snapshot, error)
 	DeploymentStatus               func(string) (statusstore.Snapshot, error)
 }
@@ -271,6 +276,23 @@ func NewRouter(options Options) http.Handler {
 		}
 		path := strings.TrimPrefix(r.URL.Path, "/v1/overview/deployments/")
 		switch {
+		case strings.HasSuffix(path, "/events"):
+			if options.OverviewDeploymentEvents == nil {
+				http.Error(w, "overview deployment events unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			name := strings.TrimSuffix(path, "/events")
+			if name == "" || strings.Contains(name, "/") {
+				http.Error(w, "invalid deployment name", http.StatusBadRequest)
+				return
+			}
+			events, err := options.OverviewDeploymentEvents(name)
+			if err != nil {
+				respondLookupError(w, err)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(events)
 		case strings.HasSuffix(path, "/resource-logs"):
 			if options.OverviewDeployment == nil {
 				http.Error(w, "overview deployment unavailable", http.StatusServiceUnavailable)
@@ -324,6 +346,63 @@ func NewRouter(options Options) http.Handler {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(detail)
 		}
+	})
+	mux.HandleFunc("/v1/plans/deployments/", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodPost) {
+			return
+		}
+		if options.CreateDeploymentPlanPreview == nil {
+			http.Error(w, "deployment plan preview unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		name := strings.TrimPrefix(r.URL.Path, "/v1/plans/deployments/")
+		if name == "" || strings.Contains(name, "/") {
+			http.Error(w, "invalid deployment name", http.StatusBadRequest)
+			return
+		}
+		var req planpreview.CreateRequest
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			http.Error(w, "invalid plan preview request body", http.StatusBadRequest)
+			return
+		}
+		if err := decoder.Decode(&struct{}{}); err != nil && !errors.Is(err, io.EOF) {
+			http.Error(w, "invalid plan preview request body", http.StatusBadRequest)
+			return
+		}
+		result, err := options.CreateDeploymentPlanPreview(r.Context(), name, req)
+		if err != nil {
+			respondLookupError(w, err)
+			return
+		}
+		w.Header().Set("Location", "/v1/plans/"+result.Record.ID)
+		w.Header().Set("Content-Type", "application/json")
+		if result.Created {
+			w.WriteHeader(http.StatusCreated)
+		}
+		_ = json.NewEncoder(w).Encode(result.Record)
+	})
+	mux.HandleFunc("/v1/plans/", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+		if options.PlanPreview == nil {
+			http.Error(w, "plan preview unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		id := strings.TrimPrefix(r.URL.Path, "/v1/plans/")
+		if id == "" || strings.Contains(id, "/") {
+			http.Error(w, "invalid plan id", http.StatusBadRequest)
+			return
+		}
+		record, err := options.PlanPreview(r.Context(), id)
+		if err != nil {
+			respondLookupError(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(record)
 	})
 	mux.HandleFunc("/v1/status/deployments", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodGet) {

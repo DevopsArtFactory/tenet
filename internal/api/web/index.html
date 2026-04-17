@@ -832,6 +832,7 @@
           page: validPages.has(page) ? page : 'applications',
           accountId: params.get('accountId') || '',
           deployment: params.get('deployment') || '',
+          planId: params.get('planId') || '',
           resourceType: params.get('resourceType') || '',
           resourceId: params.get('resourceId') || '',
         };
@@ -1091,8 +1092,16 @@
         const page = createElement('article', 'account');
         page.append(
           createElement('h2', 'account-name', 'Application resources'),
-          createElement('div', 'account-meta', 'Grouped linked resources for the selected application. Deep rollout/history details stay on the final resource page.'),
+          createElement('div', 'account-meta', 'Grouped linked resources for the selected application. Open drift or plan/apply from here before the final resource page.'),
         );
+        const workspaceLinks = createElement('div', 'row-links row-links-shell');
+        if (detail.name) {
+          workspaceLinks.append(
+            createNavLink(buildPageURL('drift', { deployment: detail.name }), 'Drift view', '_self'),
+            createNavLink(buildPageURL('plan', { deployment: detail.name }), 'Plan/apply', '_self'),
+          );
+        }
+        page.append(workspaceLinks);
         const rows = createElement('div', 'rows');
         groupResourceSections(detail).forEach((group) => {
           const groupSection = createElement('section', 'deployment-group');
@@ -1423,11 +1432,234 @@
           if (!response.ok) throw new Error(`application detail request failed (${response.status})`);
           return response.json();
         });
+      const requestError = (kind, message, status = 0) => {
+        const error = new Error(message);
+        error.kind = kind;
+        error.status = status;
+        return error;
+      };
+      const responseErrorMessage = (response, fallback) => {
+        if (!response || typeof response.text !== 'function') return Promise.resolve(fallback);
+        return response.text()
+          .then((body) => {
+            const trimmed = String(body || '').trim();
+            return trimmed ? `${fallback}: ${trimmed}` : fallback;
+          })
+          .catch(() => fallback);
+      };
       const fetchDeploymentDetail = (deploymentName) => fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}`)
         .then((response) => {
           if (!response.ok) throw new Error(`detail request failed (${response.status})`);
           return response.json();
         });
+      const fetchPlanPreview = (planId) => fetch(`/v1/plans/${encodeURIComponent(planId)}`)
+        .then((response) => {
+          if (response.ok) return response.json();
+          const fallback = response.status === 503
+            ? `plan preview API unavailable (${response.status})`
+            : `plan preview request failed (${response.status})`;
+          return responseErrorMessage(response, fallback).then((message) => {
+            throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);
+          });
+        });
+      const cloneJSONValue = (value) => {
+        if (Array.isArray(value)) return value.map((entry) => cloneJSONValue(entry));
+        if (!value || typeof value !== 'object') return value;
+        return Object.entries(value).reduce((result, [key, entry]) => {
+          if (entry === undefined) return result;
+          result[key] = cloneJSONValue(entry);
+          return result;
+        }, {});
+      };
+      const hasArtifactValue = (value) => Boolean(value && typeof value === 'object' && ['binary', 'image'].some((key) => typeof value[key] === 'string' && value[key]));
+      const planSourceObservedGeneration = (detail) => {
+        const runtimeObserved = Number(detail.runtimeSummary?.observedGeneration);
+        if (runtimeObserved > 0) return runtimeObserved;
+        const deploymentObserved = Number(detail.observedGeneration);
+        return deploymentObserved > 0 ? deploymentObserved : 0;
+      };
+      const planSourceDesiredGeneration = (detail) => {
+        const rolloutDesired = Number(detail.rollout?.desiredGeneration || 0);
+        if (rolloutDesired > 0) return rolloutDesired;
+        const runtimeDesired = Number(detail.runtimeSummary?.desiredGeneration || 0);
+        if (runtimeDesired > 0) return runtimeDesired;
+        const observed = planSourceObservedGeneration(detail);
+        if (observed > 0 && detail.sync?.state === 'Synced' && detail.health?.overall === 'Healthy') return observed;
+        if (observed > 0) return observed + 1;
+        return 1;
+      };
+      const planSourceCurrentStep = (detail) => detail.rollout?.currentStep || detail.runtimeSummary?.currentStep || '';
+      const planSourceRuntimeTimestamp = (detail) => detail.runtimeSummary?.timestamp || '';
+      const planSourceRuntimeSource = (detail) => detail.runtimeSummary?.source || '';
+      const planSourceChanges = (detail) => Array.isArray(detail.runtimeSummary?.changes) ? detail.runtimeSummary.changes.filter((value) => typeof value === 'string' && value) : [];
+      const planSourceChangeDetails = (detail) => Array.isArray(detail.runtimeSummary?.changeDetails) ? detail.runtimeSummary.changeDetails.filter((value) => typeof value === 'string' && value) : [];
+      const planSourceExecutionResources = (detail) => {
+        const execution = detail.rollout?.execution || [];
+        if (execution.length) {
+          return execution.map((resource) => {
+            const entry = {
+              resource: resource.resource || '',
+              name: resource.name || '',
+            };
+            if (resource.description) entry.description = resource.description;
+            return entry;
+          });
+        }
+        if (!detail.executionMode) return [];
+        switch (detail.executionMode) {
+          case 'ecsCodeDeploy':
+            return [
+              { resource: 'ecsService', name: `${detail.name}-service` },
+              { resource: 'codeDeployApplication', name: `${detail.name}-codedeploy-app` },
+              { resource: 'codeDeployDeploymentGroup', name: `${detail.name}-codedeploy-group` },
+              { resource: 'productionListener', name: `${detail.name}-prod-listener` },
+              { resource: 'testListener', name: `${detail.name}-test-listener` },
+              { resource: 'blueTaskSetTargetGroup', name: `${detail.name}-blue` },
+              { resource: 'greenTaskSetTargetGroup', name: `${detail.name}-green` },
+            ];
+          case 'ecsRolling':
+            return [{ resource: 'ecsService', name: `${detail.name}-service` }];
+          case 'asgWeightedTargetGroups':
+            return [
+              { resource: 'candidateAutoScalingGroup', name: `${detail.name}-candidate` },
+              { resource: 'activeTargetGroup', name: `${detail.name}-active` },
+              { resource: 'candidateTargetGroup', name: `${detail.name}-candidate` },
+              { resource: 'productionListenerRule', name: `${detail.name}-prod-listener` },
+              { resource: 'trafficShiftPlan', name: `${detail.name}-weighted-routing` },
+              { resource: 'userDataBootstrapSource', name: canonicalUserDataBootstrapSource(detail.userData) },
+            ];
+          case 'asgInstanceRefresh':
+            return [
+              { resource: 'serviceAutoScalingGroup', name: `${detail.name}-service` },
+              { resource: 'userDataBootstrapSource', name: canonicalUserDataBootstrapSource(detail.userData) },
+            ];
+          default:
+            return [];
+        }
+      };
+      const buildPlanSourceFingerprintPayload = (detail) => {
+        const rolloutSteps = Array.isArray(detail.rollout?.steps) ? detail.rollout.steps : [];
+        if (!detail?.name || !rolloutSteps.length) return null;
+
+        const payload = {
+          deploymentName: detail.name,
+          sync: cloneJSONValue(detail.sync || {}),
+          health: cloneJSONValue(detail.health || {}),
+        };
+        if (detail.targetType) payload.targetType = detail.targetType;
+        if (detail.strategy) payload.strategy = detail.strategy;
+        if (detail.executionMode) payload.executionMode = detail.executionMode;
+        if (hasArtifactValue(detail.desiredArtifact)) payload.desiredArtifact = cloneJSONValue(detail.desiredArtifact);
+        const effectiveDeployedArtifact = hasArtifactValue(detail.deployedArtifact)
+          ? detail.deployedArtifact
+          : detail.runtimeSummary?.deployedArtifact;
+        if (hasArtifactValue(effectiveDeployedArtifact)) payload.deployedArtifact = cloneJSONValue(effectiveDeployedArtifact);
+        const runtimeTimestamp = planSourceRuntimeTimestamp(detail);
+        if (runtimeTimestamp) payload.runtimeTimestamp = runtimeTimestamp;
+        const runtimeSource = planSourceRuntimeSource(detail);
+        if (runtimeSource) payload.runtimeSource = runtimeSource;
+        const currentStep = planSourceCurrentStep(detail);
+        if (currentStep) payload.currentStep = currentStep;
+        const desiredGeneration = planSourceDesiredGeneration(detail);
+        if (desiredGeneration > 0) payload.desiredGeneration = desiredGeneration;
+        const observedGeneration = planSourceObservedGeneration(detail);
+        if (observedGeneration > 0) payload.observedGeneration = observedGeneration;
+        if (Array.isArray(detail.conditions) && detail.conditions.length) payload.conditions = cloneJSONValue(detail.conditions);
+        const runtimeChanges = planSourceChanges(detail);
+        if (runtimeChanges.length) payload.runtimeChanges = cloneJSONValue(runtimeChanges);
+        const runtimeDetails = planSourceChangeDetails(detail);
+        if (runtimeDetails.length) payload.runtimeChangeDetails = cloneJSONValue(runtimeDetails);
+        payload.rolloutSteps = cloneJSONValue(rolloutSteps);
+        const execution = planSourceExecutionResources(detail);
+        if (execution.length) payload.rolloutExecution = cloneJSONValue(execution);
+        return payload;
+      };
+      const derivePlanSourceFingerprint = async (detail) => {
+        const payload = buildPlanSourceFingerprintPayload(detail);
+        const cryptoAPI = (typeof window !== 'undefined' && window.crypto) ? window.crypto : (typeof globalThis !== 'undefined' ? globalThis.crypto : null);
+        if (!payload || !cryptoAPI?.subtle || typeof TextEncoder === 'undefined') return '';
+        const content = JSON.stringify(payload);
+        const digest = await cryptoAPI.subtle.digest('SHA-256', new TextEncoder().encode(content));
+        const hex = Array.from(new Uint8Array(digest)).map((value) => value.toString(16).padStart(2, '0')).join('');
+        return hex ? `plan_${hex.slice(0, 16)}` : '';
+      };
+      const createPlanPreview = (deploymentName, ifMatch = '') => fetch(`/v1/plans/deployments/${encodeURIComponent(deploymentName)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: ifMatch ? JSON.stringify({ ifMatch }) : '{}',
+      }).then((response) => {
+        if (response.ok) return response.json();
+        const fallback = response.status === 503
+          ? `plan preview API unavailable (${response.status})`
+          : `plan preview create failed (${response.status})`;
+        return responseErrorMessage(response, fallback).then((message) => {
+          throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);
+        });
+      });
+      const normalizePlanOperationStatus = (status) => {
+        const normalized = String(status || '').toLowerCase();
+        return ['completed', 'current', 'pending'].includes(normalized) ? normalized : 'pending';
+      };
+      const planOperationStatusLabel = (status) => rolloutStepStatusLabel(normalizePlanOperationStatus(status));
+      const previewOperations = (record) => (record?.operations || []).map((operation) => ({
+        kind: textOrDash(operation.kind),
+        status: normalizePlanOperationStatus(operation.status),
+        statusLabel: planOperationStatusLabel(operation.status),
+        phase: textOrDash(operation.phase),
+        target: textOrDash(operation.target),
+        summary: textOrDash(operation.summary),
+      }));
+      const planPreviewStateMessage = (planState, detail) => {
+        const deploymentName = detail.name || currentPageState.deployment || 'deployment';
+        const activePlanRecord = planState?.record || null;
+        const activePlanId = activePlanRecord?.id || planState?.planId || '';
+        switch (planState?.status) {
+          case 'loading':
+            if (planState.request === 'load' && activePlanId) {
+              return `Loading immutable plan preview ${activePlanId} from GET /v1/plans/${activePlanId}. Deployment-derived context remains visible below while the record loads.`;
+            }
+            return `Creating immutable plan preview via POST /v1/plans/deployments/${deploymentName}. Deployment-derived context remains visible below while Tenet stores the server-authored preview.`;
+          case 'ready':
+            return `Immutable plan preview ${activePlanId} is loaded and this workspace now shows the server-authored preview. Apply Plan remains disabled in this read-only slice.`;
+          case 'failed':
+            return `Immutable plan preview ${activePlanId} is recorded as failed. Review the server-authored errors below before retrying Create Plan; Apply Plan remains disabled.`;
+          case 'unavailable':
+            if (planState.request === 'load' && activePlanId) {
+              return `GET /v1/plans/${activePlanId} is currently unavailable. Deployment-derived context is still shown below and Apply Plan remains disabled.`;
+            }
+            return `POST /v1/plans/deployments/${deploymentName} is currently unavailable. Deployment-derived context is still shown below and Apply Plan remains disabled.`;
+          case 'fetch-error':
+            return `${planState.request === 'load' ? 'Failed to load the selected plan preview' : 'Failed to create a plan preview'}: ${planState.error?.message || 'unknown error'}. Deployment-derived context is still shown below and Apply Plan remains disabled.`;
+          default:
+            return `Create Plan will POST /v1/plans/deployments/${deploymentName}, store an immutable server-authored preview, and update this workspace URL with a shareable planId. Until then, the deployment-derived context below stays available for operator review while Apply Plan remains disabled.`;
+        }
+      };
+      const planPreviewStateClassName = (planState) => {
+        switch (planState?.status) {
+          case 'failed':
+          case 'unavailable':
+          case 'fetch-error':
+            return 'error';
+          default:
+            return '';
+        }
+      };
+      const planPreviewStatusHeading = (planState) => {
+        switch (planState?.status) {
+          case 'loading':
+            return 'Loading plan preview';
+          case 'ready':
+            return 'Plan preview ready';
+          case 'failed':
+            return 'Plan preview failed';
+          case 'unavailable':
+            return 'Plan preview unavailable';
+          case 'fetch-error':
+            return 'Plan preview fetch error';
+          default:
+            return 'No stored plan preview yet';
+        }
+      };
       const renderDeploymentDetail = (container, detail) => {
         const detailGrid = createElement('div', 'detail-grid');
         [
@@ -1595,7 +1827,7 @@
         detailStateByDeployment.set(deploymentName, { status: 'loading', promise, container });
         return promise;
       };
-      const renderDeploymentWorkspace = (mode, detail) => {
+      const renderDeploymentWorkspace = (mode, detail, planState = null) => {
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
         const root = document.getElementById('accounts');
@@ -1620,7 +1852,7 @@
         });
         head.append(titleWrap, pills);
 
-        const backLink = createNavLink(buildPageURL('applications'), 'Back to overview');
+        const backLink = createNavLink(buildPageURL('application', { deployment: detail.name || currentPageState.deployment || '' }), 'Back to application');
         backLink.target = '_self';
         backLink.rel = '';
         const toolbarActions = createElement('div', 'toolbar-actions');
@@ -1793,43 +2025,114 @@
           }
           sections.push(conditionsSection);
         } else {
-          const approvalSection = createDetailSection('Derived approval guidance');
-          const planRisk = derivePlanRisk(detail);
+          const activePlanRecord = planState?.record && (planState.status === 'ready' || planState.status === 'failed')
+            ? planState.record
+            : null;
+          const planRisk = activePlanRecord?.risk || derivePlanRisk(detail);
+          const approvalSummary = activePlanRecord?.approval?.summary || planRisk.guidance;
+          const approvalReasons = (activePlanRecord?.approval?.reasons || []).filter(Boolean);
+          const riskReasons = (planRisk.reasons || []).filter(Boolean);
+          const approvalSection = createDetailSection(activePlanRecord ? 'Plan preview approval guidance' : 'Derived approval guidance');
           const approvalCallout = createElement('div', 'workspace-callout');
           const approvalHead = createElement('div', 'workspace-callout-head');
           approvalHead.append(
-            createElement('span', 'workspace-callout-label', 'Derived risk level'),
+            createElement('span', 'workspace-callout-label', activePlanRecord ? 'Plan preview risk level' : 'Derived risk level'),
             createElement('span', `severity-indicator severity-indicator-${planRisk.level}`, planRisk.label),
           );
           approvalCallout.append(
             approvalHead,
-            createElement('div', 'workspace-callout-copy', planRisk.guidance),
-            createElement('div', 'workspace-callout-factors', `Risk factors · ${planRisk.reasons.join('; ')}`),
+            createElement('div', 'workspace-callout-copy', approvalSummary),
           );
+          if (activePlanRecord) {
+            approvalCallout.append(
+              createElement('div', 'workspace-callout-factors', `Approval required · ${activePlanRecord.approval?.required ? 'Yes' : 'No'}`),
+            );
+          }
+          if (approvalReasons.length) {
+            approvalCallout.append(createElement('div', 'workspace-callout-factors', `Approval factors · ${approvalReasons.join('; ')}`));
+          }
+          if (riskReasons.length) {
+            approvalCallout.append(createElement('div', 'workspace-callout-factors', `Risk factors · ${riskReasons.join('; ')}`));
+          }
           approvalSection.append(approvalCallout);
           sections.push(approvalSection);
 
-          const actionsSection = createDetailSection('Plan/apply actions');
+          const actionsSection = createDetailSection('Plan preview actions');
           const actionBar = createElement('div', 'row-links');
-          const createPlanButton = createElement('button', 'toolbar-button', 'Create Plan');
+          const createPlanButton = createElement(
+            'button',
+            'toolbar-button',
+            planState?.status === 'loading' && planState.request === 'create' ? 'Creating plan…' : 'Create Plan',
+          );
           createPlanButton.type = 'button';
-          createPlanButton.disabled = true;
+          createPlanButton.disabled = planState?.status === 'loading';
+          if (typeof planState?.onCreatePlan === 'function') {
+            createPlanButton.addEventListener('click', () => {
+              if (createPlanButton.disabled) return;
+              planState.onCreatePlan();
+            });
+          }
           const applyPlanButton = createElement('button', 'toolbar-button', 'Apply Plan');
           applyPlanButton.type = 'button';
           applyPlanButton.disabled = true;
           actionBar.append(createPlanButton, applyPlanButton);
+          const planStateCallout = createElement('div', 'detail-state', planPreviewStateMessage(planState, detail));
+          const planStateClassName = planPreviewStateClassName(planState);
+          if (planStateClassName) {
+            planStateCallout.classList.add(planStateClassName);
+          }
           actionsSection.append(
             actionBar,
-            createElement('div', 'detail-state', 'Plan/apply controls are not wired to mutation APIs in this read-only slice yet.'),
+            createElement('div', 'workspace-callout-label', planPreviewStatusHeading(planState)),
+            planStateCallout,
           );
           sections.push(actionsSection);
 
+          if (activePlanRecord) {
+            const previewSection = createDetailSection('Stored plan preview');
+            const previewGrid = createElement('div', 'detail-grid');
+            [
+              ['Plan ID', metricValue(activePlanRecord.id)],
+              ['Preview status', textOrDash(activePlanRecord.status)],
+              ['Created at', metricValue(activePlanRecord.createdAt)],
+              ['Source route', metricValue(activePlanRecord.source?.route)],
+              ['Source fingerprint', metricValue(activePlanRecord.source?.fingerprint)],
+              ['Source runtime', [metricValue(activePlanRecord.source?.runtimeSource), metricValue(activePlanRecord.source?.runtimeTimestamp)].join(' · ')],
+              ['Source generations', `desired ${generationValue(activePlanRecord.source?.desiredGeneration)} · observed ${generationValue(activePlanRecord.source?.observedGeneration)}`],
+            ].forEach(([label, value]) => {
+              previewGrid.append(createMetric(label, value));
+            });
+            previewSection.append(
+              previewGrid,
+              createElement('div', 'detail-state', `Shareable URL · ${buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activePlanRecord.id })}`),
+            );
+            sections.push(previewSection);
+          }
+
+          if (activePlanRecord?.errors?.length) {
+            const errorsSection = createDetailSection('Plan preview errors');
+            const errorList = createElement('ul', 'detail-list');
+            activePlanRecord.errors.forEach((entry) => {
+              errorList.append(createElement('li', '', textOrDash(entry)));
+            });
+            errorsSection.append(errorList);
+            sections.push(errorsSection);
+          }
+
           const planSection = createDetailSection(emptyTitle);
-          const operations = derivePlanOperations(detail);
+          const operations = activePlanRecord ? previewOperations(activePlanRecord) : derivePlanOperations(detail);
           if (!operations.length) {
-            planSection.append(createElement('div', 'detail-state', 'No derived plan operations are currently available.'));
+            planSection.append(createElement('div', 'detail-state', activePlanRecord
+              ? 'No server-authored plan operations are stored for this preview.'
+              : 'No derived plan operations are currently available.'));
           } else {
-            const operationsIntro = createElement('div', 'detail-state', 'Plan preview is derived from rollout steps, rollout execution resources, and the latest runtime summary in the deployment detail read model.');
+            const operationsIntro = createElement(
+              'div',
+              'detail-state',
+              activePlanRecord
+                ? `Server-authored plan preview loaded from GET /v1/plans/${activePlanRecord.id}.`
+                : 'No immutable plan preview has been created yet. The table below is derived from rollout steps, rollout execution resources, and the latest runtime summary in the deployment detail read model so operators can inspect likely changes before creating a server-authored preview.',
+            );
             const tableWrap = createElement('div', 'drift-table-wrap');
             const table = createElement('table', 'drift-table');
             const headerRow = createElement('tr');
@@ -2007,8 +2310,6 @@
                   createNavLink(buildPageURL('application', { deployment: deployment.name }), 'Open application', '_self'),
                   createNavLink(`/v1/overview/deployments/${encodeURIComponent(deployment.name)}`, 'Overview JSON'),
                   createNavLink(`/v1/status/deployments/${encodeURIComponent(deployment.name)}`, 'Status JSON'),
-                  createNavLink(buildPageURL('drift', { deployment: deployment.name }), 'Drift view'),
-                  createNavLink(buildPageURL('plan', { deployment: deployment.name }), 'Plan/apply'),
                 );
               }
 
@@ -2149,8 +2450,103 @@
                 renderResourceDetailPage(detail);
                 return;
               }
-              if (currentPageState.page === 'drift' || currentPageState.page === 'plan') {
+              if (currentPageState.page === 'drift') {
                 renderDeploymentWorkspace(currentPageState.page, detail);
+                return;
+              }
+              if (currentPageState.page === 'plan') {
+                let planState = {
+                  status: 'idle',
+                  request: 'idle',
+                  planId: currentPageState.planId,
+                  record: null,
+                  error: null,
+                };
+                const syncPlanPageURL = (planId) => {
+                  currentPageState = { ...currentPageState, planId: planId || '' };
+                  const query = buildPageURL('plan', {
+                    deployment: detail.name || currentPageState.deployment,
+                    planId: planId || '',
+                  });
+                  const hash = window.location.hash || '';
+                  history.replaceState({}, '', `${query}${hash}`);
+                };
+                const renderPlanWorkspace = () => {
+                  renderDeploymentWorkspace('plan', detail, {
+                    ...planState,
+                    onCreatePlan: async () => {
+                      const fallbackIfMatch = planState.record?.source?.fingerprint || '';
+                      planState = {
+                        ...planState,
+                        status: 'loading',
+                        request: 'create',
+                        record: null,
+                        error: null,
+                      };
+                      renderPlanWorkspace();
+                      const ifMatch = detail.sourceFingerprint || await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;
+                      createPlanPreview(detail.name || currentPageState.deployment, ifMatch)
+                        .then((record) => {
+                          planState = {
+                            ...planState,
+                            status: record.status === 'failed' ? 'failed' : 'ready',
+                            request: 'create',
+                            planId: record.id,
+                            record,
+                            error: null,
+                          };
+                          syncPlanPageURL(record.id);
+                          renderPlanWorkspace();
+                        })
+                        .catch((error) => {
+                          planState = {
+                            ...planState,
+                            status: error.kind === 'unavailable' ? 'unavailable' : 'fetch-error',
+                            request: 'create',
+                            error,
+                          };
+                          renderPlanWorkspace();
+                        });
+                    },
+                  });
+                };
+
+                renderPlanWorkspace();
+                if (currentPageState.planId) {
+                  planState = {
+                    ...planState,
+                    status: 'loading',
+                    request: 'load',
+                    planId: currentPageState.planId,
+                    error: null,
+                  };
+                  renderPlanWorkspace();
+                  fetchPlanPreview(currentPageState.planId)
+                    .then((record) => {
+                      if (record.deploymentName && detail.name && record.deploymentName !== detail.name) {
+                        throw requestError('fetch-error', `plan preview ${record.id} belongs to ${record.deploymentName}, not ${detail.name}`);
+                      }
+                      planState = {
+                        ...planState,
+                        status: record.status === 'failed' ? 'failed' : 'ready',
+                        request: 'load',
+                        planId: record.id,
+                        record,
+                        error: null,
+                      };
+                      syncPlanPageURL(record.id);
+                      renderPlanWorkspace();
+                    })
+                    .catch((error) => {
+                      planState = {
+                        ...planState,
+                        status: error.kind === 'unavailable' ? 'unavailable' : 'fetch-error',
+                        request: 'load',
+                        error,
+                      };
+                      renderPlanWorkspace();
+                    });
+                }
                 return;
               }
               throw new Error(`unsupported page ${currentPageState.page}`);

@@ -904,6 +904,94 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	}
 }
 
+func TestBuildDeploymentOverviewEvents(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
+		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments:  []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
+	}
+	snapshots := []statusstore.Snapshot{{
+		DeploymentName: "payments-api-prod",
+		Status: domain.DeploymentStatus{
+			History: []domain.StatusHistoryEntry{
+				{
+					Timestamp:          "2026-04-16T06:15:00Z",
+					Source:             "controller",
+					Summary:            "Accepted rollout for r7",
+					Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"},
+					Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "candidate warming"},
+					DesiredGeneration:  7,
+					ObservedGeneration: 6,
+					RolloutPhase:       domain.RolloutPhaseAccepted,
+					CurrentStep:        "CreateCandidateCapacity",
+					ChangeDetails:      []string{"Summary changed to Accepted rollout for r7"},
+				},
+			},
+		},
+	}}
+
+	events, err := BuildDeploymentOverviewEvents(catalog, snapshots, "payments-api-prod")
+	if err != nil {
+		t.Fatalf("BuildDeploymentOverviewEvents returned error: %v", err)
+	}
+	if events.DeploymentName != "payments-api-prod" {
+		t.Fatalf("expected deployment name, got %+v", events)
+	}
+	if len(events.Events) != 1 || events.Events[0].Summary != "Accepted rollout for r7" || events.Events[0].Source != "controller" {
+		t.Fatalf("expected controller-derived runtime events, got %+v", events.Events)
+	}
+
+	snapshots[0].Status.History[0].Summary = "mutated"
+	snapshots[0].Status.History[0].ChangeDetails[0] = "mutated"
+	if events.Events[0].Summary != "Accepted rollout for r7" || events.Events[0].ChangeDetails[0] != "Summary changed to Accepted rollout for r7" {
+		t.Fatalf("expected runtime events to be cloned defensively, got %+v", events.Events)
+	}
+
+	events.Events[0].Summary = "mutated-by-caller"
+	events.Events[0].ChangeDetails[0] = "mutated-by-caller"
+	if snapshots[0].Status.History[0].Summary != "mutated" || snapshots[0].Status.History[0].ChangeDetails[0] != "mutated" {
+		t.Fatalf("expected caller mutations to avoid mutating stored history, got %+v", snapshots[0].Status.History)
+	}
+}
+
+func TestBuildDeploymentOverviewEventsReturnsEmptyListWhenHistoryMissing(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
+		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments:  []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
+	}
+
+	events, err := BuildDeploymentOverviewEvents(catalog, nil, "payments-api-prod")
+	if err != nil {
+		t.Fatalf("BuildDeploymentOverviewEvents returned error: %v", err)
+	}
+	if events.DeploymentName != "payments-api-prod" {
+		t.Fatalf("expected deployment name, got %+v", events)
+	}
+	if events.Events == nil || len(events.Events) != 0 {
+		t.Fatalf("expected explicit empty events list, got %+v", events.Events)
+	}
+
+	payload, err := json.Marshal(events)
+	if err != nil {
+		t.Fatalf("Marshal returned error: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("failed to decode payload: %v", err)
+	}
+	rawEvents, ok := decoded["events"].([]any)
+	if !ok || len(rawEvents) != 0 {
+		t.Fatalf("expected events JSON array field, got %#v", decoded["events"])
+	}
+	if decoded["deploymentName"] != "payments-api-prod" {
+		t.Fatalf("expected deploymentName JSON field, got %#v", decoded)
+	}
+	if _, exists := decoded["DeploymentName"]; exists {
+		t.Fatalf("unexpected Go-style field names in %#v", decoded)
+	}
+}
+
 func TestBuildDeploymentOverviewDetailRuntimeSummaryUsesLatestHistory(t *testing.T) {
 	catalog := manifest.Catalog{
 		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
@@ -1151,7 +1239,7 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 		},
 	}
 	catalog := manifest.Catalog{
-		Accounts: []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2", "us-west-2"}}},
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2", "us-west-2"}}},
 		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
 		Deployments: []domain.Deployment{{
 			Name:            "payments-api-prod",
@@ -1180,8 +1268,14 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 	if detail.AccountName != "prod-core" || detail.AWSAccountID != "123456789012" || detail.Region != "ap-northeast-2" {
 		t.Fatalf("expected placement metadata, got %+v", detail)
 	}
+	if deploymentDetail.SourceFingerprint == "" {
+		t.Fatalf("expected deployment detail source fingerprint, got %+v", deploymentDetail)
+	}
 	if !reflect.DeepEqual(detail.AllowedRegions, deploymentDetail.AllowedRegions) {
 		t.Fatalf("expected application detail allowed regions to match deployment detail, got application=%+v deployment=%+v", detail.AllowedRegions, deploymentDetail.AllowedRegions)
+	}
+	if detail.SourceFingerprint != deploymentDetail.SourceFingerprint {
+		t.Fatalf("expected application detail source fingerprint to match deployment detail, got application=%q deployment=%q", detail.SourceFingerprint, deploymentDetail.SourceFingerprint)
 	}
 	if detail.TargetType != "ec2" || detail.Strategy != "canary" || detail.ExecutionMode != "asgWeightedTargetGroups" {
 		t.Fatalf("expected execution metadata, got %+v", detail)
@@ -1226,6 +1320,7 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 		RolloutConfig:      cloneDeploymentRolloutConfig(deploymentDetail.RolloutConfig),
 		DeployedArtifact:   deploymentDetail.DeployedArtifact,
 		ObservedGeneration: deploymentDetail.ObservedGeneration,
+		SourceFingerprint:  deploymentDetail.SourceFingerprint,
 		Sync:               deploymentDetail.Sync,
 		Health:             deploymentDetail.Health,
 		RuntimeSummary:     cloneRuntimeSummary(deploymentDetail.RuntimeSummary),
@@ -1288,7 +1383,7 @@ func TestBuildApplicationOverviewDetailPropagatesPlacementErrors(t *testing.T) {
 	catalog := manifest.Catalog{
 		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"us-west-2"}}},
 		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
-		Deployments: []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
+		Deployments:  []domain.Deployment{{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
 	}
 
 	_, err := BuildApplicationOverviewDetail(catalog, nil, "payments-api-prod")

@@ -28,7 +28,15 @@ Both services mount `./examples` read-only. That keeps the runtime deterministic
 make smoke-local
 ```
 
-This boots `tenet-api` against the committed example fixtures, checks `/healthz`, and validates representative JSON payloads from the catalog and status endpoints.
+Use `make smoke-local` for the fastest fixture-backed regression check when you only need direct-process validation. It boots `tenet-api` against the committed example fixtures, checks `/healthz`, and validates representative JSON payloads from the catalog and status endpoints.
+
+### Docker stack smoke check
+
+```bash
+make smoke-docker
+```
+
+Use `make smoke-docker` when you need to validate the containerized local stack itself. The script runs `docker compose config`, asserts the `api`, `controller`, and `redis` services are present in `compose.yaml`, starts the stack, waits for API health, checks representative endpoints, confirms controller logs contain useful startup/reconcile output, and then runs `docker compose down --remove-orphans` even on failure.
 
 The same smoke flow also verifies that representative responses carry a `Request-Id` header. Operators should capture that response ID when an API call fails; Tenet threads the same value through the request context so handlers and providers can log `api.RequestIDFromContext(ctx)` and make API failures easy to correlate with backend/provider diagnostics.
 
@@ -40,6 +48,8 @@ curl http://localhost:8080/v1/catalog/summary
 docker compose logs controller --tail=20
 make docker-down
 ```
+
+The `make docker-up` preflight intentionally fails fast when `localhost:8080` is already occupied by something other than this Compose stack. When that happens, inspect the listener with `lsof -nP -iTCP:8080 -sTCP:LISTEN`, clear a prior Tenet stack with `make docker-down` if needed, then rerun `docker compose up --build -d`.
 
 ## Deferred work
 

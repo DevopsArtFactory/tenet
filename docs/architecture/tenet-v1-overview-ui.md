@@ -27,7 +27,7 @@ The first page focuses on:
 - health
 - last update
 
-The goal is fast triage, not completeness.
+The goal is fast triage, not completeness. The denser account/group deployment surface now lives on the secondary `/?page=account&accountId={awsAccountId}` drill-down, where the UI reuses `GET /v1/overview/accounts/{awsAccountId}` plus grouped project/environment sections instead of crowding the landing page.
 
 ### 2. Application detail
 The second page focuses on one application and the resources that matter for understanding its rollout.
@@ -37,6 +37,8 @@ Resources are grouped into human-friendly sections such as:
 - Traffic routing
 - Config and access
 
+The page is backed by `GET /v1/overview/applications/{deploymentName}` and keeps the deeper `resource`, `drift`, and `plan` routes anchored to `GET /v1/overview/deployments/{deploymentName}`. Both detail surfaces preserve additive `sourceFingerprint` so the same reviewed payload can feed the read-only plan-preview flow without inventing a second client-side identity model.
+
 This page should help the operator decide which concrete resource to inspect next.
 
 ### 3. Resource detail
@@ -45,11 +47,14 @@ The final page is where deeper operational context belongs.
 This page is where Tenet can show things like:
 - rollout state
 - runtime history
+- controller-derived runtime events from `GET /v1/overview/deployments/{deploymentName}/events`
 - conditions
 - artifact context
 - recent logs when available
 
 The goal is to make troubleshooting possible without forcing the user to jump directly into raw AWS consoles for the first step.
+
+The deployment-events route is intentionally read-only and controller-derived. It reflects persisted runtime history entries, returns `events: []` when a deployment exists without history yet, and should not be treated as a full durable audit system.
 
 Canonical fallback resource-detail bindings remain stable so operators can share or bookmark the exact resource page they need:
 - `asgWeightedTargetGroups`
@@ -58,8 +63,17 @@ Canonical fallback resource-detail bindings remain stable so operators can share
 - `ecsCodeDeploy`
 - `ecsService` → `{deployment}-service` → `ECS service Tenet updates with native rolling deployment`, optionally extended with rollout-strategy qualifiers such as `while respecting min healthy 90% and warmup 30s`
 
-Example resource-log route:
-- `/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service`
+The neighboring read-only plan-preview flow is also part of the operator contract now:
+- `POST /v1/plans/deployments/{deploymentName}` persists an immutable preview derived from the current deployment detail
+- `GET /v1/plans/{planId}` reopens the exact stored preview
+- the embedded `/?page=plan&deployment={deploymentName}&planId={planId}` workspace keeps the URL shareable/bookmarkable and prefers the reviewed detail `sourceFingerprint` for optimistic `ifMatch` protection before falling back to a loaded preview fingerprint
+
+When `rollout.execution[]` is still missing or empty in a fixture-backed or early controller-authored payload, the resource drill-down keeps the operator contract stable by synthesizing the same fallback rollout resources the controller would eventually publish. That contract includes:
+- `ecsRolling`
+- `ecsService` → `{deployment}-service` → `ECS service Tenet updates with native rolling deployment`, optionally extended with rollout-strategy qualifiers such as `while respecting min healthy 90% and warmup 30s`
+
+That same fallback identity keeps resource-log drill-downs bookmarkable. Example route:
+- `GET /v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service`
 
 ### Additional operator views
 The current UI also still exposes supporting operator surfaces beyond the main drill-down path:
@@ -104,8 +118,11 @@ That means the UI is not just a thin log viewer or a direct mirror of raw provid
 
 Today the UI already supports:
 - applications overview
+- account drill-down for grouped project/environment context
 - application detail drill-down
 - resource detail drill-down
+- read-only drift and plan-preview workspaces with bookmarkable URLs
+- deployment events derived from persisted runtime history
 - recent operational context for supported resources
 
 Future iterations should continue improving:
