@@ -51,20 +51,26 @@ overview=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts")
 account_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts/123456789012")
 group_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts/123456789012/projects/payments-api/environments/prod-apne2")
 deployment_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod")
-plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d '{}' "http://$HOST:$PORT/v1/plans/deployments/payments-api-prod")
+deployment_source_fingerprint=$(DEPLOYMENT_DETAIL_JSON="$deployment_detail" python3 - <<'PY'
+import json, os
+print(json.loads(os.environ['DEPLOYMENT_DETAIL_JSON'])['sourceFingerprint'])
+PY
+)
+plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d "{\"ifMatch\":\"$deployment_source_fingerprint\"}" "http://$HOST:$PORT/v1/plans/deployments/payments-api-prod")
 plan_id=$(PLAN_PREVIEW_JSON="$plan_preview" python3 - <<'PY'
 import json, os
 print(json.loads(os.environ['PLAN_PREVIEW_JSON'])['id'])
 PY
 )
 plan_preview_get=$(curl -fsS "http://$HOST:$PORT/v1/plans/$plan_id")
+stale_plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d '{"ifMatch":"plan_deadbeef"}' "http://$HOST:$PORT/v1/plans/deployments/payments-api-prod")
 status=$(curl -fsS "http://$HOST:$PORT/v1/status/deployments/payments-api-prod")
 resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")
 worker_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 ui=$(curl -fsS "http://$HOST:$PORT/")
 plan_ui=$(curl -fsS "http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id")
 
-SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" PLAN_UI_HTML="$plan_ui" python3 - <<'PY'
+SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" APPLICATION_DETAIL_JSON="$application_detail" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" STALE_PLAN_PREVIEW_JSON="$stale_plan_preview" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" PLAN_UI_HTML="$plan_ui" python3 - <<'PY'
 import json, os
 summary = json.loads(os.environ['SUMMARY_JSON'])
 applications = json.loads(os.environ['APPLICATIONS_JSON'])
@@ -75,6 +81,7 @@ group_detail = json.loads(os.environ['GROUP_DETAIL_JSON'])
 deployment_detail = json.loads(os.environ['DEPLOYMENT_DETAIL_JSON'])
 plan_preview = json.loads(os.environ['PLAN_PREVIEW_JSON'])
 plan_preview_get = json.loads(os.environ['PLAN_PREVIEW_GET_JSON'])
+stale_plan_preview = json.loads(os.environ['STALE_PLAN_PREVIEW_JSON'])
 status = json.loads(os.environ['STATUS_JSON'])
 resource_logs = json.loads(os.environ['RESOURCE_LOGS_JSON'])
 worker_resource_logs = json.loads(os.environ['WORKER_RESOURCE_LOGS_JSON'])
@@ -96,6 +103,7 @@ assert application_detail['name'] == 'payments-api-prod', application_detail
 assert application_detail['accountName'] == 'prod-core', application_detail
 assert application_detail['awsAccountId'] == '123456789012', application_detail
 assert application_detail['region'] == 'ap-northeast-2', application_detail
+assert application_detail['sourceFingerprint'] == deployment_detail['sourceFingerprint'], (application_detail, deployment_detail)
 assert isinstance((application_detail.get('rollout') or {}).get('execution', []), list), application_detail
 assert [account['name'] for account in overview] == ['prod-core', 'staging-core'], overview
 assert [deployment['name'] for deployment in overview[0]['deployments']] == ['payments-api-prod', 'worker-prod'], overview
@@ -119,16 +127,21 @@ assert group_detail['deployments'][0]['name'] == 'payments-api-prod', group_deta
 deployment_runtime_summary = deployment_detail.get('runtimeSummary') or {}
 deployment_history = deployment_detail.get('history') or []
 assert deployment_detail['name'] == 'payments-api-prod', deployment_detail
+assert isinstance(deployment_detail['sourceFingerprint'], str) and deployment_detail['sourceFingerprint'].startswith('plan_'), deployment_detail
 assert isinstance(deployment_runtime_summary.get('changeDetails', []), list), deployment_detail
 if deployment_history:
     assert isinstance(deployment_history[0].get('changeDetails', []), list), deployment_detail
 assert plan_preview['deploymentName'] == 'payments-api-prod', plan_preview
-assert plan_preview['status'] in {'ready', 'failed'}, plan_preview
+assert plan_preview['status'] == 'ready', plan_preview
 assert plan_preview['source']['route'] == '/v1/overview/deployments/payments-api-prod', plan_preview
+assert plan_preview['source']['fingerprint'] == deployment_detail['sourceFingerprint'], (plan_preview, deployment_detail)
 assert isinstance(plan_preview.get('operations', []), list), plan_preview
 assert isinstance((plan_preview.get('risk') or {}).get('reasons', []), list), plan_preview
 assert isinstance((plan_preview.get('approval') or {}).get('required'), bool), plan_preview
 assert plan_preview_get == plan_preview, (plan_preview_get, plan_preview)
+assert stale_plan_preview['status'] == 'failed', stale_plan_preview
+assert stale_plan_preview['source']['fingerprint'] == deployment_detail['sourceFingerprint'], (stale_plan_preview, deployment_detail)
+assert isinstance(stale_plan_preview.get('errors', []), list) and stale_plan_preview['errors'], stale_plan_preview
 assert status['deploymentName'] == 'payments-api-prod', status
 assert status['status']['sync']['state'] == 'Synced', status
 assert resource_logs['deploymentName'] == 'payments-api-prod', resource_logs

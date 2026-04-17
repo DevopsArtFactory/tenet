@@ -1146,6 +1146,7 @@ func TestRouterOverviewApplication(t *testing.T) {
 					DesiredArtifact:    domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7"},
 					DeployedArtifact:   domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6"},
 					ObservedGeneration: 7,
+					SourceFingerprint:  "plan_1234abcd5678ef",
 					Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"},
 					Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"},
 					RuntimeSummary:     &domain.RuntimeSummary{Timestamp: "2026-04-16T06:20:00Z", Source: "controller", Summary: "Shifting canary traffic", ObservedGeneration: 7, CurrentStep: "ShiftTrafficCanary", TargetType: "ec2", Strategy: "canary", ExecutionMode: "asgWeightedTargetGroups"},
@@ -1171,8 +1172,18 @@ func TestRouterOverviewApplication(t *testing.T) {
 		if detail.Name != "payments-api-prod" || detail.ExecutionMode != "asgWeightedTargetGroups" {
 			t.Fatalf("unexpected application overview detail: %+v", detail)
 		}
+		if detail.SourceFingerprint != "plan_1234abcd5678ef" {
+			t.Fatalf("expected source fingerprint in overview application detail response, got %+v", detail)
+		}
 		if detail.RuntimeSummary == nil || detail.Rollout == nil || len(detail.Conditions) != 1 || len(detail.History) != 1 {
 			t.Fatalf("expected joined status metadata in overview application detail response, got %+v", detail)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("failed to decode raw overview application detail payload: %v", err)
+		}
+		if payload["sourceFingerprint"] != "plan_1234abcd5678ef" {
+			t.Fatalf("expected sourceFingerprint field in raw overview application detail payload, got %#v", payload)
 		}
 	})
 
@@ -1505,6 +1516,7 @@ func TestRouterOverviewDeployment(t *testing.T) {
 				RolloutConfig:      domain.DeploymentRolloutConfig{Strategy: domain.DeploymentRolloutStrategy{MinHealthyPercent: 90, WarmupSeconds: 30}},
 				DeployedArtifact:   domain.DeploymentArtifact{Image: "payments-api:v1"},
 				ObservedGeneration: 7,
+				SourceFingerprint:  "plan_feedcafe1234ab",
 				Sync:               domain.Sync{State: domain.SyncStateOutOfSync, Reason: "PendingPromotion"},
 				Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "warming up"},
 				RuntimeSummary:     &domain.RuntimeSummary{Timestamp: "2026-04-16T06:49:00Z", Source: "controller", Summary: "Traffic shift is progressing", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "Traffic shift running"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "steady"}, DesiredGeneration: 8, ObservedGeneration: 7, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "ShiftTrafficLinear", TargetType: "ecs-service", Strategy: "linear", ExecutionMode: "ecsCodeDeploy", HistoryCount: 3, Changes: []string{"summary", "sync", "health", "desiredGeneration", "observedGeneration", "rolloutPhase", "currentStep"}},
@@ -1552,6 +1564,9 @@ func TestRouterOverviewDeployment(t *testing.T) {
 	if detail.Name != "api-prod" || detail.ExecutionMode != "ecsCodeDeploy" || detail.AccountName != "prod-core" {
 		t.Fatalf("unexpected overview deployment detail: %+v", detail)
 	}
+	if detail.SourceFingerprint != "plan_feedcafe1234ab" {
+		t.Fatalf("expected source fingerprint in deployment detail, got %+v", detail)
+	}
 	if detail.UserData.Type != "file" || detail.UserData.Path != "userdata/payments-api-prod.sh" {
 		t.Fatalf("expected userdata metadata in deployment detail, got %+v", detail.UserData)
 	}
@@ -1578,6 +1593,9 @@ func TestRouterOverviewDeployment(t *testing.T) {
 	}
 	if rollout["currentStep"] != "VerifyServiceStability" {
 		t.Fatalf("expected rollout.currentStep field, got %#v", rollout)
+	}
+	if payload["sourceFingerprint"] != "plan_feedcafe1234ab" {
+		t.Fatalf("expected sourceFingerprint field in raw payload, got %#v", payload)
 	}
 	runtimeSummary, ok := payload["runtimeSummary"].(map[string]any)
 	if !ok {

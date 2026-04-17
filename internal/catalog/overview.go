@@ -124,6 +124,7 @@ type DeploymentOverviewDetail struct {
 	RolloutConfig      domain.DeploymentRolloutConfig `json:"rolloutConfig,omitempty"`
 	DeployedArtifact   domain.DeploymentArtifact      `json:"deployedArtifact,omitempty"`
 	ObservedGeneration int64                          `json:"observedGeneration,omitempty"`
+	SourceFingerprint  string                         `json:"sourceFingerprint,omitempty"`
 	Sync               domain.Sync                    `json:"sync"`
 	Health             domain.Health                  `json:"health"`
 	RuntimeSummary     *domain.RuntimeSummary         `json:"runtimeSummary,omitempty"`
@@ -149,6 +150,7 @@ type ApplicationOverviewDetail struct {
 	RolloutConfig      domain.DeploymentRolloutConfig `json:"rolloutConfig,omitempty"`
 	DeployedArtifact   domain.DeploymentArtifact      `json:"deployedArtifact,omitempty"`
 	ObservedGeneration int64                          `json:"observedGeneration,omitempty"`
+	SourceFingerprint  string                         `json:"sourceFingerprint,omitempty"`
 	Sync               domain.Sync                    `json:"sync"`
 	Health             domain.Health                  `json:"health"`
 	RuntimeSummary     *domain.RuntimeSummary         `json:"runtimeSummary,omitempty"`
@@ -406,6 +408,7 @@ func BuildApplicationOverviewDetail(c manifest.Catalog, snapshots []statusstore.
 		RolloutConfig:      cloneDeploymentRolloutConfig(detail.RolloutConfig),
 		DeployedArtifact:   detail.DeployedArtifact,
 		ObservedGeneration: detail.ObservedGeneration,
+		SourceFingerprint:  detail.SourceFingerprint,
 		Sync:               detail.Sync,
 		Health:             detail.Health,
 		RuntimeSummary:     cloneRuntimeSummary(detail.RuntimeSummary),
@@ -445,7 +448,7 @@ func BuildDeploymentOverviewDetail(c manifest.Catalog, snapshots []statusstore.S
 	account := accountByName[resolved.AccountName]
 	status := statusByDeployment[deploymentName]
 
-	return DeploymentOverviewDetail{
+	detail := DeploymentOverviewDetail{
 		Name:               deployment.Name,
 		AppRef:             deployment.AppRef,
 		EnvironmentRef:     deployment.EnvironmentRef,
@@ -467,7 +470,13 @@ func BuildDeploymentOverviewDetail(c manifest.Catalog, snapshots []statusstore.S
 		Rollout:            cloneRolloutSummary(status.Rollout),
 		Conditions:         append([]domain.Condition(nil), status.Conditions...),
 		History:            cloneStatusHistory(status.History),
-	}, nil
+	}
+	fingerprint, err := DeriveDeploymentSourceFingerprint(detail)
+	if err != nil {
+		return DeploymentOverviewDetail{}, err
+	}
+	detail.SourceFingerprint = fingerprint
+	return detail, nil
 }
 
 func deriveRuntimeSummary(status domain.DeploymentStatus) *domain.RuntimeSummary {

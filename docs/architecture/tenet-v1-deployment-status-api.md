@@ -20,6 +20,8 @@ The deployment overview read models now intentionally copy the latest artifact/c
 - `/v1/overview/applications`, `/v1/overview/accounts`, and `/v1/overview/deployments/{deploymentName}` may expose `runtimeSummary.deployedArtifact`
 - those same joined/detail routes may expose `runtimeSummary.conditions[]` as concise latest-runtime condition context copied from the newest runtime signal
 - bounded `history[]` entries on `/v1/overview/deployments/{deploymentName}` may also carry additive `deployedArtifact` / `conditions` fields when the controller recorded them for that point-in-time runtime signal
+- `/v1/overview/deployments/{deploymentName}` now also exposes additive `sourceFingerprint`, a deterministic hash derived from the same rollout/runtime/detail inputs Tenet uses for plan-preview optimistic matching
+- `/v1/overview/applications/{deploymentName}` preserves that same `sourceFingerprint` field because the application detail route currently keeps deployment-detail semantics aligned
 
 That additive copy keeps overview/detail consumers from having to diff the full `status` object or scrape the newest history entry just to show the latest runtime artifact/condition context in a compact UI row.
 

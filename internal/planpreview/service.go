@@ -119,54 +119,14 @@ func (s Service) now() time.Time {
 }
 
 func deriveSourceContext(detail catalog.DeploymentOverviewDetail) (SourceContext, error) {
-	payload := struct {
-		DeploymentName     string                          `json:"deploymentName"`
-		TargetType         string                          `json:"targetType,omitempty"`
-		Strategy           string                          `json:"strategy,omitempty"`
-		ExecutionMode      string                          `json:"executionMode,omitempty"`
-		DesiredArtifact    domain.DeploymentArtifact       `json:"desiredArtifact,omitempty"`
-		DeployedArtifact   domain.DeploymentArtifact       `json:"deployedArtifact,omitempty"`
-		RuntimeTimestamp   string                          `json:"runtimeTimestamp,omitempty"`
-		RuntimeSource      string                          `json:"runtimeSource,omitempty"`
-		CurrentStep        string                          `json:"currentStep,omitempty"`
-		DesiredGeneration  int64                           `json:"desiredGeneration,omitempty"`
-		ObservedGeneration int64                           `json:"observedGeneration,omitempty"`
-		Sync               domain.Sync                     `json:"sync"`
-		Health             domain.Health                   `json:"health"`
-		Conditions         []domain.Condition              `json:"conditions,omitempty"`
-		RuntimeChanges     []string                        `json:"runtimeChanges,omitempty"`
-		RuntimeDetails     []string                        `json:"runtimeChangeDetails,omitempty"`
-		RolloutSteps       []domain.RolloutStepSummary     `json:"rolloutSteps,omitempty"`
-		RolloutExecution   []domain.RolloutExecutionDetail `json:"rolloutExecution,omitempty"`
-	}{
-		DeploymentName:     detail.Name,
-		TargetType:         detail.TargetType,
-		Strategy:           detail.Strategy,
-		ExecutionMode:      detail.ExecutionMode,
-		DesiredArtifact:    detail.DesiredArtifact,
-		DeployedArtifact:   effectiveDeployedArtifact(detail),
-		RuntimeTimestamp:   runtimeTimestamp(detail),
-		RuntimeSource:      runtimeSource(detail),
-		CurrentStep:        effectiveCurrentStep(detail),
-		DesiredGeneration:  desiredGeneration(detail),
-		ObservedGeneration: observedGeneration(detail),
-		Sync:               detail.Sync,
-		Health:             detail.Health,
-		Conditions:         append([]domain.Condition(nil), detail.Conditions...),
-		RuntimeChanges:     runtimeChanges(detail),
-		RuntimeDetails:     runtimeChangeDetails(detail),
-		RolloutSteps:       rolloutSteps(detail),
-		RolloutExecution:   executionResources(detail),
-	}
-	content, err := json.Marshal(payload)
+	fingerprint, err := catalog.DeriveDeploymentSourceFingerprint(detail)
 	if err != nil {
-		return SourceContext{}, fmt.Errorf("encode source context fingerprint: %w", err)
+		return SourceContext{}, err
 	}
-	sum := sha256.Sum256(content)
 	return SourceContext{
 		DeploymentName:     detail.Name,
 		Route:              "/v1/overview/deployments/" + detail.Name,
-		Fingerprint:        "plan_" + hex.EncodeToString(sum[:8]),
+		Fingerprint:        fingerprint,
 		TargetType:         detail.TargetType,
 		Strategy:           detail.Strategy,
 		ExecutionMode:      detail.ExecutionMode,
