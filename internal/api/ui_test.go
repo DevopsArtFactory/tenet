@@ -278,6 +278,20 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 	}
 }
 
+func TestIndexHTMLIncludesECSRollingFallbackBranch(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const ecsRollingExecutionDescription = (detail) => {",
+		"const qualifiers = rolloutStrategyQualifiers(detail.rolloutConfig?.strategy);",
+		"description: ecsRollingExecutionDescription(detail)",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+}
+
 func TestIndexHTMLLocksSynthesizedRolloutFallbackContract(t *testing.T) {
 	body := string(indexHTML)
 
@@ -305,6 +319,7 @@ func TestIndexHTMLLocksSynthesizedRolloutFallbackContract(t *testing.T) {
 
 	for _, expectation := range []fallbackExpectation{
 		{resourceID: "ecsService", nameFragment: "-service", description: "ECS service Tenet updates during deployment"},
+		{resourceID: "ecsService", nameFragment: "-service", description: "ecsRollingExecutionDescription(detail)"},
 		{resourceID: "codeDeployApplication", nameFragment: "-codedeploy-app", description: "CodeDeploy application coordinating ECS traffic shifting"},
 		{resourceID: "codeDeployDeploymentGroup", nameFragment: "-codedeploy-group", description: "CodeDeploy deployment group Tenet targets for ECS rollout"},
 		{resourceID: "productionListener", nameFragment: "-prod-listener", description: "Production listener CodeDeploy shifts during ECS blue/green rollout"},
@@ -328,6 +343,39 @@ func TestIndexHTMLLocksSynthesizedRolloutFallbackContract(t *testing.T) {
 
 	if !strings.Contains(body, "createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')") {
 		t.Fatal("expected embedded UI to keep resource drill-down links keyed by stable resourceId identities")
+	}
+}
+
+func TestIndexHTMLIncludesTolerantResourceBookmarkResolutionContract(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const parseResourceIdentity = (resourceId) => {",
+		"const [type = '', name = '', ...descriptionParts] = String(resourceId || '').split('::');",
+		"description: descriptionParts.join('::'),",
+		"const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);",
+		"const exactMatch = resources.find((resource) => {",
+		"return resource.id === currentPageState.resourceId && resource.type === currentPageState.resourceType;",
+		"const tolerantMatch = resources.find((resource) => {",
+		"if (bookmarkedResource.type && resource.type !== bookmarkedResource.type) {",
+		"if (bookmarkedResource.name && resource.name !== bookmarkedResource.name) {",
+		"return Boolean(bookmarkedResource.type || bookmarkedResource.name);",
+		"return exactMatch || tolerantMatch || resources.find((resource) => {",
+		"type: bookmarkedResource.type || currentPageState.resourceType || 'resource',",
+		"name: bookmarkedResource.name || bookmarkedResource.type || currentPageState.resourceType || 'Resource',",
+		"description: bookmarkedResource.description || 'No linked resource metadata is available for this selection.',",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include tolerant resource bookmark resolution fragment %q", fragment)
+		}
+	}
+
+	for _, legacy := range []string{
+		"name: currentPageState.resourceId || currentPageState.resourceType || 'Resource'",
+	} {
+		if strings.Contains(body, legacy) {
+			t.Fatalf("expected embedded UI to drop brittle resource fallback fragment %q", legacy)
+		}
 	}
 }
 
@@ -674,11 +722,22 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Recent logs' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Recent logs")
 	}
-	if !strings.Contains(text, "resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing\")") {
-		t.Fatalf("expected smoke-local.sh to probe the deployment resource-logs route")
-	}
-	if !strings.Contains(text, "assert resource_logs['resourceType'] == 'trafficShiftPlan', resource_logs") {
-		t.Fatalf("expected smoke-local.sh to assert the resource-logs response shape")
+	for _, fragment := range []string{
+		"resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing\")",
+		"worker_resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service\")",
+		"assert resource_logs['resourceType'] == 'trafficShiftPlan', resource_logs",
+		"assert worker_resource_logs['deploymentName'] == 'worker-prod', worker_resource_logs",
+		"assert worker_resource_logs['resourceType'] == 'ecsService', worker_resource_logs",
+		"assert worker_resource_logs['resourceName'] == 'worker-prod-service', worker_resource_logs",
+		"assert isinstance(worker_resource_logs['available'], bool), worker_resource_logs",
+		"assert worker_resource_logs.get('entries') is None or isinstance(worker_resource_logs.get('entries'), list), worker_resource_logs",
+		"if worker_resource_logs['available']:",
+		"assert isinstance(worker_resource_logs.get('source'), str), worker_resource_logs",
+		"assert isinstance(worker_resource_logs.get('unavailableReason'), str) and worker_resource_logs['unavailableReason'], worker_resource_logs",
+	} {
+		if !strings.Contains(text, fragment) {
+			t.Fatalf("expected smoke-local.sh to include %q", fragment)
+		}
 	}
 	if !strings.Contains(text, "assert isinstance(runtime_summary.get('changeDetails', []), list), overview") {
 		t.Fatalf("expected smoke-local.sh to verify overview runtimeSummary.changeDetails shape")
@@ -691,5 +750,35 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert 'Runtime change details' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Runtime change details")
+	}
+}
+
+func TestOverviewDocsLockECSRollingFallbackContract(t *testing.T) {
+	files := map[string][]string{
+		"../../README.md": {
+			"- `ecsRolling`: `ecsService` (`{deployment}-service`)",
+			"worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service",
+		},
+		"../../docs/features/overview-dashboard.md": {
+			"- `ecsRolling`: `ecsService`",
+		},
+		"../../docs/architecture/tenet-v1-overview-ui.md": {
+			"- `ecsRolling`",
+			"- `ecsService` → `{deployment}-service` → `ECS service Tenet updates with native rolling deployment`, optionally extended with rollout-strategy qualifiers such as `while respecting min healthy 90% and warmup 30s`",
+			"worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
 	}
 }

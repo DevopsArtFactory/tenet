@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/DevopsArtFactory/tenet/internal/api"
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
@@ -194,6 +195,10 @@ func canonicalRolloutExecutionFallback(detail catalog.DeploymentOverviewDetail) 
 			{Resource: "blueTaskSetTargetGroup", Name: detail.Name + "-blue", Description: "Blue task set target group CodeDeploy treats as the live ECS traffic destination"},
 			{Resource: "greenTaskSetTargetGroup", Name: detail.Name + "-green", Description: "Green task set target group CodeDeploy warms before shifting ECS traffic"},
 		}
+	case "ecsRolling":
+		return []domain.RolloutExecutionDetail{
+			{Resource: "ecsService", Name: detail.Name + "-service", Description: ecsRollingExecutionDescription(detail.RolloutConfig.Strategy)},
+		}
 	case "asgWeightedTargetGroups":
 		return []domain.RolloutExecutionDetail{
 			{Resource: "candidateAutoScalingGroup", Name: detail.Name + "-candidate", Description: "Candidate Auto Scaling Group Tenet will create for weighted target group rollout"},
@@ -224,6 +229,25 @@ func canonicalUserDataBootstrapSource(userData domain.DeploymentUserData) string
 		return userData.Path
 	}
 	return userData.Type + ":" + userData.Path
+}
+
+func ecsRollingExecutionDescription(strategy domain.DeploymentRolloutStrategy) string {
+	description := "ECS service Tenet updates with native rolling deployment"
+	if qualifiers := rolloutStrategyQualifiers(strategy); len(qualifiers) > 0 {
+		description += " while respecting " + strings.Join(qualifiers, " and ")
+	}
+	return description
+}
+
+func rolloutStrategyQualifiers(strategy domain.DeploymentRolloutStrategy) []string {
+	qualifiers := make([]string, 0, 2)
+	if strategy.MinHealthyPercent > 0 {
+		qualifiers = append(qualifiers, fmt.Sprintf("min healthy %d%%", strategy.MinHealthyPercent))
+	}
+	if strategy.WarmupSeconds > 0 {
+		qualifiers = append(qualifiers, fmt.Sprintf("warmup %ds", strategy.WarmupSeconds))
+	}
+	return qualifiers
 }
 
 func mustOpenStatusStore(backend, path, redisAddr string) statusstore.Store {

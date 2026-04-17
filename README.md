@@ -66,7 +66,8 @@ Tenet currently expects a repository-like manifest tree:
 - `environments/*.{json,yaml,yml}`
 - `deployments/*.{json,yaml,yml}`
 
-The local examples now use YAML deployment manifests with:
+The local examples now use YAML deployment manifests that demonstrate both supported manifest shapes:
+- top-level desired-state fields such as `environmentRef`, `target`, `strategy`, `capacity`, `binary`, and `image`
 - a goployer-compatible `stacks` shape for EC2/ECS placement metadata
 - `binary` for EC2 artifact intent
 - `image` for ECS artifact intent
@@ -126,9 +127,12 @@ Those `rollout.execution[]` entries remain controller-authored summaries of the 
 
 For older fixture/local payloads that still omit `detail.rollout.execution[]` or provide it as an empty array, the application/resource drill-down synthesizes fallback resources for that missing-or-empty-detail case; controller-authored execution arrays still win unchanged whenever they are present and non-empty. The fallback list is intentionally limited to the canonical controller-authored contracts already documented above:
 - `asgWeightedTargetGroups`: `candidateAutoScalingGroup` (`{deployment}-candidate`), `activeTargetGroup` (`{deployment}-active`), `candidateTargetGroup` (`{deployment}-candidate`), `productionListenerRule` (`{deployment}-prod-listener`), `trafficShiftPlan` (`{deployment}-weighted-routing`), `userDataBootstrapSource` (`{type}:{path}` from `userData`, or `unspecified`)
+- `ecsRolling`: `ecsService` (`{deployment}-service`)
 - `ecsCodeDeploy`: `ecsService` (`{deployment}-service`), `codeDeployApplication` (`{deployment}-codedeploy-app`), `codeDeployDeploymentGroup` (`{deployment}-codedeploy-group`), `productionListener` (`{deployment}-prod-listener`), `testListener` (`{deployment}-test-listener`), `blueTaskSetTargetGroup` (`{deployment}-blue`), `greenTaskSetTargetGroup` (`{deployment}-green`)
 
 Those fallback names/descriptions are kept byte-for-byte aligned with the canonical controller-authored `rollout.execution[]` metadata so the derived `resourceId` stays stable and previously shared/bookmarked resource-detail routes keep resolving across fixture-backed and controller-authored payloads.
+
+The local smoke path now also verifies the ECS rolling resource-log route for the fixture deployment `worker-prod` via `GET /v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service`, using the same `available`/`entries`/`source` or `unavailableReason` JSON-shape assertions as the existing traffic-shift-plan check.
 
 Controller-authored runtime history is surfaced through `/v1/overview/deployments/{deploymentName}` and rendered in the expandable deployment detail panel at `/`. The current slice keeps only a bounded recent timeline so operators can see the latest sync/health/rollout-step changes without introducing a full event log, and the detail renderer now adds `History changes`, `History source`, and `History rollout phase` rows when those additive fields are present on an entry. The overview cards and client-side search index also surface the latest `runtimeSummary.changes[]` / `runtimeSummary.changeDetails[]` so operators can spot and filter on the most recent runtime change signals without opening the detail panel.
 

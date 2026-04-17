@@ -397,12 +397,32 @@
           description,
         };
       };
+      const parseResourceIdentity = (resourceId) => {
+        const [type = '', name = '', ...descriptionParts] = String(resourceId || '').split('::');
+        return {
+          id: resourceId || '',
+          type,
+          name,
+          description: descriptionParts.join('::'),
+        };
+      };
       const resourceLogCacheKey = (deploymentName, resource) => [deploymentName || '', resource.type || '', resource.name || '', resource.id || ''].join('::');
       const canonicalUserDataBootstrapSource = (userData) => {
         if (!userData || (!userData.type && !userData.path)) return 'unspecified';
         if (!userData.path) return userData.type || 'unspecified';
         if (!userData.type) return userData.path;
         return `${userData.type}:${userData.path}`;
+      };
+      const rolloutStrategyQualifiers = (strategy) => {
+        const qualifiers = [];
+        if (Number(strategy?.minHealthyPercent) > 0) qualifiers.push(`min healthy ${Number(strategy.minHealthyPercent)}%`);
+        if (Number(strategy?.warmupSeconds) > 0) qualifiers.push(`warmup ${Number(strategy.warmupSeconds)}s`);
+        return qualifiers;
+      };
+      const ecsRollingExecutionDescription = (detail) => {
+        const qualifiers = rolloutStrategyQualifiers(detail.rolloutConfig?.strategy);
+        if (!qualifiers.length) return 'ECS service Tenet updates with native rolling deployment';
+        return `ECS service Tenet updates with native rolling deployment while respecting ${qualifiers.join(' and ')}`;
       };
       const canonicalRolloutExecutionFallback = (detail) => {
         if (detail.executionMode === 'ecsCodeDeploy') {
@@ -414,6 +434,11 @@
             { resource: 'testListener', name: `${detail.name}-test-listener`, description: 'Test listener CodeDeploy uses to validate the replacement ECS task set before promotion' },
             { resource: 'blueTaskSetTargetGroup', name: `${detail.name}-blue`, description: 'Blue task set target group CodeDeploy treats as the live ECS traffic destination' },
             { resource: 'greenTaskSetTargetGroup', name: `${detail.name}-green`, description: 'Green task set target group CodeDeploy warms before shifting ECS traffic' },
+          ];
+        }
+        if (detail.executionMode === 'ecsRolling') {
+          return [
+            { resource: 'ecsService', name: `${detail.name}-service`, description: ecsRollingExecutionDescription(detail) },
           ];
         }
         if (detail.executionMode === 'asgWeightedTargetGroups') {
@@ -800,22 +825,35 @@
       };
       const resolveResourceDetail = (detail) => {
         const resources = groupResourceSections(detail).flatMap((group) => group.resources || []);
-        return resources.find((resource) => {
+        const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);
+        const exactMatch = resources.find((resource) => {
           if (currentPageState.resourceId && currentPageState.resourceType) {
             return resource.id === currentPageState.resourceId && resource.type === currentPageState.resourceType;
           }
           if (currentPageState.resourceId) {
             return resource.id === currentPageState.resourceId;
           }
+          return false;
+        });
+        const tolerantMatch = resources.find((resource) => {
+          if (bookmarkedResource.type && resource.type !== bookmarkedResource.type) {
+            return false;
+          }
+          if (bookmarkedResource.name && resource.name !== bookmarkedResource.name) {
+            return false;
+          }
+          return Boolean(bookmarkedResource.type || bookmarkedResource.name);
+        });
+        return exactMatch || tolerantMatch || resources.find((resource) => {
           if (currentPageState.resourceType) {
             return resource.type === currentPageState.resourceType;
           }
           return false;
         }) || {
           id: currentPageState.resourceId || currentPageState.resourceType || 'resource',
-          type: currentPageState.resourceType || 'resource',
-          name: currentPageState.resourceId || currentPageState.resourceType || 'Resource',
-          description: 'No linked resource metadata is available for this selection.',
+          type: bookmarkedResource.type || currentPageState.resourceType || 'resource',
+          name: bookmarkedResource.name || bookmarkedResource.type || currentPageState.resourceType || 'Resource',
+          description: bookmarkedResource.description || 'No linked resource metadata is available for this selection.',
         };
       };
       const renderResourceDetailPage = (detail) => {

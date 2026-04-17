@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
+	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
@@ -370,6 +371,43 @@ func TestAPIOptionsOverviewDeploymentResourceLogsUsesCanonicalFallbackWhenExecut
 	}
 }
 
+func TestAPIOptionsOverviewDeploymentResourceLogsUsesECSRollingFallbackWhenExecutionIsMissing(t *testing.T) {
+	repoRoot := writeRollingECSRepositoryFixture(t)
+	provider := &fakeResourceLogProvider{result: resourcelogs.Result{Available: true}}
+	restore := stubResourceLogProviderFactory(provider)
+	defer restore()
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
+	_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", "ecsService", "api-prod-service")
+	if err != nil {
+		t.Fatalf("expected ecs rolling fallback resource binding to work, got %v", err)
+	}
+	if provider.calls != 1 {
+		t.Fatalf("expected provider to run once for ecs rolling fallback resource, got %d calls", provider.calls)
+	}
+	if provider.lastRequest.ResourceType != "ecsService" || provider.lastRequest.ResourceName != "api-prod-service" {
+		t.Fatalf("unexpected resource log request for ecs rolling fallback: %+v", provider.lastRequest)
+	}
+}
+
+func TestCanonicalRolloutExecutionFallback(t *testing.T) {
+	t.Run("ecs rolling", func(t *testing.T) {
+		detail := catalog.DeploymentOverviewDetail{
+			Name:          "api-prod",
+			ExecutionMode: "ecsRolling",
+			RolloutConfig: domain.DeploymentRolloutConfig{Strategy: domain.DeploymentRolloutStrategy{MinHealthyPercent: 90, WarmupSeconds: 30}},
+		}
+		want := []domain.RolloutExecutionDetail{{
+			Resource:    "ecsService",
+			Name:        "api-prod-service",
+			Description: "ECS service Tenet updates with native rolling deployment while respecting min healthy 90% and warmup 30s",
+		}}
+		if got := canonicalRolloutExecutionFallback(detail); !reflect.DeepEqual(got, want) {
+			t.Fatalf("unexpected ecs rolling fallback resources: got %+v want %+v", got, want)
+		}
+	})
+}
+
 func TestAPIOptionsOverviewDeploymentResourceLogsUsesASGInstanceRefreshFallbackWhenExecutionIsMissing(t *testing.T) {
 	repoRoot := writeRollingEC2RepositoryFixture(t)
 	provider := &fakeResourceLogProvider{result: resourcelogs.Result{Available: true}}
@@ -469,6 +507,15 @@ func writeRollingEC2RepositoryFixture(t *testing.T) string {
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","observerRoleArn":"arn:aws:iam::123456789012:role/TenetObserverRole","allowedRegions":["ap-northeast-2"]}`)
 	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
 	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"rolling"},"traffic":{"port":443},"capacity":{"desired":2,"min":1,"max":3},"userdata":{"type":"file","path":"userdata/api-prod-refresh.sh"}}`)
+	return root
+}
+
+func writeRollingECSRepositoryFixture(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","observerRoleArn":"arn:aws:iam::123456789012:role/TenetObserverRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ecs"},"strategy":{"type":"rolling","minHealthyPercent":90,"warmupSeconds":30},"capacity":{"desired":2,"min":1,"max":2}}`)
 	return root
 }
 

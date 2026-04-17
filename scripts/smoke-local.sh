@@ -50,9 +50,10 @@ group_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts/123456789012/p
 deployment_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod")
 status=$(curl -fsS "http://$HOST:$PORT/v1/status/deployments/payments-api-prod")
 resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")
+worker_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 ui=$(curl -fsS "http://$HOST:$PORT/")
 
-SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" UI_HTML="$ui" python3 - <<'PY'
+SUMMARY_JSON="$summary" APPLICATIONS_JSON="$applications" OVERVIEW_JSON="$overview" ACCOUNT_DETAIL_JSON="$account_detail" GROUP_DETAIL_JSON="$group_detail" DEPLOYMENT_DETAIL_JSON="$deployment_detail" STATUS_JSON="$status" RESOURCE_LOGS_JSON="$resource_logs" WORKER_RESOURCE_LOGS_JSON="$worker_resource_logs" UI_HTML="$ui" python3 - <<'PY'
 import json, os
 summary = json.loads(os.environ['SUMMARY_JSON'])
 applications = json.loads(os.environ['APPLICATIONS_JSON'])
@@ -62,19 +63,29 @@ group_detail = json.loads(os.environ['GROUP_DETAIL_JSON'])
 deployment_detail = json.loads(os.environ['DEPLOYMENT_DETAIL_JSON'])
 status = json.loads(os.environ['STATUS_JSON'])
 resource_logs = json.loads(os.environ['RESOURCE_LOGS_JSON'])
+worker_resource_logs = json.loads(os.environ['WORKER_RESOURCE_LOGS_JSON'])
 ui = os.environ['UI_HTML']
 assert summary['accountCount'] == 2, summary
 assert summary['environmentCount'] == 2, summary
-assert summary['deploymentCount'] == 2, summary
+assert summary['deploymentCount'] == 3, summary
+assert [application['name'] for application in applications] == [
+    'payments-api-prod',
+    'payments-api-staging',
+    'worker-prod',
+], applications
 assert applications[0]['executionMode'] in {'asgWeightedTargetGroups', 'asgInstanceRefresh'}, applications
-assert any(application['name'] == 'payments-api-prod' for application in applications), applications
+assert applications[2]['executionMode'] == 'ecsRolling', applications
+assert applications[2]['appRef'] == 'worker', applications
+assert applications[2]['environmentRef'] == 'prod-apne2', applications
+assert [account['name'] for account in overview] == ['prod-core', 'staging-core'], overview
+assert [deployment['name'] for deployment in overview[0]['deployments']] == ['payments-api-prod', 'worker-prod'], overview
 runtime_summary = overview[0]['deployments'][0].get('runtimeSummary') or {}
 assert overview[0]['deployments'][0]['executionMode'] in {'asgWeightedTargetGroups', 'asgInstanceRefresh'}, overview
+assert overview[0]['deployments'][1]['executionMode'] == 'ecsRolling', overview
 assert isinstance(runtime_summary.get('changeDetails', []), list), overview
-assert any(account['name'] == 'prod-core' for account in overview), overview
 assert account_detail['name'] == 'prod-core', account_detail
 assert account_detail['awsAccountId'] == '123456789012', account_detail
-assert len(account_detail['deployments']) >= 1, account_detail
+assert [deployment['name'] for deployment in account_detail['deployments']] == ['payments-api-prod', 'worker-prod'], account_detail
 account_deployment = account_detail['deployments'][0]
 if 'runtimeSummary' in account_deployment and account_deployment['runtimeSummary'] is not None:
     assert isinstance(account_deployment['runtimeSummary'].get('changeDetails', []), list), account_detail
@@ -102,6 +113,15 @@ if resource_logs['available']:
     assert isinstance(resource_logs.get('source'), str), resource_logs
 else:
     assert isinstance(resource_logs.get('unavailableReason'), str) and resource_logs['unavailableReason'], resource_logs
+assert worker_resource_logs['deploymentName'] == 'worker-prod', worker_resource_logs
+assert worker_resource_logs['resourceType'] == 'ecsService', worker_resource_logs
+assert worker_resource_logs['resourceName'] == 'worker-prod-service', worker_resource_logs
+assert isinstance(worker_resource_logs['available'], bool), worker_resource_logs
+assert worker_resource_logs.get('entries') is None or isinstance(worker_resource_logs.get('entries'), list), worker_resource_logs
+if worker_resource_logs['available']:
+    assert isinstance(worker_resource_logs.get('source'), str), worker_resource_logs
+else:
+    assert isinstance(worker_resource_logs.get('unavailableReason'), str) and worker_resource_logs['unavailableReason'], worker_resource_logs
 assert 'Application status overview' in ui, ui
 assert '/v1/overview/applications' in ui, ui
 assert 'Open account' in ui, ui

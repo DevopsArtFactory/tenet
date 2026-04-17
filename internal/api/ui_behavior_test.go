@@ -835,6 +835,138 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 	})
 }
 
+func TestEmbeddedUIApplicationDetailSynthesizesECSRollingFallbackResource(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	accountsJSON, err := json.Marshal([]map[string]any{{
+		"name":         "prod-core",
+		"awsAccountId": "123456789012",
+		"deployments": []map[string]any{{
+			"name":           "payments-api-rolling",
+			"appRef":         "payments",
+			"environmentRef": "prod-apne2",
+			"region":         "ap-northeast-2",
+			"targetType":     "ecs",
+			"strategy":       "rolling",
+			"executionMode":  "ecsRolling",
+		}},
+	}})
+	if err != nil {
+		t.Fatalf("marshal sample accounts: %v", err)
+	}
+
+	detailJSON, err := json.Marshal(map[string]any{
+		"name":           "payments-api-rolling",
+		"accountName":    "prod-core",
+		"awsAccountId":   "123456789012",
+		"region":         "ap-northeast-2",
+		"appRef":         "payments",
+		"environmentRef": "prod-apne2",
+		"targetType":     "ecs",
+		"strategy":       "rolling",
+		"executionMode":  "ecsRolling",
+		"rolloutConfig":  map[string]any{"strategy": map[string]any{"minHealthyPercent": 90, "warmupSeconds": 30}},
+		"sync":           map[string]any{"state": "OutOfSync", "reason": "rolling deployment in progress"},
+		"health":         map[string]any{"overall": "Progressing", "summary": "1/2 tasks replaced"},
+		"rollout":        map[string]any{"phase": "Progressing", "currentStep": "UpdateECSService"},
+	})
+	if err != nil {
+		t.Fatalf("marshal ecs rolling detail: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const sampleAccounts = ` + string(accountsJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/', search: '?page=application&deployment=payments-api-rolling&q=payments&sync=OutOfSync&account=123456789012', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
+  if (url === '/v1/overview/deployments/payments-api-rolling') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+(async () => {
+  await settle();
+  await settle();
+  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/deployments/payments-api-rolling') throw new Error('expected ecs rolling application page to load only deployment detail');
+  const accountsText = collectText(document.getElementById('accounts')).join(' | ');
+  if (!accountsText.includes('payments-api-rolling-service')) throw new Error('expected ecs rolling fallback service resource');
+  if (!accountsText.includes('ECS service Tenet updates with native rolling deployment while respecting min healthy 90% and warmup 30s')) throw new Error('expected ecs rolling fallback resource description');
+  const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
+  const resourceId = 'ecsService::payments-api-rolling-service::ECS service Tenet updates with native rolling deployment while respecting min healthy 90% and warmup 30s';
+  const href = '/?' + new URLSearchParams({
+    page: 'resource',
+    q: 'payments',
+    sync: 'OutOfSync',
+    account: '123456789012',
+    deployment: 'payments-api-rolling',
+    resourceType: 'ecsService',
+    resourceId,
+  }).toString();
+  if (!links.find((node) => node.href === href && node.target === '_self' && !node.rel)) throw new Error('expected ecs rolling fallback stable link for ' + resourceId);
+})();
+`
+
+	cmd := exec.Command("node", "-e", nodeProgram)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+	}
+}
+
 func TestApplicationsOverviewPageWithNodeHarnessSynthesizesRolloutFallbackResources(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not installed")
@@ -2420,6 +2552,110 @@ async function render(search, detailBody) {
 	}
 }
 
+func TestEmbeddedUIResourceDetailBookmarkResolutionToleratesDescriptionDriftWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	updatedDetailJSON, err := json.Marshal(map[string]any{
+		"name":          "payments-api-staging",
+		"accountName":   "staging-core",
+		"awsAccountId":  "210987654321",
+		"region":        "ap-northeast-2",
+		"executionMode": "ecsCodeDeploy",
+		"rollout": map[string]any{
+			"execution": []map[string]any{
+				{"name": "payments-api-staging Deployment Group", "resource": "codeDeployDeploymentGroup", "description": "CodeDeploy deployment group coordinating the latest linear traffic shift"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal updated detail body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(updatedDetailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const oldResourceID = 'codeDeployDeploymentGroup::payments-api-staging Deployment Group::Linear traffic shifting deployment group';
+(async () => {
+  const window = { location: { pathname: '/', search: '?page=resource&deployment=payments-api-staging&resourceType=codeDeployDeploymentGroup&resourceId=' + encodeURIComponent(oldResourceID), hash: '' } };
+  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  const fetchCalls = [];
+  const expectedLogsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging+Deployment+Group';
+  const fetch = (url) => {
+    fetchCalls.push(String(url));
+    if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === expectedLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    throw new Error('unexpected fetch url: ' + url);
+  };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle();
+  await settle();
+  if (!fetchCalls.includes('/v1/overview/deployments/payments-api-staging')) throw new Error('expected description-drift resource page to load deployment detail');
+  if (!fetchCalls.includes(expectedLogsURL)) throw new Error('expected description-drift resource page to load recent logs using the canonical resource name');
+  const summaryText = collectText(document.getElementById('summary')).join(' | ');
+  const accountsText = collectText(document.getElementById('accounts')).join(' | ');
+  if (!summaryText.includes('payments-api-staging Deployment Group')) throw new Error('expected description-drift bookmark to resolve the canonical resource name');
+  if (!summaryText.includes('CodeDeploy deployment group coordinating the latest linear traffic shift')) throw new Error('expected description-drift bookmark to resolve the updated resource description');
+  if (summaryText.includes('No linked resource metadata is available for this selection.')) throw new Error('expected description-drift bookmark not to fall back to placeholder metadata');
+  if (!accountsText.includes('codeDeployDeploymentGroup::payments-api-staging Deployment Group::CodeDeploy deployment group coordinating the latest linear traffic shift')) throw new Error('expected description-drift bookmark to surface the current canonical resource id');
+})();
+`
+
+	cmd := exec.Command("node", "-e", nodeProgram)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+	}
+}
+
 func TestDeploymentWorkspaceDriftViewWithNodeHarness(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not installed")
@@ -2779,22 +3015,22 @@ func TestEmbeddedUIChangeDetailsWithNodeHarness(t *testing.T) {
 			"conditions":       []map[string]any{{"type": "Progressing", "status": true, "reason": "TrafficShiftLinear", "message": "runtime summary tracks the in-flight linear shift"}},
 		},
 		"history": []map[string]any{{
-			"timestamp":         "2026-04-16T07:05:00Z",
-			"summary":           "Created deployment group revision for v2",
-			"source":            "deployment-controller",
-			"targetType":        "ecs",
-			"strategy":          "linear",
-			"executionMode":     "ecsCodeDeploy",
-			"changes":           []string{"summary", "currentStep"},
-			"changeDetails":     []string{"Summary changed to Created deployment group revision for v2", "Current step changed from VerifyServiceStability to ShiftTrafficLinear"},
-			"deployedArtifact":  map[string]any{"image": "ghcr.io/example/payments:v0"},
-			"conditions":        []map[string]any{{"type": "Progressing", "status": true, "reason": "DeploymentStarted", "message": "CodeDeploy deployment created"}},
-			"sync":              map[string]any{"state": "OutOfSync"},
-			"health":            map[string]any{"overall": "Progressing", "summary": "warming"},
-			"desiredGeneration": 12,
+			"timestamp":          "2026-04-16T07:05:00Z",
+			"summary":            "Created deployment group revision for v2",
+			"source":             "deployment-controller",
+			"targetType":         "ecs",
+			"strategy":           "linear",
+			"executionMode":      "ecsCodeDeploy",
+			"changes":            []string{"summary", "currentStep"},
+			"changeDetails":      []string{"Summary changed to Created deployment group revision for v2", "Current step changed from VerifyServiceStability to ShiftTrafficLinear"},
+			"deployedArtifact":   map[string]any{"image": "ghcr.io/example/payments:v0"},
+			"conditions":         []map[string]any{{"type": "Progressing", "status": true, "reason": "DeploymentStarted", "message": "CodeDeploy deployment created"}},
+			"sync":               map[string]any{"state": "OutOfSync"},
+			"health":             map[string]any{"overall": "Progressing", "summary": "warming"},
+			"desiredGeneration":  12,
 			"observedGeneration": 11,
-			"rolloutPhase":      "Accepted",
-			"currentStep":       "ShiftTrafficLinear",
+			"rolloutPhase":       "Accepted",
+			"currentStep":        "ShiftTrafficLinear",
 		}},
 		"conditions": []map[string]any{{"type": "Available", "status": true, "reason": "ServiceReady", "message": "Service is ready"}},
 		"rollout": map[string]any{
