@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"runtime/debug"
+	"sync"
 	"time"
 )
 
@@ -68,6 +69,7 @@ func requestTimeoutMiddleware(timeout time.Duration, next http.Handler) http.Han
 				return
 			}
 
+			buffered.abandon()
 			setRequestResult(r.Context(), "timeout", "request timed out")
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusServiceUnavailable)
@@ -185,9 +187,11 @@ func (w *statusResponseWriter) statusCode() int {
 }
 
 type bufferedResponseWriter struct {
+	mu     sync.Mutex
 	header http.Header
 	status int
 	body   bytes.Buffer
+	closed bool
 }
 
 func newBufferedResponseWriter() *bufferedResponseWriter {
@@ -199,19 +203,37 @@ func (w *bufferedResponseWriter) Header() http.Header {
 }
 
 func (w *bufferedResponseWriter) WriteHeader(status int) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.closed {
+		return
+	}
 	if w.status == 0 {
 		w.status = status
 	}
 }
 
 func (w *bufferedResponseWriter) Write(body []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.closed {
+		return 0, http.ErrHandlerTimeout
+	}
 	if w.status == 0 {
 		w.status = http.StatusOK
 	}
 	return w.body.Write(body)
 }
 
+func (w *bufferedResponseWriter) abandon() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.closed = true
+}
+
 func (w *bufferedResponseWriter) writeTo(dst http.ResponseWriter) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	for key, values := range w.header {
 		for _, value := range values {
 			dst.Header().Add(key, value)
