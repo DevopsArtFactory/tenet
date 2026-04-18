@@ -2814,6 +2814,83 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 	})
 
+	t.Run("returns traffic routing summary payload", func(t *testing.T) {
+		expected := resourceinspection.Result{
+			DeploymentName: "api-prod",
+			ResourceType:   "trafficShiftPlan",
+			ResourceName:   "api-prod-weighted-routing",
+			LookupContext: resourceinspection.LookupContext{
+				Region:                 "ap-northeast-2",
+				ControlAccountID:       "123456789012",
+				TargetAccountID:        "210987654321",
+				CrossAccount:           true,
+				ObserverRoleConfigured: false,
+			},
+			Available: true,
+			Source:    resourceinspection.SourceRolloutSummary,
+			TrafficRoutingResource: &resourceinspection.TrafficRoutingInspection{
+				Kind:           "trafficShiftPlan",
+				DisplayName:    "Traffic shift plan",
+				InspectionMode: "summary_only",
+				Summary:        "Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s",
+			},
+		}
+
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "api-prod" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+				return expected, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=trafficShiftPlan&resourceName=api-prod-weighted-routing", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+
+		var got resourceinspection.Result
+		if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+			t.Fatalf("failed to decode traffic routing inspection payload: %v", err)
+		}
+		if !reflect.DeepEqual(got, expected) {
+			t.Fatalf("unexpected traffic routing inspection payload: %+v", got)
+		}
+
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw traffic routing inspection payload: %v", err)
+		}
+		for _, key := range []string{"deploymentName", "resourceType", "resourceName", "lookupContext", "available", "source", "trafficRoutingResource", "unavailableReason"} {
+			if _, ok := raw[key]; !ok {
+				t.Fatalf("expected %q field in payload, got %#v", key, raw)
+			}
+		}
+		trafficRoutingResource, ok := raw["trafficRoutingResource"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected trafficRoutingResource object in payload, got %#v", raw["trafficRoutingResource"])
+		}
+		for key, want := range map[string]any{
+			"kind":           "trafficShiftPlan",
+			"displayName":    "Traffic shift plan",
+			"inspectionMode": "summary_only",
+			"summary":        "Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s",
+		} {
+			if got := trafficRoutingResource[key]; !reflect.DeepEqual(got, want) {
+				t.Fatalf("expected trafficRoutingResource[%q]=%v, got %#v", key, want, got)
+			}
+		}
+	})
+
 	for _, tc := range []struct {
 		name         string
 		query        string

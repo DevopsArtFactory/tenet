@@ -169,13 +169,78 @@ func TestServiceInspect(t *testing.T) {
 		}
 	})
 
+	t.Run("traffic routing resources return explicit summary payloads", func(t *testing.T) {
+		service := NewService(Options{})
+		for _, tc := range []struct {
+			resourceType string
+			resourceName string
+			displayName  string
+			summary      string
+		}{
+			{
+				resourceType: "codeDeployDeploymentGroup",
+				resourceName: "payments-api-staging-codedeploy-group",
+				displayName:  "CodeDeploy deployment group",
+				summary:      "CodeDeploy deployment group Tenet targets for ECS rollout (style: linear; qualifiers: min healthy 80% and warmup 45s)",
+			},
+			{
+				resourceType: "productionListener",
+				resourceName: "payments-api-staging-prod-listener",
+				displayName:  "Production listener",
+				summary:      "Production listener CodeDeploy shifts during ECS traffic shifting (style: linear; qualifiers: min healthy 80% and warmup 45s)",
+			},
+			{
+				resourceType: "testListener",
+				resourceName: "payments-api-staging-test-listener",
+				displayName:  "Test listener",
+				summary:      "Test listener CodeDeploy uses to validate the replacement ECS task set before promotion (style: linear; qualifiers: min healthy 80% and warmup 45s)",
+			},
+			{
+				resourceType: "trafficShiftPlan",
+				resourceName: "payments-api-prod-weighted-routing",
+				displayName:  "Traffic shift plan",
+				summary:      "Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s",
+			},
+		} {
+			result, err := service.Inspect(context.Background(), Request{
+				DeploymentName:      "payments-api-prod",
+				ResourceType:        tc.resourceType,
+				ResourceName:        tc.resourceName,
+				ResourceDescription: tc.summary,
+				ControlAccountID:    "111111111111",
+				TargetAccountID:     "222222222222",
+				Region:              "ap-northeast-2",
+			})
+			if err != nil {
+				t.Fatalf("Inspect returned error for %s/%s: %v", tc.resourceType, tc.resourceName, err)
+			}
+			want := Result{
+				DeploymentName: "payments-api-prod",
+				ResourceType:   tc.resourceType,
+				ResourceName:   tc.resourceName,
+				LookupContext:  expectedLookupContext("ap-northeast-2", "111111111111", "222222222222", ""),
+				Available:      true,
+				Source:         SourceRolloutSummary,
+				TrafficRoutingResource: &TrafficRoutingInspection{
+					Kind:           tc.resourceType,
+					DisplayName:    tc.displayName,
+					InspectionMode: "summary_only",
+					Summary:        tc.summary,
+				},
+			}
+			if !reflect.DeepEqual(result, want) {
+				t.Fatalf("unexpected traffic routing inspection result for %s/%s: %+v", tc.resourceType, tc.resourceName, result)
+			}
+		}
+	})
+
 	t.Run("unsupported resource type returns unavailable payload", func(t *testing.T) {
 		service := NewService(Options{})
 
 		result, err := service.Inspect(context.Background(), Request{
 			DeploymentName:   "payments-api-prod",
-			ResourceType:     "trafficShiftPlan",
-			ResourceName:     "payments-api-prod-weighted-routing",
+			ResourceType:     "productionListenerRule",
+			ResourceName:     "payments-api-prod-prod-listener",
 			ControlAccountID: "123456789012",
 			TargetAccountID:  "123456789012",
 			Region:           "ap-northeast-2",
@@ -185,8 +250,8 @@ func TestServiceInspect(t *testing.T) {
 		}
 		want := Result{
 			DeploymentName:    "payments-api-prod",
-			ResourceType:      "trafficShiftPlan",
-			ResourceName:      "payments-api-prod-weighted-routing",
+			ResourceType:      "productionListenerRule",
+			ResourceName:      "payments-api-prod-prod-listener",
 			LookupContext:     expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
 			Available:         false,
 			UnavailableReason: "unsupported_resource_type",

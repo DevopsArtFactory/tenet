@@ -73,7 +73,7 @@ The embedded resource page now includes a dedicated `Live inspection` panel that
 - loading
 - unavailable, with lookup context plus friendly copy mapped from `unavailableReason`
 - empty, when the route is available but there is no typed payload to show yet
-- supported, with operator-friendly fields for `ecsService` and Auto Scaling Group payloads
+- supported, with operator-friendly fields for `ecsService`, Auto Scaling Group, and traffic-routing summary payloads
 
 The same embedded resource route now also renders a compact quick-navigation strip above the deeper detail sections. That strip is intentionally data-local: it builds `_self` links for `Back to application`, `Drift view`, `Plan/apply`, `Audit log`, and sibling linked resources using only the already loaded deployment-detail payload plus preserved URL state. It should not introduce nested interactive controls or a second fetch path just to support lateral navigation.
 
@@ -113,14 +113,17 @@ That same fallback identity keeps both resource-log and resource-inspection dril
 
 The additive inspection route stays read-only and local-friendly:
 - supported live summaries currently start with `ecsService`, `candidateAutoScalingGroup`, and `serviceAutoScalingGroup`
+- supported summary-only traffic-routing resources are `codeDeployDeploymentGroup`, `productionListener`, `testListener`, and `trafficShiftPlan`
 - responses always include `lookupContext` plus `available`
 - supported ECS payloads add `ecsService`
 - supported Auto Scaling payloads add `autoScalingGroup`
+- supported traffic-routing payloads add `trafficRoutingResource` with `kind`, `displayName`, `inspectionMode`, and controller/fallback `summary`
 - unsupported or unavailable resources return `available=false` with an explicit `unavailableReason` instead of bubbling a vague provider error into the operator workflow
 
 In the embedded UI, the supported inspection payloads should stay intentionally operator-facing:
 - `ecsService`: service status, desired/running/pending counts, task definition, deployments, and recent ECS service events
 - `autoScalingGroup`: sizing and health-check settings, target group ARNs, and current instances
+- `trafficRoutingResource`: summary-only traffic-routing context with explicit resource kind, display name, inspection mode, and rollout summary text
 
 ### Additional operator views
 The current UI also still exposes supporting operator surfaces beyond the main drill-down path:

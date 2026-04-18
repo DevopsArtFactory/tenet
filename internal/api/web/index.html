@@ -1831,6 +1831,34 @@
           instancesSection,
         );
       };
+      const trafficRoutingInspectionModeText = (value) => {
+        switch (value) {
+          case 'summary_only':
+            return 'Rollout summary only';
+          default:
+            return textOrDash(value);
+        }
+      };
+      const renderTrafficRoutingInspection = (section, result) => {
+        const trafficRouting = result?.trafficRoutingResource;
+        const metadata = createLookupContextGrid(result?.lookupContext, [
+          ['Inspection source', metricValue(result?.source)],
+          ['Resource kind', textOrDash(trafficRouting?.kind)],
+          ['Display name', textOrDash(trafficRouting?.displayName)],
+          ['Inspection mode', trafficRoutingInspectionModeText(trafficRouting?.inspectionMode)],
+        ]);
+        const summarySection = createElement('section', 'detail-section');
+        summarySection.append(
+          createElement('h4', '', 'Rollout summary'),
+          createElement('p', 'detail-section-copy', textOrDash(trafficRouting?.summary)),
+        );
+        section.replaceChildren(
+          createElement('h4', '', 'Live inspection'),
+          createElement('p', 'detail-section-copy', 'Read-only traffic-routing summary from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
+          metadata,
+          summarySection,
+        );
+      };
       const renderResourceInspectionPayload = (section, result) => {
         const metadata = createLookupContextGrid(result?.lookupContext, [
           ['Inspection source', metricValue(result?.source)],
@@ -1849,6 +1877,10 @@
         }
         if (result?.autoScalingGroup) {
           renderAutoScalingGroupInspection(section, result);
+          return;
+        }
+        if (result?.trafficRoutingResource) {
+          renderTrafficRoutingInspection(section, result);
           return;
         }
         renderResourceInspectionState(section, 'No live inspection details are available for this resource yet.', '', [metadata]);
