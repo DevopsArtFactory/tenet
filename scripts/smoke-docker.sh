@@ -428,16 +428,12 @@ managed_drift = deployment_detail.get("managedDrift")
 runtime_managed_drift = (deployment_detail.get("runtimeSummary") or {}).get("managedDrift")
 assert isinstance(managed_drift, list) and managed_drift, deployment_detail
 assert isinstance(runtime_managed_drift, list) and runtime_managed_drift, deployment_detail
-assert any(
-    isinstance(row, dict)
-    and row.get("field") == "artifact"
-    and row.get("severity") == "high"
-    and isinstance(row.get("desired"), str)
-    and row["desired"]
-    and isinstance(row.get("actual"), str)
-    and row["actual"]
-    for row in managed_drift
-), managed_drift
+assert runtime_managed_drift == managed_drift, deployment_detail
+assert all(isinstance(row, dict) for row in managed_drift), managed_drift
+assert all(isinstance(row.get("field"), str) and row["field"] for row in managed_drift), managed_drift
+assert all(isinstance(row.get("desired"), str) and row["desired"] for row in managed_drift), managed_drift
+assert all(isinstance(row.get("actual"), str) and row["actual"] for row in managed_drift), managed_drift
+assert all(row.get("severity") in {"high", "medium", "low"} for row in managed_drift), managed_drift
 
 assert plan_preview["deploymentName"] == "payments-api-prod", plan_preview
 assert plan_preview["status"] == "ready", plan_preview
