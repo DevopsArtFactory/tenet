@@ -352,6 +352,8 @@ For deeper design details, see:
 - `docs/features/resource-recent-logs.md`
 - `deploy/terraform/aws-central-control-plane/README.md`
 
+The AWS central-control-plane docs and Terraform bootstrap README now explicitly call out that the shipped repo-sync bootstrap path works out of the box only with an anonymously readable `repo_url` (for example a public HTTPS clone URL). Private desired-state repo authentication for that module is still a follow-up.
+
 For the standalone architecture diagram, open this file locally in a browser:
 - `docs/architecture/tenet-v1-architecture-diagram.html`
 

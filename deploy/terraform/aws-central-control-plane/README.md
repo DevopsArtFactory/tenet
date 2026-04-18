@@ -33,7 +33,7 @@ That means the machine running `terraform apply` must have:
 
 ## Repo-sync pattern
 
-Both `tenet-api` and `tenet-controller` now support `TENET_CATALOG_SOURCE=filesystem|github` for desired-state reads. This Terraform bootstrap intentionally chooses the filesystem path and sets `TENET_REPO_ROOT` because the shared repo-sync volume works for both services today, and private desired-state repo sync is still a follow-up.
+Both `tenet-api` and `tenet-controller` now support `TENET_CATALOG_SOURCE=filesystem|github` for desired-state reads. This Terraform bootstrap intentionally chooses the filesystem path and sets `TENET_REPO_ROOT` because the shared repo-sync volume works for both services today. The shipped repo-sync path works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL. Private desired-state repo authentication is not wired into this module yet.
 
 To satisfy that without introducing an external GitOps controller, each ECS task definition includes a lightweight `alpine/git` sidecar that:
 - clones `repo_url` into a shared task volume
@@ -101,7 +101,7 @@ A minimal target-account trust shape is:
 
 See `variables.tf`, but the main knobs are:
 - `name_prefix`
-- `repo_url`
+- `repo_url` (an anonymously readable clone URL, such as a public HTTPS clone URL)
 - `repo_branch`
 - `image_tag`
 - `operator_cidr_blocks`
@@ -111,6 +111,7 @@ See `variables.tf`, but the main knobs are:
 
 ```hcl
 name_prefix          = "tenet-prod"
+repo_url             = "https://github.com/DevopsArtFactory/tenet.git"
 repo_branch          = "main"
 image_tag            = "bootstrap"
 operator_cidr_blocks = ["203.0.113.10/32"]
@@ -119,6 +120,8 @@ observer_role_arns = [
   "arn:aws:iam::210987654322:role/TenetObserverRole"
 ]
 ```
+
+The shipped repo-sync path works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL. Private desired-state repo authentication is not wired into this module yet.
 
 ## Verification after apply
 
