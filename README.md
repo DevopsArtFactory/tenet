@@ -29,7 +29,7 @@ Tenet is currently built from four main layers.
 ### 1. Repository-backed desired state
 Tenet expects a repo-like manifest structure with accounts, environments, and deployments. That repository is treated as the source of deployment intent.
 
-As groundwork for remote desired-state ingestion, Tenet now also has a read-only internal GitHub contents client that can fetch one manifest file by owner/repo, ref, and path, then decode it with the same JSON/YAML rules as the local filesystem loader. This slice does not yet wire GitHub fetches into catalog loading, reconcile loops, or webhook handling.
+As groundwork for remote desired-state ingestion, Tenet now also has a read-only internal GitHub contents client that can list one manifest directory tree under a repo/ref/path, fetch individual manifest files, and decode them with the same JSON/YAML rules as the local filesystem loader. The additive backend-only `internal/manifestgithub` and `catalog.LoadFromGitHub(...)` entry points load the current accounts/environments/deployments catalog shape from GitHub without yet wiring webhook handling, reconcile loops, or main runtime configuration.
 
 ### 2. Catalog compilation
 The manifest tree is loaded and validated into a compiled catalog. This gives Tenet a stable internal model for:
