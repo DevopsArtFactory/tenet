@@ -265,7 +265,6 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"const parsePageState = () => {",
 		"const page = params.get('page') || params.get('view') || 'applications';",
 		"const validPages = new Set(['applications', 'application', 'account', 'resource', 'drift', 'plan', 'audit']);",
-		"const limit = Number.parseInt(params.get('limit') || '', 10);",
 		"page: validPages.has(page) ? page : 'applications',",
 		"accountId: params.get('accountId') || '',",
 		"deployment: params.get('deployment') || '',",
@@ -273,11 +272,12 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"applyId: params.get('applyId') || '',",
 		"resourceType: params.get('resourceType') || '',",
 		"resourceId: params.get('resourceId') || '',",
-		"auditLimit: Number.isInteger(limit) && limit > 0 ? limit : 0,",
+		"auditLimit: normalizeAuditLimit(params.get('limit') || ''),",
 		"const buildPageURL = (page, extras = {}) => {",
 		"if (currentViewState.query) params.set('q', currentViewState.query);",
 		"if (currentViewState.syncState && currentViewState.syncState !== 'all') params.set('sync', currentViewState.syncState);",
 		"if (currentViewState.account && currentViewState.account !== 'all') params.set('account', currentViewState.account);",
+		"if (page === 'audit' && currentPageState.page === 'audit') {",
 		"const pathname = window.location.pathname || '/';",
 		"return query ? `${pathname}?${query}` : pathname;",
 		"const renderApplicationsOverview = (applications, focusState = null) => {",
@@ -336,6 +336,9 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"return details.length ? details.join(' · ') : 'Actor identity was recorded for this request.';",
 		"'Actor identity is unavailable for this record.'",
 		"'Actor identity is unknown for this record.'",
+		"const normalizeAuditLimit = (value) => {",
+		"const auditLimitSelectOptions = (limit) => {",
+		"const presets = [1, 2, 5, 10, 20, 50];",
 		"const fetchApplicationDetail = (deploymentName) => fetch(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`)",
 		"if (!response.ok) throw new Error(`application detail request failed (${response.status})`);",
 		"const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {",
@@ -348,8 +351,10 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"audit log API unavailable (${response.status})",
 		"audit log request failed (${response.status})",
 		"const createAuditLogsIntro = () => createElement('div', 'detail-section-copy', 'Immutable operator audit log from GET /v1/audit-logs. Newest entries first. Actor identity remains explicit when unavailable or unknown.');",
+		"const syncAuditQueryParams = (params, pageState) => {",
 		"const renderAuditPageChrome = () => {",
 		"createSelect('Action', currentPageState.auditAction, auditActionOptions, (event) => {",
+		"createSelect('Limit', String(currentPageState.auditLimit || ''), auditLimitSelectOptions(currentPageState.auditLimit), (event) => {",
 		"Audit filters: none",
 		"Audit filters: ${activeFilters.join(' · ')}",
 		"const renderAuditLogsState = (text, className = '', detailText = '') => {",
@@ -1245,6 +1250,10 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"assert \"const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {\" in audit_ui, audit_ui",
 		"assert \"if (action) params.set('action', action);\" in audit_ui, audit_ui",
 		"assert \"createSelect('Action', currentPageState.auditAction, auditActionOptions, (event) => {\" in audit_ui, audit_ui",
+		"assert \"const normalizeAuditLimit = (value) => {\" in audit_ui, audit_ui",
+		"assert \"const auditLimitSelectOptions = (limit) => {\" in audit_ui, audit_ui",
+		"assert \"const syncAuditQueryParams = (params, pageState) => {\" in audit_ui, audit_ui",
+		"assert \"createSelect('Limit', String(currentPageState.auditLimit || ''), auditLimitSelectOptions(currentPageState.auditLimit), (event) => {\" in audit_ui, audit_ui",
 		"assert \"fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`)\" in ui, ui",
 		"audit_logs_action_filtered=$(curl -fsS \"http://$HOST:$PORT/v1/audit-logs?action=apply.requested\")",
 		"audit_logs_filtered=$(curl -fsS \"http://$HOST:$PORT/v1/audit-logs?deployment=payments-api-prod&limit=1\")",
@@ -1406,6 +1415,35 @@ func TestOverviewDocsDescribeInPlaceControllerRuntimeEventRefresh(t *testing.T) 
 			"`Refresh runtime events`",
 			"`GET /v1/overview/deployments/{deploymentName}/events` in place",
 			"preserve the bookmarkable `/?page=application...` URL",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
+	}
+}
+
+func TestAuditDocsDescribeBookmarkableLimitControl(t *testing.T) {
+	files := map[string][]string{
+		"../../README.md": {
+			"The audit toolbar now exposes the same limit as an explicit safe preset selector while still honoring bookmarked positive integers such as `?limit=2`.",
+			"a bookmarkable limit control in the audit toolbar that updates the fetch route and URL in place while preserving deployment and action filters",
+		},
+		"../../docs/features/overview-dashboard.md": {
+			"the audit toolbar exposes the same bookmarkable limit through an explicit safe selector",
+			"renders a safe limit selector in the audit toolbar with preset newest-first windows while still honoring bookmarked positive integers such as `limit=2`",
+		},
+		"../../docs/architecture/tenet-v1-overview-ui.md": {
+			"exposes the same bookmarkable limit through a safe toolbar selector that still honors positive-integer URLs such as `?limit=2`",
 		},
 	}
 

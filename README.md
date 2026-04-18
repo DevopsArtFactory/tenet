@@ -124,7 +124,7 @@ Tenet now also exposes the first safe GitHub webhook ingestion primitive for iss
 
 For the current read-only plan/apply flow, a typical local operator path is:
 - `GET /v1/overview/applications/{deploymentName}` or `GET /v1/overview/deployments/{deploymentName}` to inspect the deployment and capture its additive `sourceFingerprint`
-- open `http://localhost:8080/?page=audit` at any point for the bookmarkable audit page backed by `GET /v1/audit-logs`; application detail plus deployment-scoped drift/plan workspaces now link into `/?page=audit&deployment={deploymentName}` so the audit chrome/body stays explicitly scoped to the active deployment, and the page renders deployment-specific empty-state copy when that deployment has no persisted entries. Add `&action=plan.created|apply.requested` to narrow the embedded timeline to one action, and keep using `&limit={n}` when you want a smaller newest-first window from the API.
+- open `http://localhost:8080/?page=audit` at any point for the bookmarkable audit page backed by `GET /v1/audit-logs`; application detail plus deployment-scoped drift/plan workspaces now link into `/?page=audit&deployment={deploymentName}` so the audit chrome/body stays explicitly scoped to the active deployment, and the page renders deployment-specific empty-state copy when that deployment has no persisted entries. Add `&action=plan.created|apply.requested` to narrow the embedded timeline to one action, and keep using `&limit={n}` when you want a smaller newest-first window from the API. The audit toolbar now exposes the same limit as an explicit safe preset selector while still honoring bookmarked positive integers such as `?limit=2`.
 - `GET /v1/audit-logs?deployment={deploymentName}` when you want only one deployment's immutable plan/apply entries without changing the route shape
 - `GET /v1/audit-logs?action=plan.created` when you want only immutable plan-preview creation records
 - `GET /v1/audit-logs?action=apply.requested` when you want only immutable apply-request records
@@ -198,6 +198,7 @@ Use the audit page when you need immutable operator activity instead of controll
 The page is backed directly by `GET /v1/audit-logs` and currently focuses on:
 - newest-first `plan.created` and `apply.requested` entries
 - a bookmarkable action filter that narrows the page and fetch route to exactly `plan.created` or `apply.requested`
+- a bookmarkable limit control in the audit toolbar that updates the fetch route and URL in place while preserving deployment and action filters
 - active filter copy such as `Audit filters: action apply.requested · limit 2` when you reopen `/?page=audit&action=apply.requested&limit=2`
 - deployment-scoped filter copy such as `Audit filters: deployment payments-api-prod · action apply.requested · limit 2` when you reopen `/?page=audit&deployment=payments-api-prod&action=apply.requested&limit=2`
 - deployment / app / environment context
