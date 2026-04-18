@@ -915,6 +915,90 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const resourceInspectionStateByKey = new Map();",
+		"const resourceInspectionCacheKey = (deploymentName, resource) => resourceLogCacheKey(deploymentName, resource);",
+		"const fetchResourceInspection = (deploymentName, resource) => {",
+		"fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-inspection?${params.toString()}`)",
+		"if (!response.ok) throw new Error(`resource inspection request failed (${response.status})`);",
+		"const renderResourceInspectionState = (container, text, className = '', beforeNodes = [], afterNodes = []) => {",
+		"const heading = createElement('h4', '', 'Live inspection');",
+		"const resourceInspectionUnavailableReasonText = (reason) => {",
+		"return 'Live inspection is not supported for this resource type.';",
+		"return 'Cross-account access is not configured for live inspection for this deployment.';",
+		"return 'No running tasks were found for this ECS service.';",
+		"return 'No instances were found in this Auto Scaling Group.';",
+		"return 'AWS access is currently unavailable for live inspection.';",
+		"const resourceLogsLookupContextFields = (lookupContext) => [",
+		"const lookupContextFields = (lookupContext) => resourceLogsLookupContextFields(lookupContext);",
+		"const createLookupContextGrid = (lookupContext, extraFields = []) => {",
+		"const createResourceLogsLookupContextGrid = (lookupContext, extraFields = []) => {",
+		"[...extraFields, ...resourceLogsLookupContextFields(lookupContext)].forEach(([label, value]) => {",
+		"const countText = (value) => {",
+		"const renderECSServiceInspection = (section, result) => {",
+		"Live ECS service inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.",
+		"Inspection source",
+		"Service name",
+		"Service status",
+		"Launch type",
+		"Desired count",
+		"Running count",
+		"Pending count",
+		"Task definition",
+		"Cluster ARN",
+		"Service ARN",
+		"Service deployments",
+		"Deployment status",
+		"Rollout state",
+		"Desired/running/pending",
+		"Rollout reason",
+		"Recent ECS service events",
+		"Event timestamp",
+		"const renderAutoScalingGroupInspection = (section, result) => {",
+		"Live Auto Scaling Group inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.",
+		"Auto Scaling Group name",
+		"Desired capacity",
+		"Min size",
+		"Max size",
+		"Default cooldown",
+		"Health check type",
+		"Health check grace period",
+		"Auto Scaling Group ARN",
+		"Target group ARNs",
+		"Instances",
+		"Protected from scale-in",
+		"Weighted capacity",
+		"const renderResourceInspectionPayload = (section, result) => {",
+		"renderResourceInspectionState(section, 'Live inspection is unavailable for this resource.', '', [metadata], details);",
+		"renderResourceInspectionState(section, 'No live inspection details are available for this resource yet.', '', [metadata]);",
+		"const renderResourceInspectionSection = (section, deploymentName, resource) => {",
+		"const inspectionKey = resourceInspectionCacheKey(deploymentName, resource);",
+		"renderResourceInspectionState(section, 'Loading live inspection…');",
+		"renderResourceInspectionState(container, `Failed to load live inspection: ${error.message}`, 'error')",
+		"createDetailSection('Live inspection');",
+		"renderResourceInspectionSection(inspectionSection, detail.name || currentPageState.deployment || '', resource).catch(() => {});",
+		"Live inspection",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+
+	for _, unsafe := range []string{
+		"inspectionSection.innerHTML",
+		"renderResourceInspectionState.innerHTML",
+		"metadata.innerHTML",
+		"item.innerHTML",
+	} {
+		if strings.Contains(body, unsafe) {
+			t.Fatalf("expected embedded UI to avoid unsafe live-inspection rendering %q", unsafe)
+		}
+	}
+}
+
 func TestEmbeddedUIIncludesRuntimeAndHistoryChangeDetailsRendering(t *testing.T) {
 	body := string(indexHTML)
 
@@ -943,6 +1027,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	text := string(body)
 	if !strings.Contains(text, "assert 'Recent logs' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Recent logs")
+	}
+	if !strings.Contains(text, "assert 'Live inspection' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains Live inspection")
 	}
 	if !strings.Contains(text, "assert 'Lookup region' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Lookup region")
@@ -990,10 +1077,21 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"if worker_resource_logs['available']:",
 		"assert isinstance(worker_resource_logs.get('source'), str), worker_resource_logs",
 		"assert isinstance(worker_resource_logs.get('unavailableReason'), str) and worker_resource_logs['unavailableReason'], worker_resource_logs",
+		"assert isinstance(worker_resource_inspection['ecsService'].get('serviceName'), str) and worker_resource_inspection['ecsService']['serviceName'], worker_resource_inspection",
+		"assert isinstance(worker_resource_inspection['ecsService'].get('deployments', []), list), worker_resource_inspection",
+		"assert isinstance(worker_resource_inspection['ecsService'].get('events', []), list), worker_resource_inspection",
+		"assert isinstance(candidate_resource_inspection['autoScalingGroup'].get('autoScalingGroupName'), str) and candidate_resource_inspection['autoScalingGroup']['autoScalingGroupName'], candidate_resource_inspection",
+		"assert isinstance(candidate_resource_inspection['autoScalingGroup'].get('instances', []), list), candidate_resource_inspection",
 		"assert 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.' in ui, ui",
 		"assert 'Loading controller runtime events…' in ui, ui",
 		"assert 'No controller runtime events have been persisted yet.' in ui, ui",
 		"assert 'Controller runtime events are currently unavailable.' in ui, ui",
+		"assert 'Loading live inspection…' in ui, ui",
+		"assert 'Live inspection is unavailable for this resource.' in ui, ui",
+		"assert 'No live inspection details are available for this resource yet.' in ui, ui",
+		"assert 'Service deployments' in ui, ui",
+		"assert 'Auto Scaling Group name' in ui, ui",
+		"assert 'Target group ARNs' in ui, ui",
 		"audit_ui=$(curl -fsS \"http://$HOST:$PORT/?page=audit&deployment=payments-api-prod&action=apply.requested&limit=1\")",
 		"summary_path=$(write_payload summary.json \"$summary\")",
 		"AUDIT_UI_PATH=\"$audit_ui_path\"",
@@ -1103,6 +1201,8 @@ func TestOverviewDocsLockECSRollingFallbackContract(t *testing.T) {
 		"../../README.md": {
 			"- `ecsRolling`: `ecsService` (`{deployment}-service`)",
 			"worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service",
+			"GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}",
+			"Live inspection",
 		},
 		"../../docs/features/overview-dashboard.md": {
 			"- `ecsRolling`: `ecsService`",
@@ -1111,6 +1211,8 @@ func TestOverviewDocsLockECSRollingFallbackContract(t *testing.T) {
 			"- `ecsRolling`",
 			"- `ecsService` → `{deployment}-service` → `ECS service Tenet updates with native rolling deployment`, optionally extended with rollout-strategy qualifiers such as `while respecting min healthy 90% and warmup 30s`",
 			"worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service",
+			"Live inspection",
+			"GET /v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service",
 		},
 	}
 

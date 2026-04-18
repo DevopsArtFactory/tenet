@@ -63,10 +63,17 @@ This page is where Tenet can still show the deeper operational slices:
 - rollout state
 - runtime history
 - conditions
+- live inspection
 - artifact context
 - recent logs plus the explicit lookup path Tenet used
 
 The goal is to make troubleshooting possible without forcing the user to jump directly into raw AWS consoles for the first step.
+
+The embedded resource page now includes a dedicated `Live inspection` panel that lazy-loads `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}` for the selected resource while keeping the bookmarkable `/?page=resource...` route unchanged. That panel should always render an explicit state:
+- loading
+- unavailable, with lookup context plus friendly copy mapped from `unavailableReason`
+- empty, when the route is available but there is no typed payload to show yet
+- supported, with operator-friendly fields for `ecsService` and Auto Scaling Group payloads
 
 For recent logs, the embedded card keeps backend lookup context visible with operator-facing labels such as `Lookup region`, `Control account ID`, `Target account ID`, `Cross-account lookup`, and `Observer role configured`. Those fields stay visible in unavailable and empty states so operators can see where Tenet looked before switching to raw AWS troubleshooting.
 
@@ -108,6 +115,10 @@ The additive inspection route stays read-only and local-friendly:
 - supported ECS payloads add `ecsService`
 - supported Auto Scaling payloads add `autoScalingGroup`
 - unsupported or unavailable resources return `available=false` with an explicit `unavailableReason` instead of bubbling a vague provider error into the operator workflow
+
+In the embedded UI, the supported inspection payloads should stay intentionally operator-facing:
+- `ecsService`: service status, desired/running/pending counts, task definition, deployments, and recent ECS service events
+- `autoScalingGroup`: sizing and health-check settings, target group ARNs, and current instances
 
 ### Additional operator views
 The current UI also still exposes supporting operator surfaces beyond the main drill-down path:

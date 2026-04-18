@@ -2459,6 +2459,252 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
 	runNodeHarness(t, nodeProgram)
 }
 
+func TestResourceDetailPageLiveInspectionWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	ecsDetailJSON, err := json.Marshal(map[string]any{
+		"name":         "payments-api-staging",
+		"accountName":  "staging-core",
+		"awsAccountId": "210987654321",
+		"region":       "ap-northeast-2",
+		"rollout": map[string]any{
+			"execution": []map[string]any{
+				{"name": "payments-api-staging-service", "resource": "ecsService", "description": "Primary ECS service"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal ecs detail body: %v", err)
+	}
+
+	unsupportedDetailJSON, err := json.Marshal(map[string]any{
+		"name":         "payments-api-staging",
+		"accountName":  "staging-core",
+		"awsAccountId": "210987654321",
+		"region":       "ap-northeast-2",
+		"rollout": map[string]any{
+			"execution": []map[string]any{
+				{"name": "payments-api-staging Deployment Group", "resource": "codeDeployDeploymentGroup", "description": "Linear traffic shifting deployment group"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal unsupported detail body: %v", err)
+	}
+
+	asgDetailJSON, err := json.Marshal(map[string]any{
+		"name":         "payments-api-prod",
+		"accountName":  "prod-core",
+		"awsAccountId": "123456789012",
+		"region":       "ap-northeast-2",
+		"rollout": map[string]any{
+			"execution": []map[string]any{
+				{"name": "payments-api-prod-candidate", "resource": "candidateAutoScalingGroup", "description": "Candidate capacity"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal asg detail body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const ecsDetailBody = ` + string(ecsDetailJSON) + `;
+const unsupportedDetailBody = ` + string(unsupportedDetailJSON) + `;
+const asgDetailBody = ` + string(asgDetailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const createDocument = () => {
+  const document = new Document();
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  return document;
+};
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+
+const ecsResourceID = 'ecsService::payments-api-staging-service::Primary ECS service';
+const unsupportedResourceID = 'codeDeployDeploymentGroup::payments-api-staging Deployment Group::Linear traffic shifting deployment group';
+const asgResourceID = 'candidateAutoScalingGroup::payments-api-prod-candidate::Candidate capacity';
+
+async function renderWithFetch(search, fetchImpl, settleCount = 2) {
+  const document = createDocument();
+  const window = { location: { pathname: '/', search, hash: '' } };
+  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetchImpl, history, Element, InputElement);
+  for (let i = 0; i < settleCount; i += 1) await settle();
+  return { document, window };
+}
+
+(async () => {
+  const ecsDeploymentURL = '/v1/overview/deployments/payments-api-staging';
+  const ecsLogsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service';
+  const ecsInspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service';
+
+  let resolveInspection;
+  const loadingFetchCalls = [];
+  const loadingRun = await renderWithFetch('?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(ecsResourceID), (url) => {
+    loadingFetchCalls.push(String(url));
+    if (url === ecsDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(ecsDetailBody) });
+    if (url === ecsLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === ecsInspectionURL) return new Promise((resolve) => { resolveInspection = resolve; });
+    throw new Error('unexpected loading fetch url: ' + url);
+  }, 1);
+  const loadingText = collectText(loadingRun.document.getElementById('accounts')).join(' | ');
+  if (!loadingText.includes('Live inspection')) throw new Error('expected resource page to render live inspection section heading while loading');
+  if (!loadingText.includes('Loading live inspection…')) throw new Error('expected resource page to render loading state for live inspection');
+  if (!loadingFetchCalls.includes(ecsInspectionURL)) throw new Error('expected resource page to lazy-load live inspection for the selected resource');
+  resolveInspection({ ok: true, json: () => Promise.resolve({ available: true, source: 'ecs_service', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn: 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-staging', serviceArn: 'arn:aws:ecs:ap-northeast-2:210987654321:service/payments-staging/payments-api-staging-service', serviceName: 'payments-api-staging-service', status: 'ACTIVE', launchType: 'FARGATE', desiredCount: 2, runningCount: 2, pendingCount: 0, taskDefinition: 'payments-api:42', deployments: [], events: [] } }) });
+  await settle();
+
+  const unsupportedLogsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging+Deployment+Group';
+  const unsupportedInspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging+Deployment+Group';
+  const unsupportedRun = await renderWithFetch('?page=resource&deployment=payments-api-staging&resourceType=codeDeployDeploymentGroup&resourceId=' + encodeURIComponent(unsupportedResourceID), (url) => {
+    if (url === ecsDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(unsupportedDetailBody) });
+    if (url === unsupportedLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === unsupportedInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: false }, unavailableReason: 'unsupported_resource_type' }) });
+    throw new Error('unexpected unsupported fetch url: ' + url);
+  });
+  const unsupportedText = collectText(unsupportedRun.document.getElementById('accounts')).join(' | ');
+  if (!unsupportedText.includes('Live inspection is unavailable for this resource.')) throw new Error('expected unsupported inspection state');
+  if (!unsupportedText.includes('Live inspection is not supported for this resource type.')) throw new Error('expected unsupported inspection state to show friendly reason');
+  if (!unsupportedText.includes('Lookup region')) throw new Error('expected unsupported inspection state to label lookup context');
+  if (!unsupportedText.includes('Control account ID')) throw new Error('expected unsupported inspection state to label control account');
+  if (!unsupportedText.includes('Target account ID')) throw new Error('expected unsupported inspection state to label target account');
+  if (!unsupportedText.includes('Cross-account lookup')) throw new Error('expected unsupported inspection state to label cross-account lookup');
+  if (!unsupportedText.includes('Observer role configured')) throw new Error('expected unsupported inspection state to label observer role configuration');
+  if (!unsupportedText.includes('False')) throw new Error('expected unsupported inspection state to show missing observer role configuration');
+
+  const emptyRun = await renderWithFetch('?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(ecsResourceID), (url) => {
+    if (url === ecsDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(ecsDetailBody) });
+    if (url === ecsLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === ecsInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'ecs_service', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true } }) });
+    throw new Error('unexpected empty fetch url: ' + url);
+  });
+  const emptyText = collectText(emptyRun.document.getElementById('accounts')).join(' | ');
+  if (!emptyText.includes('No live inspection details are available for this resource yet.')) throw new Error('expected empty inspection state');
+  if (!emptyText.includes('Inspection source')) throw new Error('expected empty inspection state to show inspection source');
+  if (!emptyText.includes('ecs_service')) throw new Error('expected empty inspection state to show inspection source value');
+
+  const ecsSupportedRun = await renderWithFetch('?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(ecsResourceID), (url) => {
+    if (url === ecsDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(ecsDetailBody) });
+    if (url === ecsLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === ecsInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({
+      available: true,
+      source: 'ecs_service',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true },
+      ecsService: {
+        clusterArn: 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-staging',
+        serviceArn: 'arn:aws:ecs:ap-northeast-2:210987654321:service/payments-staging/payments-api-staging-service',
+        serviceName: 'payments-api-staging-service',
+        status: 'ACTIVE',
+        launchType: 'FARGATE',
+        desiredCount: 2,
+        runningCount: 2,
+        pendingCount: 0,
+        taskDefinition: 'payments-api:42',
+        deployments: [{ id: 'ecs-svc/123', status: 'PRIMARY', rolloutState: 'COMPLETED', rolloutStateReason: 'steady state', taskDefinition: 'payments-api:42', desiredCount: 2, runningCount: 2, pendingCount: 0, createdAt: '2026-04-18T00:10:00Z', updatedAt: '2026-04-18T00:11:00Z' }],
+        events: [{ createdAt: '2026-04-18T00:12:00Z', message: '<img src=x onerror=1> service reached steady state' }],
+      },
+    }) });
+    throw new Error('unexpected ecs supported fetch url: ' + url);
+  });
+  const ecsSupportedText = collectText(ecsSupportedRun.document.getElementById('accounts')).join(' | ');
+  if (!ecsSupportedText.includes('Service name')) throw new Error('expected ECS inspection to render service name label');
+  if (!ecsSupportedText.includes('payments-api-staging-service')) throw new Error('expected ECS inspection to render service name value');
+  if (!ecsSupportedText.includes('Service deployments')) throw new Error('expected ECS inspection to render deployments section');
+  if (!ecsSupportedText.includes('Deployment status · PRIMARY')) throw new Error('expected ECS inspection to render deployment status');
+  if (!ecsSupportedText.includes('Rollout state · COMPLETED')) throw new Error('expected ECS inspection to render deployment rollout state');
+  if (!ecsSupportedText.includes('Desired/running/pending · 2 / 2 / 0')) throw new Error('expected ECS inspection to render deployment counts');
+  if (!ecsSupportedText.includes('Recent ECS service events')) throw new Error('expected ECS inspection to render events section');
+  if (!ecsSupportedText.includes('Event timestamp · 2026-04-18T00:12:00Z')) throw new Error('expected ECS inspection to render event timestamp');
+  if (!ecsSupportedText.includes('<img src=x onerror=1> service reached steady state')) throw new Error('expected ECS inspection to render event text safely');
+  const ecsImages = collectNodes(ecsSupportedRun.document.getElementById('accounts'), (node) => node.tagName === 'IMG');
+  if (ecsImages.length !== 0) throw new Error('expected ECS inspection event text to remain text content rather than parsed html');
+
+  const asgDeploymentURL = '/v1/overview/deployments/payments-api-prod';
+  const asgLogsURL = '/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate';
+  const asgInspectionURL = '/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate';
+  const asgSupportedRun = await renderWithFetch('?page=resource&deployment=payments-api-prod&resourceType=candidateAutoScalingGroup&resourceId=' + encodeURIComponent(asgResourceID), (url) => {
+    if (url === asgDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(asgDetailBody) });
+    if (url === asgLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === asgInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({
+      available: true,
+      source: 'auto_scaling_group',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true },
+      autoScalingGroup: {
+        autoScalingGroupArn: 'arn:aws:autoscaling:ap-northeast-2:123456789012:autoScalingGroup:*:autoScalingGroupName/payments-api-prod-candidate',
+        autoScalingGroupName: 'payments-api-prod-candidate',
+        minSize: 2,
+        maxSize: 8,
+        desiredCapacity: 4,
+        defaultCooldown: 300,
+        healthCheckType: 'EC2',
+        healthCheckGracePeriod: 120,
+        targetGroupArns: ['arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-prod-candidate/abc123'],
+        instances: [{ instanceId: 'i-abc123', availabilityZone: 'ap-northeast-2a', lifecycleState: 'InService', healthStatus: 'Healthy', protectedFromScaleIn: true, weightedCapacity: '1' }],
+      },
+    }) });
+    throw new Error('unexpected asg supported fetch url: ' + url);
+  });
+  const asgSupportedText = collectText(asgSupportedRun.document.getElementById('accounts')).join(' | ');
+  if (!asgSupportedText.includes('Auto Scaling Group name')) throw new Error('expected ASG inspection to render group name label');
+  if (!asgSupportedText.includes('payments-api-prod-candidate')) throw new Error('expected ASG inspection to render group name value');
+  if (!asgSupportedText.includes('Target group ARNs')) throw new Error('expected ASG inspection to render target groups section');
+  if (!asgSupportedText.includes('arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-prod-candidate/abc123')) throw new Error('expected ASG inspection to render target group ARN');
+  if (!asgSupportedText.includes('Instances')) throw new Error('expected ASG inspection to render instances section');
+  if (!asgSupportedText.includes('Lifecycle state · InService')) throw new Error('expected ASG inspection to render lifecycle state');
+  if (!asgSupportedText.includes('Protected from scale-in · True')) throw new Error('expected ASG inspection to render protected-from-scale-in');
+  if (!asgSupportedText.includes('Weighted capacity · 1')) throw new Error('expected ASG inspection to render weighted capacity');
+})();
+`
+
+	runNodeHarness(t, nodeProgram)
+}
+
 func TestResourceDetailPageWithNodeHarnessResolvesDuplicateSameTypeResources(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not installed")
