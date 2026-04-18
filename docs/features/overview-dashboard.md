@@ -176,6 +176,8 @@ Current drift workspace behavior:
 - keeps machine-readable `runtimeSummary.changes[]` rows while also rendering human-readable `runtimeSummary.changeDetails[]`
 - shows deployment context and status conditions
 - prefers backend-authored additive `managedDrift[]` rows from the deployment-detail payload when present, normalizes them into the same safe read-only table, and falls back to the existing client-derived artifact/generation/runtime-intent comparisons for older payloads
+- shows an explicit `Active drift source` callout so operators can see whether the table is rendering controller-authored `managedDrift[]` rows or the existing derived fallback heuristics
+- uses source-specific empty-state copy so operators can distinguish "no controller-authored field-level drift was reported" from "no derived fallback field-level drift was detected"
 - keeps client-side severity filtering, query filtering, and sorting consistent across both backend-authored and fallback-derived drift rows
 - keeps the toolbar `Audit log` link deployment-scoped so operators land on `/?page=audit&deployment={name}` instead of the global audit slice
 

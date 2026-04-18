@@ -371,6 +371,22 @@
         if (managedRows) return managedRows;
         return deriveFallbackDeploymentDriftRows(detail);
       };
+      const deploymentDriftSource = (detail) => {
+        if (Array.isArray(detail?.managedDrift)) {
+          return {
+            badge: 'Controller-authored managedDrift',
+            summary: 'Current source: controller-authored managedDrift rows.',
+            factors: 'managedDrift is present in the deployment detail payload, so fallback read-model heuristics stay suppressed for this deployment.',
+            empty: 'No controller-authored field-level drift was reported for this deployment.',
+          };
+        }
+        return {
+          badge: 'Derived fallback heuristics',
+          summary: 'Current source: derived fallback read-model heuristics.',
+          factors: 'managedDrift is absent in the deployment detail payload, so Tenet is deriving field-level drift from artifact, generation, runtime-context, and unhealthy-condition read-model signals.',
+          empty: 'No derived fallback field-level drift was detected from the deployment read model.',
+        };
+      };
       const rolloutPhaseForStepKind = (stepKind) => {
         switch (stepKind) {
           case 'CreateCandidateCapacity':
@@ -2493,7 +2509,7 @@
         if (mode === 'drift') {
           const driftSection = createDetailSection(emptyTitle);
           const driftRows = deploymentDriftRows(detail);
-          const driftUsesManagedRows = Array.isArray(detail?.managedDrift);
+          const driftSource = deploymentDriftSource(detail);
           let driftQuery = '';
           let driftSeverity = 'all';
           let driftSort = 'field';
@@ -2518,9 +2534,7 @@
             if (!filteredRows.length) {
               const emptyMessage = driftRows.length
                 ? 'No field-level drift rows match the current filters.'
-                : driftUsesManagedRows
-                  ? 'No backend-authored field-level drift rows are currently reported for this deployment.'
-                  : 'No field-level drift is currently derived from the deployment read model.';
+                : driftSource.empty;
               driftTableWrap.replaceChildren(createElement('div', 'detail-state', emptyMessage));
               return;
             }
@@ -2570,7 +2584,18 @@
               renderDriftRows();
             }),
           );
-          driftSection.append(createElement('div', 'detail-section-copy', 'Backend-authored managed drift rows are preferred when present. Older deployment-detail payloads fall back to client-derived drift from the deployment read model.'));
+          const driftSourceCallout = createElement('div', 'workspace-callout');
+          const driftSourceHead = createElement('div', 'workspace-callout-head');
+          driftSourceHead.append(
+            createElement('span', 'workspace-callout-label', 'Active drift source'),
+            createElement('span', 'pill target', driftSource.badge),
+          );
+          driftSourceCallout.append(
+            driftSourceHead,
+            createElement('div', 'workspace-callout-copy', driftSource.summary),
+            createElement('div', 'workspace-callout-factors', driftSource.factors),
+          );
+          driftSection.append(driftSourceCallout);
           driftSection.append(driftControls, driftTableWrap);
           renderDriftRows();
           sections.push(driftSection);

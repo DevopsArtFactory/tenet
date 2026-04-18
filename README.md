@@ -171,7 +171,7 @@ Canonical resource-log routes stay stable across rollout modes so operators can 
 Behind those routes, the built-in AWS-backed recent-log provider now reuses SDK config/client setup per `(region, target account, observer role)` key inside a running Tenet API process instead of rebuilding ECS / CloudWatch Logs / Auto Scaling / EC2 clients on every fetch.
 
 The same drill-down also includes read-only workspace surfaces:
-- `/?page=drift&deployment={deploymentName}` for field-level troubleshooting context that prefers backend-authored `managedDrift[]` rows from the deployment detail payload when present and otherwise falls back to the current client-derived comparison for older payloads
+- `/?page=drift&deployment={deploymentName}` for field-level troubleshooting context that now calls out the active drift-row source: controller-authored `managedDrift[]` rows when present, otherwise the existing derived fallback read-model heuristics for older payloads. Empty-state copy also distinguishes "no controller-authored drift reported" from "no derived fallback drift detected."
 - `/?page=plan&deployment={deploymentName}` for immutable plan previews, `Apply Plan` activation once a persisted ready preview is loaded, bookmarkable `planId`/`applyId` workspace URLs, and stored-preview quick links to both the embedded workspace (`_self`) and immutable `Plan JSON` / `Apply JSON` read models
 
 The backend now also exposes read-only immutable apply-request routes:

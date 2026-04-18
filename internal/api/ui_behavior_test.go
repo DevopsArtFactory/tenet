@@ -3356,7 +3356,9 @@ async function render(detail) {
   const managedRun = await render(managedDetail);
   const managedText = collectText(managedRun.document.getElementById('accounts')).join(' | ');
   const managedRows = collectNodes(managedRun.document.getElementById('accounts'), (node) => node.tagName === 'TR').slice(1).map((node) => collectText(node).join(' | '));
-  if (!managedText.includes('Backend-authored managed drift rows are preferred when present. Older deployment-detail payloads fall back to client-derived drift from the deployment read model.')) throw new Error('expected managed drift workspace source-selection copy');
+  if (!managedText.includes('Active drift source')) throw new Error('expected managed drift workspace source callout label');
+  if (!managedText.includes('Current source: controller-authored managedDrift rows.')) throw new Error('expected managed drift workspace source summary');
+  if (!managedText.includes('managedDrift is present in the deployment detail payload, so fallback read-model heuristics stay suppressed for this deployment.')) throw new Error('expected managed drift workspace source explanation');
   if (!managedRows.some((row) => row.includes('listener.weight'))) throw new Error('expected backend-authored managed drift row');
   if (!managedRows.some((row) => row.includes('service.taskDefinition'))) throw new Error('expected second backend-authored managed drift row');
   if (managedRows.some((row) => row.includes('artifact'))) throw new Error('expected managed drift rows to suppress fallback artifact derivation');
@@ -3374,7 +3376,7 @@ async function render(detail) {
   const managedEmptyRun = await render(managedEmptyDetail);
   const managedEmptyText = collectText(managedEmptyRun.document.getElementById('accounts')).join(' | ');
   const managedEmptyRows = collectNodes(managedEmptyRun.document.getElementById('accounts'), (node) => node.tagName === 'TR').slice(1);
-  if (!managedEmptyText.includes('No backend-authored field-level drift rows are currently reported for this deployment.')) throw new Error('expected explicit backend-authored empty drift message');
+  if (!managedEmptyText.includes('No controller-authored field-level drift was reported for this deployment.')) throw new Error('expected explicit controller-authored empty drift message');
   if (managedEmptyText.includes('condition.DriftDetected')) throw new Error('expected empty managed drift state to suppress fallback condition rows');
   if (managedEmptyRows.length !== 0) throw new Error('expected empty managed drift state to suppress fallback drift table rows');
 
@@ -3396,6 +3398,8 @@ async function render(detail) {
   if (!text.includes('Rollout execution')) throw new Error('expected drift workspace rollout execution section');
   if (!text.includes('prod-router')) throw new Error('expected drift workspace rollout execution name');
   if (!text.includes('Field-level drift')) throw new Error('expected drift workspace section heading');
+  if (!text.includes('Current source: derived fallback read-model heuristics.')) throw new Error('expected fallback drift workspace source summary');
+  if (!text.includes('managedDrift is absent in the deployment detail payload, so Tenet is deriving field-level drift from artifact, generation, runtime-context, and unhealthy-condition read-model signals.')) throw new Error('expected fallback drift workspace source explanation');
   if (!text.includes('Field path')) throw new Error('expected drift workspace field column header');
   if (!text.includes('Desired')) throw new Error('expected drift workspace desired column header');
   if (!text.includes('Actual')) throw new Error('expected drift workspace actual column header');
@@ -3417,7 +3421,7 @@ async function render(detail) {
   if (!text.includes('high')) throw new Error('expected high severity indicator');
   if (!text.includes('medium')) throw new Error('expected medium severity indicator');
   if (!text.includes('low')) throw new Error('expected low severity indicator');
-  if (text.includes('No field-level drift is currently derived from the deployment read model.')) throw new Error('expected non-empty drift data to avoid empty state');
+  if (text.includes('No derived fallback field-level drift was detected from the deployment read model.')) throw new Error('expected non-empty drift data to avoid empty state');
   if (!text.includes("<script>alert('xss')</script> ALB production listener still targets the legacy task set")) throw new Error('expected drift condition message to render as text');
 
   const severityField = run.document.querySelector('[data-toolbar-field="Severity"]');
@@ -3459,7 +3463,7 @@ async function render(detail) {
   const emptyRun = await render(emptyDetail);
   const emptyText = collectText(emptyRun.document.getElementById('accounts')).join(' | ');
   if (!emptyText.includes('Field-level drift')) throw new Error('expected empty drift workspace section heading');
-  if (!emptyText.includes('No field-level drift is currently derived from the deployment read model.')) throw new Error('expected empty drift workspace message');
+  if (!emptyText.includes('No derived fallback field-level drift was detected from the deployment read model.')) throw new Error('expected empty drift workspace message');
   if (emptyText.includes('condition.')) throw new Error('expected empty drift workspace to omit condition rows');
 })();
 `
