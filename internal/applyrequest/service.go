@@ -24,9 +24,10 @@ type PlanProvider func(context.Context, string) (planpreview.Record, error)
 
 // Service derives and persists immutable apply requests from ready plan previews.
 type Service struct {
-	LoadPlan PlanProvider
-	Store    Store
-	Now      func() time.Time
+	LoadPlan       PlanProvider
+	Store          Store
+	Now            func() time.Time
+	EnableAWSApply bool
 }
 
 // CreateResult captures the stored apply request plus whether it was newly created.
@@ -55,15 +56,12 @@ func (s Service) Create(ctx context.Context, planID string) (CreateResult, error
 	record := Record{
 		PlanID:         plan.ID,
 		DeploymentName: plan.DeploymentName,
-		Status:         StatusFailed,
+		Status:         s.initialStatus(),
 		CreatedAt:      s.now().UTC().Format(time.RFC3339),
 		Actor:          requestactor.FromContext(ctx),
-		Error:          disabledError,
-		Details: []string{
-			"Tenet persisted this immutable apply request in read-only mode and did not contact AWS.",
-			"Live execution is intentionally disabled by default for this backend slice.",
-		},
-		Operations: deriveOperations(plan),
+		Error:          s.initialError(),
+		Details:        s.initialDetails(),
+		Operations:     deriveOperations(plan, s.initialOperationStatus()),
 		Source: SourceContext{
 			PlanID:        plan.ID,
 			Route:         "/v1/plans/" + plan.ID,
@@ -109,6 +107,40 @@ func (s Service) now() time.Time {
 	return time.Now().UTC()
 }
 
+func (s Service) initialStatus() Status {
+	if s.EnableAWSApply {
+		return StatusQueued
+	}
+	return StatusFailed
+}
+
+func (s Service) initialOperationStatus() OperationStatus {
+	if s.EnableAWSApply {
+		return OperationStatusQueued
+	}
+	return OperationStatusPending
+}
+
+func (s Service) initialError() string {
+	if s.EnableAWSApply {
+		return ""
+	}
+	return disabledError
+}
+
+func (s Service) initialDetails() []string {
+	if s.EnableAWSApply {
+		return []string{
+			"Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true.",
+			"No AWS mutation has been implemented for this backend slice yet.",
+		}
+	}
+	return []string{
+		"Tenet persisted this immutable apply request in read-only mode and did not contact AWS.",
+		"Live execution is intentionally disabled by default for this backend slice.",
+	}
+}
+
 func stableRecordID(record Record) (string, error) {
 	// Operations are intentionally excluded here. The source plan ID already commits to the
 	// ordered plan-operation intent, and the apply operations are an additive projection for
@@ -132,7 +164,7 @@ func stableRecordID(record Record) (string, error) {
 	return "apply_" + hex.EncodeToString(sum[:8]), nil
 }
 
-func deriveOperations(plan planpreview.Record) []Operation {
+func deriveOperations(plan planpreview.Record, status OperationStatus) []Operation {
 	if len(plan.Operations) == 0 {
 		return nil
 	}
@@ -140,7 +172,7 @@ func deriveOperations(plan planpreview.Record) []Operation {
 	operations := make([]Operation, 0, len(plan.Operations))
 	for _, operation := range plan.Operations {
 		operations = append(operations, Operation{
-			Status:  string(StatusPending),
+			Status:  status,
 			Phase:   operation.Phase,
 			Target:  operation.Target,
 			Summary: operation.Summary,

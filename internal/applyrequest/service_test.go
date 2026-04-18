@@ -80,7 +80,7 @@ func TestServiceCreatePersistsImmutableFailedApplyRequestWhenExecutionIsDisabled
 	if len(first.Record.Operations) != 2 {
 		t.Fatalf("expected projected operations, got %+v", first.Record.Operations)
 	}
-	if first.Record.Operations[0].Status != string(StatusPending) || first.Record.Operations[0].Phase != "Provisioning" {
+	if first.Record.Operations[0].Status != OperationStatusPending || first.Record.Operations[0].Phase != "Provisioning" {
 		t.Fatalf("expected pending projected operation rows, got %+v", first.Record.Operations)
 	}
 	if first.Record.Operations[1].Target != "api-prod-prod-listener (productionListener)" || first.Record.Operations[1].Summary != "Shift production traffic toward the replacement capacity for api-prod." {
@@ -104,6 +104,49 @@ func TestServiceCreatePersistsImmutableFailedApplyRequestWhenExecutionIsDisabled
 	}
 	if fetched.ID != first.Record.ID || fetched.PlanID != plan.ID || fetched.Status != StatusFailed {
 		t.Fatalf("unexpected fetched apply request: %+v", fetched)
+	}
+}
+
+func TestServiceCreatePersistsImmutableQueuedApplyRequestWhenExecutionIsEnabled(t *testing.T) {
+	store := &memoryStore{}
+	plan := planpreview.Record{
+		ID:             "plan_ready_1234abcd",
+		DeploymentName: "api-prod",
+		Status:         planpreview.StatusReady,
+		CreatedAt:      "2026-04-17T08:00:00Z",
+		Operations: []planpreview.Operation{
+			{Status: "completed", Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."},
+			{Status: "current", Phase: "Promoting", Target: "api-prod-prod-listener (productionListener)", Summary: "Shift production traffic toward the replacement capacity for api-prod."},
+		},
+		Source: planpreview.SourceContext{DeploymentName: "api-prod", Route: "/v1/overview/deployments/api-prod", Fingerprint: "plan_input"},
+	}
+	service := Service{
+		LoadPlan: func(context.Context, string) (planpreview.Record, error) {
+			return plan, nil
+		},
+		Store:          store,
+		Now:            func() time.Time { return time.Date(2026, 4, 18, 8, 5, 0, 0, time.UTC) },
+		EnableAWSApply: true,
+	}
+
+	result, err := service.Create(context.Background(), plan.ID)
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	if !result.Created {
+		t.Fatalf("expected first create to persist a queued apply request")
+	}
+	if result.Record.Status != StatusQueued || result.Record.Error != "" {
+		t.Fatalf("expected queued apply request without disabled error, got %+v", result.Record)
+	}
+	if len(result.Record.Details) != 2 || !strings.Contains(result.Record.Details[0], "TENET_AWS_ENABLE_APPLY=true") {
+		t.Fatalf("expected queued details, got %+v", result.Record.Details)
+	}
+	if len(result.Record.Operations) != 2 {
+		t.Fatalf("expected projected operations, got %+v", result.Record.Operations)
+	}
+	if result.Record.Operations[0].Status != OperationStatusQueued || result.Record.Operations[1].Status != OperationStatusQueued {
+		t.Fatalf("expected queued projected operation rows, got %+v", result.Record.Operations)
 	}
 }
 
@@ -185,7 +228,7 @@ func TestStableRecordIDIgnoresAdditiveOperationsProjection(t *testing.T) {
 	}
 
 	base.Operations = []Operation{{
-		Status:  string(StatusPending),
+		Status:  OperationStatusPending,
 		Phase:   "Provisioning",
 		Target:  "api-prod deployment",
 		Summary: "Create replacement capacity for api-prod.",
@@ -236,7 +279,28 @@ func TestServiceCreatePersistsAvailableActorFromRequestContext(t *testing.T) {
 	if result.Record.Actor.ID != "operator-123" || result.Record.Actor.Name != "Jane Operator" || result.Record.Actor.Email != "jane@example.com" {
 		t.Fatalf("unexpected available actor details: %+v", result.Record.Actor)
 	}
-	if len(result.Record.Operations) != 1 || result.Record.Operations[0].Status != string(StatusPending) {
+	if len(result.Record.Operations) != 1 || result.Record.Operations[0].Status != OperationStatusPending {
 		t.Fatalf("expected additive projected operations for available actor record, got %+v", result.Record.Operations)
+	}
+}
+
+func TestApplyLifecycleStatusHelpers(t *testing.T) {
+	if !StatusQueued.Valid() || !StatusFailed.Valid() || !StatusCancelled.IsTerminal() {
+		t.Fatalf("expected queued/failed/cancelled lifecycle helpers to report supported states")
+	}
+	if StatusRunning.IsTerminal() {
+		t.Fatalf("running apply status should not be terminal")
+	}
+	if Status("mystery").Valid() {
+		t.Fatalf("unexpected unknown apply status to validate")
+	}
+	if !OperationStatusQueued.Valid() || !OperationStatusSucceeded.IsTerminal() {
+		t.Fatalf("expected queued/succeeded operation helpers to report supported states")
+	}
+	if OperationStatusRunning.IsTerminal() {
+		t.Fatalf("running apply operation status should not be terminal")
+	}
+	if OperationStatus("mystery").Valid() {
+		t.Fatalf("unexpected unknown apply operation status to validate")
 	}
 }

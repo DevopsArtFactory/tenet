@@ -51,6 +51,7 @@ func main() {
 	statusPath := os.Getenv("TENET_STATUS_PATH")
 	planStorePath := envOrDefault("TENET_PLAN_STORE_PATH", defaultPlanPreviewStorePath())
 	applyStorePath := envOrDefault("TENET_APPLY_STORE_PATH", defaultApplyRequestStorePath())
+	applyEnabled := awsApplyEnabled()
 	redisAddr := os.Getenv("TENET_REDIS_ADDR")
 	statusSeedPath := os.Getenv("TENET_STATUS_SEED_PATH")
 	requestTimeout, err := requestTimeoutFromEnv()
@@ -60,7 +61,7 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	info := buildinfo.Current(version, commit)
-	log.Printf("starting tenet-api version=%s commit=%s addr=%s repo_root=%s status_backend=%s status_path=%s plan_store_path=%s apply_store_path=%s redis_addr=%s request_timeout=%s", info.Version, info.Commit, addr, repoRoot, statusBackend, statusPath, planStorePath, applyStorePath, redisAddr, requestTimeout)
+	log.Printf("starting tenet-api version=%s commit=%s addr=%s repo_root=%s status_backend=%s status_path=%s plan_store_path=%s apply_store_path=%s apply_enabled=%t redis_addr=%s request_timeout=%s", info.Version, info.Commit, addr, repoRoot, statusBackend, statusPath, planStorePath, applyStorePath, applyEnabled, redisAddr, requestTimeout)
 
 	store := mustOpenStatusStore(statusBackend, statusPath, redisAddr)
 	if store != nil {
@@ -206,8 +207,9 @@ func newAPIOptionsWithStores(info buildinfo.Info, repoRoot string, store statuss
 			Store:      planpreview.NewFileStore(planStorePath),
 		}
 		applyService := applyrequest.Service{
-			LoadPlan: planService.Get,
-			Store:    applyrequest.NewFileStore(applyStorePath),
+			LoadPlan:       planService.Get,
+			Store:          applyrequest.NewFileStore(applyStorePath),
+			EnableAWSApply: awsApplyEnabled(),
 		}
 		options.CreateDeploymentPlanPreview = planService.Create
 		options.PlanPreview = planService.Get
@@ -237,6 +239,10 @@ func defaultPlanPreviewStorePath() string {
 
 func defaultApplyRequestStorePath() string {
 	return filepath.Join(os.TempDir(), "tenet", "apply-requests.json")
+}
+
+func awsApplyEnabled() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("TENET_AWS_ENABLE_APPLY")), "true")
 }
 
 func loadPlanPreviewRecords(path string) ([]planpreview.Record, error) {

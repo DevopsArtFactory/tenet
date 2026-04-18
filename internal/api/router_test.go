@@ -3493,7 +3493,7 @@ func TestRouterCreateApplyRequest(t *testing.T) {
 					Error:          "apply execution is disabled",
 					Details:        []string{"Tenet persisted this immutable apply request in read-only mode and did not contact AWS."},
 					Operations: []applyrequest.Operation{
-						{Status: "pending", Phase: "Provisioning", Target: "api-prod-codedeploy-group (codeDeployDeploymentGroup)", Summary: "Create the CodeDeploy deployment for api-prod."},
+						{Status: applyrequest.OperationStatusPending, Phase: "Provisioning", Target: "api-prod-codedeploy-group (codeDeployDeploymentGroup)", Summary: "Create the CodeDeploy deployment for api-prod."},
 					},
 					Source: applyrequest.SourceContext{PlanID: planID, Route: "/v1/plans/plan_1234abcd", PlanStatus: "ready", Fingerprint: "plan_input"},
 				},
@@ -3519,7 +3519,7 @@ func TestRouterCreateApplyRequest(t *testing.T) {
 	if record.ID != "apply_1234abcd" || record.Status != applyrequest.StatusFailed || record.Error != "apply execution is disabled" {
 		t.Fatalf("unexpected apply request payload: %+v", record)
 	}
-	if len(record.Operations) != 1 || record.Operations[0].Status != "pending" {
+	if len(record.Operations) != 1 || record.Operations[0].Status != applyrequest.OperationStatusPending {
 		t.Fatalf("expected additive operations in apply request payload, got %+v", record)
 	}
 }
@@ -3539,7 +3539,7 @@ func TestRouterCreateApplyRequestPropagatesExplicitRequestActor(t *testing.T) {
 					Actor:          requestactor.FromContext(ctx),
 					Error:          "apply execution is disabled",
 					Operations: []applyrequest.Operation{
-						{Status: "pending", Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."},
+						{Status: applyrequest.OperationStatusPending, Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."},
 					},
 					Source: applyrequest.SourceContext{PlanID: planID, Route: "/v1/plans/plan_1234abcd", PlanStatus: "ready"},
 				},
@@ -3661,7 +3661,7 @@ func TestRouterApplyRequest(t *testing.T) {
 		Error:          "apply execution is disabled",
 		Details:        []string{"Tenet persisted this immutable apply request in read-only mode and did not contact AWS."},
 		Operations: []applyrequest.Operation{
-			{Status: "pending", Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."},
+			{Status: applyrequest.OperationStatusPending, Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."},
 		},
 		Source: applyrequest.SourceContext{PlanID: "plan_1234abcd", Route: "/v1/plans/plan_1234abcd", PlanStatus: "ready", Fingerprint: "plan_input"},
 	}
