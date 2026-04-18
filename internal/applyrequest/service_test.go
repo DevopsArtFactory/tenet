@@ -14,7 +14,8 @@ import (
 )
 
 type memoryStore struct {
-	records map[string]Record
+	records   map[string]Record
+	saveCalls int
 }
 
 func (s *memoryStore) Get(_ context.Context, id string) (Record, error) {
@@ -26,6 +27,7 @@ func (s *memoryStore) Get(_ context.Context, id string) (Record, error) {
 }
 
 func (s *memoryStore) Save(_ context.Context, record Record) error {
+	s.saveCalls++
 	if s.records == nil {
 		s.records = map[string]Record{}
 	}
@@ -197,6 +199,41 @@ func TestServiceCreateRequiresReadyPlan(t *testing.T) {
 	_, err := service.Create(context.Background(), "plan_failed_1234abcd")
 	if !errors.Is(err, ErrPlanNotReady) {
 		t.Fatalf("expected ErrPlanNotReady, got %v", err)
+	}
+}
+
+func TestServiceCreateRejectsStalePlanFingerprintBeforePersisting(t *testing.T) {
+	store := &memoryStore{}
+	plan := planpreview.Record{
+		ID:             "plan_ready_1234abcd",
+		DeploymentName: "api-prod",
+		Status:         planpreview.StatusReady,
+		CreatedAt:      "2026-04-17T08:00:00Z",
+		Source:         planpreview.SourceContext{DeploymentName: "api-prod", Route: "/v1/overview/deployments/api-prod", Fingerprint: "plan_input"},
+	}
+	service := Service{
+		LoadPlan: func(context.Context, string) (planpreview.Record, error) {
+			return plan, nil
+		},
+		CurrentFingerprint: func(_ context.Context, deploymentName string) (string, error) {
+			if deploymentName != plan.DeploymentName {
+				t.Fatalf("unexpected fingerprint lookup: %s", deploymentName)
+			}
+			return "plan_newer", nil
+		},
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, 4, 18, 8, 7, 0, 0, time.UTC) },
+	}
+
+	_, err := service.Create(context.Background(), plan.ID)
+	if !errors.Is(err, ErrSourceFingerprintConflict) {
+		t.Fatalf("expected ErrSourceFingerprintConflict, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "create a new plan preview before applying") {
+		t.Fatalf("expected operator-facing refresh guidance, got %v", err)
+	}
+	if store.saveCalls != 0 || len(store.records) != 0 {
+		t.Fatalf("expected stale plan conflict to avoid persistence, got %+v", store.records)
 	}
 }
 

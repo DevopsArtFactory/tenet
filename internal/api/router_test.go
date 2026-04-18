@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -3616,6 +3617,27 @@ func TestRouterCreateApplyRequestStatusCodes(t *testing.T) {
 
 		if resp.Code != http.StatusConflict {
 			t.Fatalf("expected 409, got %d", resp.Code)
+		}
+	})
+
+	t.Run("stale plan fingerprint", func(t *testing.T) {
+		const conflictBody = "apply request plan source fingerprint conflict: reviewed plan plan_1234abcd expects deployment detail fingerprint plan_deadbeef but current fingerprint for api-prod is plan_feedface; create a new plan preview before applying\n"
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			CreateApplyRequest: func(context.Context, string) (applyrequest.CreateResult, error) {
+				return applyrequest.CreateResult{}, fmt.Errorf("%w: reviewed plan plan_1234abcd expects deployment detail fingerprint plan_deadbeef but current fingerprint for api-prod is plan_feedface; create a new plan preview before applying", applyrequest.ErrSourceFingerprintConflict)
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/plans/plan_1234abcd", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusConflict {
+			t.Fatalf("expected 409, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != conflictBody {
+			t.Fatalf("expected conflict body %q, got %q", conflictBody, body)
 		}
 	})
 

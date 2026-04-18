@@ -297,6 +297,34 @@ func TestAPIOptionsApplyRequestPersistsQueuedRecordWhenApplyExecutionIsEnabled(t
 	}
 }
 
+func TestAPIOptionsApplyRequestRejectsStalePlanFingerprintBeforePersisting(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	planStorePath := filepath.Join(t.TempDir(), "plan-previews.json")
+	applyStorePath := filepath.Join(t.TempDir(), "apply-requests.json")
+	t.Setenv("TENET_PLAN_STORE_PATH", planStorePath)
+	t.Setenv("TENET_APPLY_STORE_PATH", applyStorePath)
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
+	if options.CreateDeploymentPlanPreview == nil || options.CreateApplyRequest == nil {
+		t.Fatalf("expected plan/apply providers to be wired")
+	}
+
+	plan, err := options.CreateDeploymentPlanPreview(context.Background(), "api-prod", planpreview.CreateRequest{})
+	if err != nil {
+		t.Fatalf("CreateDeploymentPlanPreview returned error: %v", err)
+	}
+
+	writeJSON(t, filepath.Join(repoRoot, "deployments", "api-prod.json"), `{"name":"api-prod","image":"payments-api:v3","target":{"type":"ecs"},"stacks":[{"stack":"api-prod","account":"prod-core","env":"prod-apne2","replacement_type":"linear","capacity":{"desired":1,"min":1,"max":1},"regions":[{"region":"ap-northeast-2"}]}]}`)
+
+	_, err = options.CreateApplyRequest(context.Background(), plan.Record.ID)
+	if !errors.Is(err, applyrequest.ErrSourceFingerprintConflict) {
+		t.Fatalf("expected ErrSourceFingerprintConflict, got %v", err)
+	}
+	if _, statErr := os.Stat(applyStorePath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("expected stale conflict to avoid apply persistence, stat err=%v", statErr)
+	}
+}
+
 func TestAPIOptionsAuditLogsProjectPersistedPlanAndApplyRecords(t *testing.T) {
 	repoRoot := writeRepositoryFixture(t)
 	t.Setenv("TENET_PLAN_STORE_PATH", filepath.Join(t.TempDir(), "plan-previews.json"))

@@ -10,7 +10,8 @@ with socket.socket() as sock:
     print(sock.getsockname()[1])
 PY
 )}
-REPO_ROOT=${TENET_REPO_ROOT:-$ROOT/examples/local-repo}
+SOURCE_REPO_ROOT=${TENET_REPO_ROOT:-$ROOT/examples/local-repo}
+REPO_ROOT=$(mktemp -d)
 FIXTURE_STATUS_PATH=${TENET_STATUS_PATH:-$ROOT/examples/local-status/deployments.json}
 APPLY_ENABLED=${TENET_AWS_ENABLE_APPLY:-false}
 STATUS_PATH=$(mktemp)
@@ -23,6 +24,8 @@ rm -f "$APPLY_STORE_PATH"
 LOG_FILE=$(mktemp)
 CONTROLLER_LOG_FILE=$(mktemp)
 INVALID_AUDIT_ACTION_BODY=$(mktemp)
+STALE_APPLY_CONFLICT_BODY=$(mktemp)
+cp -R "$SOURCE_REPO_ROOT/." "$REPO_ROOT/"
 cleanup() {
   if [[ -n "${CONTROLLER_PID:-}" ]] && kill -0 "$CONTROLLER_PID" 2>/dev/null; then
     kill "$CONTROLLER_PID" 2>/dev/null || true
@@ -32,8 +35,8 @@ cleanup() {
     kill "$API_PID" 2>/dev/null || true
     wait "$API_PID" 2>/dev/null || true
   fi
-  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY"
-  rm -rf "$PAYLOAD_DIR"
+  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$STALE_APPLY_CONFLICT_BODY"
+  rm -rf "$PAYLOAD_DIR" "$REPO_ROOT"
 }
 trap cleanup EXIT
 
@@ -135,6 +138,55 @@ PY
 )
 actor_apply_record_get=$(curl -fsS "http://$HOST:$PORT/v1/applies/$actor_apply_id")
 stale_plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d '{"ifMatch":"plan_deadbeef"}' "http://$HOST:$PORT/v1/plans/deployments/payments-api-prod")
+cat >"$REPO_ROOT/deployments/payments-api-stale.yaml" <<'EOF'
+name: payments-api-stale
+appRef: payments-api
+binary: s3://releases.example.com/payments-api/stale/payments-api-linux-amd64
+userdata:
+  type: git
+  path: userdata/payments-api-prod.sh
+stacks:
+  - stack: payments-api-stale
+    account: prod-core
+    env: prod-apne2
+    replacement_type: canary
+    termination_delay_rate: 25
+    capacity:
+      desired: 3
+      min: 2
+      max: 6
+    regions:
+      - region: ap-northeast-2
+        instance_type: t3.medium
+        ami_id: ami-1234567890abcdef0
+EOF
+stale_apply_deployment_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-stale")
+stale_apply_source_fingerprint=$(DEPLOYMENT_DETAIL_JSON="$stale_apply_deployment_detail" python3 - <<'PY'
+import json, os
+print(json.loads(os.environ['DEPLOYMENT_DETAIL_JSON'])['sourceFingerprint'])
+PY
+)
+stale_apply_plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d "{\"ifMatch\":\"$stale_apply_source_fingerprint\"}" "http://$HOST:$PORT/v1/plans/deployments/payments-api-stale")
+stale_apply_plan_id=$(STALE_APPLY_PLAN_PREVIEW_JSON="$stale_apply_plan_preview" python3 - <<'PY'
+import json, os
+print(json.loads(os.environ['STALE_APPLY_PLAN_PREVIEW_JSON'])['id'])
+PY
+)
+python3 - <<'PY' "$REPO_ROOT/deployments/payments-api-stale.yaml"
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+content = path.read_text(encoding='utf-8')
+old = "binary: s3://releases.example.com/payments-api/stale/payments-api-linux-amd64"
+new = "binary: s3://releases.example.com/payments-api/stale/payments-api-linux-arm64"
+if old not in content:
+    raise SystemExit(f"expected stale deployment fixture to contain {old!r}")
+path.write_text(content.replace(old, new, 1), encoding='utf-8')
+PY
+stale_apply_conflict_status=$(curl -sS -o "$STALE_APPLY_CONFLICT_BODY" -w "%{http_code}" -X POST "http://$HOST:$PORT/v1/applies/plans/$stale_apply_plan_id")
+stale_apply_conflict=$(cat "$STALE_APPLY_CONFLICT_BODY")
+stale_apply_audit_logs=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs?deployment=payments-api-stale&action=apply.requested")
 audit_logs=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs")
 audit_logs_action_filtered=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs?action=apply.requested")
 audit_logs_filtered=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs?deployment=payments-api-prod&limit=1")
@@ -172,6 +224,9 @@ actor_plan_preview_get_path=$(write_payload actor-plan-preview-get.json "$actor_
 actor_apply_record_path=$(write_payload actor-apply-record.json "$actor_apply_record")
 actor_apply_record_get_path=$(write_payload actor-apply-record-get.json "$actor_apply_record_get")
 stale_plan_preview_path=$(write_payload stale-plan-preview.json "$stale_plan_preview")
+stale_apply_plan_preview_path=$(write_payload stale-apply-plan-preview.json "$stale_apply_plan_preview")
+stale_apply_conflict_path=$(write_payload stale-apply-conflict.txt "$stale_apply_conflict")
+stale_apply_audit_logs_path=$(write_payload stale-apply-audit-logs.json "$stale_apply_audit_logs")
 audit_logs_path=$(write_payload audit-logs.json "$audit_logs")
 audit_logs_action_filtered_path=$(write_payload audit-logs-action-filtered.json "$audit_logs_action_filtered")
 audit_logs_filtered_path=$(write_payload audit-logs-filtered.json "$audit_logs_filtered")
@@ -191,7 +246,7 @@ audit_ui_path=$(write_payload audit-ui.html "$audit_ui")
 plan_ui_path=$(write_payload plan-ui.html "$plan_ui")
 apply_ui_path=$(write_payload apply-ui.html "$apply_ui")
 
-SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" RESOURCE_LOGS_PATH="$resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" UI_PATH="$ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" APPLY_ENABLED="$APPLY_ENABLED" python3 - <<'PY'
+SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" STALE_APPLY_PLAN_PREVIEW_PATH="$stale_apply_plan_preview_path" STALE_APPLY_CONFLICT_PATH="$stale_apply_conflict_path" STALE_APPLY_CONFLICT_STATUS="$stale_apply_conflict_status" STALE_APPLY_AUDIT_LOGS_PATH="$stale_apply_audit_logs_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" RESOURCE_LOGS_PATH="$resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" UI_PATH="$ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" APPLY_ENABLED="$APPLY_ENABLED" python3 - <<'PY'
 import json, os
 
 def read_json(path_env):
@@ -220,6 +275,9 @@ actor_plan_preview_get = read_json('ACTOR_PLAN_PREVIEW_GET_PATH')
 actor_apply_record = read_json('ACTOR_APPLY_RECORD_PATH')
 actor_apply_record_get = read_json('ACTOR_APPLY_RECORD_GET_PATH')
 stale_plan_preview = read_json('STALE_PLAN_PREVIEW_PATH')
+stale_apply_plan_preview = read_json('STALE_APPLY_PLAN_PREVIEW_PATH')
+stale_apply_conflict = read_text('STALE_APPLY_CONFLICT_PATH')
+stale_apply_audit_logs = read_json('STALE_APPLY_AUDIT_LOGS_PATH')
 audit_logs = read_json('AUDIT_LOGS_PATH')
 audit_logs_action_filtered = read_json('AUDIT_LOGS_ACTION_FILTERED_PATH')
 audit_logs_filtered = read_json('AUDIT_LOGS_FILTERED_PATH')
@@ -341,6 +399,11 @@ assert actor_apply_record_get == actor_apply_record, (actor_apply_record_get, ac
 assert stale_plan_preview['status'] == 'failed', stale_plan_preview
 assert stale_plan_preview['source']['fingerprint'] == deployment_detail['sourceFingerprint'], (stale_plan_preview, deployment_detail)
 assert isinstance(stale_plan_preview.get('errors', []), list) and stale_plan_preview['errors'], stale_plan_preview
+assert stale_apply_plan_preview['status'] == 'ready', stale_apply_plan_preview
+assert os.environ['STALE_APPLY_CONFLICT_STATUS'] == '409', os.environ['STALE_APPLY_CONFLICT_STATUS']
+assert 'create a new plan preview before applying' in stale_apply_conflict, stale_apply_conflict
+assert stale_apply_plan_preview['source']['fingerprint'] in stale_apply_conflict, stale_apply_conflict
+assert stale_apply_audit_logs['entries'] == [], stale_apply_audit_logs
 assert isinstance(audit_logs.get('entries', []), list), audit_logs
 assert len(audit_logs['entries']) >= 4, audit_logs
 assert any(entry['action'] == 'apply.requested' for entry in audit_logs['entries']), audit_logs

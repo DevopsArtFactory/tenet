@@ -207,9 +207,10 @@ func newAPIOptionsWithStores(info buildinfo.Info, repoRoot string, store statuss
 			Store:      planpreview.NewFileStore(planStorePath),
 		}
 		applyService := applyrequest.Service{
-			LoadPlan:       planService.Get,
-			Store:          applyrequest.NewFileStore(applyStorePath),
-			EnableAWSApply: awsApplyEnabled(),
+			LoadPlan:           planService.Get,
+			CurrentFingerprint: newApplyRequestFingerprintProvider(options.OverviewDeployment),
+			Store:              applyrequest.NewFileStore(applyStorePath),
+			EnableAWSApply:     awsApplyEnabled(),
 		}
 		options.CreateDeploymentPlanPreview = planService.Create
 		options.PlanPreview = planService.Get
@@ -243,6 +244,19 @@ func defaultApplyRequestStorePath() string {
 
 func awsApplyEnabled() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("TENET_AWS_ENABLE_APPLY")), "true")
+}
+
+func newApplyRequestFingerprintProvider(loadDetail func(string) (catalog.DeploymentOverviewDetail, error)) applyrequest.CurrentFingerprintProvider {
+	if loadDetail == nil {
+		return nil
+	}
+	return func(_ context.Context, deploymentName string) (string, error) {
+		detail, err := loadDetail(deploymentName)
+		if err != nil {
+			return "", err
+		}
+		return catalog.DeriveDeploymentSourceFingerprint(detail)
+	}
 }
 
 func loadPlanPreviewRecords(path string) ([]planpreview.Record, error) {
