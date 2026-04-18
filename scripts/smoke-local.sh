@@ -26,6 +26,9 @@ LOG_FILE=$(mktemp)
 CONTROLLER_LOG_FILE=$(mktemp)
 INVALID_AUDIT_ACTION_BODY=$(mktemp)
 STALE_APPLY_CONFLICT_BODY=$(mktemp)
+INVALID_APPLY_TRANSITION_BODY=$(mktemp)
+UNKNOWN_APPLY_TRANSITION_BODY=$(mktemp)
+TERMINAL_APPLY_TRANSITION_BODY=$(mktemp)
 INVALID_WEBHOOK_BODY=$(mktemp)
 cp -R "$SOURCE_REPO_ROOT/." "$REPO_ROOT/"
 cleanup() {
@@ -37,7 +40,7 @@ cleanup() {
     kill "$API_PID" 2>/dev/null || true
     wait "$API_PID" 2>/dev/null || true
   fi
-  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_WEBHOOK_BODY"
+  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$INVALID_WEBHOOK_BODY"
   rm -rf "$PAYLOAD_DIR" "$REPO_ROOT"
 }
 trap cleanup EXIT
@@ -142,6 +145,21 @@ if [[ "$APPLY_ENABLED" == "true" ]]; then
 else
   apply_record_get=$(curl -fsS "http://$HOST:$PORT/v1/applies/$apply_id")
 fi
+invalid_apply_transition_status=$(curl -sS -o "$INVALID_APPLY_TRANSITION_BODY" -w "%{http_code}" \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  --data '{"status":"running","step":1' \
+  "http://$HOST:$PORT/v1/applies/$apply_id/transitions")
+unknown_apply_transition_status=$(curl -sS -o "$UNKNOWN_APPLY_TRANSITION_BODY" -w "%{http_code}" \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  --data '{"status":"running","step":1}' \
+  "http://$HOST:$PORT/v1/applies/apply_smoke_missing/transitions")
+terminal_apply_transition_status=$(curl -sS -o "$TERMINAL_APPLY_TRANSITION_BODY" -w "%{http_code}" \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  --data '{"status":"running","step":1}' \
+  "http://$HOST:$PORT/v1/applies/$apply_id/transitions")
 actor_plan_preview=$(curl -fsS -X POST \
   -H "Content-Type: application/json" \
   -H "X-Tenet-Actor-Id: operator-123" \
@@ -289,6 +307,9 @@ plan_preview_path=$(write_payload plan-preview.json "$plan_preview")
 plan_preview_get_path=$(write_payload plan-preview-get.json "$plan_preview_get")
 apply_record_path=$(write_payload apply-record.json "$apply_record")
 apply_record_get_path=$(write_payload apply-record-get.json "$apply_record_get")
+invalid_apply_transition_path=$(write_payload invalid-apply-transition.txt "$(cat "$INVALID_APPLY_TRANSITION_BODY")")
+unknown_apply_transition_path=$(write_payload unknown-apply-transition.txt "$(cat "$UNKNOWN_APPLY_TRANSITION_BODY")")
+terminal_apply_transition_path=$(write_payload terminal-apply-transition.txt "$(cat "$TERMINAL_APPLY_TRANSITION_BODY")")
 actor_plan_preview_path=$(write_payload actor-plan-preview.json "$actor_plan_preview")
 actor_plan_preview_get_path=$(write_payload actor-plan-preview-get.json "$actor_plan_preview_get")
 actor_apply_record_path=$(write_payload actor-apply-record.json "$actor_apply_record")
@@ -319,7 +340,7 @@ audit_ui_path=$(write_payload audit-ui.html "$audit_ui")
 plan_ui_path=$(write_payload plan-ui.html "$plan_ui")
 apply_ui_path=$(write_payload apply-ui.html "$apply_ui")
 
-SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" STALE_APPLY_PLAN_PREVIEW_PATH="$stale_apply_plan_preview_path" STALE_APPLY_CONFLICT_PATH="$stale_apply_conflict_path" STALE_APPLY_CONFLICT_STATUS="$stale_apply_conflict_status" STALE_APPLY_AUDIT_LOGS_PATH="$stale_apply_audit_logs_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PING_PATH="$webhook_ping_path" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" RESOURCE_LOGS_PATH="$resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" UI_PATH="$ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" APPLY_ENABLED="$APPLY_ENABLED" python3 - <<'PY'
+SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" INVALID_APPLY_TRANSITION_STATUS="$invalid_apply_transition_status" INVALID_APPLY_TRANSITION_PATH="$invalid_apply_transition_path" UNKNOWN_APPLY_TRANSITION_STATUS="$unknown_apply_transition_status" UNKNOWN_APPLY_TRANSITION_PATH="$unknown_apply_transition_path" TERMINAL_APPLY_TRANSITION_STATUS="$terminal_apply_transition_status" TERMINAL_APPLY_TRANSITION_PATH="$terminal_apply_transition_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" STALE_APPLY_PLAN_PREVIEW_PATH="$stale_apply_plan_preview_path" STALE_APPLY_CONFLICT_PATH="$stale_apply_conflict_path" STALE_APPLY_CONFLICT_STATUS="$stale_apply_conflict_status" STALE_APPLY_AUDIT_LOGS_PATH="$stale_apply_audit_logs_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PING_PATH="$webhook_ping_path" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" RESOURCE_LOGS_PATH="$resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" UI_PATH="$ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" APPLY_ENABLED="$APPLY_ENABLED" python3 - <<'PY'
 import json, os
 
 def read_json(path_env):
@@ -343,6 +364,9 @@ plan_preview = read_json('PLAN_PREVIEW_PATH')
 plan_preview_get = read_json('PLAN_PREVIEW_GET_PATH')
 apply_record = read_json('APPLY_RECORD_PATH')
 apply_record_get = read_json('APPLY_RECORD_GET_PATH')
+invalid_apply_transition = read_text('INVALID_APPLY_TRANSITION_PATH')
+unknown_apply_transition = read_text('UNKNOWN_APPLY_TRANSITION_PATH')
+terminal_apply_transition = read_text('TERMINAL_APPLY_TRANSITION_PATH')
 actor_plan_preview = read_json('ACTOR_PLAN_PREVIEW_PATH')
 actor_plan_preview_get = read_json('ACTOR_PLAN_PREVIEW_GET_PATH')
 actor_apply_record = read_json('ACTOR_APPLY_RECORD_PATH')
@@ -476,6 +500,13 @@ if apply_enabled:
     assert [operation['status'] for operation in apply_record_get['operations']] == ['failed'] + ['queued'] * (len(apply_record_get['operations']) - 1), apply_record_get
 else:
     assert apply_record_get == apply_record, (apply_record_get, apply_record)
+assert os.environ['INVALID_APPLY_TRANSITION_STATUS'] == '400', os.environ['INVALID_APPLY_TRANSITION_STATUS']
+assert invalid_apply_transition.strip() == 'invalid apply transition request body', invalid_apply_transition
+assert os.environ['UNKNOWN_APPLY_TRANSITION_STATUS'] == '404', os.environ['UNKNOWN_APPLY_TRANSITION_STATUS']
+assert 'apply request not found' in unknown_apply_transition, unknown_apply_transition
+assert os.environ['TERMINAL_APPLY_TRANSITION_STATUS'] == '409', os.environ['TERMINAL_APPLY_TRANSITION_STATUS']
+assert 'apply request lifecycle transition is invalid:' in terminal_apply_transition, terminal_apply_transition
+assert f"{apply_record['id']} is already terminal with status failed" in terminal_apply_transition, terminal_apply_transition
 assert actor_plan_preview['deploymentName'] == 'payments-api-staging', actor_plan_preview
 assert actor_plan_preview['actor']['available'] is True, actor_plan_preview
 assert actor_plan_preview['actor']['name'] == 'Jane Operator', actor_plan_preview

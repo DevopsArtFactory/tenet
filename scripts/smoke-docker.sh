@@ -8,6 +8,9 @@ PORT=${TENET_DOCKER_SMOKE_PORT:-8080}
 API_BASE_URL=${TENET_DOCKER_SMOKE_API_BASE_URL:-http://$HOST:$PORT}
 WEBHOOK_SECRET=${TENET_GITHUB_WEBHOOK_SECRET:-smoke-webhook-secret}
 INVALID_AUDIT_ACTION_BODY=$(mktemp)
+INVALID_APPLY_TRANSITION_BODY=$(mktemp)
+UNKNOWN_APPLY_TRANSITION_BODY=$(mktemp)
+TERMINAL_APPLY_TRANSITION_BODY=$(mktemp)
 WEBHOOK_PUSH_BODY_FILE=$(mktemp)
 WEBHOOK_PING_BODY_FILE=$(mktemp)
 INVALID_WEBHOOK_BODY=$(mktemp)
@@ -115,7 +118,7 @@ cleanup() {
   fi
 
   "${COMPOSE[@]}" down --remove-orphans >/dev/null 2>&1 || true
-  rm -f "$INVALID_AUDIT_ACTION_BODY" "$WEBHOOK_PUSH_BODY_FILE" "$WEBHOOK_PING_BODY_FILE" "$INVALID_WEBHOOK_BODY"
+  rm -f "$INVALID_AUDIT_ACTION_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$WEBHOOK_PUSH_BODY_FILE" "$WEBHOOK_PING_BODY_FILE" "$INVALID_WEBHOOK_BODY"
   rm -rf "$PAYLOAD_DIR"
 }
 
@@ -260,6 +263,21 @@ print(json.loads(os.environ["APPLY_RECORD_JSON"])["id"])
 PY
 )
 apply_record_get=$(curl -fsS "$API_BASE_URL/v1/applies/$apply_id")
+invalid_apply_transition_status=$(curl -sS -o "$INVALID_APPLY_TRANSITION_BODY" -w "%{http_code}" \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  --data '{"status":"running","step":1' \
+  "$API_BASE_URL/v1/applies/$apply_id/transitions")
+unknown_apply_transition_status=$(curl -sS -o "$UNKNOWN_APPLY_TRANSITION_BODY" -w "%{http_code}" \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  --data '{"status":"running","step":1}' \
+  "$API_BASE_URL/v1/applies/apply_smoke_missing/transitions")
+terminal_apply_transition_status=$(curl -sS -o "$TERMINAL_APPLY_TRANSITION_BODY" -w "%{http_code}" \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  --data '{"status":"running","step":1}' \
+  "$API_BASE_URL/v1/applies/$apply_id/transitions")
 deployment_events=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/events")
 worker_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 worker_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service")
@@ -329,6 +347,9 @@ plan_preview_path=$(write_payload plan-preview.json "$plan_preview")
 plan_preview_get_path=$(write_payload plan-preview-get.json "$plan_preview_get")
 apply_record_path=$(write_payload apply-record.json "$apply_record")
 apply_record_get_path=$(write_payload apply-record-get.json "$apply_record_get")
+invalid_apply_transition_path=$(write_payload invalid-apply-transition.txt "$(cat "$INVALID_APPLY_TRANSITION_BODY")")
+unknown_apply_transition_path=$(write_payload unknown-apply-transition.txt "$(cat "$UNKNOWN_APPLY_TRANSITION_BODY")")
+terminal_apply_transition_path=$(write_payload terminal-apply-transition.txt "$(cat "$TERMINAL_APPLY_TRANSITION_BODY")")
 deployment_events_path=$(write_payload deployment-events.json "$deployment_events")
 worker_resource_logs_path=$(write_payload worker-resource-logs.json "$worker_resource_logs")
 worker_resource_inspection_path=$(write_payload worker-resource-inspection.json "$worker_resource_inspection")
@@ -346,7 +367,7 @@ ui_path=$(write_payload ui.html "$ui")
 audit_ui_path=$(write_payload audit-ui.html "$audit_ui")
 plan_apply_ui_path=$(write_payload plan-apply-ui.html "$plan_apply_ui")
 
-SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" DEPLOYMENT_EVENTS_PATH="$deployment_events_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PUSH_STATUS="$webhook_push_status" WEBHOOK_PING_PATH="$webhook_ping_path" WEBHOOK_PING_STATUS="$webhook_ping_status" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" UI_PATH="$ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_APPLY_UI_PATH="$plan_apply_ui_path" python3 - <<'PY'
+SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" INVALID_APPLY_TRANSITION_STATUS="$invalid_apply_transition_status" INVALID_APPLY_TRANSITION_PATH="$invalid_apply_transition_path" UNKNOWN_APPLY_TRANSITION_STATUS="$unknown_apply_transition_status" UNKNOWN_APPLY_TRANSITION_PATH="$unknown_apply_transition_path" TERMINAL_APPLY_TRANSITION_STATUS="$terminal_apply_transition_status" TERMINAL_APPLY_TRANSITION_PATH="$terminal_apply_transition_path" DEPLOYMENT_EVENTS_PATH="$deployment_events_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PUSH_STATUS="$webhook_push_status" WEBHOOK_PING_PATH="$webhook_ping_path" WEBHOOK_PING_STATUS="$webhook_ping_status" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" UI_PATH="$ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_APPLY_UI_PATH="$plan_apply_ui_path" python3 - <<'PY'
 import json, os
 
 def read_json(path_env):
@@ -366,6 +387,9 @@ plan_preview = read_json("PLAN_PREVIEW_PATH")
 plan_preview_get = read_json("PLAN_PREVIEW_GET_PATH")
 apply_record = read_json("APPLY_RECORD_PATH")
 apply_record_get = read_json("APPLY_RECORD_GET_PATH")
+invalid_apply_transition = read_text("INVALID_APPLY_TRANSITION_PATH")
+unknown_apply_transition = read_text("UNKNOWN_APPLY_TRANSITION_PATH")
+terminal_apply_transition = read_text("TERMINAL_APPLY_TRANSITION_PATH")
 deployment_events = read_json("DEPLOYMENT_EVENTS_PATH")
 worker_resource_logs = read_json("WORKER_RESOURCE_LOGS_PATH")
 worker_resource_inspection = read_json("WORKER_RESOURCE_INSPECTION_PATH")
@@ -433,6 +457,13 @@ assert apply_record["source"]["planId"] == plan_preview["id"], apply_record
 assert apply_record["source"]["planStatus"] == "ready", apply_record
 assert apply_record["source"]["fingerprint"] == plan_preview["source"]["fingerprint"], (apply_record, plan_preview)
 assert apply_record_get == apply_record, (apply_record_get, apply_record)
+assert os.environ["INVALID_APPLY_TRANSITION_STATUS"] == "400", os.environ["INVALID_APPLY_TRANSITION_STATUS"]
+assert invalid_apply_transition.strip() == "invalid apply transition request body", invalid_apply_transition
+assert os.environ["UNKNOWN_APPLY_TRANSITION_STATUS"] == "404", os.environ["UNKNOWN_APPLY_TRANSITION_STATUS"]
+assert "apply request not found" in unknown_apply_transition, unknown_apply_transition
+assert os.environ["TERMINAL_APPLY_TRANSITION_STATUS"] == "409", os.environ["TERMINAL_APPLY_TRANSITION_STATUS"]
+assert "apply request lifecycle transition is invalid:" in terminal_apply_transition, terminal_apply_transition
+assert f"{apply_record['id']} is already terminal with status failed" in terminal_apply_transition, terminal_apply_transition
 
 assert isinstance(audit_logs.get("entries"), list), audit_logs
 assert any(entry["action"] == "apply.requested" for entry in audit_logs["entries"]), audit_logs

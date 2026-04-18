@@ -88,6 +88,11 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		`restart_api_with_apply_mode() {`,
 		`TENET_AWS_ENABLE_APPLY="$apply_enabled" "${COMPOSE[@]}" up -d api >/dev/null`,
+		`"$API_BASE_URL/v1/applies/$apply_id/transitions"`,
+		`"$API_BASE_URL/v1/applies/apply_smoke_missing/transitions"`,
+		`assert invalid_apply_transition.strip() == "invalid apply transition request body", invalid_apply_transition`,
+		`assert "apply request not found" in unknown_apply_transition, unknown_apply_transition`,
+		`assert f"{apply_record['id']} is already terminal with status failed" in terminal_apply_transition, terminal_apply_transition`,
 		`queued_apply_record_get=$(wait_for_apply_status "$queued_apply_id" failed)`,
 		`queued_apply_record=$(curl -fsS -X POST "$API_BASE_URL/v1/applies/plans/$queued_plan_id")`,
 		`assert queued_apply_record["status"] == "queued", queued_apply_record`,
@@ -108,6 +113,11 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		`TENET_APPLY_STORE_PATH="$APPLY_STORE_PATH"`,
 		`TENET_AWS_ENABLE_APPLY="$APPLY_ENABLED"`,
 		`curl -fsS -X POST "http://$HOST:$PORT/v1/applies/plans/$plan_id"`,
+		`"http://$HOST:$PORT/v1/applies/$apply_id/transitions"`,
+		`"http://$HOST:$PORT/v1/applies/apply_smoke_missing/transitions"`,
+		`assert invalid_apply_transition.strip() == 'invalid apply transition request body', invalid_apply_transition`,
+		`assert 'apply request not found' in unknown_apply_transition, unknown_apply_transition`,
+		`assert f"{apply_record['id']} is already terminal with status failed" in terminal_apply_transition, terminal_apply_transition`,
 		`curl -sS -o "$STALE_APPLY_CONFLICT_BODY" -w "%{http_code}" -X POST "http://$HOST:$PORT/v1/applies/plans/$stale_apply_plan_id"`,
 		`apply_record_get=$(wait_for_apply_status "$apply_id" failed)`,
 		`curl -fsS "http://$HOST:$PORT/v1/applies/$apply_id"`,
@@ -139,6 +149,8 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"`GET /v1/applies/{applyId}`",
 		"`POST /v1/applies/{applyId}/transitions`",
 		"`applyrequest.TransitionRequest` state model internally",
+		"`invalid apply transition request body`",
+		"`apply request not found`",
 		"`TENET_APPLY_STORE_PATH`",
 		"`TENET_AWS_ENABLE_APPLY=true`",
 		"disabled by default for live execution",
@@ -147,11 +159,29 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"ordered `operations[]` rows",
 		"additive `lifecycle` block",
 		"`updatedAt` / `startedAt` / `finishedAt`",
+		"`400 Bad Request`",
+		"`404 Not Found`",
 		"`409 Conflict`",
+		"terminal `applyId`",
+		"clear operator-facing text",
 		"create a fresh preview",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README apply contract to include %q", fragment)
+		}
+	}
+
+	localRuntimeDoc := readRepoFile(t, "docs/architecture/tenet-v1-local-runtime.md")
+	for _, fragment := range []string{
+		"`POST /v1/applies/{applyId}/transitions`",
+		"`400` malformed JSON",
+		"`404` unknown apply",
+		"`409` invalid terminal move",
+		"operator-facing text",
+		"smoke-created terminal `applyId`",
+	} {
+		if !strings.Contains(localRuntimeDoc, fragment) {
+			t.Fatalf("expected local runtime doc apply contract to include %q", fragment)
 		}
 	}
 
