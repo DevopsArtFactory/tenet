@@ -70,6 +70,7 @@ func (s Service) Create(ctx context.Context, planID string) (CreateResult, error
 			Fingerprint:   plan.Source.Fingerprint,
 		},
 	}
+	record.Lifecycle = initialLifecycle(record)
 	record.ID, err = stableRecordID(record)
 	if err != nil {
 		return CreateResult{}, err
@@ -96,6 +97,40 @@ func (s Service) Create(ctx context.Context, planID string) (CreateResult, error
 func (s Service) Get(ctx context.Context, id string) (Record, error) {
 	if s.Store == nil {
 		return Record{}, fmt.Errorf("apply request store is required")
+	}
+	return s.Store.Get(ctx, id)
+}
+
+// Transition advances one persisted apply request to a validated lifecycle state without changing
+// its stable immutable apply ID.
+func (s Service) Transition(ctx context.Context, id string, request TransitionRequest) (Record, error) {
+	if s.Store == nil {
+		return Record{}, fmt.Errorf("apply request store is required")
+	}
+	if !request.Status.Valid() {
+		return Record{}, fmt.Errorf("%w: unsupported target status %q", ErrInvalidState, request.Status)
+	}
+
+	record, err := s.Store.Get(ctx, id)
+	if err != nil {
+		return Record{}, err
+	}
+	if err := validateTransition(record, request); err != nil {
+		return Record{}, err
+	}
+
+	record.Status = request.Status
+	if request.Error != "" || request.Status == StatusRunning || request.Status == StatusSucceeded {
+		record.Error = request.Error
+	}
+	if request.Details != nil {
+		record.Details = append([]string(nil), request.Details...)
+	}
+	record.Operations = transitionOperations(record.Operations, request.Status, request.Step)
+	record.Lifecycle = transitionLifecycle(record.Lifecycle, len(record.Operations), request, s.now())
+
+	if err := s.Store.Update(ctx, record); err != nil {
+		return Record{}, err
 	}
 	return s.Store.Get(ctx, id)
 }
@@ -179,4 +214,173 @@ func deriveOperations(plan planpreview.Record, status OperationStatus) []Operati
 		})
 	}
 	return operations
+}
+
+func initialLifecycle(record Record) Lifecycle {
+	lifecycle := Lifecycle{
+		UpdatedAt:  record.CreatedAt,
+		TotalSteps: len(record.Operations),
+	}
+	if record.Status.IsTerminal() {
+		lifecycle.FinishedAt = record.CreatedAt
+		if record.Status == StatusSucceeded && len(record.Operations) > 0 {
+			lifecycle.CurrentStep = len(record.Operations)
+			lifecycle.CompletedSteps = len(record.Operations)
+		}
+	}
+	return lifecycle
+}
+
+func validateTransition(record Record, request TransitionRequest) error {
+	if record.Status.IsTerminal() {
+		return fmt.Errorf("%w: %s is already terminal with status %s", ErrInvalidState, record.ID, record.Status)
+	}
+	if !canTransition(record.Status, request.Status) {
+		return fmt.Errorf("%w: cannot transition from %s to %s", ErrInvalidState, record.Status, request.Status)
+	}
+
+	totalSteps := len(record.Operations)
+	if totalSteps == 0 {
+		if request.Step != 0 {
+			return fmt.Errorf("%w: apply request %s does not define steps", ErrInvalidState, record.ID)
+		}
+		return nil
+	}
+
+	switch request.Status {
+	case StatusRunning, StatusFailed, StatusCancelled:
+		if request.Step < 1 || request.Step > totalSteps {
+			return fmt.Errorf("%w: step must be between 1 and %d", ErrInvalidState, totalSteps)
+		}
+	case StatusSucceeded:
+		if request.Step != 0 && request.Step != totalSteps {
+			return fmt.Errorf("%w: succeeded apply request must finish at step %d", ErrInvalidState, totalSteps)
+		}
+	default:
+		if request.Step != 0 {
+			return fmt.Errorf("%w: status %s does not accept an explicit step", ErrInvalidState, request.Status)
+		}
+	}
+
+	return nil
+}
+
+func canTransition(from Status, to Status) bool {
+	switch from {
+	case StatusQueued:
+		switch to {
+		case StatusRunning, StatusSucceeded, StatusFailed, StatusCancelled:
+			return true
+		}
+	case StatusRunning:
+		switch to {
+		case StatusRunning, StatusSucceeded, StatusFailed, StatusCancelled:
+			return true
+		}
+	}
+	return false
+}
+
+func transitionOperations(existing []Operation, status Status, step int) []Operation {
+	if len(existing) == 0 {
+		return nil
+	}
+
+	updated := append([]Operation(nil), existing...)
+	waiting := waitingOperationStatus(existing)
+	switch status {
+	case StatusRunning:
+		for i := range updated {
+			switch {
+			case i < step-1:
+				updated[i].Status = OperationStatusSucceeded
+			case i == step-1:
+				updated[i].Status = OperationStatusRunning
+			default:
+				updated[i].Status = waiting
+			}
+		}
+	case StatusSucceeded:
+		for i := range updated {
+			updated[i].Status = OperationStatusSucceeded
+		}
+	case StatusFailed, StatusCancelled:
+		terminalStatus := operationTerminalStatus(status)
+		for i := range updated {
+			switch {
+			case i < step-1:
+				updated[i].Status = OperationStatusSucceeded
+			case i == step-1:
+				updated[i].Status = terminalStatus
+			default:
+				updated[i].Status = waiting
+			}
+		}
+	}
+	return updated
+}
+
+func waitingOperationStatus(existing []Operation) OperationStatus {
+	for _, operation := range existing {
+		if operation.Status == OperationStatusPending {
+			return OperationStatusPending
+		}
+	}
+	return OperationStatusQueued
+}
+
+func operationTerminalStatus(status Status) OperationStatus {
+	switch status {
+	case StatusFailed:
+		return OperationStatusFailed
+	case StatusCancelled:
+		return OperationStatusCancelled
+	default:
+		return OperationStatusSucceeded
+	}
+}
+
+func transitionLifecycle(lifecycle Lifecycle, totalSteps int, request TransitionRequest, now time.Time) Lifecycle {
+	timestamp := now.UTC().Format(time.RFC3339)
+	lifecycle.UpdatedAt = timestamp
+	lifecycle.TotalSteps = totalSteps
+
+	switch request.Status {
+	case StatusRunning:
+		if lifecycle.StartedAt == "" {
+			lifecycle.StartedAt = timestamp
+		}
+		lifecycle.FinishedAt = ""
+		lifecycle.CurrentStep = request.Step
+		lifecycle.CompletedSteps = completedStepsForStatus(request.Status, request.Step, totalSteps)
+	case StatusSucceeded:
+		if lifecycle.StartedAt == "" {
+			lifecycle.StartedAt = timestamp
+		}
+		lifecycle.FinishedAt = timestamp
+		if totalSteps > 0 {
+			lifecycle.CurrentStep = totalSteps
+			lifecycle.CompletedSteps = totalSteps
+		}
+	case StatusFailed, StatusCancelled:
+		lifecycle.FinishedAt = timestamp
+		if request.Step > 0 {
+			lifecycle.CurrentStep = request.Step
+			lifecycle.CompletedSteps = completedStepsForStatus(request.Status, request.Step, totalSteps)
+		}
+	}
+
+	return lifecycle
+}
+
+func completedStepsForStatus(status Status, step int, totalSteps int) int {
+	switch status {
+	case StatusSucceeded:
+		return totalSteps
+	case StatusRunning, StatusFailed, StatusCancelled:
+		if step > 0 {
+			return step - 1
+		}
+	}
+	return 0
 }

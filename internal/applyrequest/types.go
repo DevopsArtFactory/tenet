@@ -10,6 +10,7 @@ import (
 var (
 	ErrNotFound     = fmt.Errorf("apply request not found")
 	ErrPlanNotReady = fmt.Errorf("plan preview is not ready")
+	ErrInvalidState = fmt.Errorf("apply request lifecycle transition is invalid")
 )
 
 // Status captures the immutable apply-request lifecycle.
@@ -92,6 +93,16 @@ type Operation struct {
 	Summary string          `json:"summary"`
 }
 
+// Lifecycle captures additive operator-facing progress metadata for one apply request.
+type Lifecycle struct {
+	UpdatedAt      string `json:"updatedAt,omitempty"`
+	StartedAt      string `json:"startedAt,omitempty"`
+	FinishedAt     string `json:"finishedAt,omitempty"`
+	CurrentStep    int    `json:"currentStep,omitempty"`
+	CompletedSteps int    `json:"completedSteps,omitempty"`
+	TotalSteps     int    `json:"totalSteps,omitempty"`
+}
+
 // Record is one immutable apply request derived from a persisted ready plan preview.
 type Record struct {
 	ID             string             `json:"id"`
@@ -102,12 +113,22 @@ type Record struct {
 	Actor          requestactor.Actor `json:"actor"`
 	Error          string             `json:"error,omitempty"`
 	Details        []string           `json:"details,omitempty"`
+	Lifecycle      Lifecycle          `json:"lifecycle,omitempty"`
 	Operations     []Operation        `json:"operations,omitempty"`
 	Source         SourceContext      `json:"source"`
+}
+
+// TransitionRequest captures one validated lifecycle advance for a persisted apply request.
+type TransitionRequest struct {
+	Status  Status   `json:"status"`
+	Step    int      `json:"step,omitempty"`
+	Error   string   `json:"error,omitempty"`
+	Details []string `json:"details,omitempty"`
 }
 
 // Store persists immutable apply-request records.
 type Store interface {
 	Get(context.Context, string) (Record, error)
 	Save(context.Context, Record) error
+	Update(context.Context, Record) error
 }

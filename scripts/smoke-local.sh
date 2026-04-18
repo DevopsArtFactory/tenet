@@ -309,6 +309,13 @@ if apply_enabled:
 else:
     assert apply_record['error'] == 'apply execution is disabled', apply_record
 assert isinstance(apply_record.get('details', []), list) and apply_record['details'], apply_record
+assert isinstance(apply_record.get('lifecycle', {}), dict) and apply_record['lifecycle'], apply_record
+assert apply_record['lifecycle']['updatedAt'] == apply_record['createdAt'], apply_record
+assert apply_record['lifecycle']['totalSteps'] == len(apply_record['operations']), apply_record
+if apply_enabled:
+    assert 'finishedAt' not in apply_record['lifecycle'], apply_record
+else:
+    assert apply_record['lifecycle']['finishedAt'] == apply_record['createdAt'], apply_record
 assert isinstance(apply_record.get('operations', []), list) and apply_record['operations'], apply_record
 assert len(apply_record['operations']) == len(plan_preview['operations']), (apply_record, plan_preview)
 assert [operation['status'] for operation in apply_record['operations']] == [('queued' if apply_enabled else 'pending')] * len(apply_record['operations']), apply_record

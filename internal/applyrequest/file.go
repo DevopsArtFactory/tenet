@@ -129,3 +129,25 @@ func (s FileStore) Save(_ context.Context, record Record) error {
 	}
 	return Save(s.Path, append(records, record))
 }
+
+// Update replaces one persisted apply request by ID.
+func (s FileStore) Update(_ context.Context, record Record) error {
+	if s.Path == "" {
+		return fmt.Errorf("file apply request store path is required")
+	}
+	records, err := Load(s.Path)
+	if err != nil {
+		var pathErr *os.PathError
+		if errors.As(err, &pathErr) && errors.Is(pathErr.Err, os.ErrNotExist) {
+			return ErrNotFound
+		}
+		return err
+	}
+	for i, existing := range records {
+		if existing.ID == record.ID {
+			records[i] = record
+			return Save(s.Path, records)
+		}
+	}
+	return fmt.Errorf("%w: %s", ErrNotFound, record.ID)
+}

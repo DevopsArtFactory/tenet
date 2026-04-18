@@ -14,7 +14,7 @@ func TestSaveAndLoadRoundTripsApplyRequestRecords(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "applies", "requests.json")
 	input := []Record{
 		{ID: "apply_b", PlanID: "plan_b", DeploymentName: "worker-prod", Status: StatusFailed, CreatedAt: "2026-04-18T08:00:00Z", Error: disabledError, Details: []string{"did not contact AWS"}},
-		{ID: "apply_a", PlanID: "plan_a", DeploymentName: "api-prod", Status: StatusFailed, CreatedAt: "2026-04-18T07:59:00Z", Error: disabledError, Operations: []Operation{{Status: OperationStatusPending, Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."}}, Source: SourceContext{PlanID: "plan_a", Route: "/v1/plans/plan_a", PlanStatus: "ready", Fingerprint: "plan_input"}},
+		{ID: "apply_a", PlanID: "plan_a", DeploymentName: "api-prod", Status: StatusFailed, CreatedAt: "2026-04-18T07:59:00Z", Error: disabledError, Lifecycle: Lifecycle{UpdatedAt: "2026-04-18T07:59:00Z", FinishedAt: "2026-04-18T07:59:00Z", TotalSteps: 1}, Operations: []Operation{{Status: OperationStatusPending, Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."}}, Source: SourceContext{PlanID: "plan_a", Route: "/v1/plans/plan_a", PlanStatus: "ready", Fingerprint: "plan_input"}},
 	}
 
 	if err := Save(path, input); err != nil {
@@ -30,7 +30,7 @@ func TestSaveAndLoadRoundTripsApplyRequestRecords(t *testing.T) {
 	if loaded[0].ID != "apply_a" || loaded[1].ID != "apply_b" {
 		t.Fatalf("expected saved apply requests to be sorted by ID, got %+v", loaded)
 	}
-	if loaded[0].Source.Route != "/v1/plans/plan_a" || loaded[0].Operations[0].Status != OperationStatusPending || loaded[1].Details[0] != "did not contact AWS" {
+	if loaded[0].Source.Route != "/v1/plans/plan_a" || loaded[0].Operations[0].Status != OperationStatusPending || loaded[0].Lifecycle.TotalSteps != 1 || loaded[1].Details[0] != "did not contact AWS" {
 		t.Fatalf("unexpected loaded apply requests: %+v", loaded)
 	}
 }
@@ -65,6 +65,59 @@ func TestFileStoreGetAndSaveAreIdempotent(t *testing.T) {
 	}
 	if got.ID != "apply_a" || got.PlanID != "plan_a" {
 		t.Fatalf("unexpected stored apply request: %+v", got)
+	}
+}
+
+func TestFileStoreUpdateReplacesExistingRecordAtomically(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "applies", "requests.json")
+	store := NewFileStore(path)
+	ctx := context.Background()
+	record := Record{
+		ID:             "apply_a",
+		PlanID:         "plan_a",
+		DeploymentName: "api-prod",
+		Status:         StatusQueued,
+		Lifecycle: Lifecycle{
+			UpdatedAt:  "2026-04-18T08:05:00Z",
+			TotalSteps: 2,
+		},
+		Operations: []Operation{
+			{Status: OperationStatusQueued, Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."},
+			{Status: OperationStatusQueued, Phase: "Promoting", Target: "api-prod listener", Summary: "Shift production traffic."},
+		},
+	}
+
+	if err := store.Save(ctx, record); err != nil {
+		t.Fatalf("Save returned error: %v", err)
+	}
+	record.Status = StatusRunning
+	record.Lifecycle = Lifecycle{
+		UpdatedAt:      "2026-04-18T08:06:00Z",
+		StartedAt:      "2026-04-18T08:06:00Z",
+		CurrentStep:    1,
+		CompletedSteps: 0,
+		TotalSteps:     2,
+	}
+	record.Operations[0].Status = OperationStatusRunning
+	if err := store.Update(ctx, record); err != nil {
+		t.Fatalf("Update returned error: %v", err)
+	}
+
+	got, err := store.Get(ctx, "apply_a")
+	if err != nil {
+		t.Fatalf("Get returned error: %v", err)
+	}
+	if got.Status != StatusRunning || got.Lifecycle.StartedAt != "2026-04-18T08:06:00Z" || got.Operations[0].Status != OperationStatusRunning {
+		t.Fatalf("expected updated apply request to be stored, got %+v", got)
+	}
+}
+
+func TestFileStoreUpdateReturnsNotFoundWhenMissing(t *testing.T) {
+	store := NewFileStore(filepath.Join(t.TempDir(), "applies", "requests.json"))
+
+	err := store.Update(context.Background(), Record{ID: "missing"})
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }
 

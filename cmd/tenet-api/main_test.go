@@ -240,6 +240,9 @@ func TestAPIOptionsApplyRequestPersistsDisabledRecordAndReadsBack(t *testing.T) 
 	if created.Record.Error != "apply execution is disabled" || len(created.Record.Details) == 0 {
 		t.Fatalf("expected disabled apply contract, got %+v", created.Record)
 	}
+	if created.Record.Lifecycle.UpdatedAt == "" || created.Record.Lifecycle.FinishedAt == "" || created.Record.Lifecycle.TotalSteps == 0 {
+		t.Fatalf("expected additive apply lifecycle metadata, got %+v", created.Record.Lifecycle)
+	}
 	if len(created.Record.Operations) == 0 || created.Record.Operations[0].Status != applyrequest.OperationStatusPending {
 		t.Fatalf("expected pending projected operations for disabled contract, got %+v", created.Record.Operations)
 	}
@@ -277,6 +280,9 @@ func TestAPIOptionsApplyRequestPersistsQueuedRecordWhenApplyExecutionIsEnabled(t
 	}
 	if created.Record.Status != applyrequest.StatusQueued || created.Record.Error != "" {
 		t.Fatalf("expected queued apply contract without disabled error, got %+v", created.Record)
+	}
+	if created.Record.Lifecycle.UpdatedAt == "" || created.Record.Lifecycle.FinishedAt != "" || created.Record.Lifecycle.TotalSteps == 0 {
+		t.Fatalf("expected queued lifecycle metadata, got %+v", created.Record.Lifecycle)
 	}
 	if len(created.Record.Details) != 2 || created.Record.Operations[0].Status != applyrequest.OperationStatusQueued {
 		t.Fatalf("expected queued apply details/operations, got %+v", created.Record)
