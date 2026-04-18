@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/reconcile"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
@@ -23,12 +22,13 @@ const (
 var runtimeHistoryNow = time.Now
 
 func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupConfig, store statusstore.Store) error {
-	if config.RepoRoot == "" {
-		logger.Printf("controller runtime disabled reason=no_repo_root")
+	source := config.catalogSource()
+	if !source.configured() {
+		logger.Printf("controller runtime disabled reason=no_catalog_source")
 		return nil
 	}
 
-	compiled, err := catalog.LoadFromRepository(config.RepoRoot)
+	compiled, err := source.loadCatalog(ctx)
 	if err != nil {
 		return fmt.Errorf("load runtime catalog: %w", err)
 	}

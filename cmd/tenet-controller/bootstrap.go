@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"time"
@@ -13,6 +14,7 @@ type startupConfig struct {
 	Info            buildinfo.Info
 	WorkerCount     string
 	RepoRoot        string
+	CatalogSource   controllerCatalogSource
 	StatusBackend   string
 	StatusPath      string
 	RedisAddr       string
@@ -25,7 +27,6 @@ func loadStartupConfig(getenv func(string) string) (startupConfig, error) {
 	version := envOrDefaultFrom(getenv, "TENET_VERSION", "dev")
 	commit := envOrDefaultFrom(getenv, "TENET_COMMIT", "unknown")
 	workerCount := envOrDefaultFrom(getenv, "TENET_CONTROLLER_WORKERS", "1")
-	repoRoot := getenv("TENET_REPO_ROOT")
 	statusBackend := envOrDefaultFrom(getenv, "TENET_STATUS_BACKEND", "file")
 	statusPath := getenv("TENET_STATUS_PATH")
 	redisAddr := getenv("TENET_REDIS_ADDR")
@@ -34,28 +35,43 @@ func loadStartupConfig(getenv func(string) string) (startupConfig, error) {
 	if err != nil {
 		return startupConfig{}, err
 	}
+	catalogSource, err := loadControllerCatalogSourceFromEnv(getenv)
+	if err != nil {
+		return startupConfig{}, err
+	}
 
 	config := startupConfig{
 		Info:            buildinfo.Current(version, commit),
 		WorkerCount:     workerCount,
-		RepoRoot:        repoRoot,
+		RepoRoot:        catalogSource.filesystemRoot,
+		CatalogSource:   catalogSource,
 		StatusBackend:   statusBackend,
 		StatusPath:      statusPath,
 		RedisAddr:       redisAddr,
 		StatusSeedPath:  statusSeedPath,
 		RequeueInterval: time.Duration(requeueSeconds) * time.Second,
 	}
-	if repoRoot == "" {
+	if !catalogSource.configured() {
 		return config, nil
 	}
 
-	compiled, err := catalog.LoadFromRepository(repoRoot)
+	compiled, err := catalogSource.loadCatalog(context.Background())
 	if err != nil {
-		return startupConfig{}, fmt.Errorf("load controller repository catalog: %w", err)
+		return startupConfig{}, fmt.Errorf("load controller catalog: %w", err)
 	}
 	summary := catalog.Summarize(compiled)
 	config.Summary = &summary
 	return config, nil
+}
+
+func (c startupConfig) catalogSource() controllerCatalogSource {
+	if c.CatalogSource.configured() {
+		return c.CatalogSource
+	}
+	if c.RepoRoot == "" {
+		return controllerCatalogSource{}
+	}
+	return newControllerFilesystemCatalogSource(c.RepoRoot)
 }
 
 func controllerRequeueSeconds(getenv func(string) string) (int, error) {

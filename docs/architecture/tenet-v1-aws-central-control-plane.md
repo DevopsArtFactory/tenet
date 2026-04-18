@@ -348,11 +348,11 @@ TENET_STATUS_SEED_PATH=/workspace/bootstrap/deployments.json
 TENET_API_REQUEST_TIMEOUT=30s
 ```
 
-That GitHub mode is read-only for desired state. Controller startup, controller polling, and the opt-in local-safe apply executor still require a filesystem checkout via `TENET_REPO_ROOT`.
+That GitHub mode is read-only for desired state. Both `tenet-api` and `tenet-controller` can now use those GitHub envs for desired-state reads, while `TENET_REPO_ROOT` remains the filesystem-mode contract when you want a local checkout. The opt-in local-safe apply executor still requires the filesystem source.
 
 ### 3. Make the repo available
 
-`tenet-controller` must still see a local repo tree at `TENET_REPO_ROOT`. `tenet-api` may either share that same checkout or use the read-only GitHub source envs above when you only need API-side desired-state reads.
+`tenet-api` and `tenet-controller` may either share the same checkout via `TENET_REPO_ROOT` or use the same read-only GitHub source envs above for desired-state reads. Keep the local checkout when you want filesystem mode or when the API-side local-safe apply executor is enabled.
 
 ### 4. Add account manifests
 

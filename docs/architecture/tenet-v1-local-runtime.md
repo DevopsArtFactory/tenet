@@ -34,7 +34,7 @@ make smoke-local
 
 Use `make smoke-local` for the fastest fixture-backed regression check when you only need direct-process validation. It boots `tenet-api` against the committed example fixtures, checks `/healthz`, validates representative JSON payloads from the catalog and status endpoints, and in enabled apply mode proves that Tenet now creates a queued immutable apply record before the local-safe executor advances the same `applyId` to a failed stub boundary without manual transition API calls.
 
-This local smoke path now sets `TENET_CATALOG_SOURCE=filesystem` explicitly so the fixture-backed contract is unambiguous. GitHub-backed desired-state loading is supported in `tenet-api`, but it remains an API-only read-only mode and does not change the controller/runtime filesystem contract used by the local stack.
+This local smoke path now sets `TENET_CATALOG_SOURCE=filesystem` explicitly so the fixture-backed contract is unambiguous. `tenet-controller` now honors the same `TENET_CATALOG_SOURCE=filesystem|github` contract as `tenet-api` for desired-state reads, but the local stack keeps the mounted checkout path because that is still the simplest deterministic demo shape.
 
 ### Manual `tenet-api` run without Docker
 

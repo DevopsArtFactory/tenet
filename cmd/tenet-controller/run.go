@@ -7,14 +7,16 @@ import (
 )
 
 func runController(ctx context.Context, logger *log.Logger, config startupConfig) {
+	catalogSource := config.catalogSource()
+	catalogSourceKind, repoRoot, githubRepository, githubRef, githubPath, githubBaseURL := catalogSource.logFields()
 	if config.Summary != nil {
-		logger.Printf("starting tenet-controller version=%s commit=%s workers=%s repo_root=%s status_backend=%s status_path=%s redis_addr=%s requeue_interval=%s accounts=%d environments=%d deployments=%d", config.Info.Version, config.Info.Commit, config.WorkerCount, config.RepoRoot, config.StatusBackend, config.StatusPath, config.RedisAddr, config.RequeueInterval, config.Summary.AccountCount, config.Summary.EnvironmentCount, config.Summary.DeploymentCount)
+		logger.Printf("starting tenet-controller version=%s commit=%s workers=%s catalog_source=%s repo_root=%s github_repository=%s github_ref=%s github_path=%s github_base_url=%s status_backend=%s status_path=%s redis_addr=%s requeue_interval=%s accounts=%d environments=%d deployments=%d", config.Info.Version, config.Info.Commit, config.WorkerCount, catalogSourceKind, repoRoot, githubRepository, githubRef, githubPath, githubBaseURL, config.StatusBackend, config.StatusPath, config.RedisAddr, config.RequeueInterval, config.Summary.AccountCount, config.Summary.EnvironmentCount, config.Summary.DeploymentCount)
 	} else {
-		logger.Printf("starting tenet-controller version=%s commit=%s workers=%s repo_root=%s status_backend=%s status_path=%s redis_addr=%s requeue_interval=%s", config.Info.Version, config.Info.Commit, config.WorkerCount, config.RepoRoot, config.StatusBackend, config.StatusPath, config.RedisAddr, config.RequeueInterval)
+		logger.Printf("starting tenet-controller version=%s commit=%s workers=%s catalog_source=%s repo_root=%s github_repository=%s github_ref=%s github_path=%s github_base_url=%s status_backend=%s status_path=%s redis_addr=%s requeue_interval=%s", config.Info.Version, config.Info.Commit, config.WorkerCount, catalogSourceKind, repoRoot, githubRepository, githubRef, githubPath, githubBaseURL, config.StatusBackend, config.StatusPath, config.RedisAddr, config.RequeueInterval)
 	}
 
 	var store runtimeStatusStore
-	if config.RepoRoot != "" {
+	if catalogSource.configured() {
 		var err error
 		store, err = openRuntimeStatusStore(ctx, logger, config)
 		if err != nil {

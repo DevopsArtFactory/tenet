@@ -16,6 +16,8 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
+	"github.com/DevopsArtFactory/tenet/internal/githubcontents"
+	"github.com/DevopsArtFactory/tenet/internal/manifest"
 	"github.com/DevopsArtFactory/tenet/internal/reconcile"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
@@ -153,7 +155,58 @@ func TestRunControllerLogsDisabledRuntimeWhenRepositoryRootIsUnset(t *testing.T)
 		close(done)
 	}()
 
-	requireLogLine(t, output, "controller runtime disabled")
+	requireLogLine(t, output, "controller runtime disabled reason=no_catalog_source")
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("runController did not stop after cancellation")
+	}
+}
+
+func TestRunControllerLogsReconcilePlansFromGitHubCatalogSourceAndStatusSnapshots(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","binary":"s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1},"userdata":{"type":"file","path":"userdata/api-prod.sh"}}`)
+	desiredGeneration := desiredGenerationForTest(t, root, "api-prod")
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, fmt.Sprintf(`[{"deploymentName":"api-prod","status":{"observedGeneration":%d,"sync":{"state":"Reconciling","reason":"warming up"},"health":{"overall":"Progressing","summary":"warming"},"conditions":[]}}]`, desiredGeneration))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	output := newConcurrentLogSink()
+	logger := log.New(output, "", 0)
+	config := startupConfig{
+		Info:        buildinfo.Info{Version: "dev", Commit: "abc123"},
+		WorkerCount: "1",
+		CatalogSource: controllerCatalogSource{
+			kind: controllerCatalogSourceGitHub,
+			githubRequest: githubcontents.Request{
+				Repository: "acme/platform-config",
+				Ref:        "main",
+				Path:       "tenet",
+			},
+			loadCatalog: func(_ context.Context) (manifest.Catalog, error) {
+				return catalog.LoadFromRepository(root)
+			},
+		},
+		StatusPath:      statusPath,
+		RequeueInterval: 10 * time.Millisecond,
+	}
+
+	done := make(chan struct{})
+	go func() {
+		runController(ctx, logger, config)
+		close(done)
+	}()
+
+	requireLogLine(t, output, "catalog_source=github")
+	requireLogLine(t, output, "controller reconcile deployment=api-prod")
+	requireLogLine(t, output, "steps=ResolvePlacement,ObserveCurrentState,ReconcileCurrentState")
+
 	cancel()
 
 	select {
