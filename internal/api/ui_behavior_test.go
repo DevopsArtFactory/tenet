@@ -2714,6 +2714,27 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
         defaultCooldown: 300,
         healthCheckType: 'EC2',
         healthCheckGracePeriod: 120,
+        launchTemplate: {
+          id: 'lt-abc123',
+          name: 'payments-api-prod-candidate',
+          version: '$Default',
+        },
+        mixedInstancesPolicy: {
+          launchTemplate: {
+            id: 'lt-base123',
+            name: 'payments-api-prod-candidate-base',
+            version: '7',
+          },
+          overrides: [{
+            instanceType: 'c7g.large',
+            weightedCapacity: '2',
+            launchTemplate: {
+              id: 'lt-arm123',
+              name: 'payments-api-prod-candidate-arm',
+              version: '3',
+            },
+          }],
+        },
         targetGroupArns: ['arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-prod-candidate/abc123'],
         instances: [{ instanceId: 'i-abc123', availabilityZone: 'ap-northeast-2a', lifecycleState: 'InService', healthStatus: 'Healthy', protectedFromScaleIn: true, weightedCapacity: '1' }],
       },
@@ -2723,8 +2744,15 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   const asgSupportedText = collectText(asgSupportedRun.document.getElementById('accounts')).join(' | ');
   if (!asgSupportedText.includes('Auto Scaling Group name')) throw new Error('expected ASG inspection to render group name label');
   if (!asgSupportedText.includes('payments-api-prod-candidate')) throw new Error('expected ASG inspection to render group name value');
+  if (!asgSupportedText.includes('Launch template')) throw new Error('expected ASG inspection to render launch template label');
+  if (!asgSupportedText.includes('payments-api-prod-candidate · version $Default · id lt-abc123')) throw new Error('expected ASG inspection to render launch template summary');
+  if (!asgSupportedText.includes('Mixed instances launch template')) throw new Error('expected ASG inspection to render mixed instances launch template label');
+  if (!asgSupportedText.includes('payments-api-prod-candidate-base · version 7 · id lt-base123')) throw new Error('expected ASG inspection to render mixed instances launch template summary');
   if (!asgSupportedText.includes('Target group ARNs')) throw new Error('expected ASG inspection to render target groups section');
   if (!asgSupportedText.includes('arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-prod-candidate/abc123')) throw new Error('expected ASG inspection to render target group ARN');
+  if (!asgSupportedText.includes('Mixed instances overrides')) throw new Error('expected ASG inspection to render mixed instances overrides section');
+  if (!asgSupportedText.includes('payments-api-prod-candidate-arm · version 3 · id lt-arm123')) throw new Error('expected ASG inspection to render mixed instances override launch template');
+  if (!asgSupportedText.includes('Instance type · c7g.large')) throw new Error('expected ASG inspection to render mixed instances override instance type');
   if (!asgSupportedText.includes('Instances')) throw new Error('expected ASG inspection to render instances section');
   if (!asgSupportedText.includes('Lifecycle state · InService')) throw new Error('expected ASG inspection to render lifecycle state');
   if (!asgSupportedText.includes('Protected from scale-in · True')) throw new Error('expected ASG inspection to render protected-from-scale-in');

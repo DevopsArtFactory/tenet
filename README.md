@@ -192,13 +192,13 @@ For `ecsService`, Tenet now keeps a bounded in-process hint of the last cluster 
 
 The embedded `Live inspection` panel renders operator-friendly summaries from those payloads:
 - `ecsService`: service identity/status, desired-running-pending counts, active deployments, and recent ECS service events
-- `autoScalingGroup`: group sizing/health settings, attached target groups, and current instances
+- `autoScalingGroup`: group sizing/health settings, additive launch-template metadata, attached target groups, and current instances
 - `trafficRoutingResource`: summary-only or live traffic-routing context with explicit resource kind, display name, inspection mode, rollout summary text, and additive live fields for CodeDeploy deployment groups or listeners when AWS access is available
 
 Resource-inspection responses keep the contract explicit for UI consumers:
 - common fields: `deploymentName`, `resourceType`, `resourceName`, `lookupContext`, `available`, `source`, `unavailableReason`
 - ECS payloads add `ecsService`
-- Auto Scaling payloads add `autoScalingGroup`
+- Auto Scaling payloads add `autoScalingGroup`, including optional `launchTemplate` and `mixedInstancesPolicy` metadata when `DescribeAutoScalingGroups` returns launch-template details
 - traffic-routing payloads add `trafficRoutingResource`
 
 Traffic-routing inspection stays local-friendly without changing the route shape:

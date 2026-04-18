@@ -2891,6 +2891,119 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 	})
 
+	t.Run("returns auto scaling inspection payload with launch template metadata", func(t *testing.T) {
+		expected := resourceinspection.Result{
+			DeploymentName: "api-prod",
+			ResourceType:   "candidateAutoScalingGroup",
+			ResourceName:   "api-prod-candidate",
+			LookupContext: resourceinspection.LookupContext{
+				Region:                 "ap-northeast-2",
+				ControlAccountID:       "123456789012",
+				TargetAccountID:        "123456789012",
+				CrossAccount:           false,
+				ObserverRoleConfigured: true,
+			},
+			Available: true,
+			Source:    resourceinspection.SourceAutoScalingGroup,
+			AutoScalingGroup: &resourceinspection.AutoScalingInspection{
+				AutoScalingGroupARN:    "arn:aws:autoscaling:ap-northeast-2:123456789012:autoScalingGroup:*:autoScalingGroupName/api-prod-candidate",
+				AutoScalingGroupName:   "api-prod-candidate",
+				MinSize:                2,
+				MaxSize:                8,
+				DesiredCapacity:        4,
+				DefaultCooldown:        300,
+				HealthCheckType:        "EC2",
+				HealthCheckGracePeriod: 120,
+				LaunchTemplate: &resourceinspection.AutoScalingLaunchTemplateSummary{
+					ID:      "lt-abc123",
+					Name:    "api-prod-candidate",
+					Version: "$Default",
+				},
+				MixedInstancesPolicy: &resourceinspection.AutoScalingMixedInstancesPolicy{
+					LaunchTemplate: &resourceinspection.AutoScalingLaunchTemplateSummary{
+						ID:      "lt-base123",
+						Name:    "api-prod-candidate-base",
+						Version: "7",
+					},
+					Overrides: []resourceinspection.AutoScalingLaunchTemplateOverride{{
+						InstanceType:     "c7g.large",
+						WeightedCapacity: "2",
+						LaunchTemplate: &resourceinspection.AutoScalingLaunchTemplateSummary{
+							ID:      "lt-arm123",
+							Name:    "api-prod-candidate-arm",
+							Version: "3",
+						},
+					}},
+				},
+				TargetGroupARNs: []string{
+					"arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/api-prod-candidate/abc123",
+				},
+				Instances: []resourceinspection.AutoScalingGroupInstanceSummary{{
+					InstanceID:           "i-abc123",
+					AvailabilityZone:     "ap-northeast-2a",
+					LifecycleState:       "InService",
+					HealthStatus:         "Healthy",
+					ProtectedFromScaleIn: true,
+					WeightedCapacity:     "1",
+				}},
+			},
+		}
+
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "api-prod" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+				return expected, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=api-prod-candidate", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+
+		var got resourceinspection.Result
+		if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+			t.Fatalf("failed to decode auto scaling inspection payload: %v", err)
+		}
+		if !reflect.DeepEqual(got, expected) {
+			t.Fatalf("unexpected auto scaling inspection payload: %+v", got)
+		}
+
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw auto scaling inspection payload: %v", err)
+		}
+		autoScalingGroup, ok := raw["autoScalingGroup"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected autoScalingGroup object in payload, got %#v", raw["autoScalingGroup"])
+		}
+		launchTemplate, ok := autoScalingGroup["launchTemplate"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected launchTemplate object in payload, got %#v", autoScalingGroup["launchTemplate"])
+		}
+		if got := launchTemplate["name"]; got != "api-prod-candidate" {
+			t.Fatalf("expected launchTemplate name, got %#v", got)
+		}
+		mixedInstancesPolicy, ok := autoScalingGroup["mixedInstancesPolicy"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected mixedInstancesPolicy object in payload, got %#v", autoScalingGroup["mixedInstancesPolicy"])
+		}
+		overrides, ok := mixedInstancesPolicy["overrides"].([]any)
+		if !ok || len(overrides) != 1 {
+			t.Fatalf("expected mixedInstancesPolicy overrides in payload, got %#v", mixedInstancesPolicy["overrides"])
+		}
+	})
+
 	t.Run("returns live traffic routing payload", func(t *testing.T) {
 		expected := resourceinspection.Result{
 			DeploymentName: "api-prod",
