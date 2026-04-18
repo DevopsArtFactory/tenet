@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+TARGET=/workspace/repo
+if [ ! -d "$TARGET/.git" ]; then
+  rm -rf "$TARGET"
+  mkdir -p "$(dirname "$TARGET")"
+  git clone --depth 1 --branch ${repo_branch} ${repo_url} "$TARGET"
+fi
+while true; do
+  git -C "$TARGET" fetch --depth 1 origin ${repo_branch}
+  git -C "$TARGET" reset --hard FETCH_HEAD
+  sleep ${sync_interval}
+done

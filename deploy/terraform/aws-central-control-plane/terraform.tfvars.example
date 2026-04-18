@@ -1,0 +1,11 @@
+name_prefix          = "tenet-prod"
+repo_branch          = "main"
+image_tag            = "bootstrap"
+operator_cidr_blocks = ["203.0.113.10/32"]
+
+# When you already know the target-account observer roles Tenet should use for
+# read-only cross-account inspection, list them here.
+observer_role_arns = [
+  "arn:aws:iam::210987654321:role/TenetObserverRole",
+  "arn:aws:iam::210987654322:role/TenetObserverRole"
+]

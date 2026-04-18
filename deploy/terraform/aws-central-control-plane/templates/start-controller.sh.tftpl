@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+until [ -d /workspace/repo/.git ]; do
+  echo "waiting for repo sync"
+  sleep 2
+done
+export TENET_CONTROLLER_WORKERS='${controller_workers}'
+export TENET_CONTROLLER_REQUEUE_SECONDS='${controller_requeue_seconds}'
+exec /usr/local/bin/tenet-controller
