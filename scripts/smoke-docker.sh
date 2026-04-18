@@ -384,6 +384,8 @@ for fragment in (
     "Controller runtime events",
     "Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.",
     "Recent logs",
+    "Lookup region",
+    "Observer role configured",
     "Plan preview actions",
     "Apply request actions",
     "Plan preview approval guidance",

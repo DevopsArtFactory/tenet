@@ -431,6 +431,8 @@ assert 'Open plan/apply workspace' in audit_ui, audit_ui
 assert "fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`)" in ui, ui
 assert "const ifMatch = detail.sourceFingerprint || await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;" in ui, ui
 assert 'Recent logs' in ui, ui
+assert 'Lookup region' in ui, ui
+assert 'Observer role configured' in ui, ui
 assert 'Plan preview actions' in ui, ui
 assert 'Apply request actions' in ui, ui
 assert 'Plan preview approval guidance' in ui, ui

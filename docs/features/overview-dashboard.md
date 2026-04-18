@@ -101,6 +101,7 @@ Current behavior:
   - `Config and access`
 - `_self` `Open resource` links targeting `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}`
 - keeps the deeper artifact/history/generation/log drill-down on the final resource page
+- the recent-log card on that final resource page now surfaces the backend lookup path directly as `Lookup region`, `Control account ID`, `Target account ID`, `Cross-account lookup`, and `Observer role configured`, even when the log lookup is empty or unavailable
 - the backend resource drill-down now also has a parallel read-only inspection route for supported live AWS summaries: `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}`
 - that inspection payload is intentionally additive and explicit for operators/UI consumers: common fields stay `deploymentName`, `resourceType`, `resourceName`, `lookupContext`, `available`, `source`, `unavailableReason`, while supported resource-specific bodies are currently `ecsService` and `autoScalingGroup`
 - unsupported or unavailable inspection lookups keep the route usable during troubleshooting by returning `available=false` plus an explicit `unavailableReason` instead of surfacing a raw provider failure
