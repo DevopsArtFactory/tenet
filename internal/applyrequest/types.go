@@ -29,6 +29,14 @@ type SourceContext struct {
 	Fingerprint   string `json:"fingerprint,omitempty"`
 }
 
+// Operation is one additive operator-facing execution row projected from a ready plan preview.
+type Operation struct {
+	Status  string `json:"status"`
+	Phase   string `json:"phase"`
+	Target  string `json:"target"`
+	Summary string `json:"summary"`
+}
+
 // Record is one immutable apply request derived from a persisted ready plan preview.
 type Record struct {
 	ID             string             `json:"id"`
@@ -39,6 +47,7 @@ type Record struct {
 	Actor          requestactor.Actor `json:"actor"`
 	Error          string             `json:"error,omitempty"`
 	Details        []string           `json:"details,omitempty"`
+	Operations     []Operation        `json:"operations,omitempty"`
 	Source         SourceContext      `json:"source"`
 }
 

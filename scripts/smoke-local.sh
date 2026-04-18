@@ -300,6 +300,12 @@ assert apply_record['deploymentName'] == 'payments-api-prod', apply_record
 assert apply_record['status'] == 'failed', apply_record
 assert apply_record['error'] == 'apply execution is disabled', apply_record
 assert isinstance(apply_record.get('details', []), list) and apply_record['details'], apply_record
+assert isinstance(apply_record.get('operations', []), list) and apply_record['operations'], apply_record
+assert len(apply_record['operations']) == len(plan_preview['operations']), (apply_record, plan_preview)
+assert [operation['status'] for operation in apply_record['operations']] == ['pending'] * len(apply_record['operations']), apply_record
+assert [operation['phase'] for operation in apply_record['operations']] == [operation['phase'] for operation in plan_preview['operations']], (apply_record, plan_preview)
+assert [operation['target'] for operation in apply_record['operations']] == [operation['target'] for operation in plan_preview['operations']], (apply_record, plan_preview)
+assert [operation['summary'] for operation in apply_record['operations']] == [operation['summary'] for operation in plan_preview['operations']], (apply_record, plan_preview)
 assert apply_record['source']['route'] == f"/v1/plans/{plan_preview['id']}", apply_record
 assert apply_record['source']['planStatus'] == 'ready', apply_record
 assert apply_record['source']['fingerprint'] == plan_preview['source']['fingerprint'], (apply_record, plan_preview)
@@ -313,6 +319,8 @@ assert actor_apply_record['deploymentName'] == 'payments-api-staging', actor_app
 assert actor_apply_record['actor']['available'] is True, actor_apply_record
 assert actor_apply_record['actor']['name'] == 'Jane Operator', actor_apply_record
 assert actor_apply_record['actor']['email'] == 'jane@example.com', actor_apply_record
+assert isinstance(actor_apply_record.get('operations', []), list) and actor_apply_record['operations'], actor_apply_record
+assert all(operation['status'] == 'pending' for operation in actor_apply_record['operations']), actor_apply_record
 assert actor_apply_record_get == actor_apply_record, (actor_apply_record_get, actor_apply_record)
 assert stale_plan_preview['status'] == 'failed', stale_plan_preview
 assert stale_plan_preview['source']['fingerprint'] == deployment_detail['sourceFingerprint'], (stale_plan_preview, deployment_detail)

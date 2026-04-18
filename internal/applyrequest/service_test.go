@@ -41,7 +41,11 @@ func TestServiceCreatePersistsImmutableFailedApplyRequestWhenExecutionIsDisabled
 		DeploymentName: "api-prod",
 		Status:         planpreview.StatusReady,
 		CreatedAt:      "2026-04-17T08:00:00Z",
-		Source:         planpreview.SourceContext{DeploymentName: "api-prod", Route: "/v1/overview/deployments/api-prod", Fingerprint: "plan_input"},
+		Operations: []planpreview.Operation{
+			{Status: "completed", Phase: "Provisioning", Target: "api-prod-codedeploy-group (codeDeployDeploymentGroup)", Summary: "Create the CodeDeploy deployment for api-prod."},
+			{Status: "current", Phase: "Promoting", Target: "api-prod-prod-listener (productionListener)", Summary: "Shift production traffic toward the replacement capacity for api-prod."},
+		},
+		Source: planpreview.SourceContext{DeploymentName: "api-prod", Route: "/v1/overview/deployments/api-prod", Fingerprint: "plan_input"},
 	}
 	service := Service{
 		LoadPlan: func(ctx context.Context, planID string) (planpreview.Record, error) {
@@ -72,6 +76,15 @@ func TestServiceCreatePersistsImmutableFailedApplyRequestWhenExecutionIsDisabled
 	}
 	if first.Record.Error != disabledError || len(first.Record.Details) != 2 {
 		t.Fatalf("expected disabled error/details, got %+v", first.Record)
+	}
+	if len(first.Record.Operations) != 2 {
+		t.Fatalf("expected projected operations, got %+v", first.Record.Operations)
+	}
+	if first.Record.Operations[0].Status != string(StatusPending) || first.Record.Operations[0].Phase != "Provisioning" {
+		t.Fatalf("expected pending projected operation rows, got %+v", first.Record.Operations)
+	}
+	if first.Record.Operations[1].Target != "api-prod-prod-listener (productionListener)" || first.Record.Operations[1].Summary != "Shift production traffic toward the replacement capacity for api-prod." {
+		t.Fatalf("expected ordered plan projection into apply operations, got %+v", first.Record.Operations)
 	}
 
 	second, err := service.Create(context.Background(), plan.ID)
@@ -153,6 +166,40 @@ func TestServiceCreateReturnsStableRecordIDEncodingErrors(t *testing.T) {
 	}
 }
 
+func TestStableRecordIDIgnoresAdditiveOperationsProjection(t *testing.T) {
+	base := Record{
+		PlanID:         "plan_ready_1234abcd",
+		DeploymentName: "api-prod",
+		Source: SourceContext{
+			PlanID:        "plan_ready_1234abcd",
+			Route:         "/v1/plans/plan_ready_1234abcd",
+			PlanStatus:    "ready",
+			PlanCreatedAt: "2026-04-17T08:00:00Z",
+			Fingerprint:   "plan_input",
+		},
+	}
+
+	first, err := stableRecordID(base)
+	if err != nil {
+		t.Fatalf("stableRecordID returned error: %v", err)
+	}
+
+	base.Operations = []Operation{{
+		Status:  string(StatusPending),
+		Phase:   "Provisioning",
+		Target:  "api-prod deployment",
+		Summary: "Create replacement capacity for api-prod.",
+	}}
+
+	second, err := stableRecordID(base)
+	if err != nil {
+		t.Fatalf("stableRecordID with additive operations returned error: %v", err)
+	}
+	if first != second {
+		t.Fatalf("expected stable apply ID to ignore additive operations projection, got %q and %q", first, second)
+	}
+}
+
 func TestServiceCreatePersistsAvailableActorFromRequestContext(t *testing.T) {
 	store := &memoryStore{}
 	plan := planpreview.Record{
@@ -160,6 +207,9 @@ func TestServiceCreatePersistsAvailableActorFromRequestContext(t *testing.T) {
 		DeploymentName: "api-prod",
 		Status:         planpreview.StatusReady,
 		CreatedAt:      "2026-04-17T08:00:00Z",
+		Operations: []planpreview.Operation{
+			{Status: "pending", Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."},
+		},
 	}
 	service := Service{
 		LoadPlan: func(context.Context, string) (planpreview.Record, error) {
@@ -185,5 +235,8 @@ func TestServiceCreatePersistsAvailableActorFromRequestContext(t *testing.T) {
 	}
 	if result.Record.Actor.ID != "operator-123" || result.Record.Actor.Name != "Jane Operator" || result.Record.Actor.Email != "jane@example.com" {
 		t.Fatalf("unexpected available actor details: %+v", result.Record.Actor)
+	}
+	if len(result.Record.Operations) != 1 || result.Record.Operations[0].Status != string(StatusPending) {
+		t.Fatalf("expected additive projected operations for available actor record, got %+v", result.Record.Operations)
 	}
 }

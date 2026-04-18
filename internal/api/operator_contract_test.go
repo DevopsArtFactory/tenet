@@ -83,6 +83,8 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		`curl -fsS -X POST "http://$HOST:$PORT/v1/applies/plans/$plan_id"`,
 		`curl -fsS "http://$HOST:$PORT/v1/applies/$apply_id"`,
 		`assert apply_record['error'] == 'apply execution is disabled', apply_record`,
+		`assert isinstance(apply_record.get('operations', []), list) and apply_record['operations'], apply_record`,
+		`assert [operation['status'] for operation in apply_record['operations']] == ['pending'] * len(apply_record['operations']), apply_record`,
 	} {
 		if !strings.Contains(script, fragment) {
 			t.Fatalf("expected smoke-local apply contract to include %q", fragment)
@@ -95,6 +97,7 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"`GET /v1/applies/{applyId}`",
 		"`TENET_APPLY_STORE_PATH`",
 		"disabled by default for live execution",
+		"ordered `operations[]` rows",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README apply contract to include %q", fragment)
@@ -106,6 +109,7 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"`POST /v1/applies/plans/{planId}`",
 		"`GET /v1/applies/{applyId}`",
 		"failed immutable contract with operator-facing error/details",
+		"additive ordered `operations[]` rows with pending `status`, `phase`, `target`, and `summary` fields",
 	} {
 		if !strings.Contains(uiDoc, fragment) {
 			t.Fatalf("expected overview UI doc apply contract to include %q", fragment)
