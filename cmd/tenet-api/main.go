@@ -18,7 +18,6 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
-	"github.com/DevopsArtFactory/tenet/internal/manifestfs"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
 	"github.com/DevopsArtFactory/tenet/internal/resourceinspection"
 	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
@@ -46,7 +45,6 @@ func main() {
 	version := envOrDefault("TENET_VERSION", "dev")
 	commit := envOrDefault("TENET_COMMIT", "unknown")
 	addr := envOrDefault("TENET_API_ADDR", ":8080")
-	repoRoot := os.Getenv("TENET_REPO_ROOT")
 	statusBackend := envOrDefault("TENET_STATUS_BACKEND", "file")
 	statusPath := os.Getenv("TENET_STATUS_PATH")
 	planStorePath := envOrDefault("TENET_PLAN_STORE_PATH", defaultPlanPreviewStorePath())
@@ -54,6 +52,13 @@ func main() {
 	applyEnabled := awsApplyEnabled()
 	redisAddr := os.Getenv("TENET_REDIS_ADDR")
 	statusSeedPath := os.Getenv("TENET_STATUS_SEED_PATH")
+	catalogSource, err := loadCatalogSourceFromEnv()
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := validateCatalogSource(catalogSource, applyEnabled); err != nil {
+		log.Fatal(err)
+	}
 	requestTimeout, err := requestTimeoutFromEnv()
 	if err != nil {
 		log.Fatal(err)
@@ -61,7 +66,8 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	info := buildinfo.Current(version, commit)
-	log.Printf("starting tenet-api version=%s commit=%s addr=%s repo_root=%s status_backend=%s status_path=%s plan_store_path=%s apply_store_path=%s apply_enabled=%t redis_addr=%s request_timeout=%s", info.Version, info.Commit, addr, repoRoot, statusBackend, statusPath, planStorePath, applyStorePath, applyEnabled, redisAddr, requestTimeout)
+	catalogSourceKind, repoRoot, githubRepository, githubRef, githubPath, githubBaseURL := catalogSource.logFields()
+	log.Printf("starting tenet-api version=%s commit=%s addr=%s catalog_source=%s repo_root=%s github_repository=%s github_ref=%s github_path=%s github_base_url=%s status_backend=%s status_path=%s plan_store_path=%s apply_store_path=%s apply_enabled=%t redis_addr=%s request_timeout=%s", info.Version, info.Commit, addr, catalogSourceKind, repoRoot, githubRepository, githubRef, githubPath, githubBaseURL, statusBackend, statusPath, planStorePath, applyStorePath, applyEnabled, redisAddr, requestTimeout)
 
 	store := mustOpenStatusStore(statusBackend, statusPath, redisAddr)
 	if store != nil {
@@ -69,7 +75,7 @@ func main() {
 			log.Fatalf("seed status store: %v", err)
 		}
 	}
-	options := newAPIOptionsWithStores(info, repoRoot, store, planStorePath, applyStorePath)
+	options := newAPIOptionsWithCatalogSourceAndStores(info, catalogSource, store, planStorePath, applyStorePath)
 	options.Logger = logger
 	options.RequestTimeout = requestTimeout
 
@@ -84,9 +90,9 @@ func main() {
 }
 
 func newAPIOptions(info buildinfo.Info, repoRoot string, store statusstore.Store) api.Options {
-	return newAPIOptionsWithStores(
+	return newAPIOptionsWithCatalogSourceAndStores(
 		info,
-		repoRoot,
+		newFilesystemCatalogSource(repoRoot),
 		store,
 		envOrDefault("TENET_PLAN_STORE_PATH", defaultPlanPreviewStorePath()),
 		envOrDefault("TENET_APPLY_STORE_PATH", defaultApplyRequestStorePath()),
@@ -94,21 +100,23 @@ func newAPIOptions(info buildinfo.Info, repoRoot string, store statusstore.Store
 }
 
 func newAPIOptionsWithPlanStore(info buildinfo.Info, repoRoot string, store statusstore.Store, planStorePath string) api.Options {
-	return newAPIOptionsWithStores(info, repoRoot, store, planStorePath, envOrDefault("TENET_APPLY_STORE_PATH", defaultApplyRequestStorePath()))
+	return newAPIOptionsWithCatalogSourceAndStores(info, newFilesystemCatalogSource(repoRoot), store, planStorePath, envOrDefault("TENET_APPLY_STORE_PATH", defaultApplyRequestStorePath()))
 }
 
-func newAPIOptionsWithStores(info buildinfo.Info, repoRoot string, store statusstore.Store, planStorePath string, applyStorePath string) api.Options {
+func newAPIOptionsWithCatalogSource(info buildinfo.Info, source apiCatalogSource, store statusstore.Store) api.Options {
+	return newAPIOptionsWithCatalogSourceAndStores(
+		info,
+		source,
+		store,
+		envOrDefault("TENET_PLAN_STORE_PATH", defaultPlanPreviewStorePath()),
+		envOrDefault("TENET_APPLY_STORE_PATH", defaultApplyRequestStorePath()),
+	)
+}
+
+func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCatalogSource, store statusstore.Store, planStorePath string, applyStorePath string) api.Options {
 	options := api.Options{BuildInfo: info}
-	if repoRoot != "" {
-		if _, err := catalog.LoadFromRepository(repoRoot); err != nil {
-			log.Fatalf("invalid TENET_REPO_ROOT: %v", err)
-		}
-		options.CatalogSummary = catalog.RepositorySummaryProvider(repoRoot)
-		options.CatalogDeployments = catalog.RepositoryDeploymentProvider(repoRoot)
-		options.CatalogEnvironments = catalog.RepositoryEnvironmentProvider(repoRoot)
-		options.CatalogAccounts = catalog.RepositoryAccountProvider(repoRoot)
-		options.CatalogPlacements = catalog.RepositoryPlacementProvider(repoRoot)
-		options.CatalogTopology = catalog.RepositoryTopologyProvider(repoRoot)
+	if source.configured() {
+		loadCatalog := source.loadCatalog
 		resourceLogService := newResourceLogProvider()
 		resourceInspectionService := newResourceInspectionProvider()
 		loadSnapshots := func() ([]statusstore.Snapshot, error) {
@@ -118,7 +126,7 @@ func newAPIOptionsWithStores(info buildinfo.Info, repoRoot string, store statuss
 			return store.List(context.Background())
 		}
 		loadObserverRoleARN := func(targetAccountID string) (string, error) {
-			catalogSpec, err := manifestfs.Load(repoRoot)
+			catalogSpec, err := source.loadSpec()
 			if err != nil {
 				return "", err
 			}
@@ -129,8 +137,50 @@ func newAPIOptionsWithStores(info buildinfo.Info, repoRoot string, store statuss
 			}
 			return "", nil
 		}
+		options.CatalogSummary = func() (catalog.Summary, error) {
+			compiled, err := loadCatalog()
+			if err != nil {
+				return catalog.Summary{}, err
+			}
+			return catalog.Summarize(compiled), nil
+		}
+		options.CatalogDeployments = func() ([]catalog.DeploymentView, error) {
+			compiled, err := loadCatalog()
+			if err != nil {
+				return nil, err
+			}
+			return catalog.ListDeployments(compiled), nil
+		}
+		options.CatalogEnvironments = func() ([]catalog.EnvironmentView, error) {
+			compiled, err := loadCatalog()
+			if err != nil {
+				return nil, err
+			}
+			return catalog.ListEnvironments(compiled), nil
+		}
+		options.CatalogAccounts = func() ([]catalog.AccountView, error) {
+			compiled, err := loadCatalog()
+			if err != nil {
+				return nil, err
+			}
+			return catalog.ListAccounts(compiled), nil
+		}
+		options.CatalogPlacements = func() ([]catalog.PlacementView, error) {
+			compiled, err := loadCatalog()
+			if err != nil {
+				return nil, err
+			}
+			return catalog.ListPlacements(compiled)
+		}
+		options.CatalogTopology = func() (catalog.TopologySnapshot, error) {
+			compiled, err := loadCatalog()
+			if err != nil {
+				return catalog.TopologySnapshot{}, err
+			}
+			return catalog.BuildTopology(compiled)
+		}
 		options.OverviewApplications = func() ([]catalog.ApplicationOverview, error) {
-			compiled, err := catalog.LoadFromRepository(repoRoot)
+			compiled, err := loadCatalog()
 			if err != nil {
 				return nil, err
 			}
@@ -141,7 +191,7 @@ func newAPIOptionsWithStores(info buildinfo.Info, repoRoot string, store statuss
 			return catalog.BuildApplicationOverviews(compiled, snapshots)
 		}
 		options.OverviewApplication = func(name string) (catalog.ApplicationOverviewDetail, error) {
-			compiled, err := catalog.LoadFromRepository(repoRoot)
+			compiled, err := loadCatalog()
 			if err != nil {
 				return catalog.ApplicationOverviewDetail{}, err
 			}
@@ -158,7 +208,7 @@ func newAPIOptionsWithStores(info buildinfo.Info, repoRoot string, store statuss
 			return catalog.BuildApplicationOverviewDetail(compiled, []statusstore.Snapshot{snapshot}, name)
 		}
 		options.OverviewAccounts = func() ([]catalog.AccountOverview, error) {
-			compiled, err := catalog.LoadFromRepository(repoRoot)
+			compiled, err := loadCatalog()
 			if err != nil {
 				return nil, err
 			}
@@ -168,10 +218,30 @@ func newAPIOptionsWithStores(info buildinfo.Info, repoRoot string, store statuss
 			}
 			return catalog.BuildAccountOverviews(compiled, snapshots)
 		}
-		options.OverviewAccount = catalog.RepositoryAccountOverviewDetailProvider(repoRoot, loadSnapshots)
-		options.OverviewProjectEnvironment = catalog.RepositoryProjectEnvironmentOverviewDetailProvider(repoRoot, loadSnapshots)
+		options.OverviewAccount = func(awsAccountID string) (catalog.AccountOverviewDetail, error) {
+			compiled, err := loadCatalog()
+			if err != nil {
+				return catalog.AccountOverviewDetail{}, err
+			}
+			currentSnapshots, err := loadSnapshots()
+			if err != nil {
+				return catalog.AccountOverviewDetail{}, err
+			}
+			return catalog.BuildAccountOverviewDetail(compiled, currentSnapshots, awsAccountID)
+		}
+		options.OverviewProjectEnvironment = func(awsAccountID, appRef, environmentRef string) (catalog.ProjectEnvironmentOverviewDetail, error) {
+			compiled, err := loadCatalog()
+			if err != nil {
+				return catalog.ProjectEnvironmentOverviewDetail{}, err
+			}
+			currentSnapshots, err := loadSnapshots()
+			if err != nil {
+				return catalog.ProjectEnvironmentOverviewDetail{}, err
+			}
+			return catalog.BuildProjectEnvironmentOverviewDetail(compiled, currentSnapshots, awsAccountID, appRef, environmentRef)
+		}
 		options.OverviewDeployment = func(name string) (catalog.DeploymentOverviewDetail, error) {
-			compiled, err := catalog.LoadFromRepository(repoRoot)
+			compiled, err := loadCatalog()
 			if err != nil {
 				return catalog.DeploymentOverviewDetail{}, err
 			}
@@ -188,7 +258,7 @@ func newAPIOptionsWithStores(info buildinfo.Info, repoRoot string, store statuss
 			return catalog.BuildDeploymentOverviewDetail(compiled, []statusstore.Snapshot{snapshot}, name)
 		}
 		options.OverviewDeploymentEvents = func(name string) (catalog.DeploymentOverviewEvents, error) {
-			compiled, err := catalog.LoadFromRepository(repoRoot)
+			compiled, err := loadCatalog()
 			if err != nil {
 				return catalog.DeploymentOverviewEvents{}, err
 			}

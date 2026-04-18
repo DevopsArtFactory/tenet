@@ -18,4 +18,9 @@ The same manifest codec now also backs GitHub ingestion primitives:
 - `internal/manifestgithub` mirrors the filesystem loader for `accounts`, `environments`, and `deployments`
 - `internal/catalog.LoadFromGitHub(...)` validates and compiles that GitHub-backed manifest tree into the same runtime catalog shape
 
-Webhook handling, reconcile loops, and main runtime configuration remain out of scope for this slice.
+`tenet-api` now wires that additive path behind explicit source selection:
+
+- `TENET_CATALOG_SOURCE=filesystem` keeps the existing `TENET_REPO_ROOT` contract unchanged
+- `TENET_CATALOG_SOURCE=github` adds a read-only API mode backed by `TENET_CATALOG_GITHUB_REPOSITORY` plus optional `TENET_CATALOG_GITHUB_REF`, `TENET_CATALOG_GITHUB_PATH`, `TENET_CATALOG_GITHUB_TOKEN`, and `TENET_CATALOG_GITHUB_BASE_URL`
+
+`tenet-controller` and controller-owned runtime writes still remain out of scope for GitHub mode; they continue to require the filesystem repository contract.

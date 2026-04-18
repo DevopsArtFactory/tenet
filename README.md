@@ -9,7 +9,7 @@ Today, Tenet is still early-stage and intentionally read-only. The focus is on a
 ## What Tenet does
 
 At a high level, Tenet:
-- reads deployment intent from a repository-shaped manifest tree
+- reads deployment intent from either a local repository checkout or a GitHub-backed read-only manifest tree
 - compiles that intent into a validated internal catalog
 - joins desired state with runtime status snapshots
 - exposes that combined view through a small control-plane API and embedded UI
@@ -27,9 +27,11 @@ This keeps the first page simple and pushes deeper operational detail into drill
 Tenet is currently built from four main layers.
 
 ### 1. Repository-backed desired state
-Tenet expects a repo-like manifest structure with accounts, environments, and deployments. That repository is treated as the source of deployment intent.
+Tenet expects a repo-like manifest structure with accounts, environments, and deployments. `tenet-api` can now read that desired state from either:
+- a local checkout selected with `TENET_CATALOG_SOURCE=filesystem` plus `TENET_REPO_ROOT`
+- a GitHub-backed read-only source selected with `TENET_CATALOG_SOURCE=github` plus `TENET_CATALOG_GITHUB_*`
 
-As groundwork for remote desired-state ingestion, Tenet now also has a read-only internal GitHub contents client that can list one manifest directory tree under a repo/ref/path, fetch individual manifest files, and decode them with the same JSON/YAML rules as the local filesystem loader. The additive backend-only `internal/manifestgithub` and `catalog.LoadFromGitHub(...)` entry points load the current accounts/environments/deployments catalog shape from GitHub without yet wiring webhook handling, reconcile loops, or main runtime configuration.
+The same JSON/YAML manifest codec and catalog compiler sit behind both modes, so `/v1/catalog/*` and `/v1/overview/*` keep the same response contract regardless of where desired state was loaded from. `tenet-controller` still remains filesystem-root based through `TENET_REPO_ROOT`.
 
 ### 2. Catalog compilation
 The manifest tree is loaded and validated into a compiled catalog. This gives Tenet a stable internal model for:
@@ -60,6 +62,7 @@ The embedded UI is intentionally lightweight: static HTML/CSS/JS served directly
 ### Run locally against the example repository
 
 ```bash
+TENET_CATALOG_SOURCE=filesystem \
 TENET_REPO_ROOT=$(pwd)/examples/local-repo \
 TENET_STATUS_PATH=$(pwd)/examples/local-status/deployments.json \
 go run ./cmd/tenet-api
@@ -72,6 +75,40 @@ http://localhost:8080/
 ```
 
 You should land on the applications overview page.
+
+### Run `tenet-api` against a GitHub-backed desired-state catalog
+
+```bash
+TENET_CATALOG_SOURCE=github \
+TENET_CATALOG_GITHUB_REPOSITORY=acme/platform-config \
+TENET_CATALOG_GITHUB_REF=main \
+TENET_CATALOG_GITHUB_PATH=tenet \
+TENET_CATALOG_GITHUB_TOKEN=$GITHUB_TOKEN \
+TENET_STATUS_PATH=$(pwd)/examples/local-status/deployments.json \
+go run ./cmd/tenet-api
+```
+
+Optional GitHub source settings:
+- `TENET_CATALOG_GITHUB_BASE_URL` for GitHub Enterprise Server or tests
+- `TENET_CATALOG_GITHUB_REF` to pin a branch, tag, or commit
+- `TENET_CATALOG_GITHUB_PATH` to point Tenet at a repo-relative manifest root such as `tenet` or `catalog/tenet`
+- `TENET_CATALOG_GITHUB_TOKEN` when the repo is private or rate limits require auth
+
+Startup validation is explicit:
+- Tenet rejects ambiguous config when `TENET_REPO_ROOT` and `TENET_CATALOG_GITHUB_*` are both set without `TENET_CATALOG_SOURCE`
+- `TENET_CATALOG_SOURCE=filesystem` requires `TENET_REPO_ROOT`
+- `TENET_CATALOG_SOURCE=github` requires `TENET_CATALOG_GITHUB_REPOSITORY`
+- `TENET_AWS_ENABLE_APPLY=true` still requires `TENET_REPO_ROOT` because the local-safe executor only supports the filesystem source
+
+The read-model contract stays the same in both modes. For example:
+
+```bash
+curl http://localhost:8080/v1/catalog/summary
+```
+
+```json
+{"accountCount":1,"environmentCount":1,"deploymentCount":2}
+```
 
 Every HTTP response from `tenet-api` also carries a `Request-Id` header. If your client already sends `request-id`, Tenet echoes it back; otherwise it generates one. Capture that value when an API call fails and use the same ID to correlate request-scoped logs and any handler/provider work that reads `api.RequestIDFromContext(ctx)`.
 
@@ -89,7 +126,7 @@ For the current read-only plan/apply flow, a typical local operator path is:
 - `POST /v1/plans/deployments/{deploymentName}` with optional `{"ifMatch":"<sourceFingerprint>"}` to persist an immutable preview for the reviewed state; when a local proxy or test client has authenticated operator context, forward it explicitly with additive `X-Tenet-Actor-Id`, `X-Tenet-Actor-Name`, and/or `X-Tenet-Actor-Email` headers so the immutable record can persist it without changing the route shape
 - open `http://localhost:8080/?page=plan&deployment=payments-api-prod&planId={planId}` for the bookmarkable plan workspace; `Apply Plan` activates only after that persisted ready preview is loaded with a valid `planId`, and the embedded `Refresh plan preview` / `Refresh apply request` controls re-fetch stored records in place without forcing a browser reload
 - `POST /v1/applies/plans/{planId}` to persist an immutable apply request derived from that ready preview, then reopen the same workspace at `http://localhost:8080/?page=plan&deployment=payments-api-prod&planId={planId}&applyId={applyId}`; before Tenet persists anything it re-validates the current deployment-detail fingerprint against the reviewed plan fingerprint and returns `409 Conflict` with clear operator-facing guidance to create a fresh preview when the plan is stale, so no new apply record is written from drifted input. When the fingerprints still match, the same explicit `X-Tenet-Actor-*` headers are persisted when present, and the stored apply record carries additive ordered `operations[]` rows with `phase`, `target`, and `summary` projected from the reviewed plan preview plus `status=pending` in the default disabled contract or `status=queued` on create in the opt-in local-safe executor contract, together with an additive `lifecycle` block that starts with `updatedAt` and `totalSteps`
-- `GET /v1/applies/{applyId}` to reopen the stored apply request directly; this backend slice is disabled by default for live execution, so failed immutable apply records with explicit disabled error/details and pending operation rows are expected and useful because they preserve operator-reviewed intent without mutating AWS. When you opt in with `TENET_AWS_ENABLE_APPLY=true`, the backend still creates the same immutable apply record as `queued`, but a Tenet-owned local-safe executor loop now advances that same `applyId` through `running` and finally `failed` with operator-facing handoff details explaining that live AWS mutation is still not implemented. The stored read model keeps additive `lifecycle` metadata for that executor handoff, including `updatedAt` / `startedAt` / `finishedAt` timestamps plus `currentStep` / `completedSteps` / `totalSteps`, while the embedded `/?page=plan` workspace still renders lifecycle-aware queued/running/succeeded/cancelled/failed chrome, the existing compact stored-apply lifecycle summary from persisted `operations[]`, and a separate stored-apply lifecycle metadata block for timing plus current/completed step progress when those fields are present, without changing the route shape or job identity
+- `GET /v1/applies/{applyId}` to reopen the stored apply request directly; this backend slice is disabled by default for live execution, so failed immutable apply records with explicit disabled error/details and pending operation rows are expected and useful because they preserve operator-reviewed intent without mutating AWS. When you opt in with `TENET_AWS_ENABLE_APPLY=true`, the backend still creates the same immutable apply record as `queued`, but a Tenet-owned local-safe executor loop now advances that same `applyId` through `running` and finally `failed` with operator-facing handoff details explaining that live AWS mutation is still not implemented. That opt-in currently requires the filesystem catalog source via `TENET_REPO_ROOT`; GitHub catalog mode remains read-only. The stored read model keeps additive `lifecycle` metadata for that executor handoff, including `updatedAt` / `startedAt` / `finishedAt` timestamps plus `currentStep` / `completedSteps` / `totalSteps`, while the embedded `/?page=plan` workspace still renders lifecycle-aware queued/running/succeeded/cancelled/failed chrome, the existing compact stored-apply lifecycle summary from persisted `operations[]`, and a separate stored-apply lifecycle metadata block for timing plus current/completed step progress when those fields are present, without changing the route shape or job identity
 - `POST /v1/applies/{applyId}/transitions` remains available when executor or worker code needs to advance that persisted immutable apply record on the same stable `applyId`; Tenet's local-safe executor uses the same `applyrequest.TransitionRequest` state model internally, so operators do not need manual transition API calls to see enabled-mode lifecycle progress. Malformed JSON bodies fail with `400 Bad Request`, unknown `applyId` values fail with `404 Not Found`, and invalid lifecycle moves fail with `409 Conflict` without creating a replacement apply record
 - `GET /v1/audit-logs?limit={n}` to project those persisted immutable plan/apply records into a newest-first local audit timeline; `/v1/audit-logs` is the preferred v1 route shape for this local timeline, and actor identity remains explicit in both directions: persisted request actor fields when available, or `actor.available=false` plus the unavailable reason `actor information is unavailable because no authenticated request context was available for this local request` when no authenticated request context was present
 - `GET /v1/audit-logs?deployment={deploymentName}&action={action}` when you need one deployment plus one exact action without changing the route family
