@@ -64,12 +64,11 @@ Tenet needs one repository-shaped source of truth containing:
 - `environments/`
 - `deployments/`
 
-You can provide that to the runtime by:
-- mounting a checked-out repo into the containers
-- syncing a Git checkout onto shared storage
-- building a sidecar/init step that clones the repo before Tenet starts
+Tenet selects desired-state reads with `TENET_CATALOG_SOURCE`:
+- `filesystem` uses `TENET_REPO_ROOT` to point `tenet-api` and `tenet-controller` at the same checked-out repo or synced repo tree
+- `github` uses `TENET_CATALOG_GITHUB_*` so both services read the same desired-state manifests directly from GitHub in read-only mode
 
-The current runtime contract is still filesystem-root based via `TENET_REPO_ROOT`, so production deployment should make a repo tree available at a stable path inside both `tenet-api` and `tenet-controller`.
+The shipped Terraform/bootstrap path in this doc still uses repo-sync plus shared filesystem delivery today because that works for both services now, while private desired-state repo sync remains a follow-up.
 
 ### 3. Runtime state store
 
@@ -113,10 +112,10 @@ The easiest way to think about Tenet on AWS is as five connection paths.
 - ALB forwards to `tenet-api`
 - `tenet-api` serves both JSON APIs and the embedded UI
 
-### B. Tenet API/controller -> repo
+### B. Tenet API/controller -> desired-state source
 
-- `tenet-api` reads the repo tree to serve desired-state-backed read models
-- `tenet-controller` reads the same repo tree to compile deployments and update runtime status
+- both services read the same desired-state manifests, either from a shared repo tree in filesystem mode or from the same GitHub source envs in GitHub mode
+- the shipped Terraform bootstrap below uses the shared repo tree path at `/workspace/repo`
 
 ### C. Tenet API/controller -> Redis
 
@@ -352,9 +351,9 @@ TENET_API_REQUEST_TIMEOUT=30s
 
 That GitHub mode is read-only for desired state. Both `tenet-api` and `tenet-controller` can now use those GitHub envs for desired-state reads, while `TENET_REPO_ROOT` remains the filesystem-mode contract when you want a local checkout. The opt-in local-safe apply executor still requires the filesystem source.
 
-### 3. Make the repo available
+### 3. Choose desired-state delivery
 
-`tenet-api` and `tenet-controller` may either share the same checkout via `TENET_REPO_ROOT` or use the same read-only GitHub source envs above for desired-state reads. Keep the local checkout when you want filesystem mode or when the API-side local-safe apply executor is enabled.
+`tenet-api` and `tenet-controller` may either share the same checkout via `TENET_REPO_ROOT` or use the same read-only GitHub source envs above for desired-state reads. The shipped Terraform/bootstrap path still uses the shared checkout plus repo-sync pattern today. Keep the local checkout when you want filesystem mode or when the API-side local-safe apply executor is enabled.
 
 ### 4. Add account manifests
 
@@ -437,6 +436,7 @@ Use this when you want the fastest path from local/demo to a real AWS deployment
 
 ```bash
 TENET_API_ADDR=:8080
+TENET_CATALOG_SOURCE=filesystem
 TENET_REPO_ROOT=/workspace/repo
 TENET_STATUS_BACKEND=redis
 TENET_REDIS_ADDR=tenet-redis.example.cache.amazonaws.com:6379
@@ -447,6 +447,7 @@ TENET_API_REQUEST_TIMEOUT=30s
 `tenet-controller` task:
 
 ```bash
+TENET_CATALOG_SOURCE=filesystem
 TENET_REPO_ROOT=/workspace/repo
 TENET_STATUS_BACKEND=redis
 TENET_REDIS_ADDR=tenet-redis.example.cache.amazonaws.com:6379
@@ -455,7 +456,7 @@ TENET_CONTROLLER_WORKERS=1
 TENET_CONTROLLER_REQUEUE_SECONDS=30
 ```
 
-#### Repo delivery options
+#### Filesystem-mode repo delivery options
 
 Pick one practical pattern:
 - mount EFS at `/workspace/repo` and have a separate sync job update it from Git

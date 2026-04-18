@@ -66,6 +66,7 @@ locals {
       ]
       environment = [
         { name = "TENET_API_ADDR", value = ":8080" },
+        { name = "TENET_CATALOG_SOURCE", value = "filesystem" },
         { name = "TENET_REPO_ROOT", value = "/workspace/repo" },
         { name = "TENET_STATUS_BACKEND", value = "redis" },
         { name = "TENET_REDIS_ADDR", value = "${aws_elasticache_cluster.redis.cache_nodes[0].address}:${aws_elasticache_cluster.redis.port}" },
@@ -127,6 +128,7 @@ locals {
       entryPoint = ["/bin/sh", "-lc"]
       command    = [local.controller_start_command]
       environment = [
+        { name = "TENET_CATALOG_SOURCE", value = "filesystem" },
         { name = "TENET_REPO_ROOT", value = "/workspace/repo" },
         { name = "TENET_STATUS_BACKEND", value = "redis" },
         { name = "TENET_REDIS_ADDR", value = "${aws_elasticache_cluster.redis.cache_nodes[0].address}:${aws_elasticache_cluster.redis.port}" },

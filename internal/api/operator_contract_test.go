@@ -180,6 +180,63 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 	}
 }
 
+func TestDesiredStateSourceOperatorDocsContract(t *testing.T) {
+	readme := readRepoFile(t, "README.md")
+	for _, fragment := range []string{
+		"Both `tenet-api` and `tenet-controller` can read that desired state from either:",
+		"`TENET_REPO_ROOT` remains the filesystem-mode input when you want a local checkout; it is not a universal runtime requirement.",
+	} {
+		if !strings.Contains(readme, fragment) {
+			t.Fatalf("expected README desired-state source contract to include %q", fragment)
+		}
+	}
+
+	architectureDoc := readRepoFile(t, "docs/architecture/tenet-v1-aws-central-control-plane.md")
+	for _, fragment := range []string{
+		"Tenet selects desired-state reads with `TENET_CATALOG_SOURCE`:",
+		"`filesystem` uses `TENET_REPO_ROOT` to point `tenet-api` and `tenet-controller` at the same checked-out repo or synced repo tree",
+		"`github` uses `TENET_CATALOG_GITHUB_*` so both services read the same desired-state manifests directly from GitHub in read-only mode",
+		"The shipped Terraform/bootstrap path in this doc still uses repo-sync plus shared filesystem delivery today because that works for both services now, while private desired-state repo sync remains a follow-up.",
+		"the shipped Terraform bootstrap below uses the shared repo tree path at `/workspace/repo`",
+		"### 3. Choose desired-state delivery",
+		"The shipped Terraform/bootstrap path still uses the shared checkout plus repo-sync pattern today.",
+		"#### Filesystem-mode repo delivery options",
+		"TENET_CATALOG_SOURCE=filesystem",
+	} {
+		if !strings.Contains(architectureDoc, fragment) {
+			t.Fatalf("expected AWS central control-plane doc desired-state source contract to include %q", fragment)
+		}
+	}
+
+	if strings.Contains(architectureDoc, "The current runtime contract is still filesystem-root based via `TENET_REPO_ROOT`") {
+		t.Fatal("expected AWS central control-plane doc to drop stale filesystem-only runtime wording")
+	}
+
+	terraformDoc := readRepoFile(t, "deploy/terraform/aws-central-control-plane/README.md")
+	for _, fragment := range []string{
+		"Both `tenet-api` and `tenet-controller` now support `TENET_CATALOG_SOURCE=filesystem|github` for desired-state reads.",
+		"This Terraform bootstrap intentionally chooses the filesystem path and sets `TENET_REPO_ROOT` because the shared repo-sync volume works for both services today, and private desired-state repo sync is still a follow-up.",
+	} {
+		if !strings.Contains(terraformDoc, fragment) {
+			t.Fatalf("expected Terraform README desired-state source contract to include %q", fragment)
+		}
+	}
+
+	if strings.Contains(terraformDoc, "The current Tenet runtime still expects `TENET_REPO_ROOT` to point at a filesystem tree.") {
+		t.Fatal("expected Terraform README to drop stale filesystem-only runtime wording")
+	}
+
+	terraformModule := readRepoFile(t, "deploy/terraform/aws-central-control-plane/main.tf")
+	for _, fragment := range []string{
+		`{ name = "TENET_CATALOG_SOURCE", value = "filesystem" },`,
+		`{ name = "TENET_REPO_ROOT", value = "/workspace/repo" },`,
+	} {
+		if !strings.Contains(terraformModule, fragment) {
+			t.Fatalf("expected Terraform bootstrap task definition to include %q", fragment)
+		}
+	}
+}
+
 func TestAuditLogOperatorContract(t *testing.T) {
 	script := readRepoFile(t, "scripts/smoke-local.sh")
 	for _, fragment := range []string{
