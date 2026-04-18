@@ -1459,11 +1459,11 @@
         if (className) stateNode.classList.add(className);
         container.replaceChildren(stateNode);
       };
-      const renderResourceLogsState = (container, text, className = '') => {
+      const renderResourceLogsState = (container, text, className = '', beforeNodes = [], afterNodes = []) => {
         const heading = createElement('h4', '', 'Recent logs');
         const stateNode = createElement('div', 'detail-state', text);
         if (className) stateNode.classList.add(className);
-        container.replaceChildren(heading, stateNode);
+        container.replaceChildren(heading, ...beforeNodes, stateNode, ...afterNodes);
       };
       const resourceLogsUnavailableReasonText = (reason) => {
         switch (reason) {
@@ -1485,6 +1485,22 @@
             return reason || '';
         }
       };
+      const lookupContextText = (value) => value == null || value === '' ? '—' : String(value);
+      const lookupContextBoolText = (value) => typeof value === 'boolean' ? boolLabel(value) : '—';
+      const resourceLogsLookupContextFields = (lookupContext) => [
+        ['Lookup region', lookupContextText(lookupContext?.region)],
+        ['Control account ID', lookupContextText(lookupContext?.controlAccountId)],
+        ['Target account ID', lookupContextText(lookupContext?.targetAccountId)],
+        ['Cross-account lookup', lookupContextBoolText(lookupContext?.crossAccount)],
+        ['Observer role configured', lookupContextBoolText(lookupContext?.observerRoleConfigured)],
+      ];
+      const createResourceLogsLookupContextGrid = (lookupContext, extraFields = []) => {
+        const metadata = createElement('div', 'detail-grid');
+        [...extraFields, ...resourceLogsLookupContextFields(lookupContext)].forEach(([label, value]) => {
+          metadata.append(createMetric(label, value));
+        });
+        return metadata;
+      };
       const fetchResourceLogs = (deploymentName, resource) => {
         const params = new URLSearchParams({
           resourceType: resource.type || '',
@@ -1498,23 +1514,26 @@
       };
       const renderResourceLogsPayload = (section, result) => {
         if (!result?.available) {
-          renderResourceLogsState(section, 'Recent logs are unavailable for this resource.');
+          const metadata = createResourceLogsLookupContextGrid(result?.lookupContext);
           const unavailableReason = resourceLogsUnavailableReasonText(result?.unavailableReason);
-          if (unavailableReason) {
-            section.append(createElement('div', 'detail-condition-meta', unavailableReason));
-          }
+          const details = unavailableReason
+            ? [createElement('div', 'detail-condition-meta', unavailableReason)]
+            : [];
+          renderResourceLogsState(section, 'Recent logs are unavailable for this resource.', '', [metadata], details);
           return;
         }
 
         const entries = result.entries || [];
         if (!entries.length) {
-          renderResourceLogsState(section, 'No recent logs are available for this resource.');
+          const metadata = createResourceLogsLookupContextGrid(result?.lookupContext);
+          renderResourceLogsState(section, 'No recent logs are available for this resource.', '', [metadata]);
           return;
         }
 
         const fragment = [];
-        const metadata = createElement('div', 'detail-grid');
-        metadata.append(createMetric('Logs source', metricValue(result.source)));
+        const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, [
+          ['Logs source', metricValue(result.source)],
+        ]);
         fragment.push(metadata);
 
         const logList = createElement('ol', 'detail-list');

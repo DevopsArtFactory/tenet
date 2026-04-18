@@ -64,9 +64,11 @@ This page is where Tenet can still show the deeper operational slices:
 - runtime history
 - conditions
 - artifact context
-- recent logs when available
+- recent logs plus the explicit lookup path Tenet used
 
 The goal is to make troubleshooting possible without forcing the user to jump directly into raw AWS consoles for the first step.
+
+For recent logs, the embedded card keeps backend lookup context visible with operator-facing labels such as `Lookup region`, `Control account ID`, `Target account ID`, `Cross-account lookup`, and `Observer role configured`. Those fields stay visible in unavailable and empty states so operators can see where Tenet looked before switching to raw AWS troubleshooting.
 
 The deployment-events route is intentionally read-only and controller-derived. It reflects persisted runtime history entries, returns `events: []` when a deployment exists without history yet, and should not be treated as a full durable audit system.
 

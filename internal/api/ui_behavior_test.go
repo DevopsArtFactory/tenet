@@ -2380,25 +2380,39 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   if (!loadingText.includes('Recent logs')) throw new Error('expected resource page to render recent logs section heading while loading');
   if (!loadingText.includes('Loading recent logs…')) throw new Error('expected resource page to render loading state for recent logs');
   if (!loadingFetchCalls.includes(logsURL)) throw new Error('expected resource page to lazy-load logs for the selected resource');
-  resolveLogs({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', entries: [] }) });
+  resolveLogs({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, entries: [] }) });
   await settle();
 
   const unavailableRun = await renderWithFetch((url) => {
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'cross_account_not_configured', entries: [] }) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: false }, unavailableReason: 'cross_account_not_configured', entries: [] }) });
     throw new Error('unexpected unavailable fetch url: ' + url);
   });
   const unavailableText = collectText(unavailableRun.document.getElementById('accounts')).join(' | ');
   if (!unavailableText.includes('Recent logs are unavailable for this resource.')) throw new Error('expected resource page unavailable recent logs state');
   if (!unavailableText.includes('Cross-account access is not configured for this deployment.')) throw new Error('expected unavailable recent logs state to surface friendly provider reason');
+  if (!unavailableText.includes('Lookup region')) throw new Error('expected unavailable recent logs state to label lookup region');
+  if (!unavailableText.includes('ap-northeast-2')) throw new Error('expected unavailable recent logs state to show lookup region value');
+  if (!unavailableText.includes('Control account ID')) throw new Error('expected unavailable recent logs state to label control account');
+  if (!unavailableText.includes('123456789012')) throw new Error('expected unavailable recent logs state to show control account');
+  if (!unavailableText.includes('Target account ID')) throw new Error('expected unavailable recent logs state to label target account');
+  if (!unavailableText.includes('210987654321')) throw new Error('expected unavailable recent logs state to show target account');
+  if (!unavailableText.includes('Cross-account lookup')) throw new Error('expected unavailable recent logs state to label cross-account lookup');
+  if (!unavailableText.includes('Observer role configured')) throw new Error('expected unavailable recent logs state to label observer role configuration');
+  if (!unavailableText.includes('False')) throw new Error('expected unavailable recent logs state to show observer role not configured');
 
   const emptyRun = await renderWithFetch((url) => {
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', entries: [] }) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, entries: [] }) });
     throw new Error('unexpected empty fetch url: ' + url);
   });
   const emptyText = collectText(emptyRun.document.getElementById('accounts')).join(' | ');
   if (!emptyText.includes('No recent logs are available for this resource.')) throw new Error('expected resource page empty recent logs state');
+  if (!emptyText.includes('Lookup region')) throw new Error('expected empty recent logs state to label lookup region');
+  if (!emptyText.includes('Cross-account lookup')) throw new Error('expected empty recent logs state to label cross-account lookup');
+  if (!emptyText.includes('Observer role configured')) throw new Error('expected empty recent logs state to label observer role configuration');
+  if (!emptyText.includes('False')) throw new Error('expected empty recent logs state to show same-account lookup');
+  if (!emptyText.includes('True')) throw new Error('expected empty recent logs state to show observer role configured');
 
   const failedStatusRun = await renderWithFetch((url) => {
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
@@ -2422,13 +2436,18 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
 
   const populatedRun = await renderWithFetch((url) => {
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', entries: [{ timestamp: '2026-04-16T07:11:00Z', stream: 'codedeploy/bluegreen/1', message: '<img src=x onerror=1> rollback check passed' }] }) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, entries: [{ timestamp: '2026-04-16T07:11:00Z', stream: 'codedeploy/bluegreen/1', message: '<img src=x onerror=1> rollback check passed' }] }) });
     throw new Error('unexpected populated fetch url: ' + url);
   });
   await settle();
   const populatedText = collectText(populatedRun.document.getElementById('accounts')).join(' | ');
   if (!populatedText.includes('Logs source')) throw new Error('expected populated recent logs section to show source');
   if (!populatedText.includes('cloudwatch')) throw new Error('expected populated recent logs section to show source value');
+  if (!populatedText.includes('Lookup region')) throw new Error('expected populated recent logs section to label lookup region');
+  if (!populatedText.includes('Control account ID')) throw new Error('expected populated recent logs section to label control account');
+  if (!populatedText.includes('Target account ID')) throw new Error('expected populated recent logs section to label target account');
+  if (!populatedText.includes('Cross-account lookup')) throw new Error('expected populated recent logs section to label cross-account lookup');
+  if (!populatedText.includes('Observer role configured')) throw new Error('expected populated recent logs section to label observer role configuration');
   if (!populatedText.includes('Log stream · codedeploy/bluegreen/1')) throw new Error('expected populated recent logs section to show stream');
   if (!populatedText.includes('Log timestamp · 2026-04-16T07:11:00Z')) throw new Error('expected populated recent logs section to show timestamp');
   if (!populatedText.includes('<img src=x onerror=1> rollback check passed')) throw new Error('expected populated recent logs section to render raw log message text safely');

@@ -857,8 +857,8 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 		"resourceName: resource.name || '',",
 		"fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-logs?${params.toString()}`)",
 		"if (!response.ok) throw new Error(`resource logs request failed (${response.status})`);",
-		"const renderResourceLogsState = (container, text, className = '') => {",
-		"container.replaceChildren(heading, stateNode);",
+		"const renderResourceLogsState = (container, text, className = '', beforeNodes = [], afterNodes = []) => {",
+		"container.replaceChildren(heading, ...beforeNodes, stateNode, ...afterNodes);",
 		"const resourceLogsUnavailableReasonText = (reason) => {",
 		"case 'unsupported_resource_type':",
 		"return 'Recent logs are not supported for this resource type.';",
@@ -866,17 +866,33 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 		"return 'Cross-account access is not configured for this deployment.';",
 		"case 'aws_unavailable':",
 		"return 'AWS access is currently unavailable for recent logs.';",
+		"const lookupContextText = (value) => value == null || value === '' ? '—' : String(value);",
+		"const lookupContextBoolText = (value) => typeof value === 'boolean' ? boolLabel(value) : '—';",
+		"const resourceLogsLookupContextFields = (lookupContext) => [",
+		"['Lookup region', lookupContextText(lookupContext?.region)]",
+		"['Control account ID', lookupContextText(lookupContext?.controlAccountId)]",
+		"['Target account ID', lookupContextText(lookupContext?.targetAccountId)]",
+		"['Cross-account lookup', lookupContextBoolText(lookupContext?.crossAccount)]",
+		"['Observer role configured', lookupContextBoolText(lookupContext?.observerRoleConfigured)]",
+		"const createResourceLogsLookupContextGrid = (lookupContext, extraFields = []) => {",
+		"[...extraFields, ...resourceLogsLookupContextFields(lookupContext)].forEach(([label, value]) => {",
 		"const unavailableReason = resourceLogsUnavailableReasonText(result?.unavailableReason);",
-		"section.append(createElement('div', 'detail-condition-meta', unavailableReason));",
+		"const metadata = createResourceLogsLookupContextGrid(result?.lookupContext);",
+		"const details = unavailableReason",
+		"renderResourceLogsState(section, 'Recent logs are unavailable for this resource.', '', [metadata], details);",
+		"renderResourceLogsState(section, 'No recent logs are available for this resource.', '', [metadata]);",
 		"const renderResourceLogsSection = (section, deploymentName, resource) => {",
 		"const logsKey = resourceLogCacheKey(deploymentName, resource);",
 		"renderResourceLogsState(section, 'Loading recent logs…');",
-		"renderResourceLogsState(section, 'Recent logs are unavailable for this resource.');",
-		"renderResourceLogsState(section, 'No recent logs are available for this resource.');",
 		"renderResourceLogsState(container, `Failed to load recent logs: ${error.message}`, 'error')",
 		"createDetailSection('Recent logs');",
 		"Recent logs",
 		"Logs source",
+		"Lookup region",
+		"Control account ID",
+		"Target account ID",
+		"Cross-account lookup",
+		"Observer role configured",
 		"Log stream",
 		"Log timestamp",
 		"replaceChildren",
@@ -927,6 +943,12 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	text := string(body)
 	if !strings.Contains(text, "assert 'Recent logs' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Recent logs")
+	}
+	if !strings.Contains(text, "assert 'Lookup region' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains Lookup region")
+	}
+	if !strings.Contains(text, "assert 'Observer role configured' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains Observer role configured")
 	}
 	if !strings.Contains(text, "assert 'Controller runtime events' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains controller runtime events")
@@ -1225,7 +1247,7 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"GET /v1/applies/{applyId}",
 			"/?page=plan&deployment=payments-api-prod&planId={planId}&applyId={applyId}",
 			"correlated structured `http_request` logs with stable fields such as `request_id`, `method`, `path`, `status`, `duration_ms`, and `result`",
-			"`Plan preview actions`, `Apply request actions`, `Controller runtime events`, and `Recent logs`",
+			"`Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Lookup region`, and `Observer role configured`",
 			"make smoke-docker",
 		},
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
@@ -1241,7 +1263,7 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"GET /v1/applies/{applyId}",
 			"/?page=plan&deployment=payments-api-prod&planId={planId}&applyId={applyId}",
 			"correlated structured `http_request` logs with stable fields such as `request_id`, `method`, `path`, `status`, `duration_ms`, and `result`",
-			"`Plan preview actions`, `Apply request actions`, `Controller runtime events`, and `Recent logs`",
+			"`Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Lookup region`, and `Observer role configured`",
 			"`docker compose down --remove-orphans` even on failure",
 		},
 	}

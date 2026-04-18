@@ -45,6 +45,13 @@ The additive `lookupContext` object is always present, including unavailable res
 
 The resource-detail page at `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}` now renders a `Recent logs` section and lazy-loads this route after the deployment detail payload resolves.
 
+When the payload arrives, the card surfaces the backend `lookupContext` directly with operator-friendly labels:
+- `Lookup region`
+- `Control account ID`
+- `Target account ID`
+- `Cross-account lookup`
+- `Observer role configured`
+
 The UI keeps the logs slice narrowly scoped to the selected resource and uses safe DOM construction only:
 - `document.createElement`
 - `textContent`
@@ -53,9 +60,9 @@ The UI keeps the logs slice narrowly scoped to the selected resource and uses sa
 
 Rendered states:
 - loading: `Loading recent logs…`
-- unavailable: `Recent logs are unavailable for this resource.` plus friendly UI copy mapped from known provider `unavailableReason` codes such as `unsupported_resource_type`, `cross_account_not_configured`, `no_log_source`, `no_running_tasks`, `no_instances`, `resource_not_found`, and `aws_unavailable`
-- empty: `No recent logs are available for this resource.` when the backend returns `available=true` with `entries=[]`
-- populated: source metadata plus per-entry timestamp, optional stream, and message text
+- unavailable: `Recent logs are unavailable for this resource.` plus the lookup-context fields above and friendly UI copy mapped from known provider `unavailableReason` codes such as `unsupported_resource_type`, `cross_account_not_configured`, `no_log_source`, `no_running_tasks`, `no_instances`, `resource_not_found`, and `aws_unavailable`
+- empty: `No recent logs are available for this resource.` plus the same lookup-context fields when the backend returns `available=true` with `entries=[]`
+- populated: source metadata, the same lookup-context fields, and per-entry timestamp, optional stream, and message text
 
 ## Current limitations
 
