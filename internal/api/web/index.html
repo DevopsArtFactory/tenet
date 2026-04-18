@@ -98,6 +98,9 @@
       .quick-nav-links { display:flex; flex-wrap:wrap; gap: 10px; }
       .detail-section { padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.05); background: rgba(255,255,255,.03); }
       .detail-section h4 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+      .detail-section-head { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap: 10px; margin-bottom: 10px; }
+      .detail-section-head h4 { margin: 0; }
+      .detail-section-actions { display:flex; flex-wrap:wrap; gap: 10px; }
       .detail-list { margin: 0; padding-left: 18px; display:grid; gap: 8px; }
       .detail-list li::marker { color: var(--blue); }
       .detail-step-meta, .detail-condition-meta { display:block; margin-top: 4px; color: var(--muted); font-size: 13px; }
@@ -1525,13 +1528,35 @@
         section.append(createElement('h4', '', title));
         return section;
       };
+      const createDetailSectionHeader = (title, actions = []) => {
+        const head = createElement('div', 'detail-section-head');
+        head.append(createElement('h4', '', title));
+        if (actions.length) {
+          const actionBar = createElement('div', 'detail-section-actions');
+          actionBar.append(...actions);
+          head.append(actionBar);
+        }
+        return head;
+      };
+      const createRefreshButton = (label, disabled, onRefresh) => {
+        const button = createElement('button', 'toolbar-button', label);
+        button.type = 'button';
+        button.disabled = disabled;
+        if (typeof onRefresh === 'function') {
+          button.addEventListener('click', () => {
+            if (button.disabled) return;
+            onRefresh();
+          });
+        }
+        return button;
+      };
       const renderDetailState = (container, text, className = '') => {
         const stateNode = createElement('div', 'detail-state', text);
         if (className) stateNode.classList.add(className);
         container.replaceChildren(stateNode);
       };
-      const renderResourceLogsState = (container, text, className = '', beforeNodes = [], afterNodes = []) => {
-        const heading = createElement('h4', '', 'Recent logs');
+      const renderResourceLogsState = (container, text, className = '', beforeNodes = [], afterNodes = [], actions = []) => {
+        const heading = createDetailSectionHeader('Recent logs', actions);
         const stateNode = createElement('div', 'detail-state', text);
         if (className) stateNode.classList.add(className);
         container.replaceChildren(heading, ...beforeNodes, stateNode, ...afterNodes);
@@ -1572,6 +1597,13 @@
         });
         return metadata;
       };
+      const createResourceLogsActions = (section, deploymentName, resource, isLoading = false) => [
+        createRefreshButton(
+          'Refresh recent logs',
+          isLoading || !deploymentName || !resource?.type || !resource?.name,
+          () => renderResourceLogsSection(section, deploymentName, resource, { force: true }).catch(() => {}),
+        ),
+      ];
       const lookupContextFields = (lookupContext) => resourceLogsLookupContextFields(lookupContext);
       const createLookupContextGrid = (lookupContext, extraFields = []) => {
         const metadata = createElement('div', 'detail-grid');
@@ -1595,21 +1627,22 @@
             return response.json();
           });
       };
-      const renderResourceLogsPayload = (section, result) => {
+      const renderResourceLogsPayload = (section, deploymentName, resource, result) => {
+        const actions = createResourceLogsActions(section, deploymentName, resource);
         if (!result?.available) {
           const metadata = createResourceLogsLookupContextGrid(result?.lookupContext);
           const unavailableReason = resourceLogsUnavailableReasonText(result?.unavailableReason);
           const details = unavailableReason
             ? [createElement('div', 'detail-condition-meta', unavailableReason)]
             : [];
-          renderResourceLogsState(section, 'Recent logs are unavailable for this resource.', '', [metadata], details);
+          renderResourceLogsState(section, 'Recent logs are unavailable for this resource.', '', [metadata], details, actions);
           return;
         }
 
         const entries = result.entries || [];
         if (!entries.length) {
           const metadata = createResourceLogsLookupContextGrid(result?.lookupContext);
-          renderResourceLogsState(section, 'No recent logs are available for this resource.', '', [metadata]);
+          renderResourceLogsState(section, 'No recent logs are available for this resource.', '', [metadata], [], actions);
           return;
         }
 
@@ -1633,38 +1666,47 @@
           logList.append(logItem);
         });
         fragment.push(logList);
-        section.replaceChildren(createElement('h4', '', 'Recent logs'), ...fragment);
+        section.replaceChildren(createDetailSectionHeader('Recent logs', actions), ...fragment);
       };
-      const renderResourceLogsSection = (section, deploymentName, resource) => {
+      const renderResourceLogsSection = (section, deploymentName, resource, options = {}) => {
+        const force = Boolean(options?.force);
         const logsKey = resourceLogCacheKey(deploymentName, resource);
         const cached = resourceLogStateByKey.get(logsKey);
+        const loadingActions = createResourceLogsActions(section, deploymentName, resource, true);
 
         if (!deploymentName || !resource?.type || !resource?.name) {
-          renderResourceLogsState(section, 'Recent logs are unavailable for this resource.');
+          renderResourceLogsState(section, 'Recent logs are unavailable for this resource.', '', [], [], createResourceLogsActions(section, deploymentName, resource));
           return Promise.resolve(null);
         }
-        if (cached?.status === 'ready') {
-          renderResourceLogsPayload(section, cached.result);
+        if (!force && cached?.status === 'ready') {
+          renderResourceLogsPayload(section, deploymentName, resource, cached.result);
           return Promise.resolve(cached.result);
         }
         if (cached?.status === 'loading') {
           resourceLogStateByKey.set(logsKey, { ...cached, sections: [...(cached.sections || []), section] });
-          renderResourceLogsState(section, 'Loading recent logs…');
+          renderResourceLogsState(section, 'Loading recent logs…', '', [], [], loadingActions);
           return cached.promise;
         }
 
-        renderResourceLogsState(section, 'Loading recent logs…');
+        renderResourceLogsState(section, 'Loading recent logs…', '', [], [], loadingActions);
         const promise = fetchResourceLogs(deploymentName, resource)
           .then((result) => {
             const current = resourceLogStateByKey.get(logsKey);
             resourceLogStateByKey.set(logsKey, { status: 'ready', result });
-            (current?.sections || []).forEach((container) => renderResourceLogsPayload(container, result));
+            (current?.sections || []).forEach((container) => renderResourceLogsPayload(container, deploymentName, resource, result));
             return result;
           })
           .catch((error) => {
             const current = resourceLogStateByKey.get(logsKey);
             resourceLogStateByKey.set(logsKey, { status: 'error', error });
-            (current?.sections || []).forEach((container) => renderResourceLogsState(container, `Failed to load recent logs: ${error.message}`, 'error'));
+            (current?.sections || []).forEach((container) => renderResourceLogsState(
+              container,
+              `Failed to load recent logs: ${error.message}`,
+              'error',
+              [],
+              [],
+              createResourceLogsActions(container, deploymentName, resource),
+            ));
             throw error;
           });
 
@@ -1684,8 +1726,15 @@
             return response.json();
           });
       };
-      const renderResourceInspectionState = (container, text, className = '', beforeNodes = [], afterNodes = []) => {
-        const heading = createElement('h4', '', 'Live inspection');
+      const createResourceInspectionActions = (section, deploymentName, resource, isLoading = false) => [
+        createRefreshButton(
+          'Refresh live inspection',
+          isLoading || !deploymentName || !resource?.type || !resource?.name,
+          () => renderResourceInspectionSection(section, deploymentName, resource, { force: true }).catch(() => {}),
+        ),
+      ];
+      const renderResourceInspectionState = (container, text, className = '', beforeNodes = [], afterNodes = [], actions = []) => {
+        const heading = createDetailSectionHeader('Live inspection', actions);
         const stateNode = createElement('div', 'detail-state', text);
         if (className) stateNode.classList.add(className);
         container.replaceChildren(heading, ...beforeNodes, stateNode, ...afterNodes);
@@ -1722,8 +1771,9 @@
         section.append(list);
         return section;
       };
-      const renderECSServiceInspection = (section, result) => {
+      const renderECSServiceInspection = (section, deploymentName, resource, result) => {
         const service = result?.ecsService;
+        const actions = createResourceInspectionActions(section, deploymentName, resource);
         const metadata = createLookupContextGrid(result?.lookupContext, [
           ['Inspection source', metricValue(result?.source)],
           ['Service name', textOrDash(service?.serviceName)],
@@ -1774,7 +1824,7 @@
           'No recent ECS service events are available for this service.',
         );
         section.replaceChildren(
-          createElement('h4', '', 'Live inspection'),
+          createDetailSectionHeader('Live inspection', actions),
           createElement('p', 'detail-section-copy', 'Live ECS service inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
           metadata,
           deploymentsSection,
@@ -1791,8 +1841,9 @@
         if (template.id) parts.push(`id ${template.id}`);
         return parts.length ? parts.join(' · ') : '—';
       };
-      const renderAutoScalingGroupInspection = (section, result) => {
+      const renderAutoScalingGroupInspection = (section, deploymentName, resource, result) => {
         const group = result?.autoScalingGroup;
+        const actions = createResourceInspectionActions(section, deploymentName, resource);
         const metadata = createLookupContextGrid(result?.lookupContext, [
           ['Inspection source', metricValue(result?.source)],
           ['Auto Scaling Group name', textOrDash(group?.autoScalingGroupName)],
@@ -1854,7 +1905,7 @@
           'No mixed-instances launch template overrides are configured for this Auto Scaling Group.',
         );
         section.replaceChildren(
-          createElement('h4', '', 'Live inspection'),
+          createDetailSectionHeader('Live inspection', actions),
           createElement('p', 'detail-section-copy', 'Live Auto Scaling Group inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
           metadata,
           targetGroupsSection,
@@ -1870,8 +1921,9 @@
             return textOrDash(value);
         }
       };
-      const renderTrafficRoutingInspection = (section, result) => {
+      const renderTrafficRoutingInspection = (section, deploymentName, resource, result) => {
         const trafficRouting = result?.trafficRoutingResource;
+        const actions = createResourceInspectionActions(section, deploymentName, resource);
         const metadata = createLookupContextGrid(result?.lookupContext, [
           ['Inspection source', metricValue(result?.source)],
           ['Resource kind', textOrDash(trafficRouting?.kind)],
@@ -1884,13 +1936,14 @@
           createElement('p', 'detail-section-copy', textOrDash(trafficRouting?.summary)),
         );
         section.replaceChildren(
-          createElement('h4', '', 'Live inspection'),
+          createDetailSectionHeader('Live inspection', actions),
           createElement('p', 'detail-section-copy', 'Read-only traffic-routing summary from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
           metadata,
           summarySection,
         );
       };
-      const renderResourceInspectionPayload = (section, result) => {
+      const renderResourceInspectionPayload = (section, deploymentName, resource, result) => {
+        const actions = createResourceInspectionActions(section, deploymentName, resource);
         const metadata = createLookupContextGrid(result?.lookupContext, [
           ['Inspection source', metricValue(result?.source)],
         ]);
@@ -1899,53 +1952,62 @@
           const details = unavailableReason
             ? [createElement('div', 'detail-condition-meta', unavailableReason)]
             : [];
-          renderResourceInspectionState(section, 'Live inspection is unavailable for this resource.', '', [metadata], details);
+          renderResourceInspectionState(section, 'Live inspection is unavailable for this resource.', '', [metadata], details, actions);
           return;
         }
         if (result?.ecsService) {
-          renderECSServiceInspection(section, result);
+          renderECSServiceInspection(section, deploymentName, resource, result);
           return;
         }
         if (result?.autoScalingGroup) {
-          renderAutoScalingGroupInspection(section, result);
+          renderAutoScalingGroupInspection(section, deploymentName, resource, result);
           return;
         }
         if (result?.trafficRoutingResource) {
-          renderTrafficRoutingInspection(section, result);
+          renderTrafficRoutingInspection(section, deploymentName, resource, result);
           return;
         }
-        renderResourceInspectionState(section, 'No live inspection details are available for this resource yet.', '', [metadata]);
+        renderResourceInspectionState(section, 'No live inspection details are available for this resource yet.', '', [metadata], [], actions);
       };
-      const renderResourceInspectionSection = (section, deploymentName, resource) => {
+      const renderResourceInspectionSection = (section, deploymentName, resource, options = {}) => {
+        const force = Boolean(options?.force);
         const inspectionKey = resourceInspectionCacheKey(deploymentName, resource);
         const cached = resourceInspectionStateByKey.get(inspectionKey);
+        const loadingActions = createResourceInspectionActions(section, deploymentName, resource, true);
 
         if (!deploymentName || !resource?.type || !resource?.name) {
-          renderResourceInspectionState(section, 'Live inspection is unavailable for this resource.');
+          renderResourceInspectionState(section, 'Live inspection is unavailable for this resource.', '', [], [], createResourceInspectionActions(section, deploymentName, resource));
           return Promise.resolve(null);
         }
-        if (cached?.status === 'ready') {
-          renderResourceInspectionPayload(section, cached.result);
+        if (!force && cached?.status === 'ready') {
+          renderResourceInspectionPayload(section, deploymentName, resource, cached.result);
           return Promise.resolve(cached.result);
         }
         if (cached?.status === 'loading') {
           resourceInspectionStateByKey.set(inspectionKey, { ...cached, sections: [...(cached.sections || []), section] });
-          renderResourceInspectionState(section, 'Loading live inspection…');
+          renderResourceInspectionState(section, 'Loading live inspection…', '', [], [], loadingActions);
           return cached.promise;
         }
 
-        renderResourceInspectionState(section, 'Loading live inspection…');
+        renderResourceInspectionState(section, 'Loading live inspection…', '', [], [], loadingActions);
         const promise = fetchResourceInspection(deploymentName, resource)
           .then((result) => {
             const current = resourceInspectionStateByKey.get(inspectionKey);
             resourceInspectionStateByKey.set(inspectionKey, { status: 'ready', result });
-            (current?.sections || []).forEach((container) => renderResourceInspectionPayload(container, result));
+            (current?.sections || []).forEach((container) => renderResourceInspectionPayload(container, deploymentName, resource, result));
             return result;
           })
           .catch((error) => {
             const current = resourceInspectionStateByKey.get(inspectionKey);
             resourceInspectionStateByKey.set(inspectionKey, { status: 'error', error });
-            (current?.sections || []).forEach((container) => renderResourceInspectionState(container, `Failed to load live inspection: ${error.message}`, 'error'));
+            (current?.sections || []).forEach((container) => renderResourceInspectionState(
+              container,
+              `Failed to load live inspection: ${error.message}`,
+              'error',
+              [],
+              [],
+              createResourceInspectionActions(container, deploymentName, resource),
+            ));
             throw error;
           });
 
