@@ -367,13 +367,18 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"deployment events unavailable (${response.status})",
 		"deployment events request failed (${response.status})",
 		"const createDeploymentEventsIntro = () => createElement('div', 'detail-section-copy', 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.');",
+		"const createDeploymentEventsActions = (section, deploymentName, isLoading = false) => [",
+		"'Refresh runtime events'",
+		"() => renderDeploymentEventsSection(section, deploymentName, { force: true }).catch(() => {}),",
 		"const sortTimelineEvents = (events) => (events || [])",
-		"const renderDeploymentEventsState = (section, text, className = '', detailText = '') => {",
-		"const renderDeploymentEventsPayload = (section, result) => {",
+		"const renderDeploymentEventsState = (section, deploymentName, text, className = '', detailText = '', isLoading = false) => {",
+		"createDetailSectionHeader('Controller runtime events', createDeploymentEventsActions(section, deploymentName, isLoading))",
+		"const renderDeploymentEventsPayload = (section, deploymentName, result) => {",
 		"No controller runtime events have been persisted yet.",
 		"Controller runtime events are currently unavailable.",
 		"Loading controller runtime events…",
 		"Failed to load controller runtime events: ${error.message}",
+		"const force = Boolean(options?.force);",
 		"Rollout phase · ${event.rolloutPhase}",
 		"Rollout step · ${event.currentStep}",
 		"Event details · ${changeDetailsText(event.changeDetails)}",
@@ -1163,6 +1168,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Controller runtime events' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains controller runtime events")
 	}
+	if !strings.Contains(text, "assert 'Refresh runtime events' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh runtime events")
+	}
 	if !strings.Contains(text, "assert 'Audit timeline' in audit_ui, audit_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains audit timeline copy")
 	}
@@ -1209,6 +1217,7 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"assert isinstance(candidate_resource_inspection['autoScalingGroup'].get('autoScalingGroupName'), str) and candidate_resource_inspection['autoScalingGroup']['autoScalingGroupName'], candidate_resource_inspection",
 		"assert isinstance(candidate_resource_inspection['autoScalingGroup'].get('instances', []), list), candidate_resource_inspection",
 		"assert 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.' in ui, ui",
+		"assert 'Refresh runtime events' in ui, ui",
 		"assert 'Loading controller runtime events…' in ui, ui",
 		"assert 'No controller runtime events have been persisted yet.' in ui, ui",
 		"assert 'Controller runtime events are currently unavailable.' in ui, ui",
@@ -1366,6 +1375,37 @@ func TestOverviewDocsLockECSRollingFallbackContract(t *testing.T) {
 			"worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service",
 			"Live inspection",
 			"GET /v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
+	}
+}
+
+func TestOverviewDocsDescribeInPlaceControllerRuntimeEventRefresh(t *testing.T) {
+	files := map[string][]string{
+		"../../README.md": {
+			"`Refresh runtime events`",
+			"`GET /v1/overview/deployments/{deploymentName}/events` in place",
+		},
+		"../../docs/features/overview-dashboard.md": {
+			"`Refresh runtime events`",
+			"re-runs just that deployment-events route in place",
+		},
+		"../../docs/architecture/tenet-v1-overview-ui.md": {
+			"`Refresh runtime events`",
+			"`GET /v1/overview/deployments/{deploymentName}/events` in place",
+			"preserve the bookmarkable `/?page=application...` URL",
 		},
 	}
 
