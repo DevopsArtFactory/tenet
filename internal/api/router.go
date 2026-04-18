@@ -34,9 +34,37 @@ func respondInternalError(w http.ResponseWriter) {
 	http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 }
 
+func respondUnavailableError(w http.ResponseWriter, message string) {
+	http.Error(w, message, http.StatusServiceUnavailable)
+}
+
+func isRequestContextError(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
 func respondLookupError(w http.ResponseWriter, err error) {
 	if errors.Is(err, statusstore.ErrNotFound) || errors.Is(err, planpreview.ErrNotFound) || errors.Is(err, applyrequest.ErrNotFound) {
 		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	respondInternalError(w)
+}
+
+func respondReadProviderError(w http.ResponseWriter, err error, unavailableMessage string) {
+	if isRequestContextError(err) {
+		respondUnavailableError(w, unavailableMessage)
+		return
+	}
+	respondInternalError(w)
+}
+
+func respondReadLookupError(w http.ResponseWriter, err error, unavailableMessage string) {
+	if errors.Is(err, statusstore.ErrNotFound) || errors.Is(err, planpreview.ErrNotFound) || errors.Is(err, applyrequest.ErrNotFound) {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if isRequestContextError(err) {
+		respondUnavailableError(w, unavailableMessage)
 		return
 	}
 	respondInternalError(w)
@@ -77,19 +105,19 @@ type Options struct {
 	BuildInfo                            buildinfo.Info
 	Logger                               *slog.Logger
 	RequestTimeout                       time.Duration
-	CatalogSummary                       func() (catalog.Summary, error)
-	CatalogDeployments                   func() ([]catalog.DeploymentView, error)
-	CatalogEnvironments                  func() ([]catalog.EnvironmentView, error)
-	CatalogAccounts                      func() ([]catalog.AccountView, error)
-	CatalogPlacements                    func() ([]catalog.PlacementView, error)
-	CatalogTopology                      func() (catalog.TopologySnapshot, error)
-	OverviewApplications                 func() ([]catalog.ApplicationOverview, error)
-	OverviewApplication                  func(string) (catalog.ApplicationOverviewDetail, error)
-	OverviewAccounts                     func() ([]catalog.AccountOverview, error)
-	OverviewAccount                      func(string) (catalog.AccountOverviewDetail, error)
-	OverviewProjectEnvironment           func(string, string, string) (catalog.ProjectEnvironmentOverviewDetail, error)
-	OverviewDeployment                   func(string) (catalog.DeploymentOverviewDetail, error)
-	OverviewDeploymentEvents             func(string) (catalog.DeploymentOverviewEvents, error)
+	CatalogSummary                       func(context.Context) (catalog.Summary, error)
+	CatalogDeployments                   func(context.Context) ([]catalog.DeploymentView, error)
+	CatalogEnvironments                  func(context.Context) ([]catalog.EnvironmentView, error)
+	CatalogAccounts                      func(context.Context) ([]catalog.AccountView, error)
+	CatalogPlacements                    func(context.Context) ([]catalog.PlacementView, error)
+	CatalogTopology                      func(context.Context) (catalog.TopologySnapshot, error)
+	OverviewApplications                 func(context.Context) ([]catalog.ApplicationOverview, error)
+	OverviewApplication                  func(context.Context, string) (catalog.ApplicationOverviewDetail, error)
+	OverviewAccounts                     func(context.Context) ([]catalog.AccountOverview, error)
+	OverviewAccount                      func(context.Context, string) (catalog.AccountOverviewDetail, error)
+	OverviewProjectEnvironment           func(context.Context, string, string, string) (catalog.ProjectEnvironmentOverviewDetail, error)
+	OverviewDeployment                   func(context.Context, string) (catalog.DeploymentOverviewDetail, error)
+	OverviewDeploymentEvents             func(context.Context, string) (catalog.DeploymentOverviewEvents, error)
 	OverviewDeploymentResourceLogs       func(context.Context, string, string, string) (resourcelogs.Result, error)
 	OverviewDeploymentResourceInspection func(context.Context, string, string, string) (resourceinspection.Result, error)
 	AuditLogs                            func(context.Context, auditlog.Query) (auditlog.Result, error)
@@ -98,8 +126,8 @@ type Options struct {
 	CreateApplyRequest                   func(context.Context, string) (applyrequest.CreateResult, error)
 	ApplyRequest                         func(context.Context, string) (applyrequest.Record, error)
 	TransitionApplyRequest               func(context.Context, string, applyrequest.TransitionRequest) (applyrequest.Record, error)
-	DeploymentStatuses                   func() ([]statusstore.Snapshot, error)
-	DeploymentStatus                     func(string) (statusstore.Snapshot, error)
+	DeploymentStatuses                   func(context.Context) ([]statusstore.Snapshot, error)
+	DeploymentStatus                     func(context.Context, string) (statusstore.Snapshot, error)
 }
 
 // NewRouter builds the API router for the Tenet control plane.
@@ -142,9 +170,9 @@ func NewRouter(options Options) http.Handler {
 			http.Error(w, "catalog summary unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		summary, err := options.CatalogSummary()
+		summary, err := options.CatalogSummary(r.Context())
 		if err != nil {
-			respondInternalError(w)
+			respondReadProviderError(w, err, "catalog summary unavailable")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -158,9 +186,9 @@ func NewRouter(options Options) http.Handler {
 			http.Error(w, "catalog deployments unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		deployments, err := options.CatalogDeployments()
+		deployments, err := options.CatalogDeployments(r.Context())
 		if err != nil {
-			respondInternalError(w)
+			respondReadProviderError(w, err, "catalog deployments unavailable")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -174,9 +202,9 @@ func NewRouter(options Options) http.Handler {
 			http.Error(w, "catalog environments unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		environments, err := options.CatalogEnvironments()
+		environments, err := options.CatalogEnvironments(r.Context())
 		if err != nil {
-			respondInternalError(w)
+			respondReadProviderError(w, err, "catalog environments unavailable")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -190,9 +218,9 @@ func NewRouter(options Options) http.Handler {
 			http.Error(w, "catalog accounts unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		accounts, err := options.CatalogAccounts()
+		accounts, err := options.CatalogAccounts(r.Context())
 		if err != nil {
-			respondInternalError(w)
+			respondReadProviderError(w, err, "catalog accounts unavailable")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -206,9 +234,9 @@ func NewRouter(options Options) http.Handler {
 			http.Error(w, "catalog placements unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		placements, err := options.CatalogPlacements()
+		placements, err := options.CatalogPlacements(r.Context())
 		if err != nil {
-			respondInternalError(w)
+			respondReadProviderError(w, err, "catalog placements unavailable")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -222,9 +250,9 @@ func NewRouter(options Options) http.Handler {
 			http.Error(w, "catalog topology unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		topology, err := options.CatalogTopology()
+		topology, err := options.CatalogTopology(r.Context())
 		if err != nil {
-			respondInternalError(w)
+			respondReadProviderError(w, err, "catalog topology unavailable")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -238,9 +266,9 @@ func NewRouter(options Options) http.Handler {
 			http.Error(w, "overview applications unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		applications, err := options.OverviewApplications()
+		applications, err := options.OverviewApplications(r.Context())
 		if err != nil {
-			respondInternalError(w)
+			respondReadProviderError(w, err, "overview applications unavailable")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -259,9 +287,9 @@ func NewRouter(options Options) http.Handler {
 			http.Error(w, "invalid deployment name", http.StatusBadRequest)
 			return
 		}
-		detail, err := options.OverviewApplication(name)
+		detail, err := options.OverviewApplication(r.Context(), name)
 		if err != nil {
-			respondLookupError(w, err)
+			respondReadLookupError(w, err, "overview application unavailable")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -275,9 +303,9 @@ func NewRouter(options Options) http.Handler {
 			http.Error(w, "overview accounts unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		accounts, err := options.OverviewAccounts()
+		accounts, err := options.OverviewAccounts(r.Context())
 		if err != nil {
-			respondInternalError(w)
+			respondReadProviderError(w, err, "overview accounts unavailable")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -295,9 +323,9 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "overview account unavailable", http.StatusServiceUnavailable)
 				return
 			}
-			detail, err := options.OverviewAccount(segments[0])
+			detail, err := options.OverviewAccount(r.Context(), segments[0])
 			if err != nil {
-				respondLookupError(w, err)
+				respondReadLookupError(w, err, "overview account unavailable")
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -307,9 +335,9 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "overview project environment unavailable", http.StatusServiceUnavailable)
 				return
 			}
-			detail, err := options.OverviewProjectEnvironment(segments[0], segments[2], segments[4])
+			detail, err := options.OverviewProjectEnvironment(r.Context(), segments[0], segments[2], segments[4])
 			if err != nil {
-				respondLookupError(w, err)
+				respondReadLookupError(w, err, "overview project environment unavailable")
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -334,9 +362,9 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "invalid deployment name", http.StatusBadRequest)
 				return
 			}
-			events, err := options.OverviewDeploymentEvents(name)
+			events, err := options.OverviewDeploymentEvents(r.Context(), name)
 			if err != nil {
-				respondLookupError(w, err)
+				respondReadLookupError(w, err, "overview deployment events unavailable")
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -359,13 +387,13 @@ func NewRouter(options Options) http.Handler {
 			if !ok {
 				return
 			}
-			if _, err := options.OverviewDeployment(name); err != nil {
-				respondLookupError(w, err)
+			if _, err := options.OverviewDeployment(r.Context(), name); err != nil {
+				respondReadLookupError(w, err, "overview deployment unavailable")
 				return
 			}
 			result, err := options.OverviewDeploymentResourceLogs(r.Context(), name, resourceType, resourceName)
 			if err != nil {
-				respondLookupError(w, err)
+				respondReadLookupError(w, err, "overview deployment resource logs unavailable")
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -388,13 +416,13 @@ func NewRouter(options Options) http.Handler {
 			if !ok {
 				return
 			}
-			if _, err := options.OverviewDeployment(name); err != nil {
-				respondLookupError(w, err)
+			if _, err := options.OverviewDeployment(r.Context(), name); err != nil {
+				respondReadLookupError(w, err, "overview deployment unavailable")
 				return
 			}
 			result, err := options.OverviewDeploymentResourceInspection(r.Context(), name, resourceType, resourceName)
 			if err != nil {
-				respondLookupError(w, err)
+				respondReadLookupError(w, err, "overview deployment resource inspection unavailable")
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -409,9 +437,9 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "invalid deployment name", http.StatusBadRequest)
 				return
 			}
-			detail, err := options.OverviewDeployment(name)
+			detail, err := options.OverviewDeployment(r.Context(), name)
 			if err != nil {
-				respondLookupError(w, err)
+				respondReadLookupError(w, err, "overview deployment unavailable")
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -598,9 +626,9 @@ func NewRouter(options Options) http.Handler {
 			http.Error(w, "deployment statuses unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		snapshots, err := options.DeploymentStatuses()
+		snapshots, err := options.DeploymentStatuses(r.Context())
 		if err != nil {
-			respondInternalError(w)
+			respondReadProviderError(w, err, "deployment statuses unavailable")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -619,9 +647,9 @@ func NewRouter(options Options) http.Handler {
 			http.Error(w, "invalid deployment name", http.StatusBadRequest)
 			return
 		}
-		snapshot, err := options.DeploymentStatus(name)
+		snapshot, err := options.DeploymentStatus(r.Context(), name)
 		if err != nil {
-			respondLookupError(w, err)
+			respondReadLookupError(w, err, "deployment status unavailable")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

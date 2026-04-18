@@ -72,11 +72,11 @@ type Result struct {
 type Service struct {
 	ListPlanPreviews  func() ([]planpreview.Record, error)
 	ListApplyRequests func() ([]applyrequest.Record, error)
-	ListDeployments   func() ([]catalog.DeploymentView, error)
+	ListDeployments   func(context.Context) ([]catalog.DeploymentView, error)
 }
 
 // List returns a newest-first local audit timeline derived from persisted records.
-func (s Service) List(_ context.Context, query Query) (Result, error) {
+func (s Service) List(ctx context.Context, query Query) (Result, error) {
 	if s.ListPlanPreviews == nil {
 		return Result{}, fmt.Errorf("audit log plan preview provider is required")
 	}
@@ -95,7 +95,7 @@ func (s Service) List(_ context.Context, query Query) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	deployments, err := s.loadDeployments()
+	deployments, err := s.loadDeployments(ctx)
 	if err != nil {
 		return Result{}, err
 	}
@@ -136,11 +136,11 @@ func (s Service) List(_ context.Context, query Query) (Result, error) {
 	return Result{Entries: entries}, nil
 }
 
-func (s Service) loadDeployments() (map[string]catalog.DeploymentView, error) {
+func (s Service) loadDeployments(ctx context.Context) (map[string]catalog.DeploymentView, error) {
 	if s.ListDeployments == nil {
 		return nil, nil
 	}
-	deployments, err := s.ListDeployments()
+	deployments, err := s.ListDeployments(ctx)
 	if err != nil {
 		return nil, err
 	}

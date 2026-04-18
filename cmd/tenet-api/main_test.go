@@ -105,7 +105,7 @@ func TestAPIOptionsOverviewDeploymentUsesNamedSnapshotLookup(t *testing.T) {
 		t.Fatalf("expected overview deployment provider")
 	}
 
-	detail, err := options.OverviewDeployment("api-prod")
+	detail, err := options.OverviewDeployment(context.Background(), "api-prod")
 	if err != nil {
 		t.Fatalf("OverviewDeployment returned error: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestAPIOptionsOverviewDeploymentReturnsCatalogOnlyDetailWhenSnapshotMissing
 		t.Fatalf("expected overview deployment provider")
 	}
 
-	detail, err := options.OverviewDeployment("worker-prod")
+	detail, err := options.OverviewDeployment(context.Background(), "worker-prod")
 	if err != nil {
 		t.Fatalf("OverviewDeployment returned error: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestAPIOptionsOverviewDeploymentReturnsNotFoundForRepoUnknownDeployment(t *
 		t.Fatalf("expected overview deployment provider")
 	}
 
-	_, err := options.OverviewDeployment("missing")
+	_, err := options.OverviewDeployment(context.Background(), "missing")
 	if !errors.Is(err, statusstore.ErrNotFound) {
 		t.Fatalf("expected not found error, got %v", err)
 	}
@@ -551,7 +551,7 @@ func TestAPIOptionsOverviewDeploymentEventsUsesNamedSnapshotLookup(t *testing.T)
 		t.Fatalf("expected overview deployment events provider")
 	}
 
-	events, err := options.OverviewDeploymentEvents("api-prod")
+	events, err := options.OverviewDeploymentEvents(context.Background(), "api-prod")
 	if err != nil {
 		t.Fatalf("OverviewDeploymentEvents returned error: %v", err)
 	}
@@ -578,7 +578,7 @@ func TestAPIOptionsOverviewDeploymentEventsReturnsEmptyListWhenSnapshotMissing(t
 		t.Fatalf("expected overview deployment events provider")
 	}
 
-	events, err := options.OverviewDeploymentEvents("worker-prod")
+	events, err := options.OverviewDeploymentEvents(context.Background(), "worker-prod")
 	if err != nil {
 		t.Fatalf("OverviewDeploymentEvents returned error: %v", err)
 	}
@@ -613,7 +613,7 @@ func TestAPIOptionsOverviewAccountUsesSnapshotListLookup(t *testing.T) {
 		t.Fatalf("expected overview account provider")
 	}
 
-	detail, err := options.OverviewAccount("123456789012")
+	detail, err := options.OverviewAccount(context.Background(), "123456789012")
 	if err != nil {
 		t.Fatalf("OverviewAccount returned error: %v", err)
 	}
@@ -641,7 +641,7 @@ func TestAPIOptionsOverviewAccountPropagatesSnapshotListErrors(t *testing.T) {
 		t.Fatalf("expected overview account provider")
 	}
 
-	_, err := options.OverviewAccount("123456789012")
+	_, err := options.OverviewAccount(context.Background(), "123456789012")
 	if !errors.Is(err, expected) {
 		t.Fatalf("expected snapshot list error, got %v", err)
 	}
@@ -671,7 +671,7 @@ func TestAPIOptionsOverviewApplicationsUsesSnapshotListLookup(t *testing.T) {
 		t.Fatalf("expected overview applications provider")
 	}
 
-	applications, err := options.OverviewApplications()
+	applications, err := options.OverviewApplications(context.Background())
 	if err != nil {
 		t.Fatalf("OverviewApplications returned error: %v", err)
 	}
@@ -697,7 +697,7 @@ func TestAPIOptionsOverviewApplicationsFallsBackToCatalogWhenStoreMissing(t *tes
 		t.Fatalf("expected overview applications provider")
 	}
 
-	applications, err := options.OverviewApplications()
+	applications, err := options.OverviewApplications(context.Background())
 	if err != nil {
 		t.Fatalf("OverviewApplications returned error: %v", err)
 	}
@@ -732,7 +732,7 @@ func TestAPIOptionsOverviewApplication(t *testing.T) {
 			t.Fatalf("expected overview application provider")
 		}
 
-		detail, err := options.OverviewApplication("api-prod")
+		detail, err := options.OverviewApplication(context.Background(), "api-prod")
 		if err != nil {
 			t.Fatalf("OverviewApplication returned error: %v", err)
 		}
@@ -759,7 +759,7 @@ func TestAPIOptionsOverviewApplication(t *testing.T) {
 			t.Fatalf("expected overview application provider")
 		}
 
-		detail, err := options.OverviewApplication("worker-prod")
+		detail, err := options.OverviewApplication(context.Background(), "worker-prod")
 		if err != nil {
 			t.Fatalf("OverviewApplication returned error: %v", err)
 		}
@@ -798,7 +798,7 @@ func TestAPIOptionsOverviewDetailProvidersFallBackToCatalogWhenStoreMissing(t *t
 		t.Fatalf("expected overview project/environment provider")
 	}
 
-	deployment, err := options.OverviewDeployment("api-prod")
+	deployment, err := options.OverviewDeployment(context.Background(), "api-prod")
 	if err != nil {
 		t.Fatalf("OverviewDeployment returned error: %v", err)
 	}
@@ -806,7 +806,7 @@ func TestAPIOptionsOverviewDetailProvidersFallBackToCatalogWhenStoreMissing(t *t
 		t.Fatalf("expected catalog-only deployment detail, got %+v", deployment)
 	}
 
-	accounts, err := options.OverviewAccounts()
+	accounts, err := options.OverviewAccounts(context.Background())
 	if err != nil {
 		t.Fatalf("OverviewAccounts returned error: %v", err)
 	}
@@ -814,7 +814,7 @@ func TestAPIOptionsOverviewDetailProvidersFallBackToCatalogWhenStoreMissing(t *t
 		t.Fatalf("expected catalog-only account overviews, got %+v", accounts)
 	}
 
-	account, err := options.OverviewAccount("123456789012")
+	account, err := options.OverviewAccount(context.Background(), "123456789012")
 	if err != nil {
 		t.Fatalf("OverviewAccount returned error: %v", err)
 	}
@@ -827,7 +827,7 @@ func TestAPIOptionsOverviewDetailProvidersFallBackToCatalogWhenStoreMissing(t *t
 
 	appRef := account.Deployments[0].AppRef
 	environmentRef := account.Deployments[0].EnvironmentRef
-	group, err := options.OverviewProjectEnvironment("123456789012", appRef, environmentRef)
+	group, err := options.OverviewProjectEnvironment(context.Background(), "123456789012", appRef, environmentRef)
 	if err != nil {
 		t.Fatalf("OverviewProjectEnvironment returned error: %v", err)
 	}

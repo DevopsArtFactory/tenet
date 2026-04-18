@@ -26,6 +26,8 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
 
+type contextKey string
+
 func assertInternalServerErrorResponse(t *testing.T, resp *httptest.ResponseRecorder, leaked string) {
 	t.Helper()
 	if resp.Code != http.StatusInternalServerError {
@@ -116,7 +118,7 @@ func TestRouterRecoversPanicsWithCorrelatedResponseAndLogs(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 		Logger:    logger,
-		CatalogSummary: func() (catalog.Summary, error) {
+		CatalogSummary: func(_ context.Context) (catalog.Summary, error) {
 			panic("boom")
 		},
 	})
@@ -160,7 +162,7 @@ func TestRouterReturnsExplicitTimeoutResponseAndLogsCorrelation(t *testing.T) {
 		BuildInfo:      buildinfo.Info{Version: "dev", Commit: "abc123"},
 		Logger:         logger,
 		RequestTimeout: 10 * time.Millisecond,
-		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+		OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 			return catalog.DeploymentOverviewDetail{Name: name}, nil
 		},
 		OverviewDeploymentResourceLogs: func(ctx context.Context, name, resourceType, resourceName string) (resourcelogs.Result, error) {
@@ -195,6 +197,142 @@ func TestRouterReturnsExplicitTimeoutResponseAndLogsCorrelation(t *testing.T) {
 	}
 	if entries[0]["request_id"] != "timeout-request-id" || entries[0]["status"] != float64(http.StatusServiceUnavailable) {
 		t.Fatalf("expected correlated timeout log entry, got %#v", entries[0])
+	}
+}
+
+func TestRouterCatalogSummaryPassesRequestContextToProvider(t *testing.T) {
+	const key contextKey = "catalog-summary"
+	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/summary", nil)
+	req = req.WithContext(context.WithValue(req.Context(), key, "trace-value"))
+
+	var got any
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		CatalogSummary: func(ctx context.Context) (catalog.Summary, error) {
+			got = ctx.Value(key)
+			return catalog.Summary{DeploymentCount: 1}, nil
+		},
+	})
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+	if got != "trace-value" {
+		t.Fatalf("expected request context value to reach provider, got %#v", got)
+	}
+}
+
+func TestRouterOverviewApplicationPassesRequestContextToProvider(t *testing.T) {
+	const key contextKey = "overview-application"
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/applications/payments-api-prod", nil)
+	req = req.WithContext(context.WithValue(req.Context(), key, "trace-value"))
+
+	var got any
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewApplication: func(ctx context.Context, name string) (catalog.ApplicationOverviewDetail, error) {
+			if name != "payments-api-prod" {
+				t.Fatalf("unexpected deployment name: %s", name)
+			}
+			got = ctx.Value(key)
+			return catalog.ApplicationOverviewDetail{Name: name}, nil
+		},
+	})
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+	if got != "trace-value" {
+		t.Fatalf("expected request context value to reach overview provider, got %#v", got)
+	}
+}
+
+func TestRouterCatalogSummaryTreatsCanceledContextAsUnavailable(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/summary", nil).WithContext(ctx)
+	resp := httptest.NewRecorder()
+
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		CatalogSummary: func(ctx context.Context) (catalog.Summary, error) {
+			return catalog.Summary{}, ctx.Err()
+		},
+	})
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 for canceled catalog request, got %d", resp.Code)
+	}
+	if body := resp.Body.String(); body != "catalog summary unavailable\n" {
+		t.Fatalf("expected unavailable body, got %q", body)
+	}
+}
+
+func TestRouterDeploymentStatusProviderObservesCanceledRequest(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req := httptest.NewRequest(http.MethodGet, "/v1/status/deployments/api-prod", nil).WithContext(ctx)
+
+	var got error
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		DeploymentStatus: func(ctx context.Context, name string) (statusstore.Snapshot, error) {
+			if name != "api-prod" {
+				t.Fatalf("expected deployment name api-prod, got %q", name)
+			}
+			got = ctx.Err()
+			return statusstore.Snapshot{}, ctx.Err()
+		},
+	})
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 for canceled provider error, got %d", resp.Code)
+	}
+	if body := resp.Body.String(); body != "deployment status unavailable\n" {
+		t.Fatalf("expected unavailable body, got %q", body)
+	}
+	if !errors.Is(got, context.Canceled) {
+		t.Fatalf("expected provider to observe context cancellation, got %v", got)
+	}
+}
+
+func TestRouterDeploymentStatusesProviderObservesRequestTimeout(t *testing.T) {
+	seenErr := make(chan error, 1)
+	router := NewRouter(Options{
+		BuildInfo:      buildinfo.Info{Version: "dev", Commit: "abc123"},
+		RequestTimeout: 10 * time.Millisecond,
+		DeploymentStatuses: func(ctx context.Context) ([]statusstore.Snapshot, error) {
+			<-ctx.Done()
+			seenErr <- ctx.Err()
+			return nil, ctx.Err()
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/status/deployments", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 timeout response, got %d", resp.Code)
+	}
+	select {
+	case err := <-seenErr:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("expected provider to observe deadline exceeded, got %v", err)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("timed out waiting for provider to observe request timeout")
 	}
 }
 
@@ -286,7 +424,7 @@ func TestRouterInfo(t *testing.T) {
 func TestRouterCatalogSummary(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		CatalogSummary: func() (catalog.Summary, error) {
+		CatalogSummary: func(_ context.Context) (catalog.Summary, error) {
 			return catalog.Summary{AccountCount: 1, EnvironmentCount: 2, DeploymentCount: 3}, nil
 		},
 	})
@@ -324,7 +462,7 @@ func TestRouterCatalogSummaryPropagatesErrors(t *testing.T) {
 	const upstreamErr = "boom: summary provider details"
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		CatalogSummary: func() (catalog.Summary, error) {
+		CatalogSummary: func(_ context.Context) (catalog.Summary, error) {
 			return catalog.Summary{}, errors.New(upstreamErr)
 		},
 	})
@@ -339,7 +477,7 @@ func TestRouterCatalogSummaryPropagatesErrors(t *testing.T) {
 func TestRouterCatalogDeployments(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		CatalogDeployments: func() ([]catalog.DeploymentView, error) {
+		CatalogDeployments: func(_ context.Context) ([]catalog.DeploymentView, error) {
 			return []catalog.DeploymentView{{Name: "api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}}, nil
 		},
 	})
@@ -376,7 +514,7 @@ func TestRouterCatalogDeploymentsUnavailable(t *testing.T) {
 func TestRouterCatalogDeploymentsPropagatesErrors(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		CatalogDeployments: func() ([]catalog.DeploymentView, error) {
+		CatalogDeployments: func(_ context.Context) ([]catalog.DeploymentView, error) {
 			return nil, errors.New("boom")
 		},
 	})
@@ -393,7 +531,7 @@ func TestRouterCatalogDeploymentsPropagatesErrors(t *testing.T) {
 func TestRouterCatalogEnvironments(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		CatalogEnvironments: func() ([]catalog.EnvironmentView, error) {
+		CatalogEnvironments: func(_ context.Context) ([]catalog.EnvironmentView, error) {
 			return []catalog.EnvironmentView{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2", NetworkRef: "prod-main"}}, nil
 		},
 	})
@@ -430,7 +568,7 @@ func TestRouterCatalogEnvironmentsUnavailable(t *testing.T) {
 func TestRouterCatalogEnvironmentsPropagatesErrors(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		CatalogEnvironments: func() ([]catalog.EnvironmentView, error) {
+		CatalogEnvironments: func(_ context.Context) ([]catalog.EnvironmentView, error) {
 			return nil, errors.New("boom")
 		},
 	})
@@ -447,7 +585,7 @@ func TestRouterCatalogEnvironmentsPropagatesErrors(t *testing.T) {
 func TestRouterCatalogAccounts(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		CatalogAccounts: func() ([]catalog.AccountView, error) {
+		CatalogAccounts: func(_ context.Context) ([]catalog.AccountView, error) {
 			return []catalog.AccountView{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}}, nil
 		},
 	})
@@ -484,7 +622,7 @@ func TestRouterCatalogAccountsUnavailable(t *testing.T) {
 func TestRouterCatalogAccountsPropagatesErrors(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		CatalogAccounts: func() ([]catalog.AccountView, error) {
+		CatalogAccounts: func(_ context.Context) ([]catalog.AccountView, error) {
 			return nil, errors.New("boom")
 		},
 	})
@@ -501,7 +639,7 @@ func TestRouterCatalogAccountsPropagatesErrors(t *testing.T) {
 func TestRouterCatalogPlacements(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		CatalogPlacements: func() ([]catalog.PlacementView, error) {
+		CatalogPlacements: func(_ context.Context) ([]catalog.PlacementView, error) {
 			return []catalog.PlacementView{{DeploymentName: "api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2", AccountName: "prod-core", AWSAccountID: "123456789012", Region: "ap-northeast-2", NetworkRef: "prod-main"}}, nil
 		},
 	})
@@ -538,7 +676,7 @@ func TestRouterCatalogPlacementsUnavailable(t *testing.T) {
 func TestRouterCatalogPlacementsPropagatesErrors(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		CatalogPlacements: func() ([]catalog.PlacementView, error) {
+		CatalogPlacements: func(_ context.Context) ([]catalog.PlacementView, error) {
 			return nil, errors.New("boom")
 		},
 	})
@@ -555,7 +693,7 @@ func TestRouterCatalogPlacementsPropagatesErrors(t *testing.T) {
 func TestRouterCatalogTopology(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		CatalogTopology: func() (catalog.TopologySnapshot, error) {
+		CatalogTopology: func(_ context.Context) (catalog.TopologySnapshot, error) {
 			return catalog.TopologySnapshot{Summary: catalog.Summary{AccountCount: 1, EnvironmentCount: 1, DeploymentCount: 1}, Accounts: []catalog.AccountView{{Name: "prod-core"}}, Environments: []catalog.EnvironmentView{{Name: "prod-apne2"}}, Deployments: []catalog.DeploymentView{{Name: "api-prod"}}, Placements: []catalog.PlacementView{{DeploymentName: "api-prod", AccountName: "prod-core"}}}, nil
 		},
 	})
@@ -592,7 +730,7 @@ func TestRouterCatalogTopologyUnavailable(t *testing.T) {
 func TestRouterCatalogTopologyPropagatesErrors(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		CatalogTopology: func() (catalog.TopologySnapshot, error) {
+		CatalogTopology: func(_ context.Context) (catalog.TopologySnapshot, error) {
 			return catalog.TopologySnapshot{}, errors.New("boom")
 		},
 	})
@@ -736,7 +874,7 @@ func TestRouterAuditLogsMethodNotAllowed(t *testing.T) {
 func TestRouterDeploymentStatuses(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		DeploymentStatuses: func() ([]statusstore.Snapshot, error) {
+		DeploymentStatuses: func(_ context.Context) ([]statusstore.Snapshot, error) {
 			return []statusstore.Snapshot{{DeploymentName: "api-prod", Status: domain.DeploymentStatus{ObservedGeneration: 3, Sync: domain.Sync{State: domain.SyncStateSynced, Reason: "RolloutCompleted"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "all checks passed"}, Conditions: []domain.Condition{{Type: "Ready", Status: true, Reason: "Stable", Message: "deployment is healthy"}}}}}, nil
 		},
 	})
@@ -764,7 +902,7 @@ func TestRouterDeploymentStatuses(t *testing.T) {
 func TestRouterDeploymentStatusesUseStableRolloutAndHistoryJSONFieldNames(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		DeploymentStatuses: func() ([]statusstore.Snapshot, error) {
+		DeploymentStatuses: func(_ context.Context) ([]statusstore.Snapshot, error) {
 			return []statusstore.Snapshot{{DeploymentName: "api-prod", Status: domain.DeploymentStatus{
 				ObservedGeneration: 3,
 				Sync:               domain.Sync{State: domain.SyncStateSynced, Reason: "RolloutCompleted"},
@@ -868,7 +1006,7 @@ func TestRouterDeploymentStatusesUnavailable(t *testing.T) {
 func TestRouterDeploymentStatusesPropagatesErrors(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		DeploymentStatuses: func() ([]statusstore.Snapshot, error) {
+		DeploymentStatuses: func(_ context.Context) ([]statusstore.Snapshot, error) {
 			return nil, errors.New("boom")
 		},
 	})
@@ -885,7 +1023,7 @@ func TestRouterDeploymentStatusesPropagatesErrors(t *testing.T) {
 func TestRouterDeploymentStatusByName(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		DeploymentStatus: func(name string) (statusstore.Snapshot, error) {
+		DeploymentStatus: func(_ context.Context, name string) (statusstore.Snapshot, error) {
 			if name != "api-prod" {
 				t.Fatalf("unexpected lookup name: %s", name)
 			}
@@ -913,7 +1051,7 @@ func TestRouterDeploymentStatusByName(t *testing.T) {
 func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		DeploymentStatus: func(name string) (statusstore.Snapshot, error) {
+		DeploymentStatus: func(_ context.Context, name string) (statusstore.Snapshot, error) {
 			return statusstore.Snapshot{DeploymentName: "api-prod", Status: domain.DeploymentStatus{
 				ObservedGeneration: 3,
 				Sync:               domain.Sync{State: domain.SyncStateSynced, Reason: "RolloutCompleted"},
@@ -1044,7 +1182,7 @@ func TestRouterDeploymentStatusByNameUnavailable(t *testing.T) {
 func TestRouterDeploymentStatusByNameNotFound(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		DeploymentStatus: func(name string) (statusstore.Snapshot, error) {
+		DeploymentStatus: func(_ context.Context, name string) (statusstore.Snapshot, error) {
 			return statusstore.Snapshot{}, statusstore.ErrNotFound
 		},
 	})
@@ -1061,7 +1199,7 @@ func TestRouterDeploymentStatusByNameNotFound(t *testing.T) {
 func TestRouterDeploymentStatusByNameRejectsInvalidNames(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		DeploymentStatus: func(name string) (statusstore.Snapshot, error) {
+		DeploymentStatus: func(_ context.Context, name string) (statusstore.Snapshot, error) {
 			return statusstore.Snapshot{}, nil
 		},
 	})
@@ -1080,7 +1218,7 @@ func TestRouterDeploymentStatusByNameRejectsInvalidNames(t *testing.T) {
 func TestRouterDeploymentStatusByNamePropagatesErrors(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		DeploymentStatus: func(name string) (statusstore.Snapshot, error) {
+		DeploymentStatus: func(_ context.Context, name string) (statusstore.Snapshot, error) {
 			return statusstore.Snapshot{}, errors.New("boom")
 		},
 	})
@@ -1097,7 +1235,7 @@ func TestRouterDeploymentStatusByNamePropagatesErrors(t *testing.T) {
 func TestRouterOverviewAccounts(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		OverviewAccounts: func() ([]catalog.AccountOverview, error) {
+		OverviewAccounts: func(_ context.Context) ([]catalog.AccountOverview, error) {
 			return []catalog.AccountOverview{{
 				Name:             "prod-core",
 				AWSAccountID:     "123456789012",
@@ -1261,7 +1399,7 @@ func TestRouterOverviewAccounts(t *testing.T) {
 func TestOverviewAccountsResponseIncludesRuntimeSummary(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		OverviewAccounts: func() ([]catalog.AccountOverview, error) {
+		OverviewAccounts: func(_ context.Context) ([]catalog.AccountOverview, error) {
 			return []catalog.AccountOverview{{
 				Name:         "prod-core",
 				AWSAccountID: "123456789012",
@@ -1343,7 +1481,7 @@ func TestOverviewAccountsResponseIncludesRuntimeSummary(t *testing.T) {
 func TestOverviewAccountsResponseOmitsRuntimeSummarySourceWithoutHistory(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		OverviewAccounts: func() ([]catalog.AccountOverview, error) {
+		OverviewAccounts: func(_ context.Context) ([]catalog.AccountOverview, error) {
 			return []catalog.AccountOverview{{
 				Name:         "prod-core",
 				AWSAccountID: "123456789012",
@@ -1388,7 +1526,7 @@ func TestOverviewAccountsResponseOmitsRuntimeSummarySourceWithoutHistory(t *test
 func TestRouterOverviewApplications(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		OverviewApplications: func() ([]catalog.ApplicationOverview, error) {
+		OverviewApplications: func(_ context.Context) ([]catalog.ApplicationOverview, error) {
 			return []catalog.ApplicationOverview{{
 				Name:               "payments-api-prod",
 				AppRef:             "payments-api",
@@ -1476,7 +1614,7 @@ func TestRouterOverviewApplicationsPropagatesErrors(t *testing.T) {
 	const upstreamErr = "boom: overview applications provider details"
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		OverviewApplications: func() ([]catalog.ApplicationOverview, error) {
+		OverviewApplications: func(_ context.Context) ([]catalog.ApplicationOverview, error) {
 			return nil, errors.New(upstreamErr)
 		},
 	})
@@ -1492,7 +1630,7 @@ func TestRouterOverviewApplication(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewApplication: func(name string) (catalog.ApplicationOverviewDetail, error) {
+			OverviewApplication: func(_ context.Context, name string) (catalog.ApplicationOverviewDetail, error) {
 				if name != "payments-api-prod" {
 					t.Fatalf("unexpected deployment name: %s", name)
 				}
@@ -1566,7 +1704,7 @@ func TestRouterOverviewApplication(t *testing.T) {
 	t.Run("not found", func(t *testing.T) {
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewApplication: func(string) (catalog.ApplicationOverviewDetail, error) {
+			OverviewApplication: func(_ context.Context, _ string) (catalog.ApplicationOverviewDetail, error) {
 				return catalog.ApplicationOverviewDetail{}, statusstore.ErrNotFound
 			},
 		})
@@ -1584,7 +1722,7 @@ func TestRouterOverviewApplication(t *testing.T) {
 		const upstreamErr = "boom: overview application detail"
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewApplication: func(string) (catalog.ApplicationOverviewDetail, error) {
+			OverviewApplication: func(_ context.Context, _ string) (catalog.ApplicationOverviewDetail, error) {
 				return catalog.ApplicationOverviewDetail{}, errors.New(upstreamErr)
 			},
 		})
@@ -1596,10 +1734,33 @@ func TestRouterOverviewApplication(t *testing.T) {
 		assertInternalServerErrorResponse(t, resp, upstreamErr)
 	})
 
+	t.Run("treats request deadline as unavailable", func(t *testing.T) {
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		defer cancel()
+
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewApplication: func(ctx context.Context, _ string) (catalog.ApplicationOverviewDetail, error) {
+				return catalog.ApplicationOverviewDetail{}, ctx.Err()
+			},
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/applications/payments-api-prod", nil).WithContext(ctx)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusServiceUnavailable {
+			t.Fatalf("expected 503, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != "overview application unavailable\n" {
+			t.Fatalf("expected unavailable body, got %q", body)
+		}
+	})
+
 	t.Run("rejects invalid names", func(t *testing.T) {
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewApplication: func(string) (catalog.ApplicationOverviewDetail, error) {
+			OverviewApplication: func(_ context.Context, _ string) (catalog.ApplicationOverviewDetail, error) {
 				return catalog.ApplicationOverviewDetail{}, nil
 			},
 		})
@@ -1632,7 +1793,7 @@ func TestRouterOverviewAccountsPropagatesErrors(t *testing.T) {
 	const upstreamErr = "boom: overview accounts provider details"
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		OverviewAccounts: func() ([]catalog.AccountOverview, error) {
+		OverviewAccounts: func(_ context.Context) ([]catalog.AccountOverview, error) {
 			return nil, errors.New(upstreamErr)
 		},
 	})
@@ -1647,7 +1808,7 @@ func TestRouterOverviewAccountsPropagatesErrors(t *testing.T) {
 func TestRouterOverviewAccountDetail(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		OverviewAccount: func(awsAccountID string) (catalog.AccountOverviewDetail, error) {
+		OverviewAccount: func(_ context.Context, awsAccountID string) (catalog.AccountOverviewDetail, error) {
 			if awsAccountID != "123456789012" {
 				t.Fatalf("unexpected lookup aws account id: %s", awsAccountID)
 			}
@@ -1719,7 +1880,7 @@ func TestOverviewAccountDetailRoute(t *testing.T) {
 	t.Run("not found", func(t *testing.T) {
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewAccount: func(string) (catalog.AccountOverviewDetail, error) {
+			OverviewAccount: func(_ context.Context, _ string) (catalog.AccountOverviewDetail, error) {
 				return catalog.AccountOverviewDetail{}, statusstore.ErrNotFound
 			},
 		})
@@ -1740,7 +1901,7 @@ func TestOverviewAccountDetailRoute(t *testing.T) {
 		const upstreamErr = "boom: overview account detail provider details"
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewAccount: func(string) (catalog.AccountOverviewDetail, error) {
+			OverviewAccount: func(_ context.Context, _ string) (catalog.AccountOverviewDetail, error) {
 				return catalog.AccountOverviewDetail{}, errors.New(upstreamErr)
 			},
 		})
@@ -1755,7 +1916,7 @@ func TestOverviewAccountDetailRoute(t *testing.T) {
 	t.Run("rejects invalid names", func(t *testing.T) {
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewAccount: func(string) (catalog.AccountOverviewDetail, error) {
+			OverviewAccount: func(_ context.Context, _ string) (catalog.AccountOverviewDetail, error) {
 				return catalog.AccountOverviewDetail{}, nil
 			},
 		})
@@ -1775,7 +1936,7 @@ func TestOverviewAccountDetailRoute(t *testing.T) {
 func TestRouterProjectEnvironmentOverview(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		OverviewProjectEnvironment: func(accountID, appRef, environmentRef string) (catalog.ProjectEnvironmentOverviewDetail, error) {
+		OverviewProjectEnvironment: func(_ context.Context, accountID, appRef, environmentRef string) (catalog.ProjectEnvironmentOverviewDetail, error) {
 			if accountID != "123456789012" || appRef != "payments-api" || environmentRef != "prod" {
 				t.Fatalf("unexpected grouped lookup: %s %s %s", accountID, appRef, environmentRef)
 			}
@@ -1831,7 +1992,7 @@ func TestOverviewProjectEnvironmentRoute(t *testing.T) {
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}, OverviewProjectEnvironment: func(string, string, string) (catalog.ProjectEnvironmentOverviewDetail, error) {
+		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}, OverviewProjectEnvironment: func(_ context.Context, _, _, _ string) (catalog.ProjectEnvironmentOverviewDetail, error) {
 			return catalog.ProjectEnvironmentOverviewDetail{}, statusstore.ErrNotFound
 		}})
 		req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts/123456789012/projects/missing/environments/prod", nil)
@@ -1843,7 +2004,7 @@ func TestOverviewProjectEnvironmentRoute(t *testing.T) {
 	})
 
 	t.Run("invalid paths", func(t *testing.T) {
-		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}, OverviewProjectEnvironment: func(string, string, string) (catalog.ProjectEnvironmentOverviewDetail, error) {
+		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}, OverviewProjectEnvironment: func(_ context.Context, _, _, _ string) (catalog.ProjectEnvironmentOverviewDetail, error) {
 			return catalog.ProjectEnvironmentOverviewDetail{}, nil
 		}})
 		for _, path := range []string{"/v1/overview/accounts/", "/v1/overview/accounts/123456789012/projects", "/v1/overview/accounts/123456789012/projects/payments-api", "/v1/overview/accounts/123456789012/projects/payments-api/environments", "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod/extra"} {
@@ -1860,7 +2021,7 @@ func TestOverviewProjectEnvironmentRoute(t *testing.T) {
 func TestRouterOverviewDeployment(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+		OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 			if name != "api-prod" {
 				return catalog.DeploymentOverviewDetail{}, statusstore.ErrNotFound
 			}
@@ -2055,7 +2216,7 @@ func TestRouterOverviewDeployment(t *testing.T) {
 func TestDeploymentOverviewDetailRouteOmitsRuntimeSummarySourceWithoutHistory(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+		OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 			if name != "api-prod" {
 				t.Fatalf("unexpected lookup name: %s", name)
 			}
@@ -2099,7 +2260,7 @@ func TestDeploymentOverviewDetailRouteOmitsRuntimeSummarySourceWithoutHistory(t 
 func TestRouterOverviewDeploymentChangeDetails(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+		OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 			if name != "api-prod" {
 				t.Fatalf("unexpected lookup name: %s", name)
 			}
@@ -2179,7 +2340,7 @@ func TestRouterOverviewDeploymentChangeDetails(t *testing.T) {
 func TestDeploymentOverviewDetailRouteIncludesRolloutStepDetail(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+		OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 			if name != "api-prod" {
 				t.Fatalf("unexpected lookup name: %s", name)
 			}
@@ -2248,7 +2409,7 @@ func TestDeploymentOverviewDetailRouteIncludesRolloutStepDetail(t *testing.T) {
 func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+		OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 			return catalog.DeploymentOverviewDetail{
 				Name: "api-prod",
 				ManagedDrift: []domain.ManagedDriftItem{
@@ -2350,7 +2511,7 @@ func TestRouterOverviewDeploymentUnavailable(t *testing.T) {
 func TestRouterOverviewDeploymentNotFound(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+		OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 			return catalog.DeploymentOverviewDetail{}, statusstore.ErrNotFound
 		},
 	})
@@ -2367,7 +2528,7 @@ func TestRouterOverviewDeploymentNotFound(t *testing.T) {
 func TestRouterOverviewDeploymentProviderErrorReturnsInternalServerError(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+		OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 			return catalog.DeploymentOverviewDetail{}, errors.New("boom")
 		},
 	})
@@ -2384,7 +2545,7 @@ func TestRouterOverviewDeploymentProviderErrorReturnsInternalServerError(t *test
 func TestRouterOverviewDeploymentRejectsInvalidNames(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+		OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 			return catalog.DeploymentOverviewDetail{}, nil
 		},
 	})
@@ -2430,7 +2591,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		}
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 				if name != "api-prod" {
 					t.Fatalf("unexpected deployment lookup: %s", name)
 				}
@@ -2518,7 +2679,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		var providerRequestID string
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 				if name != "api-prod" {
 					t.Fatalf("unexpected deployment lookup: %s", name)
 				}
@@ -2564,7 +2725,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			router := NewRouter(Options{
 				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-				OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+				OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 					t.Fatalf("overview deployment lookup should not run for invalid query")
 					return catalog.DeploymentOverviewDetail{}, nil
 				},
@@ -2590,7 +2751,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 	t.Run("returns 503 when provider is unavailable", func(t *testing.T) {
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 				if name != "api-prod" {
 					t.Fatalf("unexpected deployment lookup: %s", name)
 				}
@@ -2613,7 +2774,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 	t.Run("propagates deployment not found as 404", func(t *testing.T) {
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 				if name != "missing" {
 					t.Fatalf("unexpected deployment lookup: %s", name)
 				}
@@ -2640,7 +2801,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 	t.Run("propagates deployment resource binding failures as 404", func(t *testing.T) {
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 				if name != "api-prod" {
 					t.Fatalf("unexpected deployment lookup: %s", name)
 				}
@@ -2670,7 +2831,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		const providerErr = "boom: resource logs provider internals"
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 				if name != "api-prod" {
 					t.Fatalf("unexpected deployment lookup: %s", name)
 				}
@@ -2695,7 +2856,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		const providerErr = "boom: deployment lookup internals"
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 				if name != "api-prod" {
 					t.Fatalf("unexpected deployment lookup: %s", name)
 				}
@@ -2763,7 +2924,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 				if name != "api-prod" {
 					t.Fatalf("unexpected deployment lookup: %s", name)
 				}
@@ -2839,7 +3000,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 				if name != "api-prod" {
 					t.Fatalf("unexpected deployment lookup: %s", name)
 				}
@@ -2952,7 +3113,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 				if name != "api-prod" {
 					t.Fatalf("unexpected deployment lookup: %s", name)
 				}
@@ -3041,7 +3202,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 				if name != "api-prod" {
 					t.Fatalf("unexpected deployment lookup: %s", name)
 				}
@@ -3096,7 +3257,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			router := NewRouter(Options{
 				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-				OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+				OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 					t.Fatalf("overview deployment lookup should not run for invalid query")
 					return catalog.DeploymentOverviewDetail{}, nil
 				},
@@ -3122,7 +3283,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 	t.Run("returns 503 when provider is unavailable", func(t *testing.T) {
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
 		})
@@ -3142,7 +3303,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 	t.Run("propagates deployment not found as 404", func(t *testing.T) {
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 				return catalog.DeploymentOverviewDetail{}, statusstore.ErrNotFound
 			},
 			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
@@ -3163,7 +3324,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 	t.Run("propagates deployment resource binding failures as 404", func(t *testing.T) {
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
 			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
@@ -3184,7 +3345,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		const providerErr = "boom: resource inspection provider internals"
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
 			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
@@ -4036,34 +4197,34 @@ func TestRouterRootServesUI(t *testing.T) {
 func TestRouterRejectsNonGETMethods(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-		CatalogSummary: func() (catalog.Summary, error) {
+		CatalogSummary: func(_ context.Context) (catalog.Summary, error) {
 			return catalog.Summary{}, nil
 		},
-		CatalogDeployments: func() ([]catalog.DeploymentView, error) {
+		CatalogDeployments: func(_ context.Context) ([]catalog.DeploymentView, error) {
 			return []catalog.DeploymentView{}, nil
 		},
-		CatalogEnvironments: func() ([]catalog.EnvironmentView, error) {
+		CatalogEnvironments: func(_ context.Context) ([]catalog.EnvironmentView, error) {
 			return []catalog.EnvironmentView{}, nil
 		},
-		CatalogAccounts: func() ([]catalog.AccountView, error) {
+		CatalogAccounts: func(_ context.Context) ([]catalog.AccountView, error) {
 			return []catalog.AccountView{}, nil
 		},
-		CatalogPlacements: func() ([]catalog.PlacementView, error) {
+		CatalogPlacements: func(_ context.Context) ([]catalog.PlacementView, error) {
 			return []catalog.PlacementView{}, nil
 		},
-		CatalogTopology: func() (catalog.TopologySnapshot, error) {
+		CatalogTopology: func(_ context.Context) (catalog.TopologySnapshot, error) {
 			return catalog.TopologySnapshot{}, nil
 		},
-		OverviewAccounts: func() ([]catalog.AccountOverview, error) {
+		OverviewAccounts: func(_ context.Context) ([]catalog.AccountOverview, error) {
 			return []catalog.AccountOverview{}, nil
 		},
-		OverviewAccount: func(string) (catalog.AccountOverviewDetail, error) {
+		OverviewAccount: func(_ context.Context, _ string) (catalog.AccountOverviewDetail, error) {
 			return catalog.AccountOverviewDetail{}, nil
 		},
-		OverviewApplication: func(string) (catalog.ApplicationOverviewDetail, error) {
+		OverviewApplication: func(_ context.Context, _ string) (catalog.ApplicationOverviewDetail, error) {
 			return catalog.ApplicationOverviewDetail{}, nil
 		},
-		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+		OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 			return catalog.DeploymentOverviewDetail{}, nil
 		},
 		OverviewDeploymentResourceLogs: func(context.Context, string, string, string) (resourcelogs.Result, error) {
@@ -4087,10 +4248,10 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		TransitionApplyRequest: func(context.Context, string, applyrequest.TransitionRequest) (applyrequest.Record, error) {
 			return applyrequest.Record{ID: "apply_1234abcd"}, nil
 		},
-		DeploymentStatuses: func() ([]statusstore.Snapshot, error) {
+		DeploymentStatuses: func(_ context.Context) ([]statusstore.Snapshot, error) {
 			return []statusstore.Snapshot{}, nil
 		},
-		DeploymentStatus: func(name string) (statusstore.Snapshot, error) {
+		DeploymentStatus: func(_ context.Context, name string) (statusstore.Snapshot, error) {
 			return statusstore.Snapshot{}, nil
 		},
 	})
