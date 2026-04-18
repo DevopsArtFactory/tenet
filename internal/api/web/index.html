@@ -2096,9 +2096,23 @@
         });
       const fetchDeploymentDetail = (deploymentName) => fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}`)
         .then((response) => {
-          if (!response.ok) throw new Error(`detail request failed (${response.status})`);
-          return response.json();
+          if (response.ok) return response.json();
+          const fallback = response.status === 503
+            ? `deployment detail unavailable (${response.status})`
+            : `detail request failed (${response.status})`;
+          return responseErrorMessage(response, fallback).then((message) => {
+            throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);
+          });
         });
+      const driftWorkspaceRefreshStateText = (workspaceState) => {
+        if (workspaceState?.status === 'loading') {
+          return 'Refreshing drift workspace from GET /v1/overview/deployments/{deploymentName}…';
+        }
+        if (workspaceState?.status === 'error') {
+          return `Failed to refresh drift workspace: ${workspaceState.error?.message || 'unknown error'}`;
+        }
+        return '';
+      };
       const createDeploymentEventsIntro = () => createElement('div', 'detail-section-copy', 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.');
       const sortTimelineEvents = (events) => (events || [])
         .map((event, index) => ({
@@ -3139,7 +3153,7 @@
         detailStateByDeployment.set(deploymentName, { status: 'loading', promise, container });
         return promise;
       };
-      const renderDeploymentWorkspace = (mode, detail, planState = null, applyState = null) => {
+      const renderDeploymentWorkspace = (mode, detail, planState = null, applyState = null, workspaceState = null) => {
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
         const root = document.getElementById('accounts');
@@ -3239,12 +3253,32 @@
         sections.push(executionSection);
 
         if (mode === 'drift') {
-          const driftSection = createDetailSection(emptyTitle);
+          const driftActions = [
+            createRefreshButton(
+              'Refresh drift workspace',
+              workspaceState?.status === 'loading' || !(detail.name || currentPageState.deployment),
+              () => workspaceState?.onRefresh?.().catch(() => {}),
+            ),
+          ];
+          const driftSection = createElement('section', 'detail-section');
+          driftSection.append(createDetailSectionHeader(emptyTitle, driftActions));
+          const driftRefreshState = driftWorkspaceRefreshStateText(workspaceState);
+          if (driftRefreshState) {
+            driftSection.append(createElement('div', workspaceState?.status === 'error' ? 'detail-state error' : 'detail-state', driftRefreshState));
+          }
           const driftRows = deploymentDriftRows(detail);
           const driftSource = deploymentDriftSource(detail);
-          let driftQuery = '';
-          let driftSeverity = 'all';
-          let driftSort = 'field';
+          let driftQuery = workspaceState?.filters?.query || '';
+          let driftSeverity = workspaceState?.filters?.severity || 'all';
+          let driftSort = workspaceState?.filters?.sort || 'field';
+          const syncDriftFilters = () => {
+            if (!workspaceState) return;
+            workspaceState.filters = {
+              query: driftQuery,
+              severity: driftSeverity,
+              sort: driftSort,
+            };
+          };
           const driftControls = createElement('div', 'toolbar-grid');
           const driftSummary = createElement('div', 'metrics');
           const driftTableWrap = createElement('div', 'drift-table-wrap');
@@ -3305,24 +3339,27 @@
             driftTableWrap.replaceChildren(table);
           };
           driftControls.append(
-            createInput('Filter drift rows', '', 'Filter by field, value, or condition context', (event) => {
+            createInput('Filter drift rows', driftQuery, 'Filter by field, value, or condition context', (event) => {
               driftQuery = event.target.value || '';
+              syncDriftFilters();
               renderDriftRows();
             }),
-            createSelect('Severity', 'all', [
+            createSelect('Severity', driftSeverity, [
               { value: 'all', label: 'All severities' },
               { value: 'high', label: 'High' },
               { value: 'medium', label: 'Medium' },
               { value: 'low', label: 'Low' },
             ], (event) => {
               driftSeverity = event.target.value || 'all';
+              syncDriftFilters();
               renderDriftRows();
             }),
-            createSelect('Sort by', 'field', [
+            createSelect('Sort by', driftSort, [
               { value: 'field', label: 'Field path' },
               { value: 'severity', label: 'Severity' },
             ], (event) => {
               driftSort = event.target.value || 'field';
+              syncDriftFilters();
               renderDriftRows();
             }),
           );
@@ -3889,7 +3926,42 @@
                 return;
               }
               if (currentPageState.page === 'drift') {
-                renderDeploymentWorkspace(currentPageState.page, detail);
+                const workspaceState = {
+                  status: 'idle',
+                  detail,
+                  error: null,
+                  filters: {
+                    query: '',
+                    severity: 'all',
+                    sort: 'field',
+                  },
+                  onRefresh: null,
+                };
+                const renderDriftWorkspace = () => {
+                  renderDeploymentWorkspace(currentPageState.page, workspaceState.detail, null, null, workspaceState);
+                };
+                workspaceState.onRefresh = () => {
+                  const deploymentName = workspaceState.detail?.name || currentPageState.deployment || '';
+                  if (!deploymentName || workspaceState.status === 'loading') return Promise.resolve(workspaceState.detail);
+                  workspaceState.status = 'loading';
+                  workspaceState.error = null;
+                  renderDriftWorkspace();
+                  return fetchDeploymentDetail(deploymentName)
+                    .then((nextDetail) => {
+                      workspaceState.status = 'idle';
+                      workspaceState.detail = nextDetail;
+                      workspaceState.error = null;
+                      renderDriftWorkspace();
+                      return nextDetail;
+                    })
+                    .catch((error) => {
+                      workspaceState.status = 'error';
+                      workspaceState.error = error;
+                      renderDriftWorkspace();
+                      throw error;
+                    });
+                };
+                renderDriftWorkspace();
                 return;
               }
               if (currentPageState.page === 'plan') {

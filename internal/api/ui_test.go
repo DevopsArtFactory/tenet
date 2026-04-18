@@ -22,7 +22,11 @@ func TestEmbeddedUILazyLoadsDeploymentDetailsOnExpandOnly(t *testing.T) {
 		"detailPanel.hidden = true;",
 		"loadDeploymentDetail(deployment.name, detailPanel).catch(() => {});",
 		"fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}`)",
-		"if (!response.ok) throw new Error(`detail request failed (${response.status})`);",
+		"const fallback = response.status === 503",
+		"? `deployment detail unavailable (${response.status})`",
+		": `detail request failed (${response.status})`;",
+		"return responseErrorMessage(response, fallback).then((message) => {",
+		"throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);",
 		"renderDetailState(container, 'Loading deployment details…');",
 		"detailStateByDeployment.set(deploymentName, { status: 'ready', detail });",
 		"detailStateByDeployment.set(deploymentName, { status: 'loading', promise, container });",
@@ -408,7 +412,8 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"if (currentPageState.page === 'resource') {",
 		"renderResourceDetailPage(detail);",
 		"if (currentPageState.page === 'drift') {",
-		"renderDeploymentWorkspace(currentPageState.page, detail);",
+		"const renderDriftWorkspace = () => {",
+		"renderDeploymentWorkspace(currentPageState.page, workspaceState.detail, null, null, workspaceState);",
 		"if (currentPageState.page === 'plan') {",
 		"renderDeploymentWorkspace('plan', detail, {",
 		"syncPlanPageURL(record.id, '');",
@@ -530,7 +535,10 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 	body := string(indexHTML)
 
 	for _, fragment := range []string{
-		"const renderDeploymentWorkspace = (mode, detail, planState = null, applyState = null) => {",
+		"const renderDeploymentWorkspace = (mode, detail, planState = null, applyState = null, workspaceState = null) => {",
+		"const driftWorkspaceRefreshStateText = (workspaceState) => {",
+		"return 'Refreshing drift workspace from GET /v1/overview/deployments/{deploymentName}…';",
+		"return `Failed to refresh drift workspace: ${workspaceState.error?.message || 'unknown error'}`;",
 		"const workspaceTitle = mode === 'drift' ? 'Drift viewer' : 'Plan and apply';",
 		"const runtimeSignalsSection = createDetailSection('Latest runtime signals');",
 		"['Runtime source', metricValue(detail.runtimeSummary?.source)]",
@@ -578,15 +586,26 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"field: `condition.${condition.type || 'Unknown'}`",
 		"const driftRows = deploymentDriftRows(detail);",
 		"const driftSource = deploymentDriftSource(detail);",
-		"createInput('Filter drift rows', '', 'Filter by field, value, or condition context', (event) => {",
+		"createRefreshButton(",
+		"'Refresh drift workspace',",
+		"() => workspaceState?.onRefresh?.().catch(() => {}),",
+		"const driftRefreshState = driftWorkspaceRefreshStateText(workspaceState);",
+		"workspaceState?.status === 'error' ? 'detail-state error' : 'detail-state'",
+		"let driftQuery = workspaceState?.filters?.query || '';",
+		"let driftSeverity = workspaceState?.filters?.severity || 'all';",
+		"let driftSort = workspaceState?.filters?.sort || 'field';",
+		"const syncDriftFilters = () => {",
+		"workspaceState.filters = {",
+		"createInput('Filter drift rows', driftQuery, 'Filter by field, value, or condition context', (event) => {",
+		"syncDriftFilters();",
 		"createMetric('Drift summary', driftSummaryCopy(driftRows.length, filteredRows.length), 'summary')",
 		"createMetric('Total rows', String(driftRows.length))",
 		"createMetric('Visible rows', String(filteredRows.length))",
 		"createMetric('High', String(filteredCounts.high))",
 		"createMetric('Medium', String(filteredCounts.medium))",
 		"createMetric('Low', String(filteredCounts.low))",
-		"createSelect('Severity', 'all', [",
-		"createSelect('Sort by', 'field', [",
+		"createSelect('Severity', driftSeverity, [",
+		"createSelect('Sort by', driftSort, [",
 		"Field path",
 		"Desired",
 		"Actual",
@@ -638,6 +657,14 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"Future immutable lifecycle states render here as queued, running, succeeded, cancelled, or failed.",
 		"Apply Plan activates only when a loaded persisted ready plan preview with a valid planId is present.",
 		"Loading immutable apply request ${activeApplyID} from GET /v1/applies/${activeApplyID}.",
+		"const workspaceState = {",
+		"filters: {",
+		"const renderDriftWorkspace = () => {",
+		"workspaceState.onRefresh = () => {",
+		"workspaceState.status = 'loading';",
+		"return fetchDeploymentDetail(deploymentName)",
+		"workspaceState.status = 'error';",
+		"renderDriftWorkspace();",
 		"const normalizeApplyRecordStatus = (status) => {",
 		"const normalizeApplyOperationStatus = (status) => {",
 		"const applyLifecycleTimestampValue = (lifecycle, field) => {",
@@ -710,7 +737,8 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"if (currentPageState.page === 'resource') {",
 		"renderResourceDetailPage(detail);",
 		"if (currentPageState.page === 'drift') {",
-		"renderDeploymentWorkspace(currentPageState.page, detail);",
+		"const renderDriftWorkspace = () => {",
+		"renderDeploymentWorkspace(currentPageState.page, workspaceState.detail, null, null, workspaceState);",
 		"if (currentPageState.page === 'plan') {",
 		"renderDeploymentWorkspace('plan', detail, {",
 		"fetchDeploymentDetail(currentPageState.deployment)",
@@ -1176,6 +1204,15 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Refresh runtime events' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh runtime events")
 	}
+	if !strings.Contains(text, "assert 'Refresh drift workspace' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh drift workspace")
+	}
+	if !strings.Contains(text, "assert 'Refreshing drift workspace from GET /v1/overview/deployments/{deploymentName}…' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains drift refresh loading copy")
+	}
+	if !strings.Contains(text, "assert 'Failed to refresh drift workspace:' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains drift refresh error copy")
+	}
 	if !strings.Contains(text, "assert 'Audit timeline' in audit_ui, audit_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains audit timeline copy")
 	}
@@ -1426,6 +1463,34 @@ func TestOverviewDocsDescribeInPlaceControllerRuntimeEventRefresh(t *testing.T) 
 			"`Refresh runtime events`",
 			"`GET /v1/overview/deployments/{deploymentName}/events` in place",
 			"preserve the bookmarkable `/?page=application...` URL",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
+	}
+}
+
+func TestOverviewDocsDescribeInPlaceDriftWorkspaceRefresh(t *testing.T) {
+	files := map[string][]string{
+		"../../docs/features/overview-dashboard.md": {
+			"`Refresh drift workspace`",
+			"re-runs only `GET /v1/overview/deployments/{deploymentName}` in place",
+			"keeps the bookmarkable `/?page=drift...` URL stable",
+		},
+		"../../docs/architecture/tenet-v1-overview-ui.md": {
+			"`Refresh drift workspace`",
+			"`GET /v1/overview/deployments/{deploymentName}` in place",
+			"keep the bookmarkable `/?page=drift...` route unchanged",
 		},
 	}
 

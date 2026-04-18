@@ -199,6 +199,7 @@ Current drift workspace behavior:
 - shows additive runtime artifact/condition rows from `runtimeSummary.deployedArtifact` / `runtimeSummary.conditions`
 - keeps machine-readable `runtimeSummary.changes[]` rows while also rendering human-readable `runtimeSummary.changeDetails[]`
 - shows deployment context and status conditions
+- adds an in-place `Refresh drift workspace` control that re-runs only `GET /v1/overview/deployments/{deploymentName}` in place, keeps the bookmarkable `/?page=drift...` URL stable, disables only while that refresh is active, and leaves the current read-only workspace content visible with explicit loading/error copy
 - prefers backend-authored additive `managedDrift[]` rows from the deployment-detail payload when present, normalizes them into the same safe read-only table, and falls back to the existing client-derived artifact/generation/runtime-intent comparisons for older payloads
 - shows an explicit `Active drift source` callout so operators can see whether the table is rendering controller-authored `managedDrift[]` rows or the existing derived fallback heuristics
 - adds a compact drift summary ahead of the table with total rows, visible rows after the current query/severity filters, and live `high` / `medium` / `low` counts so filter impact is obvious without scanning the full table

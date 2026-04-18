@@ -82,6 +82,8 @@ For recent logs, the embedded card keeps backend lookup context visible with ope
 
 The deployment-events route is intentionally read-only and controller-derived. It reflects persisted runtime history entries, returns `events: []` when a deployment exists without history yet, and should not be treated as a full durable audit system. The application drill-down now also exposes `Refresh runtime events` on that panel so operators can re-run only `GET /v1/overview/deployments/{deploymentName}/events` in place, preserve the bookmarkable `/?page=application...` URL, and disable just that panel action while the events fetch is in flight.
 
+The drift workspace stays read-only and now exposes `Refresh drift workspace` on the field-level drift section so operators can re-run only `GET /v1/overview/deployments/{deploymentName}` in place, keep the bookmarkable `/?page=drift...` route unchanged, and see explicit loading/error copy without clearing the current drift workspace content while the refresh is in flight.
+
 Canonical fallback resource-detail bindings remain stable so operators can share or bookmark the exact resource page they need:
 - `asgWeightedTargetGroups`
 - `asgInstanceRefresh`

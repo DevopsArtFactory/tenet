@@ -4145,6 +4145,234 @@ async function render(detail) {
 	runNodeHarness(t, nodeProgram)
 }
 
+func TestDeploymentWorkspaceDriftRefreshWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	initialDetailJSON, err := json.Marshal(map[string]any{
+		"name":             "api-refresh",
+		"appRef":           "payments",
+		"environmentRef":   "prod",
+		"region":           "us-west-2",
+		"accountName":      "acct-a",
+		"awsAccountId":     "111111111111",
+		"targetType":       "ecs",
+		"strategy":         "linear",
+		"executionMode":    "ecsCodeDeploy",
+		"sync":             map[string]any{"state": "Drifted", "reason": "listener weights diverged"},
+		"health":           map[string]any{"overall": "Unhealthy", "summary": "legacy target still serving traffic"},
+		"desiredArtifact":  map[string]any{"image": "ghcr.io/example/payments:v52"},
+		"deployedArtifact": map[string]any{"image": "ghcr.io/example/payments:v51"},
+		"managedDrift": []map[string]any{{
+			"field":    "listener.weight",
+			"desired":  "stable=100 canary=0",
+			"actual":   "stable=80 canary=20",
+			"severity": "high",
+		}},
+		"runtimeSummary": map[string]any{
+			"source":           "deployment-controller",
+			"timestamp":        "2026-04-19T07:55:00Z",
+			"targetType":       "ecs",
+			"strategy":         "linear",
+			"executionMode":    "ecsCodeDeploy",
+			"historyCount":     2,
+			"changes":          []string{"initial drift snapshot"},
+			"changeDetails":    []string{"Listener weight changed from stable=100/canary=0 to stable=80/canary=20"},
+			"deployedArtifact": map[string]any{"image": "ghcr.io/example/payments:v51"},
+			"conditions":       []map[string]any{{"type": "DriftDetected", "status": true, "reason": "ListenerWeightMismatch", "message": "Stable traffic is only 80 percent"}},
+		},
+		"conditions": []map[string]any{{
+			"type":    "DriftDetected",
+			"status":  true,
+			"reason":  "ListenerWeightMismatch",
+			"message": "Stable traffic is only 80 percent",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal initial drift detail body: %v", err)
+	}
+
+	refreshedDetailJSON, err := json.Marshal(map[string]any{
+		"name":             "api-refresh",
+		"appRef":           "payments",
+		"environmentRef":   "prod",
+		"region":           "us-west-2",
+		"accountName":      "acct-a",
+		"awsAccountId":     "111111111111",
+		"targetType":       "ecs",
+		"strategy":         "linear",
+		"executionMode":    "ecsCodeDeploy",
+		"sync":             map[string]any{"state": "Drifted", "reason": "task definition still lagging"},
+		"health":           map[string]any{"overall": "Progressing", "summary": "traffic is stable while tasks recycle"},
+		"desiredArtifact":  map[string]any{"image": "ghcr.io/example/payments:v52"},
+		"deployedArtifact": map[string]any{"image": "ghcr.io/example/payments:v51"},
+		"managedDrift": []map[string]any{{
+			"field":    "service.taskDefinition",
+			"desired":  "payments:52",
+			"actual":   "payments:51",
+			"severity": "medium",
+		}},
+		"runtimeSummary": map[string]any{
+			"source":           "deployment-controller",
+			"timestamp":        "2026-04-19T07:57:00Z",
+			"targetType":       "ecs",
+			"strategy":         "linear",
+			"executionMode":    "ecsCodeDeploy",
+			"historyCount":     3,
+			"changes":          []string{"refreshed drift snapshot"},
+			"changeDetails":    []string{"Task definition remains one revision behind desired"},
+			"deployedArtifact": map[string]any{"image": "ghcr.io/example/payments:v51"},
+			"conditions":       []map[string]any{{"type": "Progressing", "status": true, "reason": "TaskRecycleInFlight", "message": "New task set is still scaling"}},
+		},
+		"conditions": []map[string]any{{
+			"type":    "Progressing",
+			"status":  true,
+			"reason":  "TaskRecycleInFlight",
+			"message": "New task set is still scaling",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal refreshed drift detail body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const initialDetail = ` + string(initialDetailJSON) + `;
+const refreshedDetail = ` + string(refreshedDetailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const createDocument = () => {
+  const document = new Document();
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  return document;
+};
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+async function render(fetchImpl) {
+  const document = createDocument();
+  const fetchCalls = [];
+  const window = { location: { pathname: '/', search: '?page=drift&deployment=api-refresh', hash: '' } };
+  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  const fetch = (url) => {
+    fetchCalls.push(String(url));
+    return fetchImpl(String(url));
+  };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle();
+  await settle();
+  return { document, fetchCalls, window };
+}
+(async () => {
+  const detailURL = '/v1/overview/deployments/api-refresh';
+  const initialSearch = '?page=drift&deployment=api-refresh';
+  let refreshFetchCount = 0;
+  let resolveRefresh;
+  const loadingView = await render((url) => {
+    if (url !== detailURL) throw new Error('unexpected fetch url: ' + url);
+    refreshFetchCount += 1;
+    if (refreshFetchCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve(initialDetail) });
+    if (refreshFetchCount === 2) {
+      return new Promise((resolve) => { resolveRefresh = resolve; });
+    }
+    throw new Error('unexpected detail fetch count: ' + refreshFetchCount);
+  });
+  let buttons = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  let refreshButton = buttons.find((node) => node.textContent === 'Refresh drift workspace');
+  if (!refreshButton) throw new Error('expected drift workspace refresh button after initial render');
+  if (refreshButton.disabled) throw new Error('expected drift workspace refresh button enabled after initial render');
+  let text = collectText(loadingView.document.getElementById('accounts')).join(' | ');
+  if (!text.includes('listener.weight')) throw new Error('expected initial drift row before refresh');
+  refreshButton.dispatch('click');
+  await settle();
+  buttons = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  refreshButton = buttons.find((node) => node.textContent === 'Refresh drift workspace');
+  if (!refreshButton || !refreshButton.disabled) throw new Error('expected drift workspace refresh button disabled only while refresh is in flight');
+  text = collectText(loadingView.document.getElementById('accounts')).join(' | ');
+  if (!text.includes('Refreshing drift workspace from GET /v1/overview/deployments/{deploymentName}…')) throw new Error('expected operator-readable drift refresh loading state');
+  if (!text.includes('listener.weight')) throw new Error('expected current drift workspace content to stay visible during refresh');
+  if (loadingView.fetchCalls.length !== 2 || loadingView.fetchCalls[0] !== detailURL || loadingView.fetchCalls[1] !== detailURL) throw new Error('expected drift refresh to re-fetch only deployment detail');
+  if (loadingView.window.location.search !== initialSearch) throw new Error('expected in-place drift refresh to preserve bookmarkable route');
+  resolveRefresh({ ok: true, json: () => Promise.resolve(refreshedDetail) });
+  await settle();
+  await settle();
+  text = collectText(loadingView.document.getElementById('accounts')).join(' | ');
+  if (!text.includes('service.taskDefinition')) throw new Error('expected refreshed drift detail to render in place');
+  if (text.includes('listener.weight')) throw new Error('expected refreshed drift detail to replace stale row content');
+  buttons = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  refreshButton = buttons.find((node) => node.textContent === 'Refresh drift workspace');
+  if (!refreshButton || refreshButton.disabled) throw new Error('expected drift workspace refresh button re-enabled after refresh completes');
+
+  let errorFetchCount = 0;
+  const errorView = await render((url) => {
+    if (url !== detailURL) throw new Error('unexpected fetch url: ' + url);
+    errorFetchCount += 1;
+    if (errorFetchCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve(initialDetail) });
+    if (errorFetchCount === 2) return Promise.resolve({ ok: false, status: 500, text: () => Promise.resolve('boom') });
+    throw new Error('unexpected error-view detail fetch count: ' + errorFetchCount);
+  });
+  buttons = collectNodes(errorView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  refreshButton = buttons.find((node) => node.textContent === 'Refresh drift workspace');
+  if (!refreshButton) throw new Error('expected drift workspace refresh button in error scenario');
+  refreshButton.dispatch('click');
+  await settle();
+  await settle();
+  text = collectText(errorView.document.getElementById('accounts')).join(' | ');
+  if (!text.includes('Failed to refresh drift workspace: detail request failed (500): boom')) throw new Error('expected operator-readable drift refresh error state');
+  if (!text.includes('listener.weight')) throw new Error('expected previous drift content to remain visible after refresh error');
+  buttons = collectNodes(errorView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  refreshButton = buttons.find((node) => node.textContent === 'Refresh drift workspace');
+  if (!refreshButton || refreshButton.disabled) throw new Error('expected drift workspace refresh button re-enabled after refresh error');
+  if (errorFetchCount !== 2) throw new Error('expected drift error refresh to retry deployment detail exactly once');
+  if (errorView.window.location.search !== initialSearch) throw new Error('expected drift refresh error state to preserve bookmarkable route');
+})();
+`
+
+	runNodeHarness(t, nodeProgram)
+}
+
 func TestDeploymentWorkspacePlanViewWithNodeHarness(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not installed")
