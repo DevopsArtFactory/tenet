@@ -7,7 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	asgtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/aws/smithy-go"
 )
@@ -318,6 +320,112 @@ func TestAutoScalingInspectionFromGroupSortsFields(t *testing.T) {
 	if len(got.Instances) != 2 || got.Instances[0].InstanceID != "i-a" {
 		t.Fatalf("expected instances sorted by id, got %+v", got.Instances)
 	}
+}
+
+func TestFindECSServiceReusesCachedClusterHintOnRepeatedLookup(t *testing.T) {
+	const (
+		region          = "ap-northeast-2"
+		targetAccountID = "123456789012"
+		serviceName     = "payments-api-prod-service"
+		clusterA        = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/a"
+		clusterB        = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/b"
+	)
+
+	hints := newECSServiceClusterHintCache(4)
+	key := newECSServiceClusterHintKey(region, targetAccountID, "", serviceName)
+	client := &fakeECSServiceAPI{
+		clusterARNs: []string{clusterA, clusterB},
+		servicesByCluster: map[string][]ecstypes.Service{
+			clusterB: {{ServiceName: stringPtr(serviceName), ServiceArn: stringPtr("arn:service/b")}},
+		},
+	}
+
+	service, clusterARN, err := findECSService(context.Background(), client, serviceName, hints, key)
+	if err != nil {
+		t.Fatalf("first lookup returned error: %v", err)
+	}
+	if service == nil || aws.ToString(clusterARN) != clusterB {
+		t.Fatalf("expected first lookup to find %s in %s, got service=%+v cluster=%q", serviceName, clusterB, service, aws.ToString(clusterARN))
+	}
+	if client.listCalls != 1 {
+		t.Fatalf("expected first lookup to scan clusters once, got %d", client.listCalls)
+	}
+	if !reflect.DeepEqual(client.describeCalls, []string{clusterA, clusterB}) {
+		t.Fatalf("expected first lookup to describe both clusters, got %+v", client.describeCalls)
+	}
+	if cachedClusterARN, ok := hints.Get(key); !ok || cachedClusterARN != clusterB {
+		t.Fatalf("expected cache to store %s, got %q present=%v", clusterB, cachedClusterARN, ok)
+	}
+
+	service, clusterARN, err = findECSService(context.Background(), client, serviceName, hints, key)
+	if err != nil {
+		t.Fatalf("second lookup returned error: %v", err)
+	}
+	if service == nil || aws.ToString(clusterARN) != clusterB {
+		t.Fatalf("expected second lookup to find cached service in %s, got service=%+v cluster=%q", clusterB, service, aws.ToString(clusterARN))
+	}
+	if client.listCalls != 1 {
+		t.Fatalf("expected cached lookup to avoid a second cluster scan, got %d list calls", client.listCalls)
+	}
+	if !reflect.DeepEqual(client.describeCalls, []string{clusterA, clusterB, clusterB}) {
+		t.Fatalf("expected second lookup to reuse cached cluster only, got %+v", client.describeCalls)
+	}
+}
+
+func TestFindECSServiceClearsStaleClusterHintAndRecovers(t *testing.T) {
+	const (
+		region          = "ap-northeast-2"
+		targetAccountID = "123456789012"
+		serviceName     = "payments-api-prod-service"
+		staleCluster    = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/stale"
+		liveCluster     = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/live"
+	)
+
+	hints := newECSServiceClusterHintCache(4)
+	key := newECSServiceClusterHintKey(region, targetAccountID, "", serviceName)
+	hints.Set(key, staleCluster)
+	client := &fakeECSServiceAPI{
+		clusterARNs: []string{liveCluster},
+		servicesByCluster: map[string][]ecstypes.Service{
+			liveCluster: {{ServiceName: stringPtr(serviceName), ServiceArn: stringPtr("arn:service/live")}},
+		},
+	}
+
+	service, clusterARN, err := findECSService(context.Background(), client, serviceName, hints, key)
+	if err != nil {
+		t.Fatalf("lookup returned error: %v", err)
+	}
+	if service == nil || aws.ToString(clusterARN) != liveCluster {
+		t.Fatalf("expected lookup to recover in %s, got service=%+v cluster=%q", liveCluster, service, aws.ToString(clusterARN))
+	}
+	if client.listCalls != 1 {
+		t.Fatalf("expected stale hint recovery to fall back to one cluster scan, got %d", client.listCalls)
+	}
+	if !reflect.DeepEqual(client.describeCalls, []string{staleCluster, liveCluster}) {
+		t.Fatalf("expected stale cluster miss followed by refreshed lookup, got %+v", client.describeCalls)
+	}
+	if cachedClusterARN, ok := hints.Get(key); !ok || cachedClusterARN != liveCluster {
+		t.Fatalf("expected stale cache entry to refresh to %s, got %q present=%v", liveCluster, cachedClusterARN, ok)
+	}
+}
+
+type fakeECSServiceAPI struct {
+	clusterARNs       []string
+	servicesByCluster map[string][]ecstypes.Service
+	listCalls         int
+	describeCalls     []string
+}
+
+func (f *fakeECSServiceAPI) ListClusters(context.Context, *ecs.ListClustersInput, ...func(*ecs.Options)) (*ecs.ListClustersOutput, error) {
+	f.listCalls++
+	return &ecs.ListClustersOutput{ClusterArns: append([]string(nil), f.clusterARNs...)}, nil
+}
+
+func (f *fakeECSServiceAPI) DescribeServices(_ context.Context, input *ecs.DescribeServicesInput, _ ...func(*ecs.Options)) (*ecs.DescribeServicesOutput, error) {
+	clusterARN := aws.ToString(input.Cluster)
+	f.describeCalls = append(f.describeCalls, clusterARN)
+	services := append([]ecstypes.Service(nil), f.servicesByCluster[clusterARN]...)
+	return &ecs.DescribeServicesOutput{Services: services}, nil
 }
 
 func stringPtr(value string) *string { return &value }
