@@ -10,6 +10,12 @@ Response fields:
 - `deploymentName`
 - `resourceType`
 - `resourceName`
+- `lookupContext`
+  - `region`
+  - `controlAccountId`
+  - `targetAccountId`
+  - `crossAccount`
+  - `observerRoleConfigured`
 - `available`
 - `source`
 - `entries[]`
@@ -32,6 +38,8 @@ Behavior by type:
 Inside one Tenet API process, the built-in AWS-backed provider now reuses SDK config/client setup per `(region, targetAccountID, observerRoleARN)` key. That keeps repeated operator refreshes on the same deployment/resource from rebuilding ECS, CloudWatch Logs, Auto Scaling, and EC2 clients for every request.
 
 Unsupported resource types do not hard-fail the API. They return `available=false` with a stable `unavailableReason` code so the embedded UI can show an explicit unavailable state.
+
+The additive `lookupContext` object is always present, including unavailable responses, so operators can see which region/account path Tenet tried to inspect before AWS troubleshooting continues elsewhere.
 
 ## Embedded UI behavior
 

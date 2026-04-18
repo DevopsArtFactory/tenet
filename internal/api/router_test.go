@@ -2404,8 +2404,15 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 			DeploymentName: "api-prod",
 			ResourceType:   "ecsService",
 			ResourceName:   "payments-api-prod-service",
-			Available:      true,
-			Source:         resourcelogs.SourceCloudWatch,
+			LookupContext: resourcelogs.LookupContext{
+				Region:                 "ap-northeast-2",
+				ControlAccountID:       "123456789012",
+				TargetAccountID:        "123456789012",
+				CrossAccount:           false,
+				ObserverRoleConfigured: true,
+			},
+			Available: true,
+			Source:    resourcelogs.SourceCloudWatch,
 			Entries: []resourcelogs.Entry{
 				{Timestamp: "2026-04-16T07:10:00Z", Message: "service became healthy", Stream: "ecs/payments-api/service/abc123"},
 				{Timestamp: "2026-04-16T07:09:00Z", Message: "registered 2/2 targets"},
@@ -2466,9 +2473,24 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
 			t.Fatalf("failed to decode raw resource logs payload: %v", err)
 		}
-		for _, key := range []string{"deploymentName", "resourceType", "resourceName", "available", "source", "entries", "unavailableReason"} {
+		for _, key := range []string{"deploymentName", "resourceType", "resourceName", "lookupContext", "available", "source", "entries", "unavailableReason"} {
 			if _, ok := raw[key]; !ok {
 				t.Fatalf("expected %q field in payload, got %#v", key, raw)
+			}
+		}
+		lookupContext, ok := raw["lookupContext"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected lookupContext object in payload, got %#v", raw["lookupContext"])
+		}
+		for key, want := range map[string]any{
+			"region":                 "ap-northeast-2",
+			"controlAccountId":       "123456789012",
+			"targetAccountId":        "123456789012",
+			"crossAccount":           false,
+			"observerRoleConfigured": true,
+		} {
+			if got := lookupContext[key]; !reflect.DeepEqual(got, want) {
+				t.Fatalf("expected lookupContext[%q]=%v, got %#v", key, want, got)
 			}
 		}
 		entries, ok := raw["entries"].([]any)

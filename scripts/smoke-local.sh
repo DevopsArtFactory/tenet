@@ -335,6 +335,12 @@ assert resource_logs['deploymentName'] == 'payments-api-prod', resource_logs
 assert resource_logs['resourceType'] == 'trafficShiftPlan', resource_logs
 assert resource_logs['resourceName'] == 'payments-api-prod-weighted-routing', resource_logs
 assert isinstance(resource_logs['available'], bool), resource_logs
+assert isinstance(resource_logs.get('lookupContext'), dict), resource_logs
+assert isinstance(resource_logs['lookupContext'].get('region'), str) and resource_logs['lookupContext']['region'], resource_logs
+assert isinstance(resource_logs['lookupContext'].get('controlAccountId'), str) and resource_logs['lookupContext']['controlAccountId'], resource_logs
+assert isinstance(resource_logs['lookupContext'].get('targetAccountId'), str) and resource_logs['lookupContext']['targetAccountId'], resource_logs
+assert isinstance(resource_logs['lookupContext'].get('crossAccount'), bool), resource_logs
+assert isinstance(resource_logs['lookupContext'].get('observerRoleConfigured'), bool), resource_logs
 assert resource_logs.get('entries') is None or isinstance(resource_logs.get('entries'), list), resource_logs
 if resource_logs['available']:
     assert isinstance(resource_logs.get('source'), str), resource_logs
@@ -344,6 +350,12 @@ assert worker_resource_logs['deploymentName'] == 'worker-prod', worker_resource_
 assert worker_resource_logs['resourceType'] == 'ecsService', worker_resource_logs
 assert worker_resource_logs['resourceName'] == 'worker-prod-service', worker_resource_logs
 assert isinstance(worker_resource_logs['available'], bool), worker_resource_logs
+assert isinstance(worker_resource_logs.get('lookupContext'), dict), worker_resource_logs
+assert isinstance(worker_resource_logs['lookupContext'].get('region'), str) and worker_resource_logs['lookupContext']['region'], worker_resource_logs
+assert isinstance(worker_resource_logs['lookupContext'].get('controlAccountId'), str) and worker_resource_logs['lookupContext']['controlAccountId'], worker_resource_logs
+assert isinstance(worker_resource_logs['lookupContext'].get('targetAccountId'), str) and worker_resource_logs['lookupContext']['targetAccountId'], worker_resource_logs
+assert isinstance(worker_resource_logs['lookupContext'].get('crossAccount'), bool), worker_resource_logs
+assert isinstance(worker_resource_logs['lookupContext'].get('observerRoleConfigured'), bool), worker_resource_logs
 assert worker_resource_logs.get('entries') is None or isinstance(worker_resource_logs.get('entries'), list), worker_resource_logs
 if worker_resource_logs['available']:
     assert isinstance(worker_resource_logs.get('source'), str), worker_resource_logs

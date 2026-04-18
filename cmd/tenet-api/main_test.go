@@ -672,12 +672,13 @@ func TestAPIOptionsOverviewDeploymentResourceLogsWiresObserverRoleAndPlacement(t
 		t.Fatalf("expected wired provider result, got %+v", result)
 	}
 	want := resourcelogs.Request{
-		DeploymentName:  "api-prod",
-		ResourceType:    "ecsService",
-		ResourceName:    "api-prod-live-service",
-		TargetAccountID: "123456789012",
-		Region:          "ap-northeast-2",
-		ObserverRoleARN: "arn:aws:iam::123456789012:role/TenetObserverRole",
+		DeploymentName:   "api-prod",
+		ResourceType:     "ecsService",
+		ResourceName:     "api-prod-live-service",
+		ControlAccountID: "123456789012",
+		TargetAccountID:  "123456789012",
+		Region:           "ap-northeast-2",
+		ObserverRoleARN:  "arn:aws:iam::123456789012:role/TenetObserverRole",
 	}
 	if !reflect.DeepEqual(provider.lastRequest, want) {
 		t.Fatalf("unexpected resource log request: %+v", provider.lastRequest)

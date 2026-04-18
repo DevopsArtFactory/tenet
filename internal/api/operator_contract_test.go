@@ -188,3 +188,50 @@ func TestAuditLogOperatorContract(t *testing.T) {
 		}
 	}
 }
+
+func TestResourceLogsOperatorContract(t *testing.T) {
+	script := readRepoFile(t, "scripts/smoke-local.sh")
+	for _, fragment := range []string{
+		`assert isinstance(resource_logs.get('lookupContext'), dict), resource_logs`,
+		`assert isinstance(resource_logs['lookupContext'].get('region'), str) and resource_logs['lookupContext']['region'], resource_logs`,
+		`assert isinstance(resource_logs['lookupContext'].get('controlAccountId'), str) and resource_logs['lookupContext']['controlAccountId'], resource_logs`,
+		`assert isinstance(resource_logs['lookupContext'].get('targetAccountId'), str) and resource_logs['lookupContext']['targetAccountId'], resource_logs`,
+		`assert isinstance(resource_logs['lookupContext'].get('crossAccount'), bool), resource_logs`,
+		`assert isinstance(resource_logs['lookupContext'].get('observerRoleConfigured'), bool), resource_logs`,
+		`assert isinstance(worker_resource_logs.get('lookupContext'), dict), worker_resource_logs`,
+		`assert isinstance(worker_resource_logs['lookupContext'].get('observerRoleConfigured'), bool), worker_resource_logs`,
+	} {
+		if !strings.Contains(script, fragment) {
+			t.Fatalf("expected smoke-local resource logs contract to include %q", fragment)
+		}
+	}
+
+	readme := readRepoFile(t, "README.md")
+	for _, fragment := range []string{
+		"`lookupContext` object",
+		"`lookupContext.region`",
+		"`lookupContext.controlAccountId`",
+		"`lookupContext.targetAccountId`",
+		"`lookupContext.crossAccount`",
+		"`lookupContext.observerRoleConfigured`",
+		"present for both `available=true` and unavailable responses",
+	} {
+		if !strings.Contains(readme, fragment) {
+			t.Fatalf("expected README resource log contract to include %q", fragment)
+		}
+	}
+
+	featureDoc := readRepoFile(t, "docs/features/resource-recent-logs.md")
+	for _, fragment := range []string{
+		"- `lookupContext`",
+		"- `controlAccountId`",
+		"- `targetAccountId`",
+		"- `crossAccount`",
+		"- `observerRoleConfigured`",
+		"`lookupContext` object is always present, including unavailable responses",
+	} {
+		if !strings.Contains(featureDoc, fragment) {
+			t.Fatalf("expected resource recent logs doc to include %q", fragment)
+		}
+	}
+}

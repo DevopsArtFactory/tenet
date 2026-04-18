@@ -15,6 +15,16 @@ import (
 	"github.com/aws/smithy-go"
 )
 
+func expectedLookupContext(region, controlAccountID, targetAccountID, observerRoleARN string) LookupContext {
+	return LookupContext{
+		Region:                 region,
+		ControlAccountID:       controlAccountID,
+		TargetAccountID:        targetAccountID,
+		CrossAccount:           controlAccountID != "" && targetAccountID != "" && controlAccountID != targetAccountID,
+		ObserverRoleConfigured: observerRoleARN != "",
+	}
+}
+
 func TestServiceRecent(t *testing.T) {
 	t.Run("ecs service returns newest cloudwatch log events", func(t *testing.T) {
 		var gotLookup ECSRequest
@@ -54,6 +64,7 @@ func TestServiceRecent(t *testing.T) {
 			DeploymentName: "payments-api-prod",
 			ResourceType:   "ecsService",
 			ResourceName:   "payments-api-prod-service",
+			LookupContext:  expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
 			Available:      true,
 			Source:         SourceCloudWatch,
 			Entries: []Entry{
@@ -124,6 +135,7 @@ func TestServiceRecent(t *testing.T) {
 			DeploymentName: "payments-api-prod",
 			ResourceType:   "ecsService",
 			ResourceName:   "payments-api-prod-service",
+			LookupContext:  expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
 			Available:      true,
 			Source:         SourceCloudWatch,
 			Entries:        []Entry{},
@@ -181,6 +193,7 @@ func TestServiceRecent(t *testing.T) {
 			DeploymentName: "payments-api-prod",
 			ResourceType:   "candidateAutoScalingGroup",
 			ResourceName:   "payments-api-prod-candidate",
+			LookupContext:  expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
 			Available:      true,
 			Source:         SourceEC2Console,
 			Entries: []Entry{
@@ -235,6 +248,7 @@ func TestServiceRecent(t *testing.T) {
 			DeploymentName: "payments-api-prod",
 			ResourceType:   "candidateAutoScalingGroup",
 			ResourceName:   "payments-api-prod-candidate",
+			LookupContext:  expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
 			Available:      true,
 			Source:         SourceEC2Console,
 			Entries: []Entry{
@@ -275,6 +289,7 @@ func TestServiceRecent(t *testing.T) {
 			DeploymentName: "payments-api-prod",
 			ResourceType:   "candidateAutoScalingGroup",
 			ResourceName:   "payments-api-prod-candidate",
+			LookupContext:  expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
 			Available:      true,
 			Source:         SourceEC2Console,
 			Entries:        []Entry{},
@@ -324,6 +339,7 @@ func TestServiceRecent(t *testing.T) {
 			DeploymentName: "payments-api-prod",
 			ResourceType:   "serviceAutoScalingGroup",
 			ResourceName:   "payments-api-prod-service",
+			LookupContext:  expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
 			Available:      true,
 			Source:         SourceEC2Console,
 			Entries: []Entry{
@@ -354,6 +370,7 @@ func TestServiceRecent(t *testing.T) {
 			DeploymentName:    "payments-api-prod",
 			ResourceType:      "loadBalancer",
 			ResourceName:      "payments-api-prod-alb",
+			LookupContext:     expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
 			Available:         false,
 			Source:            "",
 			Entries:           nil,
@@ -388,6 +405,7 @@ func TestServiceRecent(t *testing.T) {
 			DeploymentName:    "payments-api-prod",
 			ResourceType:      "ecsService",
 			ResourceName:      "payments-api-prod-service",
+			LookupContext:     expectedLookupContext("ap-northeast-2", "111111111111", "222222222222", ""),
 			Available:         false,
 			Source:            "",
 			Entries:           nil,
@@ -427,6 +445,7 @@ func TestServiceRecent(t *testing.T) {
 			DeploymentName:    "payments-api-prod",
 			ResourceType:      "ecsService",
 			ResourceName:      "payments-api-prod-service",
+			LookupContext:     expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
 			Available:         false,
 			UnavailableReason: UnavailableReasonAWSUnavailable,
 		}
@@ -467,6 +486,7 @@ func TestServiceRecent(t *testing.T) {
 			DeploymentName:    "payments-api-prod",
 			ResourceType:      "candidateAutoScalingGroup",
 			ResourceName:      "payments-api-prod-candidate",
+			LookupContext:     expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
 			Available:         false,
 			UnavailableReason: UnavailableReasonAWSUnavailable,
 		}
@@ -590,6 +610,7 @@ func TestServiceRecent(t *testing.T) {
 			DeploymentName:    "payments-api-prod",
 			ResourceType:      "autoScalingGroup",
 			ResourceName:      "payments-api-prod-candidate",
+			LookupContext:     expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
 			Available:         false,
 			UnavailableReason: UnavailableReasonUnsupportedResourceType,
 		}

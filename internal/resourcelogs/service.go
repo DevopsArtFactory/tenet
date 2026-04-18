@@ -74,13 +74,22 @@ type Request struct {
 }
 
 type Result struct {
-	DeploymentName    string  `json:"deploymentName"`
-	ResourceType      string  `json:"resourceType"`
-	ResourceName      string  `json:"resourceName"`
-	Available         bool    `json:"available"`
-	Source            string  `json:"source"`
-	Entries           []Entry `json:"entries"`
-	UnavailableReason string  `json:"unavailableReason"`
+	DeploymentName    string        `json:"deploymentName"`
+	ResourceType      string        `json:"resourceType"`
+	ResourceName      string        `json:"resourceName"`
+	LookupContext     LookupContext `json:"lookupContext"`
+	Available         bool          `json:"available"`
+	Source            string        `json:"source"`
+	Entries           []Entry       `json:"entries"`
+	UnavailableReason string        `json:"unavailableReason"`
+}
+
+type LookupContext struct {
+	Region                 string `json:"region"`
+	ControlAccountID       string `json:"controlAccountId"`
+	TargetAccountID        string `json:"targetAccountId"`
+	CrossAccount           bool   `json:"crossAccount"`
+	ObserverRoleConfigured bool   `json:"observerRoleConfigured"`
 }
 
 type Entry struct {
@@ -327,6 +336,7 @@ func unavailableResult(req Request, reason string) Result {
 		DeploymentName:    req.DeploymentName,
 		ResourceType:      req.ResourceType,
 		ResourceName:      req.ResourceName,
+		LookupContext:     lookupContext(req),
 		Available:         false,
 		UnavailableReason: reason,
 	}
@@ -337,9 +347,22 @@ func availableResult(req Request, source string, entries []Entry) Result {
 		DeploymentName: req.DeploymentName,
 		ResourceType:   req.ResourceType,
 		ResourceName:   req.ResourceName,
+		LookupContext:  lookupContext(req),
 		Available:      true,
 		Source:         source,
 		Entries:        entries,
+	}
+}
+
+func lookupContext(req Request) LookupContext {
+	controlAccountID := strings.TrimSpace(req.ControlAccountID)
+	targetAccountID := strings.TrimSpace(req.TargetAccountID)
+	return LookupContext{
+		Region:                 strings.TrimSpace(req.Region),
+		ControlAccountID:       controlAccountID,
+		TargetAccountID:        targetAccountID,
+		CrossAccount:           controlAccountID != "" && targetAccountID != "" && controlAccountID != targetAccountID,
+		ObserverRoleConfigured: strings.TrimSpace(req.ObserverRoleARN) != "",
 	}
 }
 
