@@ -107,7 +107,7 @@ cleanup() {
   if [[ "$exit_code" -ne 0 ]]; then
     echo "smoke-docker: failure detected, dumping recent compose logs" >&2
     "${COMPOSE[@]}" logs api --tail=50 >&2 || true
-    "${COMPOSE[@]}" logs controller --tail=50 >&2 || true
+    "${COMPOSE[@]}" logs controller --tail=200 >&2 || true
   fi
 
   "${COMPOSE[@]}" down --remove-orphans >/dev/null 2>&1 || true
@@ -527,7 +527,7 @@ PY
 
 controller_logs=""
 for _ in $(seq 1 60); do
-  controller_logs=$("${COMPOSE[@]}" logs controller --tail=50 2>&1 || true)
+  controller_logs=$("${COMPOSE[@]}" logs controller --tail=200 2>&1 || true)
   if [[ "$controller_logs" == *"starting tenet-controller"* && "$controller_logs" == *"controller reconcile deployment=payments-api-prod"* ]]; then
     break
   fi

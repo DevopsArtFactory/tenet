@@ -1433,7 +1433,7 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"params.get('applyId') || ''",
 			"fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-logs?${params.toString()}`)",
 			"logs api --tail=200",
-			"logs controller --tail=50",
+			"logs controller --tail=200",
 			"api logs missing correlated structured request entries",
 			"down --remove-orphans",
 		},
