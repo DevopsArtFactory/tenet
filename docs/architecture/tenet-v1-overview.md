@@ -70,7 +70,7 @@ Tenet exposes joined read models through:
 - the API
 - the embedded UI
 
-The embedded UI is intentionally lightweight and served directly by the Go API. That keeps the system easy to run locally while the control-plane model is still stabilizing.
+The embedded UI is intentionally lightweight and served directly by the Go API. That keeps the system easy to run locally while the control-plane model is still stabilizing. Request timeout and cancellation now propagate through the catalog, overview, and status provider path as well, so slow GitHub-backed catalog reads or runtime-status joins can stop when the originating HTTP request is cancelled or times out.
 
 ## UI architecture
 

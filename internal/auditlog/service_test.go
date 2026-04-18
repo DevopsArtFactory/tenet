@@ -60,7 +60,7 @@ func TestServiceListProjectsImmutableRecordsIntoNewestFirstTimeline(t *testing.T
 				},
 			}, nil
 		},
-		ListDeployments: func() ([]catalog.DeploymentView, error) {
+		ListDeployments: func(_ context.Context) ([]catalog.DeploymentView, error) {
 			return []catalog.DeploymentView{
 				{Name: "api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"},
 				{Name: "worker-prod", AppRef: "worker", EnvironmentRef: "prod-apne2"},

@@ -109,7 +109,7 @@ func TestAPIOptionsWithGitHubCatalogSourcePreservesOverviewStatusJoin(t *testing
 		t.Fatal("expected overview deployment provider")
 	}
 
-	detail, err := options.OverviewDeployment("api-prod")
+	detail, err := options.OverviewDeployment(context.Background(), "api-prod")
 	if err != nil {
 		t.Fatalf("OverviewDeployment returned error: %v", err)
 	}
@@ -123,7 +123,11 @@ func TestAPIOptionsWithGitHubCatalogSourcePreservesOverviewStatusJoin(t *testing
 
 func TestAPIOptionsWithGitHubCatalogSourceUsesObserverRoleForResourceInspection(t *testing.T) {
 	repoRoot := writeCanaryEC2RepositoryFixture(t)
-	source := newTestGitHubCatalogSource(t, repoRoot)
+	const key = "load-spec-trace"
+	var gotLoadSpecValue any
+	source := newContextAwareGitHubCatalogSource(t, repoRoot, func(ctx context.Context) {
+		gotLoadSpecValue = ctx.Value(key)
+	})
 
 	provider := &fakeResourceInspectionProvider{}
 	restore := stubResourceInspectionProviderFactory(provider)
@@ -134,11 +138,15 @@ func TestAPIOptionsWithGitHubCatalogSourceUsesObserverRoleForResourceInspection(
 		t.Fatal("expected resource inspection provider")
 	}
 
-	if _, err := options.OverviewDeploymentResourceInspection(context.Background(), "api-prod", "candidateAutoScalingGroup", "api-prod-candidate"); err != nil {
+	ctx := context.WithValue(context.Background(), key, "trace-value")
+	if _, err := options.OverviewDeploymentResourceInspection(ctx, "api-prod", "candidateAutoScalingGroup", "api-prod-candidate"); err != nil {
 		t.Fatalf("OverviewDeploymentResourceInspection returned error: %v", err)
 	}
 	if provider.calls != 1 {
 		t.Fatalf("expected one inspection call, got %d", provider.calls)
+	}
+	if gotLoadSpecValue != "trace-value" {
+		t.Fatalf("expected request context value to reach GitHub loadSpec, got %#v", gotLoadSpecValue)
 	}
 	if provider.lastRequest.ObserverRoleARN != "arn:aws:iam::123456789012:role/TenetObserverRole" {
 		t.Fatalf("expected observer role from GitHub-backed account spec, got %+v", provider.lastRequest)
@@ -151,16 +159,25 @@ func TestAPIOptionsWithGitHubCatalogSourceUsesObserverRoleForResourceInspection(
 func newTestGitHubCatalogSource(t *testing.T, root string) apiCatalogSource {
 	t.Helper()
 
+	return newContextAwareGitHubCatalogSource(t, root, nil)
+}
+
+func newContextAwareGitHubCatalogSource(t *testing.T, root string, onLoadSpec func(context.Context)) apiCatalogSource {
+	t.Helper()
+
 	client := &testGitHubManifestClient{root: root, t: t}
 	req := githubcontents.Request{Repository: "acme/platform-config", Ref: "main"}
 	return apiCatalogSource{
 		kind:          apiCatalogSourceGitHub,
 		githubRequest: req,
-		loadCatalog: func() (manifest.Catalog, error) {
+		loadCatalog: func(_ context.Context) (manifest.Catalog, error) {
 			return catalog.LoadFromGitHub(context.Background(), client, req)
 		},
-		loadSpec: func() (manifest.CatalogSpec, error) {
-			return manifestgithub.Load(context.Background(), client, req)
+		loadSpec: func(ctx context.Context) (manifest.CatalogSpec, error) {
+			if onLoadSpec != nil {
+				onLoadSpec(ctx)
+			}
+			return manifestgithub.Load(ctx, client, req)
 		},
 	}
 }

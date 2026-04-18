@@ -119,14 +119,14 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 		loadCatalog := source.loadCatalog
 		resourceLogService := newResourceLogProvider()
 		resourceInspectionService := newResourceInspectionProvider()
-		loadSnapshots := func() ([]statusstore.Snapshot, error) {
+		loadSnapshots := func(ctx context.Context) ([]statusstore.Snapshot, error) {
 			if store == nil {
 				return nil, nil
 			}
-			return store.List(context.Background())
+			return store.List(ctx)
 		}
-		loadObserverRoleARN := func(targetAccountID string) (string, error) {
-			catalogSpec, err := source.loadSpec()
+		loadObserverRoleARN := func(ctx context.Context, targetAccountID string) (string, error) {
+			catalogSpec, err := source.loadSpec(ctx)
 			if err != nil {
 				return "", err
 			}
@@ -137,68 +137,68 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 			}
 			return "", nil
 		}
-		options.CatalogSummary = func() (catalog.Summary, error) {
-			compiled, err := loadCatalog()
+		options.CatalogSummary = func(ctx context.Context) (catalog.Summary, error) {
+			compiled, err := loadCatalog(ctx)
 			if err != nil {
 				return catalog.Summary{}, err
 			}
 			return catalog.Summarize(compiled), nil
 		}
-		options.CatalogDeployments = func() ([]catalog.DeploymentView, error) {
-			compiled, err := loadCatalog()
+		options.CatalogDeployments = func(ctx context.Context) ([]catalog.DeploymentView, error) {
+			compiled, err := loadCatalog(ctx)
 			if err != nil {
 				return nil, err
 			}
 			return catalog.ListDeployments(compiled), nil
 		}
-		options.CatalogEnvironments = func() ([]catalog.EnvironmentView, error) {
-			compiled, err := loadCatalog()
+		options.CatalogEnvironments = func(ctx context.Context) ([]catalog.EnvironmentView, error) {
+			compiled, err := loadCatalog(ctx)
 			if err != nil {
 				return nil, err
 			}
 			return catalog.ListEnvironments(compiled), nil
 		}
-		options.CatalogAccounts = func() ([]catalog.AccountView, error) {
-			compiled, err := loadCatalog()
+		options.CatalogAccounts = func(ctx context.Context) ([]catalog.AccountView, error) {
+			compiled, err := loadCatalog(ctx)
 			if err != nil {
 				return nil, err
 			}
 			return catalog.ListAccounts(compiled), nil
 		}
-		options.CatalogPlacements = func() ([]catalog.PlacementView, error) {
-			compiled, err := loadCatalog()
+		options.CatalogPlacements = func(ctx context.Context) ([]catalog.PlacementView, error) {
+			compiled, err := loadCatalog(ctx)
 			if err != nil {
 				return nil, err
 			}
 			return catalog.ListPlacements(compiled)
 		}
-		options.CatalogTopology = func() (catalog.TopologySnapshot, error) {
-			compiled, err := loadCatalog()
+		options.CatalogTopology = func(ctx context.Context) (catalog.TopologySnapshot, error) {
+			compiled, err := loadCatalog(ctx)
 			if err != nil {
 				return catalog.TopologySnapshot{}, err
 			}
 			return catalog.BuildTopology(compiled)
 		}
-		options.OverviewApplications = func() ([]catalog.ApplicationOverview, error) {
-			compiled, err := loadCatalog()
+		options.OverviewApplications = func(ctx context.Context) ([]catalog.ApplicationOverview, error) {
+			compiled, err := loadCatalog(ctx)
 			if err != nil {
 				return nil, err
 			}
-			snapshots, err := loadSnapshots()
+			snapshots, err := loadSnapshots(ctx)
 			if err != nil {
 				return nil, err
 			}
 			return catalog.BuildApplicationOverviews(compiled, snapshots)
 		}
-		options.OverviewApplication = func(name string) (catalog.ApplicationOverviewDetail, error) {
-			compiled, err := loadCatalog()
+		options.OverviewApplication = func(ctx context.Context, name string) (catalog.ApplicationOverviewDetail, error) {
+			compiled, err := loadCatalog(ctx)
 			if err != nil {
 				return catalog.ApplicationOverviewDetail{}, err
 			}
 			if store == nil {
 				return catalog.BuildApplicationOverviewDetail(compiled, nil, name)
 			}
-			snapshot, err := store.Get(context.Background(), name)
+			snapshot, err := store.Get(ctx, name)
 			if err != nil {
 				if errors.Is(err, statusstore.ErrNotFound) {
 					return catalog.BuildApplicationOverviewDetail(compiled, nil, name)
@@ -207,48 +207,48 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 			}
 			return catalog.BuildApplicationOverviewDetail(compiled, []statusstore.Snapshot{snapshot}, name)
 		}
-		options.OverviewAccounts = func() ([]catalog.AccountOverview, error) {
-			compiled, err := loadCatalog()
+		options.OverviewAccounts = func(ctx context.Context) ([]catalog.AccountOverview, error) {
+			compiled, err := loadCatalog(ctx)
 			if err != nil {
 				return nil, err
 			}
-			snapshots, err := loadSnapshots()
+			snapshots, err := loadSnapshots(ctx)
 			if err != nil {
 				return nil, err
 			}
 			return catalog.BuildAccountOverviews(compiled, snapshots)
 		}
-		options.OverviewAccount = func(awsAccountID string) (catalog.AccountOverviewDetail, error) {
-			compiled, err := loadCatalog()
+		options.OverviewAccount = func(ctx context.Context, awsAccountID string) (catalog.AccountOverviewDetail, error) {
+			compiled, err := loadCatalog(ctx)
 			if err != nil {
 				return catalog.AccountOverviewDetail{}, err
 			}
-			currentSnapshots, err := loadSnapshots()
+			currentSnapshots, err := loadSnapshots(ctx)
 			if err != nil {
 				return catalog.AccountOverviewDetail{}, err
 			}
 			return catalog.BuildAccountOverviewDetail(compiled, currentSnapshots, awsAccountID)
 		}
-		options.OverviewProjectEnvironment = func(awsAccountID, appRef, environmentRef string) (catalog.ProjectEnvironmentOverviewDetail, error) {
-			compiled, err := loadCatalog()
+		options.OverviewProjectEnvironment = func(ctx context.Context, awsAccountID, appRef, environmentRef string) (catalog.ProjectEnvironmentOverviewDetail, error) {
+			compiled, err := loadCatalog(ctx)
 			if err != nil {
 				return catalog.ProjectEnvironmentOverviewDetail{}, err
 			}
-			currentSnapshots, err := loadSnapshots()
+			currentSnapshots, err := loadSnapshots(ctx)
 			if err != nil {
 				return catalog.ProjectEnvironmentOverviewDetail{}, err
 			}
 			return catalog.BuildProjectEnvironmentOverviewDetail(compiled, currentSnapshots, awsAccountID, appRef, environmentRef)
 		}
-		options.OverviewDeployment = func(name string) (catalog.DeploymentOverviewDetail, error) {
-			compiled, err := loadCatalog()
+		options.OverviewDeployment = func(ctx context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+			compiled, err := loadCatalog(ctx)
 			if err != nil {
 				return catalog.DeploymentOverviewDetail{}, err
 			}
 			if store == nil {
 				return catalog.BuildDeploymentOverviewDetail(compiled, nil, name)
 			}
-			snapshot, err := store.Get(context.Background(), name)
+			snapshot, err := store.Get(ctx, name)
 			if err != nil {
 				if errors.Is(err, statusstore.ErrNotFound) {
 					return catalog.BuildDeploymentOverviewDetail(compiled, nil, name)
@@ -257,15 +257,15 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 			}
 			return catalog.BuildDeploymentOverviewDetail(compiled, []statusstore.Snapshot{snapshot}, name)
 		}
-		options.OverviewDeploymentEvents = func(name string) (catalog.DeploymentOverviewEvents, error) {
-			compiled, err := loadCatalog()
+		options.OverviewDeploymentEvents = func(ctx context.Context, name string) (catalog.DeploymentOverviewEvents, error) {
+			compiled, err := loadCatalog(ctx)
 			if err != nil {
 				return catalog.DeploymentOverviewEvents{}, err
 			}
 			if store == nil {
 				return catalog.BuildDeploymentOverviewEvents(compiled, nil, name)
 			}
-			snapshot, err := store.Get(context.Background(), name)
+			snapshot, err := store.Get(ctx, name)
 			if err != nil {
 				if errors.Is(err, statusstore.ErrNotFound) {
 					return catalog.BuildDeploymentOverviewEvents(compiled, nil, name)
@@ -301,11 +301,11 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 	if store == nil {
 		return options
 	}
-	options.DeploymentStatuses = func() ([]statusstore.Snapshot, error) {
-		return store.List(context.Background())
+	options.DeploymentStatuses = func(ctx context.Context) ([]statusstore.Snapshot, error) {
+		return store.List(ctx)
 	}
-	options.DeploymentStatus = func(name string) (statusstore.Snapshot, error) {
-		return store.Get(context.Background(), name)
+	options.DeploymentStatus = func(ctx context.Context, name string) (statusstore.Snapshot, error) {
+		return store.Get(ctx, name)
 	}
 	return options
 }
@@ -322,12 +322,12 @@ func awsApplyEnabled() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("TENET_AWS_ENABLE_APPLY")), "true")
 }
 
-func newApplyRequestFingerprintProvider(loadDetail func(string) (catalog.DeploymentOverviewDetail, error)) applyrequest.CurrentFingerprintProvider {
+func newApplyRequestFingerprintProvider(loadDetail func(context.Context, string) (catalog.DeploymentOverviewDetail, error)) applyrequest.CurrentFingerprintProvider {
 	if loadDetail == nil {
 		return nil
 	}
-	return func(_ context.Context, deploymentName string) (string, error) {
-		detail, err := loadDetail(deploymentName)
+	return func(ctx context.Context, deploymentName string) (string, error) {
+		detail, err := loadDetail(ctx, deploymentName)
 		if err != nil {
 			return "", err
 		}
@@ -395,22 +395,23 @@ type resourceLookupRequest struct {
 }
 
 func newOverviewDeploymentResourceLookupProvider(
-	loadDetail func(string) (catalog.DeploymentOverviewDetail, error),
-	loadObserverRoleARN func(string) (string, error),
+	loadDetail func(context.Context, string) (catalog.DeploymentOverviewDetail, error),
+	loadObserverRoleARN func(context.Context, string) (string, error),
 ) overviewDeploymentResourceLookupProvider {
 	return func(ctx context.Context, name, resourceType, resourceName string) (resourceLookupRequest, error) {
-		return loadOverviewDeploymentResourceRequest(loadDetail, loadObserverRoleARN, name, resourceType, resourceName)
+		return loadOverviewDeploymentResourceRequest(ctx, loadDetail, loadObserverRoleARN, name, resourceType, resourceName)
 	}
 }
 
 func loadOverviewDeploymentResourceRequest(
-	loadDetail func(string) (catalog.DeploymentOverviewDetail, error),
-	loadObserverRoleARN func(string) (string, error),
+	ctx context.Context,
+	loadDetail func(context.Context, string) (catalog.DeploymentOverviewDetail, error),
+	loadObserverRoleARN func(context.Context, string) (string, error),
 	name string,
 	resourceType string,
 	resourceName string,
 ) (resourceLookupRequest, error) {
-	detail, err := loadDetail(name)
+	detail, err := loadDetail(ctx, name)
 	if err != nil {
 		return resourceLookupRequest{}, err
 	}
@@ -418,7 +419,7 @@ func loadOverviewDeploymentResourceRequest(
 	if !ok {
 		return resourceLookupRequest{}, fmt.Errorf("%w: deployment %s resource %s/%s", statusstore.ErrNotFound, name, resourceType, resourceName)
 	}
-	observerRoleARN, err := loadObserverRoleARN(detail.AWSAccountID)
+	observerRoleARN, err := loadObserverRoleARN(ctx, detail.AWSAccountID)
 	if err != nil {
 		return resourceLookupRequest{}, err
 	}

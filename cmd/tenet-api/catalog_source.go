@@ -27,8 +27,8 @@ type apiCatalogSource struct {
 	filesystemRoot string
 	githubBaseURL  string
 	githubRequest  githubcontents.Request
-	loadCatalog    func() (manifest.Catalog, error)
-	loadSpec       func() (manifest.CatalogSpec, error)
+	loadCatalog    func(context.Context) (manifest.Catalog, error)
+	loadSpec       func(context.Context) (manifest.CatalogSpec, error)
 }
 
 func loadCatalogSourceFromEnv() (apiCatalogSource, error) {
@@ -83,10 +83,10 @@ func newFilesystemCatalogSource(root string) apiCatalogSource {
 	return apiCatalogSource{
 		kind:           apiCatalogSourceFilesystem,
 		filesystemRoot: root,
-		loadCatalog: func() (manifest.Catalog, error) {
+		loadCatalog: func(_ context.Context) (manifest.Catalog, error) {
 			return catalog.LoadFromRepository(root)
 		},
-		loadSpec: func() (manifest.CatalogSpec, error) {
+		loadSpec: func(_ context.Context) (manifest.CatalogSpec, error) {
 			return manifestfs.Load(root)
 		},
 	}
@@ -113,11 +113,11 @@ func newGitHubCatalogSource(baseURL string, req githubcontents.Request) (apiCata
 		kind:          apiCatalogSourceGitHub,
 		githubBaseURL: baseURL,
 		githubRequest: req,
-		loadCatalog: func() (manifest.Catalog, error) {
-			return catalog.LoadFromGitHub(context.Background(), client, req)
+		loadCatalog: func(ctx context.Context) (manifest.Catalog, error) {
+			return catalog.LoadFromGitHub(ctx, client, req)
 		},
-		loadSpec: func() (manifest.CatalogSpec, error) {
-			return manifestgithub.Load(context.Background(), client, req)
+		loadSpec: func(ctx context.Context) (manifest.CatalogSpec, error) {
+			return manifestgithub.Load(ctx, client, req)
 		},
 	}, nil
 }
@@ -132,7 +132,7 @@ func validateCatalogSource(source apiCatalogSource, applyEnabled bool) error {
 	if applyEnabled && source.kind != apiCatalogSourceFilesystem {
 		return fmt.Errorf("TENET_AWS_ENABLE_APPLY=true requires TENET_REPO_ROOT because the local-safe executor only supports the filesystem catalog source; GitHub catalog mode is read-only")
 	}
-	if _, err := source.loadCatalog(); err != nil {
+	if _, err := source.loadCatalog(context.Background()); err != nil {
 		switch source.kind {
 		case apiCatalogSourceFilesystem:
 			return fmt.Errorf("validate filesystem catalog source: %w", err)

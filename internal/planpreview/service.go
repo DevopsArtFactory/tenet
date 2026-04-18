@@ -20,7 +20,7 @@ var (
 )
 
 // DetailProvider resolves the canonical deployment overview detail used to derive previews.
-type DetailProvider func(string) (catalog.DeploymentOverviewDetail, error)
+type DetailProvider func(context.Context, string) (catalog.DeploymentOverviewDetail, error)
 
 // Service derives and persists immutable plan previews.
 type Service struct {
@@ -44,7 +44,7 @@ func (s Service) Create(ctx context.Context, deploymentName string, req CreateRe
 		return CreateResult{}, fmt.Errorf("plan preview store is required")
 	}
 
-	detail, err := s.LoadDetail(deploymentName)
+	detail, err := s.LoadDetail(ctx, deploymentName)
 	if err != nil {
 		return CreateResult{}, err
 	}

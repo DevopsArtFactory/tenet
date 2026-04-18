@@ -78,7 +78,7 @@ func TestServiceCreatePersistsImmutableReadyPlanWithStableID(t *testing.T) {
 		t.Fatalf("DeriveDeploymentSourceFingerprint returned error: %v", err)
 	}
 	service := Service{
-		LoadDetail: func(name string) (catalog.DeploymentOverviewDetail, error) {
+		LoadDetail: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 			if name != "api-prod" {
 				t.Fatalf("unexpected deployment lookup: %s", name)
 			}
@@ -134,7 +134,7 @@ func TestServiceCreatePersistsImmutableReadyPlanWithStableID(t *testing.T) {
 func TestServiceCreatePersistsFailedPlanWhenClientFingerprintIsStale(t *testing.T) {
 	store := &memoryStore{}
 	service := Service{
-		LoadDetail: func(name string) (catalog.DeploymentOverviewDetail, error) {
+		LoadDetail: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 			return catalog.DeploymentOverviewDetail{
 				Name:               name,
 				TargetType:         "ec2",
@@ -186,7 +186,7 @@ func TestServiceCreatePersistsFailedPlanWhenClientFingerprintIsStale(t *testing.
 
 func TestServiceCreatePropagatesDeploymentLookupErrors(t *testing.T) {
 	service := Service{
-		LoadDetail: func(string) (catalog.DeploymentOverviewDetail, error) {
+		LoadDetail: func(_ context.Context, _ string) (catalog.DeploymentOverviewDetail, error) {
 			return catalog.DeploymentOverviewDetail{}, statusstore.ErrNotFound
 		},
 		Store: &memoryStore{},
@@ -208,7 +208,7 @@ func TestServiceCreateReturnsStableRecordIDEncodingErrors(t *testing.T) {
 	})
 
 	service := Service{
-		LoadDetail: func(name string) (catalog.DeploymentOverviewDetail, error) {
+		LoadDetail: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 			return catalog.DeploymentOverviewDetail{
 				Name:          name,
 				TargetType:    "ec2",
@@ -236,7 +236,7 @@ func TestServiceCreateReturnsStableRecordIDEncodingErrors(t *testing.T) {
 func TestServiceCreatePersistsAvailableActorFromRequestContext(t *testing.T) {
 	store := &memoryStore{}
 	service := Service{
-		LoadDetail: func(name string) (catalog.DeploymentOverviewDetail, error) {
+		LoadDetail: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 			return catalog.DeploymentOverviewDetail{
 				Name:          name,
 				TargetType:    "ec2",
