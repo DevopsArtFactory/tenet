@@ -60,6 +60,7 @@ type Response struct {
 	HeadCommit              *Commit                  `json:"headCommit,omitempty"`
 	ChangedFiles            *ChangedFiles            `json:"changedFiles,omitempty"`
 	DesiredStateSourceMatch *DesiredStateSourceMatch `json:"desiredStateSourceMatch,omitempty"`
+	ControllerRefresh       *ControllerRefresh       `json:"controllerRefresh,omitempty"`
 }
 
 type Commit struct {
@@ -91,6 +92,13 @@ type ChangedFiles struct {
 	Modified []string `json:"modified,omitempty"`
 	Removed  []string `json:"removed,omitempty"`
 	All      []string `json:"all,omitempty"`
+}
+
+type ControllerRefresh struct {
+	Backend     string `json:"backend"`
+	Channel     string `json:"channel"`
+	RequestID   string `json:"requestId"`
+	PublishedAt string `json:"publishedAt"`
 }
 
 type ValidationError struct {

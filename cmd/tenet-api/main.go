@@ -17,6 +17,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/auditlog"
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
+	"github.com/DevopsArtFactory/tenet/internal/controllerrefresh"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
 	"github.com/DevopsArtFactory/tenet/internal/resourceinspection"
@@ -119,6 +120,7 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 		BuildInfo:                       info,
 		GitHubWebhookSecret:             strings.TrimSpace(os.Getenv("TENET_GITHUB_WEBHOOK_SECRET")),
 		GitHubWebhookDesiredStateSource: source.webhookDesiredStateSource(),
+		GitHubWebhookRefreshPublisher:   newGitHubWebhookRefreshPublisher(store),
 	}
 	if source.configured() {
 		loadCatalog := source.loadCatalog
@@ -642,6 +644,21 @@ func mustOpenStatusStore(backend, path, redisAddr string) statusstore.Store {
 		log.Fatalf("unsupported TENET_STATUS_BACKEND %q", backend)
 		return nil
 	}
+}
+
+type redisClientProvider interface {
+	Client() redis.UniversalClient
+}
+
+func newGitHubWebhookRefreshPublisher(store statusstore.Store) controllerrefresh.Publisher {
+	if store == nil {
+		return nil
+	}
+	provider, ok := store.(redisClientProvider)
+	if !ok || provider.Client() == nil {
+		return nil
+	}
+	return controllerrefresh.NewRedisHandoff(provider.Client(), os.Getenv("TENET_REDIS_KEY_PREFIX"))
 }
 
 func envOrDefault(name, fallback string) string {

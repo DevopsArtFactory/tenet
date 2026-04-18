@@ -21,6 +21,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/auditlog"
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
+	"github.com/DevopsArtFactory/tenet/internal/controllerrefresh"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/githubwebhook"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
@@ -31,6 +32,17 @@ import (
 )
 
 type contextKey string
+
+type recordingControllerRefreshPublisher struct {
+	requests []controllerrefresh.Request
+	receipt  controllerrefresh.Receipt
+	err      error
+}
+
+func (p *recordingControllerRefreshPublisher) Publish(_ context.Context, request controllerrefresh.Request) (controllerrefresh.Receipt, error) {
+	p.requests = append(p.requests, request)
+	return p.receipt, p.err
+}
 
 func assertInternalServerErrorResponse(t *testing.T, resp *httptest.ResponseRecorder, leaked string) {
 	t.Helper()
@@ -481,7 +493,7 @@ func TestRouterGitHubWebhookAcceptedPushEvent(t *testing.T) {
 	if got.Status != githubwebhook.StatusAccepted || got.Processed {
 		t.Fatalf("unexpected status payload: %+v", got)
 	}
-	if got.Reason != "github push event validated, but reconcile wiring is not implemented in this slice" {
+	if got.Reason != "github push event validated, but controller refresh handoff is unavailable because this API runtime is not using the redis status backend" {
 		t.Fatalf("unexpected reason: %q", got.Reason)
 	}
 	if got.Repository != "acme/platform-config" || got.Ref != "refs/heads/main" || got.After != "2222222222222222222222222222222222222222" || got.Before != "1111111111111111111111111111111111111111" {
@@ -501,6 +513,78 @@ func TestRouterGitHubWebhookAcceptedPushEvent(t *testing.T) {
 	}
 	if got.DesiredStateSourceMatch.Path != "deployments" || got.DesiredStateSourceMatch.Repository != "acme/platform-config" || got.DesiredStateSourceMatch.Ref != "main" {
 		t.Fatalf("unexpected desired-state source config echo: %+v", got.DesiredStateSourceMatch)
+	}
+	if got.ControllerRefresh != nil {
+		t.Fatalf("expected no controller refresh handoff summary, got %+v", got.ControllerRefresh)
+	}
+}
+
+func TestRouterGitHubWebhookPublishesControllerRefreshForMatchedPush(t *testing.T) {
+	const secret = "top-secret"
+	body := `{
+		"ref":"refs/heads/main",
+		"before":"1111111111111111111111111111111111111111",
+		"after":"2222222222222222222222222222222222222222",
+		"repository":{"full_name":"acme/platform-config"},
+		"commits":[{"id":"a","modified":["tenet/deployments/api.yaml"]}]
+	}`
+
+	previousNow := githubWebhookNow
+	githubWebhookNow = func() time.Time { return time.Date(2026, time.April, 19, 9, 30, 0, 0, time.UTC) }
+	defer func() {
+		githubWebhookNow = previousNow
+	}()
+
+	publisher := &recordingControllerRefreshPublisher{
+		receipt: controllerrefresh.Receipt{
+			Backend:   controllerrefresh.BackendRedis,
+			Channel:   "tenet:test:controller-refresh",
+			RequestID: "github-webhook:delivery-1:2222222222222222222222222222222222222222",
+		},
+	}
+	router := NewRouter(Options{
+		BuildInfo:           buildinfo.Info{Version: "dev", Commit: "abc123"},
+		GitHubWebhookSecret: secret,
+		GitHubWebhookDesiredStateSource: githubwebhook.DesiredStateSourceConfig{
+			Kind:       githubwebhook.DesiredStateSourceKindGitHub,
+			Repository: "acme/platform-config",
+			Ref:        "main",
+			Path:       "tenet",
+		},
+		GitHubWebhookRefreshPublisher: publisher,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/github/webhook", strings.NewReader(body))
+	req.Header = signedGitHubWebhookHeader(secret, "push", body)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d body=%q", resp.Code, resp.Body.String())
+	}
+
+	var got githubwebhook.Response
+	if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if got.Status != githubwebhook.StatusAccepted || !got.Processed {
+		t.Fatalf("unexpected processed payload: %+v", got)
+	}
+	if got.Reason != "github push event validated and controller refresh handoff published" {
+		t.Fatalf("unexpected reason: %q", got.Reason)
+	}
+	if got.ControllerRefresh == nil {
+		t.Fatalf("expected controller refresh handoff summary, got %+v", got)
+	}
+	if got.ControllerRefresh.Backend != controllerrefresh.BackendRedis || got.ControllerRefresh.Channel != "tenet:test:controller-refresh" || got.ControllerRefresh.RequestID != "github-webhook:delivery-1:2222222222222222222222222222222222222222" || got.ControllerRefresh.PublishedAt != "2026-04-19T09:30:00Z" {
+		t.Fatalf("unexpected controller refresh handoff summary: %+v", got.ControllerRefresh)
+	}
+	if len(publisher.requests) != 1 {
+		t.Fatalf("expected exactly one controller refresh publish, got %d", len(publisher.requests))
+	}
+	request := publisher.requests[0]
+	if request.RequestID != "github-webhook:delivery-1:2222222222222222222222222222222222222222" || request.DeliveryID != "delivery-1" || request.Repository != "acme/platform-config" || request.Ref != "refs/heads/main" || request.After != "2222222222222222222222222222222222222222" || request.RequestedAt != "2026-04-19T09:30:00Z" {
+		t.Fatalf("unexpected controller refresh publish request: %+v", request)
 	}
 }
 

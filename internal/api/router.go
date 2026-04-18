@@ -15,6 +15,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/auditlog"
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
+	"github.com/DevopsArtFactory/tenet/internal/controllerrefresh"
 	"github.com/DevopsArtFactory/tenet/internal/githubwebhook"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
 	"github.com/DevopsArtFactory/tenet/internal/resourceinspection"
@@ -108,6 +109,7 @@ type Options struct {
 	RequestTimeout                       time.Duration
 	GitHubWebhookSecret                  string
 	GitHubWebhookDesiredStateSource      githubwebhook.DesiredStateSourceConfig
+	GitHubWebhookRefreshPublisher        controllerrefresh.Publisher
 	CatalogSummary                       func(context.Context) (catalog.Summary, error)
 	CatalogDeployments                   func(context.Context) ([]catalog.DeploymentView, error)
 	CatalogEnvironments                  func(context.Context) ([]catalog.EnvironmentView, error)
@@ -192,6 +194,7 @@ func NewRouter(options Options) http.Handler {
 			}
 			return
 		}
+		response = finalizeGitHubWebhookResponse(r.Context(), logger, response, options.GitHubWebhookRefreshPublisher)
 
 		setRequestResult(r.Context(), response.Status, "")
 		w.Header().Set("Content-Type", "application/json")
