@@ -2497,14 +2497,57 @@
         return ['completed', 'current', 'pending'].includes(normalized) ? normalized : 'pending';
       };
       const planOperationStatusLabel = (status) => rolloutStepStatusLabel(normalizePlanOperationStatus(status));
-      const previewOperations = (record) => (record?.operations || []).map((operation) => ({
-        kind: textOrDash(operation.kind),
+      const recordOperationKind = (operation, index, fallbackPrefix) => {
+        const kind = typeof operation?.kind === 'string' ? operation.kind.trim() : '';
+        return kind || `${fallbackPrefix} ${index + 1}`;
+      };
+      const mapRecordOperations = (operations, fallbackPrefix) => (operations || []).map((operation, index) => ({
+        kind: recordOperationKind(operation, index, fallbackPrefix),
         status: normalizePlanOperationStatus(operation.status),
         statusLabel: planOperationStatusLabel(operation.status),
         phase: textOrDash(operation.phase),
         target: textOrDash(operation.target),
         summary: textOrDash(operation.summary),
       }));
+      const previewOperations = (record) => mapRecordOperations(record?.operations || [], 'Plan step');
+      const applyOperations = (record) => mapRecordOperations(record?.operations || [], 'Apply step');
+      const createOperationsSection = ({ title, intro, operations, emptyMessage }) => {
+        const section = createDetailSection(title);
+        if (!operations.length) {
+          section.append(createElement('div', 'detail-state', emptyMessage));
+          return section;
+        }
+
+        const operationsIntro = createElement('div', 'detail-state', intro);
+        const tableWrap = createElement('div', 'drift-table-wrap');
+        const table = createElement('table', 'drift-table');
+        const headerRow = createElement('tr');
+        ['Operation', 'Phase', 'Target', 'Operator note'].forEach((label) => {
+          headerRow.append(createElement('th', '', label));
+        });
+        const thead = createElement('thead');
+        thead.append(headerRow);
+        const tbody = createElement('tbody');
+        operations.forEach((operation) => {
+          const row = createElement('tr');
+          const operationCell = createElement('td', 'drift-field');
+          operationCell.append(
+            createElement('strong', '', operation.kind),
+            createElement('span', `detail-step-meta detail-step-meta-${operation.status}`, operation.statusLabel),
+          );
+          row.append(
+            operationCell,
+            createElement('td', '', operation.phase),
+            createElement('td', '', operation.target),
+            createElement('td', '', operation.summary),
+          );
+          tbody.append(row);
+        });
+        table.append(thead, tbody);
+        tableWrap.append(table);
+        section.append(operationsIntro, tableWrap);
+        return section;
+      };
       const planPreviewCanApply = (planState) => {
         const record = planState?.record;
         return Boolean(planState?.status === 'ready' && record?.status === 'ready' && record?.id);
@@ -3174,49 +3217,25 @@
             sections.push(recordDetailsSection);
           }
 
-          const planSection = createDetailSection(emptyTitle);
-          const operations = activePlanRecord ? previewOperations(activePlanRecord) : derivePlanOperations(detail);
-          if (!operations.length) {
-            planSection.append(createElement('div', 'detail-state', activePlanRecord
-              ? 'No server-authored plan operations are stored for this preview.'
-              : 'No derived plan operations are currently available.'));
-          } else {
-            const operationsIntro = createElement(
-              'div',
-              'detail-state',
-              activePlanRecord
-                ? `Server-authored plan preview loaded from GET /v1/plans/${activePlanRecord.id}.`
-                : 'No immutable plan preview has been created yet. The table below is derived from rollout steps, rollout execution resources, and the latest runtime summary in the deployment detail read model so operators can inspect likely changes before creating a server-authored preview.',
-            );
-            const tableWrap = createElement('div', 'drift-table-wrap');
-            const table = createElement('table', 'drift-table');
-            const headerRow = createElement('tr');
-            ['Operation', 'Phase', 'Target', 'Operator note'].forEach((label) => {
-              headerRow.append(createElement('th', '', label));
-            });
-            const thead = createElement('thead');
-            thead.append(headerRow);
-            const tbody = createElement('tbody');
-            operations.forEach((operation) => {
-              const row = createElement('tr');
-              const operationCell = createElement('td', 'drift-field');
-              operationCell.append(
-                createElement('strong', '', operation.kind),
-                createElement('span', `detail-step-meta detail-step-meta-${operation.status}`, operation.statusLabel),
-              );
-              row.append(
-                operationCell,
-                createElement('td', '', operation.phase),
-                createElement('td', '', operation.target),
-                createElement('td', '', operation.summary),
-              );
-              tbody.append(row);
-            });
-            table.append(thead, tbody);
-            tableWrap.append(table);
-            planSection.append(operationsIntro, tableWrap);
+          if (activeApplyRecord) {
+            sections.push(createOperationsSection({
+              title: 'Apply operations',
+              intro: `Immutable apply request loaded from GET /v1/applies/${activeApplyRecord.id}. The ordered execution sequence below comes from the persisted apply record, so operators can review intended execution order without depending on mutable plan-preview or deployment-derived context.`,
+              operations: applyOperations(activeApplyRecord),
+              emptyMessage: 'No additive apply operations are stored for this request.',
+            }));
           }
-          sections.push(planSection);
+
+          sections.push(createOperationsSection({
+            title: emptyTitle,
+            intro: activePlanRecord
+              ? `Server-authored plan preview loaded from GET /v1/plans/${activePlanRecord.id}.`
+              : 'No immutable plan preview has been created yet. The table below is derived from rollout steps, rollout execution resources, and the latest runtime summary in the deployment detail read model so operators can inspect likely changes before creating a server-authored preview.',
+            operations: activePlanRecord ? previewOperations(activePlanRecord) : derivePlanOperations(detail),
+            emptyMessage: activePlanRecord
+              ? 'No server-authored plan operations are stored for this preview.'
+              : 'No derived plan operations are currently available.',
+          }));
         }
 
         header.append(head, ...sections);
