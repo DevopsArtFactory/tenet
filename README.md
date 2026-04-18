@@ -31,7 +31,7 @@ Tenet expects a repo-like manifest structure with accounts, environments, and de
 - a local checkout selected with `TENET_CATALOG_SOURCE=filesystem` plus `TENET_REPO_ROOT`
 - a GitHub-backed read-only source selected with `TENET_CATALOG_SOURCE=github` plus `TENET_CATALOG_GITHUB_*`
 
-The same JSON/YAML manifest codec and catalog compiler sit behind both modes, so `/v1/catalog/*` and `/v1/overview/*` keep the same response contract regardless of where desired state was loaded from. `tenet-controller` still remains filesystem-root based through `TENET_REPO_ROOT`.
+The same JSON/YAML manifest codec and catalog compiler sit behind both modes, so `/v1/catalog/*` and `/v1/overview/*` keep the same response contract regardless of where desired state was loaded from. `tenet-controller` now honors the same `TENET_CATALOG_SOURCE=filesystem|github` contract for desired-state reads; `TENET_REPO_ROOT` remains the filesystem-mode input when you want a local checkout.
 
 ### 2. Catalog compilation
 The manifest tree is loaded and validated into a compiled catalog. This gives Tenet a stable internal model for:

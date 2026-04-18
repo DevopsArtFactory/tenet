@@ -23,4 +23,4 @@ The same manifest codec now also backs GitHub ingestion primitives:
 - `TENET_CATALOG_SOURCE=filesystem` keeps the existing `TENET_REPO_ROOT` contract unchanged
 - `TENET_CATALOG_SOURCE=github` adds a read-only API mode backed by `TENET_CATALOG_GITHUB_REPOSITORY` plus optional `TENET_CATALOG_GITHUB_REF`, `TENET_CATALOG_GITHUB_PATH`, `TENET_CATALOG_GITHUB_TOKEN`, and `TENET_CATALOG_GITHUB_BASE_URL`
 
-`tenet-controller` and controller-owned runtime writes still remain out of scope for GitHub mode; they continue to require the filesystem repository contract.
+`tenet-controller` now honors the same explicit source-selection contract for desired-state reads, so controller startup and polling can compile either a filesystem checkout or a GitHub-backed manifest tree. `TENET_REPO_ROOT` remains the filesystem-mode contract when operators want a local checkout. The local-safe apply executor remains a separate API-only filesystem concern.

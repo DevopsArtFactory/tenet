@@ -1,10 +1,16 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/DevopsArtFactory/tenet/internal/domain"
+	"github.com/DevopsArtFactory/tenet/internal/githubcontents"
+	"github.com/DevopsArtFactory/tenet/internal/manifest"
 )
 
 func TestLoadStartupConfigWithoutRepositoryRoot(t *testing.T) {
@@ -51,6 +57,9 @@ func TestLoadStartupConfigLoadsRepositorySummary(t *testing.T) {
 	if config.Summary == nil || config.Summary.DeploymentCount != 1 {
 		t.Fatalf("unexpected summary: %+v", config.Summary)
 	}
+	if config.CatalogSource.kind != controllerCatalogSourceFilesystem {
+		t.Fatalf("expected filesystem catalog source, got %+v", config.CatalogSource)
+	}
 }
 
 func TestLoadStartupConfigRejectsInvalidRepositoryRoot(t *testing.T) {
@@ -62,6 +71,80 @@ func TestLoadStartupConfigRejectsInvalidRepositoryRoot(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatalf("expected invalid repository root error")
+	}
+}
+
+func TestLoadStartupConfigLoadsGitHubSummary(t *testing.T) {
+	previous := newControllerGitHubCatalogSource
+	newControllerGitHubCatalogSource = func(baseURL string, req githubcontents.Request) (controllerCatalogSource, error) {
+		if baseURL != "https://github.example.test/api/v3" {
+			t.Fatalf("unexpected github base URL %q", baseURL)
+		}
+		if req.Repository != "acme/platform-config" || req.Ref != "main" || req.Path != "tenet" || req.Token != "secret-token" {
+			t.Fatalf("unexpected github request: %+v", req)
+		}
+		return controllerCatalogSource{
+			kind:          controllerCatalogSourceGitHub,
+			githubBaseURL: baseURL,
+			githubRequest: req,
+			loadCatalog: func(_ context.Context) (manifest.Catalog, error) {
+				return manifest.Catalog{
+					Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012"}},
+					Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core"}},
+					Deployments:  []domain.Deployment{{Name: "api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
+				}, nil
+			},
+		}, nil
+	}
+	t.Cleanup(func() {
+		newControllerGitHubCatalogSource = previous
+	})
+
+	config, err := loadStartupConfig(func(key string) string {
+		switch key {
+		case "TENET_CATALOG_SOURCE":
+			return "github"
+		case "TENET_CATALOG_GITHUB_REPOSITORY":
+			return "acme/platform-config"
+		case "TENET_CATALOG_GITHUB_REF":
+			return "main"
+		case "TENET_CATALOG_GITHUB_PATH":
+			return "tenet"
+		case "TENET_CATALOG_GITHUB_TOKEN":
+			return "secret-token"
+		case "TENET_CATALOG_GITHUB_BASE_URL":
+			return "https://github.example.test/api/v3"
+		default:
+			return ""
+		}
+	})
+	if err != nil {
+		t.Fatalf("loadStartupConfig returned error: %v", err)
+	}
+	if config.RepoRoot != "" {
+		t.Fatalf("expected empty repo root in github mode, got %q", config.RepoRoot)
+	}
+	if config.CatalogSource.kind != controllerCatalogSourceGitHub {
+		t.Fatalf("expected github catalog source, got %+v", config.CatalogSource)
+	}
+	if config.Summary == nil || config.Summary.DeploymentCount != 1 {
+		t.Fatalf("unexpected summary: %+v", config.Summary)
+	}
+}
+
+func TestLoadStartupConfigRejectsAmbiguousCatalogSource(t *testing.T) {
+	_, err := loadStartupConfig(func(key string) string {
+		switch key {
+		case "TENET_REPO_ROOT":
+			return t.TempDir()
+		case "TENET_CATALOG_GITHUB_REPOSITORY":
+			return "acme/platform-config"
+		default:
+			return ""
+		}
+	})
+	if err == nil || !strings.Contains(err.Error(), "catalog source is ambiguous") {
+		t.Fatalf("expected ambiguous catalog source error, got %v", err)
 	}
 }
 
