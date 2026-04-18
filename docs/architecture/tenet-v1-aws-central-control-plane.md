@@ -333,7 +333,7 @@ TENET_CONTROLLER_REQUEUE_SECONDS=30
 
 Use `TENET_STATUS_SEED_PATH` only when you want Redis to bootstrap from an existing snapshot file. In a steady production deployment, Redis is the live shared runtime store.
 
-If you want the API to accept signed GitHub webhooks, also inject `TENET_GITHUB_WEBHOOK_SECRET` from your control-plane secret store. That enables `POST /api/v1/github/webhook`, which currently validates required GitHub headers, HMAC-SHA256 signatures, and push-payload shape, then returns an accepted-or-ignored summary without enqueueing reconcile work yet.
+If you want the API to accept signed GitHub webhooks, also inject `TENET_GITHUB_WEBHOOK_SECRET` from your control-plane secret store. That enables `POST /api/v1/github/webhook`, which currently validates required GitHub headers, HMAC-SHA256 signatures, and push-payload shape, then returns an accepted-or-ignored summary with additive `desiredStateSourceMatch` details without enqueueing reconcile work yet.
 
 `tenet-api` can alternatively read desired state directly from GitHub:
 
@@ -386,7 +386,7 @@ For multi-account read paths, that runtime identity must be allowed to assume ea
 
 Publish the central URL through an ALB and your preferred auth front door.
 
-If you expose `POST /api/v1/github/webhook`, route GitHub to that exact path and keep the same shared secret in both GitHub and `TENET_GITHUB_WEBHOOK_SECRET`. In this issue-2 slice, the endpoint is still a safe ingestion primitive only: validated push events return a useful summary for future runtime wiring, while non-push events are explicitly ignored and no reconcile queue side effect happens yet.
+If you expose `POST /api/v1/github/webhook`, route GitHub to that exact path and keep the same shared secret in both GitHub and `TENET_GITHUB_WEBHOOK_SECRET`. In this issue-2 slice, the endpoint is still a safe ingestion primitive only: validated push events return a useful summary for future runtime wiring plus `desiredStateSourceMatch` states such as `repository_mismatch`, `ref_mismatch`, `path_untouched`, and `matched`, while non-push events are explicitly ignored and no reconcile queue side effect happens yet. The ref comparison normalizes both branch and tag forms and, when `TENET_CATALOG_GITHUB_REF` is unset, compares the push ref against the signed payload's `repository.default_branch` so default-branch-following GitHub catalog mode does not report misleading false mismatches.
 
 ### 7. Verify same-account or cross-account reads
 

@@ -16,6 +16,8 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
+	"github.com/DevopsArtFactory/tenet/internal/githubcontents"
+	"github.com/DevopsArtFactory/tenet/internal/githubwebhook"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
 	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 	"github.com/DevopsArtFactory/tenet/internal/resourceinspection"
@@ -184,6 +186,32 @@ func TestNewAPIOptionsIncludesGitHubWebhookSecretFromEnv(t *testing.T) {
 
 	if options.GitHubWebhookSecret != "top-secret" {
 		t.Fatalf("expected webhook secret from env, got %q", options.GitHubWebhookSecret)
+	}
+	if options.GitHubWebhookDesiredStateSource.Kind != githubwebhook.DesiredStateSourceKindFilesystem {
+		t.Fatalf("expected filesystem desired-state source for webhook matching, got %+v", options.GitHubWebhookDesiredStateSource)
+	}
+}
+
+func TestNewAPIOptionsWithGitHubCatalogSourceIncludesWebhookDesiredStateSource(t *testing.T) {
+	source := apiCatalogSource{
+		kind: apiCatalogSourceGitHub,
+		githubRequest: githubcontents.Request{
+			Repository: "acme/platform-config",
+			Ref:        "main",
+			Path:       "tenet",
+		},
+	}
+
+	options := newAPIOptionsWithCatalogSource(buildinfo.Info{Version: "dev", Commit: "abc123"}, source, nil)
+
+	want := githubwebhook.DesiredStateSourceConfig{
+		Kind:       githubwebhook.DesiredStateSourceKindGitHub,
+		Repository: "acme/platform-config",
+		Ref:        "main",
+		Path:       "tenet",
+	}
+	if options.GitHubWebhookDesiredStateSource != want {
+		t.Fatalf("unexpected webhook desired-state source: got %+v want %+v", options.GitHubWebhookDesiredStateSource, want)
 	}
 }
 

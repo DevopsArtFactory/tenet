@@ -545,10 +545,16 @@ assert webhook_push['before'] == '1111111111111111111111111111111111111111', web
 assert webhook_push['after'] == '2222222222222222222222222222222222222222', webhook_push
 assert webhook_push['headCommit']['id'] == '2222222222222222222222222222222222222222', webhook_push
 assert webhook_push['changedFiles']['all'] == ['deployments/api.yaml', 'accounts/prod.yaml', 'environments/prod.yaml', 'deployments/worker.yaml', 'deployments/old.yaml'], webhook_push
+assert webhook_push['desiredStateSourceMatch']['configured'] is True, webhook_push
+assert webhook_push['desiredStateSourceMatch']['kind'] == 'filesystem', webhook_push
+assert webhook_push['desiredStateSourceMatch']['matches'] is False, webhook_push
+assert webhook_push['desiredStateSourceMatch']['matchStatus'] == 'filesystem_source', webhook_push
+assert webhook_push['desiredStateSourceMatch']['reason'] == 'desired-state source uses the filesystem catalog, so GitHub push relevance is unavailable in this mode', webhook_push
 assert webhook_ping['deliveryId'] == 'delivery-ping-1', webhook_ping
 assert webhook_ping['event'] == 'ping', webhook_ping
 assert webhook_ping['status'] == 'ignored', webhook_ping
 assert webhook_ping['processed'] is False, webhook_ping
+assert 'desiredStateSourceMatch' not in webhook_ping, webhook_ping
 assert os.environ['INVALID_WEBHOOK_STATUS'] == '400', os.environ['INVALID_WEBHOOK_STATUS']
 assert 'github webhook signature mismatch' in invalid_webhook, invalid_webhook
 assert status['status']['sync']['state'] == 'Synced', status
