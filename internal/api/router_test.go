@@ -2891,6 +2891,86 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 	})
 
+	t.Run("returns live traffic routing payload", func(t *testing.T) {
+		expected := resourceinspection.Result{
+			DeploymentName: "api-prod",
+			ResourceType:   "codeDeployDeploymentGroup",
+			ResourceName:   "api-prod-codedeploy-group",
+			LookupContext: resourceinspection.LookupContext{
+				Region:                 "ap-northeast-2",
+				ControlAccountID:       "123456789012",
+				TargetAccountID:        "123456789012",
+				CrossAccount:           false,
+				ObserverRoleConfigured: true,
+			},
+			Available: true,
+			Source:    resourceinspection.SourceTrafficRoutingAWS,
+			TrafficRoutingResource: &resourceinspection.TrafficRoutingInspection{
+				Kind:           "codeDeployDeploymentGroup",
+				DisplayName:    "CodeDeploy deployment group",
+				InspectionMode: "live",
+				Summary:        "CodeDeploy deployment group Tenet targets for ECS rollout (style: linear)",
+				CodeDeployDeploymentGroup: &resourceinspection.CodeDeployDeploymentGroupInspection{
+					ApplicationName:       "api-prod-codedeploy-app",
+					DeploymentGroupName:   "api-prod-codedeploy-group",
+					DeploymentConfigName:  "CodeDeployDefault.ECSLinear10PercentEvery1Minutes",
+					ServiceRoleARN:        "arn:aws:iam::123456789012:role/TenetCodeDeployRole",
+					DeploymentType:        "BLUE_GREEN",
+					DeploymentOption:      "WITH_TRAFFIC_CONTROL",
+					ECSServices:           []resourceinspection.CodeDeployECSServiceBinding{{ClusterName: "payments-prod", ServiceName: "api-prod-service"}},
+					TargetGroups:          []string{"api-prod-blue", "api-prod-green"},
+					ProductionListenerARN: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:listener/app/payments/abc123/prod456",
+					TestListenerARN:       "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:listener/app/payments/abc123/test789",
+				},
+			},
+		}
+
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "api-prod" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+				return expected, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=codeDeployDeploymentGroup&resourceName=api-prod-codedeploy-group", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+
+		var got resourceinspection.Result
+		if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+			t.Fatalf("failed to decode live traffic routing inspection payload: %v", err)
+		}
+		if !reflect.DeepEqual(got, expected) {
+			t.Fatalf("unexpected live traffic routing inspection payload: %+v", got)
+		}
+
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw live traffic routing inspection payload: %v", err)
+		}
+		trafficRoutingResource, ok := raw["trafficRoutingResource"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected trafficRoutingResource object in payload, got %#v", raw["trafficRoutingResource"])
+		}
+		if got := trafficRoutingResource["inspectionMode"]; got != "live" {
+			t.Fatalf("expected live inspectionMode, got %#v", got)
+		}
+		if _, ok := trafficRoutingResource["codeDeployDeploymentGroup"].(map[string]any); !ok {
+			t.Fatalf("expected codeDeployDeploymentGroup object in payload, got %#v", trafficRoutingResource["codeDeployDeploymentGroup"])
+		}
+	})
+
 	for _, tc := range []struct {
 		name         string
 		query        string

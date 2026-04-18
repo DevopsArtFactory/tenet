@@ -145,6 +145,9 @@ resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-a
 worker_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 worker_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service")
 candidate_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate")
+codedeploy_group_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging-codedeploy-group")
+production_listener_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=productionListener&resourceName=payments-api-staging-prod-listener")
+test_listener_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=testListener&resourceName=payments-api-staging-test-listener")
 traffic_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")
 ui=$(curl -fsS "http://$HOST:$PORT/")
 audit_ui=$(curl -fsS "http://$HOST:$PORT/?page=audit&deployment=payments-api-prod&action=apply.requested&limit=1")
@@ -178,13 +181,16 @@ resource_logs_path=$(write_payload resource-logs.json "$resource_logs")
 worker_resource_logs_path=$(write_payload worker-resource-logs.json "$worker_resource_logs")
 worker_resource_inspection_path=$(write_payload worker-resource-inspection.json "$worker_resource_inspection")
 candidate_resource_inspection_path=$(write_payload candidate-resource-inspection.json "$candidate_resource_inspection")
+codedeploy_group_resource_inspection_path=$(write_payload codedeploy-group-resource-inspection.json "$codedeploy_group_resource_inspection")
+production_listener_resource_inspection_path=$(write_payload production-listener-resource-inspection.json "$production_listener_resource_inspection")
+test_listener_resource_inspection_path=$(write_payload test-listener-resource-inspection.json "$test_listener_resource_inspection")
 traffic_resource_inspection_path=$(write_payload traffic-resource-inspection.json "$traffic_resource_inspection")
 ui_path=$(write_payload ui.html "$ui")
 audit_ui_path=$(write_payload audit-ui.html "$audit_ui")
 plan_ui_path=$(write_payload plan-ui.html "$plan_ui")
 apply_ui_path=$(write_payload apply-ui.html "$apply_ui")
 
-SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" RESOURCE_LOGS_PATH="$resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" UI_PATH="$ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" python3 - <<'PY'
+SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" RESOURCE_LOGS_PATH="$resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" UI_PATH="$ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" python3 - <<'PY'
 import json, os
 
 def read_json(path_env):
@@ -223,6 +229,9 @@ resource_logs = read_json('RESOURCE_LOGS_PATH')
 worker_resource_logs = read_json('WORKER_RESOURCE_LOGS_PATH')
 worker_resource_inspection = read_json('WORKER_RESOURCE_INSPECTION_PATH')
 candidate_resource_inspection = read_json('CANDIDATE_RESOURCE_INSPECTION_PATH')
+codedeploy_group_resource_inspection = read_json('CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH')
+production_listener_resource_inspection = read_json('PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH')
+test_listener_resource_inspection = read_json('TEST_LISTENER_RESOURCE_INSPECTION_PATH')
 traffic_resource_inspection = read_json('TRAFFIC_RESOURCE_INSPECTION_PATH')
 ui = read_text('UI_PATH')
 audit_ui = read_text('AUDIT_UI_PATH')
@@ -401,6 +410,22 @@ if candidate_resource_inspection['available']:
     assert isinstance(candidate_resource_inspection['autoScalingGroup'].get('instances', []), list), candidate_resource_inspection
 else:
     assert isinstance(candidate_resource_inspection.get('unavailableReason'), str) and candidate_resource_inspection['unavailableReason'], candidate_resource_inspection
+
+def assert_summary_traffic_routing(payload, deployment_name, resource_type, resource_name):
+    assert payload['deploymentName'] == deployment_name, payload
+    assert payload['resourceType'] == resource_type, payload
+    assert payload['resourceName'] == resource_name, payload
+    assert payload['available'] is True, payload
+    assert payload.get('source') == 'rollout_execution_summary', payload
+    assert isinstance(payload.get('lookupContext'), dict), payload
+    assert isinstance(payload.get('trafficRoutingResource'), dict), payload
+    assert payload['trafficRoutingResource'].get('kind') == resource_type, payload
+    assert payload['trafficRoutingResource'].get('inspectionMode') == 'summary_only', payload
+    assert isinstance(payload['trafficRoutingResource'].get('summary'), str) and payload['trafficRoutingResource']['summary'], payload
+
+assert_summary_traffic_routing(codedeploy_group_resource_inspection, 'payments-api-staging', 'codeDeployDeploymentGroup', 'payments-api-staging-codedeploy-group')
+assert_summary_traffic_routing(production_listener_resource_inspection, 'payments-api-staging', 'productionListener', 'payments-api-staging-prod-listener')
+assert_summary_traffic_routing(test_listener_resource_inspection, 'payments-api-staging', 'testListener', 'payments-api-staging-test-listener')
 assert traffic_resource_inspection['deploymentName'] == 'payments-api-prod', traffic_resource_inspection
 assert traffic_resource_inspection['resourceType'] == 'trafficShiftPlan', traffic_resource_inspection
 assert traffic_resource_inspection['resourceName'] == 'payments-api-prod-weighted-routing', traffic_resource_inspection
