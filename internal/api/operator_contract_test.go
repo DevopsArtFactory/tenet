@@ -31,6 +31,11 @@ func readRepoFile(t *testing.T, relativePath string) string {
 }
 
 func TestDockerUpOperatorContract(t *testing.T) {
+	compose := readRepoFile(t, "compose.yaml")
+	if !strings.Contains(compose, `TENET_AWS_ENABLE_APPLY: ${TENET_AWS_ENABLE_APPLY:-false}`) {
+		t.Fatal("expected compose api service to expose TENET_AWS_ENABLE_APPLY with a default false local contract")
+	}
+
 	makefile := readRepoFile(t, "Makefile")
 	if !strings.Contains(makefile, "./scripts/docker-up.sh $(DOCKER_COMPOSE)") {
 		t.Fatal("expected Makefile docker-up target to route through scripts/docker-up.sh")
@@ -57,6 +62,7 @@ func TestDockerUpOperatorContract(t *testing.T) {
 		"`lsof -nP -iTCP:8080 -sTCP:LISTEN`",
 		"`make docker-down`",
 		"`docker compose up --build -d`",
+		"`TENET_AWS_ENABLE_APPLY=true make docker-up`",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README docker troubleshooting to include %q", fragment)
@@ -69,6 +75,7 @@ func TestDockerUpOperatorContract(t *testing.T) {
 		"`lsof -nP -iTCP:8080 -sTCP:LISTEN`",
 		"`make docker-down`",
 		"`docker compose up --build -d`",
+		"`TENET_AWS_ENABLE_APPLY=true make docker-up`",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
 			t.Fatalf("expected local runtime doc troubleshooting to include %q", fragment)
@@ -77,6 +84,22 @@ func TestDockerUpOperatorContract(t *testing.T) {
 }
 
 func TestReadOnlyApplyOperatorContract(t *testing.T) {
+	dockerSmoke := readRepoFile(t, "scripts/smoke-docker.sh")
+	for _, fragment := range []string{
+		`restart_api_with_apply_mode() {`,
+		`TENET_AWS_ENABLE_APPLY="$apply_enabled" "${COMPOSE[@]}" up -d api >/dev/null`,
+		`queued_apply_record=$(curl -fsS -X POST "$API_BASE_URL/v1/applies/plans/$queued_plan_id")`,
+		`assert queued_apply_record["status"] == "queued", queued_apply_record`,
+		`assert not queued_apply_record.get("error"), queued_apply_record`,
+		`"Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true.",`,
+		`"No AWS mutation has been implemented for this backend slice yet.",`,
+		`assert [operation["status"] for operation in queued_apply_record["operations"]] == ["queued"] * len(queued_apply_record["operations"]), queued_apply_record`,
+	} {
+		if !strings.Contains(dockerSmoke, fragment) {
+			t.Fatalf("expected smoke-docker queued apply contract to include %q", fragment)
+		}
+	}
+
 	script := readRepoFile(t, "scripts/smoke-local.sh")
 	for _, fragment := range []string{
 		`TENET_APPLY_STORE_PATH="$APPLY_STORE_PATH"`,
@@ -103,7 +126,8 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"`TENET_APPLY_STORE_PATH`",
 		"`TENET_AWS_ENABLE_APPLY=true`",
 		"disabled by default for live execution",
-		"persists a queued immutable apply request instead of a failed one",
+		"queued-only immutable apply contract",
+		"no AWS mutation has been implemented yet",
 		"ordered `operations[]` rows",
 	} {
 		if !strings.Contains(readme, fragment) {
@@ -118,7 +142,9 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"failed immutable contract with operator-facing error/details",
 		"`TENET_AWS_ENABLE_APPLY=true`",
 		"queued immutable apply request without contacting AWS",
-		"additive ordered `operations[]` rows with pending or queued `status`, `phase`, `target`, and `summary` fields",
+		"`status=pending`",
+		"`status=queued`",
+		"no AWS mutation has been implemented yet",
 	} {
 		if !strings.Contains(uiDoc, fragment) {
 			t.Fatalf("expected overview UI doc apply contract to include %q", fragment)

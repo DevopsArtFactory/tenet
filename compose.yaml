@@ -20,6 +20,7 @@ services:
       TENET_STATUS_BACKEND: redis
       TENET_REDIS_ADDR: redis:6379
       TENET_STATUS_SEED_PATH: /workspace/examples/local-status/deployments.json
+      TENET_AWS_ENABLE_APPLY: ${TENET_AWS_ENABLE_APPLY:-false}
     volumes:
       - ./examples:/workspace/examples:ro
     ports:

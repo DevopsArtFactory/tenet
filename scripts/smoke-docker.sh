@@ -107,7 +107,7 @@ cleanup() {
   if [[ "$exit_code" -ne 0 ]]; then
     echo "smoke-docker: failure detected, dumping recent compose logs" >&2
     "${COMPOSE[@]}" logs api --tail=50 >&2 || true
-    "${COMPOSE[@]}" logs controller --tail=50 >&2 || true
+    "${COMPOSE[@]}" logs controller --tail=200 >&2 || true
   fi
 
   "${COMPOSE[@]}" down --remove-orphans >/dev/null 2>&1 || true
@@ -125,6 +125,24 @@ write_payload() {
   printf '%s' "$path"
 }
 
+wait_for_api_health() {
+  for _ in $(seq 1 60); do
+    if curl -fsS "$API_BASE_URL/healthz" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+  done
+
+  curl -fsS "$API_BASE_URL/healthz" >/dev/null
+}
+
+restart_api_with_apply_mode() {
+  local apply_enabled=$1
+
+  TENET_AWS_ENABLE_APPLY="$apply_enabled" "${COMPOSE[@]}" up -d api >/dev/null
+  wait_for_api_health
+}
+
 "${COMPOSE[@]}" config >/dev/null
 services=$("${COMPOSE[@]}" config --services)
 for service in api controller redis; do
@@ -136,14 +154,7 @@ done
 
 "$ROOT/scripts/docker-up.sh" "${COMPOSE[@]}" >/dev/null
 
-for _ in $(seq 1 60); do
-  if curl -fsS "$API_BASE_URL/healthz" >/dev/null 2>&1; then
-    break
-  fi
-  sleep 1
-done
-
-curl -fsS "$API_BASE_URL/healthz" >/dev/null
+wait_for_api_health
 
 healthz_request_id=$(assert_request_id_header "$API_BASE_URL/healthz")
 summary_request_id=$(assert_request_id_header "$API_BASE_URL/v1/catalog/summary")
@@ -516,7 +527,7 @@ PY
 
 controller_logs=""
 for _ in $(seq 1 60); do
-  controller_logs=$("${COMPOSE[@]}" logs controller --tail=50 2>&1 || true)
+  controller_logs=$("${COMPOSE[@]}" logs controller --tail=200 2>&1 || true)
   if [[ "$controller_logs" == *"starting tenet-controller"* && "$controller_logs" == *"controller reconcile deployment=payments-api-prod"* ]]; then
     break
   fi
@@ -546,5 +557,67 @@ if ! assert_structured_api_request_logs "$api_logs" "$healthz_request_id" "$summ
   echo "smoke-docker: api logs missing correlated structured request entries" >&2
   exit 1
 fi
+
+restart_api_with_apply_mode true
+
+queued_plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d "$plan_preview_request_body" "$API_BASE_URL/v1/plans/deployments/payments-api-prod")
+queued_plan_id=$(QUEUED_PLAN_PREVIEW_JSON="$queued_plan_preview" python3 - <<'PY'
+import json
+import os
+
+print(json.loads(os.environ["QUEUED_PLAN_PREVIEW_JSON"])["id"])
+PY
+)
+queued_plan_preview_get=$(curl -fsS "$API_BASE_URL/v1/plans/$queued_plan_id")
+queued_apply_record=$(curl -fsS -X POST "$API_BASE_URL/v1/applies/plans/$queued_plan_id")
+queued_apply_id=$(QUEUED_APPLY_RECORD_JSON="$queued_apply_record" python3 - <<'PY'
+import json
+import os
+
+print(json.loads(os.environ["QUEUED_APPLY_RECORD_JSON"])["id"])
+PY
+)
+queued_apply_record_get=$(curl -fsS "$API_BASE_URL/v1/applies/$queued_apply_id")
+
+QUEUED_PLAN_PREVIEW_JSON="$queued_plan_preview" \
+QUEUED_PLAN_PREVIEW_GET_JSON="$queued_plan_preview_get" \
+QUEUED_APPLY_RECORD_JSON="$queued_apply_record" \
+QUEUED_APPLY_RECORD_GET_JSON="$queued_apply_record_get" \
+python3 - <<'PY'
+import json
+import os
+
+queued_plan_preview = json.loads(os.environ["QUEUED_PLAN_PREVIEW_JSON"])
+queued_plan_preview_get = json.loads(os.environ["QUEUED_PLAN_PREVIEW_GET_JSON"])
+queued_apply_record = json.loads(os.environ["QUEUED_APPLY_RECORD_JSON"])
+queued_apply_record_get = json.loads(os.environ["QUEUED_APPLY_RECORD_GET_JSON"])
+
+assert queued_plan_preview["deploymentName"] == "payments-api-prod", queued_plan_preview
+assert queued_plan_preview["status"] == "ready", queued_plan_preview
+assert isinstance(queued_plan_preview.get("operations", []), list) and queued_plan_preview["operations"], queued_plan_preview
+assert queued_plan_preview_get == queued_plan_preview, (queued_plan_preview_get, queued_plan_preview)
+
+assert queued_apply_record["planId"] == queued_plan_preview["id"], (queued_apply_record, queued_plan_preview)
+assert queued_apply_record["deploymentName"] == "payments-api-prod", queued_apply_record
+assert queued_apply_record["status"] == "queued", queued_apply_record
+assert not queued_apply_record.get("error"), queued_apply_record
+assert isinstance(queued_apply_record.get("id"), str) and queued_apply_record["id"].startswith("apply_"), queued_apply_record
+assert isinstance(queued_apply_record.get("createdAt"), str) and queued_apply_record["createdAt"], queued_apply_record
+assert queued_apply_record["details"] == [
+    "Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true.",
+    "No AWS mutation has been implemented for this backend slice yet.",
+], queued_apply_record
+assert isinstance(queued_apply_record.get("operations", []), list) and queued_apply_record["operations"], queued_apply_record
+assert len(queued_apply_record["operations"]) == len(queued_plan_preview["operations"]), (queued_apply_record, queued_plan_preview)
+assert [operation["status"] for operation in queued_apply_record["operations"]] == ["queued"] * len(queued_apply_record["operations"]), queued_apply_record
+assert [operation["phase"] for operation in queued_apply_record["operations"]] == [operation["phase"] for operation in queued_plan_preview["operations"]], (queued_apply_record, queued_plan_preview)
+assert [operation["target"] for operation in queued_apply_record["operations"]] == [operation["target"] for operation in queued_plan_preview["operations"]], (queued_apply_record, queued_plan_preview)
+assert [operation["summary"] for operation in queued_apply_record["operations"]] == [operation["summary"] for operation in queued_plan_preview["operations"]], (queued_apply_record, queued_plan_preview)
+assert queued_apply_record["source"]["route"] == f"/v1/plans/{queued_plan_preview['id']}", queued_apply_record
+assert queued_apply_record["source"]["planId"] == queued_plan_preview["id"], queued_apply_record
+assert queued_apply_record["source"]["planStatus"] == "ready", queued_apply_record
+assert queued_apply_record["source"]["fingerprint"] == queued_plan_preview["source"]["fingerprint"], (queued_apply_record, queued_plan_preview)
+assert queued_apply_record_get == queued_apply_record, (queued_apply_record_get, queued_apply_record)
+PY
 
 echo "smoke-docker: compose stack path ok"
