@@ -93,6 +93,7 @@ The neighboring read-only plan-preview flow is also part of the operator contrac
 - `GET /v1/plans/{planId}` reopens the exact stored preview
 - `POST /v1/applies/plans/{planId}` persists an immutable apply request derived from an existing ready preview, but only after re-validating that the current deployment-detail fingerprint still matches the reviewed plan fingerprint
 - `GET /v1/applies/{applyId}` reopens the exact stored apply request
+- `POST /v1/applies/{applyId}/transitions` advances executor-facing lifecycle state on that same persisted apply record with a JSON `applyrequest.TransitionRequest` body while preserving the immutable stable `applyId`
 - `GET /v1/audit-logs?deployment={deploymentName}` narrows the local audit timeline to one deployment without introducing a second route family
 - `GET /v1/audit-logs?action={action}` narrows the same local audit timeline to exactly `plan.created` or `apply.requested`
 - `GET /v1/audit-logs` projects persisted plan/apply records into a local audit timeline; the route also accepts `?limit={n}` for a newest-first window and optional `action={action}` for exact action filtering
@@ -102,6 +103,7 @@ The neighboring read-only plan-preview flow is also part of the operator contrac
 - when that reviewed plan fingerprint is stale, `POST /v1/applies/plans/{planId}` fails with `409 Conflict`, tells the operator to create a fresh plan preview, and does not persist a new apply record from drifted input
 - when `TENET_AWS_ENABLE_APPLY=true`, newly created apply records switch to a queued immutable apply request without contacting AWS; the stored contract drops the disabled error, changes those projected `operations[]` rows to `status=queued`, and adds explicit details that no AWS mutation has been implemented yet
 - the stored apply read model now also includes an additive `lifecycle` block so executor code can advance the same stable `applyId` through queued/running/terminal states while surfacing `updatedAt` / `startedAt` / `finishedAt` timestamps plus `currentStep` / `completedSteps` / `totalSteps` progress metadata for operators
+- malformed apply-transition JSON bodies fail with `400 Bad Request`, unknown apply IDs fail with `404 Not Found`, and invalid lifecycle moves fail with `409 Conflict` so executor/worker callers get explicit operator-facing boundaries without changing the route family
 - the embedded queued/running/succeeded/cancelled/failed apply chrome is still rendering immutable stored lifecycle state for operator review, not a live AWS executor in this slice
 - actor identity is intentionally explicit rather than invented: `GET /v1/audit-logs` renders `Recorded` with persisted `id` / `name` / `email` when explicit `X-Tenet-Actor-*` request headers were present at record creation time, and still renders `actor.available=false` plus an unavailable reason for unauthenticated or purely local requests
 - invalid audit `action` query values fail at the API boundary with `400 Bad Request` instead of silently widening or ignoring the filter

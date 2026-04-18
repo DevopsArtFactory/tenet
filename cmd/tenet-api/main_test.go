@@ -297,6 +297,56 @@ func TestAPIOptionsApplyRequestPersistsQueuedRecordWhenApplyExecutionIsEnabled(t
 	}
 }
 
+func TestAPIOptionsApplyRequestTransitionPersistsLifecycleUpdatesAndReusesStableApplyID(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	t.Setenv("TENET_PLAN_STORE_PATH", filepath.Join(t.TempDir(), "plan-previews.json"))
+	t.Setenv("TENET_APPLY_STORE_PATH", filepath.Join(t.TempDir(), "apply-requests.json"))
+	t.Setenv("TENET_AWS_ENABLE_APPLY", "true")
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
+	if options.CreateDeploymentPlanPreview == nil || options.CreateApplyRequest == nil || options.ApplyRequest == nil || options.TransitionApplyRequest == nil {
+		t.Fatalf("expected plan/apply providers to be wired")
+	}
+
+	plan, err := options.CreateDeploymentPlanPreview(context.Background(), "api-prod", planpreview.CreateRequest{})
+	if err != nil {
+		t.Fatalf("CreateDeploymentPlanPreview returned error: %v", err)
+	}
+	created, err := options.CreateApplyRequest(context.Background(), plan.Record.ID)
+	if err != nil {
+		t.Fatalf("CreateApplyRequest returned error: %v", err)
+	}
+
+	running, err := options.TransitionApplyRequest(context.Background(), created.Record.ID, applyrequest.TransitionRequest{
+		Status:  applyrequest.StatusRunning,
+		Step:    1,
+		Details: []string{"Executor picked up the queued apply request."},
+	})
+	if err != nil {
+		t.Fatalf("TransitionApplyRequest returned error: %v", err)
+	}
+	if running.ID != created.Record.ID || running.Status != applyrequest.StatusRunning {
+		t.Fatalf("expected stable running apply request, got %+v", running)
+	}
+	if running.Error != "" || !reflect.DeepEqual(running.Details, []string{"Executor picked up the queued apply request."}) {
+		t.Fatalf("expected running transition to update error/details, got %+v", running)
+	}
+	if running.Lifecycle.StartedAt == "" || running.Lifecycle.CurrentStep != 1 || running.Lifecycle.CompletedSteps != 0 {
+		t.Fatalf("expected running lifecycle metadata, got %+v", running.Lifecycle)
+	}
+	if len(running.Operations) == 0 || running.Operations[0].Status != applyrequest.OperationStatusRunning {
+		t.Fatalf("expected running operation projection, got %+v", running.Operations)
+	}
+
+	fetched, err := options.ApplyRequest(context.Background(), created.Record.ID)
+	if err != nil {
+		t.Fatalf("ApplyRequest returned error: %v", err)
+	}
+	if fetched.ID != running.ID || fetched.Status != applyrequest.StatusRunning || fetched.Lifecycle.CurrentStep != 1 {
+		t.Fatalf("expected fetched running apply request, got %+v", fetched)
+	}
+}
+
 func TestAPIOptionsApplyRequestRejectsStalePlanFingerprintBeforePersisting(t *testing.T) {
 	repoRoot := writeRepositoryFixture(t)
 	planStorePath := filepath.Join(t.TempDir(), "plan-previews.json")

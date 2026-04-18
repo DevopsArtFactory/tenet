@@ -131,6 +131,8 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		"`POST /v1/applies/plans/{planId}`",
 		"`GET /v1/applies/{applyId}`",
+		"`POST /v1/applies/{applyId}/transitions`",
+		"`applyrequest.TransitionRequest` body",
 		"`TENET_APPLY_STORE_PATH`",
 		"`TENET_AWS_ENABLE_APPLY=true`",
 		"disabled by default for live execution",
@@ -151,6 +153,8 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		"`POST /v1/applies/plans/{planId}`",
 		"`GET /v1/applies/{applyId}`",
+		"`POST /v1/applies/{applyId}/transitions`",
+		"preserving the immutable stable `applyId`",
 		"failed immutable contract with operator-facing error/details",
 		"`TENET_AWS_ENABLE_APPLY=true`",
 		"queued immutable apply request without contacting AWS",
@@ -159,6 +163,7 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"no AWS mutation has been implemented yet",
 		"additive `lifecycle` block",
 		"`currentStep` / `completedSteps` / `totalSteps`",
+		"`400 Bad Request`",
 		"`409 Conflict`",
 		"does not persist a new apply record",
 	} {

@@ -50,6 +50,14 @@ func respondApplyCreateError(w http.ResponseWriter, err error) {
 	respondLookupError(w, err)
 }
 
+func respondApplyTransitionError(w http.ResponseWriter, err error) {
+	if errors.Is(err, applyrequest.ErrInvalidState) {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	respondLookupError(w, err)
+}
+
 func parseResourceQuery(w http.ResponseWriter, r *http.Request) (resourceType string, resourceName string, ok bool) {
 	resourceType = strings.TrimSpace(r.URL.Query().Get("resourceType"))
 	if resourceType == "" {
@@ -89,6 +97,7 @@ type Options struct {
 	PlanPreview                          func(context.Context, string) (planpreview.Record, error)
 	CreateApplyRequest                   func(context.Context, string) (applyrequest.CreateResult, error)
 	ApplyRequest                         func(context.Context, string) (applyrequest.Record, error)
+	TransitionApplyRequest               func(context.Context, string, applyrequest.TransitionRequest) (applyrequest.Record, error)
 	DeploymentStatuses                   func() ([]statusstore.Snapshot, error)
 	DeploymentStatus                     func(string) (statusstore.Snapshot, error)
 }
@@ -533,25 +542,53 @@ func NewRouter(options Options) http.Handler {
 		_ = json.NewEncoder(w).Encode(result.Record)
 	})
 	mux.HandleFunc("/v1/applies/", func(w http.ResponseWriter, r *http.Request) {
-		if !requireMethod(w, r, http.MethodGet) {
-			return
-		}
-		if options.ApplyRequest == nil {
-			http.Error(w, "apply request unavailable", http.StatusServiceUnavailable)
-			return
-		}
-		id := strings.TrimPrefix(r.URL.Path, "/v1/applies/")
-		if id == "" || strings.Contains(id, "/") {
+		path := strings.TrimPrefix(r.URL.Path, "/v1/applies/")
+		segments := strings.Split(path, "/")
+		switch {
+		case len(segments) == 1 && segments[0] != "":
+			if !requireMethod(w, r, http.MethodGet) {
+				return
+			}
+			if options.ApplyRequest == nil {
+				http.Error(w, "apply request unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			record, err := options.ApplyRequest(r.Context(), segments[0])
+			if err != nil {
+				respondLookupError(w, err)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(record)
+		case len(segments) == 2 && segments[0] != "" && segments[1] == "transitions":
+			if !requireMethod(w, r, http.MethodPost) {
+				return
+			}
+			if options.TransitionApplyRequest == nil {
+				http.Error(w, "apply request transition unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			var req applyrequest.TransitionRequest
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&req); err != nil {
+				http.Error(w, "invalid apply transition request body", http.StatusBadRequest)
+				return
+			}
+			if err := decoder.Decode(&struct{}{}); err != nil && !errors.Is(err, io.EOF) {
+				http.Error(w, "invalid apply transition request body", http.StatusBadRequest)
+				return
+			}
+			record, err := options.TransitionApplyRequest(r.Context(), segments[0], req)
+			if err != nil {
+				respondApplyTransitionError(w, err)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(record)
+		default:
 			http.Error(w, "invalid apply id", http.StatusBadRequest)
-			return
 		}
-		record, err := options.ApplyRequest(r.Context(), id)
-		if err != nil {
-			respondLookupError(w, err)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(record)
 	})
 	mux.HandleFunc("/v1/status/deployments", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodGet) {

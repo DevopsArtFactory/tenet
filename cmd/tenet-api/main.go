@@ -216,6 +216,7 @@ func newAPIOptionsWithStores(info buildinfo.Info, repoRoot string, store statuss
 		options.PlanPreview = planService.Get
 		options.CreateApplyRequest = applyService.Create
 		options.ApplyRequest = applyService.Get
+		options.TransitionApplyRequest = applyService.Transition
 		options.AuditLogs = auditlog.Service{
 			ListPlanPreviews:  func() ([]planpreview.Record, error) { return loadPlanPreviewRecords(planStorePath) },
 			ListApplyRequests: func() ([]applyrequest.Record, error) { return loadApplyRequestRecords(applyStorePath) },
