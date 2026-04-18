@@ -99,8 +99,11 @@ Current behavior:
   - `Workloads`
   - `Traffic routing`
   - `Config and access`
-- `Open resource` links targeting `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}`
+- `_self` `Open resource` links targeting `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}`
 - keeps the deeper artifact/history/generation/log drill-down on the final resource page
+- the backend resource drill-down now also has a parallel read-only inspection route for supported live AWS summaries: `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}`
+- that inspection payload is intentionally additive and explicit for operators/UI consumers: common fields stay `deploymentName`, `resourceType`, `resourceName`, `lookupContext`, `available`, `source`, `unavailableReason`, while supported resource-specific bodies are currently `ecsService` and `autoScalingGroup`
+- unsupported or unavailable inspection lookups keep the route usable during troubleshooting by returning `available=false` plus an explicit `unavailableReason` instead of surfacing a raw provider failure
 
 Resource-list fallback contract:
 - the UI synthesizes fallback rollout resources when `detail.rollout.execution[]` is missing or empty in the application-detail payload

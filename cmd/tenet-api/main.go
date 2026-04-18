@@ -20,6 +20,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/manifestfs"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
+	"github.com/DevopsArtFactory/tenet/internal/resourceinspection"
 	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 	"github.com/redis/go-redis/v9"
@@ -29,8 +30,16 @@ type resourceLogProvider interface {
 	Recent(context.Context, resourcelogs.Request) (resourcelogs.Result, error)
 }
 
+type resourceInspectionProvider interface {
+	Inspect(context.Context, resourceinspection.Request) (resourceinspection.Result, error)
+}
+
 var newResourceLogProvider = func() resourceLogProvider {
 	return resourcelogs.NewService(resourcelogs.Options{EnableAWS: true})
+}
+
+var newResourceInspectionProvider = func() resourceInspectionProvider {
+	return resourceinspection.NewService(resourceinspection.Options{EnableAWS: true})
 }
 
 func main() {
@@ -95,6 +104,7 @@ func newAPIOptionsWithStores(info buildinfo.Info, repoRoot string, store statuss
 		options.CatalogPlacements = catalog.RepositoryPlacementProvider(repoRoot)
 		options.CatalogTopology = catalog.RepositoryTopologyProvider(repoRoot)
 		resourceLogService := newResourceLogProvider()
+		resourceInspectionService := newResourceInspectionProvider()
 		loadSnapshots := func() ([]statusstore.Snapshot, error) {
 			if store == nil {
 				return nil, nil
@@ -188,7 +198,9 @@ func newAPIOptionsWithStores(info buildinfo.Info, repoRoot string, store statuss
 			}
 			return catalog.BuildDeploymentOverviewEvents(compiled, []statusstore.Snapshot{snapshot}, name)
 		}
-		options.OverviewDeploymentResourceLogs = newOverviewDeploymentResourceLogsProvider(options.OverviewDeployment, loadObserverRoleARN, resourceLogService)
+		resourceLookupProvider := newOverviewDeploymentResourceLookupProvider(options.OverviewDeployment, loadObserverRoleARN)
+		options.OverviewDeploymentResourceLogs = newOverviewDeploymentResourceLogsProvider(resourceLookupProvider, resourceLogService)
+		options.OverviewDeploymentResourceInspection = newOverviewDeploymentResourceInspectionProvider(resourceLookupProvider, resourceInspectionService)
 		planService := planpreview.Service{
 			LoadDetail: options.OverviewDeployment,
 			Store:      planpreview.NewFileStore(planStorePath),
@@ -251,31 +263,94 @@ func loadApplyRequestRecords(path string) ([]applyrequest.Record, error) {
 	return nil, err
 }
 
-func newOverviewDeploymentResourceLogsProvider(
+type overviewDeploymentResourceLookupProvider func(context.Context, string, string, string) (resourceLookupRequest, error)
+
+type resourceLookupRequest struct {
+	DeploymentName   string
+	ResourceType     string
+	ResourceName     string
+	ControlAccountID string
+	TargetAccountID  string
+	Region           string
+	ObserverRoleARN  string
+}
+
+func newOverviewDeploymentResourceLookupProvider(
 	loadDetail func(string) (catalog.DeploymentOverviewDetail, error),
 	loadObserverRoleARN func(string) (string, error),
+) overviewDeploymentResourceLookupProvider {
+	return func(ctx context.Context, name, resourceType, resourceName string) (resourceLookupRequest, error) {
+		return loadOverviewDeploymentResourceRequest(loadDetail, loadObserverRoleARN, name, resourceType, resourceName)
+	}
+}
+
+func loadOverviewDeploymentResourceRequest(
+	loadDetail func(string) (catalog.DeploymentOverviewDetail, error),
+	loadObserverRoleARN func(string) (string, error),
+	name string,
+	resourceType string,
+	resourceName string,
+) (resourceLookupRequest, error) {
+	detail, err := loadDetail(name)
+	if err != nil {
+		return resourceLookupRequest{}, err
+	}
+	if !deploymentHasExecutionResource(detail, resourceType, resourceName) {
+		return resourceLookupRequest{}, fmt.Errorf("%w: deployment %s resource %s/%s", statusstore.ErrNotFound, name, resourceType, resourceName)
+	}
+	observerRoleARN, err := loadObserverRoleARN(detail.AWSAccountID)
+	if err != nil {
+		return resourceLookupRequest{}, err
+	}
+	return resourceLookupRequest{
+		DeploymentName:   name,
+		ResourceType:     resourceType,
+		ResourceName:     resourceName,
+		ControlAccountID: detail.AWSAccountID,
+		TargetAccountID:  detail.AWSAccountID,
+		Region:           detail.Region,
+		ObserverRoleARN:  observerRoleARN,
+	}, nil
+}
+
+func newOverviewDeploymentResourceLogsProvider(
+	loadRequest overviewDeploymentResourceLookupProvider,
 	provider resourceLogProvider,
 ) func(context.Context, string, string, string) (resourcelogs.Result, error) {
 	return func(ctx context.Context, name, resourceType, resourceName string) (resourcelogs.Result, error) {
-		detail, err := loadDetail(name)
-		if err != nil {
-			return resourcelogs.Result{}, err
-		}
-		if !deploymentHasExecutionResource(detail, resourceType, resourceName) {
-			return resourcelogs.Result{}, fmt.Errorf("%w: deployment %s resource %s/%s", statusstore.ErrNotFound, name, resourceType, resourceName)
-		}
-		observerRoleARN, err := loadObserverRoleARN(detail.AWSAccountID)
+		request, err := loadRequest(ctx, name, resourceType, resourceName)
 		if err != nil {
 			return resourcelogs.Result{}, err
 		}
 		return provider.Recent(ctx, resourcelogs.Request{
-			DeploymentName:   name,
-			ResourceType:     resourceType,
-			ResourceName:     resourceName,
-			ControlAccountID: detail.AWSAccountID,
-			TargetAccountID:  detail.AWSAccountID,
-			Region:           detail.Region,
-			ObserverRoleARN:  observerRoleARN,
+			DeploymentName:   request.DeploymentName,
+			ResourceType:     request.ResourceType,
+			ResourceName:     request.ResourceName,
+			ControlAccountID: request.ControlAccountID,
+			TargetAccountID:  request.TargetAccountID,
+			Region:           request.Region,
+			ObserverRoleARN:  request.ObserverRoleARN,
+		})
+	}
+}
+
+func newOverviewDeploymentResourceInspectionProvider(
+	loadRequest overviewDeploymentResourceLookupProvider,
+	provider resourceInspectionProvider,
+) func(context.Context, string, string, string) (resourceinspection.Result, error) {
+	return func(ctx context.Context, name, resourceType, resourceName string) (resourceinspection.Result, error) {
+		request, err := loadRequest(ctx, name, resourceType, resourceName)
+		if err != nil {
+			return resourceinspection.Result{}, err
+		}
+		return provider.Inspect(ctx, resourceinspection.Request{
+			DeploymentName:   request.DeploymentName,
+			ResourceType:     request.ResourceType,
+			ResourceName:     request.ResourceName,
+			ControlAccountID: request.ControlAccountID,
+			TargetAccountID:  request.TargetAccountID,
+			Region:           request.Region,
+			ObserverRoleARN:  request.ObserverRoleARN,
 		})
 	}
 }

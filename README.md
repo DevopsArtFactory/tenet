@@ -162,13 +162,35 @@ Open one application to see the linked rollout resources grouped into clear sect
 - config and access
 
 ### Resource detail
-Open a concrete resource to inspect the deeper operational context for that resource, including rollout and runtime information. Recent logs are surfaced here when the resource type supports them.
+Open a concrete resource to inspect the deeper operational context for that resource, including rollout and runtime information. Recent logs are surfaced here when the resource type supports them. A parallel read-only resource inspection route now exposes explicit typed backend payloads for supported live AWS resources without changing the bookmarkable drill-down shape.
 
 Canonical resource-log routes stay stable across rollout modes so operators can bookmark or script them:
 - `asgWeightedTargetGroups`: `trafficShiftPlan` (`{deployment}-weighted-routing`)
 - `ecsRolling`: `ecsService` (`{deployment}-service`)
 
 Behind those routes, the built-in AWS-backed recent-log provider now reuses SDK config/client setup per `(region, target account, observer role)` key inside a running Tenet API process instead of rebuilding ECS / CloudWatch Logs / Auto Scaling / EC2 clients on every fetch.
+
+The same drill-down now has a parallel inspection route family:
+- `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}`
+
+Supported live inspection currently starts with:
+- `ecsService`
+- `candidateAutoScalingGroup`
+- `serviceAutoScalingGroup`
+
+Resource-inspection responses keep the contract explicit for UI consumers:
+- common fields: `deploymentName`, `resourceType`, `resourceName`, `lookupContext`, `available`, `source`, `unavailableReason`
+- ECS payloads add `ecsService`
+- Auto Scaling payloads add `autoScalingGroup`
+
+Like recent logs, `lookupContext` is present for both `available=true` and unavailable inspection responses:
+- `lookupContext.region`
+- `lookupContext.controlAccountId`
+- `lookupContext.targetAccountId`
+- `lookupContext.crossAccount`
+- `lookupContext.observerRoleConfigured`
+
+Unsupported or temporarily unavailable resource types do not surface vague 500s from the provider layer. They return `available=false` with an explicit `unavailableReason` plus `lookupContext` so operators can see which region/account path Tenet attempted before continuing AWS troubleshooting elsewhere.
 
 The same drill-down also includes read-only workspace surfaces:
 - `/?page=drift&deployment={deploymentName}` for field-level troubleshooting context that now calls out the active drift-row source: controller-authored `managedDrift[]` rows when present, otherwise the existing derived fallback read-model heuristics for older payloads. Empty-state copy also distinguishes "no controller-authored drift reported" from "no derived fallback drift detected."
@@ -238,6 +260,7 @@ Implemented today:
 - immutable apply-request creation/readback with stable `applyId`, plan validation, and disabled-by-default live execution semantics
 - deployment events overview derived from persisted runtime history
 - recent resource-log support for supported resource types
+- resource inspection support for ECS services and deployment-linked Auto Scaling Groups
 
 Not implemented yet:
 - live AWS execution

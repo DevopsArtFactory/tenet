@@ -20,6 +20,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
 	"github.com/DevopsArtFactory/tenet/internal/requestactor"
+	"github.com/DevopsArtFactory/tenet/internal/resourceinspection"
 	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
@@ -2713,6 +2714,221 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 	})
 }
 
+func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
+	t.Run("returns resource inspection payload", func(t *testing.T) {
+		expected := resourceinspection.Result{
+			DeploymentName: "api-prod",
+			ResourceType:   "ecsService",
+			ResourceName:   "payments-api-prod-service",
+			LookupContext: resourceinspection.LookupContext{
+				Region:                 "ap-northeast-2",
+				ControlAccountID:       "123456789012",
+				TargetAccountID:        "123456789012",
+				CrossAccount:           false,
+				ObserverRoleConfigured: true,
+			},
+			Available: true,
+			Source:    resourceinspection.SourceECSService,
+			ECSService: &resourceinspection.ECSServiceInspection{
+				ClusterARN:     "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
+				ServiceARN:     "arn:aws:ecs:ap-northeast-2:123456789012:service/payments/payments-api-prod-service",
+				ServiceName:    "payments-api-prod-service",
+				Status:         "ACTIVE",
+				DesiredCount:   2,
+				RunningCount:   2,
+				PendingCount:   0,
+				TaskDefinition: "payments-api:42",
+				Deployments: []resourceinspection.ECSDeploymentSummary{{
+					ID:             "ecs-svc/123",
+					Status:         "PRIMARY",
+					RolloutState:   "COMPLETED",
+					TaskDefinition: "payments-api:42",
+					DesiredCount:   2,
+					RunningCount:   2,
+					PendingCount:   0,
+				}},
+				Events: []resourceinspection.ECSServiceEvent{{
+					CreatedAt: "2026-04-18T00:12:00Z",
+					Message:   "service reached steady state",
+				}},
+			},
+		}
+
+		var gotRequest struct {
+			deploymentName string
+			resourceType   string
+			resourceName   string
+			requestID      string
+		}
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "api-prod" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceInspection: func(ctx context.Context, deploymentName, resourceType, resourceName string) (resourceinspection.Result, error) {
+				gotRequest.deploymentName = deploymentName
+				gotRequest.resourceType = resourceType
+				gotRequest.resourceName = resourceName
+				gotRequest.requestID = RequestIDFromContext(ctx)
+				return expected, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		responseRequestID := assertResponseRequestID(t, resp)
+		if !reflect.DeepEqual(gotRequest, struct {
+			deploymentName string
+			resourceType   string
+			resourceName   string
+			requestID      string
+		}{deploymentName: "api-prod", resourceType: "ecsService", resourceName: "payments-api-prod-service", requestID: responseRequestID}) {
+			t.Fatalf("unexpected provider request: %+v", gotRequest)
+		}
+
+		var got resourceinspection.Result
+		if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+			t.Fatalf("failed to decode resource inspection payload: %v", err)
+		}
+		if !reflect.DeepEqual(got, expected) {
+			t.Fatalf("unexpected resource inspection payload: %+v", got)
+		}
+
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw resource inspection payload: %v", err)
+		}
+		for _, key := range []string{"deploymentName", "resourceType", "resourceName", "lookupContext", "available", "source", "ecsService", "unavailableReason"} {
+			if _, ok := raw[key]; !ok {
+				t.Fatalf("expected %q field in payload, got %#v", key, raw)
+			}
+		}
+	})
+
+	for _, tc := range []struct {
+		name         string
+		query        string
+		wantBodyPart string
+	}{
+		{name: "missing resourceType", query: "resourceName=payments-api-prod-service", wantBodyPart: "resourceType"},
+		{name: "missing resourceName", query: "resourceType=ecsService", wantBodyPart: "resourceName"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			router := NewRouter(Options{
+				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+				OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+					t.Fatalf("overview deployment lookup should not run for invalid query")
+					return catalog.DeploymentOverviewDetail{}, nil
+				},
+				OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+					t.Fatalf("resource inspection provider should not run for invalid query")
+					return resourceinspection.Result{}, nil
+				},
+			})
+
+			req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?"+tc.query, nil)
+			resp := httptest.NewRecorder()
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d with body %q", resp.Code, resp.Body.String())
+			}
+			if !strings.Contains(resp.Body.String(), tc.wantBodyPart) {
+				t.Fatalf("expected 400 body to mention %q, got %q", tc.wantBodyPart, resp.Body.String())
+			}
+		})
+	}
+
+	t.Run("returns 503 when provider is unavailable", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service", nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusServiceUnavailable {
+			t.Fatalf("expected 503, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if !strings.Contains(resp.Body.String(), "resource inspection") {
+			t.Fatalf("expected 503 body to mention resource inspection, got %q", resp.Body.String())
+		}
+	})
+
+	t.Run("propagates deployment not found as 404", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+				return catalog.DeploymentOverviewDetail{}, statusstore.ErrNotFound
+			},
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+				t.Fatalf("resource inspection provider should not run when deployment lookup fails")
+				return resourceinspection.Result{}, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/missing/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service", nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d with body %q", resp.Code, resp.Body.String())
+		}
+	})
+
+	t.Run("propagates deployment resource binding failures as 404", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+				return resourceinspection.Result{}, statusstore.ErrNotFound
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service", nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d with body %q", resp.Code, resp.Body.String())
+		}
+	})
+
+	t.Run("returns generic 500 when resource inspection provider errors", func(t *testing.T) {
+		const providerErr = "boom: resource inspection provider internals"
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+				return resourceinspection.Result{}, errors.New(providerErr)
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service", nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		assertInternalServerErrorResponse(t, resp, providerErr)
+	})
+}
+
 func TestRouterCreateDeploymentPlanPreview(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
@@ -3353,6 +3569,9 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		OverviewDeploymentResourceLogs: func(context.Context, string, string, string) (resourcelogs.Result, error) {
 			return resourcelogs.Result{}, nil
 		},
+		OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+			return resourceinspection.Result{}, nil
+		},
 		CreateDeploymentPlanPreview: func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error) {
 			return planpreview.CreateResult{Record: planpreview.Record{ID: "plan_1234abcd"}}, nil
 		},
@@ -3373,7 +3592,7 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		},
 	})
 
-	getPaths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/applications", "/v1/overview/applications/api-prod", "/v1/overview/accounts", "/v1/overview/accounts/123456789012", "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod", "/v1/overview/deployments/api-prod", "/v1/overview/deployments/api-prod/events", "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service", "/v1/plans/plan_1234abcd", "/v1/applies/apply_1234abcd", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
+	getPaths := []string{"/", "/healthz", "/v1/info", "/v1/catalog/summary", "/v1/catalog/deployments", "/v1/catalog/environments", "/v1/catalog/accounts", "/v1/catalog/placements", "/v1/catalog/topology", "/v1/overview/applications", "/v1/overview/applications/api-prod", "/v1/overview/accounts", "/v1/overview/accounts/123456789012", "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod", "/v1/overview/deployments/api-prod", "/v1/overview/deployments/api-prod/events", "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service", "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service", "/v1/plans/plan_1234abcd", "/v1/applies/apply_1234abcd", "/v1/status/deployments", "/v1/status/deployments/api-prod"}
 	for _, path := range getPaths {
 		req := httptest.NewRequest(http.MethodPost, path, nil)
 		resp := httptest.NewRecorder()

@@ -16,6 +16,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
+	"github.com/DevopsArtFactory/tenet/internal/resourceinspection"
 	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
@@ -49,32 +50,47 @@ func respondApplyCreateError(w http.ResponseWriter, err error) {
 	respondLookupError(w, err)
 }
 
+func parseResourceQuery(w http.ResponseWriter, r *http.Request) (resourceType string, resourceName string, ok bool) {
+	resourceType = strings.TrimSpace(r.URL.Query().Get("resourceType"))
+	if resourceType == "" {
+		http.Error(w, "resourceType is required", http.StatusBadRequest)
+		return "", "", false
+	}
+	resourceName = strings.TrimSpace(r.URL.Query().Get("resourceName"))
+	if resourceName == "" {
+		http.Error(w, "resourceName is required", http.StatusBadRequest)
+		return "", "", false
+	}
+	return resourceType, resourceName, true
+}
+
 // Options configures the API router.
 type Options struct {
-	BuildInfo                      buildinfo.Info
-	Logger                         *slog.Logger
-	RequestTimeout                 time.Duration
-	CatalogSummary                 func() (catalog.Summary, error)
-	CatalogDeployments             func() ([]catalog.DeploymentView, error)
-	CatalogEnvironments            func() ([]catalog.EnvironmentView, error)
-	CatalogAccounts                func() ([]catalog.AccountView, error)
-	CatalogPlacements              func() ([]catalog.PlacementView, error)
-	CatalogTopology                func() (catalog.TopologySnapshot, error)
-	OverviewApplications           func() ([]catalog.ApplicationOverview, error)
-	OverviewApplication            func(string) (catalog.ApplicationOverviewDetail, error)
-	OverviewAccounts               func() ([]catalog.AccountOverview, error)
-	OverviewAccount                func(string) (catalog.AccountOverviewDetail, error)
-	OverviewProjectEnvironment     func(string, string, string) (catalog.ProjectEnvironmentOverviewDetail, error)
-	OverviewDeployment             func(string) (catalog.DeploymentOverviewDetail, error)
-	OverviewDeploymentEvents       func(string) (catalog.DeploymentOverviewEvents, error)
-	OverviewDeploymentResourceLogs func(context.Context, string, string, string) (resourcelogs.Result, error)
-	AuditLogs                      func(context.Context, auditlog.Query) (auditlog.Result, error)
-	CreateDeploymentPlanPreview    func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error)
-	PlanPreview                    func(context.Context, string) (planpreview.Record, error)
-	CreateApplyRequest             func(context.Context, string) (applyrequest.CreateResult, error)
-	ApplyRequest                   func(context.Context, string) (applyrequest.Record, error)
-	DeploymentStatuses             func() ([]statusstore.Snapshot, error)
-	DeploymentStatus               func(string) (statusstore.Snapshot, error)
+	BuildInfo                            buildinfo.Info
+	Logger                               *slog.Logger
+	RequestTimeout                       time.Duration
+	CatalogSummary                       func() (catalog.Summary, error)
+	CatalogDeployments                   func() ([]catalog.DeploymentView, error)
+	CatalogEnvironments                  func() ([]catalog.EnvironmentView, error)
+	CatalogAccounts                      func() ([]catalog.AccountView, error)
+	CatalogPlacements                    func() ([]catalog.PlacementView, error)
+	CatalogTopology                      func() (catalog.TopologySnapshot, error)
+	OverviewApplications                 func() ([]catalog.ApplicationOverview, error)
+	OverviewApplication                  func(string) (catalog.ApplicationOverviewDetail, error)
+	OverviewAccounts                     func() ([]catalog.AccountOverview, error)
+	OverviewAccount                      func(string) (catalog.AccountOverviewDetail, error)
+	OverviewProjectEnvironment           func(string, string, string) (catalog.ProjectEnvironmentOverviewDetail, error)
+	OverviewDeployment                   func(string) (catalog.DeploymentOverviewDetail, error)
+	OverviewDeploymentEvents             func(string) (catalog.DeploymentOverviewEvents, error)
+	OverviewDeploymentResourceLogs       func(context.Context, string, string, string) (resourcelogs.Result, error)
+	OverviewDeploymentResourceInspection func(context.Context, string, string, string) (resourceinspection.Result, error)
+	AuditLogs                            func(context.Context, auditlog.Query) (auditlog.Result, error)
+	CreateDeploymentPlanPreview          func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error)
+	PlanPreview                          func(context.Context, string) (planpreview.Record, error)
+	CreateApplyRequest                   func(context.Context, string) (applyrequest.CreateResult, error)
+	ApplyRequest                         func(context.Context, string) (applyrequest.Record, error)
+	DeploymentStatuses                   func() ([]statusstore.Snapshot, error)
+	DeploymentStatus                     func(string) (statusstore.Snapshot, error)
 }
 
 // NewRouter builds the API router for the Tenet control plane.
@@ -330,14 +346,8 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "invalid deployment name", http.StatusBadRequest)
 				return
 			}
-			resourceType := strings.TrimSpace(r.URL.Query().Get("resourceType"))
-			if resourceType == "" {
-				http.Error(w, "resourceType is required", http.StatusBadRequest)
-				return
-			}
-			resourceName := strings.TrimSpace(r.URL.Query().Get("resourceName"))
-			if resourceName == "" {
-				http.Error(w, "resourceName is required", http.StatusBadRequest)
+			resourceType, resourceName, ok := parseResourceQuery(w, r)
+			if !ok {
 				return
 			}
 			if _, err := options.OverviewDeployment(name); err != nil {
@@ -345,6 +355,35 @@ func NewRouter(options Options) http.Handler {
 				return
 			}
 			result, err := options.OverviewDeploymentResourceLogs(r.Context(), name, resourceType, resourceName)
+			if err != nil {
+				respondLookupError(w, err)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(result)
+		case strings.HasSuffix(path, "/resource-inspection"):
+			if options.OverviewDeployment == nil {
+				http.Error(w, "overview deployment unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			if options.OverviewDeploymentResourceInspection == nil {
+				http.Error(w, "overview deployment resource inspection unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			name := strings.TrimSuffix(path, "/resource-inspection")
+			if name == "" || strings.Contains(name, "/") {
+				http.Error(w, "invalid deployment name", http.StatusBadRequest)
+				return
+			}
+			resourceType, resourceName, ok := parseResourceQuery(w, r)
+			if !ok {
+				return
+			}
+			if _, err := options.OverviewDeployment(name); err != nil {
+				respondLookupError(w, err)
+				return
+			}
+			result, err := options.OverviewDeploymentResourceInspection(r.Context(), name, resourceType, resourceName)
 			if err != nil {
 				respondLookupError(w, err)
 				return

@@ -79,6 +79,7 @@ curl -fsS "http://$HOST:$PORT/healthz" >/dev/null
 assert_request_id_header "http://$HOST:$PORT/healthz"
 assert_request_id_header "http://$HOST:$PORT/v1/catalog/summary"
 assert_request_id_header "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing"
+assert_request_id_header "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service"
 assert_request_id_header "http://$HOST:$PORT/"
 
 summary=$(curl -fsS "http://$HOST:$PORT/v1/catalog/summary")
@@ -142,6 +143,8 @@ invalid_audit_action_status=$(curl -sS -o "$INVALID_AUDIT_ACTION_BODY" -w "%{htt
 status=$(curl -fsS "http://$HOST:$PORT/v1/status/deployments/payments-api-prod")
 resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")
 worker_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
+worker_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service")
+candidate_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate")
 ui=$(curl -fsS "http://$HOST:$PORT/")
 audit_ui=$(curl -fsS "http://$HOST:$PORT/?page=audit&deployment=payments-api-prod&action=apply.requested&limit=1")
 plan_ui=$(curl -fsS "http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id")
@@ -172,12 +175,14 @@ actor_audit_logs_path=$(write_payload actor-audit-logs.json "$actor_audit_logs")
 status_json_path=$(write_payload status.json "$status")
 resource_logs_path=$(write_payload resource-logs.json "$resource_logs")
 worker_resource_logs_path=$(write_payload worker-resource-logs.json "$worker_resource_logs")
+worker_resource_inspection_path=$(write_payload worker-resource-inspection.json "$worker_resource_inspection")
+candidate_resource_inspection_path=$(write_payload candidate-resource-inspection.json "$candidate_resource_inspection")
 ui_path=$(write_payload ui.html "$ui")
 audit_ui_path=$(write_payload audit-ui.html "$audit_ui")
 plan_ui_path=$(write_payload plan-ui.html "$plan_ui")
 apply_ui_path=$(write_payload apply-ui.html "$apply_ui")
 
-SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" RESOURCE_LOGS_PATH="$resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" UI_PATH="$ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" python3 - <<'PY'
+SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" RESOURCE_LOGS_PATH="$resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" UI_PATH="$ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" python3 - <<'PY'
 import json, os
 
 def read_json(path_env):
@@ -214,6 +219,8 @@ actor_audit_logs = read_json('ACTOR_AUDIT_LOGS_PATH')
 status = read_json('STATUS_JSON_PATH')
 resource_logs = read_json('RESOURCE_LOGS_PATH')
 worker_resource_logs = read_json('WORKER_RESOURCE_LOGS_PATH')
+worker_resource_inspection = read_json('WORKER_RESOURCE_INSPECTION_PATH')
+candidate_resource_inspection = read_json('CANDIDATE_RESOURCE_INSPECTION_PATH')
 ui = read_text('UI_PATH')
 audit_ui = read_text('AUDIT_UI_PATH')
 plan_ui = read_text('PLAN_UI_PATH')
@@ -361,6 +368,31 @@ if worker_resource_logs['available']:
     assert isinstance(worker_resource_logs.get('source'), str), worker_resource_logs
 else:
     assert isinstance(worker_resource_logs.get('unavailableReason'), str) and worker_resource_logs['unavailableReason'], worker_resource_logs
+assert worker_resource_inspection['deploymentName'] == 'worker-prod', worker_resource_inspection
+assert worker_resource_inspection['resourceType'] == 'ecsService', worker_resource_inspection
+assert worker_resource_inspection['resourceName'] == 'worker-prod-service', worker_resource_inspection
+assert isinstance(worker_resource_inspection['available'], bool), worker_resource_inspection
+assert isinstance(worker_resource_inspection.get('lookupContext'), dict), worker_resource_inspection
+assert isinstance(worker_resource_inspection['lookupContext'].get('region'), str) and worker_resource_inspection['lookupContext']['region'], worker_resource_inspection
+assert isinstance(worker_resource_inspection['lookupContext'].get('controlAccountId'), str) and worker_resource_inspection['lookupContext']['controlAccountId'], worker_resource_inspection
+assert isinstance(worker_resource_inspection['lookupContext'].get('targetAccountId'), str) and worker_resource_inspection['lookupContext']['targetAccountId'], worker_resource_inspection
+assert isinstance(worker_resource_inspection['lookupContext'].get('crossAccount'), bool), worker_resource_inspection
+assert isinstance(worker_resource_inspection['lookupContext'].get('observerRoleConfigured'), bool), worker_resource_inspection
+if worker_resource_inspection['available']:
+    assert worker_resource_inspection.get('source') == 'ecs_service', worker_resource_inspection
+    assert isinstance(worker_resource_inspection.get('ecsService'), dict), worker_resource_inspection
+else:
+    assert isinstance(worker_resource_inspection.get('unavailableReason'), str) and worker_resource_inspection['unavailableReason'], worker_resource_inspection
+assert candidate_resource_inspection['deploymentName'] == 'payments-api-prod', candidate_resource_inspection
+assert candidate_resource_inspection['resourceType'] == 'candidateAutoScalingGroup', candidate_resource_inspection
+assert candidate_resource_inspection['resourceName'] == 'payments-api-prod-candidate', candidate_resource_inspection
+assert isinstance(candidate_resource_inspection['available'], bool), candidate_resource_inspection
+assert isinstance(candidate_resource_inspection.get('lookupContext'), dict), candidate_resource_inspection
+if candidate_resource_inspection['available']:
+    assert candidate_resource_inspection.get('source') == 'auto_scaling_group', candidate_resource_inspection
+    assert isinstance(candidate_resource_inspection.get('autoScalingGroup'), dict), candidate_resource_inspection
+else:
+    assert isinstance(candidate_resource_inspection.get('unavailableReason'), str) and candidate_resource_inspection['unavailableReason'], candidate_resource_inspection
 assert 'Application status overview' in ui, ui
 assert '/v1/overview/applications' in ui, ui
 assert '/v1/overview/applications/${encodeURIComponent(deploymentName)}' in ui, ui
