@@ -180,6 +180,8 @@ Supported live inspection currently starts with:
 - `candidateAutoScalingGroup`
 - `serviceAutoScalingGroup`
 
+For `ecsService`, Tenet now keeps a bounded in-process hint of the last cluster that resolved a given `(region, target account, observer role, service name)` lookup so repeated drill-downs avoid brute-force cluster scans. If that hint is stale or the service moved, the lookup falls back to the full cluster scan path, refreshes the hint, and keeps the existing resource-not-found semantics unchanged.
+
 The embedded `Live inspection` panel renders operator-friendly summaries from those payloads:
 - `ecsService`: service identity/status, desired-running-pending counts, active deployments, and recent ECS service events
 - `autoScalingGroup`: group sizing/health settings, attached target groups, and current instances

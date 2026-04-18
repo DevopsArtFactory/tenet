@@ -1,10 +1,12 @@
 package resourceinspection
 
 import (
+	"container/list"
 	"context"
 	"errors"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -19,6 +21,7 @@ import (
 const (
 	SourceECSService       = "ecs_service"
 	SourceAutoScalingGroup = "auto_scaling_group"
+	ecsServiceHintCacheCap = 256
 )
 
 var ErrNotImplemented = errors.New("resource inspection service not implemented")
@@ -108,15 +111,120 @@ type Options struct {
 }
 
 type Service struct {
-	options  Options
-	awsCache *resourceaws.ClientCache
+	options         Options
+	awsCache        *resourceaws.ClientCache
+	ecsServiceHints *ecsServiceClusterHintCache
 }
 
 func NewService(options Options) Service {
 	return Service{
-		options:  options,
-		awsCache: resourceaws.NewClientCache(resourceaws.DefaultClientCacheDeps()),
+		options:         options,
+		awsCache:        resourceaws.NewClientCache(resourceaws.DefaultClientCacheDeps()),
+		ecsServiceHints: newECSServiceClusterHintCache(ecsServiceHintCacheCap),
 	}
+}
+
+type ecsServiceAPI interface {
+	ListClusters(context.Context, *ecs.ListClustersInput, ...func(*ecs.Options)) (*ecs.ListClustersOutput, error)
+	DescribeServices(context.Context, *ecs.DescribeServicesInput, ...func(*ecs.Options)) (*ecs.DescribeServicesOutput, error)
+}
+
+type ecsServiceClusterHintKey struct {
+	region          string
+	targetAccountID string
+	observerRoleARN string
+	serviceName     string
+}
+
+type ecsServiceClusterHintEntry struct {
+	key        ecsServiceClusterHintKey
+	clusterARN string
+}
+
+type ecsServiceClusterHintCache struct {
+	maxEntries int
+	mu         sync.Mutex
+	order      *list.List
+	entries    map[ecsServiceClusterHintKey]*list.Element
+}
+
+func newECSServiceClusterHintCache(maxEntries int) *ecsServiceClusterHintCache {
+	if maxEntries <= 0 {
+		maxEntries = ecsServiceHintCacheCap
+	}
+	return &ecsServiceClusterHintCache{
+		maxEntries: maxEntries,
+		order:      list.New(),
+		entries:    make(map[ecsServiceClusterHintKey]*list.Element),
+	}
+}
+
+func newECSServiceClusterHintKey(region, targetAccountID, observerRoleARN, serviceName string) ecsServiceClusterHintKey {
+	return ecsServiceClusterHintKey{
+		region:          strings.TrimSpace(region),
+		targetAccountID: strings.TrimSpace(targetAccountID),
+		observerRoleARN: strings.TrimSpace(observerRoleARN),
+		serviceName:     strings.TrimSpace(serviceName),
+	}
+}
+
+func (c *ecsServiceClusterHintCache) Get(key ecsServiceClusterHintKey) (string, bool) {
+	if c == nil {
+		return "", false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	element, ok := c.entries[key]
+	if !ok {
+		return "", false
+	}
+	c.order.MoveToFront(element)
+	entry := element.Value.(ecsServiceClusterHintEntry)
+	return entry.clusterARN, true
+}
+
+func (c *ecsServiceClusterHintCache) Set(key ecsServiceClusterHintKey, clusterARN string) {
+	if c == nil {
+		return
+	}
+	clusterARN = strings.TrimSpace(clusterARN)
+	if clusterARN == "" {
+		c.Delete(key)
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if element, ok := c.entries[key]; ok {
+		element.Value = ecsServiceClusterHintEntry{key: key, clusterARN: clusterARN}
+		c.order.MoveToFront(element)
+		return
+	}
+	element := c.order.PushFront(ecsServiceClusterHintEntry{key: key, clusterARN: clusterARN})
+	c.entries[key] = element
+	if c.order.Len() <= c.maxEntries {
+		return
+	}
+	back := c.order.Back()
+	if back == nil {
+		return
+	}
+	entry := back.Value.(ecsServiceClusterHintEntry)
+	delete(c.entries, entry.key)
+	c.order.Remove(back)
+}
+
+func (c *ecsServiceClusterHintCache) Delete(key ecsServiceClusterHintKey) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	element, ok := c.entries[key]
+	if !ok {
+		return
+	}
+	delete(c.entries, key)
+	c.order.Remove(element)
 }
 
 type ECSRequest struct {
@@ -249,7 +357,13 @@ func (s Service) inspectECSServiceFromAWS(ctx context.Context, req ECSRequest) (
 	if err != nil {
 		return ECSServiceInspection{}, err
 	}
-	service, clusterARN, err := findECSService(ctx, clients.ECS, req.ResourceName)
+	service, clusterARN, err := findECSService(
+		ctx,
+		clients.ECS,
+		req.ResourceName,
+		s.ecsServiceHints,
+		newECSServiceClusterHintKey(req.Region, req.TargetAccountID, req.ObserverRoleARN, req.ResourceName),
+	)
 	if err != nil {
 		return ECSServiceInspection{}, err
 	}
@@ -376,29 +490,64 @@ func autoScalingInspectionFromGroup(group asgtypes.AutoScalingGroup) AutoScaling
 	}
 }
 
-func findECSService(ctx context.Context, client *ecs.Client, serviceName string) (*ecstypes.Service, *string, error) {
-	clusters := ecs.NewListClustersPaginator(client, &ecs.ListClustersInput{})
-	for clusters.HasMorePages() {
-		page, err := clusters.NextPage(ctx)
+func findECSService(ctx context.Context, client ecsServiceAPI, serviceName string, hints *ecsServiceClusterHintCache, key ecsServiceClusterHintKey) (*ecstypes.Service, *string, error) {
+	skipClusterARN := ""
+	if cachedClusterARN, ok := hints.Get(key); ok {
+		service, err := describeECSServiceInCluster(ctx, client, cachedClusterARN, serviceName)
+		if err != nil {
+			return nil, nil, err
+		}
+		if service != nil {
+			hints.Set(key, cachedClusterARN)
+			return service, aws.String(cachedClusterARN), nil
+		}
+		hints.Delete(key)
+		skipClusterARN = cachedClusterARN
+	}
+
+	var nextToken *string
+	for {
+		page, err := client.ListClusters(ctx, &ecs.ListClustersInput{NextToken: nextToken})
 		if err != nil {
 			return nil, nil, err
 		}
 		for _, clusterARN := range page.ClusterArns {
-			out, err := client.DescribeServices(ctx, &ecs.DescribeServicesInput{
-				Cluster:  aws.String(clusterARN),
-				Services: []string{serviceName},
-			})
+			if clusterARN == skipClusterARN {
+				continue
+			}
+			service, err := describeECSServiceInCluster(ctx, client, clusterARN, serviceName)
 			if err != nil {
 				return nil, nil, err
 			}
-			for _, service := range out.Services {
-				if aws.ToString(service.ServiceName) == serviceName {
-					return &service, aws.String(clusterARN), nil
-				}
+			if service == nil {
+				continue
 			}
+			hints.Set(key, clusterARN)
+			return service, aws.String(clusterARN), nil
+		}
+		if aws.ToString(page.NextToken) == "" {
+			break
+		}
+		nextToken = page.NextToken
+	}
+	hints.Delete(key)
+	return nil, nil, nil
+}
+
+func describeECSServiceInCluster(ctx context.Context, client ecsServiceAPI, clusterARN, serviceName string) (*ecstypes.Service, error) {
+	out, err := client.DescribeServices(ctx, &ecs.DescribeServicesInput{
+		Cluster:  aws.String(clusterARN),
+		Services: []string{serviceName},
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, service := range out.Services {
+		if aws.ToString(service.ServiceName) == serviceName {
+			return &service, nil
 		}
 	}
-	return nil, nil, nil
+	return nil, nil
 }
 
 func formatTime(ts time.Time) string {

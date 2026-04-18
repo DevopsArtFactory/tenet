@@ -104,6 +104,7 @@ Current behavior:
 - the recent-log card on that final resource page now surfaces the backend lookup path directly as `Lookup region`, `Control account ID`, `Target account ID`, `Cross-account lookup`, and `Observer role configured`, even when the log lookup is empty or unavailable
 - the backend resource drill-down now also has a parallel read-only inspection route for supported live AWS summaries: `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}`
 - that inspection payload is intentionally additive and explicit for operators/UI consumers: common fields stay `deploymentName`, `resourceType`, `resourceName`, `lookupContext`, `available`, `source`, `unavailableReason`, while supported resource-specific bodies are currently `ecsService` and `autoScalingGroup`
+- `ecsService` lookups keep a bounded in-process cluster hint per `(region, target account, observer role, service name)` so repeated inspection requests try the last known cluster first; if that hint is stale, Tenet clears it, falls back to the full cluster scan, and refreshes the hint from the recovered service location
 - unsupported or unavailable inspection lookups keep the route usable during troubleshooting by returning `available=false` plus an explicit `unavailableReason` instead of surfacing a raw provider failure
 
 Resource-list fallback contract:
