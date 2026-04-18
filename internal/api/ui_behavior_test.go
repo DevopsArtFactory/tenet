@@ -3628,20 +3628,30 @@ async function render(detail) {
   if (!managedRows.some((row) => row.includes('service.taskDefinition'))) throw new Error('expected second backend-authored managed drift row');
   if (managedRows.some((row) => row.includes('artifact'))) throw new Error('expected managed drift rows to suppress fallback artifact derivation');
   if (managedRows.some((row) => row.includes('condition.DriftDetected'))) throw new Error('expected managed drift rows to suppress fallback condition derivation');
+  if (!managedText.includes('Drift summary')) throw new Error('expected managed drift summary heading');
+  if (!managedText.includes('Total rows')) throw new Error('expected managed drift total-row summary');
+  if (!managedText.includes('Visible rows')) throw new Error('expected managed drift visible-row summary');
+  if (!managedText.includes('Showing all 2 drift rows.')) throw new Error('expected managed drift summary copy');
+  if (!/High \| 1(?: \||$)/.test(managedText)) throw new Error('expected managed drift high-severity summary count');
+  if (!/Medium \| 1(?: \||$)/.test(managedText)) throw new Error('expected managed drift medium-severity summary count');
+  if (!/Low \| 0(?: \||$)/.test(managedText)) throw new Error('expected managed drift low-severity summary count');
   if (!managedText.includes("<script>alert('xss')</script> stable=80 canary=20")) throw new Error('expected managed drift value to render as safe text');
   const managedSeverityField = managedRun.document.querySelector('[data-toolbar-field="Severity"]');
   if (!managedSeverityField) throw new Error('expected managed drift severity filter control');
   managedSeverityField.value = 'high';
   managedSeverityField.dispatch('change', { target: managedSeverityField });
   await settle();
+  const managedHighText = collectText(managedRun.document.getElementById('accounts')).join(' | ');
   const managedHighRows = collectNodes(managedRun.document.getElementById('accounts'), (node) => node.tagName === 'TR').slice(1).map((node) => collectText(node).join(' | '));
   if (managedHighRows.length !== 1) throw new Error('expected managed drift severity filter to narrow to one row, got ' + managedHighRows.length);
   if (!managedHighRows[0].includes('listener.weight')) throw new Error('expected managed drift severity filter to retain the high severity row');
+  if (!managedHighText.includes('Showing 1 drift row out of 2 drift rows after filters.')) throw new Error('expected managed drift summary to reflect high filter impact');
 
   const managedEmptyRun = await render(managedEmptyDetail);
   const managedEmptyText = collectText(managedEmptyRun.document.getElementById('accounts')).join(' | ');
   const managedEmptyRows = collectNodes(managedEmptyRun.document.getElementById('accounts'), (node) => node.tagName === 'TR').slice(1);
   if (!managedEmptyText.includes('No controller-authored field-level drift was reported for this deployment.')) throw new Error('expected explicit controller-authored empty drift message');
+  if (!managedEmptyText.includes('No field-level drift rows are currently reported.')) throw new Error('expected empty managed drift summary copy');
   if (managedEmptyText.includes('condition.DriftDetected')) throw new Error('expected empty managed drift state to suppress fallback condition rows');
   if (managedEmptyRows.length !== 0) throw new Error('expected empty managed drift state to suppress fallback drift table rows');
 
@@ -3678,6 +3688,8 @@ async function render(detail) {
   if (!text.includes('condition.Healthy')) throw new Error('expected unhealthy health-condition drift row');
   if (text.includes('condition.Progressing')) throw new Error('expected benign progressing condition to stay out of drift rows');
   if (text.includes('condition.Accepted')) throw new Error('expected benign accepted condition to stay out of drift rows');
+  if (!text.includes('Drift summary')) throw new Error('expected fallback drift summary heading');
+  if (!text.includes('Showing all 7 drift rows.')) throw new Error('expected fallback drift summary copy');
   const allRows = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'TR').slice(1).map((node) => collectText(node).join(' | '));
   if (allRows.some((row) => row.includes('BoundaryRegressionGuard') && row.includes('False drift detection should stay out of drift rows'))) throw new Error('expected DriftDetected=false boundary to stay out of drift rows');
   if (allRows.some((row) => row.includes('BoundaryRegressionGuard') && row.includes('Healthy true should stay out of drift rows'))) throw new Error('expected Healthy=true boundary to stay out of drift rows');
@@ -3697,6 +3709,7 @@ async function render(detail) {
   const highOnlyText = collectText(run.document.getElementById('accounts')).join(' | ');
   if (!highOnlyText.includes('artifact')) throw new Error('expected high severity filter to retain artifact row');
   if (highOnlyText.includes('condition.Healthy')) throw new Error('expected high severity filter to remove low-severity condition row');
+  if (!highOnlyText.includes('Showing 2 drift rows out of 7 drift rows after filters.')) throw new Error('expected high severity summary to reflect visible fallback rows');
 
   const queryField = run.document.querySelector('[data-toolbar-field="Filter drift rows"]');
   if (!queryField) throw new Error('expected drift query filter control');
@@ -3709,6 +3722,8 @@ async function render(detail) {
   if (queryRows.length !== 1) throw new Error('expected drift query filter to narrow to a single row, got ' + queryRows.length);
   if (!queryRows[0].includes('condition.Healthy')) throw new Error('expected drift query filter to match condition context');
   if (queryRows[0].includes('artifact')) throw new Error('expected drift query filter not to include artifact row content');
+  const queryText = collectText(run.document.getElementById('accounts')).join(' | ');
+  if (!queryText.includes('Showing 1 drift row out of 7 drift rows after filters.')) throw new Error('expected query summary to reflect visible fallback rows');
 
   queryField.value = '';
   queryField.dispatch('input', { target: queryField });
@@ -3724,10 +3739,17 @@ async function render(detail) {
   if (!rowTexts.length) throw new Error('expected rendered drift table rows');
   if (!rowTexts[0].includes('artifact')) throw new Error('expected severity sort to place artifact drift first');
   if (!rowTexts[rowTexts.length - 1].includes('condition.Healthy')) throw new Error('expected severity sort to place low severity drift last');
+  queryField.value = 'missing-signal';
+  queryField.dispatch('input', { target: queryField });
+  await settle();
+  const filteredEmptyText = collectText(run.document.getElementById('accounts')).join(' | ');
+  if (!filteredEmptyText.includes('Filters currently hide all 7 drift rows.')) throw new Error('expected filtered-empty summary copy');
+  if (!filteredEmptyText.includes('No field-level drift rows match the current filters. Adjust the query or severity filters to inspect reported drift.')) throw new Error('expected filtered-empty table message');
 
   const emptyRun = await render(emptyDetail);
   const emptyText = collectText(emptyRun.document.getElementById('accounts')).join(' | ');
   if (!emptyText.includes('Field-level drift')) throw new Error('expected empty drift workspace section heading');
+  if (!emptyText.includes('No field-level drift rows are currently reported.')) throw new Error('expected empty fallback drift summary copy');
   if (!emptyText.includes('No derived fallback field-level drift was detected from the deployment read model.')) throw new Error('expected empty drift workspace message');
   if (emptyText.includes('condition.')) throw new Error('expected empty drift workspace to omit condition rows');
 })();

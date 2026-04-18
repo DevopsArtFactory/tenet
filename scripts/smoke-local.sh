@@ -412,6 +412,10 @@ assert 'Drift view' in ui, ui
 assert 'Plan/apply' in ui, ui
 assert 'Current source: controller-authored managedDrift rows.' in ui, ui
 assert 'Current source: derived fallback read-model heuristics.' in ui, ui
+assert 'Drift summary' in ui, ui
+assert 'Total rows' in ui, ui
+assert 'Visible rows' in ui, ui
+assert 'No field-level drift rows match the current filters. Adjust the query or severity filters to inspect reported drift.' in ui, ui
 assert 'Controller runtime events' in ui, ui
 assert 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.' in ui, ui
 assert 'Loading controller runtime events…' in ui, ui
