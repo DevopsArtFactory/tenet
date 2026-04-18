@@ -56,7 +56,7 @@ assert_structured_api_request_logs() {
   local summary_request_id=$3
   local worker_resource_logs_request_id=$4
   local audit_logs_request_id=$5
-  local ui_request_id=$6
+  local drift_ui_request_id=$6
   local audit_ui_request_id=$7
 
   API_LOGS_TEXT="$logs_text" \
@@ -64,7 +64,7 @@ assert_structured_api_request_logs() {
   SUMMARY_REQUEST_ID="$summary_request_id" \
   WORKER_RESOURCE_LOGS_REQUEST_ID="$worker_resource_logs_request_id" \
   AUDIT_LOGS_REQUEST_ID="$audit_logs_request_id" \
-  UI_REQUEST_ID="$ui_request_id" \
+  DRIFT_UI_REQUEST_ID="$drift_ui_request_id" \
   AUDIT_UI_REQUEST_ID="$audit_ui_request_id" \
   python3 - <<'PY'
 import json
@@ -93,7 +93,7 @@ expected = [
     (os.environ["SUMMARY_REQUEST_ID"], "/v1/catalog/summary"),
     (os.environ["WORKER_RESOURCE_LOGS_REQUEST_ID"], "/v1/overview/deployments/worker-prod/resource-logs"),
     (os.environ["AUDIT_LOGS_REQUEST_ID"], "/v1/audit-logs"),
-    (os.environ["UI_REQUEST_ID"], "/"),
+    (os.environ["DRIFT_UI_REQUEST_ID"], "/"),
     (os.environ["AUDIT_UI_REQUEST_ID"], "/"),
 ]
 
@@ -191,7 +191,6 @@ wait_for_api_health
 healthz_request_id=$(assert_request_id_header "$API_BASE_URL/healthz")
 summary_request_id=$(assert_request_id_header "$API_BASE_URL/v1/catalog/summary")
 worker_resource_logs_request_id=$(assert_request_id_header "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
-ui_request_id=$(assert_request_id_header "$API_BASE_URL/")
 audit_logs_request_id=$(assert_request_id_header "$API_BASE_URL/v1/audit-logs?action=apply.requested&limit=2")
 
 summary=$(curl -fsS "$API_BASE_URL/v1/catalog/summary")
@@ -335,9 +334,9 @@ invalid_webhook_status=$(curl -sS -o "$INVALID_WEBHOOK_BODY" -w "%{http_code}" -
   "$API_BASE_URL/api/v1/github/webhook")
 invalid_webhook=$(cat "$INVALID_WEBHOOK_BODY")
 ui=$(curl -fsS "$API_BASE_URL/")
+drift_ui_request_id=$(assert_request_id_header "$API_BASE_URL/?page=drift&deployment=payments-api-prod")
 drift_ui=$(curl -fsS "$API_BASE_URL/?page=drift&deployment=payments-api-prod")
-audit_ui_request_id=$(assert_request_id_header "$API_BASE_URL/?page=audit&action=apply.requested&limit=2")
-audit_ui_deployment_request_id=$(assert_request_id_header "$API_BASE_URL/?page=audit&deployment=payments-api-prod&action=apply.requested&limit=2")
+audit_ui_request_id=$(assert_request_id_header "$API_BASE_URL/?page=audit&deployment=payments-api-prod&action=apply.requested&limit=2")
 audit_ui=$(curl -fsS "$API_BASE_URL/?page=audit&deployment=payments-api-prod&action=apply.requested&limit=2")
 plan_apply_ui=$(curl -fsS "$API_BASE_URL/?page=plan&deployment=payments-api-prod&planId=$plan_id&applyId=$apply_id")
 
@@ -717,13 +716,13 @@ fi
 api_logs=""
 for _ in $(seq 1 60); do
   api_logs=$("${COMPOSE[@]}" logs api --tail=200 2>&1 || true)
-  if assert_structured_api_request_logs "$api_logs" "$healthz_request_id" "$summary_request_id" "$worker_resource_logs_request_id" "$audit_logs_request_id" "$ui_request_id" "$audit_ui_request_id" >/dev/null 2>&1; then
+  if assert_structured_api_request_logs "$api_logs" "$healthz_request_id" "$summary_request_id" "$worker_resource_logs_request_id" "$audit_logs_request_id" "$drift_ui_request_id" "$audit_ui_request_id" >/dev/null 2>&1; then
     break
   fi
   sleep 1
 done
 
-if ! assert_structured_api_request_logs "$api_logs" "$healthz_request_id" "$summary_request_id" "$worker_resource_logs_request_id" "$audit_logs_request_id" "$ui_request_id" "$audit_ui_request_id"; then
+if ! assert_structured_api_request_logs "$api_logs" "$healthz_request_id" "$summary_request_id" "$worker_resource_logs_request_id" "$audit_logs_request_id" "$drift_ui_request_id" "$audit_ui_request_id"; then
   echo "smoke-docker: api logs missing correlated structured request entries" >&2
   exit 1
 fi
