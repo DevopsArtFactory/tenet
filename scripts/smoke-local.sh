@@ -538,15 +538,19 @@ assert "createNavLink(buildPlanPreviewRoute(activePlanRecord.id), 'Plan JSON')" 
 assert "createNavLink(buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activeApplyRecord.planId || activePlanRecord?.id || currentPageState.planId, applyId: activeApplyRecord.id }), 'Open bookmarked apply', '_self')" in ui, ui
 assert "createNavLink(buildApplyRequestRoute(activeApplyRecord.id), 'Apply JSON')" in ui, ui
 assert 'Server-authored plan preview loaded from GET /v1/plans/${activePlanRecord.id}.' in ui, ui
-assert 'Apply Plan will POST /v1/applies/plans/${planState.record.id}, persist an immutable apply request, and update this workspace URL with a shareable applyId.' in ui, ui
+assert 'Future immutable lifecycle states render here as queued, running, succeeded, cancelled, or failed.' in ui, ui
 assert 'Apply Plan activates only when a loaded persisted ready plan preview with a valid planId is present.' in ui, ui
 assert 'Live execution is intentionally disabled by default, so failed immutable apply records are expected and useful for operator review.' in ui, ui
+assert 'Apply lifecycle summary' in ui, ui
 assert "params.get('planId') || ''" in ui, ui
 assert "params.get('applyId') || ''" in ui, ui
 
 assert 'planId' in plan_ui, plan_ui
 assert 'applyId' in apply_ui, apply_ui
+assert 'Apply request failed' in apply_ui, apply_ui
+assert 'Apply lifecycle summary' in apply_ui, apply_ui
 assert 'Apply operations' in apply_ui, apply_ui
+assert 'Queued apply operation' in apply_ui, apply_ui
 assert '/v1/applies/' in apply_ui, apply_ui
 assert 'The ordered execution sequence below comes from the persisted apply record' in apply_ui, apply_ui
 print('smoke-local: fixture api path ok')
