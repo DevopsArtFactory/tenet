@@ -99,7 +99,7 @@ func TestRunControllerLogsReconcilePlansFromRepositoryAndStatusSnapshots(t *test
 	root := t.TempDir()
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
 	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
-	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1},"userdata":{"type":"file","path":"userdata/api-prod.sh"}}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","binary":"s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1},"userdata":{"type":"file","path":"userdata/api-prod.sh"}}`)
 	desiredGeneration := desiredGenerationForTest(t, root, "api-prod")
 	statusPath := filepath.Join(root, "status", "deployments.json")
 	writeJSON(t, statusPath, fmt.Sprintf(`[{"deploymentName":"api-prod","status":{"observedGeneration":%d,"sync":{"state":"Reconciling","reason":"warming up"},"health":{"overall":"Progressing","summary":"warming"},"conditions":[]}}]`, desiredGeneration))
@@ -1776,6 +1776,39 @@ func TestAppendRuntimeHistoryTracksArtifactAndConditionChanges(t *testing.T) {
 	}
 }
 
+func TestDeriveManagedDriftItemsCoversArtifactGenerationAndRuntimeIntent(t *testing.T) {
+	deployment := domain.Deployment{
+		Name:            "payments-api-prod",
+		Generation:      9,
+		TargetType:      "ec2",
+		Strategy:        "canary",
+		ExecutionMode:   "asgWeightedTargetGroups",
+		DesiredArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r9"},
+	}
+	status := domain.DeploymentStatus{
+		ObservedGeneration: 7,
+		DeployedArtifact:   domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7"},
+		Rollout: &domain.RolloutSummary{
+			ObservedGeneration: 7,
+			TargetType:         "ecs-service",
+			Strategy:           "blueGreen",
+			ExecutionMode:      "ecsCodeDeploy",
+		},
+	}
+
+	got := deriveManagedDriftItems(deployment, status)
+	want := []domain.ManagedDriftItem{
+		{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r9", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7", Severity: domain.ManagedDriftSeverityHigh},
+		{Field: "generation", Desired: "9", Actual: "7", Severity: domain.ManagedDriftSeverityMedium},
+		{Field: "runtimeContext.executionMode", Desired: "asgWeightedTargetGroups", Actual: "ecsCodeDeploy", Severity: domain.ManagedDriftSeverityMedium},
+		{Field: "runtimeContext.strategy", Desired: "canary", Actual: "blueGreen", Severity: domain.ManagedDriftSeverityMedium},
+		{Field: "runtimeContext.targetType", Desired: "ec2", Actual: "ecs-service", Severity: domain.ManagedDriftSeverityMedium},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected deterministic managed drift items, got %+v", got)
+	}
+}
+
 func TestAppendRuntimeHistoryIgnoresConditionOrderChanges(t *testing.T) {
 	previous := domain.DeploymentStatus{
 		ObservedGeneration: 7,
@@ -1956,6 +1989,79 @@ func TestEmitRuntimePlansBootstrapsHistoryWithArtifactAndConditions(t *testing.T
 	condition, ok := conditions[0].(map[string]any)
 	if !ok || condition["type"] != "Ready" || condition["status"] != false || condition["reason"] != "HealthPending" {
 		t.Fatalf("expected bootstrapped history condition payload, got %#v", conditions)
+	}
+}
+
+func TestEmitRuntimePlansPersistsManagedDriftInStatusAndHistory(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","binary":"s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1},"userdata":{"type":"file","path":"userdata/api-prod.sh"}}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":6,"sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"deployedArtifact":{"binary":"s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6"}}}]`)
+
+	oldNow := runtimeHistoryNow
+	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 15, 0, 0, time.UTC) }
+	defer func() { runtimeHistoryNow = oldNow }()
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	if len(snapshots) != 1 {
+		t.Fatalf("expected one snapshot, got %+v", snapshots)
+	}
+	status := snapshots[0].Status
+	if got := status.ManagedDrift; len(got) != 2 || got[0].Field != "artifact" || got[0].Severity != domain.ManagedDriftSeverityHigh || got[1].Field != "generation" || got[1].Severity != domain.ManagedDriftSeverityMedium {
+		t.Fatalf("expected artifact/generation managed drift on status, got %+v", status.ManagedDrift)
+	}
+	if len(status.History) != 1 {
+		t.Fatalf("expected a single bootstrapped history entry, got %+v", status.History)
+	}
+	if !reflect.DeepEqual(status.History[0].ManagedDrift, status.ManagedDrift) {
+		t.Fatalf("expected bootstrapped history to capture managed drift, got status=%+v history=%+v", status.ManagedDrift, status.History[0].ManagedDrift)
+	}
+
+	payload, err := json.Marshal(snapshots[0])
+	if err != nil {
+		t.Fatalf("Marshal returned error: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("failed to decode status snapshot JSON: %v", err)
+	}
+	statusPayload, ok := decoded["status"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected status object, got %#v", decoded["status"])
+	}
+	managedDrift, ok := statusPayload["managedDrift"].([]any)
+	if !ok || len(managedDrift) != 2 {
+		t.Fatalf("expected status.managedDrift array, got %#v", statusPayload["managedDrift"])
+	}
+	firstItem, ok := managedDrift[0].(map[string]any)
+	if !ok || firstItem["field"] != "artifact" || firstItem["severity"] != string(domain.ManagedDriftSeverityHigh) || firstItem["desired"] != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7" || firstItem["actual"] != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6" {
+		t.Fatalf("expected additive status.managedDrift item fields, got %#v", managedDrift[0])
+	}
+	history, ok := statusPayload["history"].([]any)
+	if !ok || len(history) != 1 {
+		t.Fatalf("expected status.history array, got %#v", statusPayload["history"])
+	}
+	historyEntry, ok := history[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected status.history[0] object, got %#v", history[0])
+	}
+	historyManagedDrift, ok := historyEntry["managedDrift"].([]any)
+	if !ok || len(historyManagedDrift) != 2 {
+		t.Fatalf("expected history managedDrift array, got %#v", historyEntry["managedDrift"])
+	}
+	if _, exists := historyEntry["ManagedDrift"]; exists {
+		t.Fatalf("unexpected Go-style history managed drift field name in %#v", historyEntry)
 	}
 }
 
@@ -2307,6 +2413,7 @@ func compiledRuntimeStatusForTest(t *testing.T, root string, deploymentName stri
 		plan := planner.Build(deployment, status)
 		status = normalizeRuntimeStatus(deployment, status, plan)
 		status.Rollout = deriveRolloutSummary(deployment, status, plan)
+		status.ManagedDrift = deriveManagedDriftItems(deployment, status)
 		status.History = appendRuntimeHistory(previous, status)
 		return status
 	}

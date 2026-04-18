@@ -451,8 +451,16 @@ events_payload = json.loads(os.environ['CONTROLLER_EVENTS_JSON'])
 runtime_change_details = (payload.get('runtimeSummary') or {}).get('changeDetails') or []
 history = payload.get('history') or []
 history_change_details = (history[0].get('changeDetails') if history else []) or []
+managed_drift = payload.get('managedDrift') or []
+runtime_managed_drift = (payload.get('runtimeSummary') or {}).get('managedDrift') or []
+history_managed_drift = (history[0].get('managedDrift') if history else []) or []
 assert runtime_change_details, payload
 assert history_change_details, payload
+assert managed_drift, payload
+assert runtime_managed_drift == managed_drift, payload
+assert history_managed_drift == managed_drift, payload
+assert all(isinstance(item.get('field'), str) and item['field'] for item in managed_drift), managed_drift
+assert all(item.get('severity') in {'high', 'medium', 'low'} for item in managed_drift), managed_drift
 assert events_payload['deploymentName'] == 'payments-api-prod', events_payload
 assert isinstance(events_payload['events'], list) and events_payload['events'], events_payload
 for event in events_payload['events']:

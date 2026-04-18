@@ -414,6 +414,26 @@ func TestDeriveRuntimeSummaryReturnsArtifactAndConditionsWithoutRolloutOrSyncHea
 	}
 }
 
+func TestDeriveRuntimeSummaryReturnsManagedDriftWithoutOtherRuntimeSignals(t *testing.T) {
+	summary := deriveRuntimeSummary(domain.DeploymentStatus{
+		ManagedDrift: []domain.ManagedDriftItem{{
+			Field:    "artifact",
+			Desired:  "ghcr.io/devopsartfactory/payments-api:2026-04-18.2",
+			Actual:   "ghcr.io/devopsartfactory/payments-api:2026-04-18.1",
+			Severity: domain.ManagedDriftSeverityHigh,
+		}},
+	})
+	if summary == nil {
+		t.Fatalf("expected runtime summary when managed drift is present")
+	}
+	if len(summary.ManagedDrift) != 1 || summary.ManagedDrift[0].Field != "artifact" || summary.ManagedDrift[0].Severity != domain.ManagedDriftSeverityHigh {
+		t.Fatalf("expected managed drift to survive runtime-summary fallback, got %+v", summary.ManagedDrift)
+	}
+	if summary.Sync != (domain.Sync{}) || summary.Health != (domain.Health{}) || summary.Summary != "" || summary.HistoryCount != 0 {
+		t.Fatalf("expected managed-drift-only fallback to avoid inventing extra status data, got %+v", summary)
+	}
+}
+
 func TestBuildAccountOverviewsRuntimeSummaryRemainsNilWhenStatusIsEmpty(t *testing.T) {
 	catalog := manifest.Catalog{
 		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
@@ -764,6 +784,10 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 				ObservedGeneration: 7,
 				Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"},
 				Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"},
+				ManagedDrift: []domain.ManagedDriftItem{
+					{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6", Severity: domain.ManagedDriftSeverityHigh},
+					{Field: "generation", Desired: "8", Actual: "7", Severity: domain.ManagedDriftSeverityMedium},
+				},
 				Conditions: []domain.Condition{
 					{Type: "Progressing", Status: true, Reason: "RolloutInFlight", Message: "candidate receiving traffic"},
 				},
@@ -778,7 +802,11 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 						ObservedGeneration: 6,
 						RolloutPhase:       domain.RolloutPhaseAccepted,
 						CurrentStep:        "CreateCandidateCapacity",
-						ChangeDetails:      []string{"Summary changed to Accepted rollout for r7"},
+						ManagedDrift: []domain.ManagedDriftItem{
+							{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6", Severity: domain.ManagedDriftSeverityHigh},
+							{Field: "generation", Desired: "7", Actual: "6", Severity: domain.ManagedDriftSeverityMedium},
+						},
+						ChangeDetails: []string{"Summary changed to Accepted rollout for r7"},
 					},
 					{
 						Timestamp:          "2026-04-16T06:20:00Z",
@@ -790,7 +818,11 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 						ObservedGeneration: 7,
 						RolloutPhase:       domain.RolloutPhasePromoting,
 						CurrentStep:        "ShiftTrafficCanary",
-						ChangeDetails:      []string{"Sync changed to Reconciling: new artifact", "Current step changed from CreateCandidateCapacity to ShiftTrafficCanary"},
+						ManagedDrift: []domain.ManagedDriftItem{
+							{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6", Severity: domain.ManagedDriftSeverityHigh},
+							{Field: "generation", Desired: "8", Actual: "7", Severity: domain.ManagedDriftSeverityMedium},
+						},
+						ChangeDetails: []string{"Sync changed to Reconciling: new artifact", "Current step changed from CreateCandidateCapacity to ShiftTrafficCanary"},
 					},
 				},
 				DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6"},
@@ -862,6 +894,12 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	if len(detail.Conditions) != 1 || detail.Conditions[0].Reason != "RolloutInFlight" {
 		t.Fatalf("expected conditions to be surfaced, got %+v", detail.Conditions)
 	}
+	if len(detail.ManagedDrift) != 2 || detail.ManagedDrift[0].Field != "artifact" || detail.ManagedDrift[1].Field != "generation" {
+		t.Fatalf("expected managed drift to be surfaced on deployment detail, got %+v", detail.ManagedDrift)
+	}
+	if detail.RuntimeSummary == nil || len(detail.RuntimeSummary.ManagedDrift) != 2 || detail.RuntimeSummary.ManagedDrift[0].Field != "artifact" || detail.RuntimeSummary.ManagedDrift[1].Field != "generation" {
+		t.Fatalf("expected managed drift in runtime summary, got %+v", detail.RuntimeSummary)
+	}
 	if len(detail.History) != 2 {
 		t.Fatalf("expected runtime history to be surfaced, got %+v", detail.History)
 	}
@@ -877,7 +915,9 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	snapshots[0].Status.Rollout.Steps[0].Kind = "mutated"
 	snapshots[0].Status.Rollout.Execution[0].Name = "mutated"
 	snapshots[0].Status.Conditions[0].Reason = "Mutated"
+	snapshots[0].Status.ManagedDrift[0].Actual = "mutated"
 	snapshots[0].Status.History[0].Summary = "mutated"
+	snapshots[0].Status.History[1].ManagedDrift[0].Actual = "mutated"
 	snapshots[0].Status.History[1].ChangeDetails[0] = "mutated"
 	if detail.Rollout.Steps[0].Kind != "CreateCandidateCapacity" {
 		t.Fatalf("expected rollout summary to be cloned defensively, got %+v", detail.Rollout)
@@ -888,19 +928,74 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	if detail.Conditions[0].Reason != "RolloutInFlight" {
 		t.Fatalf("expected conditions to be cloned defensively, got %+v", detail.Conditions)
 	}
+	if detail.ManagedDrift[0].Actual != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6" {
+		t.Fatalf("expected managed drift to be cloned defensively, got %+v", detail.ManagedDrift)
+	}
 	if detail.History[0].Summary != "Accepted rollout for r7" {
 		t.Fatalf("expected runtime history to be cloned from stored status, got %+v", detail.History)
+	}
+	if detail.History[1].ManagedDrift[0].Actual != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6" {
+		t.Fatalf("expected history managed drift to be cloned from stored status, got %+v", detail.History[1].ManagedDrift)
 	}
 	if detail.History[1].ChangeDetails[0] != "Sync changed to Reconciling: new artifact" {
 		t.Fatalf("expected runtime history changeDetails to be cloned from stored status, got %+v", detail.History[1].ChangeDetails)
 	}
+	detail.ManagedDrift[0].Actual = "mutated-by-caller"
+	detail.RuntimeSummary.ManagedDrift[0].Actual = "mutated-by-caller"
+	detail.History[1].ManagedDrift[0].Actual = "mutated-by-caller"
 	detail.History[1].CurrentStep = "mutated-by-caller"
 	detail.History[1].ChangeDetails[0] = "mutated-by-caller"
+	if snapshots[0].Status.ManagedDrift[0].Actual != "mutated" {
+		t.Fatalf("expected caller mutations to avoid mutating stored status managed drift, got %+v", snapshots[0].Status.ManagedDrift)
+	}
+	if snapshots[0].Status.History[1].ManagedDrift[0].Actual != "mutated" {
+		t.Fatalf("expected caller mutations to avoid mutating stored history managed drift, got %+v", snapshots[0].Status.History[1].ManagedDrift)
+	}
 	if snapshots[0].Status.History[1].CurrentStep != "ShiftTrafficCanary" {
 		t.Fatalf("expected caller mutations to avoid mutating stored history, got %+v", snapshots[0].Status.History)
 	}
 	if snapshots[0].Status.History[1].ChangeDetails[0] != "mutated" {
 		t.Fatalf("expected caller mutations to avoid mutating stored history changeDetails, got %+v", snapshots[0].Status.History[1].ChangeDetails)
+	}
+
+	payload, err := json.Marshal(detail)
+	if err != nil {
+		t.Fatalf("Marshal returned error: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("failed to decode deployment detail JSON: %v", err)
+	}
+	managedDrift, ok := decoded["managedDrift"].([]any)
+	if !ok || len(managedDrift) != 2 {
+		t.Fatalf("expected deployment detail managedDrift array, got %#v", decoded["managedDrift"])
+	}
+	driftItem, ok := managedDrift[0].(map[string]any)
+	if !ok || driftItem["field"] != "artifact" || driftItem["severity"] != string(domain.ManagedDriftSeverityHigh) || driftItem["desired"] != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7" {
+		t.Fatalf("expected deployment detail managed drift item fields, got %#v", managedDrift[0])
+	}
+	runtimeSummary, ok := decoded["runtimeSummary"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected runtimeSummary object, got %#v", decoded["runtimeSummary"])
+	}
+	runtimeManagedDrift, ok := runtimeSummary["managedDrift"].([]any)
+	if !ok || len(runtimeManagedDrift) != 2 {
+		t.Fatalf("expected runtimeSummary.managedDrift array, got %#v", runtimeSummary["managedDrift"])
+	}
+	history, ok := decoded["history"].([]any)
+	if !ok || len(history) != 2 {
+		t.Fatalf("expected history array, got %#v", decoded["history"])
+	}
+	historyEntry, ok := history[1].(map[string]any)
+	if !ok {
+		t.Fatalf("expected history[1] object, got %#v", history[1])
+	}
+	historyManagedDrift, ok := historyEntry["managedDrift"].([]any)
+	if !ok || len(historyManagedDrift) != 2 {
+		t.Fatalf("expected history managedDrift array, got %#v", historyEntry["managedDrift"])
+	}
+	if _, exists := decoded["ManagedDrift"]; exists {
+		t.Fatalf("unexpected Go-style managed drift field name in %#v", decoded)
 	}
 }
 
@@ -1190,6 +1285,10 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 				ObservedGeneration: 7,
 				Sync:               domain.Sync{State: domain.SyncStateReconciling, Reason: "new artifact"},
 				Health:             domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 targets healthy"},
+				ManagedDrift: []domain.ManagedDriftItem{
+					{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6", Severity: domain.ManagedDriftSeverityHigh},
+					{Field: "generation", Desired: "8", Actual: "7", Severity: domain.ManagedDriftSeverityMedium},
+				},
 				Conditions: []domain.Condition{
 					{Type: "Progressing", Status: true, Reason: "RolloutInFlight", Message: "candidate receiving traffic"},
 				},
@@ -1204,7 +1303,11 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 						ObservedGeneration: 6,
 						RolloutPhase:       domain.RolloutPhaseAccepted,
 						CurrentStep:        "CreateCandidateCapacity",
-						ChangeDetails:      []string{"Summary changed to Accepted rollout for r7"},
+						ManagedDrift: []domain.ManagedDriftItem{
+							{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6", Severity: domain.ManagedDriftSeverityHigh},
+							{Field: "generation", Desired: "7", Actual: "6", Severity: domain.ManagedDriftSeverityMedium},
+						},
+						ChangeDetails: []string{"Summary changed to Accepted rollout for r7"},
 					},
 					{
 						Timestamp:          "2026-04-16T06:20:00Z",
@@ -1216,7 +1319,11 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 						ObservedGeneration: 7,
 						RolloutPhase:       domain.RolloutPhasePromoting,
 						CurrentStep:        "ShiftTrafficCanary",
-						ChangeDetails:      []string{"Sync changed to Reconciling: progressing", "Current step changed from CreateCandidateCapacity to ShiftTrafficCanary"},
+						ManagedDrift: []domain.ManagedDriftItem{
+							{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6", Severity: domain.ManagedDriftSeverityHigh},
+							{Field: "generation", Desired: "8", Actual: "7", Severity: domain.ManagedDriftSeverityMedium},
+						},
+						ChangeDetails: []string{"Sync changed to Reconciling: progressing", "Current step changed from CreateCandidateCapacity to ShiftTrafficCanary"},
 					},
 				},
 				DeployedArtifact: domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6"},
@@ -1295,6 +1402,9 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 	if detail.RuntimeSummary == nil || detail.RuntimeSummary.CurrentStep != "ShiftTrafficCanary" || detail.RuntimeSummary.HistoryCount != 2 {
 		t.Fatalf("expected runtime summary fields for application page, got %+v", detail.RuntimeSummary)
 	}
+	if len(detail.ManagedDrift) != 2 || detail.ManagedDrift[0].Field != "artifact" || detail.RuntimeSummary == nil || len(detail.RuntimeSummary.ManagedDrift) != 2 {
+		t.Fatalf("expected managed drift fields for application page, got detail=%+v runtime=%+v", detail.ManagedDrift, detail.RuntimeSummary)
+	}
 	if detail.Rollout == nil || detail.Rollout.Phase != domain.RolloutPhasePromoting || detail.Rollout.CurrentStep != "ShiftTrafficCanary" || len(detail.Rollout.Steps) != 2 {
 		t.Fatalf("expected rollout summary fields for application page, got %+v", detail.Rollout)
 	}
@@ -1323,6 +1433,7 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 		SourceFingerprint:  deploymentDetail.SourceFingerprint,
 		Sync:               deploymentDetail.Sync,
 		Health:             deploymentDetail.Health,
+		ManagedDrift:       cloneManagedDrift(deploymentDetail.ManagedDrift),
 		RuntimeSummary:     cloneRuntimeSummary(deploymentDetail.RuntimeSummary),
 		Rollout:            cloneRolloutSummary(deploymentDetail.Rollout),
 		Conditions:         append([]domain.Condition(nil), deploymentDetail.Conditions...),
@@ -1337,8 +1448,13 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 	snapshots[0].Status.Rollout.Steps[0].Kind = "mutated"
 	snapshots[0].Status.Rollout.Execution[0].Name = "mutated"
 	snapshots[0].Status.Conditions[0].Reason = "mutated"
+	snapshots[0].Status.ManagedDrift[0].Actual = "mutated"
+	snapshots[0].Status.History[1].ManagedDrift[0].Actual = "mutated"
 	if detail.RuntimeSummary.CurrentStep != "ShiftTrafficCanary" || detail.RuntimeSummary.ChangeDetails[0] != "Sync changed to Reconciling: progressing" {
 		t.Fatalf("expected runtime summary to be cloned defensively, got %+v", detail.RuntimeSummary)
+	}
+	if detail.ManagedDrift[0].Actual != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6" || detail.RuntimeSummary.ManagedDrift[0].Actual != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6" {
+		t.Fatalf("expected managed drift to be cloned defensively, got detail=%+v runtime=%+v", detail.ManagedDrift, detail.RuntimeSummary.ManagedDrift)
 	}
 	if detail.Rollout.Steps[0].Kind != "CreateCandidateCapacity" || detail.Rollout.Execution[0].Name != "payments-api-prod-candidate" {
 		t.Fatalf("expected rollout summary to be cloned defensively, got %+v", detail.Rollout)
@@ -1351,8 +1467,11 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 	}
 
 	detail.RuntimeSummary.ChangeDetails[0] = "mutated-by-caller"
+	detail.ManagedDrift[0].Actual = "mutated-by-caller"
+	detail.RuntimeSummary.ManagedDrift[0].Actual = "mutated-by-caller"
 	detail.Rollout.Execution[0].Name = "mutated-by-caller"
 	detail.Conditions[0].Reason = "mutated-by-caller"
+	detail.History[1].ManagedDrift[0].Actual = "mutated-by-caller"
 	detail.History[1].CurrentStep = "mutated-by-caller"
 	refetched, err := BuildApplicationOverviewDetail(catalog, snapshots, "payments-api-prod")
 	if err != nil {
@@ -1360,6 +1479,9 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 	}
 	if refetched.RuntimeSummary.ChangeDetails[0] != "mutated" {
 		t.Fatalf("expected application detail runtime summary to avoid caller aliasing, got %+v", refetched.RuntimeSummary.ChangeDetails)
+	}
+	if refetched.ManagedDrift[0].Actual != "mutated" || refetched.RuntimeSummary.ManagedDrift[0].Actual != "mutated" || refetched.History[1].ManagedDrift[0].Actual != "mutated" {
+		t.Fatalf("expected application detail managed drift to avoid caller aliasing, got detail=%+v runtime=%+v history=%+v", refetched.ManagedDrift, refetched.RuntimeSummary.ManagedDrift, refetched.History[1].ManagedDrift)
 	}
 	if refetched.Rollout.Execution[0].Name != "mutated" {
 		t.Fatalf("expected application detail rollout to avoid caller aliasing, got %+v", refetched.Rollout.Execution)

@@ -127,6 +127,7 @@ type DeploymentOverviewDetail struct {
 	SourceFingerprint  string                         `json:"sourceFingerprint,omitempty"`
 	Sync               domain.Sync                    `json:"sync"`
 	Health             domain.Health                  `json:"health"`
+	ManagedDrift       []domain.ManagedDriftItem      `json:"managedDrift,omitempty"`
 	RuntimeSummary     *domain.RuntimeSummary         `json:"runtimeSummary,omitempty"`
 	Rollout            *domain.RolloutSummary         `json:"rollout,omitempty"`
 	Conditions         []domain.Condition             `json:"conditions,omitempty"`
@@ -159,6 +160,7 @@ type ApplicationOverviewDetail struct {
 	SourceFingerprint  string                         `json:"sourceFingerprint,omitempty"`
 	Sync               domain.Sync                    `json:"sync"`
 	Health             domain.Health                  `json:"health"`
+	ManagedDrift       []domain.ManagedDriftItem      `json:"managedDrift,omitempty"`
 	RuntimeSummary     *domain.RuntimeSummary         `json:"runtimeSummary,omitempty"`
 	Rollout            *domain.RolloutSummary         `json:"rollout,omitempty"`
 	Conditions         []domain.Condition             `json:"conditions,omitempty"`
@@ -417,6 +419,7 @@ func BuildApplicationOverviewDetail(c manifest.Catalog, snapshots []statusstore.
 		SourceFingerprint:  detail.SourceFingerprint,
 		Sync:               detail.Sync,
 		Health:             detail.Health,
+		ManagedDrift:       cloneManagedDrift(detail.ManagedDrift),
 		RuntimeSummary:     cloneRuntimeSummary(detail.RuntimeSummary),
 		Rollout:            cloneRolloutSummary(detail.Rollout),
 		Conditions:         append([]domain.Condition(nil), detail.Conditions...),
@@ -472,6 +475,7 @@ func BuildDeploymentOverviewDetail(c manifest.Catalog, snapshots []statusstore.S
 		ObservedGeneration: status.ObservedGeneration,
 		Sync:               status.Sync,
 		Health:             status.Health,
+		ManagedDrift:       cloneManagedDrift(status.ManagedDrift),
 		RuntimeSummary:     cloneRuntimeSummary(deriveRuntimeSummary(status)),
 		Rollout:            cloneRolloutSummary(status.Rollout),
 		Conditions:         append([]domain.Condition(nil), status.Conditions...),
@@ -512,6 +516,7 @@ func deriveRuntimeSummary(status domain.DeploymentStatus) *domain.RuntimeSummary
 			Summary:            latest.Summary,
 			Changes:            append([]string(nil), latest.Changes...),
 			ChangeDetails:      append([]string(nil), latest.ChangeDetails...),
+			ManagedDrift:       cloneManagedDrift(latest.ManagedDrift),
 			DeployedArtifact:   latest.DeployedArtifact,
 			Conditions:         append([]domain.Condition(nil), latest.Conditions...),
 			Sync:               latest.Sync,
@@ -531,6 +536,9 @@ func deriveRuntimeSummary(status domain.DeploymentStatus) *domain.RuntimeSummary
 		if len(summary.Conditions) == 0 && len(status.Conditions) > 0 {
 			summary.Conditions = append([]domain.Condition(nil), status.Conditions...)
 		}
+		if len(summary.ManagedDrift) == 0 && len(status.ManagedDrift) > 0 {
+			summary.ManagedDrift = cloneManagedDrift(status.ManagedDrift)
+		}
 		if status.Rollout != nil {
 			if summary.TargetType == "" {
 				summary.TargetType = status.Rollout.TargetType
@@ -544,11 +552,12 @@ func deriveRuntimeSummary(status domain.DeploymentStatus) *domain.RuntimeSummary
 		}
 		return summary
 	}
-	if status.Sync == (domain.Sync{}) && status.Health == (domain.Health{}) && status.Rollout == nil && status.DeployedArtifact == (domain.DeploymentArtifact{}) && len(status.Conditions) == 0 {
+	if status.Sync == (domain.Sync{}) && status.Health == (domain.Health{}) && status.Rollout == nil && status.DeployedArtifact == (domain.DeploymentArtifact{}) && len(status.Conditions) == 0 && len(status.ManagedDrift) == 0 {
 		return nil
 	}
 
 	summary := &domain.RuntimeSummary{
+		ManagedDrift:       cloneManagedDrift(status.ManagedDrift),
 		DeployedArtifact:   status.DeployedArtifact,
 		Conditions:         append([]domain.Condition(nil), status.Conditions...),
 		Sync:               status.Sync,
@@ -576,8 +585,16 @@ func cloneRuntimeSummary(summary *domain.RuntimeSummary) *domain.RuntimeSummary 
 	copy := *summary
 	copy.Changes = append([]string(nil), summary.Changes...)
 	copy.ChangeDetails = append([]string(nil), summary.ChangeDetails...)
+	copy.ManagedDrift = cloneManagedDrift(summary.ManagedDrift)
 	copy.Conditions = append([]domain.Condition(nil), summary.Conditions...)
 	return &copy
+}
+
+func cloneManagedDrift(items []domain.ManagedDriftItem) []domain.ManagedDriftItem {
+	if len(items) == 0 {
+		return nil
+	}
+	return append([]domain.ManagedDriftItem(nil), items...)
 }
 
 func cloneDeploymentOverview(deployment DeploymentOverview) DeploymentOverview {
@@ -612,6 +629,7 @@ func cloneStatusHistory(history []domain.StatusHistoryEntry) []domain.StatusHist
 	for i := range cloned {
 		cloned[i].Changes = append([]string(nil), history[i].Changes...)
 		cloned[i].ChangeDetails = append([]string(nil), history[i].ChangeDetails...)
+		cloned[i].ManagedDrift = cloneManagedDrift(history[i].ManagedDrift)
 		cloned[i].Conditions = append([]domain.Condition(nil), history[i].Conditions...)
 	}
 	return cloned
