@@ -68,6 +68,41 @@ func TestFileStoreGetAndSaveAreIdempotent(t *testing.T) {
 	}
 }
 
+func TestFileStoreListReturnsSortedRecordsAndHandlesMissingFile(t *testing.T) {
+	t.Run("sorted records", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "applies", "requests.json")
+		store := NewFileStore(path)
+		ctx := context.Background()
+		for _, record := range []Record{
+			{ID: "apply_b", PlanID: "plan_b", DeploymentName: "worker-prod", Status: StatusFailed},
+			{ID: "apply_a", PlanID: "plan_a", DeploymentName: "api-prod", Status: StatusQueued},
+		} {
+			if err := store.Save(ctx, record); err != nil {
+				t.Fatalf("Save(%s) returned error: %v", record.ID, err)
+			}
+		}
+
+		records, err := store.List(ctx)
+		if err != nil {
+			t.Fatalf("List returned error: %v", err)
+		}
+		if len(records) != 2 || records[0].ID != "apply_a" || records[1].ID != "apply_b" {
+			t.Fatalf("expected sorted apply requests, got %+v", records)
+		}
+	})
+
+	t.Run("missing file returns empty slice", func(t *testing.T) {
+		store := NewFileStore(filepath.Join(t.TempDir(), "applies", "requests.json"))
+		records, err := store.List(context.Background())
+		if err != nil {
+			t.Fatalf("List returned error: %v", err)
+		}
+		if len(records) != 0 {
+			t.Fatalf("expected empty list for missing file, got %+v", records)
+		}
+	})
+}
+
 func TestFileStoreUpdateReplacesExistingRecordAtomically(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "applies", "requests.json")
 	store := NewFileStore(path)

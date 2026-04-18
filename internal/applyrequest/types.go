@@ -130,6 +130,7 @@ type TransitionRequest struct {
 // Store persists immutable apply-request records.
 type Store interface {
 	Get(context.Context, string) (Record, error)
+	List(context.Context) ([]Record, error)
 	Save(context.Context, Record) error
 	Update(context.Context, Record) error
 }

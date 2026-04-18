@@ -73,6 +73,11 @@ func main() {
 	options.Logger = logger
 	options.RequestTimeout = requestTimeout
 
+	stopApplyExecutor, applyExecutorStarted := startApplyRequestExecutor(logger, repoRoot, applyEnabled, applyStorePath, 0)
+	if applyExecutorStarted {
+		defer stopApplyExecutor()
+	}
+
 	if err := http.ListenAndServe(addr, api.NewRouter(options)); err != nil {
 		log.Fatal(err)
 	}
@@ -282,6 +287,28 @@ func loadApplyRequestRecords(path string) ([]applyrequest.Record, error) {
 		return nil, nil
 	}
 	return nil, err
+}
+
+func startApplyRequestExecutor(logger *slog.Logger, repoRoot string, applyEnabled bool, applyStorePath string, interval time.Duration) (context.CancelFunc, bool) {
+	if !applyEnabled || repoRoot == "" {
+		return nil, false
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	executor := applyrequest.Executor{
+		Service: applyrequest.Service{
+			Store: applyrequest.NewFileStore(applyStorePath),
+		},
+		PollInterval: interval,
+		Logger:       logger,
+	}
+	logger.Info("starting local-safe apply executor", "apply_store_path", applyStorePath)
+	go func() {
+		if err := executor.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Warn("local-safe apply executor stopped", "error", err)
+		}
+	}()
+	return cancel, true
 }
 
 type overviewDeploymentResourceLookupProvider func(context.Context, string, string, string) (resourceLookupRequest, error)

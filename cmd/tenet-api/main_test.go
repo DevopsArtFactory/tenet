@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -20,6 +22,69 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
+
+func TestStartApplyRequestExecutor(t *testing.T) {
+	t.Run("does not start when disabled or repo root missing", func(t *testing.T) {
+		logger := slogDiscardLogger()
+
+		if cancel, started := startApplyRequestExecutor(logger, "", true, filepath.Join(t.TempDir(), "apply.json"), time.Millisecond); started || cancel != nil {
+			t.Fatalf("expected executor not to start without repo root")
+		}
+		if cancel, started := startApplyRequestExecutor(logger, t.TempDir(), false, filepath.Join(t.TempDir(), "apply.json"), time.Millisecond); started || cancel != nil {
+			t.Fatalf("expected executor not to start when apply is disabled")
+		}
+	})
+
+	t.Run("enabled startup advances queued apply request from store", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "apply-requests.json")
+		store := applyrequest.NewFileStore(path)
+		record := applyrequest.Record{
+			ID:             "apply_queued",
+			PlanID:         "plan_ready_1234abcd",
+			DeploymentName: "api-prod",
+			Status:         applyrequest.StatusQueued,
+			CreatedAt:      "2026-04-18T08:05:00Z",
+			Lifecycle: applyrequest.Lifecycle{
+				UpdatedAt:  "2026-04-18T08:05:00Z",
+				TotalSteps: 1,
+			},
+			Operations: []applyrequest.Operation{
+				{Status: applyrequest.OperationStatusQueued, Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."},
+			},
+		}
+		if err := store.Save(context.Background(), record); err != nil {
+			t.Fatalf("Save returned error: %v", err)
+		}
+
+		cancel, started := startApplyRequestExecutor(slogDiscardLogger(), t.TempDir(), true, path, 10*time.Millisecond)
+		if !started || cancel == nil {
+			t.Fatalf("expected executor to start")
+		}
+		defer cancel()
+
+		deadline := time.Now().Add(2 * time.Second)
+		for {
+			got, err := store.Get(context.Background(), record.ID)
+			if err != nil {
+				t.Fatalf("Get returned error: %v", err)
+			}
+			if got.Status == applyrequest.StatusFailed {
+				if got.ID != record.ID || got.Error == "" || got.Lifecycle.StartedAt == "" || got.Lifecycle.FinishedAt == "" {
+					t.Fatalf("unexpected auto-advanced apply request: %+v", got)
+				}
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("timed out waiting for executor handoff, last record=%+v", got)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	})
+}
+
+func slogDiscardLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
 
 func TestAPIOptionsOverviewDeploymentUsesNamedSnapshotLookup(t *testing.T) {
 	repoRoot := writeRepositoryFixture(t)
