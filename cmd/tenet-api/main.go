@@ -50,6 +50,7 @@ func main() {
 	planStorePath := envOrDefault("TENET_PLAN_STORE_PATH", defaultPlanPreviewStorePath())
 	applyStorePath := envOrDefault("TENET_APPLY_STORE_PATH", defaultApplyRequestStorePath())
 	applyEnabled := awsApplyEnabled()
+	webhookConfigured := strings.TrimSpace(os.Getenv("TENET_GITHUB_WEBHOOK_SECRET")) != ""
 	redisAddr := os.Getenv("TENET_REDIS_ADDR")
 	statusSeedPath := os.Getenv("TENET_STATUS_SEED_PATH")
 	catalogSource, err := loadCatalogSourceFromEnv()
@@ -67,7 +68,7 @@ func main() {
 
 	info := buildinfo.Current(version, commit)
 	catalogSourceKind, repoRoot, githubRepository, githubRef, githubPath, githubBaseURL := catalogSource.logFields()
-	log.Printf("starting tenet-api version=%s commit=%s addr=%s catalog_source=%s repo_root=%s github_repository=%s github_ref=%s github_path=%s github_base_url=%s status_backend=%s status_path=%s plan_store_path=%s apply_store_path=%s apply_enabled=%t redis_addr=%s request_timeout=%s", info.Version, info.Commit, addr, catalogSourceKind, repoRoot, githubRepository, githubRef, githubPath, githubBaseURL, statusBackend, statusPath, planStorePath, applyStorePath, applyEnabled, redisAddr, requestTimeout)
+	log.Printf("starting tenet-api version=%s commit=%s addr=%s catalog_source=%s repo_root=%s github_repository=%s github_ref=%s github_path=%s github_base_url=%s status_backend=%s status_path=%s plan_store_path=%s apply_store_path=%s apply_enabled=%t github_webhook_configured=%t redis_addr=%s request_timeout=%s", info.Version, info.Commit, addr, catalogSourceKind, repoRoot, githubRepository, githubRef, githubPath, githubBaseURL, statusBackend, statusPath, planStorePath, applyStorePath, applyEnabled, webhookConfigured, redisAddr, requestTimeout)
 
 	store := mustOpenStatusStore(statusBackend, statusPath, redisAddr)
 	if store != nil {
@@ -114,7 +115,10 @@ func newAPIOptionsWithCatalogSource(info buildinfo.Info, source apiCatalogSource
 }
 
 func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCatalogSource, store statusstore.Store, planStorePath string, applyStorePath string) api.Options {
-	options := api.Options{BuildInfo: info}
+	options := api.Options{
+		BuildInfo:           info,
+		GitHubWebhookSecret: strings.TrimSpace(os.Getenv("TENET_GITHUB_WEBHOOK_SECRET")),
+	}
 	if source.configured() {
 		loadCatalog := source.loadCatalog
 		resourceLogService := newResourceLogProvider()

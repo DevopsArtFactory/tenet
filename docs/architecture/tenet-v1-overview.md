@@ -69,8 +69,9 @@ In local development, this can be backed by the filesystem or Redis.
 Tenet exposes joined read models through:
 - the API
 - the embedded UI
+- a first safe GitHub webhook ingestion primitive at `POST /api/v1/github/webhook`
 
-The embedded UI is intentionally lightweight and served directly by the Go API. That keeps the system easy to run locally while the control-plane model is still stabilizing. Request timeout and cancellation now propagate through the catalog, overview, and status provider path as well, so slow GitHub-backed catalog reads or runtime-status joins can stop when the originating HTTP request is cancelled or times out.
+The embedded UI is intentionally lightweight and served directly by the Go API. That keeps the system easy to run locally while the control-plane model is still stabilizing. Request timeout and cancellation now propagate through the catalog, overview, and status provider path as well, so slow GitHub-backed catalog reads or runtime-status joins can stop when the originating HTTP request is cancelled or times out. The new webhook surface stays intentionally conservative: with `TENET_GITHUB_WEBHOOK_SECRET` configured, it validates signed GitHub requests, decodes push payloads into an operator-friendly summary, returns explicit `accepted` or `ignored` responses, and stops there without enqueueing reconcile work yet.
 
 ## UI architecture
 
@@ -129,6 +130,7 @@ Included now:
 - catalog compilation and validation
 - runtime status foundations
 - read-only control-plane API
+- read-only GitHub webhook validation and push-payload summarization
 - local-safe apply executor handoff for immutable apply requests when explicitly enabled
 - embedded UI with applications -> application -> resource drill-down
 
@@ -136,6 +138,7 @@ Not included yet:
 - full live AWS execution
 - write/mutation workflows
 - complete plan/apply automation
+- webhook-driven reconcile triggering
 - a standalone frontend application
 
 ## Diagram

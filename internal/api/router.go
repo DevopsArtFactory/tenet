@@ -15,6 +15,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/auditlog"
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
+	"github.com/DevopsArtFactory/tenet/internal/githubwebhook"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
 	"github.com/DevopsArtFactory/tenet/internal/resourceinspection"
 	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
@@ -105,6 +106,7 @@ type Options struct {
 	BuildInfo                            buildinfo.Info
 	Logger                               *slog.Logger
 	RequestTimeout                       time.Duration
+	GitHubWebhookSecret                  string
 	CatalogSummary                       func(context.Context) (catalog.Summary, error)
 	CatalogDeployments                   func(context.Context) ([]catalog.DeploymentView, error)
 	CatalogEnvironments                  func(context.Context) ([]catalog.EnvironmentView, error)
@@ -161,6 +163,40 @@ func NewRouter(options Options) http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(options.BuildInfo)
+	})
+	mux.HandleFunc("/api/v1/github/webhook", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodPost) {
+			return
+		}
+		if strings.TrimSpace(options.GitHubWebhookSecret) == "" {
+			http.Error(w, "github webhook unavailable", http.StatusServiceUnavailable)
+			return
+		}
+
+		response, err := githubwebhook.Decode(r.Context(), githubwebhook.Request{
+			Secret: options.GitHubWebhookSecret,
+			Header: r.Header,
+			Body:   r.Body,
+		})
+		if err != nil {
+			var validationErr *githubwebhook.ValidationError
+			switch {
+			case errors.As(err, &validationErr):
+				http.Error(w, validationErr.Error(), http.StatusBadRequest)
+			case isRequestContextError(err):
+				respondUnavailableError(w, "github webhook unavailable")
+			default:
+				respondInternalError(w)
+			}
+			return
+		}
+
+		setRequestResult(r.Context(), response.Status, "")
+		w.Header().Set("Content-Type", "application/json")
+		if response.Status == githubwebhook.StatusAccepted {
+			w.WriteHeader(http.StatusAccepted)
+		}
+		_ = json.NewEncoder(w).Encode(response)
 	})
 	mux.HandleFunc("/v1/catalog/summary", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodGet) {

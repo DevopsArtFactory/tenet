@@ -177,6 +177,16 @@ func TestRequestTimeoutFromEnv(t *testing.T) {
 	})
 }
 
+func TestNewAPIOptionsIncludesGitHubWebhookSecretFromEnv(t *testing.T) {
+	t.Setenv("TENET_GITHUB_WEBHOOK_SECRET", "top-secret")
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, writeRepositoryFixture(t), nil)
+
+	if options.GitHubWebhookSecret != "top-secret" {
+		t.Fatalf("expected webhook secret from env, got %q", options.GitHubWebhookSecret)
+	}
+}
+
 func TestAPIOptionsOverviewDeploymentReturnsCatalogOnlyDetailWhenSnapshotMissing(t *testing.T) {
 	repoRoot := writeRepositoryFixture(t)
 	store := &stubStatusStore{getErr: statusstore.ErrNotFound}

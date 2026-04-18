@@ -3,6 +3,9 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,6 +22,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
+	"github.com/DevopsArtFactory/tenet/internal/githubwebhook"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
 	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 	"github.com/DevopsArtFactory/tenet/internal/resourceinspection"
@@ -398,6 +402,158 @@ func decodeStructuredLogLines(t *testing.T, output string) []map[string]any {
 		entries = append(entries, entry)
 	}
 	return entries
+}
+
+func TestRouterGitHubWebhookRequiresPost(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo:           buildinfo.Info{Version: "dev", Commit: "abc123"},
+		GitHubWebhookSecret: "top-secret",
+	})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/github/webhook", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d", resp.Code)
+	}
+	assertResponseRequestID(t, resp)
+	if allow := resp.Header().Get("Allow"); allow != http.MethodPost {
+		t.Fatalf("expected Allow POST, got %q", allow)
+	}
+}
+
+func TestRouterGitHubWebhookUnavailableWithoutSecret(t *testing.T) {
+	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/github/webhook", strings.NewReader(`{}`))
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", resp.Code)
+	}
+	assertResponseRequestID(t, resp)
+	if body := resp.Body.String(); body != "github webhook unavailable\n" {
+		t.Fatalf("unexpected unavailable body: %q", body)
+	}
+}
+
+func TestRouterGitHubWebhookAcceptedPushEvent(t *testing.T) {
+	const secret = "top-secret"
+	body := `{
+		"ref":"refs/heads/main",
+		"before":"1111111111111111111111111111111111111111",
+		"after":"2222222222222222222222222222222222222222",
+		"repository":{"full_name":"acme/platform-config"},
+		"head_commit":{"id":"2222222222222222222222222222222222222222","message":"update deployment","timestamp":"2026-04-18T15:00:00Z"},
+		"commits":[
+			{"id":"a","added":["deployments/api.yaml"],"modified":["environments/prod.yaml"],"removed":[]},
+			{"id":"b","added":["accounts/prod.yaml"],"modified":["deployments/worker.yaml"],"removed":["deployments/old.yaml"]}
+		]
+	}`
+
+	router := NewRouter(Options{
+		BuildInfo:           buildinfo.Info{Version: "dev", Commit: "abc123"},
+		GitHubWebhookSecret: secret,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/github/webhook", strings.NewReader(body))
+	req.Header = signedGitHubWebhookHeader(secret, "push", body)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d body=%q", resp.Code, resp.Body.String())
+	}
+	assertResponseRequestID(t, resp)
+
+	var got githubwebhook.Response
+	if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if got.Status != githubwebhook.StatusAccepted || got.Processed {
+		t.Fatalf("unexpected status payload: %+v", got)
+	}
+	if got.Reason != "github push event validated, but reconcile wiring is not implemented in this slice" {
+		t.Fatalf("unexpected reason: %q", got.Reason)
+	}
+	if got.Repository != "acme/platform-config" || got.Ref != "refs/heads/main" || got.After != "2222222222222222222222222222222222222222" || got.Before != "1111111111111111111111111111111111111111" {
+		t.Fatalf("unexpected push summary: %+v", got)
+	}
+	if got.HeadCommit == nil || got.HeadCommit.ID != "2222222222222222222222222222222222222222" {
+		t.Fatalf("expected head commit summary, got %+v", got.HeadCommit)
+	}
+	if got.ChangedFiles == nil || !reflect.DeepEqual(got.ChangedFiles.All, []string{"deployments/api.yaml", "accounts/prod.yaml", "environments/prod.yaml", "deployments/worker.yaml", "deployments/old.yaml"}) {
+		t.Fatalf("unexpected changed files: %+v", got.ChangedFiles)
+	}
+}
+
+func TestRouterGitHubWebhookIgnoresNonPushEvent(t *testing.T) {
+	const secret = "top-secret"
+	body := `{"zen":"keep it logically awesome"}`
+
+	router := NewRouter(Options{
+		BuildInfo:           buildinfo.Info{Version: "dev", Commit: "abc123"},
+		GitHubWebhookSecret: secret,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/github/webhook", strings.NewReader(body))
+	req.Header = signedGitHubWebhookHeader(secret, "ping", body)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%q", resp.Code, resp.Body.String())
+	}
+
+	var got githubwebhook.Response
+	if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if got.Status != githubwebhook.StatusIgnored || got.Processed {
+		t.Fatalf("unexpected ignored payload: %+v", got)
+	}
+	if got.Reason != `github event "ping" is ignored because reconcile wiring is not implemented in this slice` {
+		t.Fatalf("unexpected ignored reason: %q", got.Reason)
+	}
+}
+
+func TestRouterGitHubWebhookRejectsMalformedRequest(t *testing.T) {
+	const secret = "top-secret"
+	body := `{"ref":"refs/heads/main"}`
+
+	router := NewRouter(Options{
+		BuildInfo:           buildinfo.Info{Version: "dev", Commit: "abc123"},
+		GitHubWebhookSecret: secret,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/github/webhook", strings.NewReader(body))
+	req.Header = signedGitHubWebhookHeader("wrong-secret", "push", body)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.Code)
+	}
+	assertResponseRequestID(t, resp)
+	if body := resp.Body.String(); body != "github webhook signature mismatch\n" {
+		t.Fatalf("unexpected bad request body: %q", body)
+	}
+}
+
+func signedGitHubWebhookHeader(secret, event, body string) http.Header {
+	header := http.Header{}
+	header.Set(githubwebhook.HeaderDeliveryID, "delivery-1")
+	header.Set(githubwebhook.HeaderEvent, event)
+	header.Set(githubwebhook.HeaderSignature, gitHubWebhookSignature(secret, body))
+	return header
+}
+
+func gitHubWebhookSignature(secret, body string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte(body))
+	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 }
 
 func TestRouterInfo(t *testing.T) {

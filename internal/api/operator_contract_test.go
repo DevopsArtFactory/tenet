@@ -260,6 +260,69 @@ func TestAuditLogOperatorContract(t *testing.T) {
 	}
 }
 
+func TestGitHubWebhookOperatorContract(t *testing.T) {
+	readme := readRepoFile(t, "README.md")
+	for _, fragment := range []string{
+		"`POST /api/v1/github/webhook`",
+		"`TENET_GITHUB_WEBHOOK_SECRET`",
+		"`X-GitHub-Delivery`",
+		"`X-GitHub-Event`",
+		"`X-Hub-Signature-256`",
+		"`202 Accepted`",
+		"`200 OK`",
+		"`400 Bad Request`",
+		"`status=accepted`",
+		"`status=ignored`",
+		"`processed=false`",
+		"no reconcile queue work is enqueued yet",
+	} {
+		if !strings.Contains(readme, fragment) {
+			t.Fatalf("expected README github webhook contract to include %q", fragment)
+		}
+	}
+
+	overviewDoc := readRepoFile(t, "docs/architecture/tenet-v1-overview.md")
+	for _, fragment := range []string{
+		"`POST /api/v1/github/webhook`",
+		"`TENET_GITHUB_WEBHOOK_SECRET`",
+		"accepted` or `ignored` responses",
+		"without enqueueing reconcile work yet",
+		"webhook-driven reconcile triggering",
+	} {
+		if !strings.Contains(overviewDoc, fragment) {
+			t.Fatalf("expected overview architecture doc to include %q", fragment)
+		}
+	}
+
+	controlPlaneDoc := readRepoFile(t, "docs/architecture/tenet-v1-aws-central-control-plane.md")
+	for _, fragment := range []string{
+		"`TENET_GITHUB_WEBHOOK_SECRET`",
+		"`POST /api/v1/github/webhook`",
+		"HMAC-SHA256 signatures",
+		"without enqueueing reconcile work yet",
+		"no reconcile queue side effect happens yet",
+	} {
+		if !strings.Contains(controlPlaneDoc, fragment) {
+			t.Fatalf("expected aws central control plane doc to include %q", fragment)
+		}
+	}
+
+	script := readRepoFile(t, "scripts/smoke-local.sh")
+	for _, fragment := range []string{
+		`TENET_GITHUB_WEBHOOK_SECRET="$WEBHOOK_SECRET"`,
+		`webhook_push=$(curl -fsS -X POST \`,
+		`http://$HOST:$PORT/api/v1/github/webhook`,
+		`assert webhook_push['status'] == 'accepted', webhook_push`,
+		`assert webhook_ping['status'] == 'ignored', webhook_ping`,
+		`assert os.environ['INVALID_WEBHOOK_STATUS'] == '400', os.environ['INVALID_WEBHOOK_STATUS']`,
+		`assert 'github webhook signature mismatch' in invalid_webhook, invalid_webhook`,
+	} {
+		if !strings.Contains(script, fragment) {
+			t.Fatalf("expected smoke-local github webhook contract to include %q", fragment)
+		}
+	}
+}
+
 func TestResourceLogsOperatorContract(t *testing.T) {
 	script := readRepoFile(t, "scripts/smoke-local.sh")
 	for _, fragment := range []string{
