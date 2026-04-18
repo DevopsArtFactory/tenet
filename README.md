@@ -202,6 +202,15 @@ When fixture-backed or early controller payloads have not yet persisted `rollout
 For the ECS rolling fallback service, the recent-log drill-down stays on the same operator workflow. Example route:
 - `GET /v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service`
 
+Resource-log responses now include an additive `lookupContext` object so the payload stays self-describing during AWS troubleshooting:
+- `lookupContext.region`
+- `lookupContext.controlAccountId`
+- `lookupContext.targetAccountId`
+- `lookupContext.crossAccount`
+- `lookupContext.observerRoleConfigured`
+
+`lookupContext` is present for both `available=true` and unavailable responses, so operators can still confirm the attempted lookup region/account path when `entries` is empty or `unavailableReason` is set.
+
 ## Repository layout
 
 Tenet currently expects manifests under:

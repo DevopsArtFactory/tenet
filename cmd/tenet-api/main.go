@@ -269,12 +269,13 @@ func newOverviewDeploymentResourceLogsProvider(
 			return resourcelogs.Result{}, err
 		}
 		return provider.Recent(ctx, resourcelogs.Request{
-			DeploymentName:  name,
-			ResourceType:    resourceType,
-			ResourceName:    resourceName,
-			TargetAccountID: detail.AWSAccountID,
-			Region:          detail.Region,
-			ObserverRoleARN: observerRoleARN,
+			DeploymentName:   name,
+			ResourceType:     resourceType,
+			ResourceName:     resourceName,
+			ControlAccountID: detail.AWSAccountID,
+			TargetAccountID:  detail.AWSAccountID,
+			Region:           detail.Region,
+			ObserverRoleARN:  observerRoleARN,
 		})
 	}
 }
