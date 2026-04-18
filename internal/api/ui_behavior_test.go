@@ -4112,9 +4112,12 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Apply request failed')) throw new Error('expected apply failed heading after create');
   if (!text.includes('Immutable apply request apply_failed_123 was created and recorded as failed.')) throw new Error('expected apply failed create message');
   if (!text.includes('Stored apply request')) throw new Error('expected stored apply request section');
+  if (!text.includes('Apply lifecycle summary')) throw new Error('expected apply lifecycle summary after create');
+  if (!text.includes('0/1 terminal · 0 running · 1 queued')) throw new Error('expected queued lifecycle progress summary after create');
   if (!text.includes('Apply operations')) throw new Error('expected apply operations section');
   if (!text.includes('Immutable apply request loaded from GET /v1/applies/apply_failed_123.')) throw new Error('expected apply operations intro');
   if (!text.includes('Apply step 1')) throw new Error('expected synthetic apply-step label');
+  if (!text.includes('Queued apply operation')) throw new Error('expected queued apply-operation label');
   if (!text.includes('server-preview-target')) throw new Error('expected apply operations target');
   if (!text.includes('Server-authored preview summary')) throw new Error('expected apply operations summary');
   if (!text.includes('Apply request details')) throw new Error('expected apply request details section');
@@ -4218,9 +4221,12 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Apply request failed')) throw new Error('expected failed apply heading on bookmarked apply');
   if (!text.includes('Immutable apply request apply_failed_123 is loaded and recorded as failed.')) throw new Error('expected loaded failed apply message');
   if (!text.includes('Stored apply request')) throw new Error('expected stored apply request section');
+  if (!text.includes('Apply lifecycle summary')) throw new Error('expected apply lifecycle summary on bookmarked apply');
+  if (!text.includes('0/1 terminal · 0 running · 1 queued')) throw new Error('expected queued lifecycle progress summary on bookmarked apply');
   if (!text.includes('Apply operations')) throw new Error('expected apply operations section on bookmarked apply');
   if (!text.includes('Immutable apply request loaded from GET /v1/applies/apply_failed_123.')) throw new Error('expected apply operations intro on bookmarked apply');
   if (!text.includes('Apply step 1')) throw new Error('expected synthetic apply-step label on bookmarked apply');
+  if (!text.includes('Queued apply operation')) throw new Error('expected queued apply-operation label on bookmarked apply');
   if (!text.includes('server-preview-target')) throw new Error('expected apply operations target on bookmarked apply');
   if (!text.includes('Server-authored preview summary')) throw new Error('expected apply operations summary on bookmarked apply');
   if (!text.includes('Apply request details')) throw new Error('expected apply request details section');
@@ -4241,6 +4247,111 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
 })();
 `
 		runNodeHarness(t, nodeProgram)
+	})
+
+	t.Run("future apply lifecycle states render lifecycle-aware chrome", func(t *testing.T) {
+		cases := []struct {
+			name            string
+			status          string
+			expectedHeading string
+			expectedMessage string
+		}{
+			{
+				name:            "queued",
+				status:          "queued",
+				expectedHeading: "Apply request queued",
+				expectedMessage: "recorded as queued",
+			},
+			{
+				name:            "running",
+				status:          "running",
+				expectedHeading: "Apply request running",
+				expectedMessage: "recorded as running",
+			},
+			{
+				name:            "succeeded",
+				status:          "succeeded",
+				expectedHeading: "Apply request succeeded",
+				expectedMessage: "recorded as succeeded",
+			},
+			{
+				name:            "cancelled",
+				status:          "cancelled",
+				expectedHeading: "Apply request cancelled",
+				expectedMessage: "recorded as cancelled",
+			},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				applyRecordLifecycleJSON, err := json.Marshal(map[string]any{
+					"id":             "apply_lifecycle_123",
+					"planId":         "plan_ready_123",
+					"deploymentName": "api-prod",
+					"status":         tc.status,
+					"createdAt":      "2026-04-18T08:00:00Z",
+					"operations": []map[string]any{
+						{"status": "queued", "phase": "Preparing", "target": "target-queued", "summary": "Queued summary"},
+						{"status": "running", "phase": "Promoting", "target": "target-running", "summary": "Running summary"},
+						{"status": "succeeded", "phase": "Promoting", "target": "target-succeeded", "summary": "Succeeded summary"},
+						{"status": "failed", "phase": "Verifying", "target": "target-failed", "summary": "Failed summary"},
+						{"status": "cancelled", "phase": "Cleanup", "target": "target-cancelled", "summary": "Cancelled summary"},
+					},
+					"source": map[string]any{
+						"planId":        "plan_ready_123",
+						"route":         "/v1/plans/plan_ready_123",
+						"planStatus":    "ready",
+						"planCreatedAt": "2026-04-17T09:00:00Z",
+						"fingerprint":   "fp_plan_ready",
+					},
+				})
+				if err != nil {
+					t.Fatalf("marshal lifecycle apply record: %v", err)
+				}
+
+				nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+const planPreview = ` + string(planPreviewReadyJSON) + `;
+const applyRecord = ` + string(applyRecordLifecycleJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_lifecycle_123', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/plans/plan_ready_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+  if (url === '/v1/applies/apply_lifecycle_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(applyRecord) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  await settle();
+  const root = document.getElementById('accounts');
+  const text = collectText(root).join(' | ');
+  if (!text.includes('` + tc.expectedHeading + `')) throw new Error('expected lifecycle heading for ` + tc.name + `');
+  if (!text.includes('` + tc.expectedMessage + `')) throw new Error('expected lifecycle message for ` + tc.name + `');
+  if (!text.includes('Apply lifecycle summary')) throw new Error('expected apply lifecycle summary for ` + tc.name + `');
+  if (!text.includes('3/5 terminal · 1 running · 1 queued')) throw new Error('expected lifecycle progress summary for ` + tc.name + `');
+  if (!text.includes('Queued apply operation')) throw new Error('expected queued apply-operation label for ` + tc.name + `');
+  if (!text.includes('Running apply operation')) throw new Error('expected running apply-operation label for ` + tc.name + `');
+  if (!text.includes('Succeeded apply operation')) throw new Error('expected succeeded apply-operation label for ` + tc.name + `');
+  if (!text.includes('Failed apply operation')) throw new Error('expected failed apply-operation label for ` + tc.name + `');
+  if (!text.includes('Cancelled apply operation')) throw new Error('expected cancelled apply-operation label for ` + tc.name + `');
+  if (!text.includes('Queued operations') || !text.includes('1')) throw new Error('expected queued count for ` + tc.name + `');
+  if (!text.includes('Running operations') || !text.includes('Succeeded operations') || !text.includes('Failed operations') || !text.includes('Cancelled operations')) throw new Error('expected per-status lifecycle counts for ` + tc.name + `');
+})();
+`
+				runNodeHarness(t, nodeProgram)
+			})
+		}
 	})
 
 	t.Run("create falls back to loaded preview fingerprint when client cannot derive current fingerprint", func(t *testing.T) {

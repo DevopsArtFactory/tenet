@@ -104,6 +104,8 @@
       .detail-step-meta-completed { color: var(--green); }
       .detail-step-meta-current { color: var(--blue); }
       .detail-step-meta-pending { color: var(--muted); }
+      .detail-step-meta-failed { color: var(--red); }
+      .detail-step-meta-cancelled { color: var(--muted); }
       .detail-execution-meta, .detail-history-meta { display:grid; gap: 4px; margin-top: 6px; }
       .detail-section-copy { margin: 0 0 12px; color: var(--muted); font-size: 13px; line-height: 1.5; }
       .drift-table-wrap { overflow-x: auto; }
@@ -2497,6 +2499,134 @@
         return ['completed', 'current', 'pending'].includes(normalized) ? normalized : 'pending';
       };
       const planOperationStatusLabel = (status) => rolloutStepStatusLabel(normalizePlanOperationStatus(status));
+      const normalizeApplyRecordStatus = (status) => {
+        const normalized = String(status || '').toLowerCase();
+        switch (normalized) {
+          case 'pending':
+          case 'queued':
+            return 'queued';
+          case 'running':
+          case 'in_progress':
+            return 'running';
+          case 'succeeded':
+          case 'success':
+          case 'completed':
+            return 'succeeded';
+          case 'cancelled':
+          case 'canceled':
+            return 'cancelled';
+          case 'failed':
+            return 'failed';
+          default:
+            return 'queued';
+        }
+      };
+      const applyRecordStatusLabel = (status) => {
+        switch (normalizeApplyRecordStatus(status)) {
+          case 'queued':
+            return 'Queued';
+          case 'running':
+            return 'Running';
+          case 'succeeded':
+            return 'Succeeded';
+          case 'cancelled':
+            return 'Cancelled';
+          case 'failed':
+            return 'Failed';
+          default:
+            return 'Queued';
+        }
+      };
+      const applyStatusPillClassName = (status) => {
+        switch (status) {
+          case 'running':
+            return 'pill progress';
+          case 'succeeded':
+            return 'pill synced';
+          case 'cancelled':
+            return 'pill paused';
+          case 'failed':
+          case 'unavailable':
+          case 'fetch-error':
+            return 'pill error';
+          case 'queued':
+          default:
+            return 'pill mode';
+        }
+      };
+      const normalizeApplyOperationStatus = (status) => {
+        const normalized = String(status || '').toLowerCase();
+        switch (normalized) {
+          case 'pending':
+          case 'queued':
+            return 'queued';
+          case 'running':
+          case 'in_progress':
+          case 'current':
+            return 'running';
+          case 'succeeded':
+          case 'success':
+          case 'completed':
+            return 'succeeded';
+          case 'failed':
+            return 'failed';
+          case 'cancelled':
+          case 'canceled':
+            return 'cancelled';
+          default:
+            return 'queued';
+        }
+      };
+      const applyOperationStatusClassName = (status) => {
+        switch (normalizeApplyOperationStatus(status)) {
+          case 'running':
+            return 'current';
+          case 'succeeded':
+            return 'completed';
+          case 'failed':
+            return 'failed';
+          case 'cancelled':
+            return 'cancelled';
+          case 'queued':
+          default:
+            return 'pending';
+        }
+      };
+      const applyOperationStatusLabel = (status) => {
+        switch (normalizeApplyOperationStatus(status)) {
+          case 'queued':
+            return 'Queued apply operation';
+          case 'running':
+            return 'Running apply operation';
+          case 'succeeded':
+            return 'Succeeded apply operation';
+          case 'failed':
+            return 'Failed apply operation';
+          case 'cancelled':
+            return 'Cancelled apply operation';
+          default:
+            return 'Queued apply operation';
+        }
+      };
+      const applyOperationCounts = (operations) => (operations || []).reduce((counts, operation) => {
+        const status = normalizeApplyOperationStatus(operation?.status);
+        counts.total += 1;
+        counts[status] += 1;
+        return counts;
+      }, {
+        total: 0,
+        queued: 0,
+        running: 0,
+        succeeded: 0,
+        failed: 0,
+        cancelled: 0,
+      });
+      const applyOperationProgressSummary = (operations) => {
+        const counts = applyOperationCounts(operations);
+        if (!counts.total) return 'No stored apply operations yet';
+        const terminal = counts.succeeded + counts.failed + counts.cancelled;
+        return `${terminal}/${counts.total} terminal · ${counts.running} running · ${counts.queued} queued`;
+      };
       const recordOperationKind = (operation, index, fallbackPrefix) => {
         const kind = typeof operation?.kind === 'string' ? operation.kind.trim() : '';
         return kind || `${fallbackPrefix} ${index + 1}`;
@@ -2510,7 +2640,19 @@
         summary: textOrDash(operation.summary),
       }));
       const previewOperations = (record) => mapRecordOperations(record?.operations || [], 'Plan step');
-      const applyOperations = (record) => mapRecordOperations(record?.operations || [], 'Apply step');
+      const applyOperations = (record) => (record?.operations || []).map((operation, index) => {
+        const normalizedStatus = normalizeApplyOperationStatus(operation?.status);
+        return {
+          kind: recordOperationKind(operation, index, 'Apply step'),
+          status: applyOperationStatusClassName(operation?.status),
+          statusLabel: applyOperationStatusLabel(operation?.status),
+          phase: textOrDash(operation?.phase),
+          target: textOrDash(operation?.target),
+          summary: textOrDash(operation?.summary),
+          lifecycleStatus: normalizedStatus,
+          lifecycleLabel: applyRecordStatusLabel(normalizedStatus),
+        };
+      });
       const createOperationsSection = ({ title, intro, operations, emptyMessage }) => {
         const section = createDetailSection(title);
         if (!operations.length) {
@@ -2614,11 +2756,26 @@
               return `Loading immutable apply request ${activeApplyID} from GET /v1/applies/${activeApplyID}. Deployment and plan context remain visible below while the record loads.`;
             }
             return `Creating immutable apply request via POST /v1/applies/plans/${activePlanID || 'planId'}. Deployment and plan context remain visible below while Tenet stores the server-authored record.`;
-          case 'ready':
+          case 'queued':
             if (applyState.request === 'create') {
-              return `Immutable apply request ${activeApplyID} was created and this workspace URL now includes applyId for bookmarked review. ${disabledNote}`;
+              return `Immutable apply request ${activeApplyID} was created and recorded as queued. This workspace URL now includes applyId for bookmarked review while operators wait for lifecycle progress.`;
             }
-            return `Immutable apply request ${activeApplyID} is loaded from GET /v1/applies/${activeApplyID}. ${disabledNote}`;
+            return `Immutable apply request ${activeApplyID} is loaded from GET /v1/applies/${activeApplyID} and recorded as queued. Deployment and plan context remain visible below while operators monitor lifecycle progress.`;
+          case 'running':
+            if (applyState.request === 'create') {
+              return `Immutable apply request ${activeApplyID} was created and is already recorded as running. This workspace URL now includes applyId for bookmarked review while operators monitor progress.`;
+            }
+            return `Immutable apply request ${activeApplyID} is loaded from GET /v1/applies/${activeApplyID} and recorded as running. Deployment and plan context remain visible below while operators monitor progress.`;
+          case 'succeeded':
+            if (applyState.request === 'create') {
+              return `Immutable apply request ${activeApplyID} was created and recorded as succeeded. This workspace URL now includes applyId for bookmarked review of the completed lifecycle.`;
+            }
+            return `Immutable apply request ${activeApplyID} is loaded from GET /v1/applies/${activeApplyID} and recorded as succeeded. Deployment and plan context remain visible below for post-apply review.`;
+          case 'cancelled':
+            if (applyState.request === 'create') {
+              return `Immutable apply request ${activeApplyID} was created and recorded as cancelled. This workspace URL now includes applyId for bookmarked review of the cancelled lifecycle.`;
+            }
+            return `Immutable apply request ${activeApplyID} is loaded from GET /v1/applies/${activeApplyID} and recorded as cancelled. Deployment and plan context remain visible below for operator review.`;
           case 'failed':
             if (applyState.request === 'create') {
               return `Immutable apply request ${activeApplyID} was created and recorded as failed. ${disabledNote} Review the operator-facing error and details below.`;
@@ -2633,7 +2790,7 @@
             return `${applyState.request === 'load' ? 'Failed to load the selected apply request' : 'Failed to create an apply request'}: ${applyState.error?.message || 'unknown error'}. Deployment and plan-derived context are still shown below.`;
           default:
             if (planPreviewCanApply(planState)) {
-              return `Apply Plan will POST /v1/applies/plans/${planState.record.id}, persist an immutable apply request, and update this workspace URL with a shareable applyId. ${disabledNote}`;
+              return `Apply Plan will POST /v1/applies/plans/${planState.record.id}, persist an immutable apply request, and update this workspace URL with a shareable applyId. Future immutable lifecycle states render here as queued, running, succeeded, cancelled, or failed. ${disabledNote}`;
             }
             return 'Apply Plan activates only when a loaded persisted ready plan preview with a valid planId is present. Deployment and plan-derived context remain visible below while operators review the rollout.';
         }
@@ -2652,8 +2809,14 @@
         switch (applyState?.status) {
           case 'loading':
             return 'Loading apply request';
-          case 'ready':
-            return applyState.request === 'create' ? 'Apply request created' : 'Apply request ready';
+          case 'queued':
+            return 'Apply request queued';
+          case 'running':
+            return 'Apply request running';
+          case 'succeeded':
+            return 'Apply request succeeded';
+          case 'cancelled':
+            return 'Apply request cancelled';
           case 'failed':
             return 'Apply request failed';
           case 'unavailable':
@@ -3059,7 +3222,7 @@
           const activePlanRecord = planState?.record && (planState.status === 'ready' || planState.status === 'failed')
             ? planState.record
             : null;
-          const activeApplyRecord = applyState?.record && (applyState.status === 'ready' || applyState.status === 'failed')
+          const activeApplyRecord = applyState?.record && ['queued', 'running', 'succeeded', 'cancelled', 'failed'].includes(applyState.status)
             ? applyState.record
             : null;
           const canApplyPlan = planPreviewCanApply(planState);
@@ -3168,11 +3331,16 @@
           const applySection = createDetailSection('Apply request actions');
           const applyStateCallout = createElement('div', 'detail-state', applyRecordStateMessage(applyState, detail, planState));
           const applyStateClassName = applyRecordStateClassName(applyState);
+          const applyStateHead = createElement('div', 'workspace-callout-head');
+          applyStateHead.append(
+            createElement('div', 'workspace-callout-label', applyRecordStatusHeading(applyState)),
+            createElement('span', applyStatusPillClassName(applyState?.status), applyState?.status === 'idle' ? 'Awaiting apply request' : applyState?.status === 'loading' ? 'Loading' : applyState?.status === 'unavailable' ? 'Unavailable' : applyState?.status === 'fetch-error' ? 'Fetch error' : applyRecordStatusLabel(applyState?.status)),
+          );
           if (applyStateClassName) {
             applyStateCallout.classList.add(applyStateClassName);
           }
           applySection.append(
-            createElement('div', 'workspace-callout-label', applyRecordStatusHeading(applyState)),
+            applyStateHead,
             applyStateCallout,
           );
           sections.push(applySection);
@@ -3180,10 +3348,12 @@
           if (activeApplyRecord) {
             const recordSection = createDetailSection('Stored apply request');
             const recordGrid = createElement('div', 'detail-grid');
+            const operationCounts = applyOperationCounts(activeApplyRecord.operations || []);
+            const lifecycleSummaryGrid = createElement('div', 'detail-grid');
             const recordLinks = createElement('div', 'row-links');
             [
               ['Apply ID', metricValue(activeApplyRecord.id)],
-              ['Apply status', textOrDash(activeApplyRecord.status)],
+              ['Apply status', applyRecordStatusLabel(activeApplyRecord.status)],
               ['Created at', metricValue(activeApplyRecord.createdAt)],
               ['Plan ID', metricValue(activeApplyRecord.planId)],
               ['Deployment', metricValue(activeApplyRecord.deploymentName)],
@@ -3194,11 +3364,21 @@
             ].forEach(([label, value]) => {
               recordGrid.append(createMetric(label, value));
             });
+            [
+              ['Apply lifecycle summary', applyOperationProgressSummary(activeApplyRecord.operations || []), 'summary'],
+              ['Queued operations', String(operationCounts.queued)],
+              ['Running operations', String(operationCounts.running)],
+              ['Succeeded operations', String(operationCounts.succeeded)],
+              ['Failed operations', String(operationCounts.failed)],
+              ['Cancelled operations', String(operationCounts.cancelled)],
+            ].forEach(([label, value, className]) => {
+              lifecycleSummaryGrid.append(createMetric(label, value, className || ''));
+            });
             recordLinks.append(
               createNavLink(buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activeApplyRecord.planId || activePlanRecord?.id || currentPageState.planId, applyId: activeApplyRecord.id }), 'Open bookmarked apply', '_self'),
               createNavLink(buildApplyRequestRoute(activeApplyRecord.id), 'Apply JSON'),
             );
-            recordSection.append(recordGrid, recordLinks);
+            recordSection.append(recordGrid, lifecycleSummaryGrid, recordLinks);
             sections.push(recordSection);
           }
 
@@ -3624,7 +3804,7 @@
                           }
                           applyState = {
                             ...applyState,
-                            status: record.status === 'failed' ? 'failed' : 'ready',
+                            status: normalizeApplyRecordStatus(record.status),
                             request: 'create',
                             applyId: record.id,
                             record,
@@ -3701,7 +3881,7 @@
                       }
                       applyState = {
                         ...applyState,
-                        status: record.status === 'failed' ? 'failed' : 'ready',
+                        status: normalizeApplyRecordStatus(record.status),
                         request: 'load',
                         applyId: record.id,
                         record,
