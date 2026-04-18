@@ -36,6 +36,24 @@ Use `make smoke-local` for the fastest fixture-backed regression check when you 
 
 This local smoke path now sets `TENET_CATALOG_SOURCE=filesystem` explicitly so the fixture-backed contract is unambiguous. GitHub-backed desired-state loading is supported in `tenet-api`, but it remains an API-only read-only mode and does not change the controller/runtime filesystem contract used by the local stack.
 
+### Manual `tenet-api` run without Docker
+
+For manual `go run ./cmd/tenet-api` flows, `tenet-api` listens on `TENET_API_ADDR`, not `TENET_API_PORT`. Use `TENET_API_ADDR=:18083` as a safe local example before opening the UI so you do not collide with the default Docker stack on `localhost:8080`.
+
+```bash
+TENET_CATALOG_SOURCE=filesystem \
+TENET_REPO_ROOT=$(pwd)/examples/local-repo \
+TENET_STATUS_PATH=$(pwd)/examples/local-status/deployments.json \
+TENET_API_ADDR=:18083 \
+go run ./cmd/tenet-api
+```
+
+Then open:
+
+```bash
+http://localhost:18083/
+```
+
 ### Docker stack smoke check
 
 ```bash

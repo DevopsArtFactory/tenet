@@ -1354,6 +1354,45 @@ func TestOverviewDocsLockECSRollingFallbackContract(t *testing.T) {
 	}
 }
 
+func TestManualTenetAPIDocsUseListenAddressContract(t *testing.T) {
+	files := []string{
+		"../../README.md",
+		"../../docs/architecture/tenet-v1-local-runtime.md",
+	}
+
+	requiredFragments := []string{
+		"go run ./cmd/tenet-api",
+		"`TENET_API_ADDR`, not `TENET_API_PORT`",
+		"TENET_API_ADDR=:18083",
+		"http://localhost:18083/",
+	}
+
+	forbiddenFragments := []string{
+		"TENET_API_PORT=:18083",
+		"TENET_API_PORT=18083",
+	}
+
+	for _, path := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+
+		for _, fragment := range requiredFragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
+
+		for _, fragment := range forbiddenFragments {
+			if strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to avoid %q", path, fragment)
+			}
+		}
+	}
+}
+
 func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 	files := map[string][]string{
 		"../../scripts/smoke-docker.sh": {
