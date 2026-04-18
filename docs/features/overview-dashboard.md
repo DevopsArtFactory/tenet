@@ -146,12 +146,13 @@ The embedded UI now exposes a dedicated bookmarkable audit route:
 - `/?page=audit`
 - `/?page=audit&deployment={deploymentName}` to keep one deployment's audit context visible in the page chrome/body
 - `/?page=audit&action={action}` to narrow the page to exactly `plan.created` or `apply.requested`
-- `/?page=audit&limit={n}` to request a smaller newest-first window from `GET /v1/audit-logs`
+- `/?page=audit&limit={n}` to request a smaller newest-first window from `GET /v1/audit-logs`; the audit toolbar exposes the same bookmarkable limit through an explicit safe selector
 
 Current behavior:
 - fetches `GET /v1/audit-logs` directly
 - preserves optional `deployment`, `action`, and `limit` URL state when present
 - renders a safe action filter control for exactly `plan.created` and `apply.requested`
+- renders a safe limit selector in the audit toolbar with preset newest-first windows while still honoring bookmarked positive integers such as `limit=2`
 - renders explicit `Loading audit log…`, empty, unavailable (`503`), and generic fetch-error states
 - makes an active deployment filter obvious in both the page chrome and body when `deployment={deploymentName}` is present
 - renders deployment-specific empty-state copy when one deployment is selected and no persisted audit entries match, while keeping the generic unfiltered empty state unchanged

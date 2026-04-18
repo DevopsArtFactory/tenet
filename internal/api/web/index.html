@@ -931,6 +931,22 @@
         const action = String(value || '').trim();
         return validAuditActions.has(action) ? action : '';
       };
+      const normalizeAuditLimit = (value) => {
+        const limit = Number.parseInt(String(value || '').trim(), 10);
+        return Number.isInteger(limit) && limit > 0 ? limit : 0;
+      };
+      const auditLimitSelectOptions = (limit) => {
+        const presets = [1, 2, 5, 10, 20, 50];
+        const options = [{ value: '', label: 'Default window' }];
+        const currentLimit = normalizeAuditLimit(limit);
+        if (currentLimit > 0 && !presets.includes(currentLimit)) {
+          options.push({ value: String(currentLimit), label: `${currentLimit} entries` });
+        }
+        presets.forEach((preset) => {
+          options.push({ value: String(preset), label: `${preset} entr${preset === 1 ? 'y' : 'ies'}` });
+        });
+        return options;
+      };
       const parseViewState = () => {
         const params = new URLSearchParams(window.location.search);
         return {
@@ -943,7 +959,6 @@
         const params = new URLSearchParams(window.location.search);
         const page = params.get('page') || params.get('view') || 'applications';
         const validPages = new Set(['applications', 'application', 'account', 'resource', 'drift', 'plan', 'audit']);
-        const limit = Number.parseInt(params.get('limit') || '', 10);
         return {
           page: validPages.has(page) ? page : 'applications',
           accountId: params.get('accountId') || '',
@@ -953,8 +968,25 @@
           resourceType: params.get('resourceType') || '',
           resourceId: params.get('resourceId') || '',
           auditAction: normalizeAuditAction(params.get('action') || ''),
-          auditLimit: Number.isInteger(limit) && limit > 0 ? limit : 0,
+          auditLimit: normalizeAuditLimit(params.get('limit') || ''),
         };
+      };
+      const syncAuditQueryParams = (params, pageState) => {
+        if (pageState.deployment) {
+          params.set('deployment', pageState.deployment);
+        } else {
+          params.delete('deployment');
+        }
+        if (pageState.auditAction) {
+          params.set('action', pageState.auditAction);
+        } else {
+          params.delete('action');
+        }
+        if (pageState.auditLimit > 0) {
+          params.set('limit', String(pageState.auditLimit));
+        } else {
+          params.delete('limit');
+        }
       };
       const syncAuditPageState = () => {
         const params = new URLSearchParams(window.location.search);
@@ -974,21 +1006,7 @@
         } else {
           params.delete('account');
         }
-        if (currentPageState.deployment) {
-          params.set('deployment', currentPageState.deployment);
-        } else {
-          params.delete('deployment');
-        }
-        if (currentPageState.auditAction) {
-          params.set('action', currentPageState.auditAction);
-        } else {
-          params.delete('action');
-        }
-        if (currentPageState.auditLimit > 0) {
-          params.set('limit', String(currentPageState.auditLimit));
-        } else {
-          params.delete('limit');
-        }
+        syncAuditQueryParams(params, currentPageState);
         params.delete('accountId');
         params.delete('planId');
         params.delete('applyId');
@@ -1044,8 +1062,23 @@
         if (currentViewState.query) params.set('q', currentViewState.query);
         if (currentViewState.syncState && currentViewState.syncState !== 'all') params.set('sync', currentViewState.syncState);
         if (currentViewState.account && currentViewState.account !== 'all') params.set('account', currentViewState.account);
+        if (page === 'audit' && currentPageState.page === 'audit') {
+          syncAuditQueryParams(params, currentPageState);
+        }
         Object.entries(extras).forEach(([key, value]) => {
-          if (value == null || value === '') return;
+          if (key === 'limit') {
+            const limit = normalizeAuditLimit(value);
+            if (limit > 0) {
+              params.set('limit', String(limit));
+            } else {
+              params.delete('limit');
+            }
+            return;
+          }
+          if (value == null || value === '') {
+            params.delete(key);
+            return;
+          }
           params.set(key, value);
         });
         const query = params.toString();
@@ -2230,15 +2263,26 @@
         const summary = document.getElementById('summary');
         const backLink = createNavLink(buildPageURL('applications'), 'Back to applications', '_self');
         const controls = createElement('div', 'toolbar-grid');
-        controls.append(createSelect('Action', currentPageState.auditAction, auditActionOptions, (event) => {
-          currentPageState = {
-            ...currentPageState,
-            page: 'audit',
-            auditAction: normalizeAuditAction(event.target.value),
-          };
-          syncAuditPageState();
-          loadAuditLogsPage();
-        }));
+        controls.append(
+          createSelect('Action', currentPageState.auditAction, auditActionOptions, (event) => {
+            currentPageState = {
+              ...currentPageState,
+              page: 'audit',
+              auditAction: normalizeAuditAction(event.target.value),
+            };
+            syncAuditPageState();
+            loadAuditLogsPage();
+          }),
+          createSelect('Limit', String(currentPageState.auditLimit || ''), auditLimitSelectOptions(currentPageState.auditLimit), (event) => {
+            currentPageState = {
+              ...currentPageState,
+              page: 'audit',
+              auditLimit: normalizeAuditLimit(event.target.value),
+            };
+            syncAuditPageState();
+            loadAuditLogsPage();
+          }),
+        );
         const activeFilters = [];
         if (currentPageState.deployment) activeFilters.push(`deployment ${currentPageState.deployment}`);
         if (currentPageState.auditAction) activeFilters.push(`action ${currentPageState.auditAction}`);

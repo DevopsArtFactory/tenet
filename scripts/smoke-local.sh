@@ -712,7 +712,11 @@ assert 'Loading audit log…' in audit_ui, audit_ui
 assert 'Audit log is currently unavailable.' in audit_ui, audit_ui
 assert "const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {" in audit_ui, audit_ui
 assert "if (action) params.set('action', action);" in audit_ui, audit_ui
+assert "const normalizeAuditLimit = (value) => {" in audit_ui, audit_ui
+assert "const auditLimitSelectOptions = (limit) => {" in audit_ui, audit_ui
+assert "const syncAuditQueryParams = (params, pageState) => {" in audit_ui, audit_ui
 assert "createSelect('Action', currentPageState.auditAction, auditActionOptions, (event) => {" in audit_ui, audit_ui
+assert "createSelect('Limit', String(currentPageState.auditLimit || ''), auditLimitSelectOptions(currentPageState.auditLimit), (event) => {" in audit_ui, audit_ui
 assert 'Open application drill-down' in audit_ui, audit_ui
 assert 'Open plan/apply workspace' in audit_ui, audit_ui
 assert "fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`)" in ui, ui
