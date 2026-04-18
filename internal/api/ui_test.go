@@ -514,6 +514,13 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"const deploymentDriftRows = (detail) => {",
 		"const managedRows = managedDeploymentDriftRows(detail);",
 		"if (managedRows) return managedRows;",
+		"const deploymentDriftSource = (detail) => {",
+		"badge: 'Controller-authored managedDrift',",
+		"summary: 'Current source: controller-authored managedDrift rows.',",
+		"factors: 'managedDrift is present in the deployment detail payload, so fallback read-model heuristics stay suppressed for this deployment.',",
+		"badge: 'Derived fallback heuristics',",
+		"summary: 'Current source: derived fallback read-model heuristics.',",
+		"factors: 'managedDrift is absent in the deployment detail payload, so Tenet is deriving field-level drift from artifact, generation, runtime-context, and unhealthy-condition read-model signals.',",
 		"const rolloutPhaseForStepKind = (stepKind) => {",
 		"const effectiveRolloutContext = (detail) => ({",
 		"detail.runtimeSummary?.executionMode || detail.executionMode || ''",
@@ -527,7 +534,7 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"field: 'runtimeContext.executionMode',",
 		"field: `condition.${condition.type || 'Unknown'}`",
 		"const driftRows = deploymentDriftRows(detail);",
-		"const driftUsesManagedRows = Array.isArray(detail?.managedDrift);",
+		"const driftSource = deploymentDriftSource(detail);",
 		"createInput('Filter drift rows', '', 'Filter by field, value, or condition context', (event) => {",
 		"createSelect('Severity', 'all', [",
 		"createSelect('Sort by', 'field', [",
@@ -536,9 +543,11 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"Actual",
 		"Severity",
 		"No field-level drift rows match the current filters.",
-		"No backend-authored field-level drift rows are currently reported for this deployment.",
-		"No field-level drift is currently derived from the deployment read model.",
-		"Backend-authored managed drift rows are preferred when present. Older deployment-detail payloads fall back to client-derived drift from the deployment read model.",
+		"No controller-authored field-level drift was reported for this deployment.",
+		"No derived fallback field-level drift was detected from the deployment read model.",
+		"Active drift source",
+		"Current source: controller-authored managedDrift rows.",
+		"Current source: derived fallback read-model heuristics.",
 		"const requestError = (kind, message, status = 0) => {",
 		"const responseErrorMessage = (response, fallback) => {",
 		"const buildPlanPreviewRoute = (planId) => `/v1/plans/${encodeURIComponent(planId)}`;",
@@ -1024,8 +1033,8 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Runtime change details' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Runtime change details")
 	}
-	if !strings.Contains(text, "assert 'Backend-authored managed drift rows are preferred when present. Older deployment-detail payloads fall back to client-derived drift from the deployment read model.' in ui, ui") {
-		t.Fatalf("expected smoke-local.sh to assert embedded html contains mixed-mode drift workspace copy")
+	if !strings.Contains(text, "assert 'Current source: controller-authored managedDrift rows.' in ui, ui") || !strings.Contains(text, "assert 'Current source: derived fallback read-model heuristics.' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains drift-source callout copy")
 	}
 	for _, fragment := range []string{
 		"assert 'Plan preview actions' in ui, ui",

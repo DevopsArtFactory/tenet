@@ -361,7 +361,8 @@ assert "buildPageURL('account', { accountId: deployment.awsAccountId })" in ui, 
 assert "buildPageURL('application', { deployment: deployment.name })" in ui, ui
 assert 'Drift view' in ui, ui
 assert 'Plan/apply' in ui, ui
-assert 'Backend-authored managed drift rows are preferred when present. Older deployment-detail payloads fall back to client-derived drift from the deployment read model.' in ui, ui
+assert 'Current source: controller-authored managedDrift rows.' in ui, ui
+assert 'Current source: derived fallback read-model heuristics.' in ui, ui
 assert 'Controller runtime events' in ui, ui
 assert 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.' in ui, ui
 assert 'Loading controller runtime events…' in ui, ui
