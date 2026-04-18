@@ -200,6 +200,7 @@ Unsupported or temporarily unavailable resource types do not surface vague 500s 
 
 The same drill-down also includes read-only workspace surfaces:
 - `/?page=drift&deployment={deploymentName}` for field-level troubleshooting context that now calls out the active drift-row source: controller-authored `managedDrift[]` rows when present, otherwise the existing derived fallback read-model heuristics for older payloads. Empty-state copy also distinguishes "no controller-authored drift reported" from "no derived fallback drift detected."
+- the drift workspace also includes a compact summary above the field-level table with total rows, visible rows after the current filters, and live `high` / `medium` / `low` counts so operators can see severity distribution and filter impact at a glance
 - `/?page=plan&deployment={deploymentName}` for immutable plan previews, `Apply Plan` activation once a persisted ready preview is loaded, bookmarkable `planId`/`applyId` workspace URLs, and stored-preview quick links to both the embedded workspace (`_self`) and immutable `Plan JSON` / `Apply JSON` read models
 
 The backend now also exposes read-only immutable apply-request routes:

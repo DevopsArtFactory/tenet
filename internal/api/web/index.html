@@ -273,6 +273,19 @@
             return 0;
         }
       };
+      const driftSeverityCounts = (rows) => rows.reduce((counts, row) => {
+        if (row?.severity === 'high' || row?.severity === 'medium' || row?.severity === 'low') {
+          counts[row.severity] += 1;
+        }
+        return counts;
+      }, { high: 0, medium: 0, low: 0 });
+      const driftRowLabel = (count) => `${count} drift row${count === 1 ? '' : 's'}`;
+      const driftSummaryCopy = (totalRows, visibleRows) => {
+        if (!totalRows) return 'No field-level drift rows are currently reported.';
+        if (!visibleRows) return `Filters currently hide all ${driftRowLabel(totalRows)}.`;
+        if (visibleRows === totalRows) return `Showing all ${driftRowLabel(visibleRows)}.`;
+        return `Showing ${driftRowLabel(visibleRows)} out of ${driftRowLabel(totalRows)} after filters.`;
+      };
       const driftValueText = (value) => value == null || value === '' ? '—' : String(value);
       const normalizeManagedDriftRow = (row) => {
         if (!row || typeof row !== 'object') return null;
@@ -2769,6 +2782,7 @@
           let driftSeverity = 'all';
           let driftSort = 'field';
           const driftControls = createElement('div', 'toolbar-grid');
+          const driftSummary = createElement('div', 'metrics');
           const driftTableWrap = createElement('div', 'drift-table-wrap');
           const renderDriftRows = () => {
             const searchNeedle = driftQuery.trim().toLowerCase();
@@ -2785,10 +2799,19 @@
                 }
                 return left.field.localeCompare(right.field);
               });
+            const filteredCounts = driftSeverityCounts(filteredRows);
+            driftSummary.replaceChildren(
+              createMetric('Drift summary', driftSummaryCopy(driftRows.length, filteredRows.length), 'summary'),
+              createMetric('Total rows', String(driftRows.length)),
+              createMetric('Visible rows', String(filteredRows.length)),
+              createMetric('High', String(filteredCounts.high)),
+              createMetric('Medium', String(filteredCounts.medium)),
+              createMetric('Low', String(filteredCounts.low)),
+            );
 
             if (!filteredRows.length) {
               const emptyMessage = driftRows.length
-                ? 'No field-level drift rows match the current filters.'
+                ? 'No field-level drift rows match the current filters. Adjust the query or severity filters to inspect reported drift.'
                 : driftSource.empty;
               driftTableWrap.replaceChildren(createElement('div', 'detail-state', emptyMessage));
               return;
@@ -2851,7 +2874,7 @@
             createElement('div', 'workspace-callout-factors', driftSource.factors),
           );
           driftSection.append(driftSourceCallout);
-          driftSection.append(driftControls, driftTableWrap);
+          driftSection.append(driftControls, driftSummary, driftTableWrap);
           renderDriftRows();
           sections.push(driftSection);
 

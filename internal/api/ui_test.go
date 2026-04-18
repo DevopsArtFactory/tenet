@@ -506,6 +506,9 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"backLink.rel = '';",
 		"const emptyTitle = mode === 'drift' ? 'Field-level drift' : 'Plan operations';",
 		"const driftSeverityRank = (severity) => {",
+		"const driftSeverityCounts = (rows) => rows.reduce((counts, row) => {",
+		"const driftRowLabel = (count) => `${count} drift row${count === 1 ? '' : 's'}`;",
+		"const driftSummaryCopy = (totalRows, visibleRows) => {",
 		"const driftValueText = (value) => value == null || value === '' ? '—' : String(value);",
 		"const normalizeManagedDriftRow = (row) => {",
 		"const managedDeploymentDriftRows = (detail) => {",
@@ -536,13 +539,22 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"const driftRows = deploymentDriftRows(detail);",
 		"const driftSource = deploymentDriftSource(detail);",
 		"createInput('Filter drift rows', '', 'Filter by field, value, or condition context', (event) => {",
+		"createMetric('Drift summary', driftSummaryCopy(driftRows.length, filteredRows.length), 'summary')",
+		"createMetric('Total rows', String(driftRows.length))",
+		"createMetric('Visible rows', String(filteredRows.length))",
+		"createMetric('High', String(filteredCounts.high))",
+		"createMetric('Medium', String(filteredCounts.medium))",
+		"createMetric('Low', String(filteredCounts.low))",
 		"createSelect('Severity', 'all', [",
 		"createSelect('Sort by', 'field', [",
 		"Field path",
 		"Desired",
 		"Actual",
 		"Severity",
-		"No field-level drift rows match the current filters.",
+		"No field-level drift rows are currently reported.",
+		"Filters currently hide all ${driftRowLabel(totalRows)}.",
+		"Showing ${driftRowLabel(visibleRows)} out of ${driftRowLabel(totalRows)} after filters.",
+		"No field-level drift rows match the current filters. Adjust the query or severity filters to inspect reported drift.",
 		"No controller-authored field-level drift was reported for this deployment.",
 		"No derived fallback field-level drift was detected from the deployment read model.",
 		"Active drift source",
@@ -1167,6 +1179,16 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert 'Current source: controller-authored managedDrift rows.' in ui, ui") || !strings.Contains(text, "assert 'Current source: derived fallback read-model heuristics.' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains drift-source callout copy")
+	}
+	for _, fragment := range []string{
+		"assert 'Drift summary' in ui, ui",
+		"assert 'Total rows' in ui, ui",
+		"assert 'Visible rows' in ui, ui",
+		"assert 'No field-level drift rows match the current filters. Adjust the query or severity filters to inspect reported drift.' in ui, ui",
+	} {
+		if !strings.Contains(text, fragment) {
+			t.Fatalf("expected smoke-local.sh to include %q", fragment)
+		}
 	}
 	for _, fragment := range []string{
 		"assert 'Plan preview actions' in ui, ui",
