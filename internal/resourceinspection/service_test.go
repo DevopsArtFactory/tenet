@@ -169,7 +169,7 @@ func TestServiceInspect(t *testing.T) {
 		}
 	})
 
-	t.Run("traffic routing resources return explicit summary payloads", func(t *testing.T) {
+	t.Run("traffic routing resources return explicit summary payloads when AWS inspection is disabled", func(t *testing.T) {
 		service := NewService(Options{})
 		for _, tc := range []struct {
 			resourceType string
@@ -231,6 +231,163 @@ func TestServiceInspect(t *testing.T) {
 			if !reflect.DeepEqual(result, want) {
 				t.Fatalf("unexpected traffic routing inspection result for %s/%s: %+v", tc.resourceType, tc.resourceName, result)
 			}
+		}
+	})
+
+	t.Run("traffic routing resources return live inspection payloads when provider is available", func(t *testing.T) {
+		type call struct {
+			DeploymentName      string
+			ResourceType        string
+			ResourceName        string
+			ResourceDescription string
+			Region              string
+			TargetAccountID     string
+			ObserverRoleARN     string
+		}
+		var calls []call
+		service := NewService(Options{
+			InspectTrafficRoutingResource: func(ctx context.Context, req TrafficRoutingRequest) (TrafficRoutingInspection, error) {
+				calls = append(calls, call(req))
+				switch req.ResourceType {
+				case "codeDeployDeploymentGroup":
+					return TrafficRoutingInspection{
+						Kind:           req.ResourceType,
+						DisplayName:    "CodeDeploy deployment group",
+						InspectionMode: "live",
+						Summary:        req.ResourceDescription,
+						CodeDeployDeploymentGroup: &CodeDeployDeploymentGroupInspection{
+							ApplicationName:       "payments-api-prod-codedeploy-app",
+							DeploymentGroupName:   "payments-api-prod-codedeploy-group",
+							DeploymentConfigName:  "CodeDeployDefault.ECSLinear10PercentEvery1Minutes",
+							ServiceRoleARN:        "arn:aws:iam::123456789012:role/TenetCodeDeployRole",
+							DeploymentType:        "BLUE_GREEN",
+							DeploymentOption:      "WITH_TRAFFIC_CONTROL",
+							ECSServices:           []CodeDeployECSServiceBinding{{ClusterName: "payments-prod", ServiceName: "payments-api-prod-service"}},
+							TargetGroups:          []string{"payments-api-prod-blue", "payments-api-prod-green"},
+							ProductionListenerARN: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:listener/app/payments/abc123/prod456",
+							TestListenerARN:       "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:listener/app/payments/abc123/test789",
+						},
+					}, nil
+				case "productionListener":
+					return TrafficRoutingInspection{
+						Kind:           req.ResourceType,
+						DisplayName:    "Production listener",
+						InspectionMode: "live",
+						Summary:        req.ResourceDescription,
+						Listener: &ListenerInspection{
+							ListenerARN:     "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:listener/app/payments/abc123/prod456",
+							LoadBalancerARN: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/payments/abc123",
+							Port:            443,
+							Protocol:        "HTTPS",
+							SSLPolicy:       "ELBSecurityPolicy-TLS13-1-2-2021-06",
+							Certificates:    []string{"arn:aws:acm:ap-northeast-2:123456789012:certificate/prod"},
+							DefaultActions: []ListenerActionInspection{{
+								Type:           "forward",
+								TargetGroupARN: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-prod-blue/abc123",
+								TargetGroups: []ListenerActionTargetInspection{
+									{TargetGroupARN: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-prod-blue/abc123", Weight: 100},
+								},
+							}},
+						},
+					}, nil
+				case "testListener":
+					return TrafficRoutingInspection{
+						Kind:           req.ResourceType,
+						DisplayName:    "Test listener",
+						InspectionMode: "live",
+						Summary:        req.ResourceDescription,
+						Listener: &ListenerInspection{
+							ListenerARN:     "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:listener/app/payments/abc123/test789",
+							LoadBalancerARN: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/payments/abc123",
+							Port:            8443,
+							Protocol:        "HTTPS",
+							DefaultActions: []ListenerActionInspection{{
+								Type:           "forward",
+								TargetGroupARN: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-prod-green/def456",
+							}},
+						},
+					}, nil
+				default:
+					t.Fatalf("unexpected traffic routing provider request: %+v", req)
+					return TrafficRoutingInspection{}, nil
+				}
+			},
+		})
+
+		for _, tc := range []struct {
+			resourceType string
+			resourceName string
+			summary      string
+		}{
+			{
+				resourceType: "codeDeployDeploymentGroup",
+				resourceName: "payments-api-prod-codedeploy-group",
+				summary:      "CodeDeploy deployment group Tenet targets for ECS rollout (style: linear)",
+			},
+			{
+				resourceType: "productionListener",
+				resourceName: "payments-api-prod-prod-listener",
+				summary:      "Production listener CodeDeploy shifts during ECS traffic shifting (style: linear)",
+			},
+			{
+				resourceType: "testListener",
+				resourceName: "payments-api-prod-test-listener",
+				summary:      "Test listener CodeDeploy uses to validate the replacement ECS task set before promotion (style: linear)",
+			},
+		} {
+			result, err := service.Inspect(context.Background(), Request{
+				DeploymentName:      "payments-api-prod",
+				ResourceType:        tc.resourceType,
+				ResourceName:        tc.resourceName,
+				ResourceDescription: tc.summary,
+				ControlAccountID:    "123456789012",
+				TargetAccountID:     "123456789012",
+				Region:              "ap-northeast-2",
+				ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
+			})
+			if err != nil {
+				t.Fatalf("Inspect returned error for %s/%s: %v", tc.resourceType, tc.resourceName, err)
+			}
+			if !result.Available {
+				t.Fatalf("expected %s/%s to be available, got %+v", tc.resourceType, tc.resourceName, result)
+			}
+			if result.Source != SourceTrafficRoutingAWS {
+				t.Fatalf("expected live traffic routing source for %s/%s, got %q", tc.resourceType, tc.resourceName, result.Source)
+			}
+			if result.TrafficRoutingResource == nil || result.TrafficRoutingResource.InspectionMode != "live" {
+				t.Fatalf("expected live traffic routing payload for %s/%s, got %+v", tc.resourceType, tc.resourceName, result)
+			}
+		}
+		if !reflect.DeepEqual(calls, []call{
+			{
+				DeploymentName:      "payments-api-prod",
+				ResourceType:        "codeDeployDeploymentGroup",
+				ResourceName:        "payments-api-prod-codedeploy-group",
+				ResourceDescription: "CodeDeploy deployment group Tenet targets for ECS rollout (style: linear)",
+				Region:              "ap-northeast-2",
+				TargetAccountID:     "123456789012",
+				ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
+			},
+			{
+				DeploymentName:      "payments-api-prod",
+				ResourceType:        "productionListener",
+				ResourceName:        "payments-api-prod-prod-listener",
+				ResourceDescription: "Production listener CodeDeploy shifts during ECS traffic shifting (style: linear)",
+				Region:              "ap-northeast-2",
+				TargetAccountID:     "123456789012",
+				ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
+			},
+			{
+				DeploymentName:      "payments-api-prod",
+				ResourceType:        "testListener",
+				ResourceName:        "payments-api-prod-test-listener",
+				ResourceDescription: "Test listener CodeDeploy uses to validate the replacement ECS task set before promotion (style: linear)",
+				Region:              "ap-northeast-2",
+				TargetAccountID:     "123456789012",
+				ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
+			},
+		}) {
+			t.Fatalf("unexpected traffic routing provider calls: %+v", calls)
 		}
 	})
 
@@ -309,6 +466,74 @@ func TestServiceInspect(t *testing.T) {
 		}
 		if result.UnavailableReason != "aws_unavailable" || result.Available {
 			t.Fatalf("unexpected AWS unavailable payload: %+v", result)
+		}
+	})
+
+	t.Run("traffic routing resource falls back to summary when AWS is unavailable", func(t *testing.T) {
+		service := NewService(Options{
+			InspectTrafficRoutingResource: func(context.Context, TrafficRoutingRequest) (TrafficRoutingInspection, error) {
+				return TrafficRoutingInspection{}, &smithy.OperationError{
+					ServiceID:     "CodeDeploy",
+					OperationName: "GetDeploymentGroup",
+					Err:           errors.New("get deployment group: get credentials: failed to refresh cached credentials, no EC2 IMDS role found"),
+				}
+			},
+		})
+
+		result, err := service.Inspect(context.Background(), Request{
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "codeDeployDeploymentGroup",
+			ResourceName:        "payments-api-prod-codedeploy-group",
+			ResourceDescription: "CodeDeploy deployment group Tenet targets for ECS rollout (style: linear)",
+			ControlAccountID:    "123456789012",
+			TargetAccountID:     "123456789012",
+			Region:              "ap-northeast-2",
+			ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
+		})
+		if err != nil {
+			t.Fatalf("Inspect returned error: %v", err)
+		}
+		want := Result{
+			DeploymentName: "payments-api-prod",
+			ResourceType:   "codeDeployDeploymentGroup",
+			ResourceName:   "payments-api-prod-codedeploy-group",
+			LookupContext:  expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", "arn:aws:iam::123456789012:role/TenetObserverRole"),
+			Available:      true,
+			Source:         SourceRolloutSummary,
+			TrafficRoutingResource: &TrafficRoutingInspection{
+				Kind:           "codeDeployDeploymentGroup",
+				DisplayName:    "CodeDeploy deployment group",
+				InspectionMode: "summary_only",
+				Summary:        "CodeDeploy deployment group Tenet targets for ECS rollout (style: linear)",
+			},
+		}
+		if !reflect.DeepEqual(result, want) {
+			t.Fatalf("unexpected AWS-unavailable traffic routing fallback payload: %+v", result)
+		}
+	})
+
+	t.Run("traffic shift plan remains summary only even when live provider is configured", func(t *testing.T) {
+		service := NewService(Options{
+			InspectTrafficRoutingResource: func(context.Context, TrafficRoutingRequest) (TrafficRoutingInspection, error) {
+				t.Fatalf("trafficShiftPlan should not invoke live traffic routing provider")
+				return TrafficRoutingInspection{}, nil
+			},
+		})
+
+		result, err := service.Inspect(context.Background(), Request{
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "trafficShiftPlan",
+			ResourceName:        "payments-api-prod-weighted-routing",
+			ResourceDescription: "Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s",
+			ControlAccountID:    "123456789012",
+			TargetAccountID:     "222222222222",
+			Region:              "ap-northeast-2",
+		})
+		if err != nil {
+			t.Fatalf("Inspect returned error: %v", err)
+		}
+		if result.Source != SourceRolloutSummary || result.TrafficRoutingResource == nil || result.TrafficRoutingResource.InspectionMode != "summary_only" {
+			t.Fatalf("expected summary-only traffic shift plan payload, got %+v", result)
 		}
 	})
 

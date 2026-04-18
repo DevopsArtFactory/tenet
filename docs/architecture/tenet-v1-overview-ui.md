@@ -112,18 +112,19 @@ That same fallback identity keeps both resource-log and resource-inspection dril
 - `GET /v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service`
 
 The additive inspection route stays read-only and local-friendly:
-- supported live summaries currently start with `ecsService`, `candidateAutoScalingGroup`, and `serviceAutoScalingGroup`
-- supported summary-only traffic-routing resources are `codeDeployDeploymentGroup`, `productionListener`, `testListener`, and `trafficShiftPlan`
+- supported always-live summaries currently start with `ecsService`, `candidateAutoScalingGroup`, and `serviceAutoScalingGroup`
+- supported traffic-routing resources are `codeDeployDeploymentGroup`, `productionListener`, `testListener`, and `trafficShiftPlan`; `trafficShiftPlan` stays `summary_only`, while the CodeDeploy deployment-group/listener resources upgrade to `inspectionMode=live` when AWS inspection succeeds and fall back to the existing summary payload when it does not
+- `trafficShiftPlan` stays summary-only, while `codeDeployDeploymentGroup`, `productionListener`, and `testListener` preserve that summary fallback locally and add live AWS inspection details on the same `trafficRoutingResource` body when live lookup succeeds
 - responses always include `lookupContext` plus `available`
 - supported ECS payloads add `ecsService`
 - supported Auto Scaling payloads add `autoScalingGroup`
-- supported traffic-routing payloads add `trafficRoutingResource` with `kind`, `displayName`, `inspectionMode`, and controller/fallback `summary`
+- supported traffic-routing payloads add `trafficRoutingResource` with `kind`, `displayName`, `inspectionMode`, controller/fallback `summary`, and additive live `codeDeployDeploymentGroup` or `listener` details when available
 - unsupported or unavailable resources return `available=false` with an explicit `unavailableReason` instead of bubbling a vague provider error into the operator workflow
 
 In the embedded UI, the supported inspection payloads should stay intentionally operator-facing:
 - `ecsService`: service status, desired/running/pending counts, task definition, deployments, and recent ECS service events
 - `autoScalingGroup`: sizing and health-check settings, target group ARNs, and current instances
-- `trafficRoutingResource`: summary-only traffic-routing context with explicit resource kind, display name, inspection mode, and rollout summary text
+- `trafficRoutingResource`: summary-only or live traffic-routing context with explicit resource kind, display name, inspection mode, rollout summary text, and additive CodeDeploy deployment-group or listener details
 
 ### Additional operator views
 The current UI also still exposes supporting operator surfaces beyond the main drill-down path:

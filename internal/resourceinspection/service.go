@@ -19,10 +19,11 @@ import (
 )
 
 const (
-	SourceECSService       = "ecs_service"
-	SourceAutoScalingGroup = "auto_scaling_group"
-	SourceRolloutSummary   = "rollout_execution_summary"
-	ecsServiceHintCacheCap = 256
+	SourceECSService        = "ecs_service"
+	SourceAutoScalingGroup  = "auto_scaling_group"
+	SourceTrafficRoutingAWS = "traffic_routing_aws"
+	SourceRolloutSummary    = "rollout_execution_summary"
+	ecsServiceHintCacheCap  = 256
 )
 
 var ErrNotImplemented = errors.New("resource inspection service not implemented")
@@ -54,10 +55,52 @@ type Result struct {
 }
 
 type TrafficRoutingInspection struct {
-	Kind           string `json:"kind"`
-	DisplayName    string `json:"displayName"`
-	InspectionMode string `json:"inspectionMode"`
-	Summary        string `json:"summary"`
+	Kind                      string                               `json:"kind"`
+	DisplayName               string                               `json:"displayName"`
+	InspectionMode            string                               `json:"inspectionMode"`
+	Summary                   string                               `json:"summary"`
+	CodeDeployDeploymentGroup *CodeDeployDeploymentGroupInspection `json:"codeDeployDeploymentGroup,omitempty"`
+	Listener                  *ListenerInspection                  `json:"listener,omitempty"`
+}
+
+type CodeDeployDeploymentGroupInspection struct {
+	ApplicationName       string                        `json:"applicationName"`
+	DeploymentGroupName   string                        `json:"deploymentGroupName"`
+	DeploymentConfigName  string                        `json:"deploymentConfigName,omitempty"`
+	ServiceRoleARN        string                        `json:"serviceRoleArn,omitempty"`
+	DeploymentType        string                        `json:"deploymentType,omitempty"`
+	DeploymentOption      string                        `json:"deploymentOption,omitempty"`
+	ECSServices           []CodeDeployECSServiceBinding `json:"ecsServices,omitempty"`
+	TargetGroups          []string                      `json:"targetGroups,omitempty"`
+	ProductionListenerARN string                        `json:"productionListenerArn,omitempty"`
+	TestListenerARN       string                        `json:"testListenerArn,omitempty"`
+}
+
+type CodeDeployECSServiceBinding struct {
+	ClusterName string `json:"clusterName,omitempty"`
+	ServiceName string `json:"serviceName,omitempty"`
+}
+
+type ListenerInspection struct {
+	ListenerARN     string                     `json:"listenerArn"`
+	LoadBalancerARN string                     `json:"loadBalancerArn,omitempty"`
+	Port            int32                      `json:"port,omitempty"`
+	Protocol        string                     `json:"protocol,omitempty"`
+	SSLPolicy       string                     `json:"sslPolicy,omitempty"`
+	Certificates    []string                   `json:"certificates,omitempty"`
+	DefaultActions  []ListenerActionInspection `json:"defaultActions,omitempty"`
+}
+
+type ListenerActionInspection struct {
+	Type           string                           `json:"type,omitempty"`
+	Order          int32                            `json:"order,omitempty"`
+	TargetGroupARN string                           `json:"targetGroupArn,omitempty"`
+	TargetGroups   []ListenerActionTargetInspection `json:"targetGroups,omitempty"`
+}
+
+type ListenerActionTargetInspection struct {
+	TargetGroupARN string `json:"targetGroupArn,omitempty"`
+	Weight         int32  `json:"weight,omitempty"`
 }
 
 type ECSServiceInspection struct {
@@ -115,9 +158,10 @@ type AutoScalingGroupInstanceSummary struct {
 }
 
 type Options struct {
-	EnableAWS               bool
-	InspectECSService       func(context.Context, ECSRequest) (ECSServiceInspection, error)
-	InspectAutoScalingGroup func(context.Context, AutoScalingGroupRequest) (AutoScalingInspection, error)
+	EnableAWS                     bool
+	InspectECSService             func(context.Context, ECSRequest) (ECSServiceInspection, error)
+	InspectAutoScalingGroup       func(context.Context, AutoScalingGroupRequest) (AutoScalingInspection, error)
+	InspectTrafficRoutingResource func(context.Context, TrafficRoutingRequest) (TrafficRoutingInspection, error)
 }
 
 type Service struct {
@@ -253,10 +297,50 @@ type AutoScalingGroupRequest struct {
 	ObserverRoleARN string
 }
 
+type TrafficRoutingRequest struct {
+	DeploymentName      string
+	ResourceType        string
+	ResourceName        string
+	ResourceDescription string
+	Region              string
+	TargetAccountID     string
+	ObserverRoleARN     string
+}
+
 func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
 	switch req.ResourceType {
-	case "codeDeployDeploymentGroup", "productionListener", "testListener", "trafficShiftPlan":
+	case "trafficShiftPlan":
 		return availableTrafficRoutingResult(req, trafficRoutingInspection(req)), nil
+	case "codeDeployDeploymentGroup", "productionListener", "testListener":
+		inspect := s.options.InspectTrafficRoutingResource
+		if inspect == nil {
+			if !s.options.EnableAWS {
+				return availableTrafficRoutingResult(req, trafficRoutingInspection(req)), nil
+			}
+			inspect = s.inspectTrafficRoutingResourceFromAWS
+		}
+		if crossAccountWithoutObserverRole(req) {
+			return unavailableResult(req, resourceaws.UnavailableReasonCrossAccountNotConfigured), nil
+		}
+		detail, err := inspect(ctx, TrafficRoutingRequest{
+			DeploymentName:      req.DeploymentName,
+			ResourceType:        req.ResourceType,
+			ResourceName:        req.ResourceName,
+			ResourceDescription: req.ResourceDescription,
+			Region:              req.Region,
+			TargetAccountID:     req.TargetAccountID,
+			ObserverRoleARN:     req.ObserverRoleARN,
+		})
+		if err != nil {
+			if reason, ok := resourceaws.UnavailableReasonForError(err); ok {
+				if reason == resourceaws.UnavailableReasonAWSUnavailable {
+					return availableTrafficRoutingResult(req, trafficRoutingInspection(req)), nil
+				}
+				return unavailableResult(req, reason), nil
+			}
+			return Result{}, err
+		}
+		return availableTrafficRoutingResult(req, detail), nil
 	case "ecsService":
 		if crossAccountWithoutObserverRole(req) {
 			return unavailableResult(req, resourceaws.UnavailableReasonCrossAccountNotConfigured), nil
@@ -362,13 +446,17 @@ func availableAutoScalingResult(req Request, detail AutoScalingInspection) Resul
 }
 
 func availableTrafficRoutingResult(req Request, detail TrafficRoutingInspection) Result {
+	source := SourceTrafficRoutingAWS
+	if detail.InspectionMode == "summary_only" {
+		source = SourceRolloutSummary
+	}
 	return Result{
 		DeploymentName:         req.DeploymentName,
 		ResourceType:           req.ResourceType,
 		ResourceName:           req.ResourceName,
 		LookupContext:          lookupContext(req),
 		Available:              true,
-		Source:                 SourceRolloutSummary,
+		Source:                 source,
 		TrafficRoutingResource: &detail,
 		UnavailableReason:      "",
 	}
@@ -399,10 +487,14 @@ func trafficRoutingDisplayName(resourceType string) string {
 }
 
 func trafficRoutingSummary(req Request) string {
-	if summary := strings.TrimSpace(req.ResourceDescription); summary != "" {
+	return trafficRoutingSummaryText(req.ResourceType, req.ResourceDescription)
+}
+
+func trafficRoutingSummaryText(resourceType, resourceDescription string) string {
+	if summary := strings.TrimSpace(resourceDescription); summary != "" {
 		return summary
 	}
-	switch req.ResourceType {
+	switch resourceType {
 	case "codeDeployDeploymentGroup":
 		return "CodeDeploy deployment group Tenet targets for rollout."
 	case "productionListener":

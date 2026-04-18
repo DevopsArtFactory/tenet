@@ -116,10 +116,11 @@ func Lookup(ctx RequestContext) LookupContext {
 }
 
 type Clients struct {
-	ECS  *ecs.Client
-	Logs *cloudwatchlogs.Client
-	ASG  *autoscaling.Client
-	EC2  *ec2.Client
+	Config aws.Config
+	ECS    *ecs.Client
+	Logs   *cloudwatchlogs.Client
+	ASG    *autoscaling.Client
+	EC2    *ec2.Client
 }
 
 type ClientCacheDeps struct {
@@ -184,10 +185,11 @@ func (c *ClientCache) Clients(ctx context.Context, region, targetAccountID, obse
 			return
 		}
 		entry.clients = Clients{
-			ECS:  c.deps.NewECSClient(cfg),
-			Logs: c.deps.NewLogsClient(cfg),
-			ASG:  c.deps.NewASGClient(cfg),
-			EC2:  c.deps.NewEC2Client(cfg),
+			Config: cfg,
+			ECS:    c.deps.NewECSClient(cfg),
+			Logs:   c.deps.NewLogsClient(cfg),
+			ASG:    c.deps.NewASGClient(cfg),
+			EC2:    c.deps.NewEC2Client(cfg),
 		}
 	})
 	if entry.err != nil {
