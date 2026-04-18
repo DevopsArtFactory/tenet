@@ -2081,8 +2081,15 @@
           return left.index - right.index;
         })
         .map(({ event }) => event);
-      const renderDeploymentEventsState = (section, text, className = '', detailText = '') => {
-        const heading = createElement('h4', '', 'Controller runtime events');
+      const createDeploymentEventsActions = (section, deploymentName, isLoading = false) => [
+        createRefreshButton(
+          'Refresh runtime events',
+          isLoading || !deploymentName,
+          () => renderDeploymentEventsSection(section, deploymentName, { force: true }).catch(() => {}),
+        ),
+      ];
+      const renderDeploymentEventsState = (section, deploymentName, text, className = '', detailText = '', isLoading = false) => {
+        const heading = createDetailSectionHeader('Controller runtime events', createDeploymentEventsActions(section, deploymentName, isLoading));
         const intro = createDeploymentEventsIntro();
         const stateNode = createElement('div', 'detail-state', text);
         if (className) stateNode.classList.add(className);
@@ -2092,14 +2099,14 @@
         }
         section.replaceChildren(heading, intro, stateNode);
       };
-      const renderDeploymentEventsPayload = (section, result) => {
+      const renderDeploymentEventsPayload = (section, deploymentName, result) => {
         const events = sortTimelineEvents(result?.events || []);
         if (!events.length) {
-          renderDeploymentEventsState(section, 'No controller runtime events have been persisted yet.');
+          renderDeploymentEventsState(section, deploymentName, 'No controller runtime events have been persisted yet.');
           return;
         }
 
-        const heading = createElement('h4', '', 'Controller runtime events');
+        const heading = createDetailSectionHeader('Controller runtime events', createDeploymentEventsActions(section, deploymentName));
         const intro = createDeploymentEventsIntro();
         const ordering = createElement('div', 'detail-condition-meta', `${events.length} event${events.length === 1 ? '' : 's'} · newest controller event first`);
         const eventList = createElement('ol', 'detail-list');
@@ -2155,37 +2162,38 @@
 
         section.replaceChildren(heading, intro, ordering, eventList);
       };
-      const renderDeploymentEventsSection = (section, deploymentName) => {
+      const renderDeploymentEventsSection = (section, deploymentName, options = {}) => {
+        const force = Boolean(options?.force);
         const cached = deploymentEventsStateByDeployment.get(deploymentName);
 
         if (!deploymentName) {
-          renderDeploymentEventsState(section, 'Controller runtime events are currently unavailable.', 'error', 'Application detail is missing a deployment name for GET /v1/overview/deployments/{deploymentName}/events.');
+          renderDeploymentEventsState(section, deploymentName, 'Controller runtime events are currently unavailable.', 'error', 'Application detail is missing a deployment name for GET /v1/overview/deployments/{deploymentName}/events.');
           return Promise.resolve(null);
         }
-        if (cached?.status === 'ready') {
-          renderDeploymentEventsPayload(section, cached.result);
+        if (!force && cached?.status === 'ready') {
+          renderDeploymentEventsPayload(section, deploymentName, cached.result);
           return Promise.resolve(cached.result);
         }
         if (cached?.status === 'loading') {
           deploymentEventsStateByDeployment.set(deploymentName, { ...cached, sections: [...(cached.sections || []), section] });
-          renderDeploymentEventsState(section, 'Loading controller runtime events…');
+          renderDeploymentEventsState(section, deploymentName, 'Loading controller runtime events…', '', '', true);
           return cached.promise;
         }
-        if (cached?.status === 'error') {
+        if (!force && cached?.status === 'error') {
           if (cached.error?.kind === 'unavailable') {
-            renderDeploymentEventsState(section, 'Controller runtime events are currently unavailable.', 'error', cached.error.message);
+            renderDeploymentEventsState(section, deploymentName, 'Controller runtime events are currently unavailable.', 'error', cached.error.message);
           } else {
-            renderDeploymentEventsState(section, `Failed to load controller runtime events: ${cached.error?.message || 'unknown error'}`, 'error');
+            renderDeploymentEventsState(section, deploymentName, `Failed to load controller runtime events: ${cached.error?.message || 'unknown error'}`, 'error');
           }
           return Promise.reject(cached.error);
         }
 
-        renderDeploymentEventsState(section, 'Loading controller runtime events…');
+        renderDeploymentEventsState(section, deploymentName, 'Loading controller runtime events…', '', '', true);
         const promise = fetchDeploymentEvents(deploymentName)
           .then((result) => {
             const current = deploymentEventsStateByDeployment.get(deploymentName);
             deploymentEventsStateByDeployment.set(deploymentName, { status: 'ready', result });
-            (current?.sections || []).forEach((container) => renderDeploymentEventsPayload(container, result));
+            (current?.sections || []).forEach((container) => renderDeploymentEventsPayload(container, deploymentName, result));
             return result;
           })
           .catch((error) => {
@@ -2193,10 +2201,10 @@
             deploymentEventsStateByDeployment.set(deploymentName, { status: 'error', error });
             (current?.sections || []).forEach((container) => {
               if (error?.kind === 'unavailable') {
-                renderDeploymentEventsState(container, 'Controller runtime events are currently unavailable.', 'error', error.message);
+                renderDeploymentEventsState(container, deploymentName, 'Controller runtime events are currently unavailable.', 'error', error.message);
                 return;
               }
-              renderDeploymentEventsState(container, `Failed to load controller runtime events: ${error.message}`, 'error');
+              renderDeploymentEventsState(container, deploymentName, `Failed to load controller runtime events: ${error.message}`, 'error');
             });
             throw error;
           });

@@ -80,7 +80,7 @@ The same embedded resource route now also renders a compact quick-navigation str
 
 For recent logs, the embedded card keeps backend lookup context visible with operator-facing labels such as `Lookup region`, `Control account ID`, `Target account ID`, `Cross-account lookup`, and `Observer role configured`. Those fields stay visible in unavailable and empty states so operators can see where Tenet looked before switching to raw AWS troubleshooting. That card also exposes `Refresh recent logs` with the same in-place URL-preserving behavior and per-panel loading disablement.
 
-The deployment-events route is intentionally read-only and controller-derived. It reflects persisted runtime history entries, returns `events: []` when a deployment exists without history yet, and should not be treated as a full durable audit system.
+The deployment-events route is intentionally read-only and controller-derived. It reflects persisted runtime history entries, returns `events: []` when a deployment exists without history yet, and should not be treated as a full durable audit system. The application drill-down now also exposes `Refresh runtime events` on that panel so operators can re-run only `GET /v1/overview/deployments/{deploymentName}/events` in place, preserve the bookmarkable `/?page=application...` URL, and disable just that panel action while the events fetch is in flight.
 
 Canonical fallback resource-detail bindings remain stable so operators can share or bookmark the exact resource page they need:
 - `asgWeightedTargetGroups`

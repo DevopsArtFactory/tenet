@@ -1742,10 +1742,37 @@ func TestApplicationDetailPageDeploymentEventsTimelineStatesWithNodeHarness(t *t
 		t.Fatalf("marshal application events body: %v", err)
 	}
 
+	refreshedEventsJSON, err := json.Marshal(map[string]any{
+		"deploymentName": "payments-api-staging",
+		"events": []map[string]any{
+			{
+				"timestamp":          "2026-04-16T07:14:00Z",
+				"summary":            "Completed traffic shift for v2",
+				"source":             "controller",
+				"targetType":         "ecs",
+				"strategy":           "linear",
+				"executionMode":      "ecsCodeDeploy",
+				"sync":               map[string]any{"state": "Synced", "reason": "latest desired generation applied"},
+				"health":             map[string]any{"overall": "Healthy", "summary": "2/2 tasks healthy"},
+				"rolloutPhase":       "Completed",
+				"currentStep":        "CompleteDeployment",
+				"deployedArtifact":   map[string]any{"image": "ghcr.io/example/payments:v2"},
+				"changeDetails":      []string{"Sync state changed from OutOfSync to Synced"},
+				"conditions":         []map[string]any{{"type": "Ready", "status": true, "reason": "DeploymentComplete", "message": "controller finished the traffic shift"}},
+				"desiredGeneration":  12,
+				"observedGeneration": 12,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal refreshed application events body: %v", err)
+	}
+
 	nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;
 const detailBody = ` + string(detailJSON) + `;
 const eventsBody = ` + string(eventsJSON) + `;
+const refreshedEventsBody = ` + string(refreshedEventsJSON) + `;
 class Element {
   constructor(tagName, ownerDocument) {
     this.tagName = String(tagName).toUpperCase();
@@ -1790,6 +1817,7 @@ const createDocument = () => {
   return document;
 };
 const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
 async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
 async function render(fetchImpl) {
   const document = createDocument();
@@ -1803,24 +1831,40 @@ async function render(fetchImpl) {
   new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
   await settle();
   await settle();
-  return { document, fetchCalls };
+  return { document, fetchCalls, window };
 }
 (async () => {
-  let resolveEvents;
+  const detailURL = '/v1/overview/applications/payments-api-staging';
+  const eventsURL = '/v1/overview/deployments/payments-api-staging/events';
+  const initialSearch = '?page=application&deployment=payments-api-staging';
+  let eventsFetchCount = 0;
+  let resolveInitialEvents;
+  let resolveRefreshEvents;
   const loadingView = await render((url) => {
-    if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === '/v1/overview/deployments/payments-api-staging/events') {
-      return new Promise((resolve) => { resolveEvents = resolve; });
+    if (url === detailURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === eventsURL) {
+      eventsFetchCount += 1;
+      if (eventsFetchCount === 1) {
+        return new Promise((resolve) => { resolveInitialEvents = resolve; });
+      }
+      if (eventsFetchCount === 2) {
+        return new Promise((resolve) => { resolveRefreshEvents = resolve; });
+      }
+      throw new Error('unexpected deployment events fetch count: ' + eventsFetchCount);
     }
     throw new Error('unexpected fetch url: ' + url);
   });
+  let buttons = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  let refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
+  if (!refreshEvents) throw new Error('expected runtime-events refresh button while initial load is pending');
+  if (!refreshEvents.disabled) throw new Error('expected runtime-events refresh button disabled while initial fetch is in flight');
   const loadingText = collectText(loadingView.document.getElementById('accounts')).join(' | ');
   if (!loadingText.includes('Loading controller runtime events…')) throw new Error('expected loading state while deployment events request is pending');
-  if (loadingView.fetchCalls.length !== 2 || loadingView.fetchCalls[0] !== '/v1/overview/applications/payments-api-staging' || loadingView.fetchCalls[1] !== '/v1/overview/deployments/payments-api-staging/events') throw new Error('expected application detail fetch followed by deployment events fetch');
-  resolveEvents({ ok: true, json: () => Promise.resolve(eventsBody) });
+  if (loadingView.fetchCalls.length !== 2 || loadingView.fetchCalls[0] !== detailURL || loadingView.fetchCalls[1] !== eventsURL) throw new Error('expected application detail fetch followed by deployment events fetch');
+  resolveInitialEvents({ ok: true, json: () => Promise.resolve(eventsBody) });
   await settle();
   await settle();
-  const readyText = collectText(loadingView.document.getElementById('accounts')).join(' | ');
+  let readyText = collectText(loadingView.document.getElementById('accounts')).join(' | ');
   if (!readyText.includes('Controller runtime events')) throw new Error('expected controller runtime events section heading');
   if (!readyText.includes('Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.')) throw new Error('expected application page to distinguish controller runtime events from audit/auth history');
   if (!readyText.includes('2 events · newest controller event first')) throw new Error('expected event ordering guidance');
@@ -1836,31 +1880,88 @@ async function render(fetchImpl) {
   if (!readyText.includes('Event details · Current step changed from CreateCodeDeployDeployment to ShiftTrafficLinear')) throw new Error('expected event change details');
   if (!readyText.includes('Source · controller')) throw new Error('expected controller source metadata');
   if (readyText.indexOf('Shifted 50 percent of traffic') > readyText.indexOf('Created deployment group revision for v2')) throw new Error('expected newest event to render before older event');
+  buttons = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
+  if (!refreshEvents) throw new Error('expected runtime-events refresh button after initial response');
+  if (refreshEvents.disabled) throw new Error('expected runtime-events refresh button enabled after initial fetch settles');
+
+  refreshEvents.dispatch('click');
+  await settle();
+  buttons = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
+  if (!refreshEvents) throw new Error('expected runtime-events refresh button during refresh');
+  if (!refreshEvents.disabled) throw new Error('expected runtime-events refresh button disabled only while refresh is in flight');
+  if (loadingView.fetchCalls.length !== 3 || loadingView.fetchCalls[2] !== eventsURL) throw new Error('expected in-place refresh to re-fetch only the deployment events route');
+  if (loadingView.fetchCalls.filter((url) => url === detailURL).length !== 1) throw new Error('expected in-place refresh to avoid reloading application detail');
+  if (loadingView.window.location.search !== initialSearch) throw new Error('expected in-place refresh to preserve bookmarkable application route');
+
+  resolveRefreshEvents({ ok: true, json: () => Promise.resolve(refreshedEventsBody) });
+  await settle();
+  await settle();
+  readyText = collectText(loadingView.document.getElementById('accounts')).join(' | ');
+  if (!readyText.includes('Completed traffic shift for v2')) throw new Error('expected refreshed deployment events payload to render in place');
+  if (readyText.includes('Shifted 50 percent of traffic')) throw new Error('expected refreshed deployment events payload to replace stale ready-state content');
+  buttons = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
+  if (!refreshEvents || refreshEvents.disabled) throw new Error('expected runtime-events refresh button re-enabled after refresh completes');
 
   const emptyView = await render((url) => {
-    if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
+    if (url === detailURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === eventsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
     throw new Error('unexpected fetch url: ' + url);
   });
   const emptyText = collectText(emptyView.document.getElementById('accounts')).join(' | ');
   if (!emptyText.includes('No controller runtime events have been persisted yet.')) throw new Error('expected empty deployment events state');
+  buttons = collectNodes(emptyView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
+  if (!refreshEvents || refreshEvents.disabled) throw new Error('expected runtime-events refresh button enabled in empty state');
 
   const unavailableView = await render((url) => {
-    if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: false, status: 503, text: () => Promise.resolve('overview deployment events unavailable') });
+    if (url === detailURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === eventsURL) return Promise.resolve({ ok: false, status: 503, text: () => Promise.resolve('overview deployment events unavailable') });
     throw new Error('unexpected fetch url: ' + url);
   });
   const unavailableText = collectText(unavailableView.document.getElementById('accounts')).join(' | ');
   if (!unavailableText.includes('Controller runtime events are currently unavailable.')) throw new Error('expected unavailable deployment events state');
   if (!unavailableText.includes('deployment events unavailable (503): overview deployment events unavailable')) throw new Error('expected unavailable deployment events detail');
+  buttons = collectNodes(unavailableView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
+  if (!refreshEvents || refreshEvents.disabled) throw new Error('expected runtime-events refresh button enabled in unavailable state');
 
+  let errorFetchCount = 0;
+  let resolveErrorRefresh;
   const errorView = await render((url) => {
-    if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: false, status: 500, text: () => Promise.resolve('boom') });
+    if (url === detailURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === eventsURL) {
+      errorFetchCount += 1;
+      if (errorFetchCount === 1) return Promise.resolve({ ok: false, status: 500, text: () => Promise.resolve('boom') });
+      if (errorFetchCount === 2) {
+        return new Promise((resolve) => { resolveErrorRefresh = resolve; });
+      }
+      throw new Error('unexpected error-view deployment events fetch count: ' + errorFetchCount);
+    }
     throw new Error('unexpected fetch url: ' + url);
   });
-  const errorText = collectText(errorView.document.getElementById('accounts')).join(' | ');
+  let errorText = collectText(errorView.document.getElementById('accounts')).join(' | ');
   if (!errorText.includes('Failed to load controller runtime events: deployment events request failed (500): boom')) throw new Error('expected generic deployment events fetch error state');
+  buttons = collectNodes(errorView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
+  if (!refreshEvents) throw new Error('expected runtime-events refresh button in error state');
+  if (refreshEvents.disabled) throw new Error('expected runtime-events refresh button enabled after error state settles');
+  refreshEvents.dispatch('click');
+  await settle();
+  buttons = collectNodes(errorView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
+  if (!refreshEvents || !refreshEvents.disabled) throw new Error('expected runtime-events refresh button disabled during error-state refresh');
+  if (errorFetchCount !== 2) throw new Error('expected runtime-events refresh to bypass cached error state');
+  if (errorView.fetchCalls.filter((url) => url === detailURL).length !== 1) throw new Error('expected error-state refresh to avoid reloading application detail');
+  if (errorView.window.location.search !== initialSearch) throw new Error('expected error-state refresh to preserve bookmarkable application route');
+  resolveErrorRefresh({ ok: true, json: () => Promise.resolve(refreshedEventsBody) });
+  await settle();
+  await settle();
+  errorText = collectText(errorView.document.getElementById('accounts')).join(' | ');
+  if (!errorText.includes('Completed traffic shift for v2')) throw new Error('expected refreshed deployment events payload after error-state refresh');
+  if (errorText.includes('Failed to load controller runtime events: deployment events request failed (500): boom')) throw new Error('expected error-state refresh to replace stale error copy');
 })();
 `
 

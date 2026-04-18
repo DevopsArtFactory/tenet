@@ -97,6 +97,7 @@ Current behavior:
 - explicit `Loading controller runtime events…`, empty, unavailable, and generic fetch-error states for that section
 - event ordering labeled as newest-first with readable time, summary, sync/health context, rollout phase/current step, and optional controller metadata
 - explicitly labels these as controller-derived runtime events, not audit/auth history
+- the `Controller runtime events` section header now includes an in-place `Refresh runtime events` button that re-runs just that deployment-events route in place, keeps the bookmarkable `/?page=application...` URL stable, and disables only while that section fetch is active
 - grouped resource sections:
   - `Workloads`
   - `Traffic routing`

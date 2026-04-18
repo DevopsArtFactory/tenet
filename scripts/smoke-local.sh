@@ -672,6 +672,7 @@ assert 'Total rows' in ui, ui
 assert 'Visible rows' in ui, ui
 assert 'No field-level drift rows match the current filters. Adjust the query or severity filters to inspect reported drift.' in ui, ui
 assert 'Controller runtime events' in ui, ui
+assert 'Refresh runtime events' in ui, ui
 assert 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.' in ui, ui
 assert 'Loading controller runtime events…' in ui, ui
 assert 'No controller runtime events have been persisted yet.' in ui, ui
