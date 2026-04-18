@@ -248,8 +248,8 @@ func TestProjectApplyPreservesQueuedLifecycleMetadata(t *testing.T) {
 		Status:         applyrequest.StatusQueued,
 		CreatedAt:      "2026-04-18T08:30:00Z",
 		Details: []string{
-			"Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true.",
-			"No AWS mutation has been implemented for this backend slice yet.",
+			"Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true enabled the local-safe executor handoff path.",
+			"Tenet will advance this same applyId locally, but live AWS mutation is still not implemented for this backend slice.",
 		},
 		Source: applyrequest.SourceContext{
 			Route:       "/v1/plans/plan_ready",

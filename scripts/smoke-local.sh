@@ -68,6 +68,29 @@ assert headers.get("request-id"), headers
 PY
 }
 
+wait_for_apply_status() {
+  local apply_id=$1
+  local expected_status=$2
+  local response='{}'
+
+  for _ in $(seq 1 50); do
+    response=$(curl -fsS "http://$HOST:$PORT/v1/applies/$apply_id")
+    current_status=$(APPLY_RECORD_JSON="$response" python3 - <<'PY'
+import json, os
+print(json.loads(os.environ['APPLY_RECORD_JSON'])['status'])
+PY
+)
+    if [[ "$current_status" == "$expected_status" ]]; then
+      printf '%s' "$response"
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  printf '%s' "$response"
+  return 1
+}
+
 TENET_API_ADDR=":$PORT" TENET_REPO_ROOT="$REPO_ROOT" TENET_STATUS_PATH="$STATUS_PATH" TENET_PLAN_STORE_PATH="$PLAN_STORE_PATH" TENET_APPLY_STORE_PATH="$APPLY_STORE_PATH" TENET_AWS_ENABLE_APPLY="$APPLY_ENABLED" \
   go run ./cmd/tenet-api >"$LOG_FILE" 2>&1 &
 API_PID=$!
@@ -112,12 +135,10 @@ import json, os
 print(json.loads(os.environ['APPLY_RECORD_JSON'])['id'])
 PY
 )
-apply_record_get=$(curl -fsS "http://$HOST:$PORT/v1/applies/$apply_id")
-apply_transition='{}'
 if [[ "$APPLY_ENABLED" == "true" ]]; then
-  apply_transition=$(curl -fsS -X POST -H 'Content-Type: application/json' \
-    -d '{"status":"running","step":1,"details":["executor picked up queued apply request"]}' \
-    "http://$HOST:$PORT/v1/applies/$apply_id/transitions")
+  apply_record_get=$(wait_for_apply_status "$apply_id" failed)
+else
+  apply_record_get=$(curl -fsS "http://$HOST:$PORT/v1/applies/$apply_id")
 fi
 actor_plan_preview=$(curl -fsS -X POST \
   -H "Content-Type: application/json" \
@@ -142,7 +163,11 @@ import json, os
 print(json.loads(os.environ['ACTOR_APPLY_RECORD_JSON'])['id'])
 PY
 )
-actor_apply_record_get=$(curl -fsS "http://$HOST:$PORT/v1/applies/$actor_apply_id")
+if [[ "$APPLY_ENABLED" == "true" ]]; then
+  actor_apply_record_get=$(wait_for_apply_status "$actor_apply_id" failed)
+else
+  actor_apply_record_get=$(curl -fsS "http://$HOST:$PORT/v1/applies/$actor_apply_id")
+fi
 stale_plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d '{"ifMatch":"plan_deadbeef"}' "http://$HOST:$PORT/v1/plans/deployments/payments-api-prod")
 cat >"$REPO_ROOT/deployments/payments-api-stale.yaml" <<'EOF'
 name: payments-api-stale
@@ -225,7 +250,6 @@ plan_preview_path=$(write_payload plan-preview.json "$plan_preview")
 plan_preview_get_path=$(write_payload plan-preview-get.json "$plan_preview_get")
 apply_record_path=$(write_payload apply-record.json "$apply_record")
 apply_record_get_path=$(write_payload apply-record-get.json "$apply_record_get")
-apply_transition_path=$(write_payload apply-transition.json "$apply_transition")
 actor_plan_preview_path=$(write_payload actor-plan-preview.json "$actor_plan_preview")
 actor_plan_preview_get_path=$(write_payload actor-plan-preview-get.json "$actor_plan_preview_get")
 actor_apply_record_path=$(write_payload actor-apply-record.json "$actor_apply_record")
@@ -253,7 +277,7 @@ audit_ui_path=$(write_payload audit-ui.html "$audit_ui")
 plan_ui_path=$(write_payload plan-ui.html "$plan_ui")
 apply_ui_path=$(write_payload apply-ui.html "$apply_ui")
 
-SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" APPLY_TRANSITION_PATH="$apply_transition_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" STALE_APPLY_PLAN_PREVIEW_PATH="$stale_apply_plan_preview_path" STALE_APPLY_CONFLICT_PATH="$stale_apply_conflict_path" STALE_APPLY_CONFLICT_STATUS="$stale_apply_conflict_status" STALE_APPLY_AUDIT_LOGS_PATH="$stale_apply_audit_logs_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" RESOURCE_LOGS_PATH="$resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" UI_PATH="$ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" APPLY_ENABLED="$APPLY_ENABLED" python3 - <<'PY'
+SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" STALE_APPLY_PLAN_PREVIEW_PATH="$stale_apply_plan_preview_path" STALE_APPLY_CONFLICT_PATH="$stale_apply_conflict_path" STALE_APPLY_CONFLICT_STATUS="$stale_apply_conflict_status" STALE_APPLY_AUDIT_LOGS_PATH="$stale_apply_audit_logs_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" RESOURCE_LOGS_PATH="$resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" UI_PATH="$ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" APPLY_ENABLED="$APPLY_ENABLED" python3 - <<'PY'
 import json, os
 
 def read_json(path_env):
@@ -277,7 +301,6 @@ plan_preview = read_json('PLAN_PREVIEW_PATH')
 plan_preview_get = read_json('PLAN_PREVIEW_GET_PATH')
 apply_record = read_json('APPLY_RECORD_PATH')
 apply_record_get = read_json('APPLY_RECORD_GET_PATH')
-apply_transition = read_json('APPLY_TRANSITION_PATH')
 actor_plan_preview = read_json('ACTOR_PLAN_PREVIEW_PATH')
 actor_plan_preview_get = read_json('ACTOR_PLAN_PREVIEW_GET_PATH')
 actor_apply_record = read_json('ACTOR_APPLY_RECORD_PATH')
@@ -369,8 +392,8 @@ assert apply_record['status'] == ('queued' if apply_enabled else 'failed'), appl
 if apply_enabled:
     assert not apply_record.get('error'), apply_record
     assert apply_record['details'] == [
-        'Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true.',
-        'No AWS mutation has been implemented for this backend slice yet.',
+        'Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true enabled the local-safe executor handoff path.',
+        'Tenet will advance this same applyId locally, but live AWS mutation is still not implemented for this backend slice.',
     ], apply_record
 else:
     assert apply_record['error'] == 'apply execution is disabled', apply_record
@@ -392,16 +415,22 @@ assert apply_record['source']['route'] == f"/v1/plans/{plan_preview['id']}", app
 assert apply_record['source']['planStatus'] == 'ready', apply_record
 assert apply_record['source']['fingerprint'] == plan_preview['source']['fingerprint'], (apply_record, plan_preview)
 if apply_enabled:
-    assert apply_transition['id'] == apply_record['id'], (apply_transition, apply_record)
-    assert apply_transition['status'] == 'running', apply_transition
-    assert apply_transition.get('error', '') == '', apply_transition
-    assert apply_transition['details'] == ['executor picked up queued apply request'], apply_transition
-    assert apply_transition['lifecycle']['currentStep'] == 1, apply_transition
-    assert apply_transition['lifecycle'].get('completedSteps', 0) == 0, apply_transition
-    assert apply_transition['lifecycle']['totalSteps'] == len(apply_transition['operations']), apply_transition
-    assert isinstance(apply_transition['lifecycle'].get('startedAt'), str) and apply_transition['lifecycle']['startedAt'], apply_transition
-    assert [operation['status'] for operation in apply_transition['operations']] == ['running'] + ['queued'] * (len(apply_transition['operations']) - 1), apply_transition
-assert apply_record_get == apply_record, (apply_record_get, apply_record)
+    assert apply_record_get['id'] == apply_record['id'], (apply_record_get, apply_record)
+    assert apply_record_get['status'] == 'failed', apply_record_get
+    assert apply_record_get['error'] == 'apply executor handoff stopped before live AWS mutation because this backend slice is still local-safe', apply_record_get
+    assert apply_record_get['lifecycle']['currentStep'] == 1, apply_record_get
+    assert apply_record_get['lifecycle'].get('completedSteps', 0) == 0, apply_record_get
+    assert apply_record_get['lifecycle']['totalSteps'] == len(apply_record_get['operations']), apply_record_get
+    assert isinstance(apply_record_get['lifecycle'].get('startedAt'), str) and apply_record_get['lifecycle']['startedAt'], apply_record_get
+    assert isinstance(apply_record_get['lifecycle'].get('finishedAt'), str) and apply_record_get['lifecycle']['finishedAt'], apply_record_get
+    assert apply_record_get['details'] == [
+        'Tenet executor advanced this apply request on the same applyId without calling the manual transition API.',
+        'Tenet then marked the request failed because live AWS mutation is not implemented for this backend slice yet.',
+        'The local-safe executor stopped at step 1 after recording the handoff state.',
+    ], apply_record_get
+    assert [operation['status'] for operation in apply_record_get['operations']] == ['failed'] + ['queued'] * (len(apply_record_get['operations']) - 1), apply_record_get
+else:
+    assert apply_record_get == apply_record, (apply_record_get, apply_record)
 assert actor_plan_preview['deploymentName'] == 'payments-api-staging', actor_plan_preview
 assert actor_plan_preview['actor']['available'] is True, actor_plan_preview
 assert actor_plan_preview['actor']['name'] == 'Jane Operator', actor_plan_preview
@@ -413,7 +442,14 @@ assert actor_apply_record['actor']['name'] == 'Jane Operator', actor_apply_recor
 assert actor_apply_record['actor']['email'] == 'jane@example.com', actor_apply_record
 assert isinstance(actor_apply_record.get('operations', []), list) and actor_apply_record['operations'], actor_apply_record
 assert all(operation['status'] == ('queued' if apply_enabled else 'pending') for operation in actor_apply_record['operations']), actor_apply_record
-assert actor_apply_record_get == actor_apply_record, (actor_apply_record_get, actor_apply_record)
+if apply_enabled:
+    assert actor_apply_record_get['id'] == actor_apply_record['id'], (actor_apply_record_get, actor_apply_record)
+    assert actor_apply_record_get['status'] == 'failed', actor_apply_record_get
+    assert actor_apply_record_get['actor']['available'] is True, actor_apply_record_get
+    assert actor_apply_record_get['actor']['name'] == 'Jane Operator', actor_apply_record_get
+    assert actor_apply_record_get['actor']['email'] == 'jane@example.com', actor_apply_record_get
+else:
+    assert actor_apply_record_get == actor_apply_record, (actor_apply_record_get, actor_apply_record)
 assert stale_plan_preview['status'] == 'failed', stale_plan_preview
 assert stale_plan_preview['source']['fingerprint'] == deployment_detail['sourceFingerprint'], (stale_plan_preview, deployment_detail)
 assert isinstance(stale_plan_preview.get('errors', []), list) and stale_plan_preview['errors'], stale_plan_preview

@@ -26,6 +26,14 @@ func (s *memoryStore) Get(_ context.Context, id string) (Record, error) {
 	return record, nil
 }
 
+func (s *memoryStore) List(_ context.Context) ([]Record, error) {
+	records := make([]Record, 0, len(s.records))
+	for _, record := range s.records {
+		records = append(records, record)
+	}
+	return list(records), nil
+}
+
 func (s *memoryStore) Save(_ context.Context, record Record) error {
 	s.saveCalls++
 	if s.records == nil {
@@ -159,7 +167,7 @@ func TestServiceCreatePersistsImmutableQueuedApplyRequestWhenExecutionIsEnabled(
 	if result.Record.Lifecycle.UpdatedAt != "2026-04-18T08:05:00Z" || result.Record.Lifecycle.FinishedAt != "" || result.Record.Lifecycle.TotalSteps != 2 {
 		t.Fatalf("expected queued lifecycle metadata, got %+v", result.Record.Lifecycle)
 	}
-	if len(result.Record.Details) != 2 || !strings.Contains(result.Record.Details[0], "TENET_AWS_ENABLE_APPLY=true") {
+	if len(result.Record.Details) != 2 || !strings.Contains(result.Record.Details[0], "TENET_AWS_ENABLE_APPLY=true") || !strings.Contains(result.Record.Details[1], "same applyId locally") {
 		t.Fatalf("expected queued details, got %+v", result.Record.Details)
 	}
 	if len(result.Record.Operations) != 2 {
@@ -349,8 +357,8 @@ func TestServiceTransitionAdvancesQueuedApplyRequestToRunningAndSucceeded(t *tes
 				Status:         StatusQueued,
 				CreatedAt:      "2026-04-18T08:05:00Z",
 				Details: []string{
-					"Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true.",
-					"No AWS mutation has been implemented for this backend slice yet.",
+					"Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true enabled the local-safe executor handoff path.",
+					"Tenet will advance this same applyId locally, but live AWS mutation is still not implemented for this backend slice.",
 				},
 				Lifecycle: Lifecycle{
 					UpdatedAt:  "2026-04-18T08:05:00Z",

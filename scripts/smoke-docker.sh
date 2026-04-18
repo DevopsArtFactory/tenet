@@ -136,6 +136,31 @@ wait_for_api_health() {
   curl -fsS "$API_BASE_URL/healthz" >/dev/null
 }
 
+wait_for_apply_status() {
+  local apply_id=$1
+  local expected_status=$2
+  local response='{}'
+
+  for _ in $(seq 1 50); do
+    response=$(curl -fsS "$API_BASE_URL/v1/applies/$apply_id")
+    current_status=$(APPLY_RECORD_JSON="$response" python3 - <<'PY'
+import json
+import os
+
+print(json.loads(os.environ["APPLY_RECORD_JSON"])["status"])
+PY
+)
+    if [[ "$current_status" == "$expected_status" ]]; then
+      printf '%s' "$response"
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  printf '%s' "$response"
+  return 1
+}
+
 restart_api_with_apply_mode() {
   local apply_enabled=$1
 
@@ -577,7 +602,7 @@ import os
 print(json.loads(os.environ["QUEUED_APPLY_RECORD_JSON"])["id"])
 PY
 )
-queued_apply_record_get=$(curl -fsS "$API_BASE_URL/v1/applies/$queued_apply_id")
+queued_apply_record_get=$(wait_for_apply_status "$queued_apply_id" failed)
 
 QUEUED_PLAN_PREVIEW_JSON="$queued_plan_preview" \
 QUEUED_PLAN_PREVIEW_GET_JSON="$queued_plan_preview_get" \
@@ -604,8 +629,8 @@ assert not queued_apply_record.get("error"), queued_apply_record
 assert isinstance(queued_apply_record.get("id"), str) and queued_apply_record["id"].startswith("apply_"), queued_apply_record
 assert isinstance(queued_apply_record.get("createdAt"), str) and queued_apply_record["createdAt"], queued_apply_record
 assert queued_apply_record["details"] == [
-    "Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true.",
-    "No AWS mutation has been implemented for this backend slice yet.",
+    "Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true enabled the local-safe executor handoff path.",
+    "Tenet will advance this same applyId locally, but live AWS mutation is still not implemented for this backend slice.",
 ], queued_apply_record
 assert isinstance(queued_apply_record.get("operations", []), list) and queued_apply_record["operations"], queued_apply_record
 assert len(queued_apply_record["operations"]) == len(queued_plan_preview["operations"]), (queued_apply_record, queued_plan_preview)
@@ -617,7 +642,18 @@ assert queued_apply_record["source"]["route"] == f"/v1/plans/{queued_plan_previe
 assert queued_apply_record["source"]["planId"] == queued_plan_preview["id"], queued_apply_record
 assert queued_apply_record["source"]["planStatus"] == "ready", queued_apply_record
 assert queued_apply_record["source"]["fingerprint"] == queued_plan_preview["source"]["fingerprint"], (queued_apply_record, queued_plan_preview)
-assert queued_apply_record_get == queued_apply_record, (queued_apply_record_get, queued_apply_record)
+assert queued_apply_record_get["id"] == queued_apply_record["id"], (queued_apply_record_get, queued_apply_record)
+assert queued_apply_record_get["status"] == "failed", queued_apply_record_get
+assert queued_apply_record_get["error"] == "apply executor handoff stopped before live AWS mutation because this backend slice is still local-safe", queued_apply_record_get
+assert queued_apply_record_get["details"] == [
+    "Tenet executor advanced this apply request on the same applyId without calling the manual transition API.",
+    "Tenet then marked the request failed because live AWS mutation is not implemented for this backend slice yet.",
+    "The local-safe executor stopped at step 1 after recording the handoff state.",
+], queued_apply_record_get
+assert queued_apply_record_get["lifecycle"]["currentStep"] == 1, queued_apply_record_get
+assert isinstance(queued_apply_record_get["lifecycle"].get("startedAt"), str) and queued_apply_record_get["lifecycle"]["startedAt"], queued_apply_record_get
+assert isinstance(queued_apply_record_get["lifecycle"].get("finishedAt"), str) and queued_apply_record_get["lifecycle"]["finishedAt"], queued_apply_record_get
+assert [operation["status"] for operation in queued_apply_record_get["operations"]] == ["failed"] + ["queued"] * (len(queued_apply_record_get["operations"]) - 1), queued_apply_record_get
 PY
 
 echo "smoke-docker: compose stack path ok"

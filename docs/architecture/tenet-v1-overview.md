@@ -129,6 +129,7 @@ Included now:
 - catalog compilation and validation
 - runtime status foundations
 - read-only control-plane API
+- local-safe apply executor handoff for immutable apply requests when explicitly enabled
 - embedded UI with applications -> application -> resource drill-down
 
 Not included yet:

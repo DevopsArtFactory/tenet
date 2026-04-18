@@ -196,8 +196,8 @@ func (s Service) initialError() string {
 func (s Service) initialDetails() []string {
 	if s.EnableAWSApply {
 		return []string{
-			"Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true.",
-			"No AWS mutation has been implemented for this backend slice yet.",
+			"Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true enabled the local-safe executor handoff path.",
+			"Tenet will advance this same applyId locally, but live AWS mutation is still not implemented for this backend slice.",
 		}
 	}
 	return []string{

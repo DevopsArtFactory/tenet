@@ -110,6 +110,22 @@ func (s FileStore) Get(_ context.Context, id string) (Record, error) {
 	return get(records, id)
 }
 
+// List returns all persisted apply requests.
+func (s FileStore) List(_ context.Context) ([]Record, error) {
+	if s.Path == "" {
+		return nil, fmt.Errorf("file apply request store path is required")
+	}
+	records, err := Load(s.Path)
+	if err != nil {
+		var pathErr *os.PathError
+		if errors.As(err, &pathErr) && errors.Is(pathErr.Err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return records, nil
+}
+
 // Save persists one immutable apply request by ID.
 func (s FileStore) Save(_ context.Context, record Record) error {
 	if s.Path == "" {
