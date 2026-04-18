@@ -43,7 +43,7 @@ The additive `lookupContext` object is always present, including unavailable res
 
 ## Embedded UI behavior
 
-The resource-detail page at `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}` now renders a `Recent logs` section and lazy-loads this route after the deployment detail payload resolves.
+The resource-detail page at `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}` now renders a `Recent logs` section and lazy-loads this route after the deployment detail payload resolves. That section also renders an explicit `Refresh recent logs` button so operators can re-run only this route in place without changing the bookmarkable URL.
 
 When the payload arrives, the card surfaces the backend `lookupContext` directly with operator-friendly labels:
 - `Lookup region`
@@ -57,6 +57,7 @@ The UI keeps the logs slice narrowly scoped to the selected resource and uses sa
 - `textContent`
 - `replaceChildren`
 - no `innerHTML` for log messages
+- the refresh button disables only while the recent-log fetch is in flight; it does not block the neighboring `Live inspection` panel
 
 Rendered states:
 - loading: `Loading recent logs…`
@@ -71,3 +72,4 @@ This slice is intentionally read-only and refresh-based:
 - cross-account reads depend on the API process having usable AWS credentials and optional assume-role access
 - local fixture/smoke environments usually show the section itself but may return unavailable data because no live AWS log source is configured, or an empty `entries[]` state when a supported resource simply has no recent lines
 - the route describes recent operator-facing logs only; it is not a durable audit/event stream
+- manual refresh still preserves the shared in-process dedupe path for concurrent consumers, but it bypasses stale cached ready/error UI state so operators can force a new read from the backend route

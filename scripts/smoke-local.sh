@@ -618,6 +618,7 @@ assert 'Controller runtime events are currently unavailable.' in ui, ui
 assert 'Live inspection' in ui, ui
 assert 'Loading live inspection…' in ui, ui
 assert 'Live inspection is unavailable for this resource.' in ui, ui
+assert 'Refresh live inspection' in ui, ui
 assert 'No live inspection details are available for this resource yet.' in ui, ui
 assert 'Service deployments' in ui, ui
 assert 'Auto Scaling Group name' in ui, ui
@@ -649,6 +650,7 @@ assert 'Open plan/apply workspace' in audit_ui, audit_ui
 assert "fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`)" in ui, ui
 assert "const ifMatch = detail.sourceFingerprint || await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;" in ui, ui
 assert 'Recent logs' in ui, ui
+assert 'Refresh recent logs' in ui, ui
 assert 'Lookup region' in ui, ui
 assert 'Observer role configured' in ui, ui
 assert 'Plan preview actions' in ui, ui

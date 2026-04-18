@@ -2785,6 +2785,212 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
 	runNodeHarness(t, nodeProgram)
 }
 
+func TestResourceDetailPageRefreshControlsWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	detailJSON, err := json.Marshal(map[string]any{
+		"name":         "payments-api-staging",
+		"accountName":  "staging-core",
+		"awsAccountId": "210987654321",
+		"region":       "ap-northeast-2",
+		"rollout": map[string]any{
+			"execution": []map[string]any{
+				{"name": "payments-api-staging-service", "resource": "ecsService", "description": "Primary ECS service"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal refresh detail body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+async function settle(count = 1) { for (let i = 0; i < count; i += 1) { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); } }
+const resourceID = 'ecsService::payments-api-staging-service::Primary ECS service';
+const deploymentURL = '/v1/overview/deployments/payments-api-staging';
+const logsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service';
+const inspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service';
+const initialSearch = '?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(resourceID);
+const fetchCalls = [];
+let logsFetchCount = 0;
+let inspectionFetchCount = 0;
+let resolveInitialLogs;
+let resolveInitialInspection;
+let resolveRefreshLogs;
+let resolveRefreshInspection;
+const window = { location: { pathname: '/', search: initialSearch, hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === deploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === logsURL) {
+    logsFetchCount += 1;
+    if (logsFetchCount === 1) return new Promise((resolve) => { resolveInitialLogs = resolve; });
+    if (logsFetchCount === 2) return new Promise((resolve) => { resolveRefreshLogs = resolve; });
+    throw new Error('unexpected logs fetch count: ' + logsFetchCount);
+  }
+  if (url === inspectionURL) {
+    inspectionFetchCount += 1;
+    if (inspectionFetchCount === 1) return new Promise((resolve) => { resolveInitialInspection = resolve; });
+    if (inspectionFetchCount === 2) return new Promise((resolve) => { resolveRefreshInspection = resolve; });
+    throw new Error('unexpected inspection fetch count: ' + inspectionFetchCount);
+  }
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle(1);
+  const root = document.getElementById('accounts');
+  let text = collectText(root).join(' | ');
+  let buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  let refreshLogs = buttons.find((node) => node.textContent === 'Refresh recent logs');
+  let refreshInspection = buttons.find((node) => node.textContent === 'Refresh live inspection');
+  if (!refreshLogs || !refreshInspection) throw new Error('expected resource refresh buttons while sections are loading');
+  if (!refreshLogs.disabled || !refreshInspection.disabled) throw new Error('expected resource refresh buttons disabled while initial fetches are in flight');
+  if (!text.includes('Loading recent logs…')) throw new Error('expected initial loading state for recent logs');
+  if (!text.includes('Loading live inspection…')) throw new Error('expected initial loading state for live inspection');
+
+  resolveInitialLogs({ ok: true, json: () => Promise.resolve({
+    available: true,
+    source: 'cloudwatch',
+    lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true },
+    entries: [{ timestamp: '2026-04-18T00:15:00Z', stream: 'ecs/payments-api-staging/1', message: 'Initial recent log line' }],
+  }) });
+  resolveInitialInspection({ ok: false, status: 503, json: () => Promise.resolve({}) });
+  await settle(3);
+
+  text = collectText(root).join(' | ');
+  buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  refreshLogs = buttons.find((node) => node.textContent === 'Refresh recent logs');
+  refreshInspection = buttons.find((node) => node.textContent === 'Refresh live inspection');
+  if (!refreshLogs || !refreshInspection) throw new Error('expected resource refresh buttons after initial responses');
+  if (refreshLogs.disabled || refreshInspection.disabled) throw new Error('expected resource refresh buttons enabled after initial terminal states');
+  if (!text.includes('Initial recent log line')) throw new Error('expected initial recent log payload before refresh');
+  if (!text.includes('Failed to load live inspection: resource inspection request failed (503)')) throw new Error('expected initial live inspection error state before refresh');
+
+  refreshLogs.dispatch('click');
+  await settle(1);
+  buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  refreshLogs = buttons.find((node) => node.textContent === 'Refresh recent logs');
+  refreshInspection = buttons.find((node) => node.textContent === 'Refresh live inspection');
+  if (!refreshLogs || !refreshInspection) throw new Error('expected refresh buttons during recent-logs refresh');
+  if (!refreshLogs.disabled) throw new Error('expected recent-logs refresh button disabled while its fetch is in flight');
+  if (refreshInspection.disabled) throw new Error('expected live-inspection refresh button to stay enabled during recent-logs refresh');
+  if (logsFetchCount !== 2) throw new Error('expected recent-logs refresh to bypass cached ready state');
+  if (window.location.search !== initialSearch) throw new Error('expected recent-logs refresh to preserve bookmarkable URL');
+
+  resolveRefreshLogs({ ok: true, json: () => Promise.resolve({
+    available: true,
+    source: 'cloudwatch',
+    lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true },
+    entries: [{ timestamp: '2026-04-18T00:16:00Z', stream: 'ecs/payments-api-staging/2', message: 'Updated recent log line' }],
+  }) });
+  await settle(3);
+
+  text = collectText(root).join(' | ');
+  if (!text.includes('Updated recent log line')) throw new Error('expected recent-logs refresh to render fresh payload');
+  if (text.includes('Initial recent log line')) throw new Error('expected recent-logs refresh to replace stale payload');
+
+  buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  refreshLogs = buttons.find((node) => node.textContent === 'Refresh recent logs');
+  refreshInspection = buttons.find((node) => node.textContent === 'Refresh live inspection');
+  if (!refreshLogs || !refreshInspection) throw new Error('expected refresh buttons before live-inspection refresh');
+  refreshInspection.dispatch('click');
+  await settle(1);
+  buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  refreshLogs = buttons.find((node) => node.textContent === 'Refresh recent logs');
+  refreshInspection = buttons.find((node) => node.textContent === 'Refresh live inspection');
+  if (!refreshLogs || !refreshInspection) throw new Error('expected refresh buttons during live-inspection refresh');
+  if (!refreshInspection.disabled) throw new Error('expected live-inspection refresh button disabled while its fetch is in flight');
+  if (refreshLogs.disabled) throw new Error('expected recent-logs refresh button to stay enabled during live-inspection refresh');
+  if (inspectionFetchCount !== 2) throw new Error('expected live-inspection refresh to bypass cached error state');
+  if (window.location.search !== initialSearch) throw new Error('expected live-inspection refresh to preserve bookmarkable URL');
+
+  resolveRefreshInspection({ ok: true, json: () => Promise.resolve({
+    available: true,
+    source: 'ecs_service',
+    lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true },
+    ecsService: {
+      clusterArn: 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-staging',
+      serviceArn: 'arn:aws:ecs:ap-northeast-2:210987654321:service/payments-staging/payments-api-staging-service',
+      serviceName: 'payments-api-staging-service',
+      status: 'ACTIVE',
+      launchType: 'FARGATE',
+      desiredCount: 2,
+      runningCount: 2,
+      pendingCount: 0,
+      taskDefinition: 'payments-api:43',
+      deployments: [],
+      events: [{ createdAt: '2026-04-18T00:17:00Z', message: 'Service reached steady state again' }],
+    },
+  }) });
+  await settle(3);
+
+  text = collectText(root).join(' | ');
+  if (!text.includes('Service name')) throw new Error('expected refreshed live inspection payload to render supported fields');
+  if (!text.includes('payments-api-staging-service')) throw new Error('expected refreshed live inspection payload to render service name');
+  if (!text.includes('Service reached steady state again')) throw new Error('expected refreshed live inspection payload to render fresh event text');
+  if (text.includes('Failed to load live inspection: resource inspection request failed (503)')) throw new Error('expected refreshed live inspection payload to replace stale error state');
+  if (fetchCalls.filter((url) => url === deploymentURL).length !== 1) throw new Error('expected in-place refresh controls not to reload deployment detail');
+  if (fetchCalls.filter((url) => url === logsURL).length !== 2) throw new Error('expected exactly two recent-logs fetches');
+  if (fetchCalls.filter((url) => url === inspectionURL).length !== 2) throw new Error('expected exactly two live-inspection fetches');
+  if (window.location.search !== initialSearch) throw new Error('expected bookmarkable URL to remain unchanged after both refreshes');
+})();
+`
+
+	runNodeHarness(t, nodeProgram)
+}
+
 func TestResourceDetailPageWithNodeHarnessResolvesDuplicateSameTypeResources(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not installed")
@@ -4407,7 +4613,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
 				expectedHeading: "Apply request queued",
 				expectedMessage: "recorded as queued",
 				lifecycle: map[string]any{
-					"updatedAt":  "2026-04-18T08:01:00Z",
+					"updatedAt":   "2026-04-18T08:01:00Z",
 					"currentStep": 1,
 					"totalSteps":  5,
 				},
