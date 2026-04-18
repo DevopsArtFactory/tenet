@@ -2627,6 +2627,37 @@
         const terminal = counts.succeeded + counts.failed + counts.cancelled;
         return `${terminal}/${counts.total} terminal · ${counts.running} running · ${counts.queued} queued`;
       };
+      const applyLifecycleTimestampValue = (lifecycle, field) => {
+        const value = lifecycle?.[field];
+        return typeof value === 'string' && value ? value : '—';
+      };
+      const applyLifecycleStepValue = (lifecycle, field) => Number.isFinite(lifecycle?.[field]) && lifecycle[field] > 0
+        ? String(lifecycle[field])
+        : '—';
+      const hasApplyLifecycleMetadata = (record) => {
+        const lifecycle = record?.lifecycle;
+        if (!lifecycle || typeof lifecycle !== 'object') return false;
+        return ['updatedAt', 'startedAt', 'finishedAt'].some((field) => applyLifecycleTimestampValue(lifecycle, field) !== '—') ||
+          ['currentStep', 'completedSteps', 'totalSteps'].some((field) => applyLifecycleStepValue(lifecycle, field) !== '—');
+      };
+      const applyLifecycleProgressText = (record) => {
+        const lifecycle = record?.lifecycle;
+        const currentStep = applyLifecycleStepValue(lifecycle, 'currentStep');
+        const completedSteps = applyLifecycleStepValue(lifecycle, 'completedSteps');
+        const totalSteps = applyLifecycleStepValue(lifecycle, 'totalSteps');
+        const parts = [];
+        if (currentStep !== '—' && totalSteps !== '—') {
+          parts.push(`Current step ${currentStep} of ${totalSteps}`);
+        } else if (currentStep !== '—') {
+          parts.push(`Current step ${currentStep}`);
+        }
+        if (totalSteps !== '—') {
+          parts.push(`Completed ${completedSteps} of ${totalSteps}`);
+        } else if (completedSteps !== '—') {
+          parts.push(`Completed ${completedSteps}`);
+        }
+        return parts.length ? parts.join(' · ') : 'Lifecycle metadata is not available yet';
+      };
       const recordOperationKind = (operation, index, fallbackPrefix) => {
         const kind = typeof operation?.kind === 'string' ? operation.kind.trim() : '';
         return kind || `${fallbackPrefix} ${index + 1}`;
@@ -3350,6 +3381,7 @@
             const recordGrid = createElement('div', 'detail-grid');
             const operationCounts = applyOperationCounts(activeApplyRecord.operations || []);
             const lifecycleSummaryGrid = createElement('div', 'detail-grid');
+            const lifecycleMetadataGrid = createElement('div', 'detail-grid');
             const recordLinks = createElement('div', 'row-links');
             [
               ['Apply ID', metricValue(activeApplyRecord.id)],
@@ -3374,11 +3406,27 @@
             ].forEach(([label, value, className]) => {
               lifecycleSummaryGrid.append(createMetric(label, value, className || ''));
             });
+            if (hasApplyLifecycleMetadata(activeApplyRecord)) {
+              [
+                ['Apply lifecycle metadata', applyLifecycleProgressText(activeApplyRecord), 'summary'],
+                ['Lifecycle updated', applyLifecycleTimestampValue(activeApplyRecord.lifecycle, 'updatedAt')],
+                ['Lifecycle started', applyLifecycleTimestampValue(activeApplyRecord.lifecycle, 'startedAt')],
+                ['Lifecycle finished', applyLifecycleTimestampValue(activeApplyRecord.lifecycle, 'finishedAt')],
+                ['Current lifecycle step', applyLifecycleStepValue(activeApplyRecord.lifecycle, 'currentStep')],
+                ['Completed / total steps', `${applyLifecycleStepValue(activeApplyRecord.lifecycle, 'completedSteps')} / ${applyLifecycleStepValue(activeApplyRecord.lifecycle, 'totalSteps')}`],
+              ].forEach(([label, value, className]) => {
+                lifecycleMetadataGrid.append(createMetric(label, value, className || ''));
+              });
+            }
             recordLinks.append(
               createNavLink(buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activeApplyRecord.planId || activePlanRecord?.id || currentPageState.planId, applyId: activeApplyRecord.id }), 'Open bookmarked apply', '_self'),
               createNavLink(buildApplyRequestRoute(activeApplyRecord.id), 'Apply JSON'),
             );
-            recordSection.append(recordGrid, lifecycleSummaryGrid, recordLinks);
+            recordSection.append(recordGrid, lifecycleSummaryGrid);
+            if (lifecycleMetadataGrid.children.length) {
+              recordSection.append(lifecycleMetadataGrid);
+            }
+            recordSection.append(recordLinks);
             sections.push(recordSection);
           }
 

@@ -637,6 +637,10 @@ assert 'planId' in plan_ui, plan_ui
 assert 'applyId' in apply_ui, apply_ui
 assert 'Apply request failed' in apply_ui, apply_ui
 assert 'Apply lifecycle summary' in apply_ui, apply_ui
+assert 'Apply lifecycle metadata' in apply_ui, apply_ui
+assert 'Lifecycle updated' in apply_ui, apply_ui
+assert 'Current lifecycle step' in apply_ui, apply_ui
+assert 'Completed / total steps' in apply_ui, apply_ui
 assert 'Apply operations' in apply_ui, apply_ui
 assert 'Queued apply operation' in apply_ui, apply_ui
 assert '/v1/applies/' in apply_ui, apply_ui
