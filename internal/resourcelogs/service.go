@@ -7,12 +7,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
 	asgtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
@@ -21,45 +18,22 @@ import (
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
-	"github.com/aws/aws-sdk-go-v2/service/sts"
-	"github.com/aws/smithy-go"
+
+	"github.com/DevopsArtFactory/tenet/internal/resourceaws"
 )
 
 const (
 	SourceCloudWatch = "cloudwatch"
 	SourceEC2Console = "ec2_console"
 
-	UnavailableReasonUnsupportedResourceType   = "unsupported_resource_type"
-	UnavailableReasonCrossAccountNotConfigured = "cross_account_not_configured"
-	UnavailableReasonNoLogSource               = "no_log_source"
-	UnavailableReasonNoRunningTasks            = "no_running_tasks"
-	UnavailableReasonNoInstances               = "no_instances"
-	UnavailableReasonResourceNotFound          = "resource_not_found"
-	UnavailableReasonAWSUnavailable            = "aws_unavailable"
+	UnavailableReasonUnsupportedResourceType   = resourceaws.UnavailableReasonUnsupportedResourceType
+	UnavailableReasonCrossAccountNotConfigured = resourceaws.UnavailableReasonCrossAccountNotConfigured
+	UnavailableReasonNoLogSource               = resourceaws.UnavailableReasonNoLogSource
+	UnavailableReasonNoRunningTasks            = resourceaws.UnavailableReasonNoRunningTasks
+	UnavailableReasonNoInstances               = resourceaws.UnavailableReasonNoInstances
+	UnavailableReasonResourceNotFound          = resourceaws.UnavailableReasonResourceNotFound
+	UnavailableReasonAWSUnavailable            = resourceaws.UnavailableReasonAWSUnavailable
 )
-
-var awsUnavailableErrorSubstrings = []string{
-	"failed to refresh cached credentials",
-	"no ec2 imds role found",
-	"no valid credential sources",
-	"no credential providers",
-	"failed to load credentials",
-	"missing credentials",
-}
-
-var awsUnavailableErrorCodes = map[string]struct{}{
-	"accessdenied":                {},
-	"accessdeniedexception":       {},
-	"accessdeniedfordependency":   {},
-	"authfailure":                 {},
-	"invalidclienttokenid":        {},
-	"invalidsignatureexception":   {},
-	"missingauthenticationtoken":  {},
-	"optinrequired":               {},
-	"signaturedoesnotmatch":       {},
-	"unauthorizedoperation":       {},
-	"unrecognizedclientexception": {},
-}
 
 var ErrNotImplemented = errors.New("resource log service not implemented")
 
@@ -84,13 +58,7 @@ type Result struct {
 	UnavailableReason string        `json:"unavailableReason"`
 }
 
-type LookupContext struct {
-	Region                 string `json:"region"`
-	ControlAccountID       string `json:"controlAccountId"`
-	TargetAccountID        string `json:"targetAccountId"`
-	CrossAccount           bool   `json:"crossAccount"`
-	ObserverRoleConfigured bool   `json:"observerRoleConfigured"`
-}
+type LookupContext = resourceaws.LookupContext
 
 type Entry struct {
 	Timestamp string `json:"timestamp"`
@@ -107,7 +75,7 @@ type Options struct {
 
 type Service struct {
 	options  Options
-	awsCache *awsClientCache
+	awsCache *resourceaws.ClientCache
 }
 
 func NewService(options Options) Service {
@@ -117,86 +85,15 @@ func NewService(options Options) Service {
 	}
 }
 
-type awsClientCacheKey struct {
-	region          string
-	targetAccountID string
-	observerRoleARN string
-}
-
-type awsClients struct {
-	ecs  *ecs.Client
-	logs *cloudwatchlogs.Client
-	asg  *autoscaling.Client
-	ec2  *ec2.Client
-}
-
-type awsClientCacheEntry struct {
-	once    sync.Once
-	clients awsClients
-	err     error
-}
-
-type awsClientCacheDeps struct {
-	loadConfig    func(context.Context, string, string, string) (aws.Config, error)
-	newECSClient  func(aws.Config) *ecs.Client
-	newLogsClient func(aws.Config) *cloudwatchlogs.Client
-	newASGClient  func(aws.Config) *autoscaling.Client
-	newEC2Client  func(aws.Config) *ec2.Client
-}
-
-type awsClientCache struct {
-	deps    awsClientCacheDeps
-	entries sync.Map
-}
+type awsClients = resourceaws.Clients
+type awsClientCacheDeps = resourceaws.ClientCacheDeps
 
 func defaultAWSClientCacheDeps() awsClientCacheDeps {
-	return awsClientCacheDeps{
-		loadConfig: loadAWSConfig,
-		newECSClient: func(cfg aws.Config) *ecs.Client {
-			return ecs.NewFromConfig(cfg)
-		},
-		newLogsClient: func(cfg aws.Config) *cloudwatchlogs.Client {
-			return cloudwatchlogs.NewFromConfig(cfg)
-		},
-		newASGClient: func(cfg aws.Config) *autoscaling.Client {
-			return autoscaling.NewFromConfig(cfg)
-		},
-		newEC2Client: func(cfg aws.Config) *ec2.Client {
-			return ec2.NewFromConfig(cfg)
-		},
-	}
+	return resourceaws.DefaultClientCacheDeps()
 }
 
-func newAWSClientCache(deps awsClientCacheDeps) *awsClientCache {
-	return &awsClientCache{deps: deps}
-}
-
-func (c *awsClientCache) clients(ctx context.Context, region, targetAccountID, observerRoleARN string) (awsClients, error) {
-	key := awsClientCacheKey{
-		region:          strings.TrimSpace(region),
-		targetAccountID: strings.TrimSpace(targetAccountID),
-		observerRoleARN: strings.TrimSpace(observerRoleARN),
-	}
-	actual, _ := c.entries.LoadOrStore(key, &awsClientCacheEntry{})
-	entry := actual.(*awsClientCacheEntry)
-	entry.once.Do(func() {
-		cfg, err := c.deps.loadConfig(ctx, key.region, key.targetAccountID, key.observerRoleARN)
-		if err != nil {
-			entry.err = err
-			return
-		}
-		entry.clients = awsClients{
-			ecs:  c.deps.newECSClient(cfg),
-			logs: c.deps.newLogsClient(cfg),
-			asg:  c.deps.newASGClient(cfg),
-			ec2:  c.deps.newEC2Client(cfg),
-		}
-	})
-	if entry.err != nil {
-		c.entries.Delete(key)
-		return awsClients{}, entry.err
-	}
-	return entry.clients, nil
+func newAWSClientCache(deps awsClientCacheDeps) *resourceaws.ClientCache {
+	return resourceaws.NewClientCache(deps)
 }
 
 func (s Service) awsClients(ctx context.Context, region, targetAccountID, observerRoleARN string) (awsClients, error) {
@@ -204,7 +101,7 @@ func (s Service) awsClients(ctx context.Context, region, targetAccountID, observ
 	if cache == nil {
 		cache = newAWSClientCache(defaultAWSClientCacheDeps())
 	}
-	return cache.clients(ctx, region, targetAccountID, observerRoleARN)
+	return cache.Clients(ctx, region, targetAccountID, observerRoleARN)
 }
 
 func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
@@ -297,38 +194,8 @@ type ConsoleLine struct {
 	Message   string
 }
 
-type unavailableError struct{ reason string }
-
-func (e unavailableError) Error() string { return e.reason }
-
 func unavailableReasonForError(err error) (string, bool) {
-	var unavailable unavailableError
-	if errors.As(err, &unavailable) {
-		return unavailable.reason, true
-	}
-	if isAWSUnavailableError(err) {
-		return UnavailableReasonAWSUnavailable, true
-	}
-	return "", false
-}
-
-func isAWSUnavailableError(err error) bool {
-	if err == nil {
-		return false
-	}
-	var apiErr smithy.APIError
-	if errors.As(err, &apiErr) {
-		if _, ok := awsUnavailableErrorCodes[strings.ToLower(strings.TrimSpace(apiErr.ErrorCode()))]; ok {
-			return true
-		}
-	}
-	message := strings.ToLower(err.Error())
-	for _, part := range awsUnavailableErrorSubstrings {
-		if strings.Contains(message, part) {
-			return true
-		}
-	}
-	return false
+	return resourceaws.UnavailableReasonForError(err)
 }
 
 func unavailableResult(req Request, reason string) Result {
@@ -355,15 +222,12 @@ func availableResult(req Request, source string, entries []Entry) Result {
 }
 
 func lookupContext(req Request) LookupContext {
-	controlAccountID := strings.TrimSpace(req.ControlAccountID)
-	targetAccountID := strings.TrimSpace(req.TargetAccountID)
-	return LookupContext{
-		Region:                 strings.TrimSpace(req.Region),
-		ControlAccountID:       controlAccountID,
-		TargetAccountID:        targetAccountID,
-		CrossAccount:           controlAccountID != "" && targetAccountID != "" && controlAccountID != targetAccountID,
-		ObserverRoleConfigured: strings.TrimSpace(req.ObserverRoleARN) != "",
-	}
+	return resourceaws.Lookup(resourceaws.RequestContext{
+		ControlAccountID: req.ControlAccountID,
+		TargetAccountID:  req.TargetAccountID,
+		Region:           req.Region,
+		ObserverRoleARN:  req.ObserverRoleARN,
+	})
 }
 
 func (s Service) maxEntries() int {
@@ -423,19 +287,19 @@ func (s Service) listECSLogEventsFromAWS(ctx context.Context, req ECSRequest) ([
 		return nil, err
 	}
 
-	service, clusterARN, err := findECSService(ctx, clients.ecs, req.ResourceName)
+	service, clusterARN, err := findECSService(ctx, clients.ECS, req.ResourceName)
 	if err != nil {
 		return nil, err
 	}
 	if service == nil {
-		return nil, unavailableError{reason: UnavailableReasonResourceNotFound}
+		return nil, resourceaws.NewUnavailableError(UnavailableReasonResourceNotFound)
 	}
-	tasks, err := findRecentRunningTasks(ctx, clients.ecs, aws.ToString(clusterARN), aws.ToString(service.ServiceName))
+	tasks, err := findRecentRunningTasks(ctx, clients.ECS, aws.ToString(clusterARN), aws.ToString(service.ServiceName))
 	if err != nil {
 		return nil, err
 	}
 	if len(tasks) == 0 {
-		return nil, unavailableError{reason: UnavailableReasonNoRunningTasks}
+		return nil, resourceaws.NewUnavailableError(UnavailableReasonNoRunningTasks)
 	}
 
 	taskDefinitions := map[string]ecstypes.TaskDefinition{}
@@ -447,7 +311,7 @@ func (s Service) listECSLogEventsFromAWS(ctx context.Context, req ECSRequest) ([
 		}
 		taskDefinition, ok := taskDefinitions[taskDefinitionARN]
 		if !ok {
-			out, err := clients.ecs.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{TaskDefinition: aws.String(taskDefinitionARN)})
+			out, err := clients.ECS.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{TaskDefinition: aws.String(taskDefinitionARN)})
 			if err != nil {
 				return nil, err
 			}
@@ -457,7 +321,7 @@ func (s Service) listECSLogEventsFromAWS(ctx context.Context, req ECSRequest) ([
 			taskDefinition = *out.TaskDefinition
 			taskDefinitions[taskDefinitionARN] = taskDefinition
 		}
-		taskEvents, err := fetchTaskLogEvents(ctx, clients.logs, task, taskDefinition, s.maxEntries())
+		taskEvents, err := fetchTaskLogEvents(ctx, clients.Logs, task, taskDefinition, s.maxEntries())
 		if err != nil {
 			return nil, err
 		}
@@ -467,7 +331,7 @@ func (s Service) listECSLogEventsFromAWS(ctx context.Context, req ECSRequest) ([
 		}
 	}
 	if len(events) == 0 {
-		return nil, unavailableError{reason: UnavailableReasonNoLogSource}
+		return nil, resourceaws.NewUnavailableError(UnavailableReasonNoLogSource)
 	}
 	return events, nil
 }
@@ -478,25 +342,25 @@ func (s Service) listASGInstanceConsolesFromAWS(ctx context.Context, req ASGRequ
 		return nil, err
 	}
 
-	groupsOut, err := clients.asg.DescribeAutoScalingGroups(ctx, &autoscaling.DescribeAutoScalingGroupsInput{AutoScalingGroupNames: []string{req.ResourceName}})
+	groupsOut, err := clients.ASG.DescribeAutoScalingGroups(ctx, &autoscaling.DescribeAutoScalingGroupsInput{AutoScalingGroupNames: []string{req.ResourceName}})
 	if err != nil {
 		return nil, err
 	}
 	if len(groupsOut.AutoScalingGroups) == 0 {
-		return nil, unavailableError{reason: UnavailableReasonResourceNotFound}
+		return nil, resourceaws.NewUnavailableError(UnavailableReasonResourceNotFound)
 	}
 	group := groupsOut.AutoScalingGroups[0]
 	if len(group.Instances) == 0 {
-		return nil, unavailableError{reason: UnavailableReasonNoInstances}
+		return nil, resourceaws.NewUnavailableError(UnavailableReasonNoInstances)
 	}
-	instanceID, err := newestInstanceID(ctx, clients.ec2, group.Instances)
+	instanceID, err := newestInstanceID(ctx, clients.EC2, group.Instances)
 	if err != nil {
 		return nil, err
 	}
 	if instanceID == "" {
-		return nil, unavailableError{reason: UnavailableReasonNoInstances}
+		return nil, resourceaws.NewUnavailableError(UnavailableReasonNoInstances)
 	}
-	consoleOut, err := clients.ec2.GetConsoleOutput(ctx, &ec2.GetConsoleOutputInput{InstanceId: aws.String(instanceID), Latest: aws.Bool(true)})
+	consoleOut, err := clients.EC2.GetConsoleOutput(ctx, &ec2.GetConsoleOutputInput{InstanceId: aws.String(instanceID), Latest: aws.Bool(true)})
 	if err != nil {
 		return nil, err
 	}
@@ -506,27 +370,6 @@ func (s Service) listASGInstanceConsolesFromAWS(ctx context.Context, req ASGRequ
 	}
 	lines := parseConsoleLines(decoded, aws.ToTime(consoleOut.Timestamp))
 	return []InstanceConsole{{InstanceID: instanceID, GeneratedAt: aws.ToTime(consoleOut.Timestamp), Lines: lines}}, nil
-}
-
-func loadAWSConfig(ctx context.Context, region, targetAccountID, observerRoleARN string) (aws.Config, error) {
-	cfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(region))
-	if err != nil {
-		return aws.Config{}, err
-	}
-	callerAccountID := ""
-	identity, err := sts.NewFromConfig(cfg).GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
-	if err == nil {
-		callerAccountID = aws.ToString(identity.Account)
-	}
-	if targetAccountID != "" && callerAccountID != "" && targetAccountID != callerAccountID {
-		if strings.TrimSpace(observerRoleARN) == "" {
-			return aws.Config{}, unavailableError{reason: UnavailableReasonCrossAccountNotConfigured}
-		}
-		cfg.Credentials = aws.NewCredentialsCache(stscreds.NewAssumeRoleProvider(sts.NewFromConfig(cfg), observerRoleARN, func(options *stscreds.AssumeRoleOptions) {
-			options.RoleSessionName = "tenet-resource-logs"
-		}))
-	}
-	return cfg, nil
 }
 
 func findECSService(ctx context.Context, client *ecs.Client, serviceName string) (*ecstypes.Service, *string, error) {

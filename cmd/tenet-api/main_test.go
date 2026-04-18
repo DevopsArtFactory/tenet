@@ -16,6 +16,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
 	"github.com/DevopsArtFactory/tenet/internal/requestactor"
+	"github.com/DevopsArtFactory/tenet/internal/resourceinspection"
 	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
@@ -923,6 +924,89 @@ func TestAPIOptionsOverviewDeploymentResourceLogsUsesASGInstanceRefreshFallbackW
 	}
 }
 
+func TestAPIOptionsOverviewDeploymentResourceInspectionWiresObserverRoleAndPlacement(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	store := &stubStatusStore{
+		getSnapshot: statusstore.Snapshot{
+			DeploymentName: "api-prod",
+			Status: domain.DeploymentStatus{
+				Rollout: &domain.RolloutSummary{Execution: []domain.RolloutExecutionDetail{{Resource: "ecsService", Name: "api-prod-live-service", Description: "live ECS service"}}},
+			},
+		},
+	}
+	provider := &fakeResourceInspectionProvider{result: resourceinspection.Result{Available: true}}
+	restore := stubResourceInspectionProviderFactory(provider)
+	defer restore()
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, store)
+	if options.OverviewDeploymentResourceInspection == nil {
+		t.Fatalf("expected overview deployment resource inspection provider")
+	}
+
+	result, err := options.OverviewDeploymentResourceInspection(context.Background(), "api-prod", "ecsService", "api-prod-live-service")
+	if err != nil {
+		t.Fatalf("OverviewDeploymentResourceInspection returned error: %v", err)
+	}
+	if !result.Available {
+		t.Fatalf("expected wired provider result, got %+v", result)
+	}
+	want := resourceinspection.Request{
+		DeploymentName:   "api-prod",
+		ResourceType:     "ecsService",
+		ResourceName:     "api-prod-live-service",
+		ControlAccountID: "123456789012",
+		TargetAccountID:  "123456789012",
+		Region:           "ap-northeast-2",
+		ObserverRoleARN:  "arn:aws:iam::123456789012:role/TenetObserverRole",
+	}
+	if !reflect.DeepEqual(provider.lastRequest, want) {
+		t.Fatalf("unexpected resource inspection request: %+v", provider.lastRequest)
+	}
+}
+
+func TestAPIOptionsOverviewDeploymentResourceInspectionRejectsResourcesOutsideDeploymentExecution(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	store := &stubStatusStore{
+		getSnapshot: statusstore.Snapshot{
+			DeploymentName: "api-prod",
+			Status: domain.DeploymentStatus{
+				Rollout: &domain.RolloutSummary{Execution: []domain.RolloutExecutionDetail{{Resource: "ecsService", Name: "api-prod-live-service", Description: "live ECS service"}}},
+			},
+		},
+	}
+	provider := &fakeResourceInspectionProvider{}
+	restore := stubResourceInspectionProviderFactory(provider)
+	defer restore()
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, store)
+	_, err := options.OverviewDeploymentResourceInspection(context.Background(), "api-prod", "ecsService", "other-service")
+	if !errors.Is(err, statusstore.ErrNotFound) {
+		t.Fatalf("expected not found for unbound resource, got %v", err)
+	}
+	if provider.calls != 0 {
+		t.Fatalf("expected provider not to run for unbound resource, got %d calls", provider.calls)
+	}
+}
+
+func TestAPIOptionsOverviewDeploymentResourceInspectionUsesFallbackWhenExecutionIsMissing(t *testing.T) {
+	repoRoot := writeCanaryEC2RepositoryFixture(t)
+	provider := &fakeResourceInspectionProvider{result: resourceinspection.Result{Available: true}}
+	restore := stubResourceInspectionProviderFactory(provider)
+	defer restore()
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
+	_, err := options.OverviewDeploymentResourceInspection(context.Background(), "api-prod", "candidateAutoScalingGroup", "api-prod-candidate")
+	if err != nil {
+		t.Fatalf("expected fallback resource binding to work, got %v", err)
+	}
+	if provider.calls != 1 {
+		t.Fatalf("expected provider to run once for fallback-bound resource, got %d calls", provider.calls)
+	}
+	if provider.lastRequest.ResourceType != "candidateAutoScalingGroup" || provider.lastRequest.ResourceName != "api-prod-candidate" {
+		t.Fatalf("unexpected resource inspection request: %+v", provider.lastRequest)
+	}
+}
+
 type stubStatusStore struct {
 	getSnapshot   statusstore.Snapshot
 	listSnapshots []statusstore.Snapshot
@@ -974,6 +1058,25 @@ func stubResourceLogProviderFactory(provider resourceLogProvider) func() {
 	original := newResourceLogProvider
 	newResourceLogProvider = func() resourceLogProvider { return provider }
 	return func() { newResourceLogProvider = original }
+}
+
+type fakeResourceInspectionProvider struct {
+	result      resourceinspection.Result
+	err         error
+	lastRequest resourceinspection.Request
+	calls       int
+}
+
+func (p *fakeResourceInspectionProvider) Inspect(_ context.Context, req resourceinspection.Request) (resourceinspection.Result, error) {
+	p.calls++
+	p.lastRequest = req
+	return p.result, p.err
+}
+
+func stubResourceInspectionProviderFactory(provider resourceInspectionProvider) func() {
+	original := newResourceInspectionProvider
+	newResourceInspectionProvider = func() resourceInspectionProvider { return provider }
+	return func() { newResourceInspectionProvider = original }
 }
 
 func writeRepositoryFixture(t *testing.T) string {

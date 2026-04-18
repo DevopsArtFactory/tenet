@@ -629,26 +629,26 @@ func TestServiceAWSClientCache(t *testing.T) {
 		asgClients := 0
 		ec2Clients := 0
 		service.awsCache = newAWSClientCache(awsClientCacheDeps{
-			loadConfig: func(ctx context.Context, region, targetAccountID, observerRoleARN string) (aws.Config, error) {
+			LoadConfig: func(ctx context.Context, region, targetAccountID, observerRoleARN string) (aws.Config, error) {
 				loads++
 				if region != "ap-northeast-2" || targetAccountID != "123456789012" || observerRoleARN != "arn:aws:iam::123456789012:role/observer" {
 					t.Fatalf("unexpected cache lookup key: region=%q target=%q observer=%q", region, targetAccountID, observerRoleARN)
 				}
 				return aws.Config{Region: region}, nil
 			},
-			newECSClient: func(cfg aws.Config) *ecs.Client {
+			NewECSClient: func(cfg aws.Config) *ecs.Client {
 				ecsClients++
 				return &ecs.Client{}
 			},
-			newLogsClient: func(cfg aws.Config) *cloudwatchlogs.Client {
+			NewLogsClient: func(cfg aws.Config) *cloudwatchlogs.Client {
 				logsClients++
 				return &cloudwatchlogs.Client{}
 			},
-			newASGClient: func(cfg aws.Config) *autoscaling.Client {
+			NewASGClient: func(cfg aws.Config) *autoscaling.Client {
 				asgClients++
 				return &autoscaling.Client{}
 			},
-			newEC2Client: func(cfg aws.Config) *ec2.Client {
+			NewEC2Client: func(cfg aws.Config) *ec2.Client {
 				ec2Clients++
 				return &ec2.Client{}
 			},
@@ -666,7 +666,7 @@ func TestServiceAWSClientCache(t *testing.T) {
 		if loads != 1 || ecsClients != 1 || logsClients != 1 || asgClients != 1 || ec2Clients != 1 {
 			t.Fatalf("expected single config/client construction, got loads=%d ecs=%d logs=%d asg=%d ec2=%d", loads, ecsClients, logsClients, asgClients, ec2Clients)
 		}
-		if first.ecs != second.ecs || first.logs != second.logs || first.asg != second.asg || first.ec2 != second.ec2 {
+		if first.ECS != second.ECS || first.Logs != second.Logs || first.ASG != second.ASG || first.EC2 != second.EC2 {
 			t.Fatalf("expected cached aws clients to be reused across identical lookups")
 		}
 	})
@@ -676,17 +676,17 @@ func TestServiceAWSClientCache(t *testing.T) {
 		loads := 0
 		ecsClients := 0
 		service.awsCache = newAWSClientCache(awsClientCacheDeps{
-			loadConfig: func(ctx context.Context, region, targetAccountID, observerRoleARN string) (aws.Config, error) {
+			LoadConfig: func(ctx context.Context, region, targetAccountID, observerRoleARN string) (aws.Config, error) {
 				loads++
 				return aws.Config{Region: region}, nil
 			},
-			newECSClient: func(cfg aws.Config) *ecs.Client {
+			NewECSClient: func(cfg aws.Config) *ecs.Client {
 				ecsClients++
 				return &ecs.Client{}
 			},
-			newLogsClient: func(cfg aws.Config) *cloudwatchlogs.Client { return &cloudwatchlogs.Client{} },
-			newASGClient:  func(cfg aws.Config) *autoscaling.Client { return &autoscaling.Client{} },
-			newEC2Client:  func(cfg aws.Config) *ec2.Client { return &ec2.Client{} },
+			NewLogsClient: func(cfg aws.Config) *cloudwatchlogs.Client { return &cloudwatchlogs.Client{} },
+			NewASGClient:  func(cfg aws.Config) *autoscaling.Client { return &autoscaling.Client{} },
+			NewEC2Client:  func(cfg aws.Config) *ec2.Client { return &ec2.Client{} },
 		})
 
 		first, err := service.awsClients(context.Background(), "ap-northeast-2", "123456789012", "arn:aws:iam::123456789012:role/observer")
@@ -701,7 +701,7 @@ func TestServiceAWSClientCache(t *testing.T) {
 		if loads != 2 || ecsClients != 2 {
 			t.Fatalf("expected unique lookup keys to rebuild config and clients, got loads=%d ecs=%d", loads, ecsClients)
 		}
-		if first.ecs == second.ecs {
+		if first.ECS == second.ECS {
 			t.Fatalf("expected different lookup keys to keep separate aws clients")
 		}
 	})
@@ -710,17 +710,17 @@ func TestServiceAWSClientCache(t *testing.T) {
 		service := NewService(Options{})
 		loads := 0
 		service.awsCache = newAWSClientCache(awsClientCacheDeps{
-			loadConfig: func(ctx context.Context, region, targetAccountID, observerRoleARN string) (aws.Config, error) {
+			LoadConfig: func(ctx context.Context, region, targetAccountID, observerRoleARN string) (aws.Config, error) {
 				loads++
 				if loads == 1 {
 					return aws.Config{}, errors.New("boom")
 				}
 				return aws.Config{Region: region}, nil
 			},
-			newECSClient:  func(cfg aws.Config) *ecs.Client { return &ecs.Client{} },
-			newLogsClient: func(cfg aws.Config) *cloudwatchlogs.Client { return &cloudwatchlogs.Client{} },
-			newASGClient:  func(cfg aws.Config) *autoscaling.Client { return &autoscaling.Client{} },
-			newEC2Client:  func(cfg aws.Config) *ec2.Client { return &ec2.Client{} },
+			NewECSClient:  func(cfg aws.Config) *ecs.Client { return &ecs.Client{} },
+			NewLogsClient: func(cfg aws.Config) *cloudwatchlogs.Client { return &cloudwatchlogs.Client{} },
+			NewASGClient:  func(cfg aws.Config) *autoscaling.Client { return &autoscaling.Client{} },
+			NewEC2Client:  func(cfg aws.Config) *ec2.Client { return &ec2.Client{} },
 		})
 
 		if _, err := service.awsClients(context.Background(), "ap-northeast-2", "123456789012", "arn:aws:iam::123456789012:role/observer"); err == nil || err.Error() != "boom" {

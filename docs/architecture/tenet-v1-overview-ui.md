@@ -96,8 +96,16 @@ When `rollout.execution[]` is still missing or empty in a fixture-backed or earl
 - `ecsRolling`
 - `ecsService` → `{deployment}-service` → `ECS service Tenet updates with native rolling deployment`, optionally extended with rollout-strategy qualifiers such as `while respecting min healthy 90% and warmup 30s`
 
-That same fallback identity keeps resource-log drill-downs bookmarkable. Example route:
+That same fallback identity keeps both resource-log and resource-inspection drill-downs bookmarkable. Example routes:
 - `GET /v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service`
+- `GET /v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service`
+
+The additive inspection route stays read-only and local-friendly:
+- supported live summaries currently start with `ecsService`, `candidateAutoScalingGroup`, and `serviceAutoScalingGroup`
+- responses always include `lookupContext` plus `available`
+- supported ECS payloads add `ecsService`
+- supported Auto Scaling payloads add `autoScalingGroup`
+- unsupported or unavailable resources return `available=false` with an explicit `unavailableReason` instead of bubbling a vague provider error into the operator workflow
 
 ### Additional operator views
 The current UI also still exposes supporting operator surfaces beyond the main drill-down path:
