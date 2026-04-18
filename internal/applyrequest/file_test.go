@@ -14,7 +14,7 @@ func TestSaveAndLoadRoundTripsApplyRequestRecords(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "applies", "requests.json")
 	input := []Record{
 		{ID: "apply_b", PlanID: "plan_b", DeploymentName: "worker-prod", Status: StatusFailed, CreatedAt: "2026-04-18T08:00:00Z", Error: disabledError, Details: []string{"did not contact AWS"}},
-		{ID: "apply_a", PlanID: "plan_a", DeploymentName: "api-prod", Status: StatusFailed, CreatedAt: "2026-04-18T07:59:00Z", Error: disabledError, Operations: []Operation{{Status: string(StatusPending), Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."}}, Source: SourceContext{PlanID: "plan_a", Route: "/v1/plans/plan_a", PlanStatus: "ready", Fingerprint: "plan_input"}},
+		{ID: "apply_a", PlanID: "plan_a", DeploymentName: "api-prod", Status: StatusFailed, CreatedAt: "2026-04-18T07:59:00Z", Error: disabledError, Operations: []Operation{{Status: OperationStatusPending, Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."}}, Source: SourceContext{PlanID: "plan_a", Route: "/v1/plans/plan_a", PlanStatus: "ready", Fingerprint: "plan_input"}},
 	}
 
 	if err := Save(path, input); err != nil {
@@ -30,7 +30,7 @@ func TestSaveAndLoadRoundTripsApplyRequestRecords(t *testing.T) {
 	if loaded[0].ID != "apply_a" || loaded[1].ID != "apply_b" {
 		t.Fatalf("expected saved apply requests to be sorted by ID, got %+v", loaded)
 	}
-	if loaded[0].Source.Route != "/v1/plans/plan_a" || loaded[0].Operations[0].Status != string(StatusPending) || loaded[1].Details[0] != "did not contact AWS" {
+	if loaded[0].Source.Route != "/v1/plans/plan_a" || loaded[0].Operations[0].Status != OperationStatusPending || loaded[1].Details[0] != "did not contact AWS" {
 		t.Fatalf("unexpected loaded apply requests: %+v", loaded)
 	}
 }

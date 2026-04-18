@@ -16,9 +16,64 @@ var (
 type Status string
 
 const (
-	StatusPending Status = "pending"
-	StatusFailed  Status = "failed"
+	StatusQueued    Status = "queued"
+	StatusRunning   Status = "running"
+	StatusSucceeded Status = "succeeded"
+	StatusFailed    Status = "failed"
+	StatusCancelled Status = "cancelled"
 )
+
+// Valid reports whether the apply-request lifecycle status is supported.
+func (s Status) Valid() bool {
+	switch s {
+	case StatusQueued, StatusRunning, StatusSucceeded, StatusFailed, StatusCancelled:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsTerminal reports whether the apply-request lifecycle can no longer advance.
+func (s Status) IsTerminal() bool {
+	switch s {
+	case StatusSucceeded, StatusFailed, StatusCancelled:
+		return true
+	default:
+		return false
+	}
+}
+
+// OperationStatus captures the operator-facing lifecycle for one projected apply operation.
+type OperationStatus string
+
+const (
+	OperationStatusPending   OperationStatus = "pending"
+	OperationStatusQueued    OperationStatus = "queued"
+	OperationStatusRunning   OperationStatus = "running"
+	OperationStatusSucceeded OperationStatus = "succeeded"
+	OperationStatusFailed    OperationStatus = "failed"
+	OperationStatusCancelled OperationStatus = "cancelled"
+)
+
+// Valid reports whether the projected operation lifecycle status is supported.
+func (s OperationStatus) Valid() bool {
+	switch s {
+	case OperationStatusPending, OperationStatusQueued, OperationStatusRunning, OperationStatusSucceeded, OperationStatusFailed, OperationStatusCancelled:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsTerminal reports whether the projected operation lifecycle can no longer advance.
+func (s OperationStatus) IsTerminal() bool {
+	switch s {
+	case OperationStatusSucceeded, OperationStatusFailed, OperationStatusCancelled:
+		return true
+	default:
+		return false
+	}
+}
 
 // SourceContext captures the immutable plan preview that an apply request references.
 type SourceContext struct {
@@ -31,10 +86,10 @@ type SourceContext struct {
 
 // Operation is one additive operator-facing execution row projected from a ready plan preview.
 type Operation struct {
-	Status  string `json:"status"`
-	Phase   string `json:"phase"`
-	Target  string `json:"target"`
-	Summary string `json:"summary"`
+	Status  OperationStatus `json:"status"`
+	Phase   string          `json:"phase"`
+	Target  string          `json:"target"`
+	Summary string          `json:"summary"`
 }
 
 // Record is one immutable apply request derived from a persisted ready plan preview.

@@ -4345,8 +4345,11 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Succeeded apply operation')) throw new Error('expected succeeded apply-operation label for ` + tc.name + `');
   if (!text.includes('Failed apply operation')) throw new Error('expected failed apply-operation label for ` + tc.name + `');
   if (!text.includes('Cancelled apply operation')) throw new Error('expected cancelled apply-operation label for ` + tc.name + `');
-  if (!text.includes('Queued operations') || !text.includes('1')) throw new Error('expected queued count for ` + tc.name + `');
-  if (!text.includes('Running operations') || !text.includes('Succeeded operations') || !text.includes('Failed operations') || !text.includes('Cancelled operations')) throw new Error('expected per-status lifecycle counts for ` + tc.name + `');
+  if (!/Queued operations\s*\|\s*1/.test(text)) throw new Error('expected queued count for ` + tc.name + `');
+  if (!/Running operations\s*\|\s*1/.test(text)) throw new Error('expected running count for ` + tc.name + `');
+  if (!/Succeeded operations\s*\|\s*1/.test(text)) throw new Error('expected succeeded count for ` + tc.name + `');
+  if (!/Failed operations\s*\|\s*1/.test(text)) throw new Error('expected failed count for ` + tc.name + `');
+  if (!/Cancelled operations\s*\|\s*1/.test(text)) throw new Error('expected cancelled count for ` + tc.name + `');
 })();
 `
 				runNodeHarness(t, nodeProgram)
