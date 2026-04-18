@@ -162,7 +162,9 @@ Open one application to see the linked rollout resources grouped into clear sect
 - config and access
 
 ### Resource detail
-Open a concrete resource to inspect the deeper operational context for that resource, including rollout and runtime information. Recent logs are surfaced here when the resource type supports them, and the recent-log card now keeps the backend lookup path explicit with operator-facing labels for region, control account, target account, cross-account status, and observer-role configuration even when no lines are returned or the lookup is unavailable. A parallel read-only resource inspection route now exposes explicit typed backend payloads for supported live AWS resources without changing the bookmarkable drill-down shape.
+Open a concrete resource to inspect the deeper operational context for that resource, including rollout and runtime information. The embedded resource page now includes a `Live inspection` panel that lazy-loads the resource-inspection route for the selected resource while keeping bookmarkable resource URLs unchanged. The panel renders explicit loading, unavailable, empty, and supported states, reuses the same safe DOM construction patterns as the rest of the embedded UI, and keeps lookup context visible when Tenet cannot return a live payload.
+
+Recent logs are still surfaced here when the resource type supports them, and the recent-log card keeps the backend lookup path explicit with operator-facing labels for region, control account, target account, cross-account status, and observer-role configuration even when no lines are returned or the lookup is unavailable. A parallel read-only resource inspection route now exposes explicit typed backend payloads for supported live AWS resources without changing the bookmarkable drill-down shape.
 
 Canonical resource-log routes stay stable across rollout modes so operators can bookmark or script them:
 - `asgWeightedTargetGroups`: `trafficShiftPlan` (`{deployment}-weighted-routing`)
@@ -177,6 +179,10 @@ Supported live inspection currently starts with:
 - `ecsService`
 - `candidateAutoScalingGroup`
 - `serviceAutoScalingGroup`
+
+The embedded `Live inspection` panel renders operator-friendly summaries from those payloads:
+- `ecsService`: service identity/status, desired-running-pending counts, active deployments, and recent ECS service events
+- `autoScalingGroup`: group sizing/health settings, attached target groups, and current instances
 
 Resource-inspection responses keep the contract explicit for UI consumers:
 - common fields: `deploymentName`, `resourceType`, `resourceName`, `lookupContext`, `available`, `source`, `unavailableReason`

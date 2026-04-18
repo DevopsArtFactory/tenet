@@ -138,6 +138,7 @@
       const detailStateByDeployment = new Map();
       const deploymentEventsStateByDeployment = new Map();
       const resourceLogStateByKey = new Map();
+      const resourceInspectionStateByKey = new Map();
       let allAccounts = [];
       let allApplications = [];
       let currentViewState = { query: '', syncState: 'all', account: 'all' };
@@ -1439,10 +1440,13 @@
           conditionsSection.append(conditionList);
         }
 
+        const inspectionSection = createDetailSection('Live inspection');
+        renderResourceInspectionSection(inspectionSection, detail.name || currentPageState.deployment || '', resource).catch(() => {});
+
         const logsSection = createDetailSection('Recent logs');
         renderResourceLogsSection(logsSection, detail.name || currentPageState.deployment || '', resource).catch(() => {});
 
-        page.append(shell, historySection, executionSection, conditionsSection, logsSection);
+        page.append(shell, historySection, executionSection, conditionsSection, inspectionSection, logsSection);
         root.replaceChildren(page);
       };
       const renderEmptyState = (message) => {
@@ -1500,6 +1504,18 @@
           metadata.append(createMetric(label, value));
         });
         return metadata;
+      };
+      const lookupContextFields = (lookupContext) => resourceLogsLookupContextFields(lookupContext);
+      const createLookupContextGrid = (lookupContext, extraFields = []) => {
+        const metadata = createElement('div', 'detail-grid');
+        [...extraFields, ...lookupContextFields(lookupContext)].forEach(([label, value]) => {
+          metadata.append(createMetric(label, value));
+        });
+        return metadata;
+      };
+      const countText = (value) => {
+        if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+        return '—';
       };
       const fetchResourceLogs = (deploymentName, resource) => {
         const params = new URLSearchParams({
@@ -1586,6 +1602,226 @@
           });
 
         resourceLogStateByKey.set(logsKey, { status: 'loading', promise, sections: [section] });
+        return promise;
+      };
+      const resourceInspectionCacheKey = (deploymentName, resource) => resourceLogCacheKey(deploymentName, resource);
+      const fetchResourceInspection = (deploymentName, resource) => {
+        const params = new URLSearchParams({
+          resourceType: resource.type || '',
+          resourceName: resource.name || '',
+        });
+        return Promise.resolve()
+          .then(() => fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-inspection?${params.toString()}`))
+          .then((response) => {
+            if (!response.ok) throw new Error(`resource inspection request failed (${response.status})`);
+            return response.json();
+          });
+      };
+      const renderResourceInspectionState = (container, text, className = '', beforeNodes = [], afterNodes = []) => {
+        const heading = createElement('h4', '', 'Live inspection');
+        const stateNode = createElement('div', 'detail-state', text);
+        if (className) stateNode.classList.add(className);
+        container.replaceChildren(heading, ...beforeNodes, stateNode, ...afterNodes);
+      };
+      const resourceInspectionUnavailableReasonText = (reason) => {
+        switch (reason) {
+          case 'unsupported_resource_type':
+            return 'Live inspection is not supported for this resource type.';
+          case 'cross_account_not_configured':
+            return 'Cross-account access is not configured for live inspection for this deployment.';
+          case 'no_log_source':
+            return 'No live inspection source is configured for this resource yet.';
+          case 'no_running_tasks':
+            return 'No running tasks were found for this ECS service.';
+          case 'no_instances':
+            return 'No instances were found in this Auto Scaling Group.';
+          case 'resource_not_found':
+            return 'This resource could not be found in the provider.';
+          case 'aws_unavailable':
+            return 'AWS access is currently unavailable for live inspection.';
+          default:
+            return reason || '';
+        }
+      };
+      const createInspectionListSection = (title, items, renderItem, emptyText) => {
+        const section = createElement('section', 'detail-section');
+        section.append(createElement('h4', '', title));
+        if (!items.length) {
+          section.append(createElement('div', 'detail-state', emptyText));
+          return section;
+        }
+        const list = createElement('ol', 'detail-list');
+        items.forEach((item) => list.append(renderItem(item)));
+        section.append(list);
+        return section;
+      };
+      const renderECSServiceInspection = (section, result) => {
+        const service = result?.ecsService;
+        const metadata = createLookupContextGrid(result?.lookupContext, [
+          ['Inspection source', metricValue(result?.source)],
+          ['Service name', textOrDash(service?.serviceName)],
+          ['Service status', textOrDash(service?.status)],
+          ['Launch type', textOrDash(service?.launchType)],
+          ['Desired count', countText(service?.desiredCount)],
+          ['Running count', countText(service?.runningCount)],
+          ['Pending count', countText(service?.pendingCount)],
+          ['Task definition', textOrDash(service?.taskDefinition)],
+          ['Cluster ARN', textOrDash(service?.clusterArn)],
+          ['Service ARN', textOrDash(service?.serviceArn)],
+        ]);
+        const deploymentsSection = createInspectionListSection(
+          'Service deployments',
+          service?.deployments || [],
+          (deployment) => {
+            const item = createElement('li');
+            item.append(createElement('strong', '', textOrDash(deployment.taskDefinition || deployment.id || deployment.status)));
+            const meta = createElement('div', 'detail-history-meta');
+            meta.append(
+              createElement('span', 'detail-condition-meta', `Deployment status · ${textOrDash(deployment.status)}`),
+              createElement('span', 'detail-condition-meta', `Rollout state · ${textOrDash(deployment.rolloutState)}`),
+              createElement('span', 'detail-condition-meta', `Desired/running/pending · ${countText(deployment.desiredCount)} / ${countText(deployment.runningCount)} / ${countText(deployment.pendingCount)}`),
+            );
+            if (deployment.rolloutStateReason) {
+              meta.append(createElement('span', 'detail-condition-meta', `Rollout reason · ${deployment.rolloutStateReason}`));
+            }
+            if (deployment.createdAt) {
+              meta.append(createElement('span', 'detail-condition-meta', `Created at · ${deployment.createdAt}`));
+            }
+            if (deployment.updatedAt) {
+              meta.append(createElement('span', 'detail-condition-meta', `Updated at · ${deployment.updatedAt}`));
+            }
+            item.append(meta);
+            return item;
+          },
+          'No active ECS deployments are reported for this service.',
+        );
+        const eventsSection = createInspectionListSection(
+          'Recent ECS service events',
+          service?.events || [],
+          (event) => {
+            const item = createElement('li');
+            item.append(createElement('strong', '', textOrDash(event.message)));
+            item.append(createElement('span', 'detail-condition-meta', `Event timestamp · ${textOrDash(event.createdAt)}`));
+            return item;
+          },
+          'No recent ECS service events are available for this service.',
+        );
+        section.replaceChildren(
+          createElement('h4', '', 'Live inspection'),
+          createElement('p', 'detail-section-copy', 'Live ECS service inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
+          metadata,
+          deploymentsSection,
+          eventsSection,
+        );
+      };
+      const renderAutoScalingGroupInspection = (section, result) => {
+        const group = result?.autoScalingGroup;
+        const metadata = createLookupContextGrid(result?.lookupContext, [
+          ['Inspection source', metricValue(result?.source)],
+          ['Auto Scaling Group name', textOrDash(group?.autoScalingGroupName)],
+          ['Desired capacity', countText(group?.desiredCapacity)],
+          ['Min size', countText(group?.minSize)],
+          ['Max size', countText(group?.maxSize)],
+          ['Default cooldown', countText(group?.defaultCooldown)],
+          ['Health check type', textOrDash(group?.healthCheckType)],
+          ['Health check grace period', countText(group?.healthCheckGracePeriod)],
+          ['Auto Scaling Group ARN', textOrDash(group?.autoScalingGroupArn)],
+        ]);
+        const targetGroupsSection = createInspectionListSection(
+          'Target group ARNs',
+          group?.targetGroupArns || [],
+          (targetGroupARN) => {
+            const item = createElement('li');
+            item.append(createElement('strong', '', textOrDash(targetGroupARN)));
+            return item;
+          },
+          'No target groups are attached to this Auto Scaling Group.',
+        );
+        const instancesSection = createInspectionListSection(
+          'Instances',
+          group?.instances || [],
+          (instance) => {
+            const item = createElement('li');
+            item.append(createElement('strong', '', textOrDash(instance.instanceId)));
+            const meta = createElement('div', 'detail-history-meta');
+            meta.append(
+              createElement('span', 'detail-condition-meta', `Availability Zone · ${textOrDash(instance.availabilityZone)}`),
+              createElement('span', 'detail-condition-meta', `Lifecycle state · ${textOrDash(instance.lifecycleState)}`),
+              createElement('span', 'detail-condition-meta', `Health status · ${textOrDash(instance.healthStatus)}`),
+              createElement('span', 'detail-condition-meta', `Protected from scale-in · ${lookupContextBoolText(instance.protectedFromScaleIn)}`),
+            );
+            if (instance.weightedCapacity) {
+              meta.append(createElement('span', 'detail-condition-meta', `Weighted capacity · ${instance.weightedCapacity}`));
+            }
+            item.append(meta);
+            return item;
+          },
+          'No instances are currently reported for this Auto Scaling Group.',
+        );
+        section.replaceChildren(
+          createElement('h4', '', 'Live inspection'),
+          createElement('p', 'detail-section-copy', 'Live Auto Scaling Group inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
+          metadata,
+          targetGroupsSection,
+          instancesSection,
+        );
+      };
+      const renderResourceInspectionPayload = (section, result) => {
+        const metadata = createLookupContextGrid(result?.lookupContext, [
+          ['Inspection source', metricValue(result?.source)],
+        ]);
+        if (!result?.available) {
+          const unavailableReason = resourceInspectionUnavailableReasonText(result?.unavailableReason);
+          const details = unavailableReason
+            ? [createElement('div', 'detail-condition-meta', unavailableReason)]
+            : [];
+          renderResourceInspectionState(section, 'Live inspection is unavailable for this resource.', '', [metadata], details);
+          return;
+        }
+        if (result?.ecsService) {
+          renderECSServiceInspection(section, result);
+          return;
+        }
+        if (result?.autoScalingGroup) {
+          renderAutoScalingGroupInspection(section, result);
+          return;
+        }
+        renderResourceInspectionState(section, 'No live inspection details are available for this resource yet.', '', [metadata]);
+      };
+      const renderResourceInspectionSection = (section, deploymentName, resource) => {
+        const inspectionKey = resourceInspectionCacheKey(deploymentName, resource);
+        const cached = resourceInspectionStateByKey.get(inspectionKey);
+
+        if (!deploymentName || !resource?.type || !resource?.name) {
+          renderResourceInspectionState(section, 'Live inspection is unavailable for this resource.');
+          return Promise.resolve(null);
+        }
+        if (cached?.status === 'ready') {
+          renderResourceInspectionPayload(section, cached.result);
+          return Promise.resolve(cached.result);
+        }
+        if (cached?.status === 'loading') {
+          resourceInspectionStateByKey.set(inspectionKey, { ...cached, sections: [...(cached.sections || []), section] });
+          renderResourceInspectionState(section, 'Loading live inspection…');
+          return cached.promise;
+        }
+
+        renderResourceInspectionState(section, 'Loading live inspection…');
+        const promise = fetchResourceInspection(deploymentName, resource)
+          .then((result) => {
+            const current = resourceInspectionStateByKey.get(inspectionKey);
+            resourceInspectionStateByKey.set(inspectionKey, { status: 'ready', result });
+            (current?.sections || []).forEach((container) => renderResourceInspectionPayload(container, result));
+            return result;
+          })
+          .catch((error) => {
+            const current = resourceInspectionStateByKey.get(inspectionKey);
+            resourceInspectionStateByKey.set(inspectionKey, { status: 'error', error });
+            (current?.sections || []).forEach((container) => renderResourceInspectionState(container, `Failed to load live inspection: ${error.message}`, 'error'));
+            throw error;
+          });
+
+        resourceInspectionStateByKey.set(inspectionKey, { status: 'loading', promise, sections: [section] });
         return promise;
       };
       const requestError = (kind, message, status = 0) => {

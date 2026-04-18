@@ -381,6 +381,9 @@ assert isinstance(worker_resource_inspection['lookupContext'].get('observerRoleC
 if worker_resource_inspection['available']:
     assert worker_resource_inspection.get('source') == 'ecs_service', worker_resource_inspection
     assert isinstance(worker_resource_inspection.get('ecsService'), dict), worker_resource_inspection
+    assert isinstance(worker_resource_inspection['ecsService'].get('serviceName'), str) and worker_resource_inspection['ecsService']['serviceName'], worker_resource_inspection
+    assert isinstance(worker_resource_inspection['ecsService'].get('deployments', []), list), worker_resource_inspection
+    assert isinstance(worker_resource_inspection['ecsService'].get('events', []), list), worker_resource_inspection
 else:
     assert isinstance(worker_resource_inspection.get('unavailableReason'), str) and worker_resource_inspection['unavailableReason'], worker_resource_inspection
 assert candidate_resource_inspection['deploymentName'] == 'payments-api-prod', candidate_resource_inspection
@@ -391,6 +394,8 @@ assert isinstance(candidate_resource_inspection.get('lookupContext'), dict), can
 if candidate_resource_inspection['available']:
     assert candidate_resource_inspection.get('source') == 'auto_scaling_group', candidate_resource_inspection
     assert isinstance(candidate_resource_inspection.get('autoScalingGroup'), dict), candidate_resource_inspection
+    assert isinstance(candidate_resource_inspection['autoScalingGroup'].get('autoScalingGroupName'), str) and candidate_resource_inspection['autoScalingGroup']['autoScalingGroupName'], candidate_resource_inspection
+    assert isinstance(candidate_resource_inspection['autoScalingGroup'].get('instances', []), list), candidate_resource_inspection
 else:
     assert isinstance(candidate_resource_inspection.get('unavailableReason'), str) and candidate_resource_inspection['unavailableReason'], candidate_resource_inspection
 assert 'Application status overview' in ui, ui
@@ -412,6 +417,13 @@ assert 'Controller-derived runtime events from GET /v1/overview/deployments/{dep
 assert 'Loading controller runtime events…' in ui, ui
 assert 'No controller runtime events have been persisted yet.' in ui, ui
 assert 'Controller runtime events are currently unavailable.' in ui, ui
+assert 'Live inspection' in ui, ui
+assert 'Loading live inspection…' in ui, ui
+assert 'Live inspection is unavailable for this resource.' in ui, ui
+assert 'No live inspection details are available for this resource yet.' in ui, ui
+assert 'Service deployments' in ui, ui
+assert 'Auto Scaling Group name' in ui, ui
+assert 'Target group ARNs' in ui, ui
 assert "createNavLink(buildPageURL('drift', { deployment: detail.name }), 'Drift view', '_self')" in ui, ui
 assert "createNavLink(buildPageURL('plan', { deployment: detail.name }), 'Plan/apply', '_self')" in ui, ui
 assert "createNavLink(buildPageURL('audit', { deployment: detail.name }), 'Audit log', '_self')" in ui, ui
