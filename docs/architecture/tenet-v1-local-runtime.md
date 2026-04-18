@@ -14,6 +14,7 @@ The local runtime packages the current read-only control-plane foundation as a D
 
 The local stack uses these inputs:
 
+- `TENET_CATALOG_SOURCE=filesystem`
 - `TENET_REPO_ROOT=/workspace/examples/local-repo`
 - `TENET_STATUS_PATH=/workspace/examples/local-status/deployments.json`
 - `TENET_CONTROLLER_REQUEUE_SECONDS=5` in the local Compose demo so controller planning logs refresh quickly
@@ -32,6 +33,8 @@ make smoke-local
 ```
 
 Use `make smoke-local` for the fastest fixture-backed regression check when you only need direct-process validation. It boots `tenet-api` against the committed example fixtures, checks `/healthz`, validates representative JSON payloads from the catalog and status endpoints, and in enabled apply mode proves that Tenet now creates a queued immutable apply record before the local-safe executor advances the same `applyId` to a failed stub boundary without manual transition API calls.
+
+This local smoke path now sets `TENET_CATALOG_SOURCE=filesystem` explicitly so the fixture-backed contract is unambiguous. GitHub-backed desired-state loading is supported in `tenet-api`, but it remains an API-only read-only mode and does not change the controller/runtime filesystem contract used by the local stack.
 
 ### Docker stack smoke check
 

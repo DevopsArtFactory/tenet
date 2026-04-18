@@ -322,6 +322,7 @@ Set at least these environment variables:
 
 ```bash
 TENET_API_ADDR=:8080
+TENET_CATALOG_SOURCE=filesystem
 TENET_REPO_ROOT=/workspace/repo
 TENET_STATUS_BACKEND=redis
 TENET_REDIS_ADDR=redis:6379
@@ -333,9 +334,25 @@ TENET_CONTROLLER_REQUEUE_SECONDS=30
 
 Use `TENET_STATUS_SEED_PATH` only when you want Redis to bootstrap from an existing snapshot file. In a steady production deployment, Redis is the live shared runtime store.
 
+`tenet-api` can alternatively read desired state directly from GitHub:
+
+```bash
+TENET_API_ADDR=:8080
+TENET_CATALOG_SOURCE=github
+TENET_CATALOG_GITHUB_REPOSITORY=acme/platform-config
+TENET_CATALOG_GITHUB_REF=main
+TENET_CATALOG_GITHUB_PATH=tenet
+TENET_STATUS_BACKEND=redis
+TENET_REDIS_ADDR=redis:6379
+TENET_STATUS_SEED_PATH=/workspace/bootstrap/deployments.json
+TENET_API_REQUEST_TIMEOUT=30s
+```
+
+That GitHub mode is read-only for desired state. Controller startup, controller polling, and the opt-in local-safe apply executor still require a filesystem checkout via `TENET_REPO_ROOT`.
+
 ### 3. Make the repo available
 
-Both `tenet-api` and `tenet-controller` must see the same repo tree at `TENET_REPO_ROOT`.
+`tenet-controller` must still see a local repo tree at `TENET_REPO_ROOT`. `tenet-api` may either share that same checkout or use the read-only GitHub source envs above when you only need API-side desired-state reads.
 
 ### 4. Add account manifests
 

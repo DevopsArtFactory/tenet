@@ -11,6 +11,8 @@ The UX direction is now a simpler ArgoCD-style drill-down instead of a single de
 
 The implementation remains fully embedded HTML/CSS/JS with no separate frontend toolchain.
 
+The dashboard routes are source-agnostic on the backend: `tenet-api` can now feed the same `/v1/catalog/*` and `/v1/overview/*` payloads from either a filesystem checkout or a GitHub-backed read-only desired-state catalog without changing the UI route contract.
+
 ## What shipped so far
 
 ### 1. Applications overview landing page
