@@ -210,6 +210,8 @@ func TestAuditLogOperatorContract(t *testing.T) {
 		"actor information is unavailable because no authenticated request context was available for this local request",
 		"`Audit filters: action apply.requested · limit 2`",
 		"`/v1/audit-logs` is the preferred v1 route shape for this local timeline",
+		"the full `GET /v1/audit-logs` collection with expected `plan.created` and `apply.requested` actions present",
+		"fetches the full `GET /v1/audit-logs` collection and asserts the expected `plan.created` and `apply.requested` actions are present without depending on `limit=2`",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README audit contract to include %q", fragment)
@@ -225,6 +227,8 @@ func TestAuditLogOperatorContract(t *testing.T) {
 		"`action` is optional and must be exactly `plan.created` or `apply.requested` when present",
 		"`deployment` is optional and must name exactly one deployment when present",
 		"`GET /v1/audit-logs?action=apply.requested&limit=2`",
+		"fetching the full `GET /v1/audit-logs` collection",
+		"asserting the expected `plan.created` and `apply.requested` actions are present without depending on a two-entry window",
 		"`action=invalid.action` with `400 Bad Request`",
 		"`entries: []` with `200 OK` when the selected deployment exists but has no persisted audit records yet",
 		"`X-Tenet-Actor-Id`",

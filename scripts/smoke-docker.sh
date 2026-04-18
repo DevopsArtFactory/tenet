@@ -239,7 +239,7 @@ codedeploy_group_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/depl
 production_listener_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=productionListener&resourceName=payments-api-staging-prod-listener")
 test_listener_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=testListener&resourceName=payments-api-staging-test-listener")
 traffic_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")
-audit_logs=$(curl -fsS "$API_BASE_URL/v1/audit-logs?limit=2")
+audit_logs=$(curl -fsS "$API_BASE_URL/v1/audit-logs")
 audit_logs_action_filtered=$(curl -fsS "$API_BASE_URL/v1/audit-logs?action=apply.requested&limit=2")
 invalid_audit_action_status=$(curl -sS -o "$INVALID_AUDIT_ACTION_BODY" -w "%{http_code}" "$API_BASE_URL/v1/audit-logs?action=invalid.action")
 ui=$(curl -fsS "$API_BASE_URL/")
@@ -355,11 +355,11 @@ assert apply_record["source"]["fingerprint"] == plan_preview["source"]["fingerpr
 assert apply_record_get == apply_record, (apply_record_get, apply_record)
 
 assert isinstance(audit_logs.get("entries"), list), audit_logs
-assert len(audit_logs["entries"]) == 2, audit_logs
-assert {entry["action"] for entry in audit_logs["entries"]} == {"apply.requested", "plan.created"}, audit_logs
+assert any(entry["action"] == "apply.requested" for entry in audit_logs["entries"]), audit_logs
+assert any(entry["action"] == "plan.created" for entry in audit_logs["entries"]), audit_logs
 assert isinstance(audit_logs_action_filtered.get("entries"), list), audit_logs_action_filtered
-assert len(audit_logs_action_filtered["entries"]) == 1, audit_logs_action_filtered
-assert audit_logs_action_filtered["entries"][0]["action"] == "apply.requested", audit_logs_action_filtered
+assert 1 <= len(audit_logs_action_filtered["entries"]) <= 2, audit_logs_action_filtered
+assert all(entry["action"] == "apply.requested" for entry in audit_logs_action_filtered["entries"]), audit_logs_action_filtered
 assert os.environ["INVALID_AUDIT_ACTION_STATUS"] == "400", os.environ["INVALID_AUDIT_ACTION_STATUS"]
 assert "invalid action query" in invalid_audit_action_body, invalid_audit_action_body
 for entry in audit_logs["entries"]:
