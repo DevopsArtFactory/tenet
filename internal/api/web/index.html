@@ -3294,7 +3294,7 @@
             planState?.status === 'loading' && planState.request === 'create' ? 'Creating plan…' : 'Create Plan',
           );
           createPlanButton.type = 'button';
-          createPlanButton.disabled = planState?.status === 'loading';
+          createPlanButton.disabled = planState?.status === 'loading' || applyState?.status === 'loading';
           if (typeof planState?.onCreatePlan === 'function') {
             createPlanButton.addEventListener('click', () => {
               if (createPlanButton.disabled) return;
@@ -3310,7 +3310,27 @@
               applyState.onApplyPlan();
             });
           }
-          actionBar.append(createPlanButton, applyPlanButton);
+          const refreshPlanID = activePlanRecord?.id || planState?.planId || '';
+          const refreshPlanButton = createElement('button', 'toolbar-button', 'Refresh plan preview');
+          refreshPlanButton.type = 'button';
+          refreshPlanButton.disabled = planState?.status === 'loading' || applyState?.status === 'loading' || !refreshPlanID;
+          if (typeof planState?.onReloadPlan === 'function') {
+            refreshPlanButton.addEventListener('click', () => {
+              if (refreshPlanButton.disabled) return;
+              planState.onReloadPlan(refreshPlanID);
+            });
+          }
+          const refreshApplyID = activeApplyRecord?.id || applyState?.applyId || '';
+          const refreshApplyButton = createElement('button', 'toolbar-button', 'Refresh apply request');
+          refreshApplyButton.type = 'button';
+          refreshApplyButton.disabled = planState?.status === 'loading' || applyState?.status === 'loading' || !refreshApplyID;
+          if (typeof applyState?.onReloadApply === 'function') {
+            refreshApplyButton.addEventListener('click', () => {
+              if (refreshApplyButton.disabled) return;
+              applyState.onReloadApply(refreshApplyID);
+            });
+          }
+          actionBar.append(createPlanButton, applyPlanButton, refreshPlanButton, refreshApplyButton);
           const planStateCallout = createElement('div', 'detail-state', planPreviewStateMessage(planState, detail));
           const planStateClassName = planPreviewStateClassName(planState);
           if (planStateClassName) {
@@ -3783,9 +3803,89 @@
                   const hash = window.location.hash || '';
                   history.replaceState({}, '', `${query}${hash}`);
                 };
+                const loadPlanPreviewRecord = (planId) => {
+                  if (!planId) return Promise.resolve(null);
+                  planState = {
+                    ...planState,
+                    status: 'loading',
+                    request: 'load',
+                    planId,
+                    error: null,
+                  };
+                  renderPlanWorkspace();
+                  return fetchPlanPreview(planId)
+                    .then((record) => {
+                      if (record.deploymentName && detail.name && record.deploymentName !== detail.name) {
+                        throw requestError('fetch-error', `plan preview ${record.id} belongs to ${record.deploymentName}, not ${detail.name}`);
+                      }
+                      planState = {
+                        ...planState,
+                        status: record.status === 'failed' ? 'failed' : 'ready',
+                        request: 'load',
+                        planId: record.id,
+                        record,
+                        error: null,
+                      };
+                      syncPlanPageURL(record.id, currentPageState.applyId || applyState.applyId || applyState.record?.id || '');
+                      renderPlanWorkspace();
+                      return record;
+                    })
+                    .catch((error) => {
+                      planState = {
+                        ...planState,
+                        status: error.kind === 'unavailable' ? 'unavailable' : 'fetch-error',
+                        request: 'load',
+                        error,
+                      };
+                      renderPlanWorkspace();
+                      throw error;
+                    });
+                };
+                const loadApplyRequestRecord = (applyId) => {
+                  if (!applyId) return Promise.resolve(null);
+                  applyState = {
+                    ...applyState,
+                    status: 'loading',
+                    request: 'load',
+                    applyId,
+                    error: null,
+                  };
+                  renderPlanWorkspace();
+                  return fetchApplyRequest(applyId)
+                    .then((record) => {
+                      if (record.deploymentName && detail.name && record.deploymentName !== detail.name) {
+                        throw requestError('fetch-error', `apply request ${record.id} belongs to ${record.deploymentName}, not ${detail.name}`);
+                      }
+                      if (currentPageState.planId && record.planId && record.planId !== currentPageState.planId) {
+                        throw requestError('fetch-error', `apply request ${record.id} belongs to plan ${record.planId}, not ${currentPageState.planId}`);
+                      }
+                      applyState = {
+                        ...applyState,
+                        status: normalizeApplyRecordStatus(record.status),
+                        request: 'load',
+                        applyId: record.id,
+                        record,
+                        error: null,
+                      };
+                      syncPlanPageURL(record.planId || currentPageState.planId, record.id);
+                      renderPlanWorkspace();
+                      return record;
+                    })
+                    .catch((error) => {
+                      applyState = {
+                        ...applyState,
+                        status: error.kind === 'unavailable' ? 'unavailable' : 'fetch-error',
+                        request: 'load',
+                        error,
+                      };
+                      renderPlanWorkspace();
+                      throw error;
+                    });
+                };
                 const renderPlanWorkspace = () => {
                   renderDeploymentWorkspace('plan', detail, {
                     ...planState,
+                    onReloadPlan: (planId) => loadPlanPreviewRecord(planId),
                     onCreatePlan: async () => {
                       const fallbackIfMatch = planState.record?.source?.fingerprint || '';
                       planState = {
@@ -3830,6 +3930,7 @@
                     },
                   }, {
                     ...applyState,
+                    onReloadApply: (applyId) => loadApplyRequestRecord(applyId),
                     onApplyPlan: async () => {
                       const planID = planState.record?.id || planState.planId || '';
                       if (!planID || !planPreviewCanApply(planState)) return;
@@ -3876,77 +3977,10 @@
 
                 renderPlanWorkspace();
                 if (currentPageState.planId) {
-                  planState = {
-                    ...planState,
-                    status: 'loading',
-                    request: 'load',
-                    planId: currentPageState.planId,
-                    error: null,
-                  };
-                  renderPlanWorkspace();
-                  fetchPlanPreview(currentPageState.planId)
-                    .then((record) => {
-                      if (record.deploymentName && detail.name && record.deploymentName !== detail.name) {
-                        throw requestError('fetch-error', `plan preview ${record.id} belongs to ${record.deploymentName}, not ${detail.name}`);
-                      }
-                      planState = {
-                        ...planState,
-                        status: record.status === 'failed' ? 'failed' : 'ready',
-                        request: 'load',
-                        planId: record.id,
-                        record,
-                        error: null,
-                      };
-                      syncPlanPageURL(record.id, currentPageState.applyId || applyState.applyId || '');
-                      renderPlanWorkspace();
-                    })
-                    .catch((error) => {
-                      planState = {
-                        ...planState,
-                        status: error.kind === 'unavailable' ? 'unavailable' : 'fetch-error',
-                        request: 'load',
-                        error,
-                      };
-                      renderPlanWorkspace();
-                    });
+                  loadPlanPreviewRecord(currentPageState.planId).catch(() => {});
                 }
                 if (currentPageState.applyId) {
-                  applyState = {
-                    ...applyState,
-                    status: 'loading',
-                    request: 'load',
-                    applyId: currentPageState.applyId,
-                    error: null,
-                  };
-                  renderPlanWorkspace();
-                  fetchApplyRequest(currentPageState.applyId)
-                    .then((record) => {
-                      if (record.deploymentName && detail.name && record.deploymentName !== detail.name) {
-                        throw requestError('fetch-error', `apply request ${record.id} belongs to ${record.deploymentName}, not ${detail.name}`);
-                      }
-                      if (currentPageState.planId && record.planId && record.planId !== currentPageState.planId) {
-                        throw requestError('fetch-error', `apply request ${record.id} belongs to plan ${record.planId}, not ${currentPageState.planId}`);
-                      }
-                      applyState = {
-                        ...applyState,
-                        status: normalizeApplyRecordStatus(record.status),
-                        request: 'load',
-                        applyId: record.id,
-                        record,
-                        error: null,
-                      };
-                      syncPlanPageURL(record.planId || currentPageState.planId, record.id);
-                      renderPlanWorkspace();
-                    })
-                    .catch((error) => {
-                      applyState = {
-                        ...applyState,
-                        status: error.kind === 'unavailable' ? 'unavailable' : 'fetch-error',
-                        request: 'load',
-                        error,
-                      };
-                      renderPlanWorkspace();
-                    });
+                  loadApplyRequestRecord(currentPageState.applyId).catch(() => {});
                 }
                 return;
               }
