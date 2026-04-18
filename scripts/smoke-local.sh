@@ -537,6 +537,9 @@ assert "params.get('applyId') || ''" in ui, ui
 
 assert 'planId' in plan_ui, plan_ui
 assert 'applyId' in apply_ui, apply_ui
+assert 'Apply operations' in apply_ui, apply_ui
+assert '/v1/applies/' in apply_ui, apply_ui
+assert 'The ordered execution sequence below comes from the persisted apply record' in apply_ui, apply_ui
 print('smoke-local: fixture api path ok')
 PY
 

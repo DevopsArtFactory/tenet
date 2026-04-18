@@ -599,6 +599,12 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"const createPlanPreview = (deploymentName, ifMatch = '') => fetch(`/v1/plans/deployments/${encodeURIComponent(deploymentName)}`, {",
 		"const createApplyRequest = (planId) => fetch(`/v1/applies/plans/${encodeURIComponent(planId)}`, {",
 		"body: ifMatch ? JSON.stringify({ ifMatch }) : '{}',",
+		"const recordOperationKind = (operation, index, fallbackPrefix) => {",
+		"return kind || `${fallbackPrefix} ${index + 1}`;",
+		"const mapRecordOperations = (operations, fallbackPrefix) => (operations || []).map((operation, index) => ({",
+		"const previewOperations = (record) => mapRecordOperations(record?.operations || [], 'Plan step');",
+		"const applyOperations = (record) => mapRecordOperations(record?.operations || [], 'Apply step');",
+		"const createOperationsSection = ({ title, intro, operations, emptyMessage }) => {",
 		"const planPreviewCanApply = (planState) => {",
 		"const planPreviewStateMessage = (planState, detail) => {",
 		"Create Plan will POST /v1/plans/deployments/${deploymentName}, store an immutable server-authored preview, and update this workspace URL with a shareable planId.",
@@ -625,6 +631,9 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"Stored apply request",
 		"createNavLink(buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activeApplyRecord.planId || activePlanRecord?.id || currentPageState.planId, applyId: activeApplyRecord.id }), 'Open bookmarked apply', '_self')",
 		"createNavLink(buildApplyRequestRoute(activeApplyRecord.id), 'Apply JSON')",
+		"Apply operations",
+		"Immutable apply request loaded from GET /v1/applies/${activeApplyRecord.id}. The ordered execution sequence below comes from the persisted apply record, so operators can review intended execution order without depending on mutable plan-preview or deployment-derived context.",
+		"No additive apply operations are stored for this request.",
 		"Apply request details",
 		"Stored plan preview",
 		"createNavLink(buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activePlanRecord.id, applyId: activeApplyRecord?.id || applyState?.applyId || '' }), 'Open bookmarked workspace', '_self')",
@@ -1254,6 +1263,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"apply_ui=$(curl -fsS \"http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id&applyId=$apply_id\")",
 		"assert 'planId' in plan_ui, plan_ui",
 		"assert 'applyId' in apply_ui, apply_ui",
+		"assert 'Apply operations' in apply_ui, apply_ui",
+		"assert '/v1/applies/' in apply_ui, apply_ui",
+		"assert 'The ordered execution sequence below comes from the persisted apply record' in apply_ui, apply_ui",
 	} {
 		if !strings.Contains(text, fragment) {
 			t.Fatalf("expected smoke-local.sh to include %q", fragment)

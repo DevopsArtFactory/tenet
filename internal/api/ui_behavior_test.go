@@ -3961,6 +3961,12 @@ func TestDeploymentWorkspacePlanViewWithNodeHarness(t *testing.T) {
 			"Tenet persisted this immutable apply request in read-only mode and did not contact AWS.",
 			"Live execution is intentionally disabled by default for this backend slice.",
 		},
+		"operations": []map[string]any{{
+			"status":  "pending",
+			"phase":   "Promoting",
+			"target":  "server-preview-target",
+			"summary": "Server-authored preview summary",
+		}},
 		"source": map[string]any{
 			"planId":        "plan_ready_123",
 			"route":         "/v1/plans/plan_ready_123",
@@ -4106,6 +4112,11 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Apply request failed')) throw new Error('expected apply failed heading after create');
   if (!text.includes('Immutable apply request apply_failed_123 was created and recorded as failed.')) throw new Error('expected apply failed create message');
   if (!text.includes('Stored apply request')) throw new Error('expected stored apply request section');
+  if (!text.includes('Apply operations')) throw new Error('expected apply operations section');
+  if (!text.includes('Immutable apply request loaded from GET /v1/applies/apply_failed_123.')) throw new Error('expected apply operations intro');
+  if (!text.includes('Apply step 1')) throw new Error('expected synthetic apply-step label');
+  if (!text.includes('server-preview-target')) throw new Error('expected apply operations target');
+  if (!text.includes('Server-authored preview summary')) throw new Error('expected apply operations summary');
   if (!text.includes('Apply request details')) throw new Error('expected apply request details section');
   if (!text.includes('apply execution is disabled')) throw new Error('expected apply failure reason');
   if (!text.includes('Tenet persisted this immutable apply request in read-only mode and did not contact AWS.')) throw new Error('expected immutable apply detail');
@@ -4207,6 +4218,11 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Apply request failed')) throw new Error('expected failed apply heading on bookmarked apply');
   if (!text.includes('Immutable apply request apply_failed_123 is loaded and recorded as failed.')) throw new Error('expected loaded failed apply message');
   if (!text.includes('Stored apply request')) throw new Error('expected stored apply request section');
+  if (!text.includes('Apply operations')) throw new Error('expected apply operations section on bookmarked apply');
+  if (!text.includes('Immutable apply request loaded from GET /v1/applies/apply_failed_123.')) throw new Error('expected apply operations intro on bookmarked apply');
+  if (!text.includes('Apply step 1')) throw new Error('expected synthetic apply-step label on bookmarked apply');
+  if (!text.includes('server-preview-target')) throw new Error('expected apply operations target on bookmarked apply');
+  if (!text.includes('Server-authored preview summary')) throw new Error('expected apply operations summary on bookmarked apply');
   if (!text.includes('Apply request details')) throw new Error('expected apply request details section');
   if (!text.includes('apply execution is disabled')) throw new Error('expected stored apply error');
   if (!text.includes('Tenet persisted this immutable apply request in read-only mode and did not contact AWS.')) throw new Error('expected immutable apply detail on bookmarked apply');
