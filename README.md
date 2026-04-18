@@ -354,6 +354,8 @@ For deeper design details, see:
 
 The AWS central-control-plane docs and Terraform bootstrap README now explicitly call out that the shipped repo-sync bootstrap path works out of the box only with an anonymously readable `repo_url` (for example a public HTTPS clone URL). Private desired-state repo authentication for that module is still a follow-up.
 
+If you plan to use the AWS central-control-plane Terraform bootstrap, do the preflight before `terraform apply`: it builds and pushes the current local Tenet checkout from the machine running apply, requires Terraform 1.5+, Docker Buildx, and AWS CLI v2 with working credentials, and expects you to verify that `repo_url` and `repo_branch` are reachable from that machine first, for example with `git ls-remote --heads <repo_url> <repo_branch>`.
+
 For the standalone architecture diagram, open this file locally in a browser:
 - `docs/architecture/tenet-v1-architecture-diagram.html`
 
