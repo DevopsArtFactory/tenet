@@ -63,6 +63,7 @@ func (s Service) Create(ctx context.Context, planID string) (CreateResult, error
 			"Tenet persisted this immutable apply request in read-only mode and did not contact AWS.",
 			"Live execution is intentionally disabled by default for this backend slice.",
 		},
+		Operations: deriveOperations(plan),
 		Source: SourceContext{
 			PlanID:        plan.ID,
 			Route:         "/v1/plans/" + plan.ID,
@@ -109,6 +110,11 @@ func (s Service) now() time.Time {
 }
 
 func stableRecordID(record Record) (string, error) {
+	// Operations are intentionally excluded here. The source plan ID already commits to the
+	// ordered plan-operation intent, and the apply operations are an additive projection for
+	// operator/executor read models. Keeping the hash anchored to the source plan avoids
+	// churning immutable apply IDs when this duplicated projection evolves without source-intent
+	// changes.
 	payload := struct {
 		PlanID         string        `json:"planId"`
 		DeploymentName string        `json:"deploymentName"`
@@ -124,4 +130,21 @@ func stableRecordID(record Record) (string, error) {
 	}
 	sum := sha256.Sum256(content)
 	return "apply_" + hex.EncodeToString(sum[:8]), nil
+}
+
+func deriveOperations(plan planpreview.Record) []Operation {
+	if len(plan.Operations) == 0 {
+		return nil
+	}
+
+	operations := make([]Operation, 0, len(plan.Operations))
+	for _, operation := range plan.Operations {
+		operations = append(operations, Operation{
+			Status:  string(StatusPending),
+			Phase:   operation.Phase,
+			Target:  operation.Target,
+			Summary: operation.Summary,
+		})
+	}
+	return operations
 }

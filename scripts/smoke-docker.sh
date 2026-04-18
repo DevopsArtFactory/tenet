@@ -324,6 +324,12 @@ assert apply_record["status"] == "failed", apply_record
 assert apply_record["error"] == "apply execution is disabled", apply_record
 assert isinstance(apply_record.get("id"), str) and apply_record["id"].startswith("apply_"), apply_record
 assert isinstance(apply_record.get("createdAt"), str) and apply_record["createdAt"], apply_record
+assert isinstance(apply_record.get("operations", []), list) and apply_record["operations"], apply_record
+assert len(apply_record["operations"]) == len(plan_preview["operations"]), (apply_record, plan_preview)
+assert [operation["status"] for operation in apply_record["operations"]] == ["pending"] * len(apply_record["operations"]), apply_record
+assert [operation["phase"] for operation in apply_record["operations"]] == [operation["phase"] for operation in plan_preview["operations"]], (apply_record, plan_preview)
+assert [operation["target"] for operation in apply_record["operations"]] == [operation["target"] for operation in plan_preview["operations"]], (apply_record, plan_preview)
+assert [operation["summary"] for operation in apply_record["operations"]] == [operation["summary"] for operation in plan_preview["operations"]], (apply_record, plan_preview)
 assert apply_record["details"] == [
     "Tenet persisted this immutable apply request in read-only mode and did not contact AWS.",
     "Live execution is intentionally disabled by default for this backend slice.",
