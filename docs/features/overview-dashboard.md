@@ -122,6 +122,16 @@ Resource-list fallback contract:
 
 The existing `Drift view` and `Plan/apply` workspace shells remain available as deeper read-only troubleshooting pages, but they are now entered from the application detail page instead of older account-row shortcuts.
 
+### Resource detail quick navigation
+
+The embedded `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}` page now includes a compact quick-navigation strip above the deeper runtime/log/inspection sections.
+
+Current behavior:
+- keeps all links bookmarkable and `_self` inside the embedded shell
+- includes `Back to application`, `Drift view`, `Plan/apply`, and deployment-scoped `Audit log` links
+- derives sibling resource links only from the already loaded deployment-detail payload, so the strip does not introduce another fetch path
+- keeps the anchors outside toggle buttons and other nested interactive controls
+
 ### Audit timeline page
 
 The embedded UI now exposes a dedicated bookmarkable audit route:

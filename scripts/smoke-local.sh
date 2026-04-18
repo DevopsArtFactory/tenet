@@ -432,6 +432,12 @@ assert "createNavLink(buildPageURL('drift', { deployment: detail.name }), 'Drift
 assert "createNavLink(buildPageURL('plan', { deployment: detail.name }), 'Plan/apply', '_self')" in ui, ui
 assert "createNavLink(buildPageURL('audit', { deployment: detail.name }), 'Audit log', '_self')" in ui, ui
 assert "createNavLink(buildPageURL('audit', { deployment: detail.name || currentPageState.deployment || '' }), 'Audit log', '_self')" in ui, ui
+assert "const createResourceQuickNav = (detail, resource) => {" in ui, ui
+assert "createElement('div', 'quick-nav-title', 'Quick navigation')" in ui, ui
+assert "createElement('div', 'quick-nav-label', 'Sibling resources')" in ui, ui
+assert "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')" in ui, ui
+assert "createNavLink(buildPageURL('resource', {" in ui, ui
+assert "No sibling linked resources are available for this application." in ui, ui
 assert 'Audit timeline' in audit_ui, audit_ui
 assert 'Deployment audit timeline' in audit_ui, audit_ui
 assert 'Active deployment context' in audit_ui, audit_ui

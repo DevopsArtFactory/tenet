@@ -20,7 +20,7 @@ The current UI flow is:
 - Application detail
 - Resource detail
 
-This keeps the first page simple and pushes deeper operational detail into drill-down pages where it is easier to understand.
+This keeps the first page simple and pushes deeper operational detail into drill-down pages where it is easier to understand. The final embedded resource page now also keeps a compact quick-navigation strip in the same shell so operators can jump laterally to the parent application, drift/plan/audit workspaces, or sibling linked resources without backing out first.
 
 ## Architecture
 

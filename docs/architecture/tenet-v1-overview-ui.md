@@ -75,6 +75,8 @@ The embedded resource page now includes a dedicated `Live inspection` panel that
 - empty, when the route is available but there is no typed payload to show yet
 - supported, with operator-friendly fields for `ecsService` and Auto Scaling Group payloads
 
+The same embedded resource route now also renders a compact quick-navigation strip above the deeper detail sections. That strip is intentionally data-local: it builds `_self` links for `Back to application`, `Drift view`, `Plan/apply`, `Audit log`, and sibling linked resources using only the already loaded deployment-detail payload plus preserved URL state. It should not introduce nested interactive controls or a second fetch path just to support lateral navigation.
+
 For recent logs, the embedded card keeps backend lookup context visible with operator-facing labels such as `Lookup region`, `Control account ID`, `Target account ID`, `Cross-account lookup`, and `Observer role configured`. Those fields stay visible in unavailable and empty states so operators can see where Tenet looked before switching to raw AWS troubleshooting.
 
 The deployment-events route is intentionally read-only and controller-derived. It reflects persisted runtime history entries, returns `events: []` when a deployment exists without history yet, and should not be treated as a full durable audit system.

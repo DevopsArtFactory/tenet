@@ -90,6 +90,12 @@
       .detail-state { padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.03); color: var(--muted); }
       .detail-state.error { border-color: rgba(255,123,123,.28); color: #ffd0d0; }
       .detail-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+      .quick-nav-strip { display:grid; gap: 12px; padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.03); }
+      .quick-nav-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap: 10px; }
+      .quick-nav-title, .quick-nav-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+      .quick-nav-current, .quick-nav-empty { color: var(--muted); font-size: 13px; }
+      .quick-nav-groups, .quick-nav-group { display:grid; gap: 10px; }
+      .quick-nav-links { display:flex; flex-wrap:wrap; gap: 10px; }
       .detail-section { padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.05); background: rgba(255,255,255,.03); }
       .detail-section h4 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
       .detail-list { margin: 0; padding-left: 18px; display:grid; gap: 8px; }
@@ -1324,6 +1330,52 @@
           description: bookmarkedResource.description || 'No linked resource metadata is available for this selection.',
         };
       };
+      const createResourceQuickNav = (detail, resource) => {
+        const deploymentName = detail.name || currentPageState.deployment || '';
+        const strip = createElement('section', 'quick-nav-strip');
+        const shellLinks = createElement('div', 'quick-nav-links');
+        shellLinks.append(
+          createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self'),
+          createNavLink(buildPageURL('drift', { deployment: deploymentName }), 'Drift view', '_self'),
+          createNavLink(buildPageURL('plan', { deployment: deploymentName }), 'Plan/apply', '_self'),
+          createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self'),
+        );
+
+        const siblingLinks = createElement('div', 'quick-nav-links');
+        const siblingResources = groupResourceSections(detail)
+          .flatMap((group) => group.resources || [])
+          .filter((candidate) => candidate.id !== resource.id);
+        siblingResources.forEach((sibling) => {
+          siblingLinks.append(createNavLink(buildPageURL('resource', {
+            deployment: deploymentName,
+            resourceType: sibling.type,
+            resourceId: sibling.id,
+          }), sibling.name, '_self'));
+        });
+
+        const groups = createElement('div', 'quick-nav-groups');
+        const appGroup = createElement('div', 'quick-nav-group');
+        appGroup.append(
+          createElement('div', 'quick-nav-label', 'Application'),
+          shellLinks,
+        );
+        const siblingGroup = createElement('div', 'quick-nav-group');
+        siblingGroup.append(createElement('div', 'quick-nav-label', 'Sibling resources'));
+        if (siblingLinks.children.length) {
+          siblingGroup.append(siblingLinks);
+        } else {
+          siblingGroup.append(createElement('div', 'quick-nav-empty', 'No sibling linked resources are available for this application.'));
+        }
+        groups.append(appGroup, siblingGroup);
+        const head = createElement('div', 'quick-nav-head');
+        head.append(
+          createElement('div', 'quick-nav-title', 'Quick navigation'),
+          createElement('div', 'quick-nav-current', `${deploymentName || 'Application'} · ${resource.name}`),
+        );
+
+        strip.append(head, groups);
+        return strip;
+      };
       const renderResourceDetailPage = (detail) => {
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
@@ -1459,7 +1511,7 @@
         const logsSection = createDetailSection('Recent logs');
         renderResourceLogsSection(logsSection, detail.name || currentPageState.deployment || '', resource).catch(() => {});
 
-        page.append(shell, historySection, executionSection, conditionsSection, inspectionSection, logsSection);
+        page.append(createResourceQuickNav(detail, resource), shell, historySection, executionSection, conditionsSection, inspectionSection, logsSection);
         root.replaceChildren(page);
       };
       const renderEmptyState = (message) => {
