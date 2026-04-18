@@ -8,9 +8,10 @@ import (
 )
 
 var (
-	ErrNotFound     = fmt.Errorf("apply request not found")
-	ErrPlanNotReady = fmt.Errorf("plan preview is not ready")
-	ErrInvalidState = fmt.Errorf("apply request lifecycle transition is invalid")
+	ErrNotFound                  = fmt.Errorf("apply request not found")
+	ErrPlanNotReady              = fmt.Errorf("plan preview is not ready")
+	ErrSourceFingerprintConflict = fmt.Errorf("apply request plan source fingerprint conflict")
+	ErrInvalidState              = fmt.Errorf("apply request lifecycle transition is invalid")
 )
 
 // Status captures the immutable apply-request lifecycle.

@@ -43,7 +43,7 @@ func respondLookupError(w http.ResponseWriter, err error) {
 }
 
 func respondApplyCreateError(w http.ResponseWriter, err error) {
-	if errors.Is(err, applyrequest.ErrPlanNotReady) {
+	if errors.Is(err, applyrequest.ErrPlanNotReady) || errors.Is(err, applyrequest.ErrSourceFingerprintConflict) {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}

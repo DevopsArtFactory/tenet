@@ -22,12 +22,16 @@ var (
 // PlanProvider loads one persisted immutable plan preview by ID.
 type PlanProvider func(context.Context, string) (planpreview.Record, error)
 
+// CurrentFingerprintProvider loads the current deployment-detail fingerprint for one deployment.
+type CurrentFingerprintProvider func(context.Context, string) (string, error)
+
 // Service derives and persists immutable apply requests from ready plan previews.
 type Service struct {
-	LoadPlan       PlanProvider
-	Store          Store
-	Now            func() time.Time
-	EnableAWSApply bool
+	LoadPlan           PlanProvider
+	CurrentFingerprint CurrentFingerprintProvider
+	Store              Store
+	Now                func() time.Time
+	EnableAWSApply     bool
 }
 
 // CreateResult captures the stored apply request plus whether it was newly created.
@@ -51,6 +55,9 @@ func (s Service) Create(ctx context.Context, planID string) (CreateResult, error
 	}
 	if plan.Status != planpreview.StatusReady {
 		return CreateResult{}, fmt.Errorf("%w: %s is %s", ErrPlanNotReady, plan.ID, plan.Status)
+	}
+	if err := s.validateCurrentFingerprint(ctx, plan); err != nil {
+		return CreateResult{}, err
 	}
 
 	record := Record{
@@ -91,6 +98,29 @@ func (s Service) Create(ctx context.Context, planID string) (CreateResult, error
 		return CreateResult{}, err
 	}
 	return CreateResult{Record: stored, Created: true}, nil
+}
+
+func (s Service) validateCurrentFingerprint(ctx context.Context, plan planpreview.Record) error {
+	if s.CurrentFingerprint == nil || plan.Source.Fingerprint == "" {
+		return nil
+	}
+
+	currentFingerprint, err := s.CurrentFingerprint(ctx, plan.DeploymentName)
+	if err != nil {
+		return err
+	}
+	if currentFingerprint == plan.Source.Fingerprint {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"%w: reviewed plan %s expects deployment detail fingerprint %s but current fingerprint for %s is %s; create a new plan preview before applying",
+		ErrSourceFingerprintConflict,
+		plan.ID,
+		plan.Source.Fingerprint,
+		plan.DeploymentName,
+		currentFingerprint,
+	)
 }
 
 // Get returns one persisted immutable apply request by ID.

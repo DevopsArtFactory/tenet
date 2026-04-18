@@ -105,6 +105,7 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		`TENET_APPLY_STORE_PATH="$APPLY_STORE_PATH"`,
 		`TENET_AWS_ENABLE_APPLY="$APPLY_ENABLED"`,
 		`curl -fsS -X POST "http://$HOST:$PORT/v1/applies/plans/$plan_id"`,
+		`curl -sS -o "$STALE_APPLY_CONFLICT_BODY" -w "%{http_code}" -X POST "http://$HOST:$PORT/v1/applies/plans/$stale_apply_plan_id"`,
 		`curl -fsS "http://$HOST:$PORT/v1/applies/$apply_id"`,
 		`apply_enabled = os.environ['APPLY_ENABLED'].lower() == 'true'`,
 		`assert apply_record['status'] == ('queued' if apply_enabled else 'failed'), apply_record`,
@@ -117,6 +118,9 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		`'No AWS mutation has been implemented for this backend slice yet.'`,
 		`assert isinstance(apply_record.get('operations', []), list) and apply_record['operations'], apply_record`,
 		`assert [operation['status'] for operation in apply_record['operations']] == [('queued' if apply_enabled else 'pending')] * len(apply_record['operations']), apply_record`,
+		`assert os.environ['STALE_APPLY_CONFLICT_STATUS'] == '409', os.environ['STALE_APPLY_CONFLICT_STATUS']`,
+		`assert 'create a new plan preview before applying' in stale_apply_conflict, stale_apply_conflict`,
+		`curl -fsS "http://$HOST:$PORT/v1/audit-logs?deployment=payments-api-stale&action=apply.requested"`,
 	} {
 		if !strings.Contains(script, fragment) {
 			t.Fatalf("expected smoke-local apply contract to include %q", fragment)
@@ -135,6 +139,8 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"ordered `operations[]` rows",
 		"additive `lifecycle` block",
 		"`updatedAt` / `startedAt` / `finishedAt`",
+		"`409 Conflict`",
+		"create a fresh preview",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README apply contract to include %q", fragment)
@@ -153,6 +159,8 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"no AWS mutation has been implemented yet",
 		"additive `lifecycle` block",
 		"`currentStep` / `completedSteps` / `totalSteps`",
+		"`409 Conflict`",
+		"does not persist a new apply record",
 	} {
 		if !strings.Contains(uiDoc, fragment) {
 			t.Fatalf("expected overview UI doc apply contract to include %q", fragment)
