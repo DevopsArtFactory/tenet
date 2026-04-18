@@ -235,3 +235,62 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		}
 	}
 }
+
+func TestResourceInspectionOperatorContract(t *testing.T) {
+	localSmoke := readRepoFile(t, "scripts/smoke-local.sh")
+	for _, fragment := range []string{
+		`candidate_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate")`,
+		`launch_template = candidate_resource_inspection['autoScalingGroup'].get('launchTemplate')`,
+		`mixed_instances_policy = candidate_resource_inspection['autoScalingGroup'].get('mixedInstancesPolicy')`,
+		`override_launch_template = override.get('launchTemplate')`,
+	} {
+		if !strings.Contains(localSmoke, fragment) {
+			t.Fatalf("expected smoke-local resource inspection contract to include %q", fragment)
+		}
+	}
+
+	dockerSmoke := readRepoFile(t, "scripts/smoke-docker.sh")
+	for _, fragment := range []string{
+		`candidate_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate")`,
+		`launch_template = candidate_resource_inspection["autoScalingGroup"].get("launchTemplate")`,
+		`mixed_instances_policy = candidate_resource_inspection["autoScalingGroup"].get("mixedInstancesPolicy")`,
+		`override_launch_template = override.get("launchTemplate")`,
+	} {
+		if !strings.Contains(dockerSmoke, fragment) {
+			t.Fatalf("expected smoke-docker resource inspection contract to include %q", fragment)
+		}
+	}
+
+	readme := readRepoFile(t, "README.md")
+	for _, fragment := range []string{
+		"`autoScalingGroup`: group sizing/health settings, additive launch-template metadata, attached target groups, and current instances",
+		"`launchTemplate`",
+		"`mixedInstancesPolicy`",
+	} {
+		if !strings.Contains(readme, fragment) {
+			t.Fatalf("expected README resource inspection contract to include %q", fragment)
+		}
+	}
+
+	featureDoc := readRepoFile(t, "docs/features/overview-dashboard.md")
+	for _, fragment := range []string{
+		"`launchTemplate`",
+		"`mixedInstancesPolicy`",
+		"`DescribeAutoScalingGroups`",
+	} {
+		if !strings.Contains(featureDoc, fragment) {
+			t.Fatalf("expected overview dashboard doc to include %q", fragment)
+		}
+	}
+
+	uiDoc := readRepoFile(t, "docs/architecture/tenet-v1-overview-ui.md")
+	for _, fragment := range []string{
+		"`launchTemplate`",
+		"`mixedInstancesPolicy`",
+		"additive launch-template metadata",
+	} {
+		if !strings.Contains(uiDoc, fragment) {
+			t.Fatalf("expected overview UI doc to include %q", fragment)
+		}
+	}
+}

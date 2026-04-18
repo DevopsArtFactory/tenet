@@ -1779,6 +1779,16 @@
           eventsSection,
         );
       };
+      const autoScalingLaunchTemplateText = (template) => {
+        if (!template || typeof template !== 'object') {
+          return '—';
+        }
+        const parts = [];
+        if (template.name) parts.push(template.name);
+        if (template.version) parts.push(`version ${template.version}`);
+        if (template.id) parts.push(`id ${template.id}`);
+        return parts.length ? parts.join(' · ') : '—';
+      };
       const renderAutoScalingGroupInspection = (section, result) => {
         const group = result?.autoScalingGroup;
         const metadata = createLookupContextGrid(result?.lookupContext, [
@@ -1790,6 +1800,8 @@
           ['Default cooldown', countText(group?.defaultCooldown)],
           ['Health check type', textOrDash(group?.healthCheckType)],
           ['Health check grace period', countText(group?.healthCheckGracePeriod)],
+          ['Launch template', autoScalingLaunchTemplateText(group?.launchTemplate)],
+          ['Mixed instances launch template', autoScalingLaunchTemplateText(group?.mixedInstancesPolicy?.launchTemplate)],
           ['Auto Scaling Group ARN', textOrDash(group?.autoScalingGroupArn)],
         ]);
         const targetGroupsSection = createInspectionListSection(
@@ -1823,11 +1835,28 @@
           },
           'No instances are currently reported for this Auto Scaling Group.',
         );
+        const mixedInstancesOverridesSection = createInspectionListSection(
+          'Mixed instances overrides',
+          group?.mixedInstancesPolicy?.overrides || [],
+          (override) => {
+            const item = createElement('li');
+            item.append(createElement('strong', '', autoScalingLaunchTemplateText(override?.launchTemplate)));
+            const meta = createElement('div', 'detail-history-meta');
+            meta.append(
+              createElement('span', 'detail-condition-meta', `Instance type · ${textOrDash(override?.instanceType)}`),
+              createElement('span', 'detail-condition-meta', `Weighted capacity · ${textOrDash(override?.weightedCapacity)}`),
+            );
+            item.append(meta);
+            return item;
+          },
+          'No mixed-instances launch template overrides are configured for this Auto Scaling Group.',
+        );
         section.replaceChildren(
           createElement('h4', '', 'Live inspection'),
           createElement('p', 'detail-section-copy', 'Live Auto Scaling Group inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
           metadata,
           targetGroupsSection,
+          mixedInstancesOverridesSection,
           instancesSection,
         );
       };

@@ -117,13 +117,13 @@ The additive inspection route stays read-only and local-friendly:
 - `trafficShiftPlan` stays summary-only, while `codeDeployDeploymentGroup`, `productionListener`, and `testListener` preserve that summary fallback locally and add live AWS inspection details on the same `trafficRoutingResource` body when live lookup succeeds
 - responses always include `lookupContext` plus `available`
 - supported ECS payloads add `ecsService`
-- supported Auto Scaling payloads add `autoScalingGroup`
+- supported Auto Scaling payloads add `autoScalingGroup`, with optional `launchTemplate` and `mixedInstancesPolicy` metadata when the live Auto Scaling Group already exposes launch-template details through `DescribeAutoScalingGroups`
 - supported traffic-routing payloads add `trafficRoutingResource` with `kind`, `displayName`, `inspectionMode`, controller/fallback `summary`, and additive live `codeDeployDeploymentGroup` or `listener` details when available
 - unsupported or unavailable resources return `available=false` with an explicit `unavailableReason` instead of bubbling a vague provider error into the operator workflow
 
 In the embedded UI, the supported inspection payloads should stay intentionally operator-facing:
 - `ecsService`: service status, desired/running/pending counts, task definition, deployments, and recent ECS service events
-- `autoScalingGroup`: sizing and health-check settings, target group ARNs, and current instances
+- `autoScalingGroup`: sizing and health-check settings, additive launch-template metadata, target group ARNs, and current instances
 - `trafficRoutingResource`: summary-only or live traffic-routing context with explicit resource kind, display name, inspection mode, rollout summary text, and additive CodeDeploy deployment-group or listener details
 
 ### Additional operator views

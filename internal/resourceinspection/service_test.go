@@ -133,6 +133,27 @@ func TestServiceInspect(t *testing.T) {
 					DefaultCooldown:        300,
 					HealthCheckType:        "EC2",
 					HealthCheckGracePeriod: 120,
+					LaunchTemplate: &AutoScalingLaunchTemplateSummary{
+						ID:      "lt-abc123",
+						Name:    "payments-api-prod-candidate",
+						Version: "$Default",
+					},
+					MixedInstancesPolicy: &AutoScalingMixedInstancesPolicy{
+						LaunchTemplate: &AutoScalingLaunchTemplateSummary{
+							ID:      "lt-abc123",
+							Name:    "payments-api-prod-candidate",
+							Version: "$Default",
+						},
+						Overrides: []AutoScalingLaunchTemplateOverride{{
+							InstanceType:     "m6i.large",
+							WeightedCapacity: "2",
+							LaunchTemplate: &AutoScalingLaunchTemplateSummary{
+								ID:      "lt-override123",
+								Name:    "payments-api-prod-candidate-arm",
+								Version: "3",
+							},
+						}},
+					},
 					TargetGroupARNs: []string{
 						"arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-prod-candidate/abc123",
 					},
@@ -168,6 +189,12 @@ func TestServiceInspect(t *testing.T) {
 		}
 		if !result.Available || result.Source != SourceAutoScalingGroup || result.AutoScalingGroup == nil {
 			t.Fatalf("expected available ASG inspection payload, got %+v", result)
+		}
+		if result.AutoScalingGroup.LaunchTemplate == nil || result.AutoScalingGroup.LaunchTemplate.Name != "payments-api-prod-candidate" {
+			t.Fatalf("expected launch template metadata in ASG inspection payload, got %+v", result.AutoScalingGroup)
+		}
+		if result.AutoScalingGroup.MixedInstancesPolicy == nil || len(result.AutoScalingGroup.MixedInstancesPolicy.Overrides) != 1 {
+			t.Fatalf("expected mixed instances launch template metadata in ASG inspection payload, got %+v", result.AutoScalingGroup)
 		}
 	})
 
@@ -803,10 +830,38 @@ func TestECSInspectionFromServiceSortsDeploymentsAndEvents(t *testing.T) {
 	}
 }
 
-func TestAutoScalingInspectionFromGroupSortsFields(t *testing.T) {
+func TestAutoScalingInspectionFromGroupSortsFieldsAndMapsLaunchTemplates(t *testing.T) {
 	got := autoScalingInspectionFromGroup(asgtypes.AutoScalingGroup{
 		AutoScalingGroupARN:  stringPtr("arn:asg"),
 		AutoScalingGroupName: stringPtr("payments-api-prod-candidate"),
+		LaunchTemplate: &asgtypes.LaunchTemplateSpecification{
+			LaunchTemplateId:   stringPtr("lt-abc123"),
+			LaunchTemplateName: stringPtr("payments-api-prod-candidate"),
+			Version:            stringPtr("$Default"),
+		},
+		MixedInstancesPolicy: &asgtypes.MixedInstancesPolicy{
+			LaunchTemplate: &asgtypes.LaunchTemplate{
+				LaunchTemplateSpecification: &asgtypes.LaunchTemplateSpecification{
+					LaunchTemplateId:   stringPtr("lt-base123"),
+					LaunchTemplateName: stringPtr("payments-api-prod-candidate-base"),
+					Version:            stringPtr("7"),
+				},
+				Overrides: []asgtypes.LaunchTemplateOverrides{
+					{
+						InstanceType:     stringPtr("c7g.large"),
+						WeightedCapacity: stringPtr("2"),
+						LaunchTemplateSpecification: &asgtypes.LaunchTemplateSpecification{
+							LaunchTemplateId:   stringPtr("lt-arm123"),
+							LaunchTemplateName: stringPtr("payments-api-prod-candidate-arm"),
+							Version:            stringPtr("3"),
+						},
+					},
+					{
+						InstanceType: stringPtr("m6i.large"),
+					},
+				},
+			},
+		},
 		TargetGroupARNs: []string{
 			"arn:tg/b",
 			"arn:tg/a",
@@ -822,6 +877,39 @@ func TestAutoScalingInspectionFromGroupSortsFields(t *testing.T) {
 	}
 	if len(got.Instances) != 2 || got.Instances[0].InstanceID != "i-a" {
 		t.Fatalf("expected instances sorted by id, got %+v", got.Instances)
+	}
+	if !reflect.DeepEqual(got.LaunchTemplate, &AutoScalingLaunchTemplateSummary{
+		ID:      "lt-abc123",
+		Name:    "payments-api-prod-candidate",
+		Version: "$Default",
+	}) {
+		t.Fatalf("expected direct launch template metadata, got %+v", got.LaunchTemplate)
+	}
+	if got.MixedInstancesPolicy == nil {
+		t.Fatalf("expected mixed instances policy metadata, got %+v", got)
+	}
+	if !reflect.DeepEqual(got.MixedInstancesPolicy.LaunchTemplate, &AutoScalingLaunchTemplateSummary{
+		ID:      "lt-base123",
+		Name:    "payments-api-prod-candidate-base",
+		Version: "7",
+	}) {
+		t.Fatalf("expected mixed instances base launch template metadata, got %+v", got.MixedInstancesPolicy.LaunchTemplate)
+	}
+	if !reflect.DeepEqual(got.MixedInstancesPolicy.Overrides, []AutoScalingLaunchTemplateOverride{
+		{
+			InstanceType:     "c7g.large",
+			WeightedCapacity: "2",
+			LaunchTemplate: &AutoScalingLaunchTemplateSummary{
+				ID:      "lt-arm123",
+				Name:    "payments-api-prod-candidate-arm",
+				Version: "3",
+			},
+		},
+		{
+			InstanceType: "m6i.large",
+		},
+	}) {
+		t.Fatalf("expected mixed instances overrides, got %+v", got.MixedInstancesPolicy.Overrides)
 	}
 }
 

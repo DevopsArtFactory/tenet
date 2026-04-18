@@ -145,8 +145,27 @@ type AutoScalingInspection struct {
 	DefaultCooldown        int32                             `json:"defaultCooldown"`
 	HealthCheckType        string                            `json:"healthCheckType,omitempty"`
 	HealthCheckGracePeriod int32                             `json:"healthCheckGracePeriod"`
+	LaunchTemplate         *AutoScalingLaunchTemplateSummary `json:"launchTemplate,omitempty"`
+	MixedInstancesPolicy   *AutoScalingMixedInstancesPolicy  `json:"mixedInstancesPolicy,omitempty"`
 	TargetGroupARNs        []string                          `json:"targetGroupArns,omitempty"`
 	Instances              []AutoScalingGroupInstanceSummary `json:"instances"`
+}
+
+type AutoScalingLaunchTemplateSummary struct {
+	ID      string `json:"id,omitempty"`
+	Name    string `json:"name,omitempty"`
+	Version string `json:"version,omitempty"`
+}
+
+type AutoScalingMixedInstancesPolicy struct {
+	LaunchTemplate *AutoScalingLaunchTemplateSummary   `json:"launchTemplate,omitempty"`
+	Overrides      []AutoScalingLaunchTemplateOverride `json:"overrides,omitempty"`
+}
+
+type AutoScalingLaunchTemplateOverride struct {
+	InstanceType     string                            `json:"instanceType,omitempty"`
+	WeightedCapacity string                            `json:"weightedCapacity,omitempty"`
+	LaunchTemplate   *AutoScalingLaunchTemplateSummary `json:"launchTemplate,omitempty"`
 }
 
 type AutoScalingGroupInstanceSummary struct {
@@ -772,9 +791,53 @@ func autoScalingInspectionFromGroup(group asgtypes.AutoScalingGroup) AutoScaling
 		DefaultCooldown:        aws.ToInt32(group.DefaultCooldown),
 		HealthCheckType:        aws.ToString(group.HealthCheckType),
 		HealthCheckGracePeriod: aws.ToInt32(group.HealthCheckGracePeriod),
+		LaunchTemplate:         autoScalingLaunchTemplateSummary(group.LaunchTemplate),
+		MixedInstancesPolicy:   autoScalingMixedInstancesPolicy(group.MixedInstancesPolicy),
 		TargetGroupARNs:        targetGroupARNs,
 		Instances:              instanceSummaries,
 	}
+}
+
+func autoScalingLaunchTemplateSummary(spec *asgtypes.LaunchTemplateSpecification) *AutoScalingLaunchTemplateSummary {
+	if spec == nil {
+		return nil
+	}
+	summary := &AutoScalingLaunchTemplateSummary{
+		ID:      strings.TrimSpace(aws.ToString(spec.LaunchTemplateId)),
+		Name:    strings.TrimSpace(aws.ToString(spec.LaunchTemplateName)),
+		Version: strings.TrimSpace(aws.ToString(spec.Version)),
+	}
+	if summary.ID == "" && summary.Name == "" && summary.Version == "" {
+		return nil
+	}
+	return summary
+}
+
+func autoScalingMixedInstancesPolicy(policy *asgtypes.MixedInstancesPolicy) *AutoScalingMixedInstancesPolicy {
+	if policy == nil || policy.LaunchTemplate == nil {
+		return nil
+	}
+
+	detail := &AutoScalingMixedInstancesPolicy{
+		LaunchTemplate: autoScalingLaunchTemplateSummary(policy.LaunchTemplate.LaunchTemplateSpecification),
+	}
+
+	for _, override := range policy.LaunchTemplate.Overrides {
+		mapped := AutoScalingLaunchTemplateOverride{
+			InstanceType:     strings.TrimSpace(aws.ToString(override.InstanceType)),
+			WeightedCapacity: strings.TrimSpace(aws.ToString(override.WeightedCapacity)),
+			LaunchTemplate:   autoScalingLaunchTemplateSummary(override.LaunchTemplateSpecification),
+		}
+		if mapped.InstanceType == "" && mapped.WeightedCapacity == "" && mapped.LaunchTemplate == nil {
+			continue
+		}
+		detail.Overrides = append(detail.Overrides, mapped)
+	}
+
+	if detail.LaunchTemplate == nil && len(detail.Overrides) == 0 {
+		return nil
+	}
+	return detail
 }
 
 func findECSService(ctx context.Context, client ecsServiceAPI, serviceName string, hints *ecsServiceClusterHintCache, key ecsServiceClusterHintKey) (*ecstypes.Service, *string, error) {

@@ -407,6 +407,21 @@ if candidate_resource_inspection['available']:
     assert candidate_resource_inspection.get('source') == 'auto_scaling_group', candidate_resource_inspection
     assert isinstance(candidate_resource_inspection.get('autoScalingGroup'), dict), candidate_resource_inspection
     assert isinstance(candidate_resource_inspection['autoScalingGroup'].get('autoScalingGroupName'), str) and candidate_resource_inspection['autoScalingGroup']['autoScalingGroupName'], candidate_resource_inspection
+    launch_template = candidate_resource_inspection['autoScalingGroup'].get('launchTemplate')
+    assert launch_template is None or isinstance(launch_template, dict), candidate_resource_inspection
+    if isinstance(launch_template, dict):
+        assert any(isinstance(launch_template.get(key), str) and launch_template.get(key) for key in ('id', 'name', 'version')), candidate_resource_inspection
+    mixed_instances_policy = candidate_resource_inspection['autoScalingGroup'].get('mixedInstancesPolicy')
+    assert mixed_instances_policy is None or isinstance(mixed_instances_policy, dict), candidate_resource_inspection
+    if isinstance(mixed_instances_policy, dict):
+        base_launch_template = mixed_instances_policy.get('launchTemplate')
+        assert base_launch_template is None or isinstance(base_launch_template, dict), candidate_resource_inspection
+        overrides = mixed_instances_policy.get('overrides')
+        assert overrides is None or isinstance(overrides, list), candidate_resource_inspection
+        for override in overrides or []:
+            assert isinstance(override, dict), candidate_resource_inspection
+            override_launch_template = override.get('launchTemplate')
+            assert override_launch_template is None or isinstance(override_launch_template, dict), candidate_resource_inspection
     assert isinstance(candidate_resource_inspection['autoScalingGroup'].get('instances', []), list), candidate_resource_inspection
 else:
     assert isinstance(candidate_resource_inspection.get('unavailableReason'), str) and candidate_resource_inspection['unavailableReason'], candidate_resource_inspection
@@ -465,7 +480,9 @@ assert 'Live inspection is unavailable for this resource.' in ui, ui
 assert 'No live inspection details are available for this resource yet.' in ui, ui
 assert 'Service deployments' in ui, ui
 assert 'Auto Scaling Group name' in ui, ui
+assert 'Launch template' in ui, ui
 assert 'Target group ARNs' in ui, ui
+assert 'Mixed instances overrides' in ui, ui
 assert "createNavLink(buildPageURL('drift', { deployment: detail.name }), 'Drift view', '_self')" in ui, ui
 assert "createNavLink(buildPageURL('plan', { deployment: detail.name }), 'Plan/apply', '_self')" in ui, ui
 assert "createNavLink(buildPageURL('audit', { deployment: detail.name }), 'Audit log', '_self')" in ui, ui
