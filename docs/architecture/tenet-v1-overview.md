@@ -146,4 +146,6 @@ Open the architecture diagram here:
 
 - `docs/architecture/tenet-v1-overview-ui.md`
 - `docs/architecture/tenet-v1-domain-model.md`
+- `docs/architecture/tenet-v1-aws-central-control-plane.md`
 - `docs/features/resource-recent-logs.md`
+- `deploy/terraform/aws-central-control-plane/README.md`

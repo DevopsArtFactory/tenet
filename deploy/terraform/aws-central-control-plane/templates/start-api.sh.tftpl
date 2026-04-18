@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+until [ -d /workspace/repo/.git ]; do
+  echo "waiting for repo sync"
+  sleep 2
+done
+mkdir -p /workspace/control-plane-state
+[ -f /workspace/control-plane-state/plan-previews.json ] || printf '[]\n' > /workspace/control-plane-state/plan-previews.json
+[ -f /workspace/control-plane-state/apply-requests.json ] || printf '[]\n' > /workspace/control-plane-state/apply-requests.json
+export TENET_API_REQUEST_TIMEOUT='${api_request_timeout}'
+exec /usr/local/bin/tenet-api

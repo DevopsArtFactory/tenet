@@ -1,0 +1,141 @@
+# Terraform: AWS central Tenet bootstrap
+
+This directory provides a one-touch Terraform bootstrap for a centralized Tenet control plane on AWS.
+
+What it provisions:
+- a bootstrap VPC
+- public subnets for the ALB and ECS/Fargate tasks
+- private subnets for Redis and EFS mount targets
+- an ALB for the embedded Tenet UI/API
+- one ECS cluster
+- one ECS service for `tenet-api`
+- one ECS service for `tenet-controller`
+- one ElastiCache Redis cluster for shared runtime state
+- one EFS filesystem/access point for persisted plan/apply stores
+- one ECR repository
+- IAM roles for ECS execution and runtime access
+- a local `terraform apply` image build/push step that builds the current repo checkout and pushes it to ECR
+
+This is a practical bootstrap, not the final production topology. It intentionally optimizes for one-touch deployment from a checked-out Tenet repo.
+
+## How the one-touch path works
+
+`terraform apply` does three things in one flow:
+1. creates the AWS infrastructure
+2. builds the current local Tenet checkout with Docker Buildx
+3. pushes the image into the provisioned ECR repository and deploys ECS services from it
+
+That means the machine running `terraform apply` must have:
+- Terraform 1.5+
+- Docker with Buildx
+- AWS CLI v2
+- AWS credentials with permission to create the resources in this module
+
+## Repo-sync pattern
+
+The current Tenet runtime still expects `TENET_REPO_ROOT` to point at a filesystem tree.
+
+To satisfy that without introducing an external GitOps controller, each ECS task definition includes a lightweight `alpine/git` sidecar that:
+- clones `repo_url` into a shared task volume
+- hard-resets it to `repo_branch`
+- refreshes it on a loop
+
+That keeps both:
+- `tenet-api`
+- `tenet-controller`
+
+reading a real repo tree at `/workspace/repo`.
+
+## Current scope and honesty notes
+
+Implemented well by this bootstrap:
+- centralized `tenet-api` + `tenet-controller`
+- shared Redis runtime state
+- ALB ingress
+- one-touch image build/push/deploy from the local checkout
+- cross-account read-only setup via `observer_role_arns`
+
+Still intentionally bootstrap-grade:
+- ALB is HTTP-only in this module; TLS/auth can be added in front later
+- ECS tasks get public IPs to avoid NAT complexity in the first slice
+- the runtime role is attached to AWS `ReadOnlyAccess` for bootstrap convenience rather than a hand-minimized least-privilege policy
+- this module does not implement live write-side execution; `roleArn` remains part of the Tenet manifest contract, not part of this Terraform runtime yet
+
+## Quick start
+
+From the Tenet repository root:
+
+```bash
+cd deploy/terraform/aws-central-control-plane
+cp terraform.tfvars.example terraform.tfvars
+$EDITOR terraform.tfvars
+terraform init
+terraform apply
+```
+
+When apply finishes, Terraform prints:
+- the ALB DNS name
+- the Tenet URL
+- the ECS runtime role ARN
+- the ECR repository URL
+
+## Single-account usage
+
+If you are deploying Tenet and workloads in the same AWS account:
+- leave `observer_role_arns = []` if you do not need cross-account read paths yet
+- narrow `operator_cidr_blocks` to your office/VPN
+- let the ECS runtime role inspect same-account resources directly
+
+## Multi-account usage
+
+If you are deploying Tenet in a central control-plane account:
+- set `observer_role_arns` to the target-account `TenetObserverRole` ARNs
+- use the `runtime_role_arn` output when writing those target-account trust policies
+- keep workload resources in the target accounts
+
+A minimal target-account trust shape is:
+- principal: the `runtime_role_arn` output from this module
+- action: `sts:AssumeRole`
+
+## Important inputs
+
+See `variables.tf`, but the main knobs are:
+- `name_prefix`
+- `repo_url`
+- `repo_branch`
+- `image_tag`
+- `operator_cidr_blocks`
+- `observer_role_arns`
+
+## Example tfvars
+
+```hcl
+name_prefix          = "tenet-prod"
+repo_branch          = "main"
+image_tag            = "bootstrap"
+operator_cidr_blocks = ["203.0.113.10/32"]
+observer_role_arns = [
+  "arn:aws:iam::210987654321:role/TenetObserverRole",
+  "arn:aws:iam::210987654322:role/TenetObserverRole"
+]
+```
+
+## Verification after apply
+
+Use the printed ALB URL or DNS name.
+
+```bash
+curl -I http://<alb-dns-name>/
+curl http://<alb-dns-name>/healthz
+curl http://<alb-dns-name>/v1/overview/applications
+```
+
+For cross-account reads, also test a supported resource-detail API route and verify that it either:
+- returns live data, or
+- returns an explicit unavailable payload with lookup context
+
+## Cleanup
+
+```bash
+terraform destroy
+```
