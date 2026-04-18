@@ -65,13 +65,16 @@ The embedded UI is intentionally lightweight: static HTML/CSS/JS served directly
 TENET_CATALOG_SOURCE=filesystem \
 TENET_REPO_ROOT=$(pwd)/examples/local-repo \
 TENET_STATUS_PATH=$(pwd)/examples/local-status/deployments.json \
+TENET_API_ADDR=:18083 \
 go run ./cmd/tenet-api
 ```
+
+For manual `go run ./cmd/tenet-api` flows, `tenet-api` listens on `TENET_API_ADDR`, not `TENET_API_PORT`. Use `TENET_API_ADDR=:18083` as a safe local example before opening the UI.
 
 Then open:
 
 ```bash
-http://localhost:8080/
+http://localhost:18083/
 ```
 
 You should land on the applications overview page.
@@ -85,6 +88,7 @@ TENET_CATALOG_GITHUB_REF=main \
 TENET_CATALOG_GITHUB_PATH=tenet \
 TENET_CATALOG_GITHUB_TOKEN=$GITHUB_TOKEN \
 TENET_STATUS_PATH=$(pwd)/examples/local-status/deployments.json \
+TENET_API_ADDR=:18083 \
 go run ./cmd/tenet-api
 ```
 
@@ -103,7 +107,7 @@ Startup validation is explicit:
 The read-model contract stays the same in both modes. For example:
 
 ```bash
-curl http://localhost:8080/v1/catalog/summary
+curl http://localhost:18083/v1/catalog/summary
 ```
 
 ```json
