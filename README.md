@@ -186,6 +186,8 @@ Supported traffic-routing inspection currently covers:
 - `testListener`
 - `trafficShiftPlan`
 
+Within one running Tenet API process, repeated successful live inspections for `codeDeployDeploymentGroup`, `productionListener`, and `testListener` now reuse a bounded in-process cache keyed by `(region, target account, observer role, resource type, resource name)`. Summary-only fallbacks and unavailable outcomes are still recomputed or returned through the existing non-cached path.
+
 For `ecsService`, Tenet now keeps a bounded in-process hint of the last cluster that resolved a given `(region, target account, observer role, service name)` lookup so repeated drill-downs avoid brute-force cluster scans. If that hint is stale or the service moved, the lookup falls back to the full cluster scan path, refreshes the hint, and keeps the existing resource-not-found semantics unchanged.
 
 The embedded `Live inspection` panel renders operator-friendly summaries from those payloads:

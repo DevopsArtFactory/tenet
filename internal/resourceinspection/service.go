@@ -24,6 +24,7 @@ const (
 	SourceTrafficRoutingAWS = "traffic_routing_aws"
 	SourceRolloutSummary    = "rollout_execution_summary"
 	ecsServiceHintCacheCap  = 256
+	trafficRoutingCacheCap  = 128
 )
 
 var ErrNotImplemented = errors.New("resource inspection service not implemented")
@@ -165,16 +166,18 @@ type Options struct {
 }
 
 type Service struct {
-	options         Options
-	awsCache        *resourceaws.ClientCache
-	ecsServiceHints *ecsServiceClusterHintCache
+	options             Options
+	awsCache            *resourceaws.ClientCache
+	ecsServiceHints     *ecsServiceClusterHintCache
+	trafficRoutingCache *trafficRoutingInspectionCache
 }
 
 func NewService(options Options) Service {
 	return Service{
-		options:         options,
-		awsCache:        resourceaws.NewClientCache(resourceaws.DefaultClientCacheDeps()),
-		ecsServiceHints: newECSServiceClusterHintCache(ecsServiceHintCacheCap),
+		options:             options,
+		awsCache:            resourceaws.NewClientCache(resourceaws.DefaultClientCacheDeps()),
+		ecsServiceHints:     newECSServiceClusterHintCache(ecsServiceHintCacheCap),
+		trafficRoutingCache: newTrafficRoutingInspectionCache(trafficRoutingCacheCap),
 	}
 }
 
@@ -202,6 +205,26 @@ type ecsServiceClusterHintCache struct {
 	entries    map[ecsServiceClusterHintKey]*list.Element
 }
 
+type trafficRoutingInspectionCacheKey struct {
+	region          string
+	targetAccountID string
+	observerRoleARN string
+	resourceType    string
+	resourceName    string
+}
+
+type trafficRoutingInspectionCacheEntry struct {
+	key    trafficRoutingInspectionCacheKey
+	detail TrafficRoutingInspection
+}
+
+type trafficRoutingInspectionCache struct {
+	maxEntries int
+	mu         sync.Mutex
+	order      *list.List
+	entries    map[trafficRoutingInspectionCacheKey]*list.Element
+}
+
 func newECSServiceClusterHintCache(maxEntries int) *ecsServiceClusterHintCache {
 	if maxEntries <= 0 {
 		maxEntries = ecsServiceHintCacheCap
@@ -213,12 +236,33 @@ func newECSServiceClusterHintCache(maxEntries int) *ecsServiceClusterHintCache {
 	}
 }
 
+func newTrafficRoutingInspectionCache(maxEntries int) *trafficRoutingInspectionCache {
+	if maxEntries <= 0 {
+		maxEntries = trafficRoutingCacheCap
+	}
+	return &trafficRoutingInspectionCache{
+		maxEntries: maxEntries,
+		order:      list.New(),
+		entries:    make(map[trafficRoutingInspectionCacheKey]*list.Element),
+	}
+}
+
 func newECSServiceClusterHintKey(region, targetAccountID, observerRoleARN, serviceName string) ecsServiceClusterHintKey {
 	return ecsServiceClusterHintKey{
 		region:          strings.TrimSpace(region),
 		targetAccountID: strings.TrimSpace(targetAccountID),
 		observerRoleARN: strings.TrimSpace(observerRoleARN),
 		serviceName:     strings.TrimSpace(serviceName),
+	}
+}
+
+func newTrafficRoutingInspectionCacheKey(region, targetAccountID, observerRoleARN, resourceType, resourceName string) trafficRoutingInspectionCacheKey {
+	return trafficRoutingInspectionCacheKey{
+		region:          strings.TrimSpace(region),
+		targetAccountID: strings.TrimSpace(targetAccountID),
+		observerRoleARN: strings.TrimSpace(observerRoleARN),
+		resourceType:    strings.TrimSpace(resourceType),
+		resourceName:    strings.TrimSpace(resourceName),
 	}
 }
 
@@ -263,6 +307,47 @@ func (c *ecsServiceClusterHintCache) Set(key ecsServiceClusterHintKey, clusterAR
 		return
 	}
 	entry := back.Value.(ecsServiceClusterHintEntry)
+	delete(c.entries, entry.key)
+	c.order.Remove(back)
+}
+
+func (c *trafficRoutingInspectionCache) Get(key trafficRoutingInspectionCacheKey) (TrafficRoutingInspection, bool) {
+	if c == nil {
+		return TrafficRoutingInspection{}, false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	element, ok := c.entries[key]
+	if !ok {
+		return TrafficRoutingInspection{}, false
+	}
+	c.order.MoveToFront(element)
+	entry := element.Value.(trafficRoutingInspectionCacheEntry)
+	return cloneTrafficRoutingInspection(entry.detail), true
+}
+
+func (c *trafficRoutingInspectionCache) Set(key trafficRoutingInspectionCacheKey, detail TrafficRoutingInspection) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	cloned := cloneTrafficRoutingInspection(detail)
+	if element, ok := c.entries[key]; ok {
+		element.Value = trafficRoutingInspectionCacheEntry{key: key, detail: cloned}
+		c.order.MoveToFront(element)
+		return
+	}
+	element := c.order.PushFront(trafficRoutingInspectionCacheEntry{key: key, detail: cloned})
+	c.entries[key] = element
+	if c.order.Len() <= c.maxEntries {
+		return
+	}
+	back := c.order.Back()
+	if back == nil {
+		return
+	}
+	entry := back.Value.(trafficRoutingInspectionCacheEntry)
 	delete(c.entries, entry.key)
 	c.order.Remove(back)
 }
@@ -312,6 +397,11 @@ func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
 	case "trafficShiftPlan":
 		return availableTrafficRoutingResult(req, trafficRoutingInspection(req)), nil
 	case "codeDeployDeploymentGroup", "productionListener", "testListener":
+		cacheKey := newTrafficRoutingInspectionCacheKey(req.Region, req.TargetAccountID, req.ObserverRoleARN, req.ResourceType, req.ResourceName)
+		if detail, ok := s.trafficRoutingCache.Get(cacheKey); ok {
+			detail.Summary = trafficRoutingSummary(req)
+			return availableTrafficRoutingResult(req, detail), nil
+		}
 		inspect := s.options.InspectTrafficRoutingResource
 		if inspect == nil {
 			if !s.options.EnableAWS {
@@ -339,6 +429,9 @@ func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
 				return unavailableResult(req, reason), nil
 			}
 			return Result{}, err
+		}
+		if detail.InspectionMode == "live" {
+			s.trafficRoutingCache.Set(cacheKey, detail)
 		}
 		return availableTrafficRoutingResult(req, detail), nil
 	case "ecsService":
@@ -506,6 +599,35 @@ func trafficRoutingSummaryText(resourceType, resourceDescription string) string 
 	default:
 		return "Traffic routing summary is available for this resource."
 	}
+}
+
+func cloneTrafficRoutingInspection(detail TrafficRoutingInspection) TrafficRoutingInspection {
+	cloned := detail
+	if detail.CodeDeployDeploymentGroup != nil {
+		group := *detail.CodeDeployDeploymentGroup
+		group.ECSServices = append([]CodeDeployECSServiceBinding(nil), detail.CodeDeployDeploymentGroup.ECSServices...)
+		group.TargetGroups = append([]string(nil), detail.CodeDeployDeploymentGroup.TargetGroups...)
+		cloned.CodeDeployDeploymentGroup = &group
+	}
+	if detail.Listener != nil {
+		listener := *detail.Listener
+		listener.Certificates = append([]string(nil), detail.Listener.Certificates...)
+		listener.DefaultActions = cloneListenerActions(detail.Listener.DefaultActions)
+		cloned.Listener = &listener
+	}
+	return cloned
+}
+
+func cloneListenerActions(actions []ListenerActionInspection) []ListenerActionInspection {
+	if len(actions) == 0 {
+		return nil
+	}
+	cloned := make([]ListenerActionInspection, len(actions))
+	for i, action := range actions {
+		cloned[i] = action
+		cloned[i].TargetGroups = append([]ListenerActionTargetInspection(nil), action.TargetGroups...)
+	}
+	return cloned
 }
 
 func lookupContext(req Request) LookupContext {

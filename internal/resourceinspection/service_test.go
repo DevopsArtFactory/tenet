@@ -12,6 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/aws/smithy-go"
+
+	"github.com/DevopsArtFactory/tenet/internal/resourceaws"
 )
 
 func expectedLookupContext(region, controlAccountID, targetAccountID, observerRoleARN string) LookupContext {
@@ -534,6 +536,217 @@ func TestServiceInspect(t *testing.T) {
 		}
 		if result.Source != SourceRolloutSummary || result.TrafficRoutingResource == nil || result.TrafficRoutingResource.InspectionMode != "summary_only" {
 			t.Fatalf("expected summary-only traffic shift plan payload, got %+v", result)
+		}
+	})
+
+	t.Run("traffic routing live inspection reuses cached result", func(t *testing.T) {
+		callCount := 0
+		service := NewService(Options{
+			InspectTrafficRoutingResource: func(context.Context, TrafficRoutingRequest) (TrafficRoutingInspection, error) {
+				callCount++
+				return TrafficRoutingInspection{
+					Kind:           "productionListener",
+					DisplayName:    "Production listener",
+					InspectionMode: "live",
+					Summary:        "Production listener CodeDeploy shifts during ECS traffic shifting",
+					Listener: &ListenerInspection{
+						ListenerARN:     "arn:listener/prod",
+						LoadBalancerARN: "arn:loadbalancer/payments",
+						Port:            443,
+						Protocol:        "HTTPS",
+					},
+				}, nil
+			},
+		})
+		req := Request{
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "productionListener",
+			ResourceName:        "payments-api-prod-prod-listener",
+			ResourceDescription: "Production listener CodeDeploy shifts during ECS traffic shifting",
+			ControlAccountID:    "123456789012",
+			TargetAccountID:     "123456789012",
+			Region:              "ap-northeast-2",
+			ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
+		}
+
+		first, err := service.Inspect(context.Background(), req)
+		if err != nil {
+			t.Fatalf("first Inspect returned error: %v", err)
+		}
+		second, err := service.Inspect(context.Background(), req)
+		if err != nil {
+			t.Fatalf("second Inspect returned error: %v", err)
+		}
+		if callCount != 1 {
+			t.Fatalf("expected one live provider call for repeated lookup, got %d", callCount)
+		}
+		if !reflect.DeepEqual(first, second) {
+			t.Fatalf("expected repeated lookup to return cached payload, first=%+v second=%+v", first, second)
+		}
+	})
+
+	t.Run("traffic routing live inspection cache key separates region account role type and name", func(t *testing.T) {
+		callCount := 0
+		service := NewService(Options{
+			InspectTrafficRoutingResource: func(context.Context, TrafficRoutingRequest) (TrafficRoutingInspection, error) {
+				callCount++
+				return TrafficRoutingInspection{
+					Kind:           "productionListener",
+					DisplayName:    "Production listener",
+					InspectionMode: "live",
+					Summary:        "summary",
+					Listener: &ListenerInspection{
+						ListenerARN: "arn:listener/" + string(rune('a'+callCount-1)),
+					},
+				}, nil
+			},
+		})
+		base := Request{
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "productionListener",
+			ResourceName:        "payments-api-prod-prod-listener",
+			ResourceDescription: "summary",
+			ControlAccountID:    "123456789012",
+			TargetAccountID:     "123456789012",
+			Region:              "ap-northeast-2",
+			ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
+		}
+		requests := []Request{
+			base,
+			base,
+			func() Request {
+				req := base
+				req.Region = "us-west-2"
+				return req
+			}(),
+			func() Request {
+				req := base
+				req.TargetAccountID = "210987654321"
+				return req
+			}(),
+			func() Request {
+				req := base
+				req.ObserverRoleARN = "arn:aws:iam::123456789012:role/AnotherObserverRole"
+				return req
+			}(),
+			func() Request {
+				req := base
+				req.ResourceType = "testListener"
+				req.ResourceName = "payments-api-prod-test-listener"
+				return req
+			}(),
+			func() Request {
+				req := base
+				req.ResourceName = "payments-api-prod-prod-listener-v2"
+				return req
+			}(),
+		}
+
+		for i, req := range requests {
+			if _, err := service.Inspect(context.Background(), req); err != nil {
+				t.Fatalf("Inspect #%d returned error: %v", i+1, err)
+			}
+		}
+		if callCount != 6 {
+			t.Fatalf("expected repeated base lookup plus five key changes to trigger 6 live provider calls, got %d", callCount)
+		}
+	})
+
+	t.Run("traffic routing live inspection retries after unavailable result because unavailable outcomes are not cached", func(t *testing.T) {
+		callCount := 0
+		service := NewService(Options{
+			InspectTrafficRoutingResource: func(context.Context, TrafficRoutingRequest) (TrafficRoutingInspection, error) {
+				callCount++
+				if callCount == 1 {
+					return TrafficRoutingInspection{}, resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
+				}
+				return TrafficRoutingInspection{
+					Kind:           "codeDeployDeploymentGroup",
+					DisplayName:    "CodeDeploy deployment group",
+					InspectionMode: "live",
+					Summary:        "CodeDeploy deployment group Tenet targets for ECS rollout",
+					CodeDeployDeploymentGroup: &CodeDeployDeploymentGroupInspection{
+						ApplicationName:     "payments-api-prod-codedeploy-app",
+						DeploymentGroupName: "payments-api-prod-codedeploy-group",
+					},
+				}, nil
+			},
+		})
+		req := Request{
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "codeDeployDeploymentGroup",
+			ResourceName:        "payments-api-prod-codedeploy-group",
+			ResourceDescription: "CodeDeploy deployment group Tenet targets for ECS rollout",
+			ControlAccountID:    "123456789012",
+			TargetAccountID:     "123456789012",
+			Region:              "ap-northeast-2",
+			ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
+		}
+
+		first, err := service.Inspect(context.Background(), req)
+		if err != nil {
+			t.Fatalf("first Inspect returned error: %v", err)
+		}
+		if first.Available || first.UnavailableReason != resourceaws.UnavailableReasonResourceNotFound {
+			t.Fatalf("expected first lookup to remain unavailable, got %+v", first)
+		}
+		second, err := service.Inspect(context.Background(), req)
+		if err != nil {
+			t.Fatalf("second Inspect returned error: %v", err)
+		}
+		if !second.Available || second.Source != SourceTrafficRoutingAWS || second.TrafficRoutingResource == nil || second.TrafficRoutingResource.InspectionMode != "live" {
+			t.Fatalf("expected second lookup to retry and return live payload, got %+v", second)
+		}
+		if callCount != 2 {
+			t.Fatalf("expected unavailable result to bypass cache and retry provider, got %d calls", callCount)
+		}
+	})
+
+	t.Run("traffic routing cached result recomputes summary from current request", func(t *testing.T) {
+		callCount := 0
+		service := NewService(Options{
+			InspectTrafficRoutingResource: func(context.Context, TrafficRoutingRequest) (TrafficRoutingInspection, error) {
+				callCount++
+				return TrafficRoutingInspection{
+					Kind:           "testListener",
+					DisplayName:    "Test listener",
+					InspectionMode: "live",
+					Summary:        "stale summary",
+					Listener: &ListenerInspection{
+						ListenerARN: "arn:listener/test",
+					},
+				}, nil
+			},
+		})
+		req := Request{
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "testListener",
+			ResourceName:        "payments-api-prod-test-listener",
+			ResourceDescription: "Test listener CodeDeploy uses to validate the replacement ECS task set before promotion",
+			ControlAccountID:    "123456789012",
+			TargetAccountID:     "123456789012",
+			Region:              "ap-northeast-2",
+			ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
+		}
+
+		first, err := service.Inspect(context.Background(), req)
+		if err != nil {
+			t.Fatalf("first Inspect returned error: %v", err)
+		}
+		if first.TrafficRoutingResource == nil || first.TrafficRoutingResource.Summary != "stale summary" {
+			t.Fatalf("expected provider summary on first live lookup, got %+v", first)
+		}
+
+		req.ResourceDescription = "Updated operator-facing summary for the replacement validation listener"
+		second, err := service.Inspect(context.Background(), req)
+		if err != nil {
+			t.Fatalf("second Inspect returned error: %v", err)
+		}
+		if second.TrafficRoutingResource == nil || second.TrafficRoutingResource.Summary != req.ResourceDescription {
+			t.Fatalf("expected cached lookup to recompute summary from current request, got %+v", second)
+		}
+		if callCount != 1 {
+			t.Fatalf("expected cached summary recomputation to avoid a second provider call, got %d", callCount)
 		}
 	})
 
