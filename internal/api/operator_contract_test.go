@@ -363,10 +363,20 @@ func TestAuditLogOperatorContract(t *testing.T) {
 }
 
 func TestGitHubWebhookOperatorContract(t *testing.T) {
+	compose := readRepoFile(t, "compose.yaml")
+	for _, fragment := range []string{
+		`TENET_GITHUB_WEBHOOK_SECRET: ${TENET_GITHUB_WEBHOOK_SECRET:-smoke-webhook-secret}`,
+	} {
+		if !strings.Contains(compose, fragment) {
+			t.Fatalf("expected compose github webhook contract to include %q", fragment)
+		}
+	}
+
 	readme := readRepoFile(t, "README.md")
 	for _, fragment := range []string{
 		"`POST /api/v1/github/webhook`",
 		"`TENET_GITHUB_WEBHOOK_SECRET`",
+		"`smoke-webhook-secret`",
 		"`X-GitHub-Delivery`",
 		"`X-GitHub-Event`",
 		"`X-Hub-Signature-256`",
@@ -403,7 +413,11 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		"`TENET_GITHUB_WEBHOOK_SECRET`",
 		"`POST /api/v1/github/webhook`",
+		"`smoke-webhook-secret`",
 		"HMAC-SHA256 signatures",
+		"`202 Accepted`",
+		"`200 OK`",
+		"`400 Bad Request`",
 		"`repository_mismatch`",
 		"`ref_mismatch`",
 		"`path_untouched`",
@@ -413,6 +427,24 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 	} {
 		if !strings.Contains(controlPlaneDoc, fragment) {
 			t.Fatalf("expected aws central control plane doc to include %q", fragment)
+		}
+	}
+
+	dockerSmoke := readRepoFile(t, "scripts/smoke-docker.sh")
+	for _, fragment := range []string{
+		`WEBHOOK_SECRET=${TENET_GITHUB_WEBHOOK_SECRET:-smoke-webhook-secret}`,
+		`webhook_push_status=$(curl -sS -o "$WEBHOOK_PUSH_BODY_FILE" -w "%{http_code}" -X POST \`,
+		`"$API_BASE_URL/api/v1/github/webhook")`,
+		`assert os.environ["WEBHOOK_PUSH_STATUS"] == "202", os.environ["WEBHOOK_PUSH_STATUS"]`,
+		`assert webhook_push["desiredStateSourceMatch"]["kind"] == "filesystem", webhook_push`,
+		`assert webhook_push["desiredStateSourceMatch"]["matchStatus"] == "filesystem_source", webhook_push`,
+		`assert os.environ["WEBHOOK_PING_STATUS"] == "200", os.environ["WEBHOOK_PING_STATUS"]`,
+		`assert webhook_ping["status"] == "ignored", webhook_ping`,
+		`assert os.environ["INVALID_WEBHOOK_STATUS"] == "400", os.environ["INVALID_WEBHOOK_STATUS"]`,
+		`assert "github webhook signature mismatch" in invalid_webhook, invalid_webhook`,
+	} {
+		if !strings.Contains(dockerSmoke, fragment) {
+			t.Fatalf("expected smoke-docker github webhook contract to include %q", fragment)
 		}
 	}
 
