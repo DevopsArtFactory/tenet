@@ -17,7 +17,7 @@ variable "operator_cidr_blocks" {
 }
 
 variable "repo_url" {
-  description = "Git clone URL that the repo-sync sidecars keep mounted into both Tenet tasks."
+  description = "Git clone URL that the repo-sync sidecars keep mounted into both Tenet tasks. The shipped repo-sync path works out of the box only when this URL is anonymously readable, for example a public HTTPS clone URL. Private desired-state repo authentication is not wired into this module yet."
   type        = string
   default     = "https://github.com/DevopsArtFactory/tenet.git"
 }

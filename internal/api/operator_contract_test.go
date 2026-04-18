@@ -185,6 +185,7 @@ func TestDesiredStateSourceOperatorDocsContract(t *testing.T) {
 	for _, fragment := range []string{
 		"Both `tenet-api` and `tenet-controller` can read that desired state from either:",
 		"`TENET_REPO_ROOT` remains the filesystem-mode input when you want a local checkout; it is not a universal runtime requirement.",
+		"The AWS central-control-plane docs and Terraform bootstrap README now explicitly call out that the shipped repo-sync bootstrap path works out of the box only with an anonymously readable `repo_url` (for example a public HTTPS clone URL).",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README desired-state source contract to include %q", fragment)
@@ -196,7 +197,9 @@ func TestDesiredStateSourceOperatorDocsContract(t *testing.T) {
 		"Tenet selects desired-state reads with `TENET_CATALOG_SOURCE`:",
 		"`filesystem` uses `TENET_REPO_ROOT` to point `tenet-api` and `tenet-controller` at the same checked-out repo or synced repo tree",
 		"`github` uses `TENET_CATALOG_GITHUB_*` so both services read the same desired-state manifests directly from GitHub in read-only mode",
-		"The shipped Terraform/bootstrap path in this doc still uses repo-sync plus shared filesystem delivery today because that works for both services now, while private desired-state repo sync remains a follow-up.",
+		"The shipped Terraform/bootstrap path in this doc still uses repo-sync plus shared filesystem delivery today because that works for both services now.",
+		"That repo-sync path works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL.",
+		"Private desired-state repo authentication is not wired into this module yet.",
 		"the shipped Terraform bootstrap below uses the shared repo tree path at `/workspace/repo`",
 		"### 3. Choose desired-state delivery",
 		"The shipped Terraform/bootstrap path still uses the shared checkout plus repo-sync pattern today.",
@@ -215,7 +218,10 @@ func TestDesiredStateSourceOperatorDocsContract(t *testing.T) {
 	terraformDoc := readRepoFile(t, "deploy/terraform/aws-central-control-plane/README.md")
 	for _, fragment := range []string{
 		"Both `tenet-api` and `tenet-controller` now support `TENET_CATALOG_SOURCE=filesystem|github` for desired-state reads.",
-		"This Terraform bootstrap intentionally chooses the filesystem path and sets `TENET_REPO_ROOT` because the shared repo-sync volume works for both services today, and private desired-state repo sync is still a follow-up.",
+		"This Terraform bootstrap intentionally chooses the filesystem path and sets `TENET_REPO_ROOT` because the shared repo-sync volume works for both services today.",
+		"The shipped repo-sync path works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL.",
+		"Private desired-state repo authentication is not wired into this module yet.",
+		"`repo_url` (an anonymously readable clone URL, such as a public HTTPS clone URL)",
 	} {
 		if !strings.Contains(terraformDoc, fragment) {
 			t.Fatalf("expected Terraform README desired-state source contract to include %q", fragment)
@@ -224,6 +230,27 @@ func TestDesiredStateSourceOperatorDocsContract(t *testing.T) {
 
 	if strings.Contains(terraformDoc, "The current Tenet runtime still expects `TENET_REPO_ROOT` to point at a filesystem tree.") {
 		t.Fatal("expected Terraform README to drop stale filesystem-only runtime wording")
+	}
+
+	terraformVars := readRepoFile(t, "deploy/terraform/aws-central-control-plane/variables.tf")
+	for _, fragment := range []string{
+		`description = "Git clone URL that the repo-sync sidecars keep mounted into both Tenet tasks. The shipped repo-sync path works out of the box only when this URL is anonymously readable, for example a public HTTPS clone URL. Private desired-state repo authentication is not wired into this module yet."`,
+	} {
+		if !strings.Contains(terraformVars, fragment) {
+			t.Fatalf("expected Terraform variables desired-state source contract to include %q", fragment)
+		}
+	}
+
+	terraformTfvarsExample := readRepoFile(t, "deploy/terraform/aws-central-control-plane/terraform.tfvars.example")
+	for _, fragment := range []string{
+		"# The shipped repo-sync path works out of the box only when `repo_url` is",
+		"# anonymously readable, for example a public HTTPS clone URL. Private",
+		"# desired-state repo authentication is not wired into this module yet.",
+		`repo_url             = "https://github.com/DevopsArtFactory/tenet.git"`,
+	} {
+		if !strings.Contains(terraformTfvarsExample, fragment) {
+			t.Fatalf("expected Terraform tfvars example desired-state source contract to include %q", fragment)
+		}
 	}
 
 	terraformModule := readRepoFile(t, "deploy/terraform/aws-central-control-plane/main.tf")

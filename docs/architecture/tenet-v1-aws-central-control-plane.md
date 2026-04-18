@@ -68,7 +68,7 @@ Tenet selects desired-state reads with `TENET_CATALOG_SOURCE`:
 - `filesystem` uses `TENET_REPO_ROOT` to point `tenet-api` and `tenet-controller` at the same checked-out repo or synced repo tree
 - `github` uses `TENET_CATALOG_GITHUB_*` so both services read the same desired-state manifests directly from GitHub in read-only mode
 
-The shipped Terraform/bootstrap path in this doc still uses repo-sync plus shared filesystem delivery today because that works for both services now, while private desired-state repo sync remains a follow-up.
+The shipped Terraform/bootstrap path in this doc still uses repo-sync plus shared filesystem delivery today because that works for both services now. That repo-sync path works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL. Private desired-state repo authentication is not wired into this module yet.
 
 ### 3. Runtime state store
 
@@ -353,7 +353,7 @@ That GitHub mode is read-only for desired state. Both `tenet-api` and `tenet-con
 
 ### 3. Choose desired-state delivery
 
-`tenet-api` and `tenet-controller` may either share the same checkout via `TENET_REPO_ROOT` or use the same read-only GitHub source envs above for desired-state reads. The shipped Terraform/bootstrap path still uses the shared checkout plus repo-sync pattern today. Keep the local checkout when you want filesystem mode or when the API-side local-safe apply executor is enabled.
+`tenet-api` and `tenet-controller` may either share the same checkout via `TENET_REPO_ROOT` or use the same read-only GitHub source envs above for desired-state reads. The shipped Terraform/bootstrap path still uses the shared checkout plus repo-sync pattern today. That repo-sync path works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL. Keep the local checkout when you want filesystem mode or when the API-side local-safe apply executor is enabled.
 
 ### 4. Add account manifests
 
@@ -463,7 +463,7 @@ Pick one practical pattern:
 - build a sidecar/init step that clones the repo into ephemeral task storage on startup
 - publish a repo snapshot artifact and unpack it into the task filesystem during deploy
 
-For a first ECS deployment, EFS plus a simple repo-sync job is the most straightforward long-lived option because both services can read the same tree without custom image rebuilds.
+For a first ECS deployment, EFS plus a simple repo-sync job is the most straightforward long-lived option because both services can read the same tree without custom image rebuilds. In the shipped Terraform/bootstrap module, that repo-sync job works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL. Private desired-state repo authentication is not wired into this module yet.
 
 #### IAM expectations
 
