@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 	"time"
+
+	"github.com/DevopsArtFactory/tenet/internal/controllerrefresh"
 )
 
 func runController(ctx context.Context, logger *log.Logger, config startupConfig) {
@@ -35,6 +37,19 @@ func runController(ctx context.Context, logger *log.Logger, config startupConfig
 		logger.Printf("controller runtime error: %v", err)
 	}
 
+	refreshSubscription, err := controllerRefreshSubscriptionOpener(ctx, config, store)
+	if err != nil {
+		logger.Printf("controller refresh handoff unavailable: %v", err)
+	}
+	if refreshSubscription != nil {
+		defer func() {
+			if err := refreshSubscription.Close(); err != nil {
+				logger.Printf("close controller refresh handoff: %v", err)
+			}
+		}()
+		logger.Printf("controller refresh handoff enabled backend=redis channel=%s", refreshSubscription.Channel())
+	}
+
 	interval := config.RequeueInterval
 	if interval <= 0 {
 		interval = 30 * time.Second
@@ -42,11 +57,37 @@ func runController(ctx context.Context, logger *log.Logger, config startupConfig
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	var refreshMessages <-chan controllerrefresh.Message
+	if refreshSubscription != nil {
+		refreshMessages = refreshSubscription.C()
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			logger.Printf("stopping tenet-controller")
 			return
+		case message, ok := <-refreshMessages:
+			if !ok {
+				refreshMessages = nil
+				continue
+			}
+			if message.Err != nil {
+				logger.Printf("controller refresh handoff ignored: %v", message.Err)
+				continue
+			}
+			logger.Printf(
+				"controller refresh handoff received request_id=%s delivery_id=%s repository=%s ref=%s after=%s requested_at=%s",
+				message.Request.RequestID,
+				message.Request.DeliveryID,
+				message.Request.Repository,
+				message.Request.Ref,
+				message.Request.After,
+				message.Request.RequestedAt,
+			)
+			if err := emitRuntimePlans(ctx, logger, config, store); err != nil {
+				logger.Printf("controller runtime error: %v", err)
+			}
 		case <-ticker.C:
 			if err := emitRuntimePlans(ctx, logger, config, store); err != nil {
 				logger.Printf("controller runtime error: %v", err)

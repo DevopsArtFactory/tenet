@@ -15,6 +15,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/auditlog"
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
+	"github.com/DevopsArtFactory/tenet/internal/controllerrefresh"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/githubcontents"
 	"github.com/DevopsArtFactory/tenet/internal/githubwebhook"
@@ -23,6 +24,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/resourceinspection"
 	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
+	"github.com/redis/go-redis/v9"
 )
 
 func TestStartApplyRequestExecutor(t *testing.T) {
@@ -212,6 +214,34 @@ func TestNewAPIOptionsWithGitHubCatalogSourceIncludesWebhookDesiredStateSource(t
 	}
 	if options.GitHubWebhookDesiredStateSource != want {
 		t.Fatalf("unexpected webhook desired-state source: got %+v want %+v", options.GitHubWebhookDesiredStateSource, want)
+	}
+}
+
+func TestNewAPIOptionsWithRedisStatusStoreIncludesWebhookRefreshPublisher(t *testing.T) {
+	client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
+	t.Cleanup(func() {
+		_ = client.Close()
+	})
+
+	store := statusstore.NewRedisStore(client, "tenet:test")
+	options := newAPIOptionsWithCatalogSource(
+		buildinfo.Info{Version: "dev", Commit: "abc123"},
+		apiCatalogSource{
+			kind: apiCatalogSourceGitHub,
+			githubRequest: githubcontents.Request{
+				Repository: "acme/platform-config",
+				Ref:        "main",
+				Path:       "tenet",
+			},
+		},
+		store,
+	)
+
+	if options.GitHubWebhookRefreshPublisher == nil {
+		t.Fatal("expected redis-backed webhook refresh publisher")
+	}
+	if _, ok := options.GitHubWebhookRefreshPublisher.(controllerrefresh.RedisHandoff); !ok {
+		t.Fatalf("expected redis handoff publisher, got %T", options.GitHubWebhookRefreshPublisher)
 	}
 }
 

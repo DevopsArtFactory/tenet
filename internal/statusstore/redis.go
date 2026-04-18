@@ -70,6 +70,10 @@ func NewRedisStore(client redis.UniversalClient, keyPrefix string) RedisStore {
 	return RedisStore{client: client, keyPrefix: keyPrefix}
 }
 
+func (s RedisStore) Client() redis.UniversalClient {
+	return s.client
+}
+
 func (s RedisStore) indexKey() string {
 	return s.keyPrefix + ":deployments"
 }

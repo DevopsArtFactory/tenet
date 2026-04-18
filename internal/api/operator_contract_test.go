@@ -416,9 +416,11 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 		"`status=accepted`",
 		"`status=ignored`",
 		"`processed=false`",
+		"`processed=true`",
 		"`desiredStateSourceMatch`",
 		"`matchStatus`",
-		"no reconcile queue work is enqueued yet",
+		"`controllerRefresh`",
+		"`TENET_STATUS_BACKEND=redis`",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README github webhook contract to include %q", fragment)
@@ -429,10 +431,11 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		"`POST /api/v1/github/webhook`",
 		"`TENET_GITHUB_WEBHOOK_SECRET`",
-		"accepted` or `ignored` responses",
+		"`accepted` or `ignored` responses",
 		"`desiredStateSourceMatch`",
-		"without enqueueing reconcile work yet",
-		"webhook-driven reconcile triggering",
+		"`controllerRefresh`",
+		"`processed=false`",
+		"`processed=true`",
 	} {
 		if !strings.Contains(overviewDoc, fragment) {
 			t.Fatalf("expected overview architecture doc to include %q", fragment)
@@ -452,8 +455,9 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 		"`ref_mismatch`",
 		"`path_untouched`",
 		"`matched`",
-		"without enqueueing reconcile work yet",
-		"no reconcile queue side effect happens yet",
+		"`controllerRefresh`",
+		"`processed=true`",
+		"`processed=false`",
 	} {
 		if !strings.Contains(controlPlaneDoc, fragment) {
 			t.Fatalf("expected aws central control plane doc to include %q", fragment)
