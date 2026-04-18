@@ -456,6 +456,12 @@ func TestRouterGitHubWebhookAcceptedPushEvent(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo:           buildinfo.Info{Version: "dev", Commit: "abc123"},
 		GitHubWebhookSecret: secret,
+		GitHubWebhookDesiredStateSource: githubwebhook.DesiredStateSourceConfig{
+			Kind:       githubwebhook.DesiredStateSourceKindGitHub,
+			Repository: "acme/platform-config",
+			Ref:        "main",
+			Path:       "deployments",
+		},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/github/webhook", strings.NewReader(body))
 	req.Header = signedGitHubWebhookHeader(secret, "push", body)
@@ -487,6 +493,15 @@ func TestRouterGitHubWebhookAcceptedPushEvent(t *testing.T) {
 	if got.ChangedFiles == nil || !reflect.DeepEqual(got.ChangedFiles.All, []string{"deployments/api.yaml", "accounts/prod.yaml", "environments/prod.yaml", "deployments/worker.yaml", "deployments/old.yaml"}) {
 		t.Fatalf("unexpected changed files: %+v", got.ChangedFiles)
 	}
+	if got.DesiredStateSourceMatch == nil {
+		t.Fatalf("expected desired-state source match summary, got %+v", got)
+	}
+	if got.DesiredStateSourceMatch.MatchStatus != githubwebhook.DesiredStateSourceMatchStatusMatched || !got.DesiredStateSourceMatch.Matches {
+		t.Fatalf("unexpected desired-state source match summary: %+v", got.DesiredStateSourceMatch)
+	}
+	if got.DesiredStateSourceMatch.Path != "deployments" || got.DesiredStateSourceMatch.Repository != "acme/platform-config" || got.DesiredStateSourceMatch.Ref != "main" {
+		t.Fatalf("unexpected desired-state source config echo: %+v", got.DesiredStateSourceMatch)
+	}
 }
 
 func TestRouterGitHubWebhookIgnoresNonPushEvent(t *testing.T) {
@@ -516,6 +531,9 @@ func TestRouterGitHubWebhookIgnoresNonPushEvent(t *testing.T) {
 	}
 	if got.Reason != `github event "ping" is ignored because reconcile wiring is not implemented in this slice` {
 		t.Fatalf("unexpected ignored reason: %q", got.Reason)
+	}
+	if got.DesiredStateSourceMatch != nil {
+		t.Fatalf("expected no desired-state source match summary for ignored event, got %+v", got.DesiredStateSourceMatch)
 	}
 }
 

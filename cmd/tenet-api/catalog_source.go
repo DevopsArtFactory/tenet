@@ -9,6 +9,7 @@ import (
 
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/githubcontents"
+	"github.com/DevopsArtFactory/tenet/internal/githubwebhook"
 	"github.com/DevopsArtFactory/tenet/internal/manifest"
 	"github.com/DevopsArtFactory/tenet/internal/manifestfs"
 	"github.com/DevopsArtFactory/tenet/internal/manifestgithub"
@@ -151,4 +152,22 @@ func (s apiCatalogSource) configured() bool {
 
 func (s apiCatalogSource) logFields() (kind string, filesystemRoot string, githubRepository string, githubRef string, githubPath string, githubBaseURL string) {
 	return string(s.kind), s.filesystemRoot, s.githubRequest.Repository, s.githubRequest.Ref, s.githubRequest.Path, s.githubBaseURL
+}
+
+func (s apiCatalogSource) webhookDesiredStateSource() githubwebhook.DesiredStateSourceConfig {
+	switch s.kind {
+	case apiCatalogSourceFilesystem:
+		return githubwebhook.DesiredStateSourceConfig{
+			Kind: githubwebhook.DesiredStateSourceKindFilesystem,
+		}
+	case apiCatalogSourceGitHub:
+		return githubwebhook.DesiredStateSourceConfig{
+			Kind:       githubwebhook.DesiredStateSourceKindGitHub,
+			Repository: s.githubRequest.Repository,
+			Ref:        s.githubRequest.Ref,
+			Path:       s.githubRequest.Path,
+		}
+	default:
+		return githubwebhook.DesiredStateSourceConfig{}
+	}
 }

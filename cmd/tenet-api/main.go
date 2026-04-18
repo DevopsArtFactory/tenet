@@ -116,8 +116,9 @@ func newAPIOptionsWithCatalogSource(info buildinfo.Info, source apiCatalogSource
 
 func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCatalogSource, store statusstore.Store, planStorePath string, applyStorePath string) api.Options {
 	options := api.Options{
-		BuildInfo:           info,
-		GitHubWebhookSecret: strings.TrimSpace(os.Getenv("TENET_GITHUB_WEBHOOK_SECRET")),
+		BuildInfo:                       info,
+		GitHubWebhookSecret:             strings.TrimSpace(os.Getenv("TENET_GITHUB_WEBHOOK_SECRET")),
+		GitHubWebhookDesiredStateSource: source.webhookDesiredStateSource(),
 	}
 	if source.configured() {
 		loadCatalog := source.loadCatalog

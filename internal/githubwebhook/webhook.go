@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path"
 	"strings"
 )
 
@@ -24,30 +25,65 @@ const (
 	StatusIgnored  = "ignored"
 )
 
+const (
+	DesiredStateSourceKindNone       = ""
+	DesiredStateSourceKindFilesystem = "filesystem"
+	DesiredStateSourceKindGitHub     = "github"
+)
+
+const (
+	DesiredStateSourceMatchStatusNotConfigured      = "not_configured"
+	DesiredStateSourceMatchStatusFilesystemSource   = "filesystem_source"
+	DesiredStateSourceMatchStatusRepositoryMismatch = "repository_mismatch"
+	DesiredStateSourceMatchStatusRefMismatch        = "ref_mismatch"
+	DesiredStateSourceMatchStatusPathUntouched      = "path_untouched"
+	DesiredStateSourceMatchStatusMatched            = "matched"
+)
+
 type Request struct {
-	Secret string
-	Header http.Header
-	Body   io.Reader
+	Secret             string
+	Header             http.Header
+	Body               io.Reader
+	DesiredStateSource DesiredStateSourceConfig
 }
 
 type Response struct {
-	DeliveryID   string        `json:"deliveryId"`
-	Event        string        `json:"event"`
-	Status       string        `json:"status"`
-	Processed    bool          `json:"processed"`
-	Reason       string        `json:"reason"`
-	Repository   string        `json:"repository,omitempty"`
-	Ref          string        `json:"ref,omitempty"`
-	Before       string        `json:"before,omitempty"`
-	After        string        `json:"after,omitempty"`
-	HeadCommit   *Commit       `json:"headCommit,omitempty"`
-	ChangedFiles *ChangedFiles `json:"changedFiles,omitempty"`
+	DeliveryID              string                   `json:"deliveryId"`
+	Event                   string                   `json:"event"`
+	Status                  string                   `json:"status"`
+	Processed               bool                     `json:"processed"`
+	Reason                  string                   `json:"reason"`
+	Repository              string                   `json:"repository,omitempty"`
+	Ref                     string                   `json:"ref,omitempty"`
+	Before                  string                   `json:"before,omitempty"`
+	After                   string                   `json:"after,omitempty"`
+	HeadCommit              *Commit                  `json:"headCommit,omitempty"`
+	ChangedFiles            *ChangedFiles            `json:"changedFiles,omitempty"`
+	DesiredStateSourceMatch *DesiredStateSourceMatch `json:"desiredStateSourceMatch,omitempty"`
 }
 
 type Commit struct {
 	ID        string `json:"id"`
 	Message   string `json:"message,omitempty"`
 	Timestamp string `json:"timestamp,omitempty"`
+}
+
+type DesiredStateSourceConfig struct {
+	Kind       string
+	Repository string
+	Ref        string
+	Path       string
+}
+
+type DesiredStateSourceMatch struct {
+	Configured  bool   `json:"configured"`
+	Kind        string `json:"kind"`
+	Matches     bool   `json:"matches"`
+	MatchStatus string `json:"matchStatus"`
+	Reason      string `json:"reason"`
+	Repository  string `json:"repository"`
+	Ref         string `json:"ref"`
+	Path        string `json:"path"`
 }
 
 type ChangedFiles struct {
@@ -145,6 +181,7 @@ func Decode(ctx context.Context, req Request) (Response, error) {
 			Removed:  changedFiles.Removed,
 			All:      changedFiles.All,
 		},
+		DesiredStateSourceMatch: desiredStateSourceMatch(payload, req.DesiredStateSource, changedFiles.All),
 	}
 	if payload.HeadCommit.ID != "" || payload.HeadCommit.Message != "" || payload.HeadCommit.Timestamp != "" {
 		response.HeadCommit = &Commit{
@@ -166,7 +203,8 @@ type pushPayload struct {
 }
 
 type pushRepository struct {
-	FullName string `json:"full_name"`
+	FullName      string `json:"full_name"`
+	DefaultBranch string `json:"default_branch"`
 }
 
 type pushCommit struct {
@@ -264,6 +302,123 @@ func (c *changedFilesAccumulator) addByCategory(target *[]string, seen map[strin
 		seen[item] = struct{}{}
 		*target = append(*target, item)
 	}
+}
+
+func desiredStateSourceMatch(payload pushPayload, config DesiredStateSourceConfig, changedFiles []string) *DesiredStateSourceMatch {
+	config.Kind = strings.TrimSpace(config.Kind)
+	config.Repository = strings.TrimSpace(config.Repository)
+	config.Ref = strings.TrimSpace(config.Ref)
+	config.Path = normalizeRepoPath(config.Path)
+
+	match := &DesiredStateSourceMatch{
+		Configured: config.Kind != DesiredStateSourceKindNone,
+		Kind:       config.Kind,
+		Matches:    false,
+		Repository: config.Repository,
+		Ref:        config.Ref,
+		Path:       config.Path,
+	}
+
+	switch config.Kind {
+	case DesiredStateSourceKindNone:
+		match.Reason = "desired-state source is not configured"
+		match.MatchStatus = DesiredStateSourceMatchStatusNotConfigured
+		return match
+	case DesiredStateSourceKindFilesystem:
+		match.Reason = "desired-state source uses the filesystem catalog, so GitHub push relevance is unavailable in this mode"
+		match.MatchStatus = DesiredStateSourceMatchStatusFilesystemSource
+		return match
+	case DesiredStateSourceKindGitHub:
+		if !strings.EqualFold(config.Repository, strings.TrimSpace(payload.Repository.FullName)) {
+			match.Reason = fmt.Sprintf("desired-state source repository %q does not match push repository %q", config.Repository, payload.Repository.FullName)
+			match.MatchStatus = DesiredStateSourceMatchStatusRepositoryMismatch
+			return match
+		}
+		refMatch, refReason := desiredStateSourceRefMatch(config.Ref, payload.Ref, payload.Repository.DefaultBranch)
+		if !refMatch {
+			match.Reason = refReason
+			match.MatchStatus = DesiredStateSourceMatchStatusRefMismatch
+			return match
+		}
+		if config.Path != "" && !pathTouched(config.Path, changedFiles) {
+			match.Reason = fmt.Sprintf("desired-state source path %q was not touched by this push", config.Path)
+			match.MatchStatus = DesiredStateSourceMatchStatusPathUntouched
+			return match
+		}
+		match.Matches = true
+		match.MatchStatus = DesiredStateSourceMatchStatusMatched
+		if config.Path == "" {
+			match.Reason = "desired-state source repository and ref match this push"
+			return match
+		}
+		match.Reason = "desired-state source repository, ref, and path match this push"
+		return match
+	default:
+		match.Reason = fmt.Sprintf("desired-state source kind %q is unsupported for GitHub webhook matching", config.Kind)
+		match.MatchStatus = DesiredStateSourceMatchStatusNotConfigured
+		match.Configured = false
+		match.Kind = DesiredStateSourceKindNone
+		return match
+	}
+}
+
+func normalizeRef(value string) string {
+	value = strings.TrimSpace(value)
+	for _, prefix := range []string{"refs/heads/", "refs/tags/"} {
+		if strings.HasPrefix(value, prefix) {
+			return strings.TrimPrefix(value, prefix)
+		}
+	}
+	return value
+}
+
+func desiredStateSourceRefMatch(configRef string, pushRef string, defaultBranch string) (bool, string) {
+	configRef = strings.TrimSpace(configRef)
+	pushRef = strings.TrimSpace(pushRef)
+	defaultBranch = strings.TrimSpace(defaultBranch)
+
+	normalizedConfigRef := normalizeRef(configRef)
+	normalizedPushRef := normalizeRef(pushRef)
+	if normalizedConfigRef != "" {
+		if normalizedConfigRef == normalizedPushRef {
+			return true, ""
+		}
+		return false, fmt.Sprintf("desired-state source ref %q does not match push ref %q", configRef, pushRef)
+	}
+
+	if normalizedPushRef == "" {
+		return false, fmt.Sprintf("desired-state source uses the repository default branch, but push ref %q is empty", pushRef)
+	}
+	if defaultBranch == "" {
+		return false, fmt.Sprintf("desired-state source uses the repository default branch, but the push payload did not report repository.default_branch for ref %q", pushRef)
+	}
+	if normalizedPushRef == normalizeRef(defaultBranch) {
+		return true, ""
+	}
+	return false, fmt.Sprintf("desired-state source uses the repository default branch %q, which does not match push ref %q", defaultBranch, pushRef)
+}
+
+func normalizeRepoPath(value string) string {
+	value = strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))
+	if value == "" {
+		return ""
+	}
+	value = strings.TrimPrefix(value, "./")
+	cleaned := path.Clean("/" + value)
+	if cleaned == "/" || cleaned == "/." {
+		return ""
+	}
+	return strings.TrimPrefix(cleaned, "/")
+}
+
+func pathTouched(configuredPath string, changedFiles []string) bool {
+	for _, changedFile := range changedFiles {
+		changedFile = normalizeRepoPath(changedFile)
+		if changedFile == configuredPath || strings.HasPrefix(changedFile, configuredPath+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 func contextErr(ctx context.Context) error {

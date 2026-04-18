@@ -64,6 +64,15 @@ func TestDecodeAcceptedPushEvent(t *testing.T) {
 	if got, want := response.ChangedFiles.All, []string{"deployments/api.yaml", "accounts/prod.yaml", "environments/prod.yaml", "deployments/worker.yaml", "deployments/old.yaml"}; !equalStrings(got, want) {
 		t.Fatalf("unexpected all files: got %v want %v", got, want)
 	}
+	if response.DesiredStateSourceMatch == nil {
+		t.Fatalf("expected desired-state source match summary, got %+v", response)
+	}
+	if response.DesiredStateSourceMatch.MatchStatus != DesiredStateSourceMatchStatusNotConfigured || response.DesiredStateSourceMatch.Configured || response.DesiredStateSourceMatch.Matches {
+		t.Fatalf("unexpected default desired-state source match: %+v", response.DesiredStateSourceMatch)
+	}
+	if response.DesiredStateSourceMatch.Reason != "desired-state source is not configured" {
+		t.Fatalf("unexpected desired-state source reason: %q", response.DesiredStateSourceMatch.Reason)
+	}
 }
 
 func TestDecodeIgnoredNonPushEvent(t *testing.T) {
@@ -87,6 +96,277 @@ func TestDecodeIgnoredNonPushEvent(t *testing.T) {
 	}
 	if response.Repository != "" || response.ChangedFiles != nil {
 		t.Fatalf("expected no push summary for ignored event, got %+v", response)
+	}
+	if response.DesiredStateSourceMatch != nil {
+		t.Fatalf("expected no desired-state source match summary for ignored event, got %+v", response.DesiredStateSourceMatch)
+	}
+}
+
+func TestDecodeDesiredStateSourceMatch(t *testing.T) {
+	const secret = "top-secret"
+
+	tests := []struct {
+		name       string
+		source     DesiredStateSourceConfig
+		body       string
+		wantStatus string
+		wantMatch  bool
+		wantReason string
+		wantKind   string
+		wantPath   string
+		wantRef    string
+		wantRepo   string
+	}{
+		{
+			name: "filesystem source configured",
+			source: DesiredStateSourceConfig{
+				Kind: DesiredStateSourceKindFilesystem,
+			},
+			body: `{
+				"ref":"refs/heads/main",
+				"before":"111",
+				"after":"222",
+				"repository":{"full_name":"acme/platform-config"},
+				"commits":[{"id":"a","modified":["deployments/api.yaml"]}]
+			}`,
+			wantStatus: DesiredStateSourceMatchStatusFilesystemSource,
+			wantReason: "desired-state source uses the filesystem catalog, so GitHub push relevance is unavailable in this mode",
+			wantKind:   DesiredStateSourceKindFilesystem,
+		},
+		{
+			name: "repository mismatch",
+			source: DesiredStateSourceConfig{
+				Kind:       DesiredStateSourceKindGitHub,
+				Repository: "acme/other-config",
+				Ref:        "main",
+				Path:       "tenet",
+			},
+			body: `{
+				"ref":"refs/heads/main",
+				"before":"111",
+				"after":"222",
+				"repository":{"full_name":"acme/platform-config"},
+				"commits":[{"id":"a","modified":["tenet/deployments/api.yaml"]}]
+			}`,
+			wantStatus: DesiredStateSourceMatchStatusRepositoryMismatch,
+			wantReason: `desired-state source repository "acme/other-config" does not match push repository "acme/platform-config"`,
+			wantKind:   DesiredStateSourceKindGitHub,
+			wantRepo:   "acme/other-config",
+			wantRef:    "main",
+			wantPath:   "tenet",
+		},
+		{
+			name: "ref mismatch",
+			source: DesiredStateSourceConfig{
+				Kind:       DesiredStateSourceKindGitHub,
+				Repository: "acme/platform-config",
+				Ref:        "release",
+				Path:       "tenet",
+			},
+			body: `{
+				"ref":"refs/heads/main",
+				"before":"111",
+				"after":"222",
+				"repository":{"full_name":"acme/platform-config"},
+				"commits":[{"id":"a","modified":["tenet/deployments/api.yaml"]}]
+			}`,
+			wantStatus: DesiredStateSourceMatchStatusRefMismatch,
+			wantReason: `desired-state source ref "release" does not match push ref "refs/heads/main"`,
+			wantKind:   DesiredStateSourceKindGitHub,
+			wantRepo:   "acme/platform-config",
+			wantRef:    "release",
+			wantPath:   "tenet",
+		},
+		{
+			name: "tag ref matches canonical push ref",
+			source: DesiredStateSourceConfig{
+				Kind:       DesiredStateSourceKindGitHub,
+				Repository: "acme/platform-config",
+				Ref:        "v1.2.3",
+				Path:       "tenet",
+			},
+			body: `{
+				"ref":"refs/tags/v1.2.3",
+				"before":"111",
+				"after":"222",
+				"repository":{"full_name":"acme/platform-config"},
+				"commits":[{"id":"a","modified":["tenet/deployments/api.yaml"]}]
+			}`,
+			wantStatus: DesiredStateSourceMatchStatusMatched,
+			wantMatch:  true,
+			wantReason: "desired-state source repository, ref, and path match this push",
+			wantKind:   DesiredStateSourceKindGitHub,
+			wantRepo:   "acme/platform-config",
+			wantRef:    "v1.2.3",
+			wantPath:   "tenet",
+		},
+		{
+			name: "path untouched",
+			source: DesiredStateSourceConfig{
+				Kind:       DesiredStateSourceKindGitHub,
+				Repository: "acme/platform-config",
+				Ref:        "main",
+				Path:       "tenet",
+			},
+			body: `{
+				"ref":"refs/heads/main",
+				"before":"111",
+				"after":"222",
+				"repository":{"full_name":"acme/platform-config"},
+				"commits":[{"id":"a","modified":["docs/readme.md"]}]
+			}`,
+			wantStatus: DesiredStateSourceMatchStatusPathUntouched,
+			wantReason: `desired-state source path "tenet" was not touched by this push`,
+			wantKind:   DesiredStateSourceKindGitHub,
+			wantRepo:   "acme/platform-config",
+			wantRef:    "main",
+			wantPath:   "tenet",
+		},
+		{
+			name: "repo ref and path match",
+			source: DesiredStateSourceConfig{
+				Kind:       DesiredStateSourceKindGitHub,
+				Repository: "acme/platform-config",
+				Ref:        "main",
+				Path:       "/tenet/",
+			},
+			body: `{
+				"ref":"refs/heads/main",
+				"before":"111",
+				"after":"222",
+				"repository":{"full_name":"acme/platform-config"},
+				"commits":[{"id":"a","modified":["tenet/deployments/api.yaml"],"removed":["tenet/deployments/old.yaml"]}]
+			}`,
+			wantStatus: DesiredStateSourceMatchStatusMatched,
+			wantMatch:  true,
+			wantReason: "desired-state source repository, ref, and path match this push",
+			wantKind:   DesiredStateSourceKindGitHub,
+			wantRepo:   "acme/platform-config",
+			wantRef:    "main",
+			wantPath:   "tenet",
+		},
+		{
+			name: "root path uses repo and ref only",
+			source: DesiredStateSourceConfig{
+				Kind:       DesiredStateSourceKindGitHub,
+				Repository: "acme/platform-config",
+				Ref:        "refs/heads/main",
+				Path:       "/",
+			},
+			body: `{
+				"ref":"main",
+				"before":"111",
+				"after":"222",
+				"repository":{"full_name":"acme/platform-config"},
+				"commits":[]
+			}`,
+			wantStatus: DesiredStateSourceMatchStatusMatched,
+			wantMatch:  true,
+			wantReason: "desired-state source repository and ref match this push",
+			wantKind:   DesiredStateSourceKindGitHub,
+			wantRepo:   "acme/platform-config",
+			wantRef:    "refs/heads/main",
+			wantPath:   "",
+		},
+		{
+			name: "default branch matches when ref is unset",
+			source: DesiredStateSourceConfig{
+				Kind:       DesiredStateSourceKindGitHub,
+				Repository: "acme/platform-config",
+				Ref:        "",
+				Path:       "tenet",
+			},
+			body: `{
+				"ref":"refs/heads/main",
+				"before":"111",
+				"after":"222",
+				"repository":{"full_name":"acme/platform-config","default_branch":"main"},
+				"commits":[{"id":"a","modified":["tenet/deployments/api.yaml"]}]
+			}`,
+			wantStatus: DesiredStateSourceMatchStatusMatched,
+			wantMatch:  true,
+			wantReason: "desired-state source repository, ref, and path match this push",
+			wantKind:   DesiredStateSourceKindGitHub,
+			wantRepo:   "acme/platform-config",
+			wantRef:    "",
+			wantPath:   "tenet",
+		},
+		{
+			name: "default branch mismatch when ref is unset",
+			source: DesiredStateSourceConfig{
+				Kind:       DesiredStateSourceKindGitHub,
+				Repository: "acme/platform-config",
+				Ref:        "",
+				Path:       "tenet",
+			},
+			body: `{
+				"ref":"refs/heads/release",
+				"before":"111",
+				"after":"222",
+				"repository":{"full_name":"acme/platform-config","default_branch":"main"},
+				"commits":[{"id":"a","modified":["tenet/deployments/api.yaml"]}]
+			}`,
+			wantStatus: DesiredStateSourceMatchStatusRefMismatch,
+			wantReason: `desired-state source uses the repository default branch "main", which does not match push ref "refs/heads/release"`,
+			wantKind:   DesiredStateSourceKindGitHub,
+			wantRepo:   "acme/platform-config",
+			wantRef:    "",
+			wantPath:   "tenet",
+		},
+		{
+			name: "default branch is unavailable when ref is unset",
+			source: DesiredStateSourceConfig{
+				Kind:       DesiredStateSourceKindGitHub,
+				Repository: "acme/platform-config",
+				Ref:        "",
+				Path:       "tenet",
+			},
+			body: `{
+				"ref":"refs/heads/main",
+				"before":"111",
+				"after":"222",
+				"repository":{"full_name":"acme/platform-config"},
+				"commits":[{"id":"a","modified":["tenet/deployments/api.yaml"]}]
+			}`,
+			wantStatus: DesiredStateSourceMatchStatusRefMismatch,
+			wantReason: `desired-state source uses the repository default branch, but the push payload did not report repository.default_branch for ref "refs/heads/main"`,
+			wantKind:   DesiredStateSourceKindGitHub,
+			wantRepo:   "acme/platform-config",
+			wantRef:    "",
+			wantPath:   "tenet",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			response, err := Decode(context.Background(), Request{
+				Secret:             secret,
+				Header:             signedHeader(secret, "push", tc.body),
+				Body:               strings.NewReader(tc.body),
+				DesiredStateSource: tc.source,
+			})
+			if err != nil {
+				t.Fatalf("Decode returned error: %v", err)
+			}
+			if response.DesiredStateSourceMatch == nil {
+				t.Fatalf("expected desired-state source match summary, got %+v", response)
+			}
+			if response.DesiredStateSourceMatch.MatchStatus != tc.wantStatus {
+				t.Fatalf("unexpected match status: got %q want %q", response.DesiredStateSourceMatch.MatchStatus, tc.wantStatus)
+			}
+			if response.DesiredStateSourceMatch.Matches != tc.wantMatch {
+				t.Fatalf("unexpected match bool: got %t want %t", response.DesiredStateSourceMatch.Matches, tc.wantMatch)
+			}
+			if response.DesiredStateSourceMatch.Reason != tc.wantReason {
+				t.Fatalf("unexpected match reason: got %q want %q", response.DesiredStateSourceMatch.Reason, tc.wantReason)
+			}
+			if response.DesiredStateSourceMatch.Kind != tc.wantKind {
+				t.Fatalf("unexpected kind: got %q want %q", response.DesiredStateSourceMatch.Kind, tc.wantKind)
+			}
+			if response.DesiredStateSourceMatch.Repository != tc.wantRepo || response.DesiredStateSourceMatch.Ref != tc.wantRef || response.DesiredStateSourceMatch.Path != tc.wantPath {
+				t.Fatalf("unexpected config echo: %+v", response.DesiredStateSourceMatch)
+			}
+		})
 	}
 }
 

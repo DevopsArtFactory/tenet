@@ -11,6 +11,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/githubcontents"
+	"github.com/DevopsArtFactory/tenet/internal/githubwebhook"
 	"github.com/DevopsArtFactory/tenet/internal/manifest"
 	"github.com/DevopsArtFactory/tenet/internal/manifestgithub"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
@@ -86,6 +87,41 @@ func TestValidateCatalogSourceLoadsGitHubCatalogAtStartup(t *testing.T) {
 	if err := validateCatalogSource(source, false); err != nil {
 		t.Fatalf("validateCatalogSource returned error: %v", err)
 	}
+}
+
+func TestCatalogSourceWebhookDesiredStateSource(t *testing.T) {
+	t.Run("filesystem source exposes filesystem webhook matching mode", func(t *testing.T) {
+		source := newFilesystemCatalogSource("/tmp/repo")
+
+		got := source.webhookDesiredStateSource()
+
+		if got != (githubwebhook.DesiredStateSourceConfig{Kind: githubwebhook.DesiredStateSourceKindFilesystem}) {
+			t.Fatalf("unexpected filesystem webhook desired-state source: %+v", got)
+		}
+	})
+
+	t.Run("github source exposes repository ref and path", func(t *testing.T) {
+		source := apiCatalogSource{
+			kind: apiCatalogSourceGitHub,
+			githubRequest: githubcontents.Request{
+				Repository: "acme/platform-config",
+				Ref:        "main",
+				Path:       "tenet",
+			},
+		}
+
+		got := source.webhookDesiredStateSource()
+
+		want := githubwebhook.DesiredStateSourceConfig{
+			Kind:       githubwebhook.DesiredStateSourceKindGitHub,
+			Repository: "acme/platform-config",
+			Ref:        "main",
+			Path:       "tenet",
+		}
+		if got != want {
+			t.Fatalf("unexpected github webhook desired-state source: got %+v want %+v", got, want)
+		}
+	})
 }
 
 func TestAPIOptionsWithGitHubCatalogSourcePreservesOverviewStatusJoin(t *testing.T) {

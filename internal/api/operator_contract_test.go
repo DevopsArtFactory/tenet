@@ -376,6 +376,8 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 		"`status=accepted`",
 		"`status=ignored`",
 		"`processed=false`",
+		"`desiredStateSourceMatch`",
+		"`matchStatus`",
 		"no reconcile queue work is enqueued yet",
 	} {
 		if !strings.Contains(readme, fragment) {
@@ -388,6 +390,7 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 		"`POST /api/v1/github/webhook`",
 		"`TENET_GITHUB_WEBHOOK_SECRET`",
 		"accepted` or `ignored` responses",
+		"`desiredStateSourceMatch`",
 		"without enqueueing reconcile work yet",
 		"webhook-driven reconcile triggering",
 	} {
@@ -401,6 +404,10 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 		"`TENET_GITHUB_WEBHOOK_SECRET`",
 		"`POST /api/v1/github/webhook`",
 		"HMAC-SHA256 signatures",
+		"`repository_mismatch`",
+		"`ref_mismatch`",
+		"`path_untouched`",
+		"`matched`",
 		"without enqueueing reconcile work yet",
 		"no reconcile queue side effect happens yet",
 	} {
@@ -415,7 +422,10 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 		`webhook_push=$(curl -fsS -X POST \`,
 		`http://$HOST:$PORT/api/v1/github/webhook`,
 		`assert webhook_push['status'] == 'accepted', webhook_push`,
+		`assert webhook_push['desiredStateSourceMatch']['kind'] == 'filesystem', webhook_push`,
+		`assert webhook_push['desiredStateSourceMatch']['matchStatus'] == 'filesystem_source', webhook_push`,
 		`assert webhook_ping['status'] == 'ignored', webhook_ping`,
+		`assert 'desiredStateSourceMatch' not in webhook_ping, webhook_ping`,
 		`assert os.environ['INVALID_WEBHOOK_STATUS'] == '400', os.environ['INVALID_WEBHOOK_STATUS']`,
 		`assert 'github webhook signature mismatch' in invalid_webhook, invalid_webhook`,
 	} {

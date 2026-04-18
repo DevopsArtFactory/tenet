@@ -107,6 +107,7 @@ type Options struct {
 	Logger                               *slog.Logger
 	RequestTimeout                       time.Duration
 	GitHubWebhookSecret                  string
+	GitHubWebhookDesiredStateSource      githubwebhook.DesiredStateSourceConfig
 	CatalogSummary                       func(context.Context) (catalog.Summary, error)
 	CatalogDeployments                   func(context.Context) ([]catalog.DeploymentView, error)
 	CatalogEnvironments                  func(context.Context) ([]catalog.EnvironmentView, error)
@@ -174,9 +175,10 @@ func NewRouter(options Options) http.Handler {
 		}
 
 		response, err := githubwebhook.Decode(r.Context(), githubwebhook.Request{
-			Secret: options.GitHubWebhookSecret,
-			Header: r.Header,
-			Body:   r.Body,
+			Secret:             options.GitHubWebhookSecret,
+			Header:             r.Header,
+			Body:               r.Body,
+			DesiredStateSource: options.GitHubWebhookDesiredStateSource,
 		})
 		if err != nil {
 			var validationErr *githubwebhook.ValidationError

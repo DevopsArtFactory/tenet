@@ -71,7 +71,7 @@ Tenet exposes joined read models through:
 - the embedded UI
 - a first safe GitHub webhook ingestion primitive at `POST /api/v1/github/webhook`
 
-The embedded UI is intentionally lightweight and served directly by the Go API. That keeps the system easy to run locally while the control-plane model is still stabilizing. Request timeout and cancellation now propagate through the catalog, overview, and status provider path as well, so slow GitHub-backed catalog reads or runtime-status joins can stop when the originating HTTP request is cancelled or times out. The new webhook surface stays intentionally conservative: with `TENET_GITHUB_WEBHOOK_SECRET` configured, it validates signed GitHub requests, decodes push payloads into an operator-friendly summary, returns explicit `accepted` or `ignored` responses, and stops there without enqueueing reconcile work yet.
+The embedded UI is intentionally lightweight and served directly by the Go API. That keeps the system easy to run locally while the control-plane model is still stabilizing. Request timeout and cancellation now propagate through the catalog, overview, and status provider path as well, so slow GitHub-backed catalog reads or runtime-status joins can stop when the originating HTTP request is cancelled or times out. The new webhook surface stays intentionally conservative: with `TENET_GITHUB_WEBHOOK_SECRET` configured, it validates signed GitHub requests, decodes push payloads into an operator-friendly summary, returns explicit `accepted` or `ignored` responses, reports additive `desiredStateSourceMatch` state for the currently configured desired-state source, and stops there without enqueueing reconcile work yet.
 
 ## UI architecture
 
@@ -130,7 +130,7 @@ Included now:
 - catalog compilation and validation
 - runtime status foundations
 - read-only control-plane API
-- read-only GitHub webhook validation and push-payload summarization
+- read-only GitHub webhook validation, push-payload summarization, and desired-state source relevance reporting
 - local-safe apply executor handoff for immutable apply requests when explicitly enabled
 - embedded UI with applications -> application -> resource drill-down
 
