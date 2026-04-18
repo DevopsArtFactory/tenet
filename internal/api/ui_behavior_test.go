@@ -2233,9 +2233,26 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   if (!toolbarText.includes('Back to application')) throw new Error('expected resource page back link');
   const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
+  const pageLinks = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
   const backLink = toolbarLinks.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.target === '_self');
   if (!backLink) throw new Error('expected resource page self-navigation back link');
   if (backLink.rel) throw new Error('expected resource page back link to avoid new-tab rel attributes');
+  if (!accountsText.includes('Quick navigation')) throw new Error('expected resource page quick navigation strip');
+  const quickBackLink = pageLinks.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Back to application' && node.target === '_self');
+  if (!quickBackLink || quickBackLink.rel) throw new Error('expected resource page quick navigation back link');
+  const driftLink = pageLinks.find((node) => node.href === '/?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Drift view' && node.target === '_self');
+  if (!driftLink || driftLink.rel) throw new Error('expected resource page quick navigation drift link');
+  const planLink = pageLinks.find((node) => node.href === '/?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Plan/apply' && node.target === '_self');
+  if (!planLink || planLink.rel) throw new Error('expected resource page quick navigation plan link');
+  const auditLink = pageLinks.find((node) => node.href === '/?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Audit log' && node.target === '_self');
+  if (!auditLink || auditLink.rel) throw new Error('expected resource page quick navigation audit link');
+  const siblingLink = pageLinks.find((node) => node.textContent === 'payments-api-staging ECS Service'
+    && node.target === '_self'
+    && node.href.includes('/?page=resource')
+    && node.href.includes('deployment=payments-api-staging')
+    && node.href.includes('resourceType=ecsService')
+    && node.href.includes('resourceId=ecsService%3A%3Apayments-api-staging+ECS+Service%3A%3APrimary'));
+  if (!siblingLink || siblingLink.rel) throw new Error('expected resource page sibling quick link');
   if (!summaryText.includes('Resource detail')) throw new Error('expected resource page summary heading');
   if (!summaryText.includes('payments-api-staging Deployment Group')) throw new Error('expected resource page resource title');
   if (!summaryText.includes('codeDeployDeploymentGroup')) throw new Error('expected resource page resource type');

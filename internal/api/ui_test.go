@@ -230,6 +230,34 @@ func TestEmbeddedUIIncludesQuickLinksToDeploymentReadModels(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const createResourceQuickNav = (detail, resource) => {",
+		"const strip = createElement('section', 'quick-nav-strip');",
+		"createElement('div', 'quick-nav-title', 'Quick navigation')",
+		"createElement('div', 'quick-nav-current', `${deploymentName || 'Application'} · ${resource.name}`)",
+		"createElement('div', 'quick-nav-label', 'Application')",
+		"createElement('div', 'quick-nav-label', 'Sibling resources')",
+		"createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')",
+		"createNavLink(buildPageURL('drift', { deployment: deploymentName }), 'Drift view', '_self')",
+		"createNavLink(buildPageURL('plan', { deployment: deploymentName }), 'Plan/apply', '_self')",
+		"createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self')",
+		".filter((candidate) => candidate.id !== resource.id);",
+		"createNavLink(buildPageURL('resource', {",
+		"resourceType: sibling.type,",
+		"resourceId: sibling.id,",
+		"}), sibling.name, '_self')",
+		"'No sibling linked resources are available for this application.'",
+		"page.append(createResourceQuickNav(detail, resource), shell, historySection, executionSection, conditionsSection, inspectionSection, logsSection);",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+}
+
 func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 	body := string(indexHTML)
 
@@ -285,6 +313,8 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"const renderResourceDetailPage = (detail) => {",
 		"Resource detail",
 		"Back to application",
+		"Quick navigation",
+		"Sibling resources",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include %q", fragment)
