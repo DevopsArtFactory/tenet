@@ -88,6 +88,7 @@ func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupCon
 		plan := planner.Build(deployment, status)
 		status = normalizeRuntimeStatus(deployment, status, plan)
 		status.Rollout = deriveRolloutSummary(deployment, status, plan)
+		status.ManagedDrift = deriveManagedDriftItems(deployment, status)
 		status.History = appendRuntimeHistory(previousStatus, status)
 		currentStatuses[deployment.Name] = status
 		logger.Printf(
@@ -201,6 +202,11 @@ func normalizeRuntimeHistoryEntryContext(entry domain.StatusHistoryEntry, fallba
 	} else {
 		entry.Conditions = normalizeRuntimeHistoryConditions(entry.Conditions)
 	}
+	if len(entry.ManagedDrift) == 0 && len(fallback.ManagedDrift) > 0 {
+		entry.ManagedDrift = normalizeManagedDriftItems(fallback.ManagedDrift)
+	} else {
+		entry.ManagedDrift = normalizeManagedDriftItems(entry.ManagedDrift)
+	}
 	if entry.TargetType == "" {
 		entry.TargetType = fallback.TargetType
 	}
@@ -211,6 +217,85 @@ func normalizeRuntimeHistoryEntryContext(entry domain.StatusHistoryEntry, fallba
 		entry.ExecutionMode = fallback.ExecutionMode
 	}
 	return entry
+}
+
+func deriveManagedDriftItems(deployment domain.Deployment, status domain.DeploymentStatus) []domain.ManagedDriftItem {
+	items := make([]domain.ManagedDriftItem, 0, 5)
+
+	desiredArtifact := describeDeploymentArtifact(deployment.DesiredArtifact)
+	actualArtifact := describeDeploymentArtifact(status.DeployedArtifact)
+	if desiredArtifact != "none" && actualArtifact != "none" && desiredArtifact != actualArtifact {
+		items = append(items, domain.ManagedDriftItem{
+			Field:    "artifact",
+			Desired:  desiredArtifact,
+			Actual:   actualArtifact,
+			Severity: domain.ManagedDriftSeverityHigh,
+		})
+	}
+
+	observedGeneration := status.ObservedGeneration
+	if status.Rollout != nil && status.Rollout.ObservedGeneration != 0 {
+		observedGeneration = status.Rollout.ObservedGeneration
+	}
+	if deployment.Generation > 0 && observedGeneration > 0 && deployment.Generation != observedGeneration {
+		items = append(items, domain.ManagedDriftItem{
+			Field:    "generation",
+			Desired:  fmt.Sprintf("%d", deployment.Generation),
+			Actual:   fmt.Sprintf("%d", observedGeneration),
+			Severity: domain.ManagedDriftSeverityMedium,
+		})
+	}
+
+	if status.Rollout != nil {
+		if deployment.TargetType != "" && status.Rollout.TargetType != "" && deployment.TargetType != status.Rollout.TargetType {
+			items = append(items, domain.ManagedDriftItem{
+				Field:    "runtimeContext.targetType",
+				Desired:  deployment.TargetType,
+				Actual:   status.Rollout.TargetType,
+				Severity: domain.ManagedDriftSeverityMedium,
+			})
+		}
+		if deployment.Strategy != "" && status.Rollout.Strategy != "" && deployment.Strategy != status.Rollout.Strategy {
+			items = append(items, domain.ManagedDriftItem{
+				Field:    "runtimeContext.strategy",
+				Desired:  deployment.Strategy,
+				Actual:   status.Rollout.Strategy,
+				Severity: domain.ManagedDriftSeverityMedium,
+			})
+		}
+		if deployment.ExecutionMode != "" && status.Rollout.ExecutionMode != "" && deployment.ExecutionMode != status.Rollout.ExecutionMode {
+			items = append(items, domain.ManagedDriftItem{
+				Field:    "runtimeContext.executionMode",
+				Desired:  deployment.ExecutionMode,
+				Actual:   status.Rollout.ExecutionMode,
+				Severity: domain.ManagedDriftSeverityMedium,
+			})
+		}
+	}
+
+	return normalizeManagedDriftItems(items)
+}
+
+func normalizeManagedDriftItems(items []domain.ManagedDriftItem) []domain.ManagedDriftItem {
+	if len(items) == 0 {
+		return nil
+	}
+	normalized := append([]domain.ManagedDriftItem(nil), items...)
+	sort.Slice(normalized, func(i, j int) bool {
+		left := normalized[i]
+		right := normalized[j]
+		if left.Field != right.Field {
+			return left.Field < right.Field
+		}
+		if left.Desired != right.Desired {
+			return left.Desired < right.Desired
+		}
+		if left.Actual != right.Actual {
+			return left.Actual < right.Actual
+		}
+		return left.Severity < right.Severity
+	})
+	return normalized
 }
 
 func runtimeHistoryHasControllerEntry(history []domain.StatusHistoryEntry) bool {
@@ -240,8 +325,8 @@ func runtimeHistoryInitialDiff(previous domain.StatusHistoryEntry, current domai
 }
 
 func runtimeHistoryDiff(previous domain.StatusHistoryEntry, current domain.StatusHistoryEntry) ([]string, []string) {
-	changes := make([]string, 0, 13)
-	details := make([]string, 0, 13)
+	changes := make([]string, 0, 14)
+	details := make([]string, 0, 14)
 	if previous.Summary != current.Summary {
 		changes = append(changes, "summary")
 		details = append(details, fmt.Sprintf("Summary changed to %s", valueOrUnknown(current.Summary)))
@@ -249,6 +334,10 @@ func runtimeHistoryDiff(previous domain.StatusHistoryEntry, current domain.Statu
 	if previous.DeployedArtifact != current.DeployedArtifact {
 		changes = append(changes, "deployedArtifact")
 		details = append(details, fmt.Sprintf("Artifact changed to %s", describeDeploymentArtifact(current.DeployedArtifact)))
+	}
+	if !reflect.DeepEqual(previous.ManagedDrift, current.ManagedDrift) {
+		changes = append(changes, "managedDrift")
+		details = append(details, fmt.Sprintf("Managed drift changed to %s", describeManagedDrift(current.ManagedDrift)))
 	}
 	if !runtimeHistoryConditionsEqual(previous.Conditions, current.Conditions) {
 		changes = append(changes, "conditions")
@@ -302,6 +391,24 @@ func describeDeploymentArtifact(artifact domain.DeploymentArtifact) string {
 	default:
 		return "none"
 	}
+}
+
+func describeManagedDrift(items []domain.ManagedDriftItem) string {
+	if len(items) == 0 {
+		return "none"
+	}
+	parts := make([]string, 0, len(items))
+	for _, item := range normalizeManagedDriftItems(items) {
+		part := item.Field
+		if item.Desired != "" || item.Actual != "" {
+			part += fmt.Sprintf(" (%s -> %s)", valueOrUnknown(item.Desired), valueOrUnknown(item.Actual))
+		}
+		if item.Severity != "" {
+			part += fmt.Sprintf(" [%s]", item.Severity)
+		}
+		parts = append(parts, part)
+	}
+	return strings.Join(parts, ", ")
 }
 
 func describeConditions(conditions []domain.Condition) string {
@@ -377,6 +484,7 @@ func deriveRuntimeHistoryEntry(status domain.DeploymentStatus) domain.StatusHist
 	entry := domain.StatusHistoryEntry{
 		Source:             runtimeHistorySourceController,
 		Summary:            "Runtime status updated",
+		ManagedDrift:       normalizeManagedDriftItems(status.ManagedDrift),
 		DeployedArtifact:   status.DeployedArtifact,
 		Conditions:         normalizeRuntimeHistoryConditions(status.Conditions),
 		Sync:               status.Sync,
@@ -400,6 +508,7 @@ func runtimeHistoryMeaningfullyChanged(previous domain.StatusHistoryEntry, curre
 	return previous.Source != current.Source ||
 		previous.Summary != current.Summary ||
 		previous.DeployedArtifact != current.DeployedArtifact ||
+		!reflect.DeepEqual(previous.ManagedDrift, current.ManagedDrift) ||
 		!runtimeHistoryConditionsEqual(previous.Conditions, current.Conditions) ||
 		previous.Sync != current.Sync ||
 		previous.Health != current.Health ||

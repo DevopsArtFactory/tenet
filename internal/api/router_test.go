@@ -916,7 +916,10 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 				ObservedGeneration: 3,
 				Sync:               domain.Sync{State: domain.SyncStateSynced, Reason: "RolloutCompleted"},
 				Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "all checks passed"},
-				Conditions:         []domain.Condition{{Type: "Ready", Status: true, Reason: "Stable", Message: "deployment is healthy"}},
+				ManagedDrift: []domain.ManagedDriftItem{
+					{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r4", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r3", Severity: domain.ManagedDriftSeverityHigh},
+				},
+				Conditions: []domain.Condition{{Type: "Ready", Status: true, Reason: "Stable", Message: "deployment is healthy"}},
 				Rollout: &domain.RolloutSummary{
 					DesiredGeneration:  4,
 					ObservedGeneration: 3,
@@ -931,6 +934,7 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 					Summary:      "Creating candidate capacity for weighted target groups",
 					Sync:         domain.Sync{State: domain.SyncStateReconciling, Reason: "CandidateProvisioning"},
 					Health:       domain.Health{Overall: domain.HealthProgressing, Summary: "warming"},
+					ManagedDrift: []domain.ManagedDriftItem{{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r4", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r3", Severity: domain.ManagedDriftSeverityHigh}},
 					RolloutPhase: domain.RolloutPhaseProvisioning,
 					CurrentStep:  "CreateCandidateCapacity",
 				}},
@@ -1002,6 +1006,21 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 	}
 	if historyEntry["currentStep"] != "CreateCandidateCapacity" || historyEntry["rolloutPhase"] != string(domain.RolloutPhaseProvisioning) {
 		t.Fatalf("expected history field names/values, got %#v", historyEntry)
+	}
+	managedDrift, ok := status["managedDrift"].([]any)
+	if !ok || len(managedDrift) != 1 {
+		t.Fatalf("expected managedDrift array in raw payload, got %#v", status["managedDrift"])
+	}
+	driftItem, ok := managedDrift[0].(map[string]any)
+	if !ok || driftItem["field"] != "artifact" || driftItem["desired"] != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r4" || driftItem["actual"] != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r3" || driftItem["severity"] != string(domain.ManagedDriftSeverityHigh) {
+		t.Fatalf("expected managedDrift item fields, got %#v", managedDrift[0])
+	}
+	historyManagedDrift, ok := historyEntry["managedDrift"].([]any)
+	if !ok || len(historyManagedDrift) != 1 {
+		t.Fatalf("expected history managedDrift array, got %#v", historyEntry["managedDrift"])
+	}
+	if _, exists := status["ManagedDrift"]; exists {
+		t.Fatalf("unexpected Go-style managedDrift field name in %#v", status)
 	}
 	if _, exists := status["ObservedGeneration"]; exists {
 		t.Fatalf("unexpected Go-style field name in %#v", status)
@@ -2230,6 +2249,10 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 		OverviewDeployment: func(name string) (catalog.DeploymentOverviewDetail, error) {
 			return catalog.DeploymentOverviewDetail{
 				Name: "api-prod",
+				ManagedDrift: []domain.ManagedDriftItem{
+					{Field: "artifact", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh},
+					{Field: "generation", Desired: "8", Actual: "7", Severity: domain.ManagedDriftSeverityMedium},
+				},
 				RuntimeSummary: &domain.RuntimeSummary{
 					Timestamp:          "2026-04-16T06:49:00Z",
 					Summary:            "Traffic shift is progressing",
@@ -2242,9 +2265,13 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 					TargetType:         "ecs-service",
 					Strategy:           "linear",
 					ExecutionMode:      "ecsCodeDeploy",
-					DeployedArtifact:   domain.DeploymentArtifact{Image: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1"},
-					Conditions:         []domain.Condition{{Type: "Ready", Status: true, Reason: "Stable", Message: "deployment is healthy"}},
-					HistoryCount:       3,
+					ManagedDrift: []domain.ManagedDriftItem{
+						{Field: "artifact", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh},
+						{Field: "generation", Desired: "8", Actual: "7", Severity: domain.ManagedDriftSeverityMedium},
+					},
+					DeployedArtifact: domain.DeploymentArtifact{Image: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1"},
+					Conditions:       []domain.Condition{{Type: "Ready", Status: true, Reason: "Stable", Message: "deployment is healthy"}},
+					HistoryCount:     3,
 				},
 			}, nil
 		},
@@ -2288,6 +2315,21 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 	condition, ok := conditions[0].(map[string]any)
 	if !ok || condition["type"] != "Ready" || condition["status"] != true || condition["reason"] != "Stable" {
 		t.Fatalf("expected runtimeSummary.conditions fields in overview deployment payload, got %#v", conditions)
+	}
+	managedDrift, ok := payload["managedDrift"].([]any)
+	if !ok || len(managedDrift) != 2 {
+		t.Fatalf("expected managedDrift array in overview deployment payload, got %#v", payload["managedDrift"])
+	}
+	driftItem, ok := managedDrift[0].(map[string]any)
+	if !ok || driftItem["field"] != "artifact" || driftItem["severity"] != string(domain.ManagedDriftSeverityHigh) || driftItem["desired"] != "ghcr.io/devopsartfactory/payments-api:2026-04-16.2" {
+		t.Fatalf("expected managedDrift item fields in overview deployment payload, got %#v", managedDrift[0])
+	}
+	runtimeManagedDrift, ok := runtimeSummary["managedDrift"].([]any)
+	if !ok || len(runtimeManagedDrift) != 2 {
+		t.Fatalf("expected runtimeSummary.managedDrift array in overview deployment payload, got %#v", runtimeSummary["managedDrift"])
+	}
+	if _, exists := payload["ManagedDrift"]; exists {
+		t.Fatalf("unexpected Go-style managedDrift field name in %#v", payload)
 	}
 }
 
