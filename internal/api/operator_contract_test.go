@@ -109,6 +109,10 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		`apply_enabled = os.environ['APPLY_ENABLED'].lower() == 'true'`,
 		`assert apply_record['status'] == ('queued' if apply_enabled else 'failed'), apply_record`,
 		`assert apply_record['error'] == 'apply execution is disabled', apply_record`,
+		`assert isinstance(apply_record.get('lifecycle', {}), dict) and apply_record['lifecycle'], apply_record`,
+		`assert apply_record['lifecycle']['updatedAt'] == apply_record['createdAt'], apply_record`,
+		`assert apply_record['lifecycle']['totalSteps'] == len(apply_record['operations']), apply_record`,
+		`assert apply_record['lifecycle']['finishedAt'] == apply_record['createdAt'], apply_record`,
 		`'Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true.'`,
 		`'No AWS mutation has been implemented for this backend slice yet.'`,
 		`assert isinstance(apply_record.get('operations', []), list) and apply_record['operations'], apply_record`,
@@ -129,6 +133,8 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"queued-only immutable apply contract",
 		"no AWS mutation has been implemented yet",
 		"ordered `operations[]` rows",
+		"additive `lifecycle` block",
+		"`updatedAt` / `startedAt` / `finishedAt`",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README apply contract to include %q", fragment)
@@ -145,6 +151,8 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"`status=pending`",
 		"`status=queued`",
 		"no AWS mutation has been implemented yet",
+		"additive `lifecycle` block",
+		"`currentStep` / `completedSteps` / `totalSteps`",
 	} {
 		if !strings.Contains(uiDoc, fragment) {
 			t.Fatalf("expected overview UI doc apply contract to include %q", fragment)

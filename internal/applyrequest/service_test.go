@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -31,6 +32,17 @@ func (s *memoryStore) Save(_ context.Context, record Record) error {
 	if _, exists := s.records[record.ID]; !exists {
 		s.records[record.ID] = record
 	}
+	return nil
+}
+
+func (s *memoryStore) Update(_ context.Context, record Record) error {
+	if s.records == nil {
+		s.records = map[string]Record{}
+	}
+	if _, exists := s.records[record.ID]; !exists {
+		return ErrNotFound
+	}
+	s.records[record.ID] = record
 	return nil
 }
 
@@ -76,6 +88,9 @@ func TestServiceCreatePersistsImmutableFailedApplyRequestWhenExecutionIsDisabled
 	}
 	if first.Record.Error != disabledError || len(first.Record.Details) != 2 {
 		t.Fatalf("expected disabled error/details, got %+v", first.Record)
+	}
+	if first.Record.Lifecycle.UpdatedAt != "2026-04-18T08:00:00Z" || first.Record.Lifecycle.FinishedAt != "2026-04-18T08:00:00Z" || first.Record.Lifecycle.TotalSteps != 2 {
+		t.Fatalf("expected additive lifecycle metadata on create, got %+v", first.Record.Lifecycle)
 	}
 	if len(first.Record.Operations) != 2 {
 		t.Fatalf("expected projected operations, got %+v", first.Record.Operations)
@@ -138,6 +153,9 @@ func TestServiceCreatePersistsImmutableQueuedApplyRequestWhenExecutionIsEnabled(
 	}
 	if result.Record.Status != StatusQueued || result.Record.Error != "" {
 		t.Fatalf("expected queued apply request without disabled error, got %+v", result.Record)
+	}
+	if result.Record.Lifecycle.UpdatedAt != "2026-04-18T08:05:00Z" || result.Record.Lifecycle.FinishedAt != "" || result.Record.Lifecycle.TotalSteps != 2 {
+		t.Fatalf("expected queued lifecycle metadata, got %+v", result.Record.Lifecycle)
 	}
 	if len(result.Record.Details) != 2 || !strings.Contains(result.Record.Details[0], "TENET_AWS_ENABLE_APPLY=true") {
 		t.Fatalf("expected queued details, got %+v", result.Record.Details)
@@ -281,6 +299,189 @@ func TestServiceCreatePersistsAvailableActorFromRequestContext(t *testing.T) {
 	}
 	if len(result.Record.Operations) != 1 || result.Record.Operations[0].Status != OperationStatusPending {
 		t.Fatalf("expected additive projected operations for available actor record, got %+v", result.Record.Operations)
+	}
+}
+
+func TestServiceTransitionAdvancesQueuedApplyRequestToRunningAndSucceeded(t *testing.T) {
+	store := &memoryStore{
+		records: map[string]Record{
+			"apply_1234abcd": {
+				ID:             "apply_1234abcd",
+				PlanID:         "plan_ready_1234abcd",
+				DeploymentName: "api-prod",
+				Status:         StatusQueued,
+				CreatedAt:      "2026-04-18T08:05:00Z",
+				Details: []string{
+					"Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true.",
+					"No AWS mutation has been implemented for this backend slice yet.",
+				},
+				Lifecycle: Lifecycle{
+					UpdatedAt:  "2026-04-18T08:05:00Z",
+					TotalSteps: 2,
+				},
+				Operations: []Operation{
+					{Status: OperationStatusQueued, Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."},
+					{Status: OperationStatusQueued, Phase: "Promoting", Target: "api-prod listener", Summary: "Shift production traffic."},
+				},
+			},
+		},
+	}
+	service := Service{
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, 4, 18, 8, 6, 0, 0, time.UTC) },
+	}
+
+	running, err := service.Transition(context.Background(), "apply_1234abcd", TransitionRequest{
+		Status: StatusRunning,
+		Step:   1,
+	})
+	if err != nil {
+		t.Fatalf("Transition to running returned error: %v", err)
+	}
+	if running.ID != "apply_1234abcd" || running.Status != StatusRunning {
+		t.Fatalf("expected stable apply id with running status, got %+v", running)
+	}
+	if running.Lifecycle.StartedAt != "2026-04-18T08:06:00Z" || running.Lifecycle.UpdatedAt != "2026-04-18T08:06:00Z" || running.Lifecycle.CurrentStep != 1 || running.Lifecycle.CompletedSteps != 0 || running.Lifecycle.TotalSteps != 2 {
+		t.Fatalf("unexpected running lifecycle metadata: %+v", running.Lifecycle)
+	}
+	if statuses := []OperationStatus{running.Operations[0].Status, running.Operations[1].Status}; !reflect.DeepEqual(statuses, []OperationStatus{OperationStatusRunning, OperationStatusQueued}) {
+		t.Fatalf("unexpected running operations: %+v", running.Operations)
+	}
+
+	service.Now = func() time.Time { return time.Date(2026, 4, 18, 8, 7, 0, 0, time.UTC) }
+	succeeded, err := service.Transition(context.Background(), "apply_1234abcd", TransitionRequest{
+		Status: StatusSucceeded,
+	})
+	if err != nil {
+		t.Fatalf("Transition to succeeded returned error: %v", err)
+	}
+	if succeeded.ID != "apply_1234abcd" || succeeded.Status != StatusSucceeded {
+		t.Fatalf("expected stable apply id with succeeded status, got %+v", succeeded)
+	}
+	if succeeded.Lifecycle.StartedAt != "2026-04-18T08:06:00Z" || succeeded.Lifecycle.FinishedAt != "2026-04-18T08:07:00Z" || succeeded.Lifecycle.UpdatedAt != "2026-04-18T08:07:00Z" || succeeded.Lifecycle.CurrentStep != 2 || succeeded.Lifecycle.CompletedSteps != 2 || succeeded.Lifecycle.TotalSteps != 2 {
+		t.Fatalf("unexpected succeeded lifecycle metadata: %+v", succeeded.Lifecycle)
+	}
+	if statuses := []OperationStatus{succeeded.Operations[0].Status, succeeded.Operations[1].Status}; !reflect.DeepEqual(statuses, []OperationStatus{OperationStatusSucceeded, OperationStatusSucceeded}) {
+		t.Fatalf("unexpected succeeded operations: %+v", succeeded.Operations)
+	}
+}
+
+func TestServiceTransitionMarksRunningStepAsFailed(t *testing.T) {
+	store := &memoryStore{
+		records: map[string]Record{
+			"apply_1234abcd": {
+				ID:             "apply_1234abcd",
+				PlanID:         "plan_ready_1234abcd",
+				DeploymentName: "api-prod",
+				Status:         StatusRunning,
+				CreatedAt:      "2026-04-18T08:05:00Z",
+				Lifecycle: Lifecycle{
+					UpdatedAt:   "2026-04-18T08:06:00Z",
+					StartedAt:   "2026-04-18T08:06:00Z",
+					CurrentStep: 2,
+					TotalSteps:  3,
+				},
+				Operations: []Operation{
+					{Status: OperationStatusSucceeded, Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."},
+					{Status: OperationStatusRunning, Phase: "Promoting", Target: "api-prod listener", Summary: "Shift production traffic."},
+					{Status: OperationStatusQueued, Phase: "Finalizing", Target: "api-prod alarms", Summary: "Verify final health."},
+				},
+			},
+		},
+	}
+	service := Service{
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, 4, 18, 8, 8, 0, 0, time.UTC) },
+	}
+
+	result, err := service.Transition(context.Background(), "apply_1234abcd", TransitionRequest{
+		Status: StatusFailed,
+		Step:   2,
+		Error:  "promotion failed",
+	})
+	if err != nil {
+		t.Fatalf("Transition to failed returned error: %v", err)
+	}
+	if result.Status != StatusFailed || result.Error != "promotion failed" {
+		t.Fatalf("expected failed apply record with propagated error, got %+v", result)
+	}
+	if result.Lifecycle.StartedAt != "2026-04-18T08:06:00Z" || result.Lifecycle.FinishedAt != "2026-04-18T08:08:00Z" || result.Lifecycle.CurrentStep != 2 || result.Lifecycle.CompletedSteps != 1 || result.Lifecycle.TotalSteps != 3 {
+		t.Fatalf("unexpected failed lifecycle metadata: %+v", result.Lifecycle)
+	}
+	if statuses := []OperationStatus{result.Operations[0].Status, result.Operations[1].Status, result.Operations[2].Status}; !reflect.DeepEqual(statuses, []OperationStatus{OperationStatusSucceeded, OperationStatusFailed, OperationStatusQueued}) {
+		t.Fatalf("unexpected failed operations: %+v", result.Operations)
+	}
+}
+
+func TestServiceTransitionRejectsInvalidLifecycleUpdates(t *testing.T) {
+	store := &memoryStore{
+		records: map[string]Record{
+			"apply_queued": {
+				ID:             "apply_queued",
+				PlanID:         "plan_ready_1234abcd",
+				DeploymentName: "api-prod",
+				Status:         StatusQueued,
+				Operations: []Operation{
+					{Status: OperationStatusQueued, Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."},
+					{Status: OperationStatusQueued, Phase: "Promoting", Target: "api-prod listener", Summary: "Shift production traffic."},
+				},
+			},
+			"apply_done": {
+				ID:             "apply_done",
+				PlanID:         "plan_ready_1234abcd",
+				DeploymentName: "api-prod",
+				Status:         StatusSucceeded,
+				Operations: []Operation{
+					{Status: OperationStatusSucceeded, Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."},
+				},
+			},
+		},
+	}
+	service := Service{Store: store}
+
+	for _, tc := range []struct {
+		name    string
+		id      string
+		request TransitionRequest
+	}{
+		{
+			name: "unsupported status",
+			id:   "apply_queued",
+			request: TransitionRequest{
+				Status: Status("mystery"),
+			},
+		},
+		{
+			name: "running requires valid step",
+			id:   "apply_queued",
+			request: TransitionRequest{
+				Status: StatusRunning,
+				Step:   3,
+			},
+		},
+		{
+			name: "succeeded rejects partial step",
+			id:   "apply_queued",
+			request: TransitionRequest{
+				Status: StatusSucceeded,
+				Step:   1,
+			},
+		},
+		{
+			name: "terminal record cannot advance",
+			id:   "apply_done",
+			request: TransitionRequest{
+				Status: StatusRunning,
+				Step:   1,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := service.Transition(context.Background(), tc.id, tc.request)
+			if !errors.Is(err, ErrInvalidState) {
+				t.Fatalf("expected ErrInvalidState, got %v", err)
+			}
+		})
 	}
 }
 

@@ -3492,6 +3492,7 @@ func TestRouterCreateApplyRequest(t *testing.T) {
 					CreatedAt:      "2026-04-18T08:00:00Z",
 					Error:          "apply execution is disabled",
 					Details:        []string{"Tenet persisted this immutable apply request in read-only mode and did not contact AWS."},
+					Lifecycle:      applyrequest.Lifecycle{UpdatedAt: "2026-04-18T08:00:00Z", FinishedAt: "2026-04-18T08:00:00Z", TotalSteps: 1},
 					Operations: []applyrequest.Operation{
 						{Status: applyrequest.OperationStatusPending, Phase: "Provisioning", Target: "api-prod-codedeploy-group (codeDeployDeploymentGroup)", Summary: "Create the CodeDeploy deployment for api-prod."},
 					},
@@ -3519,6 +3520,9 @@ func TestRouterCreateApplyRequest(t *testing.T) {
 	if record.ID != "apply_1234abcd" || record.Status != applyrequest.StatusFailed || record.Error != "apply execution is disabled" {
 		t.Fatalf("unexpected apply request payload: %+v", record)
 	}
+	if record.Lifecycle.UpdatedAt != "2026-04-18T08:00:00Z" || record.Lifecycle.TotalSteps != 1 {
+		t.Fatalf("expected lifecycle metadata in create response, got %+v", record.Lifecycle)
+	}
 	if len(record.Operations) != 1 || record.Operations[0].Status != applyrequest.OperationStatusPending {
 		t.Fatalf("expected additive operations in apply request payload, got %+v", record)
 	}
@@ -3538,6 +3542,7 @@ func TestRouterCreateApplyRequestPropagatesExplicitRequestActor(t *testing.T) {
 					CreatedAt:      "2026-04-18T08:00:00Z",
 					Actor:          requestactor.FromContext(ctx),
 					Error:          "apply execution is disabled",
+					Lifecycle:      applyrequest.Lifecycle{UpdatedAt: "2026-04-18T08:00:00Z", FinishedAt: "2026-04-18T08:00:00Z", TotalSteps: 1},
 					Operations: []applyrequest.Operation{
 						{Status: applyrequest.OperationStatusPending, Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."},
 					},
@@ -3660,6 +3665,7 @@ func TestRouterApplyRequest(t *testing.T) {
 		CreatedAt:      "2026-04-18T08:05:00Z",
 		Error:          "apply execution is disabled",
 		Details:        []string{"Tenet persisted this immutable apply request in read-only mode and did not contact AWS."},
+		Lifecycle:      applyrequest.Lifecycle{UpdatedAt: "2026-04-18T08:05:00Z", FinishedAt: "2026-04-18T08:05:00Z", TotalSteps: 1},
 		Operations: []applyrequest.Operation{
 			{Status: applyrequest.OperationStatusPending, Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."},
 		},
@@ -3693,7 +3699,7 @@ func TestRouterApplyRequest(t *testing.T) {
 		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
 			t.Fatalf("failed to decode raw apply request payload: %v", err)
 		}
-		for _, key := range []string{"id", "planId", "deploymentName", "status", "createdAt", "error", "details", "operations", "source"} {
+		for _, key := range []string{"id", "planId", "deploymentName", "status", "createdAt", "error", "details", "lifecycle", "operations", "source"} {
 			if _, ok := raw[key]; !ok {
 				t.Fatalf("expected apply request payload to include %q, got %#v", key, raw)
 			}
