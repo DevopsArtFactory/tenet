@@ -28,8 +28,23 @@ This is a practical bootstrap, not the final production topology. It intentional
 That means the machine running `terraform apply` must have:
 - Terraform 1.5+
 - Docker with Buildx
-- AWS CLI v2
-- AWS credentials with permission to create the resources in this module
+- AWS CLI v2 with working credentials for the target AWS account
+
+## Preflight before `terraform apply`
+
+Run this checklist on the same machine that will run `terraform apply`:
+- `terraform apply` builds and pushes the current local Tenet checkout from that machine, so run it from the repo checkout you intend to ship
+- Terraform 1.5+ is installed
+- Docker Buildx is installed and working locally
+- AWS CLI v2 is installed and your current shell has working AWS credentials for this deployment
+- verify that `repo_url` and `repo_branch` are reachable from the current machine before apply, for example `git ls-remote --heads <repo_url> <repo_branch>`:
+
+```bash
+git ls-remote --heads <repo_url> <repo_branch>
+```
+
+- the shipped repo-sync path works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL
+- private desired-state repo authentication is not wired into this module yet
 
 ## Repo-sync pattern
 

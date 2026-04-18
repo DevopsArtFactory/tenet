@@ -186,6 +186,7 @@ func TestDesiredStateSourceOperatorDocsContract(t *testing.T) {
 		"Both `tenet-api` and `tenet-controller` can read that desired state from either:",
 		"`TENET_REPO_ROOT` remains the filesystem-mode input when you want a local checkout; it is not a universal runtime requirement.",
 		"The AWS central-control-plane docs and Terraform bootstrap README now explicitly call out that the shipped repo-sync bootstrap path works out of the box only with an anonymously readable `repo_url` (for example a public HTTPS clone URL).",
+		"If you plan to use the AWS central-control-plane Terraform bootstrap, do the preflight before `terraform apply`: it builds and pushes the current local Tenet checkout from the machine running apply, requires Terraform 1.5+, Docker Buildx, and AWS CLI v2 with working credentials, and expects you to verify that `repo_url` and `repo_branch` are reachable from that machine first, for example with `git ls-remote --heads <repo_url> <repo_branch>`.",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README desired-state source contract to include %q", fragment)
@@ -203,6 +204,14 @@ func TestDesiredStateSourceOperatorDocsContract(t *testing.T) {
 		"the shipped Terraform bootstrap below uses the shared repo tree path at `/workspace/repo`",
 		"### 3. Choose desired-state delivery",
 		"The shipped Terraform/bootstrap path still uses the shared checkout plus repo-sync pattern today.",
+		"If you use the shipped Terraform bootstrap, run this operator preflight on the same machine before `terraform apply`:",
+		"`terraform apply` builds and pushes the current local Tenet checkout from that machine, so run it from the repo checkout you intend to ship",
+		"Terraform 1.5+ is installed",
+		"Docker Buildx is installed and working locally",
+		"AWS CLI v2 is installed and your current shell has working AWS credentials for this deployment",
+		"verify that `repo_url` and `repo_branch` are reachable from the current machine before apply, for example `git ls-remote --heads <repo_url> <repo_branch>`",
+		"the shipped repo-sync path works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL",
+		"private desired-state repo authentication is not wired into this module yet",
 		"#### Filesystem-mode repo delivery options",
 		"TENET_CATALOG_SOURCE=filesystem",
 	} {
@@ -222,6 +231,15 @@ func TestDesiredStateSourceOperatorDocsContract(t *testing.T) {
 		"The shipped repo-sync path works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL.",
 		"Private desired-state repo authentication is not wired into this module yet.",
 		"`repo_url` (an anonymously readable clone URL, such as a public HTTPS clone URL)",
+		"## Preflight before `terraform apply`",
+		"Run this checklist on the same machine that will run `terraform apply`:",
+		"`terraform apply` builds and pushes the current local Tenet checkout from that machine, so run it from the repo checkout you intend to ship",
+		"Terraform 1.5+ is installed",
+		"Docker Buildx is installed and working locally",
+		"AWS CLI v2 is installed and your current shell has working AWS credentials for this deployment",
+		"verify that `repo_url` and `repo_branch` are reachable from the current machine before apply, for example `git ls-remote --heads <repo_url> <repo_branch>`:",
+		"the shipped repo-sync path works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL",
+		"private desired-state repo authentication is not wired into this module yet",
 	} {
 		if !strings.Contains(terraformDoc, fragment) {
 			t.Fatalf("expected Terraform README desired-state source contract to include %q", fragment)
