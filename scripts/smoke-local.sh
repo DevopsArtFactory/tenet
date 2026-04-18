@@ -619,6 +619,10 @@ assert 'Plan preview actions' in ui, ui
 assert 'Apply request actions' in ui, ui
 assert 'Plan preview approval guidance' in ui, ui
 assert 'Create Plan will POST /v1/plans/deployments/${deploymentName}, store an immutable server-authored preview, and update this workspace URL with a shareable planId.' in ui, ui
+assert 'Refresh plan preview' in ui, ui
+assert 'Refresh apply request' in ui, ui
+assert 'const loadPlanPreviewRecord = (planId) => {' in ui, ui
+assert 'const loadApplyRequestRecord = (applyId) => {' in ui, ui
 assert 'const buildPlanPreviewRoute = (planId) => `/v1/plans/${encodeURIComponent(planId)}`;' in ui, ui
 assert 'const buildApplyRequestRoute = (applyId) => `/v1/applies/${encodeURIComponent(applyId)}`;' in ui, ui
 assert "createNavLink(buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activePlanRecord.id, applyId: activeApplyRecord?.id || applyState?.applyId || '' }), 'Open bookmarked workspace', '_self')" in ui, ui

@@ -4068,8 +4068,11 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   let buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
   let createPlan = buttons.find((node) => node.textContent === 'Create Plan');
   let applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');
-  if (!createPlan || !applyPlan) throw new Error('expected plan workspace action buttons before create');
+  let refreshPlan = buttons.find((node) => node.textContent === 'Refresh plan preview');
+  let refreshApply = buttons.find((node) => node.textContent === 'Refresh apply request');
+  if (!createPlan || !applyPlan || !refreshPlan || !refreshApply) throw new Error('expected plan workspace action buttons before create');
   if (createPlan.disabled || !applyPlan.disabled) throw new Error('expected Create Plan enabled and Apply Plan disabled before create');
+  if (!refreshPlan.disabled || !refreshApply.disabled) throw new Error('expected refresh buttons disabled before persisted records exist');
   createPlan.dispatch('click');
   await settle();
   await settle();
@@ -4099,8 +4102,11 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
   createPlan = buttons.find((node) => node.textContent === 'Create Plan');
   applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');
-  if (!createPlan || !applyPlan) throw new Error('expected plan workspace buttons after create');
+  refreshPlan = buttons.find((node) => node.textContent === 'Refresh plan preview');
+  refreshApply = buttons.find((node) => node.textContent === 'Refresh apply request');
+  if (!createPlan || !applyPlan || !refreshPlan || !refreshApply) throw new Error('expected plan workspace buttons after create');
   if (createPlan.disabled || applyPlan.disabled) throw new Error('expected Create Plan enabled and Apply Plan enabled after ready preview load');
+  if (refreshPlan.disabled || !refreshApply.disabled) throw new Error('expected only plan refresh enabled after preview load');
   applyPlan.dispatch('click');
   await settle();
   await settle();
@@ -4132,6 +4138,11 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!bookmarkedApplyLink || bookmarkedApplyLink.target !== '_self' || bookmarkedApplyLink.rel) throw new Error('expected bookmarked apply self link after apply create');
   const applyJSONLink = applyLinks.find((node) => node.href === '/v1/applies/apply_failed_123' && node.textContent === 'Apply JSON');
   if (!applyJSONLink || applyJSONLink.target !== '_blank' || applyJSONLink.rel !== 'noreferrer noopener') throw new Error('expected apply json read-model link after apply create');
+  buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  refreshPlan = buttons.find((node) => node.textContent === 'Refresh plan preview');
+  refreshApply = buttons.find((node) => node.textContent === 'Refresh apply request');
+  if (!refreshPlan || !refreshApply) throw new Error('expected refresh buttons after apply create');
+  if (refreshPlan.disabled || refreshApply.disabled) throw new Error('expected refresh buttons enabled after apply create');
 })();
 `
 		runNodeHarness(t, nodeProgram)
@@ -4181,8 +4192,11 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
   const createPlan = buttons.find((node) => node.textContent === 'Create Plan');
   const applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');
-  if (!createPlan || !applyPlan) throw new Error('expected plan workspace action buttons on bookmarked plan');
+  const refreshPlan = buttons.find((node) => node.textContent === 'Refresh plan preview');
+  const refreshApply = buttons.find((node) => node.textContent === 'Refresh apply request');
+  if (!createPlan || !applyPlan || !refreshPlan || !refreshApply) throw new Error('expected plan workspace action buttons on bookmarked plan');
   if (createPlan.disabled || !applyPlan.disabled) throw new Error('expected Create Plan enabled and Apply Plan disabled on bookmarked failed plan');
+  if (refreshPlan.disabled || !refreshApply.disabled) throw new Error('expected only plan refresh enabled on bookmarked failed plan');
 })();
 `
 		runNodeHarness(t, nodeProgram)
@@ -4244,8 +4258,134 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
   const createPlan = buttons.find((node) => node.textContent === 'Create Plan');
   const applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');
-  if (!createPlan || !applyPlan) throw new Error('expected plan workspace action buttons on bookmarked apply');
+  const refreshPlan = buttons.find((node) => node.textContent === 'Refresh plan preview');
+  const refreshApply = buttons.find((node) => node.textContent === 'Refresh apply request');
+  if (!createPlan || !applyPlan || !refreshPlan || !refreshApply) throw new Error('expected plan workspace action buttons on bookmarked apply');
   if (createPlan.disabled || applyPlan.disabled) throw new Error('expected Create Plan enabled and Apply Plan enabled on bookmarked apply backed by ready preview');
+  if (refreshPlan.disabled || refreshApply.disabled) throw new Error('expected refresh buttons enabled on bookmarked apply');
+})();
+`
+		runNodeHarness(t, nodeProgram)
+	})
+
+	t.Run("refresh controls reload bookmarked plan and apply records without changing the URL", func(t *testing.T) {
+		applyRecordQueuedJSON, err := json.Marshal(map[string]any{
+			"id":             "apply_refresh_123",
+			"planId":         "plan_ready_123",
+			"deploymentName": "api-prod",
+			"status":         "queued",
+			"createdAt":      "2026-04-18T08:00:00Z",
+			"operations": []map[string]any{
+				{"status": "queued", "phase": "Preparing", "target": "queue-target", "summary": "Queued summary"},
+			},
+			"lifecycle": map[string]any{
+				"updatedAt":   "2026-04-18T08:01:00Z",
+				"currentStep": 1,
+				"totalSteps":  2,
+			},
+			"source": map[string]any{
+				"planId":        "plan_ready_123",
+				"route":         "/v1/plans/plan_ready_123",
+				"planStatus":    "ready",
+				"planCreatedAt": "2026-04-17T09:00:00Z",
+				"fingerprint":   "fp_plan_ready",
+			},
+		})
+		if err != nil {
+			t.Fatalf("marshal queued refresh apply record: %v", err)
+		}
+
+		applyRecordRunningJSON, err := json.Marshal(map[string]any{
+			"id":             "apply_refresh_123",
+			"planId":         "plan_ready_123",
+			"deploymentName": "api-prod",
+			"status":         "running",
+			"createdAt":      "2026-04-18T08:00:00Z",
+			"operations": []map[string]any{
+				{"status": "succeeded", "phase": "Preparing", "target": "queue-target", "summary": "Queued summary"},
+				{"status": "running", "phase": "Promoting", "target": "promote-target", "summary": "Promotion in progress"},
+			},
+			"lifecycle": map[string]any{
+				"updatedAt":      "2026-04-18T08:03:00Z",
+				"startedAt":      "2026-04-18T08:02:00Z",
+				"currentStep":    2,
+				"completedSteps": 1,
+				"totalSteps":     2,
+			},
+			"source": map[string]any{
+				"planId":        "plan_ready_123",
+				"route":         "/v1/plans/plan_ready_123",
+				"planStatus":    "ready",
+				"planCreatedAt": "2026-04-17T09:00:00Z",
+				"fingerprint":   "fp_plan_ready",
+			},
+		})
+		if err != nil {
+			t.Fatalf("marshal running refresh apply record: %v", err)
+		}
+
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+const planPreview = ` + string(planPreviewReadyJSON) + `;
+const applyQueuedRecord = ` + string(applyRecordQueuedJSON) + `;
+const applyRunningRecord = ` + string(applyRecordRunningJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+let applyFetchCount = 0;
+let planFetchCount = 0;
+const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_refresh_123', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/plans/plan_ready_123') {
+    planFetchCount += 1;
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+  }
+  if (url === '/v1/applies/apply_refresh_123') {
+    applyFetchCount += 1;
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(applyFetchCount === 1 ? applyQueuedRecord : applyRunningRecord) });
+  }
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  await settle();
+  const root = document.getElementById('accounts');
+  let text = collectText(root).join(' | ');
+  if (!text.includes('Apply request queued')) throw new Error('expected queued apply heading before refresh');
+  if (!text.includes('Immutable apply request apply_refresh_123 is loaded from GET /v1/applies/apply_refresh_123 and recorded as queued.')) throw new Error('expected queued apply message before refresh');
+  let buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  const refreshPlan = buttons.find((node) => node.textContent === 'Refresh plan preview');
+  const refreshApply = buttons.find((node) => node.textContent === 'Refresh apply request');
+  if (!refreshPlan || !refreshApply) throw new Error('expected refresh buttons on bookmarked apply');
+  if (refreshPlan.disabled || refreshApply.disabled) throw new Error('expected refresh buttons enabled on bookmarked apply');
+  refreshPlan.dispatch('click');
+  await settle();
+  await settle();
+  await settle();
+  if (planFetchCount !== 2) throw new Error('expected plan refresh to re-fetch stored preview');
+  if (window.location.search !== '?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_refresh_123') throw new Error('expected plan refresh to preserve workspace URL');
+  refreshApply.dispatch('click');
+  await settle();
+  await settle();
+  await settle();
+  if (applyFetchCount !== 2) throw new Error('expected apply refresh to re-fetch stored apply record');
+  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/plan_ready_123, /v1/applies/apply_refresh_123, /v1/plans/plan_ready_123, /v1/applies/apply_refresh_123') throw new Error('unexpected fetch sequence during refresh monitoring: ' + fetchCalls.join(', '));
+  if (window.location.search !== '?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_refresh_123') throw new Error('expected apply refresh to preserve workspace URL');
+  text = collectText(root).join(' | ');
+  if (!text.includes('Apply request running')) throw new Error('expected running apply heading after refresh');
+  if (!text.includes('Immutable apply request apply_refresh_123 is loaded from GET /v1/applies/apply_refresh_123 and recorded as running.')) throw new Error('expected running apply message after refresh');
+  if (!text.includes('1/2 terminal · 1 running · 0 queued')) throw new Error('expected updated lifecycle summary after refresh');
+  if (!text.includes('Current step 2 of 2 · Completed 1 of 2')) throw new Error('expected updated lifecycle metadata after refresh');
+  if (!text.includes('Running apply operation')) throw new Error('expected running apply operation after refresh');
 })();
 `
 		runNodeHarness(t, nodeProgram)
