@@ -705,6 +705,9 @@ assert 'Plan/apply' in ui, ui
 assert 'Current source: controller-authored managedDrift rows.' in ui, ui
 assert 'Current source: derived fallback read-model heuristics.' in ui, ui
 assert 'Drift summary' in ui, ui
+assert 'Refresh drift workspace' in ui, ui
+assert 'Refreshing drift workspace from GET /v1/overview/deployments/{deploymentName}…' in ui, ui
+assert 'Failed to refresh drift workspace:' in ui, ui
 assert 'Total rows' in ui, ui
 assert 'Visible rows' in ui, ui
 assert 'No field-level drift rows match the current filters. Adjust the query or severity filters to inspect reported drift.' in ui, ui
