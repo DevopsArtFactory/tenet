@@ -239,3 +239,29 @@ func TestServiceListReturnsExplicitEmptyEntriesForDeploymentWithoutAuditRecords(
 		t.Fatalf("expected explicit empty audit result, got %+v", result.Entries)
 	}
 }
+
+func TestProjectApplyPreservesQueuedLifecycleMetadata(t *testing.T) {
+	entry := projectApply(applyrequest.Record{
+		ID:             "apply_queued",
+		PlanID:         "plan_ready",
+		DeploymentName: "api-prod",
+		Status:         applyrequest.StatusQueued,
+		CreatedAt:      "2026-04-18T08:30:00Z",
+		Details: []string{
+			"Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true.",
+			"No AWS mutation has been implemented for this backend slice yet.",
+		},
+		Source: applyrequest.SourceContext{
+			Route:       "/v1/plans/plan_ready",
+			PlanStatus:  "ready",
+			Fingerprint: "fp_plan_ready",
+		},
+	}, catalog.DeploymentView{Name: "api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"})
+
+	if entry.Metadata.Status != "queued" || entry.Metadata.Error != "" {
+		t.Fatalf("expected queued lifecycle metadata without disabled error, got %+v", entry.Metadata)
+	}
+	if len(entry.Metadata.Details) != 2 || entry.Source.RecordRoute != "/v1/applies/apply_queued" {
+		t.Fatalf("unexpected queued audit projection: %+v", entry)
+	}
+}

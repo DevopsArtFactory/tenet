@@ -83,6 +83,7 @@ Important details:
 - `planId` / `applyId` link the timeline back to the immutable read models Tenet already exposes
 - `metadata` carries explicit action-specific details such as status, risk, fingerprint, error, and details
 - `source` points to both the immutable record route and the parent route the record was derived from
+- apply-request entries default to `metadata.status="failed"` plus the disabled error/details shown above; when `TENET_AWS_ENABLE_APPLY=true`, newly created apply-request entries persist as `metadata.status="queued"` without an error while still remaining mutation-free in this backend slice
 
 ## Auth and actor data
 

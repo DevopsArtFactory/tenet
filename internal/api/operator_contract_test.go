@@ -80,11 +80,16 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 	script := readRepoFile(t, "scripts/smoke-local.sh")
 	for _, fragment := range []string{
 		`TENET_APPLY_STORE_PATH="$APPLY_STORE_PATH"`,
+		`TENET_AWS_ENABLE_APPLY="$APPLY_ENABLED"`,
 		`curl -fsS -X POST "http://$HOST:$PORT/v1/applies/plans/$plan_id"`,
 		`curl -fsS "http://$HOST:$PORT/v1/applies/$apply_id"`,
+		`apply_enabled = os.environ['APPLY_ENABLED'].lower() == 'true'`,
+		`assert apply_record['status'] == ('queued' if apply_enabled else 'failed'), apply_record`,
 		`assert apply_record['error'] == 'apply execution is disabled', apply_record`,
+		`'Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true.'`,
+		`'No AWS mutation has been implemented for this backend slice yet.'`,
 		`assert isinstance(apply_record.get('operations', []), list) and apply_record['operations'], apply_record`,
-		`assert [operation['status'] for operation in apply_record['operations']] == ['pending'] * len(apply_record['operations']), apply_record`,
+		`assert [operation['status'] for operation in apply_record['operations']] == [('queued' if apply_enabled else 'pending')] * len(apply_record['operations']), apply_record`,
 	} {
 		if !strings.Contains(script, fragment) {
 			t.Fatalf("expected smoke-local apply contract to include %q", fragment)
@@ -96,7 +101,9 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"`POST /v1/applies/plans/{planId}`",
 		"`GET /v1/applies/{applyId}`",
 		"`TENET_APPLY_STORE_PATH`",
+		"`TENET_AWS_ENABLE_APPLY=true`",
 		"disabled by default for live execution",
+		"persists a queued immutable apply request instead of a failed one",
 		"ordered `operations[]` rows",
 	} {
 		if !strings.Contains(readme, fragment) {
@@ -109,7 +116,9 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"`POST /v1/applies/plans/{planId}`",
 		"`GET /v1/applies/{applyId}`",
 		"failed immutable contract with operator-facing error/details",
-		"additive ordered `operations[]` rows with pending `status`, `phase`, `target`, and `summary` fields",
+		"`TENET_AWS_ENABLE_APPLY=true`",
+		"queued immutable apply request without contacting AWS",
+		"additive ordered `operations[]` rows with pending or queued `status`, `phase`, `target`, and `summary` fields",
 	} {
 		if !strings.Contains(uiDoc, fragment) {
 			t.Fatalf("expected overview UI doc apply contract to include %q", fragment)

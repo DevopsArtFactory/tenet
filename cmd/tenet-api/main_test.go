@@ -240,6 +240,9 @@ func TestAPIOptionsApplyRequestPersistsDisabledRecordAndReadsBack(t *testing.T) 
 	if created.Record.Error != "apply execution is disabled" || len(created.Record.Details) == 0 {
 		t.Fatalf("expected disabled apply contract, got %+v", created.Record)
 	}
+	if len(created.Record.Operations) == 0 || created.Record.Operations[0].Status != applyrequest.OperationStatusPending {
+		t.Fatalf("expected pending projected operations for disabled contract, got %+v", created.Record.Operations)
+	}
 
 	fetched, err := options.ApplyRequest(context.Background(), created.Record.ID)
 	if err != nil {
@@ -247,6 +250,44 @@ func TestAPIOptionsApplyRequestPersistsDisabledRecordAndReadsBack(t *testing.T) 
 	}
 	if fetched.ID != created.Record.ID || fetched.Source.Route != "/v1/plans/"+plan.Record.ID {
 		t.Fatalf("unexpected fetched immutable apply request: %+v", fetched)
+	}
+}
+
+func TestAPIOptionsApplyRequestPersistsQueuedRecordWhenApplyExecutionIsEnabled(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	t.Setenv("TENET_PLAN_STORE_PATH", filepath.Join(t.TempDir(), "plan-previews.json"))
+	t.Setenv("TENET_APPLY_STORE_PATH", filepath.Join(t.TempDir(), "apply-requests.json"))
+	t.Setenv("TENET_AWS_ENABLE_APPLY", "true")
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
+	if options.CreateDeploymentPlanPreview == nil || options.CreateApplyRequest == nil || options.ApplyRequest == nil {
+		t.Fatalf("expected plan/apply providers to be wired")
+	}
+
+	plan, err := options.CreateDeploymentPlanPreview(context.Background(), "api-prod", planpreview.CreateRequest{})
+	if err != nil {
+		t.Fatalf("CreateDeploymentPlanPreview returned error: %v", err)
+	}
+	created, err := options.CreateApplyRequest(context.Background(), plan.Record.ID)
+	if err != nil {
+		t.Fatalf("CreateApplyRequest returned error: %v", err)
+	}
+	if !created.Created || created.Record.ID == "" {
+		t.Fatalf("expected a persisted immutable queued apply request, got %+v", created)
+	}
+	if created.Record.Status != applyrequest.StatusQueued || created.Record.Error != "" {
+		t.Fatalf("expected queued apply contract without disabled error, got %+v", created.Record)
+	}
+	if len(created.Record.Details) != 2 || created.Record.Operations[0].Status != applyrequest.OperationStatusQueued {
+		t.Fatalf("expected queued apply details/operations, got %+v", created.Record)
+	}
+
+	fetched, err := options.ApplyRequest(context.Background(), created.Record.ID)
+	if err != nil {
+		t.Fatalf("ApplyRequest returned error: %v", err)
+	}
+	if fetched.Status != applyrequest.StatusQueued || fetched.Operations[0].Status != applyrequest.OperationStatusQueued {
+		t.Fatalf("unexpected fetched queued apply request: %+v", fetched)
 	}
 }
 
