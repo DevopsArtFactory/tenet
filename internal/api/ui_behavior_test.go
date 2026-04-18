@@ -4114,6 +4114,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Stored apply request')) throw new Error('expected stored apply request section');
   if (!text.includes('Apply lifecycle summary')) throw new Error('expected apply lifecycle summary after create');
   if (!text.includes('0/1 terminal · 0 running · 1 queued')) throw new Error('expected queued lifecycle progress summary after create');
+  if (text.includes('Apply lifecycle metadata')) throw new Error('expected failed/default apply record to omit lifecycle metadata section when lifecycle fields are missing');
   if (!text.includes('Apply operations')) throw new Error('expected apply operations section');
   if (!text.includes('Immutable apply request loaded from GET /v1/applies/apply_failed_123.')) throw new Error('expected apply operations intro');
   if (!text.includes('Apply step 1')) throw new Error('expected synthetic apply-step label');
@@ -4223,6 +4224,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Stored apply request')) throw new Error('expected stored apply request section');
   if (!text.includes('Apply lifecycle summary')) throw new Error('expected apply lifecycle summary on bookmarked apply');
   if (!text.includes('0/1 terminal · 0 running · 1 queued')) throw new Error('expected queued lifecycle progress summary on bookmarked apply');
+  if (text.includes('Apply lifecycle metadata')) throw new Error('expected bookmarked failed/default apply record to omit lifecycle metadata section when lifecycle fields are missing');
   if (!text.includes('Apply operations')) throw new Error('expected apply operations section on bookmarked apply');
   if (!text.includes('Immutable apply request loaded from GET /v1/applies/apply_failed_123.')) throw new Error('expected apply operations intro on bookmarked apply');
   if (!text.includes('Apply step 1')) throw new Error('expected synthetic apply-step label on bookmarked apply');
@@ -4249,36 +4251,75 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
 		runNodeHarness(t, nodeProgram)
 	})
 
-	t.Run("future apply lifecycle states render lifecycle-aware chrome", func(t *testing.T) {
+	t.Run("future apply lifecycle states render lifecycle-aware chrome and metadata", func(t *testing.T) {
 		cases := []struct {
 			name            string
 			status          string
 			expectedHeading string
 			expectedMessage string
+			lifecycle       map[string]any
+			expectedSummary string
+			expectedSteps   string
 		}{
 			{
 				name:            "queued",
 				status:          "queued",
 				expectedHeading: "Apply request queued",
 				expectedMessage: "recorded as queued",
+				lifecycle: map[string]any{
+					"updatedAt":  "2026-04-18T08:01:00Z",
+					"currentStep": 1,
+					"totalSteps":  5,
+				},
+				expectedSummary: "Current step 1 of 5 · Completed — of 5",
+				expectedSteps:   "— / 5",
 			},
 			{
 				name:            "running",
 				status:          "running",
 				expectedHeading: "Apply request running",
 				expectedMessage: "recorded as running",
+				lifecycle: map[string]any{
+					"updatedAt":      "2026-04-18T08:02:00Z",
+					"startedAt":      "2026-04-18T08:01:30Z",
+					"currentStep":    2,
+					"completedSteps": 1,
+					"totalSteps":     5,
+				},
+				expectedSummary: "Current step 2 of 5 · Completed 1 of 5",
+				expectedSteps:   "1 / 5",
 			},
 			{
 				name:            "succeeded",
 				status:          "succeeded",
 				expectedHeading: "Apply request succeeded",
 				expectedMessage: "recorded as succeeded",
+				lifecycle: map[string]any{
+					"updatedAt":      "2026-04-18T08:05:00Z",
+					"startedAt":      "2026-04-18T08:01:30Z",
+					"finishedAt":     "2026-04-18T08:05:00Z",
+					"currentStep":    5,
+					"completedSteps": 5,
+					"totalSteps":     5,
+				},
+				expectedSummary: "Current step 5 of 5 · Completed 5 of 5",
+				expectedSteps:   "5 / 5",
 			},
 			{
 				name:            "cancelled",
 				status:          "cancelled",
 				expectedHeading: "Apply request cancelled",
 				expectedMessage: "recorded as cancelled",
+				lifecycle: map[string]any{
+					"updatedAt":      "2026-04-18T08:04:00Z",
+					"startedAt":      "2026-04-18T08:01:30Z",
+					"finishedAt":     "2026-04-18T08:04:00Z",
+					"currentStep":    3,
+					"completedSteps": 2,
+					"totalSteps":     5,
+				},
+				expectedSummary: "Current step 3 of 5 · Completed 2 of 5",
+				expectedSteps:   "2 / 5",
 			},
 		}
 
@@ -4297,6 +4338,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
 						{"status": "failed", "phase": "Verifying", "target": "target-failed", "summary": "Failed summary"},
 						{"status": "cancelled", "phase": "Cleanup", "target": "target-cancelled", "summary": "Cancelled summary"},
 					},
+					"lifecycle": tc.lifecycle,
 					"source": map[string]any{
 						"planId":        "plan_ready_123",
 						"route":         "/v1/plans/plan_ready_123",
@@ -4340,11 +4382,26 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('` + tc.expectedMessage + `')) throw new Error('expected lifecycle message for ` + tc.name + `');
   if (!text.includes('Apply lifecycle summary')) throw new Error('expected apply lifecycle summary for ` + tc.name + `');
   if (!text.includes('3/5 terminal · 1 running · 1 queued')) throw new Error('expected lifecycle progress summary for ` + tc.name + `');
+  if (!text.includes('Apply lifecycle metadata')) throw new Error('expected lifecycle metadata section for ` + tc.name + `');
+  if (!text.includes('` + tc.expectedSummary + `')) throw new Error('expected lifecycle metadata summary for ` + tc.name + `');
+  if (!/Lifecycle updated\s*\|\s*2026-04-18T08:0[1-5]:00Z/.test(text)) throw new Error('expected lifecycle updated timestamp for ` + tc.name + `');
+  if (!/Current lifecycle step\s*\|\s*[1-5]/.test(text)) throw new Error('expected current lifecycle step metric for ` + tc.name + `');
+  if (!text.includes('Completed / total steps')) throw new Error('expected completed/total lifecycle metric for ` + tc.name + `');
+  if (!text.includes('` + tc.expectedSteps + `')) throw new Error('expected completed/total lifecycle value for ` + tc.name + `');
   if (!text.includes('Queued apply operation')) throw new Error('expected queued apply-operation label for ` + tc.name + `');
   if (!text.includes('Running apply operation')) throw new Error('expected running apply-operation label for ` + tc.name + `');
   if (!text.includes('Succeeded apply operation')) throw new Error('expected succeeded apply-operation label for ` + tc.name + `');
   if (!text.includes('Failed apply operation')) throw new Error('expected failed apply-operation label for ` + tc.name + `');
   if (!text.includes('Cancelled apply operation')) throw new Error('expected cancelled apply-operation label for ` + tc.name + `');
+  if ('` + tc.name + `' === 'queued') {
+    if (!text.includes('Lifecycle started') || !text.includes('Lifecycle finished')) throw new Error('expected queued lifecycle timing labels to render');
+    if (!/Lifecycle started\s*\|\s*—/.test(text)) throw new Error('expected queued lifecycle started placeholder');
+    if (!/Lifecycle finished\s*\|\s*—/.test(text)) throw new Error('expected queued lifecycle finished placeholder');
+  }
+  if ('` + tc.name + `' === 'running') {
+    if (!/Lifecycle started\s*\|\s*2026-04-18T08:01:30Z/.test(text)) throw new Error('expected running lifecycle started timestamp');
+    if (!/Lifecycle finished\s*\|\s*—/.test(text)) throw new Error('expected running lifecycle finished placeholder');
+  }
   if (!/Queued operations\s*\|\s*1/.test(text)) throw new Error('expected queued count for ` + tc.name + `');
   if (!/Running operations\s*\|\s*1/.test(text)) throw new Error('expected running count for ` + tc.name + `');
   if (!/Succeeded operations\s*\|\s*1/.test(text)) throw new Error('expected succeeded count for ` + tc.name + `');
