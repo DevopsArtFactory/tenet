@@ -951,13 +951,14 @@ func TestAPIOptionsOverviewDeploymentResourceInspectionWiresObserverRoleAndPlace
 		t.Fatalf("expected wired provider result, got %+v", result)
 	}
 	want := resourceinspection.Request{
-		DeploymentName:   "api-prod",
-		ResourceType:     "ecsService",
-		ResourceName:     "api-prod-live-service",
-		ControlAccountID: "123456789012",
-		TargetAccountID:  "123456789012",
-		Region:           "ap-northeast-2",
-		ObserverRoleARN:  "arn:aws:iam::123456789012:role/TenetObserverRole",
+		DeploymentName:      "api-prod",
+		ResourceType:        "ecsService",
+		ResourceName:        "api-prod-live-service",
+		ResourceDescription: "live ECS service",
+		ControlAccountID:    "123456789012",
+		TargetAccountID:     "123456789012",
+		Region:              "ap-northeast-2",
+		ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
 	}
 	if !reflect.DeepEqual(provider.lastRequest, want) {
 		t.Fatalf("unexpected resource inspection request: %+v", provider.lastRequest)
@@ -995,15 +996,79 @@ func TestAPIOptionsOverviewDeploymentResourceInspectionUsesFallbackWhenExecution
 	defer restore()
 
 	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
-	_, err := options.OverviewDeploymentResourceInspection(context.Background(), "api-prod", "candidateAutoScalingGroup", "api-prod-candidate")
-	if err != nil {
-		t.Fatalf("expected fallback resource binding to work, got %v", err)
+	for _, resource := range []struct {
+		resourceType        string
+		resourceName        string
+		resourceDescription string
+	}{
+		{
+			resourceType:        "candidateAutoScalingGroup",
+			resourceName:        "api-prod-candidate",
+			resourceDescription: "Candidate Auto Scaling Group Tenet creates from normalized userdata source file:userdata/api-prod.sh with desired 4, min 2, and max 8 instances and warmup 90s for weighted target group rollout",
+		},
+		{
+			resourceType:        "trafficShiftPlan",
+			resourceName:        "api-prod-weighted-routing",
+			resourceDescription: "Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s",
+		},
+	} {
+		provider.calls = 0
+		provider.lastRequest = resourceinspection.Request{}
+
+		_, err := options.OverviewDeploymentResourceInspection(context.Background(), "api-prod", resource.resourceType, resource.resourceName)
+		if err != nil {
+			t.Fatalf("expected fallback resource binding to work for %s/%s, got %v", resource.resourceType, resource.resourceName, err)
+		}
+		if provider.calls != 1 {
+			t.Fatalf("expected provider to run once for fallback-bound %s/%s, got %d calls", resource.resourceType, resource.resourceName, provider.calls)
+		}
+		if provider.lastRequest.ResourceType != resource.resourceType || provider.lastRequest.ResourceName != resource.resourceName || provider.lastRequest.ResourceDescription != resource.resourceDescription {
+			t.Fatalf("unexpected resource inspection request for %s/%s: %+v", resource.resourceType, resource.resourceName, provider.lastRequest)
+		}
 	}
-	if provider.calls != 1 {
-		t.Fatalf("expected provider to run once for fallback-bound resource, got %d calls", provider.calls)
-	}
-	if provider.lastRequest.ResourceType != "candidateAutoScalingGroup" || provider.lastRequest.ResourceName != "api-prod-candidate" {
-		t.Fatalf("unexpected resource inspection request: %+v", provider.lastRequest)
+}
+
+func TestAPIOptionsOverviewDeploymentResourceInspectionUsesCodeDeployFallbackWhenExecutionIsMissing(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	provider := &fakeResourceInspectionProvider{result: resourceinspection.Result{Available: true}}
+	restore := stubResourceInspectionProviderFactory(provider)
+	defer restore()
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
+	for _, resource := range []struct {
+		resourceType        string
+		resourceName        string
+		resourceDescription string
+	}{
+		{
+			resourceType:        "codeDeployDeploymentGroup",
+			resourceName:        "api-prod-codedeploy-group",
+			resourceDescription: "CodeDeploy deployment group Tenet targets for ECS rollout (style: linear)",
+		},
+		{
+			resourceType:        "productionListener",
+			resourceName:        "api-prod-prod-listener",
+			resourceDescription: "Production listener CodeDeploy shifts during ECS traffic shifting (style: linear)",
+		},
+		{
+			resourceType:        "testListener",
+			resourceName:        "api-prod-test-listener",
+			resourceDescription: "Test listener CodeDeploy uses to validate the replacement ECS task set before promotion (style: linear)",
+		},
+	} {
+		provider.calls = 0
+		provider.lastRequest = resourceinspection.Request{}
+
+		_, err := options.OverviewDeploymentResourceInspection(context.Background(), "api-prod", resource.resourceType, resource.resourceName)
+		if err != nil {
+			t.Fatalf("expected CodeDeploy fallback resource binding to work for %s/%s, got %v", resource.resourceType, resource.resourceName, err)
+		}
+		if provider.calls != 1 {
+			t.Fatalf("expected provider to run once for fallback-bound %s/%s, got %d calls", resource.resourceType, resource.resourceName, provider.calls)
+		}
+		if provider.lastRequest.ResourceType != resource.resourceType || provider.lastRequest.ResourceName != resource.resourceName || provider.lastRequest.ResourceDescription != resource.resourceDescription {
+			t.Fatalf("unexpected resource inspection request for %s/%s: %+v", resource.resourceType, resource.resourceName, provider.lastRequest)
+		}
 	}
 }
 

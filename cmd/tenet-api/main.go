@@ -266,13 +266,14 @@ func loadApplyRequestRecords(path string) ([]applyrequest.Record, error) {
 type overviewDeploymentResourceLookupProvider func(context.Context, string, string, string) (resourceLookupRequest, error)
 
 type resourceLookupRequest struct {
-	DeploymentName   string
-	ResourceType     string
-	ResourceName     string
-	ControlAccountID string
-	TargetAccountID  string
-	Region           string
-	ObserverRoleARN  string
+	DeploymentName      string
+	ResourceType        string
+	ResourceName        string
+	ResourceDescription string
+	ControlAccountID    string
+	TargetAccountID     string
+	Region              string
+	ObserverRoleARN     string
 }
 
 func newOverviewDeploymentResourceLookupProvider(
@@ -295,7 +296,8 @@ func loadOverviewDeploymentResourceRequest(
 	if err != nil {
 		return resourceLookupRequest{}, err
 	}
-	if !deploymentHasExecutionResource(detail, resourceType, resourceName) {
+	resource, ok := deploymentExecutionResource(detail, resourceType, resourceName)
+	if !ok {
 		return resourceLookupRequest{}, fmt.Errorf("%w: deployment %s resource %s/%s", statusstore.ErrNotFound, name, resourceType, resourceName)
 	}
 	observerRoleARN, err := loadObserverRoleARN(detail.AWSAccountID)
@@ -303,13 +305,14 @@ func loadOverviewDeploymentResourceRequest(
 		return resourceLookupRequest{}, err
 	}
 	return resourceLookupRequest{
-		DeploymentName:   name,
-		ResourceType:     resourceType,
-		ResourceName:     resourceName,
-		ControlAccountID: detail.AWSAccountID,
-		TargetAccountID:  detail.AWSAccountID,
-		Region:           detail.Region,
-		ObserverRoleARN:  observerRoleARN,
+		DeploymentName:      name,
+		ResourceType:        resourceType,
+		ResourceName:        resourceName,
+		ResourceDescription: resource.Description,
+		ControlAccountID:    detail.AWSAccountID,
+		TargetAccountID:     detail.AWSAccountID,
+		Region:              detail.Region,
+		ObserverRoleARN:     observerRoleARN,
 	}, nil
 }
 
@@ -344,24 +347,25 @@ func newOverviewDeploymentResourceInspectionProvider(
 			return resourceinspection.Result{}, err
 		}
 		return provider.Inspect(ctx, resourceinspection.Request{
-			DeploymentName:   request.DeploymentName,
-			ResourceType:     request.ResourceType,
-			ResourceName:     request.ResourceName,
-			ControlAccountID: request.ControlAccountID,
-			TargetAccountID:  request.TargetAccountID,
-			Region:           request.Region,
-			ObserverRoleARN:  request.ObserverRoleARN,
+			DeploymentName:      request.DeploymentName,
+			ResourceType:        request.ResourceType,
+			ResourceName:        request.ResourceName,
+			ResourceDescription: request.ResourceDescription,
+			ControlAccountID:    request.ControlAccountID,
+			TargetAccountID:     request.TargetAccountID,
+			Region:              request.Region,
+			ObserverRoleARN:     request.ObserverRoleARN,
 		})
 	}
 }
 
-func deploymentHasExecutionResource(detail catalog.DeploymentOverviewDetail, resourceType, resourceName string) bool {
+func deploymentExecutionResource(detail catalog.DeploymentOverviewDetail, resourceType, resourceName string) (domain.RolloutExecutionDetail, bool) {
 	for _, resource := range rolloutExecutionResources(detail) {
 		if resource.Resource == resourceType && resource.Name == resourceName {
-			return true
+			return resource, true
 		}
 	}
-	return false
+	return domain.RolloutExecutionDetail{}, false
 }
 
 func rolloutExecutionResources(detail catalog.DeploymentOverviewDetail) []domain.RolloutExecutionDetail {

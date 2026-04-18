@@ -180,16 +180,24 @@ Supported live inspection currently starts with:
 - `candidateAutoScalingGroup`
 - `serviceAutoScalingGroup`
 
+Supported summary-only traffic-routing inspection currently covers:
+- `codeDeployDeploymentGroup`
+- `productionListener`
+- `testListener`
+- `trafficShiftPlan`
+
 For `ecsService`, Tenet now keeps a bounded in-process hint of the last cluster that resolved a given `(region, target account, observer role, service name)` lookup so repeated drill-downs avoid brute-force cluster scans. If that hint is stale or the service moved, the lookup falls back to the full cluster scan path, refreshes the hint, and keeps the existing resource-not-found semantics unchanged.
 
 The embedded `Live inspection` panel renders operator-friendly summaries from those payloads:
 - `ecsService`: service identity/status, desired-running-pending counts, active deployments, and recent ECS service events
 - `autoScalingGroup`: group sizing/health settings, attached target groups, and current instances
+- `trafficRoutingResource`: summary-only traffic-routing context with explicit resource kind, display name, inspection mode, and rollout summary text
 
 Resource-inspection responses keep the contract explicit for UI consumers:
 - common fields: `deploymentName`, `resourceType`, `resourceName`, `lookupContext`, `available`, `source`, `unavailableReason`
 - ECS payloads add `ecsService`
 - Auto Scaling payloads add `autoScalingGroup`
+- traffic-routing summary payloads add `trafficRoutingResource`
 
 Like recent logs, `lookupContext` is present for both `available=true` and unavailable inspection responses:
 - `lookupContext.region`

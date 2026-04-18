@@ -21,6 +21,7 @@ import (
 const (
 	SourceECSService       = "ecs_service"
 	SourceAutoScalingGroup = "auto_scaling_group"
+	SourceRolloutSummary   = "rollout_execution_summary"
 	ecsServiceHintCacheCap = 256
 )
 
@@ -29,25 +30,34 @@ var ErrNotImplemented = errors.New("resource inspection service not implemented"
 type LookupContext = resourceaws.LookupContext
 
 type Request struct {
-	DeploymentName   string
-	ResourceType     string
-	ResourceName     string
-	ControlAccountID string
-	TargetAccountID  string
-	Region           string
-	ObserverRoleARN  string
+	DeploymentName      string
+	ResourceType        string
+	ResourceName        string
+	ResourceDescription string
+	ControlAccountID    string
+	TargetAccountID     string
+	Region              string
+	ObserverRoleARN     string
 }
 
 type Result struct {
-	DeploymentName    string                 `json:"deploymentName"`
-	ResourceType      string                 `json:"resourceType"`
-	ResourceName      string                 `json:"resourceName"`
-	LookupContext     LookupContext          `json:"lookupContext"`
-	Available         bool                   `json:"available"`
-	Source            string                 `json:"source"`
-	ECSService        *ECSServiceInspection  `json:"ecsService,omitempty"`
-	AutoScalingGroup  *AutoScalingInspection `json:"autoScalingGroup,omitempty"`
-	UnavailableReason string                 `json:"unavailableReason"`
+	DeploymentName         string                    `json:"deploymentName"`
+	ResourceType           string                    `json:"resourceType"`
+	ResourceName           string                    `json:"resourceName"`
+	LookupContext          LookupContext             `json:"lookupContext"`
+	Available              bool                      `json:"available"`
+	Source                 string                    `json:"source"`
+	ECSService             *ECSServiceInspection     `json:"ecsService,omitempty"`
+	AutoScalingGroup       *AutoScalingInspection    `json:"autoScalingGroup,omitempty"`
+	TrafficRoutingResource *TrafficRoutingInspection `json:"trafficRoutingResource,omitempty"`
+	UnavailableReason      string                    `json:"unavailableReason"`
+}
+
+type TrafficRoutingInspection struct {
+	Kind           string `json:"kind"`
+	DisplayName    string `json:"displayName"`
+	InspectionMode string `json:"inspectionMode"`
+	Summary        string `json:"summary"`
 }
 
 type ECSServiceInspection struct {
@@ -244,12 +254,13 @@ type AutoScalingGroupRequest struct {
 }
 
 func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
-	if req.ControlAccountID != "" && req.TargetAccountID != "" && req.ControlAccountID != req.TargetAccountID && strings.TrimSpace(req.ObserverRoleARN) == "" {
-		return unavailableResult(req, resourceaws.UnavailableReasonCrossAccountNotConfigured), nil
-	}
-
 	switch req.ResourceType {
+	case "codeDeployDeploymentGroup", "productionListener", "testListener", "trafficShiftPlan":
+		return availableTrafficRoutingResult(req, trafficRoutingInspection(req)), nil
 	case "ecsService":
+		if crossAccountWithoutObserverRole(req) {
+			return unavailableResult(req, resourceaws.UnavailableReasonCrossAccountNotConfigured), nil
+		}
 		inspect := s.options.InspectECSService
 		if inspect == nil {
 			if !s.options.EnableAWS {
@@ -272,6 +283,9 @@ func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
 		}
 		return availableECSResult(req, detail), nil
 	case "candidateAutoScalingGroup", "serviceAutoScalingGroup":
+		if crossAccountWithoutObserverRole(req) {
+			return unavailableResult(req, resourceaws.UnavailableReasonCrossAccountNotConfigured), nil
+		}
 		inspect := s.options.InspectAutoScalingGroup
 		if inspect == nil {
 			if !s.options.EnableAWS {
@@ -296,6 +310,10 @@ func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
 	default:
 		return unavailableResult(req, resourceaws.UnavailableReasonUnsupportedResourceType), nil
 	}
+}
+
+func crossAccountWithoutObserverRole(req Request) bool {
+	return req.ControlAccountID != "" && req.TargetAccountID != "" && req.ControlAccountID != req.TargetAccountID && strings.TrimSpace(req.ObserverRoleARN) == ""
 }
 
 func (s Service) awsClients(ctx context.Context, region, targetAccountID, observerRoleARN string) (resourceaws.Clients, error) {
@@ -340,6 +358,61 @@ func availableAutoScalingResult(req Request, detail AutoScalingInspection) Resul
 		Source:            SourceAutoScalingGroup,
 		AutoScalingGroup:  &detail,
 		UnavailableReason: "",
+	}
+}
+
+func availableTrafficRoutingResult(req Request, detail TrafficRoutingInspection) Result {
+	return Result{
+		DeploymentName:         req.DeploymentName,
+		ResourceType:           req.ResourceType,
+		ResourceName:           req.ResourceName,
+		LookupContext:          lookupContext(req),
+		Available:              true,
+		Source:                 SourceRolloutSummary,
+		TrafficRoutingResource: &detail,
+		UnavailableReason:      "",
+	}
+}
+
+func trafficRoutingInspection(req Request) TrafficRoutingInspection {
+	return TrafficRoutingInspection{
+		Kind:           req.ResourceType,
+		DisplayName:    trafficRoutingDisplayName(req.ResourceType),
+		InspectionMode: "summary_only",
+		Summary:        trafficRoutingSummary(req),
+	}
+}
+
+func trafficRoutingDisplayName(resourceType string) string {
+	switch resourceType {
+	case "codeDeployDeploymentGroup":
+		return "CodeDeploy deployment group"
+	case "productionListener":
+		return "Production listener"
+	case "testListener":
+		return "Test listener"
+	case "trafficShiftPlan":
+		return "Traffic shift plan"
+	default:
+		return "Traffic routing resource"
+	}
+}
+
+func trafficRoutingSummary(req Request) string {
+	if summary := strings.TrimSpace(req.ResourceDescription); summary != "" {
+		return summary
+	}
+	switch req.ResourceType {
+	case "codeDeployDeploymentGroup":
+		return "CodeDeploy deployment group Tenet targets for rollout."
+	case "productionListener":
+		return "Production listener Tenet uses while shifting live traffic."
+	case "testListener":
+		return "Test listener Tenet uses to validate replacement capacity before promotion."
+	case "trafficShiftPlan":
+		return "Traffic shift plan Tenet follows while promoting the candidate resource."
+	default:
+		return "Traffic routing summary is available for this resource."
 	}
 }
 

@@ -223,6 +223,7 @@ apply_record_get=$(curl -fsS "$API_BASE_URL/v1/applies/$apply_id")
 deployment_events=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/events")
 worker_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 worker_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service")
+traffic_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")
 audit_logs=$(curl -fsS "$API_BASE_URL/v1/audit-logs?limit=2")
 audit_logs_action_filtered=$(curl -fsS "$API_BASE_URL/v1/audit-logs?action=apply.requested&limit=2")
 invalid_audit_action_status=$(curl -sS -o "$INVALID_AUDIT_ACTION_BODY" -w "%{http_code}" "$API_BASE_URL/v1/audit-logs?action=invalid.action")
@@ -242,13 +243,14 @@ apply_record_get_path=$(write_payload apply-record-get.json "$apply_record_get")
 deployment_events_path=$(write_payload deployment-events.json "$deployment_events")
 worker_resource_logs_path=$(write_payload worker-resource-logs.json "$worker_resource_logs")
 worker_resource_inspection_path=$(write_payload worker-resource-inspection.json "$worker_resource_inspection")
+traffic_resource_inspection_path=$(write_payload traffic-resource-inspection.json "$traffic_resource_inspection")
 audit_logs_path=$(write_payload audit-logs.json "$audit_logs")
 audit_logs_action_filtered_path=$(write_payload audit-logs-action-filtered.json "$audit_logs_action_filtered")
 ui_path=$(write_payload ui.html "$ui")
 audit_ui_path=$(write_payload audit-ui.html "$audit_ui")
 plan_apply_ui_path=$(write_payload plan-apply-ui.html "$plan_apply_ui")
 
-SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" DEPLOYMENT_EVENTS_PATH="$deployment_events_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" UI_PATH="$ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_APPLY_UI_PATH="$plan_apply_ui_path" python3 - <<'PY'
+SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" DEPLOYMENT_EVENTS_PATH="$deployment_events_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" UI_PATH="$ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_APPLY_UI_PATH="$plan_apply_ui_path" python3 - <<'PY'
 import json, os
 
 def read_json(path_env):
@@ -271,6 +273,7 @@ apply_record_get = read_json("APPLY_RECORD_GET_PATH")
 deployment_events = read_json("DEPLOYMENT_EVENTS_PATH")
 worker_resource_logs = read_json("WORKER_RESOURCE_LOGS_PATH")
 worker_resource_inspection = read_json("WORKER_RESOURCE_INSPECTION_PATH")
+traffic_resource_inspection = read_json("TRAFFIC_RESOURCE_INSPECTION_PATH")
 audit_logs = read_json("AUDIT_LOGS_PATH")
 audit_logs_action_filtered = read_json("AUDIT_LOGS_ACTION_FILTERED_PATH")
 invalid_audit_action_body = read_text("INVALID_AUDIT_ACTION_BODY_PATH")
@@ -375,6 +378,16 @@ if worker_resource_inspection["available"]:
     assert isinstance(worker_resource_inspection.get("ecsService"), dict), worker_resource_inspection
 else:
     assert isinstance(worker_resource_inspection.get("unavailableReason"), str) and worker_resource_inspection["unavailableReason"], worker_resource_inspection
+assert traffic_resource_inspection["deploymentName"] == "payments-api-prod", traffic_resource_inspection
+assert traffic_resource_inspection["resourceType"] == "trafficShiftPlan", traffic_resource_inspection
+assert traffic_resource_inspection["resourceName"] == "payments-api-prod-weighted-routing", traffic_resource_inspection
+assert traffic_resource_inspection["available"] is True, traffic_resource_inspection
+assert isinstance(traffic_resource_inspection.get("lookupContext"), dict), traffic_resource_inspection
+assert traffic_resource_inspection.get("source") == "rollout_execution_summary", traffic_resource_inspection
+assert isinstance(traffic_resource_inspection.get("trafficRoutingResource"), dict), traffic_resource_inspection
+assert traffic_resource_inspection["trafficRoutingResource"].get("kind") == "trafficShiftPlan", traffic_resource_inspection
+assert traffic_resource_inspection["trafficRoutingResource"].get("inspectionMode") == "summary_only", traffic_resource_inspection
+assert isinstance(traffic_resource_inspection["trafficRoutingResource"].get("summary"), str) and traffic_resource_inspection["trafficRoutingResource"]["summary"], traffic_resource_inspection
 
 for fragment in (
     "Open account",

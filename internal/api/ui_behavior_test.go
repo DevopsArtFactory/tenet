@@ -2584,8 +2584,10 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
 
 const ecsResourceID = 'ecsService::payments-api-staging-service::Primary ECS service';
-const unsupportedResourceID = 'codeDeployDeploymentGroup::payments-api-staging Deployment Group::Linear traffic shifting deployment group';
+const summaryResourceID = 'codeDeployDeploymentGroup::payments-api-staging Deployment Group::Linear traffic shifting deployment group';
+const unsupportedResourceID = 'productionListenerRule::payments-api-staging-prod-listener::Weighted listener rule';
 const asgResourceID = 'candidateAutoScalingGroup::payments-api-prod-candidate::Candidate capacity';
+const trafficShiftPlanResourceID = 'trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan';
 
 async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   const document = createDocument();
@@ -2617,9 +2619,26 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   resolveInspection({ ok: true, json: () => Promise.resolve({ available: true, source: 'ecs_service', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn: 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-staging', serviceArn: 'arn:aws:ecs:ap-northeast-2:210987654321:service/payments-staging/payments-api-staging-service', serviceName: 'payments-api-staging-service', status: 'ACTIVE', launchType: 'FARGATE', desiredCount: 2, runningCount: 2, pendingCount: 0, taskDefinition: 'payments-api:42', deployments: [], events: [] } }) });
   await settle();
 
-  const unsupportedLogsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging+Deployment+Group';
-  const unsupportedInspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging+Deployment+Group';
-  const unsupportedRun = await renderWithFetch('?page=resource&deployment=payments-api-staging&resourceType=codeDeployDeploymentGroup&resourceId=' + encodeURIComponent(unsupportedResourceID), (url) => {
+  const summaryLogsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging+Deployment+Group';
+  const summaryInspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging+Deployment+Group';
+  const summaryRun = await renderWithFetch('?page=resource&deployment=payments-api-staging&resourceType=codeDeployDeploymentGroup&resourceId=' + encodeURIComponent(summaryResourceID), (url) => {
+    if (url === ecsDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(unsupportedDetailBody) });
+    if (url === summaryLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === summaryInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'rollout_execution_summary', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: false }, trafficRoutingResource: { kind: 'codeDeployDeploymentGroup', displayName: 'CodeDeploy deployment group', inspectionMode: 'summary_only', summary: 'Linear traffic shifting deployment group' } }) });
+    throw new Error('unexpected summary fetch url: ' + url);
+  });
+  const summaryText = collectText(summaryRun.document.getElementById('accounts')).join(' | ');
+  if (!summaryText.includes('Rollout summary')) throw new Error('expected traffic-routing inspection to render rollout summary heading');
+  if (!summaryText.includes('CodeDeploy deployment group')) throw new Error('expected traffic-routing inspection to render display name');
+  if (!summaryText.includes('Rollout summary only')) throw new Error('expected traffic-routing inspection to render summary inspection mode');
+  if (!summaryText.includes('Linear traffic shifting deployment group')) throw new Error('expected traffic-routing inspection to render controller summary');
+  if (!summaryText.includes('Lookup region')) throw new Error('expected traffic-routing inspection to label lookup context');
+  if (!summaryText.includes('Observer role configured')) throw new Error('expected traffic-routing inspection to label observer role configuration');
+  if (!summaryText.includes('False')) throw new Error('expected traffic-routing inspection to show missing observer role configuration');
+
+  const unsupportedLogsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=productionListenerRule&resourceName=payments-api-staging-prod-listener';
+  const unsupportedInspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=productionListenerRule&resourceName=payments-api-staging-prod-listener';
+  const unsupportedRun = await renderWithFetch('?page=resource&deployment=payments-api-staging&resourceType=productionListenerRule&resourceId=' + encodeURIComponent(unsupportedResourceID), (url) => {
     if (url === ecsDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(unsupportedDetailBody) });
     if (url === unsupportedLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
     if (url === unsupportedInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: false }, unavailableReason: 'unsupported_resource_type' }) });
@@ -2628,12 +2647,6 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   const unsupportedText = collectText(unsupportedRun.document.getElementById('accounts')).join(' | ');
   if (!unsupportedText.includes('Live inspection is unavailable for this resource.')) throw new Error('expected unsupported inspection state');
   if (!unsupportedText.includes('Live inspection is not supported for this resource type.')) throw new Error('expected unsupported inspection state to show friendly reason');
-  if (!unsupportedText.includes('Lookup region')) throw new Error('expected unsupported inspection state to label lookup context');
-  if (!unsupportedText.includes('Control account ID')) throw new Error('expected unsupported inspection state to label control account');
-  if (!unsupportedText.includes('Target account ID')) throw new Error('expected unsupported inspection state to label target account');
-  if (!unsupportedText.includes('Cross-account lookup')) throw new Error('expected unsupported inspection state to label cross-account lookup');
-  if (!unsupportedText.includes('Observer role configured')) throw new Error('expected unsupported inspection state to label observer role configuration');
-  if (!unsupportedText.includes('False')) throw new Error('expected unsupported inspection state to show missing observer role configuration');
 
   const emptyRun = await renderWithFetch('?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(ecsResourceID), (url) => {
     if (url === ecsDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(ecsDetailBody) });
@@ -2716,6 +2729,28 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!asgSupportedText.includes('Lifecycle state · InService')) throw new Error('expected ASG inspection to render lifecycle state');
   if (!asgSupportedText.includes('Protected from scale-in · True')) throw new Error('expected ASG inspection to render protected-from-scale-in');
   if (!asgSupportedText.includes('Weighted capacity · 1')) throw new Error('expected ASG inspection to render weighted capacity');
+
+  const trafficShiftPlanLogsURL = '/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing';
+  const trafficShiftPlanInspectionURL = '/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing';
+  const trafficShiftPlanRun = await renderWithFetch('?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=' + encodeURIComponent(trafficShiftPlanResourceID), (url) => {
+    if (url === asgDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(asgDetailBody) });
+    if (url === trafficShiftPlanLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === trafficShiftPlanInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({
+      available: true,
+      source: 'rollout_execution_summary',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '222222222222', crossAccount: true, observerRoleConfigured: false },
+      trafficRoutingResource: {
+        kind: 'trafficShiftPlan',
+        displayName: 'Traffic shift plan',
+        inspectionMode: 'summary_only',
+        summary: 'Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s',
+      },
+    }) });
+    throw new Error('unexpected traffic shift plan fetch url: ' + url);
+  });
+  const trafficShiftPlanText = collectText(trafficShiftPlanRun.document.getElementById('accounts')).join(' | ');
+  if (!trafficShiftPlanText.includes('Traffic shift plan')) throw new Error('expected traffic shift plan inspection to render display name');
+  if (!trafficShiftPlanText.includes('Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s')) throw new Error('expected traffic shift plan inspection to render summary text');
 })();
 `
 
