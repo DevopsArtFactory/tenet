@@ -33,7 +33,7 @@ That means the machine running `terraform apply` must have:
 
 ## Repo-sync pattern
 
-The current Tenet runtime still expects `TENET_REPO_ROOT` to point at a filesystem tree.
+Both `tenet-api` and `tenet-controller` now support `TENET_CATALOG_SOURCE=filesystem|github` for desired-state reads. This Terraform bootstrap intentionally chooses the filesystem path and sets `TENET_REPO_ROOT` because the shared repo-sync volume works for both services today, and private desired-state repo sync is still a follow-up.
 
 To satisfy that without introducing an external GitOps controller, each ECS task definition includes a lightweight `alpine/git` sidecar that:
 - clones `repo_url` into a shared task volume
