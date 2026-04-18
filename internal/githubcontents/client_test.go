@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -15,25 +15,21 @@ import (
 func TestFetchReturnsMetadataAndContent(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := testClient(t, func(r *http.Request) (*http.Response, error) {
 		if r.URL.Path != "/repos/acme/platform-config/contents/deployments/payments-api-prod.yaml" {
 			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{
+		return jsonResponse(http.StatusOK, `{
 			"name":"payments-api-prod.yaml",
 			"path":"deployments/payments-api-prod.yaml",
 			"sha":"abc123",
 			"size":31,
 			"encoding":"base64",
-			"content":"` + base64.StdEncoding.EncodeToString([]byte("name: payments-api-prod\n")) + `",
+			"content":"`+base64.StdEncoding.EncodeToString([]byte("name: payments-api-prod\n"))+`",
 			"html_url":"https://github.example/acme/platform-config/blob/main/deployments/payments-api-prod.yaml",
 			"download_url":"https://github.example/acme/platform-config/raw/main/deployments/payments-api-prod.yaml"
-		}`))
-	}))
-	defer server.Close()
-
-	client := Client{BaseURL: server.URL, HTTPClient: server.Client()}
+		}`), nil
+	})
 	file, err := client.Fetch(context.Background(), Request{
 		Owner: "acme",
 		Repo:  "platform-config",
@@ -58,21 +54,57 @@ func TestFetchReturnsMetadataAndContent(t *testing.T) {
 	}
 }
 
-func TestFetchSendsAuthHeaderAndRefQuery(t *testing.T) {
+func TestListReturnsDirectoryEntries(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := testClient(t, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path != "/repos/acme/platform-config/contents/catalog/accounts" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
 		if got := r.Header.Get("Authorization"); got != "Bearer secret-token" {
 			t.Fatalf("unexpected authorization header: %q", got)
 		}
 		if got := r.URL.Query().Get("ref"); got != "feature/test" {
 			t.Fatalf("unexpected ref query: %q", got)
 		}
-		_, _ = w.Write([]byte(`{"name":"catalog.json","path":"catalog.json","encoding":"base64","content":"` + base64.StdEncoding.EncodeToString([]byte(`{"name":"ok"}`)) + `"}`))
-	}))
-	defer server.Close()
+		return jsonResponse(http.StatusOK, `[
+			{"type":"file","name":"prod-core.json","path":"catalog/accounts/prod-core.json","sha":"sha-1","size":123},
+			{"type":"dir","name":"nested","path":"catalog/accounts/nested","sha":"sha-2","size":0},
+			{"type":"file","name":"sandbox.yaml","path":"catalog/accounts/sandbox.yaml","sha":"sha-3","size":456}
+		]`), nil
+	})
+	entries, err := client.List(context.Background(), Request{
+		Repository: "acme/platform-config",
+		Ref:        "feature/test",
+		Path:       "catalog/accounts",
+		Token:      "secret-token",
+	})
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("unexpected entry count: %+v", entries)
+	}
+	if entries[0].Path != "catalog/accounts/nested" || !entries[0].IsDir() {
+		t.Fatalf("expected sorted directory entry first, got %+v", entries[0])
+	}
+	if entries[1].Path != "catalog/accounts/prod-core.json" || entries[1].IsDir() {
+		t.Fatalf("unexpected file entry: %+v", entries[1])
+	}
+}
 
-	client := Client{BaseURL: server.URL, HTTPClient: server.Client()}
+func TestFetchSendsAuthHeaderAndRefQuery(t *testing.T) {
+	t.Parallel()
+
+	client := testClient(t, func(r *http.Request) (*http.Response, error) {
+		if got := r.Header.Get("Authorization"); got != "Bearer secret-token" {
+			t.Fatalf("unexpected authorization header: %q", got)
+		}
+		if got := r.URL.Query().Get("ref"); got != "feature/test" {
+			t.Fatalf("unexpected ref query: %q", got)
+		}
+		return jsonResponse(http.StatusOK, `{"name":"catalog.json","path":"catalog.json","encoding":"base64","content":"`+base64.StdEncoding.EncodeToString([]byte(`{"name":"ok"}`))+`"}`), nil
+	})
 	if _, err := client.Fetch(context.Background(), Request{
 		Repository: "acme/platform-config",
 		Ref:        "feature/test",
@@ -86,12 +118,9 @@ func TestFetchSendsAuthHeaderAndRefQuery(t *testing.T) {
 func TestFetchRejectsUnauthorized(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-	}))
-	defer server.Close()
-
-	client := Client{BaseURL: server.URL, HTTPClient: server.Client()}
+	client := testClient(t, func(r *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusUnauthorized, `unauthorized`), nil
+	})
 	_, err := client.Fetch(context.Background(), Request{
 		Owner: "acme",
 		Repo:  "platform-config",
@@ -109,12 +138,9 @@ func TestFetchRejectsUnauthorized(t *testing.T) {
 func TestFetchRejectsNotFound(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.NotFound(w, r)
-	}))
-	defer server.Close()
-
-	client := Client{BaseURL: server.URL, HTTPClient: server.Client()}
+	client := testClient(t, func(r *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusNotFound, `not found`), nil
+	})
 	_, err := client.Fetch(context.Background(), Request{
 		Repository: "acme/platform-config",
 		Ref:        "main",
@@ -125,6 +151,26 @@ func TestFetchRejectsNotFound(t *testing.T) {
 	}
 	assertCode(t, err, ErrorCodeNotFound)
 	if !strings.Contains(err.Error(), "deployments/missing.yaml") {
+		t.Fatalf("unexpected message: %v", err)
+	}
+}
+
+func TestListRejectsNotFound(t *testing.T) {
+	t.Parallel()
+
+	client := testClient(t, func(r *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusNotFound, `not found`), nil
+	})
+	_, err := client.List(context.Background(), Request{
+		Repository: "acme/platform-config",
+		Ref:        "main",
+		Path:       "catalog/accounts",
+	})
+	if err == nil {
+		t.Fatal("expected not found error")
+	}
+	assertCode(t, err, ErrorCodeNotFound)
+	if !strings.Contains(err.Error(), "directory") {
 		t.Fatalf("unexpected message: %v", err)
 	}
 }
@@ -148,15 +194,31 @@ func TestFetchRejectsInvalidRepositoryOrPath(t *testing.T) {
 	}
 }
 
+func TestListRejectsInvalidRepositoryOrPath(t *testing.T) {
+	t.Parallel()
+
+	cases := []Request{
+		{Repository: "acme", Path: "catalog/accounts"},
+		{Owner: "acme", Repo: "platform-config", Path: "/catalog/accounts"},
+		{Owner: "acme", Repo: "platform-config", Path: "../catalog/accounts"},
+	}
+
+	client := Client{}
+	for _, req := range cases {
+		if _, err := client.List(context.Background(), req); err == nil {
+			t.Fatalf("expected invalid input for request %+v", req)
+		} else {
+			assertCode(t, err, ErrorCodeInvalidInput)
+		}
+	}
+}
+
 func TestFetchRejectsUnsupportedContentEncoding(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"name":"catalog.yaml","path":"catalog.yaml","encoding":"utf-8","content":"plain text"}`))
-	}))
-	defer server.Close()
-
-	client := Client{BaseURL: server.URL, HTTPClient: server.Client()}
+	client := testClient(t, func(r *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, `{"name":"catalog.yaml","path":"catalog.yaml","encoding":"utf-8","content":"plain text"}`), nil
+	})
 	_, err := client.Fetch(context.Background(), Request{
 		Owner: "acme",
 		Repo:  "platform-config",
@@ -171,12 +233,9 @@ func TestFetchRejectsUnsupportedContentEncoding(t *testing.T) {
 func TestFetchRejectsInvalidBase64Content(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"name":"catalog.yaml","path":"catalog.yaml","encoding":"base64","content":"%%%not-base64%%%"}`))
-	}))
-	defer server.Close()
-
-	client := Client{BaseURL: server.URL, HTTPClient: server.Client()}
+	client := testClient(t, func(r *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, `{"name":"catalog.yaml","path":"catalog.yaml","encoding":"base64","content":"%%%not-base64%%%"}`), nil
+	})
 	_, err := client.Fetch(context.Background(), Request{
 		Owner: "acme",
 		Repo:  "platform-config",
@@ -213,12 +272,9 @@ func TestDecodeRejectsInvalidYAML(t *testing.T) {
 func TestFetchRejectsUnexpectedStatus(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "boom", http.StatusInternalServerError)
-	}))
-	defer server.Close()
-
-	client := Client{BaseURL: server.URL, HTTPClient: server.Client()}
+	client := testClient(t, func(r *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusInternalServerError, `boom`), nil
+	})
 	_, err := client.Fetch(context.Background(), Request{
 		Owner: "acme",
 		Repo:  "platform-config",
@@ -228,6 +284,84 @@ func TestFetchRejectsUnexpectedStatus(t *testing.T) {
 		t.Fatal("expected unexpected status error")
 	}
 	assertCode(t, err, ErrorCodeUnexpectedStatus)
+}
+
+func TestListRejectsUnexpectedStatus(t *testing.T) {
+	t.Parallel()
+
+	client := testClient(t, func(r *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusInternalServerError, `boom`), nil
+	})
+	_, err := client.List(context.Background(), Request{
+		Owner: "acme",
+		Repo:  "platform-config",
+		Path:  "catalog/accounts",
+	})
+	if err == nil {
+		t.Fatal("expected unexpected status error")
+	}
+	assertCode(t, err, ErrorCodeUnexpectedStatus)
+}
+
+func TestListRejectsFileResponses(t *testing.T) {
+	t.Parallel()
+
+	client := testClient(t, func(r *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, `{"type":"file","name":"prod-core.json","path":"catalog/accounts/prod-core.json"}`), nil
+	})
+	_, err := client.List(context.Background(), Request{
+		Owner: "acme",
+		Repo:  "platform-config",
+		Path:  "catalog/accounts",
+	})
+	if err == nil {
+		t.Fatal("expected unexpected content type error")
+	}
+	assertCode(t, err, ErrorCodeUnexpectedContentType)
+	if !strings.Contains(err.Error(), "directory listing") {
+		t.Fatalf("unexpected message: %v", err)
+	}
+}
+
+func TestFetchRejectsDirectoryResponses(t *testing.T) {
+	t.Parallel()
+
+	client := testClient(t, func(r *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusOK, `[]`), nil
+	})
+	_, err := client.Fetch(context.Background(), Request{
+		Owner: "acme",
+		Repo:  "platform-config",
+		Path:  "catalog/accounts",
+	})
+	if err == nil {
+		t.Fatal("expected unexpected content type error")
+	}
+	assertCode(t, err, ErrorCodeUnexpectedContentType)
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
+}
+
+func testClient(t *testing.T, fn func(*http.Request) (*http.Response, error)) Client {
+	t.Helper()
+	return Client{
+		BaseURL: "https://github.example",
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(fn),
+		},
+	}
+}
+
+func jsonResponse(status int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
 }
 
 func assertCode(t *testing.T, err error, want ErrorCode) {
