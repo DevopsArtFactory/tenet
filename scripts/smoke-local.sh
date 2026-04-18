@@ -14,6 +14,7 @@ SOURCE_REPO_ROOT=${TENET_REPO_ROOT:-$ROOT/examples/local-repo}
 REPO_ROOT=$(mktemp -d)
 FIXTURE_STATUS_PATH=${TENET_STATUS_PATH:-$ROOT/examples/local-status/deployments.json}
 APPLY_ENABLED=${TENET_AWS_ENABLE_APPLY:-false}
+WEBHOOK_SECRET=${TENET_GITHUB_WEBHOOK_SECRET:-smoke-webhook-secret}
 STATUS_PATH=$(mktemp)
 PLAN_STORE_PATH=$(mktemp)
 APPLY_STORE_PATH=$(mktemp)
@@ -25,6 +26,7 @@ LOG_FILE=$(mktemp)
 CONTROLLER_LOG_FILE=$(mktemp)
 INVALID_AUDIT_ACTION_BODY=$(mktemp)
 STALE_APPLY_CONFLICT_BODY=$(mktemp)
+INVALID_WEBHOOK_BODY=$(mktemp)
 cp -R "$SOURCE_REPO_ROOT/." "$REPO_ROOT/"
 cleanup() {
   if [[ -n "${CONTROLLER_PID:-}" ]] && kill -0 "$CONTROLLER_PID" 2>/dev/null; then
@@ -35,7 +37,7 @@ cleanup() {
     kill "$API_PID" 2>/dev/null || true
     wait "$API_PID" 2>/dev/null || true
   fi
-  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$STALE_APPLY_CONFLICT_BODY"
+  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_WEBHOOK_BODY"
   rm -rf "$PAYLOAD_DIR" "$REPO_ROOT"
 }
 trap cleanup EXIT
@@ -91,7 +93,7 @@ PY
   return 1
 }
 
-TENET_API_ADDR=":$PORT" TENET_CATALOG_SOURCE=filesystem TENET_REPO_ROOT="$REPO_ROOT" TENET_STATUS_PATH="$STATUS_PATH" TENET_PLAN_STORE_PATH="$PLAN_STORE_PATH" TENET_APPLY_STORE_PATH="$APPLY_STORE_PATH" TENET_AWS_ENABLE_APPLY="$APPLY_ENABLED" \
+TENET_API_ADDR=":$PORT" TENET_CATALOG_SOURCE=filesystem TENET_REPO_ROOT="$REPO_ROOT" TENET_STATUS_PATH="$STATUS_PATH" TENET_PLAN_STORE_PATH="$PLAN_STORE_PATH" TENET_APPLY_STORE_PATH="$APPLY_STORE_PATH" TENET_AWS_ENABLE_APPLY="$APPLY_ENABLED" TENET_GITHUB_WEBHOOK_SECRET="$WEBHOOK_SECRET" \
   go run ./cmd/tenet-api >"$LOG_FILE" 2>&1 &
 API_PID=$!
 
@@ -225,6 +227,43 @@ audit_logs_empty=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs?deployment=worker
 actor_audit_logs=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs?deployment=payments-api-staging&action=apply.requested&limit=1")
 invalid_audit_action_status=$(curl -sS -o "$INVALID_AUDIT_ACTION_BODY" -w "%{http_code}" "http://$HOST:$PORT/v1/audit-logs?action=invalid.action")
 status=$(curl -fsS "http://$HOST:$PORT/v1/status/deployments/payments-api-prod")
+webhook_push_body=$(cat <<'EOF'
+{"ref":"refs/heads/main","before":"1111111111111111111111111111111111111111","after":"2222222222222222222222222222222222222222","repository":{"full_name":"acme/platform-config"},"head_commit":{"id":"2222222222222222222222222222222222222222","message":"update deployment","timestamp":"2026-04-18T15:00:00Z"},"commits":[{"id":"a","added":["deployments/api.yaml"],"modified":["environments/prod.yaml"],"removed":[]},{"id":"b","added":["accounts/prod.yaml"],"modified":["deployments/worker.yaml"],"removed":["deployments/old.yaml"]}]}
+EOF
+)
+webhook_push_signature=$(WEBHOOK_SECRET="$WEBHOOK_SECRET" WEBHOOK_BODY="$webhook_push_body" python3 - <<'PY'
+import hashlib, hmac, os
+print('sha256=' + hmac.new(os.environ['WEBHOOK_SECRET'].encode('utf-8'), os.environ['WEBHOOK_BODY'].encode('utf-8'), hashlib.sha256).hexdigest())
+PY
+)
+webhook_push=$(curl -fsS -X POST \
+  -H 'Content-Type: application/json' \
+  -H 'X-GitHub-Delivery: delivery-push-1' \
+  -H 'X-GitHub-Event: push' \
+  -H "X-Hub-Signature-256: $webhook_push_signature" \
+  --data "$webhook_push_body" \
+  "http://$HOST:$PORT/api/v1/github/webhook")
+webhook_ping_body='{"zen":"keep it logically awesome"}'
+webhook_ping_signature=$(WEBHOOK_SECRET="$WEBHOOK_SECRET" WEBHOOK_BODY="$webhook_ping_body" python3 - <<'PY'
+import hashlib, hmac, os
+print('sha256=' + hmac.new(os.environ['WEBHOOK_SECRET'].encode('utf-8'), os.environ['WEBHOOK_BODY'].encode('utf-8'), hashlib.sha256).hexdigest())
+PY
+)
+webhook_ping=$(curl -fsS -X POST \
+  -H 'Content-Type: application/json' \
+  -H 'X-GitHub-Delivery: delivery-ping-1' \
+  -H 'X-GitHub-Event: ping' \
+  -H "X-Hub-Signature-256: $webhook_ping_signature" \
+  --data "$webhook_ping_body" \
+  "http://$HOST:$PORT/api/v1/github/webhook")
+invalid_webhook_status=$(curl -sS -o "$INVALID_WEBHOOK_BODY" -w "%{http_code}" -X POST \
+  -H 'Content-Type: application/json' \
+  -H 'X-GitHub-Delivery: delivery-invalid-1' \
+  -H 'X-GitHub-Event: push' \
+  -H 'X-Hub-Signature-256: sha256=deadbeef' \
+  --data "$webhook_push_body" \
+  "http://$HOST:$PORT/api/v1/github/webhook")
+invalid_webhook=$(cat "$INVALID_WEBHOOK_BODY")
 resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")
 worker_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 worker_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service")
@@ -264,6 +303,9 @@ audit_logs_filtered_path=$(write_payload audit-logs-filtered.json "$audit_logs_f
 audit_logs_empty_path=$(write_payload audit-logs-empty.json "$audit_logs_empty")
 actor_audit_logs_path=$(write_payload actor-audit-logs.json "$actor_audit_logs")
 status_json_path=$(write_payload status.json "$status")
+webhook_push_path=$(write_payload webhook-push.json "$webhook_push")
+webhook_ping_path=$(write_payload webhook-ping.json "$webhook_ping")
+invalid_webhook_path=$(write_payload invalid-webhook.txt "$invalid_webhook")
 resource_logs_path=$(write_payload resource-logs.json "$resource_logs")
 worker_resource_logs_path=$(write_payload worker-resource-logs.json "$worker_resource_logs")
 worker_resource_inspection_path=$(write_payload worker-resource-inspection.json "$worker_resource_inspection")
@@ -277,7 +319,7 @@ audit_ui_path=$(write_payload audit-ui.html "$audit_ui")
 plan_ui_path=$(write_payload plan-ui.html "$plan_ui")
 apply_ui_path=$(write_payload apply-ui.html "$apply_ui")
 
-SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" STALE_APPLY_PLAN_PREVIEW_PATH="$stale_apply_plan_preview_path" STALE_APPLY_CONFLICT_PATH="$stale_apply_conflict_path" STALE_APPLY_CONFLICT_STATUS="$stale_apply_conflict_status" STALE_APPLY_AUDIT_LOGS_PATH="$stale_apply_audit_logs_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" RESOURCE_LOGS_PATH="$resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" UI_PATH="$ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" APPLY_ENABLED="$APPLY_ENABLED" python3 - <<'PY'
+SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" STALE_APPLY_PLAN_PREVIEW_PATH="$stale_apply_plan_preview_path" STALE_APPLY_CONFLICT_PATH="$stale_apply_conflict_path" STALE_APPLY_CONFLICT_STATUS="$stale_apply_conflict_status" STALE_APPLY_AUDIT_LOGS_PATH="$stale_apply_audit_logs_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PING_PATH="$webhook_ping_path" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" RESOURCE_LOGS_PATH="$resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" UI_PATH="$ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" APPLY_ENABLED="$APPLY_ENABLED" python3 - <<'PY'
 import json, os
 
 def read_json(path_env):
@@ -315,6 +357,9 @@ audit_logs_filtered = read_json('AUDIT_LOGS_FILTERED_PATH')
 audit_logs_empty = read_json('AUDIT_LOGS_EMPTY_PATH')
 actor_audit_logs = read_json('ACTOR_AUDIT_LOGS_PATH')
 status = read_json('STATUS_JSON_PATH')
+webhook_push = read_json('WEBHOOK_PUSH_PATH')
+webhook_ping = read_json('WEBHOOK_PING_PATH')
+invalid_webhook = read_text('INVALID_WEBHOOK_PATH')
 resource_logs = read_json('RESOURCE_LOGS_PATH')
 worker_resource_logs = read_json('WORKER_RESOURCE_LOGS_PATH')
 worker_resource_inspection = read_json('WORKER_RESOURCE_INSPECTION_PATH')
@@ -490,6 +535,22 @@ assert os.environ['INVALID_AUDIT_ACTION_STATUS'] == '400', os.environ['INVALID_A
 invalid_audit_action = read_text('INVALID_AUDIT_ACTION_BODY_PATH')
 assert 'invalid action query' in invalid_audit_action, invalid_audit_action
 assert status['deploymentName'] == 'payments-api-prod', status
+assert webhook_push['deliveryId'] == 'delivery-push-1', webhook_push
+assert webhook_push['event'] == 'push', webhook_push
+assert webhook_push['status'] == 'accepted', webhook_push
+assert webhook_push['processed'] is False, webhook_push
+assert webhook_push['repository'] == 'acme/platform-config', webhook_push
+assert webhook_push['ref'] == 'refs/heads/main', webhook_push
+assert webhook_push['before'] == '1111111111111111111111111111111111111111', webhook_push
+assert webhook_push['after'] == '2222222222222222222222222222222222222222', webhook_push
+assert webhook_push['headCommit']['id'] == '2222222222222222222222222222222222222222', webhook_push
+assert webhook_push['changedFiles']['all'] == ['deployments/api.yaml', 'accounts/prod.yaml', 'environments/prod.yaml', 'deployments/worker.yaml', 'deployments/old.yaml'], webhook_push
+assert webhook_ping['deliveryId'] == 'delivery-ping-1', webhook_ping
+assert webhook_ping['event'] == 'ping', webhook_ping
+assert webhook_ping['status'] == 'ignored', webhook_ping
+assert webhook_ping['processed'] is False, webhook_ping
+assert os.environ['INVALID_WEBHOOK_STATUS'] == '400', os.environ['INVALID_WEBHOOK_STATUS']
+assert 'github webhook signature mismatch' in invalid_webhook, invalid_webhook
 assert status['status']['sync']['state'] == 'Synced', status
 assert resource_logs['deploymentName'] == 'payments-api-prod', resource_logs
 assert resource_logs['resourceType'] == 'trafficShiftPlan', resource_logs

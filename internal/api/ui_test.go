@@ -1173,6 +1173,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"assert_request_id_header \"http://$HOST:$PORT/v1/catalog/summary\"",
 		"assert_request_id_header \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing\"",
 		"assert_request_id_header \"http://$HOST:$PORT/\"",
+		"TENET_GITHUB_WEBHOOK_SECRET=\"$WEBHOOK_SECRET\"",
+		"webhook_push=$(curl -fsS -X POST \\",
+		"http://$HOST:$PORT/api/v1/github/webhook",
 		"deployment_events_fixture=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/events\")",
 		"resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing\")",
 		"worker_resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service\")",
@@ -1271,6 +1274,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert isinstance(runtime_summary.get('changeDetails', []), list), overview") {
 		t.Fatalf("expected smoke-local.sh to verify overview runtimeSummary.changeDetails shape")
+	}
+	if !strings.Contains(text, "assert webhook_push['status'] == 'accepted', webhook_push") || !strings.Contains(text, "assert webhook_ping['status'] == 'ignored', webhook_ping") || !strings.Contains(text, "assert 'github webhook signature mismatch' in invalid_webhook, invalid_webhook") {
+		t.Fatalf("expected smoke-local.sh to verify github webhook accepted/ignored/error contracts")
 	}
 	if !strings.Contains(text, "assert isinstance(deployment_runtime_summary.get('changeDetails', []), list), deployment_detail") {
 		t.Fatalf("expected smoke-local.sh to verify deployment detail runtimeSummary.changeDetails shape")
