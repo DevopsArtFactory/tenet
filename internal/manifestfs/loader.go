@@ -1,15 +1,13 @@
 package manifestfs
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/DevopsArtFactory/tenet/internal/manifest"
+	"github.com/DevopsArtFactory/tenet/internal/manifestcodec"
 	"github.com/DevopsArtFactory/tenet/internal/spec"
-	"gopkg.in/yaml.v3"
 )
 
 // Load reads a repository-like directory tree into a CatalogSpec.
@@ -52,7 +50,7 @@ func loadSpecs[T any](dir string) ([]T, error) {
 
 	loaded := make([]T, 0, len(entries))
 	for _, entry := range entries {
-		if entry.IsDir() || !isManifestFile(entry.Name()) {
+		if entry.IsDir() || !manifestcodec.IsManifestFile(entry.Name()) {
 			continue
 		}
 
@@ -62,33 +60,13 @@ func loadSpecs[T any](dir string) ([]T, error) {
 		}
 
 		var decoded T
-		if err := decodeSpec(entry.Name(), content, &decoded); err != nil {
+		if err := manifestcodec.Decode(entry.Name(), content, &decoded); err != nil {
 			return nil, fmt.Errorf("decode %s: %w", entry.Name(), err)
 		}
 		loaded = append(loaded, decoded)
 	}
 
 	return loaded, nil
-}
-
-func decodeSpec(name string, content []byte, out any) error {
-	switch strings.ToLower(filepath.Ext(name)) {
-	case ".json":
-		return json.Unmarshal(content, out)
-	case ".yaml", ".yml":
-		return yaml.Unmarshal(content, out)
-	default:
-		return fmt.Errorf("unsupported manifest extension %q", filepath.Ext(name))
-	}
-}
-
-func isManifestFile(name string) bool {
-	switch strings.ToLower(filepath.Ext(name)) {
-	case ".json", ".yaml", ".yml":
-		return true
-	default:
-		return false
-	}
 }
 
 func isMissingDir(err error) bool {
