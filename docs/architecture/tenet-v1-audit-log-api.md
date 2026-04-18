@@ -20,7 +20,7 @@ Tenet now exposes a small read-only audit timeline derived from the immutable op
 `deployment` is optional and must name exactly one deployment when present.
 The response is always newest-first.
 
-The compose-backed smoke keeps this operator contract grounded by fetching `GET /v1/audit-logs?action=apply.requested&limit=2`, asserting the filtered JSON shape, and rejecting `action=invalid.action` with `400 Bad Request` instead of silently widening the query.
+The compose-backed smoke keeps this operator contract grounded by fetching the full `GET /v1/audit-logs` collection, asserting the expected `plan.created` and `apply.requested` actions are present without depending on a two-entry window, then fetching `GET /v1/audit-logs?action=apply.requested&limit=2` to verify exact-action filtering and rejecting `action=invalid.action` with `400 Bad Request` instead of silently widening the query.
 
 ## Source of truth
 
