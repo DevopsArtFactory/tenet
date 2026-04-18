@@ -450,6 +450,55 @@ func TestServiceTransitionMarksRunningStepAsFailed(t *testing.T) {
 	}
 }
 
+func TestServiceTransitionRunningClearsErrorAndReplacesDetails(t *testing.T) {
+	store := &memoryStore{
+		records: map[string]Record{
+			"apply_1234abcd": {
+				ID:             "apply_1234abcd",
+				PlanID:         "plan_ready_1234abcd",
+				DeploymentName: "api-prod",
+				Status:         StatusQueued,
+				CreatedAt:      "2026-04-18T08:05:00Z",
+				Error:          "stale executor error",
+				Details:        []string{"old detail"},
+				Lifecycle: Lifecycle{
+					UpdatedAt:  "2026-04-18T08:05:00Z",
+					TotalSteps: 2,
+				},
+				Operations: []Operation{
+					{Status: OperationStatusQueued, Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."},
+					{Status: OperationStatusQueued, Phase: "Promoting", Target: "api-prod listener", Summary: "Shift production traffic."},
+				},
+			},
+		},
+	}
+	service := Service{
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, 4, 18, 8, 6, 30, 0, time.UTC) },
+	}
+
+	result, err := service.Transition(context.Background(), "apply_1234abcd", TransitionRequest{
+		Status:  StatusRunning,
+		Step:    1,
+		Details: []string{"executor picked up queued apply request"},
+	})
+	if err != nil {
+		t.Fatalf("Transition to running returned error: %v", err)
+	}
+	if result.ID != "apply_1234abcd" || result.Status != StatusRunning {
+		t.Fatalf("expected stable running apply request, got %+v", result)
+	}
+	if result.Error != "" {
+		t.Fatalf("expected running transition to clear error, got %+v", result)
+	}
+	if !reflect.DeepEqual(result.Details, []string{"executor picked up queued apply request"}) {
+		t.Fatalf("expected running transition to replace details, got %+v", result.Details)
+	}
+	if result.Lifecycle.StartedAt != "2026-04-18T08:06:30Z" || result.Lifecycle.CurrentStep != 1 {
+		t.Fatalf("unexpected running lifecycle metadata: %+v", result.Lifecycle)
+	}
+}
+
 func TestServiceTransitionRejectsInvalidLifecycleUpdates(t *testing.T) {
 	store := &memoryStore{
 		records: map[string]Record{

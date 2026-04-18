@@ -3794,6 +3794,196 @@ func TestRouterApplyRequest(t *testing.T) {
 	}
 }
 
+func TestRouterTransitionApplyRequest(t *testing.T) {
+	t.Run("transition payload", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			TransitionApplyRequest: func(ctx context.Context, applyID string, req applyrequest.TransitionRequest) (applyrequest.Record, error) {
+				if applyID != "apply_1234abcd" {
+					t.Fatalf("unexpected apply transition for %s", applyID)
+				}
+				expected := applyrequest.TransitionRequest{
+					Status:  applyrequest.StatusFailed,
+					Step:    2,
+					Error:   "promotion failed",
+					Details: []string{"executor reported a promotion failure"},
+				}
+				if !reflect.DeepEqual(req, expected) {
+					t.Fatalf("unexpected transition request: %+v", req)
+				}
+				return applyrequest.Record{
+					ID:             applyID,
+					PlanID:         "plan_1234abcd",
+					DeploymentName: "api-prod",
+					Status:         applyrequest.StatusFailed,
+					CreatedAt:      "2026-04-18T08:05:00Z",
+					Error:          "promotion failed",
+					Details:        []string{"executor reported a promotion failure"},
+					Lifecycle: applyrequest.Lifecycle{
+						UpdatedAt:      "2026-04-18T08:08:00Z",
+						StartedAt:      "2026-04-18T08:06:00Z",
+						FinishedAt:     "2026-04-18T08:08:00Z",
+						CurrentStep:    2,
+						CompletedSteps: 1,
+						TotalSteps:     3,
+					},
+					Operations: []applyrequest.Operation{
+						{Status: applyrequest.OperationStatusSucceeded, Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."},
+						{Status: applyrequest.OperationStatusFailed, Phase: "Promoting", Target: "api-prod listener", Summary: "Shift production traffic."},
+						{Status: applyrequest.OperationStatusQueued, Phase: "Finalizing", Target: "api-prod alarms", Summary: "Verify final health."},
+					},
+					Source: applyrequest.SourceContext{PlanID: "plan_1234abcd", Route: "/v1/plans/plan_1234abcd", PlanStatus: "ready", Fingerprint: "plan_input"},
+				}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/transitions", strings.NewReader(`{"status":"failed","step":2,"error":"promotion failed","details":["executor reported a promotion failure"]}`))
+		req.Header.Set("Content-Type", "application/json")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		var record applyrequest.Record
+		if err := json.Unmarshal(resp.Body.Bytes(), &record); err != nil {
+			t.Fatalf("failed to decode apply transition payload: %v", err)
+		}
+		if record.ID != "apply_1234abcd" || record.Status != applyrequest.StatusFailed || record.Error != "promotion failed" {
+			t.Fatalf("unexpected apply transition payload: %+v", record)
+		}
+		if record.Lifecycle.CurrentStep != 2 || record.Lifecycle.CompletedSteps != 1 || len(record.Operations) != 3 {
+			t.Fatalf("expected lifecycle/operations update, got %+v", record)
+		}
+
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw apply transition payload: %v", err)
+		}
+		for _, key := range []string{"id", "planId", "deploymentName", "status", "createdAt", "error", "details", "lifecycle", "operations", "source"} {
+			if _, ok := raw[key]; !ok {
+				t.Fatalf("expected apply transition payload to include %q, got %#v", key, raw)
+			}
+		}
+	})
+
+	t.Run("unavailable", func(t *testing.T) {
+		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/transitions", strings.NewReader(`{"status":"running","step":1}`))
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusServiceUnavailable {
+			t.Fatalf("expected 503, got %d", resp.Code)
+		}
+	})
+
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{name: "empty body", body: ""},
+		{name: "unknown field", body: `{"status":"running","step":1,"unexpected":true}`},
+		{name: "trailing payload", body: `{"status":"running","step":1}{"status":"failed"}`},
+	} {
+		t.Run("invalid body "+tc.name, func(t *testing.T) {
+			router := NewRouter(Options{
+				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+				TransitionApplyRequest: func(context.Context, string, applyrequest.TransitionRequest) (applyrequest.Record, error) {
+					t.Fatalf("apply transition provider should not run on invalid body")
+					return applyrequest.Record{}, nil
+				},
+			})
+			req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/transitions", strings.NewReader(tc.body))
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400 for %s, got %d", tc.name, resp.Code)
+			}
+			if body := resp.Body.String(); body != "invalid apply transition request body\n" {
+				t.Fatalf("expected invalid body response, got %q", body)
+			}
+		})
+	}
+
+	t.Run("not found", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			TransitionApplyRequest: func(context.Context, string, applyrequest.TransitionRequest) (applyrequest.Record, error) {
+				return applyrequest.Record{}, applyrequest.ErrNotFound
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_missing/transitions", strings.NewReader(`{"status":"running","step":1}`))
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", resp.Code)
+		}
+	})
+
+	t.Run("invalid transition", func(t *testing.T) {
+		const conflictBody = "apply request lifecycle transition is invalid: cannot transition from succeeded to running\n"
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			TransitionApplyRequest: func(context.Context, string, applyrequest.TransitionRequest) (applyrequest.Record, error) {
+				return applyrequest.Record{}, fmt.Errorf("%w: cannot transition from succeeded to running", applyrequest.ErrInvalidState)
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/transitions", strings.NewReader(`{"status":"running","step":1}`))
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusConflict {
+			t.Fatalf("expected 409, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != conflictBody {
+			t.Fatalf("expected conflict body %q, got %q", conflictBody, body)
+		}
+	})
+
+	t.Run("provider error", func(t *testing.T) {
+		const upstreamErr = "boom: apply transition store"
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			TransitionApplyRequest: func(context.Context, string, applyrequest.TransitionRequest) (applyrequest.Record, error) {
+				return applyrequest.Record{}, errors.New(upstreamErr)
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/transitions", strings.NewReader(`{"status":"running","step":1}`))
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		assertInternalServerErrorResponse(t, resp, upstreamErr)
+	})
+
+	for _, path := range []string{"/v1/applies/a/b/transitions", "/v1/applies/a/transitions/b"} {
+		t.Run("invalid path "+path, func(t *testing.T) {
+			router := NewRouter(Options{
+				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+				TransitionApplyRequest: func(context.Context, string, applyrequest.TransitionRequest) (applyrequest.Record, error) {
+					t.Fatalf("apply transition provider should not run on invalid path")
+					return applyrequest.Record{}, nil
+				},
+			})
+			req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"status":"running","step":1}`))
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400 for %s, got %d", path, resp.Code)
+			}
+		})
+	}
+}
+
 func TestRouterRootServesUI(t *testing.T) {
 	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -3894,6 +4084,9 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
 			return applyrequest.Record{ID: "apply_1234abcd"}, nil
 		},
+		TransitionApplyRequest: func(context.Context, string, applyrequest.TransitionRequest) (applyrequest.Record, error) {
+			return applyrequest.Record{ID: "apply_1234abcd"}, nil
+		},
 		DeploymentStatuses: func() ([]statusstore.Snapshot, error) {
 			return []statusstore.Snapshot{}, nil
 		},
@@ -3939,5 +4132,17 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 	}
 	if allow := resp.Header().Get("Allow"); allow != http.MethodPost {
 		t.Fatalf("expected Allow header for /v1/applies/plans/plan_1234abcd, got %q", allow)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/v1/applies/apply_1234abcd/transitions", nil)
+	resp = httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405 for /v1/applies/apply_1234abcd/transitions, got %d", resp.Code)
+	}
+	if allow := resp.Header().Get("Allow"); allow != http.MethodPost {
+		t.Fatalf("expected Allow header for /v1/applies/apply_1234abcd/transitions, got %q", allow)
 	}
 }
