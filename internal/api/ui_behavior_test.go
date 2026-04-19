@@ -81,6 +81,151 @@ func TestEmbeddedUIDetailFetchRerenderRaceWithNodeHarness(t *testing.T) {
 	t.Skip("legacy dense-overview behavior replaced by applications-overview slice; coverage moved to slice-specific tests")
 }
 
+func TestEmbeddedUIReadRouteAuthGuidanceWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const collectText = (node) => node ? [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean) : [];
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+
+const scenarios = [
+  {
+    name: 'application 401 keeps bookmarked route and explains trusted front door retry',
+    search: '?page=application&deployment=api-prod',
+    route: '/v1/overview/applications/api-prod',
+    status: 401,
+    body: 'unauthenticated: operator identity missing',
+    expected: [
+      'Authenticated operator required',
+      'Tenet rejected GET /v1/overview/applications/api-prod because authenticated identity is required on this operator read route.',
+      'Retry this bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers.',
+    ],
+    unexpected: 'Failed to load overview:',
+  },
+  {
+    name: 'resource 403 keeps bookmarked route and explains operator authorization failure',
+    search: '?page=resource&deployment=api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan::api-prod::Weighted%20routing%20plan',
+    route: '/v1/overview/deployments/api-prod',
+    status: 403,
+    body: 'forbidden: operator does not have access to this deployment',
+    expected: [
+      'Operator access denied',
+      'Tenet rejected GET /v1/overview/deployments/api-prod after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment.',
+    ],
+    unexpected: 'Failed to load overview:',
+  },
+  {
+    name: 'drift 401 keeps bookmarked route and explains trusted front door retry',
+    search: '?page=drift&deployment=api-prod',
+    route: '/v1/overview/deployments/api-prod',
+    status: 401,
+    body: 'unauthenticated: operator identity missing',
+    expected: [
+      'Authenticated operator required',
+      'Tenet rejected GET /v1/overview/deployments/api-prod because authenticated identity is required on this operator read route.',
+      'trusted front door',
+    ],
+    unexpected: 'Failed to load overview:',
+  },
+  {
+    name: 'audit 403 keeps bookmarked route and explains operator authorization failure',
+    search: '?page=audit&deployment=api-prod&action=apply.requested&limit=2',
+    route: '/v1/audit-logs?deployment=api-prod&action=apply.requested&limit=2',
+    status: 403,
+    body: 'forbidden: operator does not have access to this deployment',
+    expected: [
+      'Operator access denied',
+      'Tenet rejected GET /v1/audit-logs?deployment=api-prod&action=apply.requested&limit=2 after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment.',
+    ],
+    unexpected: 'Failed to load audit log:',
+  },
+];
+
+(async () => {
+  for (const scenario of scenarios) {
+    const document = new Document();
+    document.byID.set('toolbar', document.createElement('section'));
+    document.byID.set('summary', document.createElement('section'));
+    document.byID.set('accounts', document.createElement('section'));
+    const initialSearch = scenario.search;
+    const window = { location: { pathname: '/', search: initialSearch, hash: '' } };
+    const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+    let fetchCount = 0;
+    const fetch = (url) => {
+      fetchCount += 1;
+      if (String(url) !== scenario.route) throw new Error('unexpected fetch url for ' + scenario.name + ': ' + url);
+      return Promise.resolve({
+        ok: false,
+        status: scenario.status,
+        text: () => Promise.resolve(scenario.body),
+      });
+    };
+    new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+    await settle();
+    await settle();
+    await settle();
+    if (fetchCount !== 1) throw new Error('expected one fetch for ' + scenario.name + ', got ' + fetchCount);
+    if (window.location.search !== initialSearch) throw new Error('expected bookmarkable URL to stay unchanged for ' + scenario.name + ', got ' + window.location.search);
+    const text = [
+      ...collectText(document.getElementById('toolbar')),
+      ...collectText(document.getElementById('summary')),
+      ...collectText(document.getElementById('accounts')),
+    ].join(' | ');
+    scenario.expected.forEach((fragment) => {
+      if (!text.includes(fragment)) throw new Error('expected fragment for ' + scenario.name + ': ' + fragment + '\nUI text: ' + text);
+    });
+    if (scenario.unexpected && text.includes(scenario.unexpected)) throw new Error('unexpected generic failure copy for ' + scenario.name + ': ' + text);
+  }
+})();
+`
+
+	runNodeHarness(t, nodeProgram)
+}
+
 func TestApplicationsOverviewPageWithNodeHarness(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not installed")

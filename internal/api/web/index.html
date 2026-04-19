@@ -1596,6 +1596,53 @@
         const empty = createElement('div', 'empty', message);
         document.getElementById('accounts').replaceChildren(empty);
       };
+      const embeddedPageTitle = (page) => {
+        switch (page) {
+          case 'application':
+            return 'Application detail';
+          case 'resource':
+            return 'Resource detail';
+          case 'drift':
+            return 'Drift viewer';
+          case 'plan':
+            return 'Plan and apply';
+          default:
+            return 'Operator detail';
+        }
+      };
+      const buildEmbeddedPageReadRoute = (pageState = currentPageState) => {
+        const deploymentName = pageState?.deployment || '{deploymentName}';
+        switch (pageState?.page) {
+          case 'application':
+            return `GET /v1/overview/applications/${deploymentName}`;
+          case 'resource':
+          case 'drift':
+          case 'plan':
+            return `GET /v1/overview/deployments/${deploymentName}`;
+          case 'audit':
+            return `GET ${buildAuditLogsRoute({
+              deploymentName: pageState?.deployment,
+              action: pageState?.auditAction,
+              limit: pageState?.auditLimit,
+            })}`;
+          default:
+            return 'GET operator read route';
+        }
+      };
+      const renderOperatorReadFailurePage = (pageLabel, route, error) => {
+        const heading = operatorReadFailureHeading(error);
+        if (!heading) {
+          renderEmptyState(`Failed to load overview: ${error?.message || 'unknown error'}`);
+          return;
+        }
+        const page = createElement('article', 'account');
+        page.append(
+          createElement('div', 'label', pageLabel),
+          createElement('h2', 'account-name', heading),
+          createElement('div', 'account-meta', operatorReadFailureMessage(route, error)),
+        );
+        document.getElementById('accounts').replaceChildren(page);
+      };
       const createDetailSection = (title) => {
         const section = createElement('section', 'detail-section');
         section.append(createElement('h4', '', title));
@@ -2102,22 +2149,25 @@
           })
           .catch(() => fallback);
       };
-      const fetchApplicationDetail = (deploymentName) => fetch(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`)
-        .then((response) => {
-          if (!response.ok) throw new Error(`application detail request failed (${response.status})`);
-          return response.json();
-        });
-      const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {
-        const route = buildAuditLogsRoute({ deploymentName, action, limit });
-        return fetch(route)
+      const fetchEmbeddedReadRouteJSON = (route, labels) => fetch(route)
         .then((response) => {
           if (response.ok) return response.json();
           const fallback = response.status === 503
-            ? `audit log API unavailable (${response.status})`
-            : `audit log request failed (${response.status})`;
+            ? `${labels.unavailable} (${response.status})`
+            : `${labels.failure} (${response.status})`;
           return responseErrorMessage(response, fallback).then((message) => {
             throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);
           });
+        });
+      const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {
+        unavailable: 'application detail unavailable',
+        failure: 'application detail request failed',
+      });
+      const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {
+        const route = buildAuditLogsRoute({ deploymentName, action, limit });
+        return fetchEmbeddedReadRouteJSON(route, {
+          unavailable: 'audit log API unavailable',
+          failure: 'audit log request failed',
         });
       };
       const fetchDeploymentEvents = (deploymentName) => fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`)
@@ -2130,16 +2180,10 @@
             throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);
           });
         });
-      const fetchDeploymentDetail = (deploymentName) => fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}`)
-        .then((response) => {
-          if (response.ok) return response.json();
-          const fallback = response.status === 503
-            ? `deployment detail unavailable (${response.status})`
-            : `detail request failed (${response.status})`;
-          return responseErrorMessage(response, fallback).then((message) => {
-            throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);
-          });
-        });
+      const fetchDeploymentDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}`, {
+        unavailable: 'deployment detail unavailable',
+        failure: 'detail request failed',
+      });
       const driftWorkspaceRefreshStateText = (workspaceState) => {
         if (workspaceState?.status === 'loading') {
           return 'Refreshing drift workspace from GET /v1/overview/deployments/{deploymentName}…';
@@ -2559,6 +2603,10 @@
               renderAuditLogsState('Audit log is currently unavailable.', 'error', error.message);
               throw error;
             }
+            if (operatorReadFailureHeading(error)) {
+              renderAuditLogsState(operatorReadFailureHeading(error), 'error', operatorReadFailureMessage(buildEmbeddedPageReadRoute(currentPageState), error));
+              throw error;
+            }
             renderAuditLogsState(`Failed to load audit log: ${error?.message || 'unknown error'}`, 'error');
             throw error;
           });
@@ -2963,6 +3011,28 @@
       const planPreviewCanApply = (planState) => {
         const record = planState?.record;
         return Boolean(planState?.status === 'ready' && record?.status === 'ready' && record?.id);
+      };
+      const operatorReadAuthRequiredState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 401;
+      const operatorReadForbiddenState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 403;
+      const operatorReadAuthRequiredMessage = (route) => `Tenet rejected ${route} because authenticated identity is required on this operator read route. Retry this bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers.`;
+      const operatorReadForbiddenMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized for that route or deployment.`;
+      const operatorReadFailureHeading = (error) => {
+        if (operatorReadAuthRequiredState(error)) {
+          return 'Authenticated operator required';
+        }
+        if (operatorReadForbiddenState(error)) {
+          return 'Operator access denied';
+        }
+        return '';
+      };
+      const operatorReadFailureMessage = (route, error) => {
+        if (operatorReadAuthRequiredState(error)) {
+          return operatorReadAuthRequiredMessage(route);
+        }
+        if (operatorReadForbiddenState(error)) {
+          return operatorReadForbiddenMessage(route);
+        }
+        return error?.message || 'unknown error';
       };
       const operatorWriteAuthRequiredState = (state) => state?.request === 'create' && state?.status === 'fetch-error' && Number(state?.error?.status) === 401;
       const operatorWriteAuthRequiredMessage = (route, action) => `Tenet rejected ${route} because authenticated identity is required on operator write routes. When auth enforcement is enabled, retry ${action} through the trusted front door so it can authenticate you and forward trusted identity headers.`;
@@ -4298,7 +4368,7 @@
               throw new Error(`unsupported page ${currentPageState.page}`);
             })
             .catch((error) => {
-              renderEmptyState(`Failed to load overview: ${error.message}`);
+              renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);
             });
         }
       }

@@ -21,12 +21,9 @@ func TestEmbeddedUILazyLoadsDeploymentDetailsOnExpandOnly(t *testing.T) {
 		"renderDeploymentDetail(container, cached.detail);",
 		"detailPanel.hidden = true;",
 		"loadDeploymentDetail(deployment.name, detailPanel).catch(() => {});",
-		"fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}`)",
-		"const fallback = response.status === 503",
-		"? `deployment detail unavailable (${response.status})`",
-		": `detail request failed (${response.status})`;",
-		"return responseErrorMessage(response, fallback).then((message) => {",
-		"throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);",
+		"const fetchDeploymentDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}`, {",
+		"unavailable: 'deployment detail unavailable',",
+		"failure: 'detail request failed',",
 		"renderDetailState(container, 'Loading deployment details…');",
 		"detailStateByDeployment.set(deploymentName, { status: 'ready', detail });",
 		"detailStateByDeployment.set(deploymentName, { status: 'loading', promise, container });",
@@ -343,8 +340,10 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"const normalizeAuditLimit = (value) => {",
 		"const auditLimitSelectOptions = (limit) => {",
 		"const presets = [1, 2, 5, 10, 20, 50];",
-		"const fetchApplicationDetail = (deploymentName) => fetch(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`)",
-		"if (!response.ok) throw new Error(`application detail request failed (${response.status})`);",
+		"const fetchEmbeddedReadRouteJSON = (route, labels) => fetch(route)",
+		"const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {",
+		"unavailable: 'application detail unavailable',",
+		"failure: 'application detail request failed',",
 		"const buildAuditLogsRoute = ({ deploymentName = '', action = '', limit = 0 } = {}) => {",
 		"const params = new URLSearchParams();",
 		"if (deploymentName) params.set('deployment', deploymentName);",
@@ -353,9 +352,9 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"return params.toString() ? `/v1/audit-logs?${params.toString()}` : '/v1/audit-logs';",
 		"const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {",
 		"const route = buildAuditLogsRoute({ deploymentName, action, limit });",
-		"return fetch(route)",
-		"audit log API unavailable (${response.status})",
-		"audit log request failed (${response.status})",
+		"return fetchEmbeddedReadRouteJSON(route, {",
+		"unavailable: 'audit log API unavailable',",
+		"failure: 'audit log request failed',",
 		"const createAuditLogsIntro = () => createElement('div', 'detail-section-copy', 'Immutable operator audit log from GET /v1/audit-logs. Newest entries first. Actor identity remains explicit when unavailable or unknown.');",
 		"const syncAuditQueryParams = (params, pageState) => {",
 		"const renderAuditPageChrome = () => {",
@@ -426,6 +425,34 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"renderDeploymentWorkspace('plan', detail, {",
 		"syncPlanPageURL(record.id, '');",
 		"fetchDeploymentDetail(currentPageState.deployment)",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+}
+
+func TestEmbeddedUIIncludesOperatorReadAuthGuidanceContract(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const operatorReadAuthRequiredState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 401;",
+		"const operatorReadForbiddenState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 403;",
+		"const operatorReadAuthRequiredMessage = (route) => `Tenet rejected ${route} because authenticated identity is required on this operator read route. Retry this bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers.`;",
+		"const operatorReadForbiddenMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized for that route or deployment.`;",
+		"const embeddedPageTitle = (page) => {",
+		"return 'Application detail';",
+		"return 'Resource detail';",
+		"return 'Drift viewer';",
+		"const buildEmbeddedPageReadRoute = (pageState = currentPageState) => {",
+		"return `GET /v1/overview/applications/${deploymentName}`;",
+		"return `GET /v1/overview/deployments/${deploymentName}`;",
+		"return `GET ${buildAuditLogsRoute({",
+		"const renderOperatorReadFailurePage = (pageLabel, route, error) => {",
+		"createElement('h2', 'account-name', heading)",
+		"createElement('div', 'account-meta', operatorReadFailureMessage(route, error))",
+		"renderAuditLogsState(operatorReadFailureHeading(error), 'error', operatorReadFailureMessage(buildEmbeddedPageReadRoute(currentPageState), error));",
+		"renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include %q", fragment)
@@ -1244,7 +1271,7 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "resource_ui=$(curl -fsS \"http://$HOST:$PORT/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan%3A%3Apayments-api-prod-weighted-routing%3A%3AWeighted+routing+plan\")") {
 		t.Fatalf("expected smoke-local.sh to fetch bookmarkable resource page")
 	}
-	if !strings.Contains(text, "assert \"const fetchApplicationDetail = (deploymentName) => fetch(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`)\" in application_ui, application_ui") {
+	if !strings.Contains(text, "assert \"const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page fetch route contract")
 	}
 	if !strings.Contains(text, "assert \"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')\" in application_ui, application_ui") {
@@ -1700,7 +1727,7 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"RESOURCE_UI_PATH=\"$resource_ui_path\"",
 			"application_ui = read_text(\"APPLICATION_UI_PATH\")",
 			"resource_ui = read_text(\"RESOURCE_UI_PATH\")",
-			"const fetchApplicationDetail = (deploymentName) => fetch(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`)",
+			"const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {",
 			"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')",
 			"const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);",
 			"createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')",
