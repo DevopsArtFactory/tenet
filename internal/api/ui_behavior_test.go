@@ -3115,6 +3115,219 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
 	runNodeHarness(t, nodeProgram)
 }
 
+func TestResourceDetailLazyPanelReadAuthGuidanceWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	detailJSON, err := json.Marshal(map[string]any{
+		"name":         "payments-api-staging",
+		"accountName":  "staging-core",
+		"awsAccountId": "210987654321",
+		"region":       "ap-northeast-2",
+		"rollout": map[string]any{
+			"execution": []map[string]any{
+				{"name": "payments-api-staging-service", "resource": "ecsService", "description": "Primary ECS service"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal resource detail body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const createDocument = () => {
+  const document = new Document();
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  return document;
+};
+const collectText = (node) => node ? [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean) : [];
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+async function settle(count = 1) { for (let i = 0; i < count; i += 1) { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); } }
+
+const resourceID = 'ecsService::payments-api-staging-service::Primary ECS service';
+const initialSearch = '?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(resourceID);
+const deploymentURL = '/v1/overview/deployments/payments-api-staging';
+const logsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service';
+const inspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service';
+const unavailableLogsPayload = {
+  available: false,
+  source: '',
+  lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true },
+  unavailableReason: 'unsupported_resource_type',
+  entries: [],
+};
+const unavailableInspectionPayload = {
+  available: false,
+  source: '',
+  lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true },
+  unavailableReason: 'unsupported_resource_type',
+};
+
+const scenarios = [
+  {
+    name: 'recent logs 401 keeps bookmarkable route and explains trusted front door retry',
+    failingPanel: 'logs',
+    status: 401,
+    body: 'unauthenticated: operator identity missing',
+    expectedHeading: 'Authenticated operator required',
+    expectedMessage: 'Tenet rejected GET /v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service because authenticated identity is required on this operator read route. Retry this bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers.',
+    unexpectedText: 'Failed to load recent logs:',
+    buttonLabel: 'Refresh recent logs',
+  },
+  {
+    name: 'recent logs 403 keeps bookmarkable route and explains operator authorization failure',
+    failingPanel: 'logs',
+    status: 403,
+    body: 'forbidden: operator does not have access to this deployment',
+    expectedHeading: 'Operator access denied',
+    expectedMessage: 'Tenet rejected GET /v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment.',
+    unexpectedText: 'Failed to load recent logs:',
+    buttonLabel: 'Refresh recent logs',
+  },
+  {
+    name: 'live inspection 401 keeps bookmarkable route and explains trusted front door retry',
+    failingPanel: 'inspection',
+    status: 401,
+    body: 'unauthenticated: operator identity missing',
+    expectedHeading: 'Authenticated operator required',
+    expectedMessage: 'Tenet rejected GET /v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service because authenticated identity is required on this operator read route. Retry this bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers.',
+    unexpectedText: 'Failed to load live inspection:',
+    buttonLabel: 'Refresh live inspection',
+  },
+  {
+    name: 'live inspection 403 keeps bookmarkable route and explains operator authorization failure',
+    failingPanel: 'inspection',
+    status: 403,
+    body: 'forbidden: operator does not have access to this deployment',
+    expectedHeading: 'Operator access denied',
+    expectedMessage: 'Tenet rejected GET /v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment.',
+    unexpectedText: 'Failed to load live inspection:',
+    buttonLabel: 'Refresh live inspection',
+  },
+];
+
+(async () => {
+  for (const scenario of scenarios) {
+    const document = createDocument();
+    const window = { location: { pathname: '/', search: initialSearch, hash: '' } };
+    const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+    let detailFetchCount = 0;
+    let logsFetchCount = 0;
+    let inspectionFetchCount = 0;
+    const fetch = (url) => {
+      if (url === deploymentURL) {
+        detailFetchCount += 1;
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+      }
+      if (url === logsURL) {
+        logsFetchCount += 1;
+        if (scenario.failingPanel === 'logs') {
+          return Promise.resolve({ ok: false, status: scenario.status, text: () => Promise.resolve(scenario.body) });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(unavailableLogsPayload) });
+      }
+      if (url === inspectionURL) {
+        inspectionFetchCount += 1;
+        if (scenario.failingPanel === 'inspection') {
+          return Promise.resolve({ ok: false, status: scenario.status, text: () => Promise.resolve(scenario.body) });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(unavailableInspectionPayload) });
+      }
+      throw new Error('unexpected fetch url for ' + scenario.name + ': ' + url);
+    };
+
+    new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+    await settle(4);
+
+    const root = document.getElementById('accounts');
+    let text = collectText(root).join(' | ');
+    if (!text.includes(scenario.expectedHeading)) throw new Error('expected auth heading for ' + scenario.name + ': ' + text);
+    if (!text.includes(scenario.expectedMessage)) throw new Error('expected auth guidance message for ' + scenario.name + ': ' + text);
+    if (text.includes(scenario.unexpectedText)) throw new Error('expected auth guidance instead of generic panel failure for ' + scenario.name + ': ' + text);
+    if (window.location.search !== initialSearch) throw new Error('expected initial resource auth guidance to preserve bookmarkable URL for ' + scenario.name);
+    if (detailFetchCount !== 1) throw new Error('expected resource detail to load exactly once for ' + scenario.name + ', got ' + detailFetchCount);
+    if (logsFetchCount !== 1) throw new Error('expected recent logs panel to load exactly once for ' + scenario.name + ', got ' + logsFetchCount);
+    if (inspectionFetchCount !== 1) throw new Error('expected live inspection panel to load exactly once for ' + scenario.name + ', got ' + inspectionFetchCount);
+
+    let buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+    let refresh = buttons.find((node) => node.textContent === scenario.buttonLabel);
+    if (!refresh) throw new Error('expected panel refresh button for ' + scenario.name);
+    if (refresh.disabled) throw new Error('expected panel refresh button enabled after auth failure for ' + scenario.name);
+
+    refresh.dispatch('click');
+    await settle(4);
+
+    text = collectText(root).join(' | ');
+    if (!text.includes(scenario.expectedHeading)) throw new Error('expected refresh auth heading for ' + scenario.name + ': ' + text);
+    if (!text.includes(scenario.expectedMessage)) throw new Error('expected refresh auth guidance message for ' + scenario.name + ': ' + text);
+    if (text.includes(scenario.unexpectedText)) throw new Error('expected refresh auth guidance instead of generic panel failure for ' + scenario.name + ': ' + text);
+    if (window.location.search !== initialSearch) throw new Error('expected panel refresh to preserve bookmarkable URL for ' + scenario.name);
+    if (detailFetchCount !== 1) throw new Error('expected panel refresh not to reload deployment detail for ' + scenario.name + ', got ' + detailFetchCount);
+    if (scenario.failingPanel === 'logs') {
+      if (logsFetchCount !== 2) throw new Error('expected recent logs refresh to refetch only that panel for ' + scenario.name + ', got ' + logsFetchCount);
+      if (inspectionFetchCount !== 1) throw new Error('expected recent logs refresh not to refetch live inspection for ' + scenario.name + ', got ' + inspectionFetchCount);
+    } else {
+      if (inspectionFetchCount !== 2) throw new Error('expected live inspection refresh to refetch only that panel for ' + scenario.name + ', got ' + inspectionFetchCount);
+      if (logsFetchCount !== 1) throw new Error('expected live inspection refresh not to refetch recent logs for ' + scenario.name + ', got ' + logsFetchCount);
+    }
+
+    buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+    refresh = buttons.find((node) => node.textContent === scenario.buttonLabel);
+    if (!refresh) throw new Error('expected panel refresh button after refresh for ' + scenario.name);
+    if (refresh.disabled) throw new Error('expected panel refresh button re-enabled after refresh for ' + scenario.name);
+  }
+})();
+`
+
+	runNodeHarness(t, nodeProgram)
+}
+
 func TestResourceDetailPageRefreshControlsWithNodeHarness(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not installed")

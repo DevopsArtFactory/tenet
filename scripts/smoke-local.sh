@@ -860,6 +860,9 @@ assert "const bookmarkedResource = parseResourceIdentity(currentPageState.resour
 assert "const renderResourceDetailPage = (detail) => {" in resource_ui, resource_ui
 assert "currentLabel: resource.name," in resource_ui, resource_ui
 assert "const createResourceQuickNav = (detail, resource) => {" in resource_ui, resource_ui
+assert "const renderOperatorReadFailurePanel = (container, title, actions, route, error) => {" in resource_ui, resource_ui
+assert "const resourceLogsReadRoute = (deploymentName, resource) => `GET ${buildResourceLogsRoute(deploymentName, resource)}`;" in resource_ui, resource_ui
+assert "const resourceInspectionReadRoute = (deploymentName, resource) => `GET ${buildResourceInspectionRoute(deploymentName, resource)}`;" in resource_ui, resource_ui
 assert "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')" in resource_ui, resource_ui
 assert "createNavLink(buildPageURL('resource', {" in resource_ui, resource_ui
 assert 'Quick navigation' in resource_ui, resource_ui
