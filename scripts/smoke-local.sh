@@ -774,6 +774,7 @@ assert "buildPageURL('application', { deployment: deployment.name })" in ui, ui
 assert 'Drift view' in ui, ui
 assert 'Plan/apply' in ui, ui
 assert 'Linked resources' in ui, ui
+assert 'On this page' in ui, ui
 assert 'Breadcrumbs' in ui, ui
 assert 'No linked resources are available in this drift workspace yet.' in ui, ui
 assert 'Current source: controller-authored managedDrift rows.' in ui, ui
@@ -815,8 +816,20 @@ assert "createNavLink(buildPageURL('audit', { deployment: detail.name || current
 assert "const createWorkspaceQuickNav = (detail, mode) => {" in ui, ui
 assert "const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';" in ui, ui
 assert "const linkedResources = mode === 'drift' ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;" in ui, ui
+assert "const buildPageSectionURL = (page, sectionID, extras = {}) => {" in ui, ui
+assert "const scrollToCurrentHashTarget = () => {" in ui, ui
+assert "target.scrollIntoView({ block: 'start', behavior: 'auto' });" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Deployment workspaces')" in ui, ui
+assert "createElement('div', 'quick-nav-label', 'On this page')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Linked resources')" in ui, ui
+assert "buildPageSectionURL('drift', 'drift-runtime-signals', { deployment: deploymentName })" in ui, ui
+assert "buildPageSectionURL('drift', 'drift-rollout-execution', { deployment: deploymentName })" in ui, ui
+assert "buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName })" in ui, ui
+assert "buildPageSectionURL('drift', 'drift-status-conditions', { deployment: deploymentName })" in ui, ui
+assert "runtimeSignalsSection.id = 'drift-runtime-signals';" in ui, ui
+assert "executionSection.id = 'drift-rollout-execution';" in ui, ui
+assert "driftSection.id = 'drift-field-level';" in ui, ui
+assert "conditionsSection.id = 'drift-status-conditions';" in ui, ui
 assert "createElement('div', 'quick-nav-current', `${deploymentName || 'Deployment'} · ${currentWorkspace}`)" in ui, ui
 assert "header.append(head, createWorkspaceQuickNav(detail, mode), ...sections);" in ui, ui
 assert "const createResourceQuickNav = (detail, resource) => {" in ui, ui
