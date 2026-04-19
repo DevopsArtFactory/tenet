@@ -757,7 +757,9 @@ assert '/v1/overview/applications/${encodeURIComponent(deploymentName)}' in ui, 
 assert "const fetchApplicationsOverview = () => fetchEmbeddedReadRouteJSON('/v1/overview/applications', {" in ui, ui
 assert "failure: 'applications overview request failed'," in ui, ui
 assert "return 'Applications overview';" in ui, ui
+assert "return 'Account detail';" in ui, ui
 assert "return 'GET /v1/overview/applications';" in ui, ui
+assert "return `GET /v1/overview/accounts/${accountID}`;" in ui, ui
 assert 'Open account' in ui, ui
 assert 'Open application' in ui, ui
 assert 'Open audit log' in ui, ui
@@ -816,6 +818,8 @@ assert "createNavLink(buildPageURL('application', { deployment: deploymentName }
 assert "createNavLink(buildPageURL('resource', {" in ui, ui
 assert "No sibling linked resources are available for this application." in ui, ui
 assert "const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {" in application_ui, application_ui
+assert "const fetchAccountDetail = (accountID) => fetchEmbeddedReadRouteJSON(`/v1/overview/accounts/${encodeURIComponent(accountID)}`, {" in ui, ui
+assert "failure: 'account detail request failed'," in ui, ui
 assert "const applicationDetail = currentPageState.page === 'application' ? fetchApplicationDetail(currentPageState.deployment) : fetchDeploymentDetail(currentPageState.deployment);" in application_ui, application_ui
 assert "const renderApplicationDetailPage = (detail) => {" in application_ui, application_ui
 assert "createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')" in application_ui, application_ui
