@@ -382,6 +382,7 @@ invalid_webhook_status=$(curl -sS -o "$INVALID_WEBHOOK_BODY" -w "%{http_code}" -
 invalid_webhook=$(cat "$INVALID_WEBHOOK_BODY")
 ui=$(curl -fsS "$API_BASE_URL/")
 application_ui=$(curl -fsS "$API_BASE_URL/?page=application&deployment=payments-api-prod")
+account_ui=$(curl -fsS "$API_BASE_URL/?page=account&accountId=123456789012")
 resource_ui=$(curl -fsS "$API_BASE_URL/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan%3A%3Apayments-api-prod-weighted-routing%3A%3AWeighted+routing+plan")
 drift_ui_request_id=$(assert_request_id_header "$API_BASE_URL/?page=drift&deployment=payments-api-prod")
 drift_ui=$(curl -fsS "$API_BASE_URL/?page=drift&deployment=payments-api-prod")
@@ -419,12 +420,13 @@ webhook_ping_path=$(write_payload webhook-ping.json "$webhook_ping")
 invalid_webhook_path=$(write_payload invalid-webhook.txt "$invalid_webhook")
 ui_path=$(write_payload ui.html "$ui")
 application_ui_path=$(write_payload application-ui.html "$application_ui")
+account_ui_path=$(write_payload account-ui.html "$account_ui")
 resource_ui_path=$(write_payload resource-ui.html "$resource_ui")
 drift_ui_path=$(write_payload drift-ui.html "$drift_ui")
 audit_ui_path=$(write_payload audit-ui.html "$audit_ui")
 plan_apply_ui_path=$(write_payload plan-apply-ui.html "$plan_apply_ui")
 
-SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" INVALID_APPLY_TRANSITION_STATUS="$invalid_apply_transition_status" INVALID_APPLY_TRANSITION_PATH="$invalid_apply_transition_path" UNKNOWN_APPLY_TRANSITION_STATUS="$unknown_apply_transition_status" UNKNOWN_APPLY_TRANSITION_PATH="$unknown_apply_transition_path" TERMINAL_APPLY_TRANSITION_STATUS="$terminal_apply_transition_status" TERMINAL_APPLY_TRANSITION_PATH="$terminal_apply_transition_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" DEPLOYMENT_EVENTS_PATH="$deployment_events_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PUSH_STATUS="$webhook_push_status" WEBHOOK_PING_PATH="$webhook_ping_path" WEBHOOK_PING_STATUS="$webhook_ping_status" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" UI_PATH="$ui_path" APPLICATION_UI_PATH="$application_ui_path" RESOURCE_UI_PATH="$resource_ui_path" DRIFT_UI_PATH="$drift_ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_APPLY_UI_PATH="$plan_apply_ui_path" python3 - <<'PY'
+SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" INVALID_APPLY_TRANSITION_STATUS="$invalid_apply_transition_status" INVALID_APPLY_TRANSITION_PATH="$invalid_apply_transition_path" UNKNOWN_APPLY_TRANSITION_STATUS="$unknown_apply_transition_status" UNKNOWN_APPLY_TRANSITION_PATH="$unknown_apply_transition_path" TERMINAL_APPLY_TRANSITION_STATUS="$terminal_apply_transition_status" TERMINAL_APPLY_TRANSITION_PATH="$terminal_apply_transition_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" DEPLOYMENT_EVENTS_PATH="$deployment_events_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PUSH_STATUS="$webhook_push_status" WEBHOOK_PING_PATH="$webhook_ping_path" WEBHOOK_PING_STATUS="$webhook_ping_status" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" UI_PATH="$ui_path" APPLICATION_UI_PATH="$application_ui_path" ACCOUNT_UI_PATH="$account_ui_path" RESOURCE_UI_PATH="$resource_ui_path" DRIFT_UI_PATH="$drift_ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_APPLY_UI_PATH="$plan_apply_ui_path" python3 - <<'PY'
 import json, os
 
 def read_json(path_env):
@@ -474,6 +476,7 @@ webhook_ping = read_json("WEBHOOK_PING_PATH")
 invalid_webhook = read_text("INVALID_WEBHOOK_PATH")
 ui = read_text("UI_PATH")
 application_ui = read_text("APPLICATION_UI_PATH")
+account_ui = read_text("ACCOUNT_UI_PATH")
 resource_ui = read_text("RESOURCE_UI_PATH")
 drift_ui = read_text("DRIFT_UI_PATH")
 audit_ui = read_text("AUDIT_UI_PATH")
@@ -711,6 +714,13 @@ assert_fragments("application_ui", application_ui, operator_read_auth_fragments 
     "const renderOperatorReadFailurePage = (pageLabel, route, error) => {",
     "renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);",
 ))
+assert_fragments("account_ui", account_ui, operator_read_auth_fragments + (
+    "return 'Account detail';",
+    "return `GET /v1/overview/accounts/${accountID}`;",
+    "const renderOperatorReadFailurePage = (pageLabel, route, error) => {",
+    "renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);",
+))
+assert "const fetchAccountDetail = (accountID) => fetchEmbeddedReadRouteJSON(`/v1/overview/accounts/${encodeURIComponent(accountID)}`, {" in account_ui, account_ui
 assert_fragments("resource_ui", resource_ui, operator_read_auth_fragments + (
     "return 'Resource detail';",
     "return `GET /v1/overview/deployments/${deploymentName}`;",

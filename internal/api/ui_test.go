@@ -1356,6 +1356,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "application_ui=$(curl -fsS \"http://$HOST:$PORT/?page=application&deployment=payments-api-prod\")") {
 		t.Fatalf("expected smoke-local.sh to fetch bookmarkable application page")
 	}
+	if !strings.Contains(text, "account_ui=$(curl -fsS \"http://$HOST:$PORT/?page=account&accountId=123456789012\")") {
+		t.Fatalf("expected smoke-local.sh to fetch bookmarkable account page")
+	}
 	if !strings.Contains(text, "resource_ui=$(curl -fsS \"http://$HOST:$PORT/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan%3A%3Apayments-api-prod-weighted-routing%3A%3AWeighted+routing+plan\")") {
 		t.Fatalf("expected smoke-local.sh to fetch bookmarkable resource page")
 	}
@@ -1364,6 +1367,12 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert \"const fetchApplicationsOverview = () => fetchEmbeddedReadRouteJSON('/v1/overview/applications', {\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert applications landing page fetch route contract")
+	}
+	if !strings.Contains(text, "assert_fragments(\"account_ui\", account_ui, operator_read_auth_fragments + (") {
+		t.Fatalf("expected smoke-local.sh to lock account page operator-read auth guidance")
+	}
+	if !strings.Contains(text, "\"return 'Account detail';\",") || !strings.Contains(text, "\"return `GET /v1/overview/accounts/${accountID}`;\",") {
+		t.Fatalf("expected smoke-local.sh to assert account-page operator read auth labels")
 	}
 	if !strings.Contains(text, "assert \"return 'Applications overview';\" in ui, ui") || !strings.Contains(text, "assert \"return 'GET /v1/overview/applications';\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert landing-page operator read auth labels")
@@ -1877,12 +1886,16 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"response_path=$(write_payload wait-for-apply-status.json \"$response\")",
 			"current_status=$(json_string_field_from_path \"$response_path\" status)",
 			"application_ui=$(curl -fsS \"$API_BASE_URL/?page=application&deployment=payments-api-prod\")",
+			"account_ui=$(curl -fsS \"$API_BASE_URL/?page=account&accountId=123456789012\")",
 			"resource_ui=$(curl -fsS \"$API_BASE_URL/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan%3A%3Apayments-api-prod-weighted-routing%3A%3AWeighted+routing+plan\")",
 			"APPLICATION_UI_PATH=\"$application_ui_path\"",
+			"ACCOUNT_UI_PATH=\"$account_ui_path\"",
 			"RESOURCE_UI_PATH=\"$resource_ui_path\"",
 			"application_ui = read_text(\"APPLICATION_UI_PATH\")",
+			"account_ui = read_text(\"ACCOUNT_UI_PATH\")",
 			"resource_ui = read_text(\"RESOURCE_UI_PATH\")",
 			"const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {",
+			"const fetchAccountDetail = (accountID) => fetchEmbeddedReadRouteJSON(`/v1/overview/accounts/${encodeURIComponent(accountID)}`, {",
 			"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')",
 			"const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);",
 			"createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')",
@@ -2050,6 +2063,7 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"def assert_fragments(label, body, fragments):",
 			"operator_read_auth_fragments = (",
 			"assert_fragments(\"application_ui\", application_ui, operator_read_auth_fragments + (",
+			"assert_fragments(\"account_ui\", account_ui, operator_read_auth_fragments + (",
 			"assert_fragments(\"resource_ui\", resource_ui, operator_read_auth_fragments + (",
 			"assert_fragments(\"drift_ui\", drift_ui, operator_read_auth_fragments + (",
 			"assert_fragments(\"audit_ui\", audit_ui, operator_read_auth_fragments + (",
@@ -2058,9 +2072,11 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"\"const operatorReadAuthRequiredMessage = (route) => `Tenet rejected ${route} because authenticated identity is required on this operator read route. Retry this bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers.`;\"",
 			"\"const operatorReadForbiddenMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized for that route or deployment.`;\"",
 			"\"return 'Application detail';\"",
+			"\"return 'Account detail';\"",
 			"\"return 'Resource detail';\"",
 			"\"return 'Drift viewer';\"",
 			"\"return `GET /v1/overview/applications/${deploymentName}`;\"",
+			"\"return `GET /v1/overview/accounts/${accountID}`;\"",
 			"\"return `GET /v1/overview/deployments/${deploymentName}`;\"",
 			"\"return `GET ${buildAuditLogsRoute({\"",
 			"\"const renderOperatorReadFailurePage = (pageLabel, route, error) => {\"",
@@ -2091,8 +2107,8 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 		"../../README.md": {
 			"Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis;",
 			"the request-actor header contract by sending conflicting `X-Tenet-Actor-*` and `X-User-*` identities together",
-			"fetches the bookmarkable `/?page=application&deployment=payments-api-prod` route and one representative bookmarkable `/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan` route",
-			"checks only raw embedded application/resource shell strings that prove those drill-down pages can render and navigate",
+			"fetches the bookmarkable `/?page=application&deployment=payments-api-prod` route, the bookmarkable `/?page=account&accountId=123456789012` route, and one representative bookmarkable `/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan` route",
+			"checks only raw embedded application/account/resource shell strings that prove those drill-down pages can render and navigate, plus the landing-page helper strings that keep `/` and the bookmarkable account drill-down on the shared operator-read auth guidance path under trusted front-door auth",
 			"the front-door auth contract by restarting `tenet-api`",
 			"Front-door auth remains additive and opt-in.",
 			"TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
@@ -2105,6 +2121,7 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"checks representative endpoints plus deployment-events/resource-logs/audit-log JSON shapes, verifies representative `Request-Id` response headers, fetches the full `GET /v1/audit-logs` collection and asserts the expected `plan.created` and `apply.requested` actions are present without depending on `limit=2`, still fetches `GET /v1/audit-logs?action=apply.requested&limit=2` to verify exact-action filtering, rejects `action=invalid.action` with `400 Bad Request`,",
 			"non-empty controller-authored `managedDrift[]` evidence in `GET /v1/overview/deployments/payments-api-prod` with stable `field` / `desired` / `actual` / `severity` rows and aligned `runtimeSummary.managedDrift`",
 			"the bookmarkable `/?page=drift&deployment=payments-api-prod` workspace source/summary/table copy",
+			"the bookmarkable `/?page=account&accountId=123456789012` route",
 			"mirrors the direct-process actor coverage by sending both header families with conflicting identities on a `payments-api-staging` plan/apply flow and verifying that the explicit `X-Tenet-Actor-*` actor survives the stored plan preview, stored apply request, and deployment-scoped `GET /v1/audit-logs?deployment=payments-api-staging&action=apply.requested&limit=1` retrieval",
 			"reuses that stable terminal `applyId` to prove `POST /v1/applies/{applyId}/transitions` rejects malformed JSON with `400`, unknown apply IDs with `404`, and invalid lifecycle moves with `409` plus operator-facing terminal-state text",
 			"unauthenticated `POST /v1/applies/{applyId}/transitions` fail with `401`",
@@ -2133,13 +2150,14 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
 			"Use `make smoke-local` for the fastest fixture-backed regression check when you only need direct-process validation.",
 			"proves additive `X-User-*` alias support plus explicit `X-Tenet-Actor-*` precedence by sending both header families with conflicting identities",
-			"fetches the bookmarkable `/?page=application&deployment=payments-api-prod` route plus one representative bookmarkable `/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan` route",
-			"asserts only the raw embedded application/resource shell strings needed to prove those drill-down pages can render and navigate",
+			"fetches the bookmarkable `/?page=application&deployment=payments-api-prod` route, the bookmarkable `/?page=account&accountId=123456789012` route, plus one representative bookmarkable `/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan` route",
+			"asserts only the raw embedded application/account/resource shell strings needed to prove those drill-down pages can render and navigate",
 			"restarts `tenet-api` with `TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
 			"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
 			"including the persisted `POST /v1/applies/{applyId}/transitions` write route",
 			"unauthenticated transition callers still short-circuit with the operator-write `401` before any apply lookup",
 			"the bookmarkable `/?page=plan` workspace still includes operator-facing guidance for those auth-gated write failures",
+			"the bookmarkable `/?page=account&accountId=123456789012` drill-down stays on the shared operator-read guidance path",
 			"do it only behind a front door that authenticates callers and strips inbound `X-Tenet-Authenticated-*` headers",
 			"### Docker stack smoke check",
 			"make smoke-docker",
@@ -2147,6 +2165,7 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"checks representative endpoints plus deployment-events/resource-logs/audit-log JSON shapes, verifies representative `Request-Id` response headers, fetches the full `GET /v1/audit-logs` collection and asserts the expected `plan.created` and `apply.requested` actions are present without depending on `limit=2`, still fetches `GET /v1/audit-logs?action=apply.requested&limit=2` to verify exact-action filtering, rejects `action=invalid.action` with `400 Bad Request`,",
 			"non-empty controller-authored `managedDrift[]` evidence in `GET /v1/overview/deployments/payments-api-prod` with stable `field` / `desired` / `actual` / `severity` rows and aligned `runtimeSummary.managedDrift`",
 			"mirrors the direct-process actor coverage by sending both header families with conflicting identities on a `payments-api-staging` plan/apply flow and verifying that the explicit `X-Tenet-Actor-*` actor survives the stored plan preview, stored apply request, and deployment-scoped `GET /v1/audit-logs?deployment=payments-api-staging&action=apply.requested&limit=1` retrieval",
+			"the bookmarkable `/?page=account&accountId=123456789012` route",
 			"fetches the bookmarkable `/?page=drift&deployment=payments-api-prod` workspace URL",
 			"confirms the drift page source still includes `Active drift source`, `Current source: controller-authored managedDrift rows.`, `Drift summary`, and field-level table headers such as `Field path` / `Desired` / `Actual` / `Severity`",
 			"reuses that smoke-created terminal `applyId` to verify the executor-facing transition-route boundaries (`400` malformed JSON, `404` unknown apply, `409` invalid terminal move with operator-facing text)",
@@ -2211,11 +2230,13 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 func TestDockerSmokeDocsDescribeEmbeddedReadAuthGuidanceCoverage(t *testing.T) {
 	files := map[string][]string{
 		"../../README.md": {
-			"checks raw embedded application/resource/drift/audit shell HTML/script fragments instead of runtime DOM text",
+			"checks raw embedded application/account/resource/drift/audit/plan shell HTML/script fragments instead of runtime DOM text",
+			"the bookmarkable `/?page=account&accountId=123456789012` route",
 			"the shipped operator read-auth guidance hooks for initial `401` / `403` failures remain present",
 		},
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
-			"checks raw embedded application/resource/drift/audit shell HTML/script fragments instead of runtime DOM text",
+			"checks raw embedded application/account/resource/drift/audit shell HTML/script fragments instead of runtime DOM text",
+			"the bookmarkable `/?page=account&accountId=123456789012` route",
 			"the shipped operator read-auth guidance hooks for initial `401` / `403` failures remain present",
 		},
 	}
