@@ -100,10 +100,11 @@ Current behavior:
 - when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`, this route also requires trusted `X-Tenet-Authenticated-*` identity plus `X-Tenet-Authorized-Deployments` to include the exact deployment name
 - initial `GET /v1/overview/applications/{deploymentName}` auth failures are status-aware: `401` tells operators to retry the same bookmarkable page through the trusted front door so authenticated identity can be provided, while `403` explains that identity was recognized but the current operator is not authorized for that route/deployment
 - `Controller runtime events` section backed by `GET /v1/overview/deployments/{deploymentName}/events`
-- explicit `Loading controller runtime events…`, empty, unavailable, and generic fetch-error states for that section
+- explicit `Loading controller runtime events…`, empty, unavailable, and generic fetch-error states for non-auth failures on that section
 - event ordering labeled as newest-first with readable time, summary, sync/health context, rollout phase/current step, and optional controller metadata
 - explicitly labels these as controller-derived runtime events, not audit/auth history
 - the `Controller runtime events` section header now includes an in-place `Refresh runtime events` button that re-runs just that deployment-events route in place, keeps the bookmarkable `/?page=application...` URL stable, and disables only while that section fetch is active
+- when that guarded lazy read returns `401` or `403`, the runtime-events panel keeps its refresh control and bookmarkable route stable but replaces generic fetch-error copy with the same trusted-front-door / access-denied guidance used on the other embedded read paths
 - grouped resource sections:
   - `Workloads`
   - `Traffic routing`
