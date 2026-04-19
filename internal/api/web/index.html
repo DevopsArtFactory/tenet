@@ -150,6 +150,7 @@
       const deploymentEventsStateByDeployment = new Map();
       const resourceLogStateByKey = new Map();
       const resourceInspectionStateByKey = new Map();
+      let auditLogsPageState = { status: 'idle', route: '', result: null, error: null, promise: null, requestId: 0 };
       let allAccounts = [];
       let allApplications = [];
       let currentViewState = { query: '', syncState: 'all', account: 'all' };
@@ -1084,6 +1085,13 @@
         const query = params.toString();
         const pathname = window.location.pathname || '/';
         return query ? `${pathname}?${query}` : pathname;
+      };
+      const buildAuditLogsRoute = ({ deploymentName = '', action = '', limit = 0 } = {}) => {
+        const params = new URLSearchParams();
+        if (deploymentName) params.set('deployment', deploymentName);
+        if (action) params.set('action', action);
+        if (limit > 0) params.set('limit', String(limit));
+        return params.toString() ? `/v1/audit-logs?${params.toString()}` : '/v1/audit-logs';
       };
       const updateViewState = (patch) => {
         const focusState = captureToolbarFocus();
@@ -2068,11 +2076,7 @@
           return response.json();
         });
       const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {
-        const params = new URLSearchParams();
-        if (deploymentName) params.set('deployment', deploymentName);
-        if (action) params.set('action', action);
-        if (limit > 0) params.set('limit', String(limit));
-        const route = params.toString() ? `/v1/audit-logs?${params.toString()}` : '/v1/audit-logs';
+        const route = buildAuditLogsRoute({ deploymentName, action, limit });
         return fetch(route)
         .then((response) => {
           if (response.ok) return response.json();
@@ -2261,6 +2265,22 @@
       };
       const createAuditLogsIntro = () => createElement('div', 'detail-section-copy', 'Immutable operator audit log from GET /v1/audit-logs. Newest entries first. Actor identity remains explicit when unavailable or unknown.');
       const auditDeploymentName = () => currentPageState.deployment || '';
+      const createAuditLogsActions = (isLoading = false) => [
+        createRefreshButton(
+          'Refresh audit log',
+          isLoading,
+          () => loadAuditLogsPage({ force: true }).catch(() => {}),
+        ),
+      ];
+      const auditLogsRefreshStateText = (auditState) => {
+        if (auditState?.status === 'loading') {
+          return 'Refreshing audit log from GET /v1/audit-logs…';
+        }
+        if (auditState?.status === 'error') {
+          return `Failed to refresh audit log: ${auditState.error?.message || 'unknown error'}`;
+        }
+        return '';
+      };
       const createAuditDeploymentContextCallout = () => {
         const deploymentName = auditDeploymentName();
         if (!deploymentName) return null;
@@ -2285,7 +2305,7 @@
               auditAction: normalizeAuditAction(event.target.value),
             };
             syncAuditPageState();
-            loadAuditLogsPage();
+            loadAuditLogsPage().catch(() => {});
           }),
           createSelect('Limit', String(currentPageState.auditLimit || ''), auditLimitSelectOptions(currentPageState.auditLimit), (event) => {
             currentPageState = {
@@ -2294,7 +2314,7 @@
               auditLimit: normalizeAuditLimit(event.target.value),
             };
             syncAuditPageState();
-            loadAuditLogsPage();
+            loadAuditLogsPage().catch(() => {});
           }),
         );
         const activeFilters = [];
@@ -2325,7 +2345,7 @@
         const root = document.getElementById('accounts');
         const page = createElement('article', 'account');
         page.append(
-          createElement('h2', 'account-name', 'Audit timeline'),
+          createDetailSectionHeader('Audit timeline', createAuditLogsActions(auditLogsPageState.status === 'loading')),
           createAuditLogsIntro(),
         );
         const deploymentCallout = createAuditDeploymentContextCallout();
@@ -2341,18 +2361,22 @@
         }
         root.replaceChildren(page);
       };
-      const renderAuditLogsPage = (result) => {
+      const renderAuditLogsPage = (result, auditState = null) => {
         renderAuditPageChrome();
         const root = document.getElementById('accounts');
         const page = createElement('article', 'account');
         const entries = sortAuditEntries(result?.entries || []);
+        const refreshStateText = auditLogsRefreshStateText(auditState);
         page.append(
-          createElement('h2', 'account-name', 'Audit timeline'),
+          createDetailSectionHeader('Audit timeline', createAuditLogsActions(auditState?.status === 'loading')),
           createAuditLogsIntro(),
         );
         const deploymentCallout = createAuditDeploymentContextCallout();
         if (deploymentCallout) {
           page.append(deploymentCallout);
+        }
+        if (refreshStateText) {
+          page.append(createElement('div', auditState?.status === 'error' ? 'detail-state error' : 'detail-state', refreshStateText));
         }
         if (!entries.length) {
           page.append(createElement('div', 'detail-state', currentPageState.deployment
@@ -2437,23 +2461,70 @@
         page.append(rows);
         root.replaceChildren(page);
       };
-      const loadAuditLogsPage = () => {
-        renderAuditLogsState('Loading audit log…');
-        fetchAuditLogs({
+      const loadAuditLogsPage = (options = {}) => {
+        const force = Boolean(options?.force);
+        const route = buildAuditLogsRoute({
+          deploymentName: currentPageState.deployment,
+          action: currentPageState.auditAction,
+          limit: currentPageState.auditLimit,
+        });
+        const cached = auditLogsPageState;
+        const sameRoute = cached.route === route;
+
+        if (!force && sameRoute && cached.status === 'ready') {
+          renderAuditLogsPage(cached.result, cached);
+          return Promise.resolve(cached.result);
+        }
+        if (sameRoute && cached.status === 'loading') {
+          if (cached.result) {
+            renderAuditLogsPage(cached.result, cached);
+          } else {
+            renderAuditLogsState('Loading audit log…');
+          }
+          return cached.promise;
+        }
+
+        const staleResult = sameRoute ? cached.result : null;
+        const requestId = cached.requestId + 1;
+        auditLogsPageState = { status: 'loading', route, result: staleResult, error: null, promise: null, requestId };
+        if (staleResult) {
+          renderAuditLogsPage(staleResult, auditLogsPageState);
+        } else {
+          renderAuditLogsState('Loading audit log…');
+        }
+
+        const promise = fetchAuditLogs({
           deploymentName: currentPageState.deployment,
           action: currentPageState.auditAction,
           limit: currentPageState.auditLimit,
         })
           .then((result) => {
-            renderAuditLogsPage(result);
+            if (auditLogsPageState.requestId !== requestId || auditLogsPageState.route !== route) {
+              return result;
+            }
+            auditLogsPageState = { status: 'ready', route, result, error: null, promise: null, requestId };
+            renderAuditLogsPage(result, auditLogsPageState);
+            return result;
           })
           .catch((error) => {
+            if (auditLogsPageState.requestId !== requestId || auditLogsPageState.route !== route) {
+              throw error;
+            }
+            auditLogsPageState = { status: 'error', route, result: staleResult, error, promise: null, requestId };
+            if (staleResult) {
+              renderAuditLogsPage(staleResult, auditLogsPageState);
+              throw error;
+            }
             if (error?.kind === 'unavailable') {
               renderAuditLogsState('Audit log is currently unavailable.', 'error', error.message);
-              return;
+              throw error;
             }
             renderAuditLogsState(`Failed to load audit log: ${error?.message || 'unknown error'}`, 'error');
+            throw error;
           });
+
+        auditLogsPageState = { ...auditLogsPageState, promise };
+        return promise;
       };
       const buildPlanPreviewRoute = (planId) => `/v1/plans/${encodeURIComponent(planId)}`;
       const fetchPlanPreview = (planId) => fetch(buildPlanPreviewRoute(planId))
@@ -3893,7 +3964,7 @@
             renderEmptyState(`Failed to load overview: ${error.message}`);
           });
       } else if (currentPageState.page === 'audit') {
-        loadAuditLogsPage();
+        loadAuditLogsPage().catch(() => {});
       } else if (currentPageState.page === 'account') {
         if (!currentPageState.accountId) {
           renderEmptyState('account page is missing an accountId query parameter');
