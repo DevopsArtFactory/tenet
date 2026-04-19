@@ -943,7 +943,8 @@ assert "createSelect('Action', currentPageState.auditAction, auditActionOptions,
 assert "createSelect('Limit', String(currentPageState.auditLimit || ''), auditLimitSelectOptions(currentPageState.auditLimit), (event) => {" in audit_ui, audit_ui
 assert 'Open application drill-down' in audit_ui, audit_ui
 assert 'Open plan/apply workspace' in audit_ui, audit_ui
-assert "fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`)" in ui, ui
+assert "const buildDeploymentEventsReadRoute = (deploymentName) => `/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`;" in ui, ui
+assert "const fetchDeploymentEvents = (deploymentName) => fetchEmbeddedReadRouteJSON(buildDeploymentEventsReadRoute(deploymentName), {" in ui, ui
 assert "const ifMatch = detail.sourceFingerprint || await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;" in ui, ui
 assert 'Recent logs' in ui, ui
 assert 'Refresh recent logs' in ui, ui
