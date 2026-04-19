@@ -1153,7 +1153,18 @@ PY
 
 restart_api_with_apply_mode true
 
-queued_plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d "$plan_preview_request_body" "$API_BASE_URL/v1/plans/deployments/payments-api-prod")
+queued_deployment_detail=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod")
+queued_deployment_detail_extract_path=$(write_payload queued-deployment-detail.extract.json "$queued_deployment_detail")
+queued_deployment_source_fingerprint=$(json_string_field_from_path "$queued_deployment_detail_extract_path" sourceFingerprint)
+queued_plan_preview_request_body=$(DEPLOYMENT_SOURCE_FINGERPRINT="$queued_deployment_source_fingerprint" python3 - <<'PY'
+import json
+import os
+
+fingerprint = (os.environ.get("DEPLOYMENT_SOURCE_FINGERPRINT") or "").strip()
+print(json.dumps({"ifMatch": fingerprint} if fingerprint else {}))
+PY
+)
+queued_plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d "$queued_plan_preview_request_body" "$API_BASE_URL/v1/plans/deployments/worker-prod")
 queued_plan_preview_path=$(write_payload queued-plan-preview.json "$queued_plan_preview")
 queued_plan_id=$(json_string_field_from_path "$queued_plan_preview_path" id)
 queued_plan_preview_get=$(curl -fsS "$API_BASE_URL/v1/plans/$queued_plan_id")
@@ -1181,13 +1192,13 @@ with open(os.environ["QUEUED_APPLY_RECORD_PATH"], encoding="utf-8") as fh:
 with open(os.environ["QUEUED_APPLY_RECORD_GET_PATH"], encoding="utf-8") as fh:
     queued_apply_record_get = json.load(fh)
 
-assert queued_plan_preview["deploymentName"] == "payments-api-prod", queued_plan_preview
+assert queued_plan_preview["deploymentName"] == "worker-prod", queued_plan_preview
 assert queued_plan_preview["status"] == "ready", queued_plan_preview
 assert isinstance(queued_plan_preview.get("operations", []), list) and queued_plan_preview["operations"], queued_plan_preview
 assert queued_plan_preview_get == queued_plan_preview, (queued_plan_preview_get, queued_plan_preview)
 
 assert queued_apply_record["planId"] == queued_plan_preview["id"], (queued_apply_record, queued_plan_preview)
-assert queued_apply_record["deploymentName"] == "payments-api-prod", queued_apply_record
+assert queued_apply_record["deploymentName"] == "worker-prod", queued_apply_record
 assert queued_apply_record["status"] == "queued", queued_apply_record
 assert not queued_apply_record.get("error"), queued_apply_record
 assert isinstance(queued_apply_record.get("id"), str) and queued_apply_record["id"].startswith("apply_"), queued_apply_record
