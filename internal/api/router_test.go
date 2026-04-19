@@ -67,6 +67,20 @@ func assertResponseRequestID(t *testing.T, resp *httptest.ResponseRecorder) stri
 	return requestID
 }
 
+func requireManagedDriftItemByField(t *testing.T, items []any, field string) map[string]any {
+	t.Helper()
+
+	for _, item := range items {
+		driftItem, ok := item.(map[string]any)
+		if ok && driftItem["field"] == field {
+			return driftItem
+		}
+	}
+
+	t.Fatalf("expected managedDrift item for field %q in %#v", field, items)
+	return nil
+}
+
 func TestRouterHealthz(t *testing.T) {
 	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
@@ -1316,6 +1330,9 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 				Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "all checks passed"},
 				ManagedDrift: []domain.ManagedDriftItem{
 					{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r4", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r3", Severity: domain.ManagedDriftSeverityHigh},
+					{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh},
+					{Field: "runtimeContext.capacity.min", Desired: "4", Actual: "2", Severity: domain.ManagedDriftSeverityMedium},
+					{Field: "runtimeContext.capacity.max", Desired: "12", Actual: "8", Severity: domain.ManagedDriftSeverityLow},
 				},
 				Conditions: []domain.Condition{{Type: "Ready", Status: true, Reason: "Stable", Message: "deployment is healthy"}},
 				Rollout: &domain.RolloutSummary{
@@ -1327,12 +1344,17 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 					Steps:              []domain.RolloutStepSummary{{Kind: "ResolvePlacement", Status: domain.RolloutStepStatusCompleted}, {Kind: "CreateCandidateCapacity", Current: true, Status: domain.RolloutStepStatusCurrent}},
 				},
 				History: []domain.StatusHistoryEntry{{
-					Timestamp:    "2026-04-16T07:05:00Z",
-					Source:       "controller",
-					Summary:      "Creating candidate capacity for weighted target groups",
-					Sync:         domain.Sync{State: domain.SyncStateReconciling, Reason: "CandidateProvisioning"},
-					Health:       domain.Health{Overall: domain.HealthProgressing, Summary: "warming"},
-					ManagedDrift: []domain.ManagedDriftItem{{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r4", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r3", Severity: domain.ManagedDriftSeverityHigh}},
+					Timestamp: "2026-04-16T07:05:00Z",
+					Source:    "controller",
+					Summary:   "Creating candidate capacity for weighted target groups",
+					Sync:      domain.Sync{State: domain.SyncStateReconciling, Reason: "CandidateProvisioning"},
+					Health:    domain.Health{Overall: domain.HealthProgressing, Summary: "warming"},
+					ManagedDrift: []domain.ManagedDriftItem{
+						{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r4", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r3", Severity: domain.ManagedDriftSeverityHigh},
+						{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh},
+						{Field: "runtimeContext.capacity.min", Desired: "4", Actual: "2", Severity: domain.ManagedDriftSeverityMedium},
+						{Field: "runtimeContext.capacity.max", Desired: "12", Actual: "8", Severity: domain.ManagedDriftSeverityLow},
+					},
 					RolloutPhase: domain.RolloutPhaseProvisioning,
 					CurrentStep:  "CreateCandidateCapacity",
 				}},
@@ -1348,8 +1370,19 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.Code)
 	}
 
+	raw := resp.Body.String()
+	for _, fragment := range []string{
+		`"field":"runtimeContext.capacity.desired"`,
+		`"field":"runtimeContext.capacity.min"`,
+		`"field":"runtimeContext.capacity.max"`,
+	} {
+		if !strings.Contains(raw, fragment) {
+			t.Fatalf("expected raw deployment status payload to include %s, got %s", fragment, raw)
+		}
+	}
+
 	var payload map[string]any
-	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 		t.Fatalf("failed to decode raw payload: %v", err)
 	}
 	status, ok := payload["status"].(map[string]any)
@@ -1406,16 +1439,28 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 		t.Fatalf("expected history field names/values, got %#v", historyEntry)
 	}
 	managedDrift, ok := status["managedDrift"].([]any)
-	if !ok || len(managedDrift) != 1 {
+	if !ok || len(managedDrift) != 4 {
 		t.Fatalf("expected managedDrift array in raw payload, got %#v", status["managedDrift"])
 	}
-	driftItem, ok := managedDrift[0].(map[string]any)
-	if !ok || driftItem["field"] != "artifact" || driftItem["desired"] != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r4" || driftItem["actual"] != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r3" || driftItem["severity"] != string(domain.ManagedDriftSeverityHigh) {
-		t.Fatalf("expected managedDrift item fields, got %#v", managedDrift[0])
+	driftItem := requireManagedDriftItemByField(t, managedDrift, "artifact")
+	if driftItem["desired"] != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r4" || driftItem["actual"] != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r3" || driftItem["severity"] != string(domain.ManagedDriftSeverityHigh) {
+		t.Fatalf("expected managedDrift artifact item fields, got %#v", driftItem)
+	}
+	if desiredCapacityDrift := requireManagedDriftItemByField(t, managedDrift, "runtimeContext.capacity.desired"); desiredCapacityDrift["desired"] != "6" || desiredCapacityDrift["actual"] != "4" || desiredCapacityDrift["severity"] != string(domain.ManagedDriftSeverityHigh) {
+		t.Fatalf("expected managedDrift desired-capacity item fields, got %#v", desiredCapacityDrift)
+	}
+	if minCapacityDrift := requireManagedDriftItemByField(t, managedDrift, "runtimeContext.capacity.min"); minCapacityDrift["desired"] != "4" || minCapacityDrift["actual"] != "2" || minCapacityDrift["severity"] != string(domain.ManagedDriftSeverityMedium) {
+		t.Fatalf("expected managedDrift min-capacity item fields, got %#v", minCapacityDrift)
+	}
+	if maxCapacityDrift := requireManagedDriftItemByField(t, managedDrift, "runtimeContext.capacity.max"); maxCapacityDrift["desired"] != "12" || maxCapacityDrift["actual"] != "8" || maxCapacityDrift["severity"] != string(domain.ManagedDriftSeverityLow) {
+		t.Fatalf("expected managedDrift max-capacity item fields, got %#v", maxCapacityDrift)
 	}
 	historyManagedDrift, ok := historyEntry["managedDrift"].([]any)
-	if !ok || len(historyManagedDrift) != 1 {
+	if !ok || len(historyManagedDrift) != 4 {
 		t.Fatalf("expected history managedDrift array, got %#v", historyEntry["managedDrift"])
+	}
+	if historyDesiredCapacityDrift := requireManagedDriftItemByField(t, historyManagedDrift, "runtimeContext.capacity.desired"); historyDesiredCapacityDrift["desired"] != "6" || historyDesiredCapacityDrift["actual"] != "4" {
+		t.Fatalf("expected history managedDrift desired-capacity item fields, got %#v", historyDesiredCapacityDrift)
 	}
 	if _, exists := status["ManagedDrift"]; exists {
 		t.Fatalf("unexpected Go-style managedDrift field name in %#v", status)
@@ -2739,7 +2784,9 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 				Name: "api-prod",
 				ManagedDrift: []domain.ManagedDriftItem{
 					{Field: "artifact", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh},
-					{Field: "generation", Desired: "8", Actual: "7", Severity: domain.ManagedDriftSeverityMedium},
+					{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh},
+					{Field: "runtimeContext.capacity.min", Desired: "4", Actual: "2", Severity: domain.ManagedDriftSeverityMedium},
+					{Field: "runtimeContext.capacity.max", Desired: "12", Actual: "8", Severity: domain.ManagedDriftSeverityLow},
 				},
 				RuntimeSummary: &domain.RuntimeSummary{
 					Timestamp:          "2026-04-16T06:49:00Z",
@@ -2755,7 +2802,9 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 					ExecutionMode:      "ecsCodeDeploy",
 					ManagedDrift: []domain.ManagedDriftItem{
 						{Field: "artifact", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh},
-						{Field: "generation", Desired: "8", Actual: "7", Severity: domain.ManagedDriftSeverityMedium},
+						{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh},
+						{Field: "runtimeContext.capacity.min", Desired: "4", Actual: "2", Severity: domain.ManagedDriftSeverityMedium},
+						{Field: "runtimeContext.capacity.max", Desired: "12", Actual: "8", Severity: domain.ManagedDriftSeverityLow},
 					},
 					DeployedArtifact: domain.DeploymentArtifact{Image: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1"},
 					Conditions:       []domain.Condition{{Type: "Ready", Status: true, Reason: "Stable", Message: "deployment is healthy"}},
@@ -2773,8 +2822,19 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.Code)
 	}
 
+	raw := resp.Body.String()
+	for _, fragment := range []string{
+		`"field":"runtimeContext.capacity.desired"`,
+		`"field":"runtimeContext.capacity.min"`,
+		`"field":"runtimeContext.capacity.max"`,
+	} {
+		if !strings.Contains(raw, fragment) {
+			t.Fatalf("expected raw overview deployment payload to include %s, got %s", fragment, raw)
+		}
+	}
+
 	var payload map[string]any
-	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 		t.Fatalf("failed to decode raw overview deployment payload: %v", err)
 	}
 	runtimeSummary, ok := payload["runtimeSummary"].(map[string]any)
@@ -2805,16 +2865,25 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 		t.Fatalf("expected runtimeSummary.conditions fields in overview deployment payload, got %#v", conditions)
 	}
 	managedDrift, ok := payload["managedDrift"].([]any)
-	if !ok || len(managedDrift) != 2 {
+	if !ok || len(managedDrift) != 4 {
 		t.Fatalf("expected managedDrift array in overview deployment payload, got %#v", payload["managedDrift"])
 	}
-	driftItem, ok := managedDrift[0].(map[string]any)
-	if !ok || driftItem["field"] != "artifact" || driftItem["severity"] != string(domain.ManagedDriftSeverityHigh) || driftItem["desired"] != "ghcr.io/devopsartfactory/payments-api:2026-04-16.2" {
-		t.Fatalf("expected managedDrift item fields in overview deployment payload, got %#v", managedDrift[0])
+	driftItem := requireManagedDriftItemByField(t, managedDrift, "artifact")
+	if driftItem["severity"] != string(domain.ManagedDriftSeverityHigh) || driftItem["desired"] != "ghcr.io/devopsartfactory/payments-api:2026-04-16.2" {
+		t.Fatalf("expected managedDrift artifact item fields in overview deployment payload, got %#v", driftItem)
 	}
 	runtimeManagedDrift, ok := runtimeSummary["managedDrift"].([]any)
-	if !ok || len(runtimeManagedDrift) != 2 {
+	if !ok || len(runtimeManagedDrift) != 4 {
 		t.Fatalf("expected runtimeSummary.managedDrift array in overview deployment payload, got %#v", runtimeSummary["managedDrift"])
+	}
+	if desiredCapacityDrift := requireManagedDriftItemByField(t, runtimeManagedDrift, "runtimeContext.capacity.desired"); desiredCapacityDrift["desired"] != "6" || desiredCapacityDrift["actual"] != "4" || desiredCapacityDrift["severity"] != string(domain.ManagedDriftSeverityHigh) {
+		t.Fatalf("expected runtimeSummary desired-capacity drift item fields, got %#v", desiredCapacityDrift)
+	}
+	if minCapacityDrift := requireManagedDriftItemByField(t, runtimeManagedDrift, "runtimeContext.capacity.min"); minCapacityDrift["desired"] != "4" || minCapacityDrift["actual"] != "2" || minCapacityDrift["severity"] != string(domain.ManagedDriftSeverityMedium) {
+		t.Fatalf("expected runtimeSummary min-capacity drift item fields, got %#v", minCapacityDrift)
+	}
+	if maxCapacityDrift := requireManagedDriftItemByField(t, runtimeManagedDrift, "runtimeContext.capacity.max"); maxCapacityDrift["desired"] != "12" || maxCapacityDrift["actual"] != "8" || maxCapacityDrift["severity"] != string(domain.ManagedDriftSeverityLow) {
+		t.Fatalf("expected runtimeSummary max-capacity drift item fields, got %#v", maxCapacityDrift)
 	}
 	if _, exists := payload["ManagedDrift"]; exists {
 		t.Fatalf("unexpected Go-style managedDrift field name in %#v", payload)

@@ -3899,6 +3899,12 @@ func TestDeploymentWorkspaceDriftViewWithNodeHarness(t *testing.T) {
 				"actual":   "payments:41",
 				"severity": "medium",
 			},
+			{
+				"field":    "runtimeContext.capacity.desired",
+				"desired":  "6",
+				"actual":   "<script>alert('capacity')</script> 4",
+				"severity": "low",
+			},
 		},
 		"runtimeSummary": map[string]any{
 			"source":             "deployment-controller",
@@ -4184,15 +4190,16 @@ async function render(detail) {
   if (!managedText.includes('managedDrift is present in the deployment detail payload, so fallback read-model heuristics stay suppressed for this deployment.')) throw new Error('expected managed drift workspace source explanation');
   if (!managedRows.some((row) => row.includes('listener.weight'))) throw new Error('expected backend-authored managed drift row');
   if (!managedRows.some((row) => row.includes('service.taskDefinition'))) throw new Error('expected second backend-authored managed drift row');
+  if (!managedRows.some((row) => row.includes('runtimeContext.capacity.desired') && row.includes("<script>alert('capacity')</script> 4"))) throw new Error('expected managed drift capacity row to render as safe text');
   if (managedRows.some((row) => row.includes('artifact'))) throw new Error('expected managed drift rows to suppress fallback artifact derivation');
   if (managedRows.some((row) => row.includes('condition.DriftDetected'))) throw new Error('expected managed drift rows to suppress fallback condition derivation');
   if (!managedText.includes('Drift summary')) throw new Error('expected managed drift summary heading');
   if (!managedText.includes('Total rows')) throw new Error('expected managed drift total-row summary');
   if (!managedText.includes('Visible rows')) throw new Error('expected managed drift visible-row summary');
-  if (!managedText.includes('Showing all 2 drift rows.')) throw new Error('expected managed drift summary copy');
+  if (!managedText.includes('Showing all 3 drift rows.')) throw new Error('expected managed drift summary copy');
   if (!/High \| 1(?: \||$)/.test(managedText)) throw new Error('expected managed drift high-severity summary count');
   if (!/Medium \| 1(?: \||$)/.test(managedText)) throw new Error('expected managed drift medium-severity summary count');
-  if (!/Low \| 0(?: \||$)/.test(managedText)) throw new Error('expected managed drift low-severity summary count');
+  if (!/Low \| 1(?: \||$)/.test(managedText)) throw new Error('expected managed drift low-severity summary count');
   if (!managedText.includes("<script>alert('xss')</script> stable=80 canary=20")) throw new Error('expected managed drift value to render as safe text');
   const managedSeverityField = managedRun.document.querySelector('[data-toolbar-field="Severity"]');
   if (!managedSeverityField) throw new Error('expected managed drift severity filter control');
@@ -4203,7 +4210,7 @@ async function render(detail) {
   const managedHighRows = collectNodes(managedRun.document.getElementById('accounts'), (node) => node.tagName === 'TR').slice(1).map((node) => collectText(node).join(' | '));
   if (managedHighRows.length !== 1) throw new Error('expected managed drift severity filter to narrow to one row, got ' + managedHighRows.length);
   if (!managedHighRows[0].includes('listener.weight')) throw new Error('expected managed drift severity filter to retain the high severity row');
-  if (!managedHighText.includes('Showing 1 drift row out of 2 drift rows after filters.')) throw new Error('expected managed drift summary to reflect high filter impact');
+  if (!managedHighText.includes('Showing 1 drift row out of 3 drift rows after filters.')) throw new Error('expected managed drift summary to reflect high filter impact');
 
   const managedEmptyRun = await render(managedEmptyDetail);
   const managedEmptyText = collectText(managedEmptyRun.document.getElementById('accounts')).join(' | ');
