@@ -1328,42 +1328,42 @@ func TestRouterDeploymentReadAuthorization(t *testing.T) {
 		}
 	})
 
-		t.Run("overview applications collection returns empty array when allowlist has no matches", func(t *testing.T) {
-			router, providerCalls := newGuardedRouter(t)
-			req := newAuthenticatedRequest("/v1/overview/applications", "worker-prod")
-			resp := httptest.NewRecorder()
+	t.Run("overview applications collection returns empty array when allowlist has no matches", func(t *testing.T) {
+		router, providerCalls := newGuardedRouter(t)
+		req := newAuthenticatedRequest("/v1/overview/applications", "worker-prod")
+		resp := httptest.NewRecorder()
 
-			router.ServeHTTP(resp, req)
+		router.ServeHTTP(resp, req)
 
-			if resp.Code != http.StatusOK {
-				t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
-			}
-			if body := strings.TrimSpace(resp.Body.String()); body != "[]" {
-				t.Fatalf("expected empty JSON array, got %q", body)
-			}
-			if *providerCalls != 1 {
-				t.Fatalf("expected overview applications provider call, got %d", *providerCalls)
-			}
-		})
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if body := strings.TrimSpace(resp.Body.String()); body != "[]" {
+			t.Fatalf("expected empty JSON array, got %q", body)
+		}
+		if *providerCalls != 1 {
+			t.Fatalf("expected overview applications provider call, got %d", *providerCalls)
+		}
+	})
 
-		t.Run("overview applications collection returns empty array when allowlist header is absent", func(t *testing.T) {
-			router, providerCalls := newGuardedRouter(t)
-			req := httptest.NewRequest(http.MethodGet, "/v1/overview/applications", nil)
-			req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
-			resp := httptest.NewRecorder()
+	t.Run("overview applications collection returns empty array when allowlist header is absent", func(t *testing.T) {
+		router, providerCalls := newGuardedRouter(t)
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/applications", nil)
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		resp := httptest.NewRecorder()
 
-			router.ServeHTTP(resp, req)
+		router.ServeHTTP(resp, req)
 
-			if resp.Code != http.StatusOK {
-				t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
-			}
-			if body := strings.TrimSpace(resp.Body.String()); body != "[]" {
-				t.Fatalf("expected empty JSON array, got %q", body)
-			}
-			if *providerCalls != 1 {
-				t.Fatalf("expected overview applications provider call, got %d", *providerCalls)
-			}
-		})
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if body := strings.TrimSpace(resp.Body.String()); body != "[]" {
+			t.Fatalf("expected empty JSON array, got %q", body)
+		}
+		if *providerCalls != 1 {
+			t.Fatalf("expected overview applications provider call, got %d", *providerCalls)
+		}
+	})
 
 	t.Run("immutable plan preview reads honor deployment authorization", func(t *testing.T) {
 		providerCalls := 0
@@ -2673,6 +2673,298 @@ func TestOverviewProjectEnvironmentRoute(t *testing.T) {
 			if resp.Code != http.StatusBadRequest {
 				t.Fatalf("expected 400 for %s, got %d", path, resp.Code)
 			}
+		}
+	})
+}
+
+func TestRouterOverviewAccountsDeploymentReadAuthorization(t *testing.T) {
+	newAuthenticatedRequest := func(path string, authorizedDeployments string) *http.Request {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+		if authorizedDeployments != "" {
+			req.Header.Set(requestactor.AuthorizedDeploymentsHeader, authorizedDeployments)
+		}
+		return req
+	}
+
+	t.Run("collection unauthenticated", func(t *testing.T) {
+		providerCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			OverviewAccounts: func(context.Context) ([]catalog.AccountOverview, error) {
+				providerCalls++
+				return []catalog.AccountOverview{{Name: "prod-core"}}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/accounts", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != "unauthenticated: authenticated identity is required for this operator read route\n" {
+			t.Fatalf("unexpected 401 response body: %q", body)
+		}
+		if providerCalls != 0 {
+			t.Fatalf("expected auth guard to short-circuit before overview accounts provider, got %d calls", providerCalls)
+		}
+	})
+
+	t.Run("collection filters visible deployments and recomputes counts", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			OverviewAccounts: func(context.Context) ([]catalog.AccountOverview, error) {
+				return []catalog.AccountOverview{
+					{
+						Name:             "prod-core",
+						AWSAccountID:     "123456789012",
+						AllowedRegions:   []string{"ap-northeast-2", "us-west-2"},
+						DeploymentCount:  3,
+						ProjectCount:     2,
+						EnvironmentCount: 2,
+						SyncedCount:      1,
+						ProgressingCount: 1,
+						PausedCount:      1,
+						Deployments: []catalog.DeploymentOverview{
+							{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2", Sync: domain.Sync{State: domain.SyncStateSynced}},
+							{Name: "worker-prod", AppRef: "worker", EnvironmentRef: "prod-apne2", Sync: domain.Sync{State: domain.SyncStatePaused}},
+							{Name: "payments-api-staging", AppRef: "payments-api", EnvironmentRef: "staging-apne2", Sync: domain.Sync{State: domain.SyncStateReconciling}},
+						},
+					},
+					{
+						Name:             "sandbox",
+						AWSAccountID:     "999999999999",
+						DeploymentCount:  1,
+						ProjectCount:     1,
+						EnvironmentCount: 1,
+						SyncedCount:      1,
+						Deployments: []catalog.DeploymentOverview{
+							{Name: "shadow-prod", AppRef: "shadow", EnvironmentRef: "prod-apne2", Sync: domain.Sync{State: domain.SyncStateSynced}},
+						},
+					},
+				}, nil
+			},
+		})
+		req := newAuthenticatedRequest("/v1/overview/accounts", "payments-api-staging, worker-prod")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+
+		var accounts []catalog.AccountOverview
+		if err := json.Unmarshal(resp.Body.Bytes(), &accounts); err != nil {
+			t.Fatalf("decode overview accounts: %v", err)
+		}
+		if len(accounts) != 1 {
+			t.Fatalf("expected one visible account, got %+v", accounts)
+		}
+		if got := accounts[0]; got.Name != "prod-core" || got.DeploymentCount != 2 || got.ProjectCount != 2 || got.EnvironmentCount != 2 || got.SyncedCount != 0 || got.ProgressingCount != 1 || got.PausedCount != 1 || got.ErrorCount != 0 {
+			t.Fatalf("unexpected filtered overview account aggregates: %+v", got)
+		}
+		if got := accounts[0].Deployments; len(got) != 2 || got[0].Name != "worker-prod" || got[1].Name != "payments-api-staging" {
+			t.Fatalf("unexpected filtered overview account deployments: %+v", got)
+		}
+	})
+
+	t.Run("collection returns empty array when allowlist has no matches", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			OverviewAccounts: func(context.Context) ([]catalog.AccountOverview, error) {
+				return []catalog.AccountOverview{{
+					Name:         "prod-core",
+					AWSAccountID: "123456789012",
+					Deployments: []catalog.DeploymentOverview{
+						{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"},
+					},
+				}}, nil
+			},
+		})
+		req := newAuthenticatedRequest("/v1/overview/accounts", "worker-prod")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if body := strings.TrimSpace(resp.Body.String()); body != "[]" {
+			t.Fatalf("expected empty JSON array, got %q", body)
+		}
+	})
+
+	t.Run("account detail forbidden when scope has no authorized deployments", func(t *testing.T) {
+		providerCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			OverviewAccount: func(_ context.Context, awsAccountID string) (catalog.AccountOverviewDetail, error) {
+				providerCalls++
+				if awsAccountID != "123456789012" {
+					t.Fatalf("unexpected lookup aws account id: %s", awsAccountID)
+				}
+				return catalog.AccountOverviewDetail{
+					Name:         "prod-core",
+					AWSAccountID: "123456789012",
+					Deployments: []catalog.DeploymentOverview{
+						{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2", Sync: domain.Sync{State: domain.SyncStateSynced}},
+					},
+				}, nil
+			},
+		})
+		req := newAuthenticatedRequest("/v1/overview/accounts/123456789012", "worker-prod")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != "forbidden: operator does not have access to this deployment\n" {
+			t.Fatalf("unexpected 403 response body: %q", body)
+		}
+		if providerCalls != 1 {
+			t.Fatalf("expected scoped account detail lookup before deny, got %d calls", providerCalls)
+		}
+	})
+
+	t.Run("account detail filters visible deployments and recomputes counts", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			OverviewAccount: func(_ context.Context, awsAccountID string) (catalog.AccountOverviewDetail, error) {
+				if awsAccountID != "123456789012" {
+					t.Fatalf("unexpected lookup aws account id: %s", awsAccountID)
+				}
+				return catalog.AccountOverviewDetail{
+					Name:             "prod-core",
+					AWSAccountID:     "123456789012",
+					AllowedRegions:   []string{"ap-northeast-2", "us-west-2"},
+					DeploymentCount:  3,
+					ProjectCount:     2,
+					EnvironmentCount: 2,
+					SyncedCount:      1,
+					ProgressingCount: 1,
+					PausedCount:      1,
+					Deployments: []catalog.DeploymentOverview{
+						{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2", Sync: domain.Sync{State: domain.SyncStateSynced}},
+						{Name: "worker-prod", AppRef: "worker", EnvironmentRef: "prod-apne2", Sync: domain.Sync{State: domain.SyncStatePaused}},
+						{Name: "payments-api-staging", AppRef: "payments-api", EnvironmentRef: "staging-apne2", Sync: domain.Sync{State: domain.SyncStateReconciling}},
+					},
+				}, nil
+			},
+		})
+		req := newAuthenticatedRequest("/v1/overview/accounts/123456789012", "payments-api-staging")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+
+		var detail catalog.AccountOverviewDetail
+		if err := json.Unmarshal(resp.Body.Bytes(), &detail); err != nil {
+			t.Fatalf("decode overview account detail: %v", err)
+		}
+		if detail.DeploymentCount != 1 || detail.ProjectCount != 1 || detail.EnvironmentCount != 1 || detail.SyncedCount != 0 || detail.ProgressingCount != 1 || detail.PausedCount != 0 || detail.ErrorCount != 0 {
+			t.Fatalf("unexpected filtered overview account detail aggregates: %+v", detail)
+		}
+		if got := detail.Deployments; len(got) != 1 || got[0].Name != "payments-api-staging" {
+			t.Fatalf("unexpected filtered overview account detail deployments: %+v", got)
+		}
+	})
+
+	t.Run("group detail forbidden when scope has no authorized deployments", func(t *testing.T) {
+		providerCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			OverviewProjectEnvironment: func(_ context.Context, accountID, appRef, environmentRef string) (catalog.ProjectEnvironmentOverviewDetail, error) {
+				providerCalls++
+				if accountID != "123456789012" || appRef != "payments-api" || environmentRef != "prod-apne2" {
+					t.Fatalf("unexpected grouped lookup: %s %s %s", accountID, appRef, environmentRef)
+				}
+				return catalog.ProjectEnvironmentOverviewDetail{
+					AccountName:    "prod-core",
+					AWSAccountID:   "123456789012",
+					AppRef:         "payments-api",
+					EnvironmentRef: "prod-apne2",
+					Deployments: []catalog.DeploymentOverview{
+						{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2", Sync: domain.Sync{State: domain.SyncStateSynced}},
+					},
+				}, nil
+			},
+		})
+		req := newAuthenticatedRequest("/v1/overview/accounts/123456789012/projects/payments-api/environments/prod-apne2", "worker-prod")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != "forbidden: operator does not have access to this deployment\n" {
+			t.Fatalf("unexpected 403 response body: %q", body)
+		}
+		if providerCalls != 1 {
+			t.Fatalf("expected grouped overview lookup before deny, got %d calls", providerCalls)
+		}
+	})
+
+	t.Run("group detail filters visible deployments and recomputes counts", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			OverviewProjectEnvironment: func(_ context.Context, accountID, appRef, environmentRef string) (catalog.ProjectEnvironmentOverviewDetail, error) {
+				if accountID != "123456789012" || appRef != "payments-api" || environmentRef != "prod-apne2" {
+					t.Fatalf("unexpected grouped lookup: %s %s %s", accountID, appRef, environmentRef)
+				}
+				return catalog.ProjectEnvironmentOverviewDetail{
+					AccountName:      "prod-core",
+					AWSAccountID:     "123456789012",
+					AppRef:           "payments-api",
+					EnvironmentRef:   "prod-apne2",
+					Region:           "ap-northeast-2",
+					DeploymentCount:  3,
+					SyncedCount:      1,
+					ProgressingCount: 1,
+					PausedCount:      1,
+					Deployments: []catalog.DeploymentOverview{
+						{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2", Sync: domain.Sync{State: domain.SyncStateSynced}},
+						{Name: "payments-worker-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2", Sync: domain.Sync{State: domain.SyncStateReconciling}},
+						{Name: "payments-cron-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2", Sync: domain.Sync{State: domain.SyncStatePaused}},
+					},
+				}, nil
+			},
+		})
+		req := newAuthenticatedRequest("/v1/overview/accounts/123456789012/projects/payments-api/environments/prod-apne2", "payments-api-prod, payments-cron-prod")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+
+		var detail catalog.ProjectEnvironmentOverviewDetail
+		if err := json.Unmarshal(resp.Body.Bytes(), &detail); err != nil {
+			t.Fatalf("decode grouped overview detail: %v", err)
+		}
+		if detail.DeploymentCount != 2 || detail.SyncedCount != 1 || detail.ProgressingCount != 0 || detail.PausedCount != 1 || detail.ErrorCount != 0 {
+			t.Fatalf("unexpected filtered grouped overview aggregates: %+v", detail)
+		}
+		if got := detail.Deployments; len(got) != 2 || got[0].Name != "payments-api-prod" || got[1].Name != "payments-cron-prod" {
+			t.Fatalf("unexpected filtered grouped overview deployments: %+v", got)
 		}
 	})
 }
