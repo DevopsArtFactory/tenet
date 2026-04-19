@@ -35,6 +35,16 @@ func TestDockerUpOperatorContract(t *testing.T) {
 	if !strings.Contains(compose, `TENET_AWS_ENABLE_APPLY: ${TENET_AWS_ENABLE_APPLY:-false}`) {
 		t.Fatal("expected compose api service to expose TENET_AWS_ENABLE_APPLY with a default false local contract")
 	}
+	for _, fragment := range []string{
+		`TENET_PLAN_STORE_PATH: /tmp/tenet/plan-previews.json`,
+		`TENET_APPLY_STORE_PATH: /tmp/tenet/apply-requests.json`,
+		`- tenet-api-tmp:/tmp`,
+		`tenet-api-tmp:`,
+	} {
+		if !strings.Contains(compose, fragment) {
+			t.Fatalf("expected compose local api runtime to include %q", fragment)
+		}
+	}
 
 	makefile := readRepoFile(t, "Makefile")
 	if !strings.Contains(makefile, "./scripts/docker-up.sh $(DOCKER_COMPOSE)") {
@@ -91,6 +101,17 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		`current_status=$(json_string_field_from_path "$response_path" status)`,
 		`restart_api_with_apply_mode() {`,
 		`TENET_AWS_ENABLE_APPLY="$apply_enabled" "${COMPOSE[@]}" up -d api >/dev/null`,
+		`restarted_plan_preview=$(curl -fsS \`,
+		`"$API_BASE_URL/v1/plans/$plan_id")`,
+		`restarted_apply_record=$(curl -fsS \`,
+		`"$API_BASE_URL/v1/applies/$apply_id")`,
+		`restarted_plan_preview_path=$(write_payload restarted-plan-preview.json "$restarted_plan_preview")`,
+		`restarted_apply_record_path=$(write_payload restarted-apply-record.json "$restarted_apply_record")`,
+		`RESTARTED_PLAN_PREVIEW_PATH="$restarted_plan_preview_path" \`,
+		`RESTARTED_APPLY_RECORD_PATH="$restarted_apply_record_path" \`,
+		`assert restarted_plan_preview["id"] == os.environ["PLAN_ID"], restarted_plan_preview`,
+		`assert restarted_apply_record["id"] == os.environ["APPLY_ID"], restarted_apply_record`,
+		`assert restarted_apply_record["planId"] == os.environ["PLAN_ID"], restarted_apply_record`,
 		`drift_ui=$(curl -fsS "$API_BASE_URL/?page=drift&deployment=payments-api-prod")`,
 		`"$API_BASE_URL/v1/applies/$apply_id/transitions"`,
 		`"$API_BASE_URL/v1/applies/apply_smoke_missing/transitions"`,
@@ -213,9 +234,14 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"`GET /v1/applies/{applyId}`",
 		"`POST /v1/applies/{applyId}/transitions`",
 		"`applyrequest.TransitionRequest` state model internally",
+		"`TENET_PLAN_STORE_PATH`",
 		"`invalid apply transition request body`",
 		"`apply request not found`",
 		"`TENET_APPLY_STORE_PATH`",
+		"`/tmp/tenet/plan-previews.json`",
+		"`/tmp/tenet/apply-requests.json`",
+		"`/tmp`",
+		"survive the Compose `api` service restart",
 		"`TENET_AWS_ENABLE_APPLY=true`",
 		"disabled by default for live execution",
 		"queued-on-create local-safe executor handoff contract",
@@ -246,6 +272,9 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"`409` invalid terminal move",
 		"operator-facing text",
 		"smoke-created terminal `applyId`",
+		"`TENET_PLAN_STORE_PATH=/tmp/tenet/plan-previews.json`",
+		"`TENET_APPLY_STORE_PATH=/tmp/tenet/apply-requests.json`",
+		"survive the Compose `api` service restart",
 		"temp files through the shared `write_payload` helper",
 		"Linux CI runners with tighter environment-size limits",
 	} {

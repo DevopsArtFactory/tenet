@@ -864,6 +864,19 @@ fi
 
 restart_api_with_frontdoor_read_auth
 
+restarted_plan_preview=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-prod" \
+  "$API_BASE_URL/v1/plans/$plan_id")
+restarted_apply_record=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-prod" \
+  "$API_BASE_URL/v1/applies/$apply_id")
+
 auth_unauthenticated_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" -w "%{http_code}" \
   "$API_BASE_URL/v1/overview/applications")
 auth_unauthenticated_status_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" -w "%{http_code}" \
@@ -916,12 +929,18 @@ empty_status_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   "$API_BASE_URL/v1/status/deployments")
+restarted_plan_preview_path=$(write_payload restarted-plan-preview.json "$restarted_plan_preview")
+restarted_apply_record_path=$(write_payload restarted-apply-record.json "$restarted_apply_record")
 allowed_status_read_path=$(write_payload allowed-status-read.json "$allowed_status_read")
 filtered_applications_collection_path=$(write_payload filtered-applications-collection.json "$filtered_applications_collection")
 filtered_status_collection_path=$(write_payload filtered-status-collection.json "$filtered_status_collection")
 empty_applications_collection_path=$(write_payload empty-applications-collection.json "$empty_applications_collection")
 empty_status_collection_path=$(write_payload empty-status-collection.json "$empty_status_collection")
 
+PLAN_ID="$plan_id" \
+APPLY_ID="$apply_id" \
+RESTARTED_PLAN_PREVIEW_PATH="$restarted_plan_preview_path" \
+RESTARTED_APPLY_RECORD_PATH="$restarted_apply_record_path" \
 AUTH_UNAUTHENTICATED_COLLECTION_STATUS="$auth_unauthenticated_collection_status" \
 AUTH_UNAUTHENTICATED_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_COLLECTION_BODY" \
 AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS="$auth_unauthenticated_status_collection_status" \
@@ -947,6 +966,10 @@ with open(os.environ["AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY_PATH"], encodi
     unauthenticated_status_collection_body = fh.read()
 with open(os.environ["AUTH_UNAUTHENTICATED_TRANSITION_BODY_PATH"], encoding="utf-8") as fh:
     unauthenticated_transition_body = fh.read()
+with open(os.environ["RESTARTED_PLAN_PREVIEW_PATH"], encoding="utf-8") as fh:
+    restarted_plan_preview = json.load(fh)
+with open(os.environ["RESTARTED_APPLY_RECORD_PATH"], encoding="utf-8") as fh:
+    restarted_apply_record = json.load(fh)
 with open(os.environ["AUTH_FORBIDDEN_STATUS_READ_BODY_PATH"], encoding="utf-8") as fh:
     forbidden_status_read_body = fh.read()
 with open(os.environ["AUTH_FORBIDDEN_TRANSITION_BODY_PATH"], encoding="utf-8") as fh:
@@ -962,6 +985,11 @@ with open(os.environ["EMPTY_APPLICATIONS_COLLECTION_PATH"], encoding="utf-8") as
 with open(os.environ["EMPTY_STATUS_COLLECTION_PATH"], encoding="utf-8") as fh:
     empty_status_collection = json.load(fh)
 
+assert restarted_plan_preview["id"] == os.environ["PLAN_ID"], restarted_plan_preview
+assert restarted_plan_preview["deploymentName"] == "payments-api-prod", restarted_plan_preview
+assert restarted_apply_record["id"] == os.environ["APPLY_ID"], restarted_apply_record
+assert restarted_apply_record["planId"] == os.environ["PLAN_ID"], restarted_apply_record
+assert restarted_apply_record["deploymentName"] == "payments-api-prod", restarted_apply_record
 assert os.environ["AUTH_UNAUTHENTICATED_COLLECTION_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_COLLECTION_STATUS"]
 assert unauthenticated_collection_body.strip() == "unauthenticated: authenticated identity is required for this operator read route", unauthenticated_collection_body
 assert os.environ["AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS"]
