@@ -5014,6 +5014,53 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
 		runNodeHarness(t, nodeProgram)
 	})
 
+	t.Run("create plan forbidden explains deployment access denial", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url, options = {}) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/plans/deployments/api-prod') {
+    if (options.method !== 'POST') throw new Error('expected create plan POST');
+    return Promise.resolve({
+      ok: false,
+      status: 403,
+      text: () => Promise.resolve('forbidden: operator does not have access to this deployment'),
+    });
+  }
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  const root = document.getElementById('accounts');
+  const createPlan = collectNodes(root, (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Create Plan');
+  if (!createPlan) throw new Error('expected Create Plan button before forbidden create');
+  createPlan.dispatch('click');
+  await settle();
+  await settle();
+  await settle();
+  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/deployments/api-prod') throw new Error('unexpected fetch sequence after forbidden create: ' + fetchCalls.join(', '));
+  if (window.location.search !== '?page=plan&deployment=api-prod') throw new Error('expected forbidden create to preserve workspace URL, got ' + window.location.search);
+  const text = collectText(root).join(' | ');
+  if (!text.includes('Operator access denied')) throw new Error('expected access-denied heading for forbidden create');
+  if (!text.includes('Tenet rejected POST /v1/plans/deployments/api-prod after recognizing the caller\'s identity, but this operator is not authorized to create plan for that deployment through this route.')) throw new Error('expected operator-facing create access-denied explanation');
+  if (text.includes('Failed to create a plan preview')) throw new Error('expected forbidden create to avoid generic fetch-error copy');
+})();
+`
+		runNodeHarness(t, nodeProgram)
+	})
+
 	t.Run("apply create unauthorized explains trusted front door auth requirement", func(t *testing.T) {
 		nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;
@@ -5070,6 +5117,56 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!createPlan || !applyPlanAfter || !refreshPlan || !refreshApply) throw new Error('expected plan workspace action buttons after unauthorized apply create');
   if (createPlan.disabled || applyPlanAfter.disabled) throw new Error('expected create/apply actions to stay enabled after unauthorized apply create');
   if (refreshPlan.disabled || !refreshApply.disabled) throw new Error('expected only plan refresh enabled after unauthorized apply create');
+})();
+`
+		runNodeHarness(t, nodeProgram)
+	})
+
+	t.Run("apply create forbidden explains deployment access denial", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+const planPreview = ` + string(planPreviewReadyJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod&planId=plan_ready_123', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url, options = {}) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/plans/plan_ready_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+  if (url === '/v1/applies/plans/plan_ready_123') {
+    if (options.method !== 'POST') throw new Error('expected apply create POST');
+    return Promise.resolve({
+      ok: false,
+      status: 403,
+      text: () => Promise.resolve('forbidden: operator does not have access to this deployment'),
+    });
+  }
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  await settle();
+  const root = document.getElementById('accounts');
+  const applyPlan = collectNodes(root, (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Apply Plan');
+  if (!applyPlan || applyPlan.disabled) throw new Error('expected Apply Plan enabled before forbidden apply create');
+  applyPlan.dispatch('click');
+  await settle();
+  await settle();
+  await settle();
+  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/plan_ready_123, /v1/applies/plans/plan_ready_123') throw new Error('unexpected fetch sequence after forbidden apply create: ' + fetchCalls.join(', '));
+  if (window.location.search !== '?page=plan&deployment=api-prod&planId=plan_ready_123') throw new Error('expected forbidden apply create to preserve plan workspace URL, got ' + window.location.search);
+  const text = collectText(root).join(' | ');
+  if (!text.includes('Operator access denied')) throw new Error('expected access-denied heading for forbidden apply create');
+  if (!text.includes('Tenet rejected POST /v1/applies/plans/plan_ready_123 after recognizing the caller\'s identity, but this operator is not authorized to apply plan for that deployment through this route.')) throw new Error('expected operator-facing apply access-denied explanation');
+  if (text.includes('Failed to create an apply request')) throw new Error('expected forbidden apply create to avoid generic fetch-error copy');
 })();
 `
 		runNodeHarness(t, nodeProgram)
