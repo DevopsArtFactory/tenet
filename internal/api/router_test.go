@@ -1280,9 +1280,37 @@ func TestRouterDeploymentReadAuthorization(t *testing.T) {
 		}
 	})
 
-	t.Run("overview applications collection remains unchanged", func(t *testing.T) {
+	t.Run("overview applications collection unauthenticated", func(t *testing.T) {
 		router, providerCalls := newGuardedRouter(t)
 		req := httptest.NewRequest(http.MethodGet, "/v1/overview/applications", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != "unauthenticated: authenticated identity is required for this operator read route\n" {
+			t.Fatalf("unexpected 401 response body: %q", body)
+		}
+		if *providerCalls != 0 {
+			t.Fatalf("expected auth guard to short-circuit before providers, got %d calls", *providerCalls)
+		}
+	})
+
+	t.Run("overview applications collection filters allowed deployments", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			OverviewApplications: func(context.Context) ([]catalog.ApplicationOverview, error) {
+				return []catalog.ApplicationOverview{
+					{Name: "api-prod"},
+					{Name: "worker-prod"},
+					{Name: "payments-api-staging"},
+				}, nil
+			},
+		})
+		req := newAuthenticatedRequest("/v1/overview/applications", "payments-api-staging, worker-prod")
 		resp := httptest.NewRecorder()
 
 		router.ServeHTTP(resp, req)
@@ -1290,10 +1318,52 @@ func TestRouterDeploymentReadAuthorization(t *testing.T) {
 		if resp.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
 		}
-		if *providerCalls != 1 {
-			t.Fatalf("expected overview applications provider call, got %d", *providerCalls)
+		var applications []catalog.ApplicationOverview
+		if err := json.Unmarshal(resp.Body.Bytes(), &applications); err != nil {
+			t.Fatalf("decode overview applications: %v", err)
+		}
+		want := []catalog.ApplicationOverview{{Name: "worker-prod"}, {Name: "payments-api-staging"}}
+		if !reflect.DeepEqual(applications, want) {
+			t.Fatalf("unexpected filtered overview applications: got %+v want %+v", applications, want)
 		}
 	})
+
+		t.Run("overview applications collection returns empty array when allowlist has no matches", func(t *testing.T) {
+			router, providerCalls := newGuardedRouter(t)
+			req := newAuthenticatedRequest("/v1/overview/applications", "worker-prod")
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+			}
+			if body := strings.TrimSpace(resp.Body.String()); body != "[]" {
+				t.Fatalf("expected empty JSON array, got %q", body)
+			}
+			if *providerCalls != 1 {
+				t.Fatalf("expected overview applications provider call, got %d", *providerCalls)
+			}
+		})
+
+		t.Run("overview applications collection returns empty array when allowlist header is absent", func(t *testing.T) {
+			router, providerCalls := newGuardedRouter(t)
+			req := httptest.NewRequest(http.MethodGet, "/v1/overview/applications", nil)
+			req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+			}
+			if body := strings.TrimSpace(resp.Body.String()); body != "[]" {
+				t.Fatalf("expected empty JSON array, got %q", body)
+			}
+			if *providerCalls != 1 {
+				t.Fatalf("expected overview applications provider call, got %d", *providerCalls)
+			}
+		})
 
 	t.Run("immutable plan preview reads honor deployment authorization", func(t *testing.T) {
 		providerCalls := 0
