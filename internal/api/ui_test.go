@@ -1924,6 +1924,25 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"Apply Plan will POST /v1/applies/plans/${planState.record.id}, persist an immutable apply request, and update this workspace URL with a shareable applyId.",
 			"Apply Plan activates only when a loaded persisted ready plan preview with a valid planId is present.",
 			"Live execution is intentionally disabled by default, so failed immutable apply records are expected and useful for operator review.",
+			"def assert_fragments(label, body, fragments):",
+			"operator_read_auth_fragments = (",
+			"assert_fragments(\"application_ui\", application_ui, operator_read_auth_fragments + (",
+			"assert_fragments(\"resource_ui\", resource_ui, operator_read_auth_fragments + (",
+			"assert_fragments(\"drift_ui\", drift_ui, operator_read_auth_fragments + (",
+			"assert_fragments(\"audit_ui\", audit_ui, operator_read_auth_fragments + (",
+			"\"const operatorReadAuthRequiredState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 401;\"",
+			"\"const operatorReadForbiddenState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 403;\"",
+			"\"const operatorReadAuthRequiredMessage = (route) => `Tenet rejected ${route} because authenticated identity is required on this operator read route. Retry this bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers.`;\"",
+			"\"const operatorReadForbiddenMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized for that route or deployment.`;\"",
+			"\"return 'Application detail';\"",
+			"\"return 'Resource detail';\"",
+			"\"return 'Drift viewer';\"",
+			"\"return `GET /v1/overview/applications/${deploymentName}`;\"",
+			"\"return `GET /v1/overview/deployments/${deploymentName}`;\"",
+			"\"return `GET ${buildAuditLogsRoute({\"",
+			"\"const renderOperatorReadFailurePage = (pageLabel, route, error) => {\"",
+			"\"renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);\"",
+			"\"renderAuditLogsState(operatorReadFailureHeading(error), 'error', operatorReadFailureMessage(buildEmbeddedPageReadRoute(currentPageState), error));\"",
 			"params.get('planId') || ''",
 			"params.get('applyId') || ''",
 			"fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-logs?${params.toString()}`)",
@@ -2042,6 +2061,32 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 	} {
 		if strings.Contains(dockerSmoke, fragment) {
 			t.Fatalf("expected smoke-docker.sh to avoid env-blob JSON parsing fragment %q", fragment)
+		}
+	}
+}
+
+func TestDockerSmokeDocsDescribeEmbeddedReadAuthGuidanceCoverage(t *testing.T) {
+	files := map[string][]string{
+		"../../README.md": {
+			"checks raw embedded application/resource/drift/audit shell HTML/script fragments instead of runtime DOM text",
+			"the shipped operator read-auth guidance hooks for initial `401` / `403` failures remain present",
+		},
+		"../../docs/architecture/tenet-v1-local-runtime.md": {
+			"checks raw embedded application/resource/drift/audit shell HTML/script fragments instead of runtime DOM text",
+			"the shipped operator read-auth guidance hooks for initial `401` / `403` failures remain present",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
 		}
 	}
 }
