@@ -949,7 +949,7 @@ filtered_application_names = {row["name"] for row in filtered_applications_colle
 assert "worker-prod" in filtered_application_names, filtered_applications_collection
 assert filtered_application_names == {"payments-api-prod", "worker-prod"}, filtered_applications_collection
 filtered_status_deployment_names = {row["deploymentName"] for row in filtered_status_collection}
-assert filtered_status_deployment_names == {"payments-api-prod"}, filtered_status_collection
+assert filtered_status_deployment_names == {"payments-api-prod", "worker-prod"}, filtered_status_collection
 assert empty_applications_collection == [], empty_applications_collection
 assert empty_status_collection == [], empty_status_collection
 PY
