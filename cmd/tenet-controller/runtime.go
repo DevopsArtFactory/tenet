@@ -31,9 +31,10 @@ const (
 var runtimeHistoryNow = time.Now
 
 type runtimeLiveCapacityObservation struct {
-	Desired int
-	Min     int
-	Max     int
+	Desired             int
+	Min                 int
+	Max                 int
+	TaskDefinitionImage string
 }
 
 var runtimeLiveCapacityLookup = runtimeLiveCapacityLookupFromInspection
@@ -286,7 +287,8 @@ func runtimeLiveCapacityLookupFromInspection(ctx context.Context, inspector reso
 	}
 	if result.ECSService != nil {
 		return &runtimeLiveCapacityObservation{
-			Desired: int(result.ECSService.DesiredCount),
+			Desired:             int(result.ECSService.DesiredCount),
+			TaskDefinitionImage: strings.TrimSpace(result.ECSService.TaskDefinitionImage),
 		}, nil
 	}
 	return nil, nil
@@ -357,6 +359,14 @@ func deriveManagedDriftItems(deployment domain.Deployment, status domain.Deploym
 	}
 
 	if liveCapacity != nil {
+		if desiredImage := strings.TrimSpace(deployment.DesiredArtifact.Image); desiredImage != "" && liveCapacity.TaskDefinitionImage != "" && desiredImage != liveCapacity.TaskDefinitionImage {
+			items = append(items, domain.ManagedDriftItem{
+				Field:    "runtimeContext.taskDefinition.image",
+				Desired:  desiredImage,
+				Actual:   liveCapacity.TaskDefinitionImage,
+				Severity: domain.ManagedDriftSeverityHigh,
+			})
+		}
 		desiredCapacity := deployment.RolloutConfig.Capacity
 		if desiredCapacity.Desired != liveCapacity.Desired {
 			items = append(items, domain.ManagedDriftItem{

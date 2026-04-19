@@ -33,15 +33,16 @@ func TestServiceInspect(t *testing.T) {
 			InspectECSService: func(ctx context.Context, req ECSRequest) (ECSServiceInspection, error) {
 				gotLookup = req
 				return ECSServiceInspection{
-					ClusterARN:     "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
-					ServiceARN:     "arn:aws:ecs:ap-northeast-2:123456789012:service/payments/payments-api-prod-service",
-					ServiceName:    "payments-api-prod-service",
-					Status:         "ACTIVE",
-					LaunchType:     "FARGATE",
-					DesiredCount:   2,
-					RunningCount:   2,
-					PendingCount:   0,
-					TaskDefinition: "payments-api:42",
+					ClusterARN:          "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
+					ServiceARN:          "arn:aws:ecs:ap-northeast-2:123456789012:service/payments/payments-api-prod-service",
+					ServiceName:         "payments-api-prod-service",
+					Status:              "ACTIVE",
+					LaunchType:          "FARGATE",
+					DesiredCount:        2,
+					RunningCount:        2,
+					PendingCount:        0,
+					TaskDefinition:      "payments-api:42",
+					TaskDefinitionImage: "ghcr.io/devopsartfactory/payments-api:2026-04-18.2",
 					Deployments: []ECSDeploymentSummary{{
 						ID:             "ecs-svc/123",
 						Status:         "PRIMARY",
@@ -88,15 +89,16 @@ func TestServiceInspect(t *testing.T) {
 			Available:      true,
 			Source:         SourceECSService,
 			ECSService: &ECSServiceInspection{
-				ClusterARN:     "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
-				ServiceARN:     "arn:aws:ecs:ap-northeast-2:123456789012:service/payments/payments-api-prod-service",
-				ServiceName:    "payments-api-prod-service",
-				Status:         "ACTIVE",
-				LaunchType:     "FARGATE",
-				DesiredCount:   2,
-				RunningCount:   2,
-				PendingCount:   0,
-				TaskDefinition: "payments-api:42",
+				ClusterARN:          "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
+				ServiceARN:          "arn:aws:ecs:ap-northeast-2:123456789012:service/payments/payments-api-prod-service",
+				ServiceName:         "payments-api-prod-service",
+				Status:              "ACTIVE",
+				LaunchType:          "FARGATE",
+				DesiredCount:        2,
+				RunningCount:        2,
+				PendingCount:        0,
+				TaskDefinition:      "payments-api:42",
+				TaskDefinitionImage: "ghcr.io/devopsartfactory/payments-api:2026-04-18.2",
 				Deployments: []ECSDeploymentSummary{{
 					ID:             "ecs-svc/123",
 					Status:         "PRIMARY",
@@ -821,12 +823,35 @@ func TestECSInspectionFromServiceSortsDeploymentsAndEvents(t *testing.T) {
 		},
 	}
 
-	got := ecsInspectionFromService(service, "arn:cluster")
+	got := ecsInspectionFromService(service, "arn:cluster", "ghcr.io/devopsartfactory/payments-api:2026-04-18.2")
 	if len(got.Deployments) != 2 || got.Deployments[0].ID != "primary" {
 		t.Fatalf("expected deployments sorted newest-first, got %+v", got.Deployments)
 	}
 	if len(got.Events) != 2 || got.Events[0].Message != "steady" {
 		t.Fatalf("expected events sorted newest-first, got %+v", got.Events)
+	}
+	if got.TaskDefinitionImage != "ghcr.io/devopsartfactory/payments-api:2026-04-18.2" {
+		t.Fatalf("expected task-definition image evidence in ECS inspection payload, got %+v", got)
+	}
+}
+
+func TestECSTaskDefinitionImageUsesOnlySingleDeterministicImage(t *testing.T) {
+	if got := ecsTaskDefinitionImage(&ecstypes.TaskDefinition{
+		ContainerDefinitions: []ecstypes.ContainerDefinition{
+			{Image: stringPtr("ghcr.io/devopsartfactory/payments-api:2026-04-18.2")},
+			{Image: stringPtr("ghcr.io/devopsartfactory/payments-api:2026-04-18.2")},
+		},
+	}); got != "ghcr.io/devopsartfactory/payments-api:2026-04-18.2" {
+		t.Fatalf("expected single deduplicated task-definition image, got %q", got)
+	}
+
+	if got := ecsTaskDefinitionImage(&ecstypes.TaskDefinition{
+		ContainerDefinitions: []ecstypes.ContainerDefinition{
+			{Image: stringPtr("ghcr.io/devopsartfactory/payments-api:2026-04-18.2")},
+			{Image: stringPtr("public.ecr.aws/aws-observability/aws-otel-collector:v0.40.0")},
+		},
+	}); got != "" {
+		t.Fatalf("expected multiple live container images to suppress the narrow image contract, got %q", got)
 	}
 }
 

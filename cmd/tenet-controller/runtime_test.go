@@ -2012,6 +2012,34 @@ func TestDeriveManagedDriftItemsAddsLiveECSDesiredCapacityEvidence(t *testing.T)
 	}
 }
 
+func TestDeriveManagedDriftItemsAddsLiveECSTaskDefinitionImageEvidence(t *testing.T) {
+	for _, executionMode := range []string{"ecsCodeDeploy", "ecsRolling"} {
+		t.Run(executionMode, func(t *testing.T) {
+			deployment := domain.Deployment{
+				Name:          "payments-worker-prod",
+				ExecutionMode: executionMode,
+				DesiredArtifact: domain.DeploymentArtifact{
+					Image: "ghcr.io/devopsartfactory/payments-worker:1.2.3",
+				},
+				RolloutConfig: domain.DeploymentRolloutConfig{
+					Capacity: domain.DeploymentRolloutCapacity{Desired: 3, Min: 1, Max: 5},
+				},
+			}
+
+			got := deriveManagedDriftItems(deployment, domain.DeploymentStatus{}, &runtimeLiveCapacityObservation{
+				Desired:             3,
+				TaskDefinitionImage: "ghcr.io/devopsartfactory/payments-worker:1.2.2",
+			})
+			want := []domain.ManagedDriftItem{
+				{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-worker:1.2.3", Actual: "ghcr.io/devopsartfactory/payments-worker:1.2.2", Severity: domain.ManagedDriftSeverityHigh},
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("expected live ECS task-definition image drift evidence, got %+v", got)
+			}
+		})
+	}
+}
+
 func TestRuntimeLiveCapacityLookupFromInspectionUsesECSServiceDesiredCount(t *testing.T) {
 	deployment := domain.Deployment{
 		Name:           "payments-worker-prod",
@@ -2034,7 +2062,8 @@ func TestRuntimeLiveCapacityLookupFromInspectionUsesECSServiceDesiredCount(t *te
 		InspectECSService: func(_ context.Context, req resourceinspection.ECSRequest) (resourceinspection.ECSServiceInspection, error) {
 			gotReq = req
 			return resourceinspection.ECSServiceInspection{
-				DesiredCount: 3,
+				DesiredCount:        3,
+				TaskDefinitionImage: "ghcr.io/devopsartfactory/payments-worker:1.2.3",
 			}, nil
 		},
 	})
@@ -2043,7 +2072,10 @@ func TestRuntimeLiveCapacityLookupFromInspectionUsesECSServiceDesiredCount(t *te
 	if err != nil {
 		t.Fatalf("runtimeLiveCapacityLookupFromInspection returned error: %v", err)
 	}
-	if !reflect.DeepEqual(got, &runtimeLiveCapacityObservation{Desired: 3}) {
+	if !reflect.DeepEqual(got, &runtimeLiveCapacityObservation{
+		Desired:             3,
+		TaskDefinitionImage: "ghcr.io/devopsartfactory/payments-worker:1.2.3",
+	}) {
 		t.Fatalf("expected ECS desired-count observation, got %+v", got)
 	}
 	if gotReq != (resourceinspection.ECSRequest{

@@ -2787,6 +2787,7 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 					{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh},
 					{Field: "runtimeContext.capacity.min", Desired: "4", Actual: "2", Severity: domain.ManagedDriftSeverityMedium},
 					{Field: "runtimeContext.capacity.max", Desired: "12", Actual: "8", Severity: domain.ManagedDriftSeverityLow},
+					{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh},
 				},
 				RuntimeSummary: &domain.RuntimeSummary{
 					Timestamp:          "2026-04-16T06:49:00Z",
@@ -2805,6 +2806,7 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 						{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh},
 						{Field: "runtimeContext.capacity.min", Desired: "4", Actual: "2", Severity: domain.ManagedDriftSeverityMedium},
 						{Field: "runtimeContext.capacity.max", Desired: "12", Actual: "8", Severity: domain.ManagedDriftSeverityLow},
+						{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh},
 					},
 					DeployedArtifact: domain.DeploymentArtifact{Image: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1"},
 					Conditions:       []domain.Condition{{Type: "Ready", Status: true, Reason: "Stable", Message: "deployment is healthy"}},
@@ -2827,6 +2829,7 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 		`"field":"runtimeContext.capacity.desired"`,
 		`"field":"runtimeContext.capacity.min"`,
 		`"field":"runtimeContext.capacity.max"`,
+		`"field":"runtimeContext.taskDefinition.image"`,
 	} {
 		if !strings.Contains(raw, fragment) {
 			t.Fatalf("expected raw overview deployment payload to include %s, got %s", fragment, raw)
@@ -2865,15 +2868,18 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 		t.Fatalf("expected runtimeSummary.conditions fields in overview deployment payload, got %#v", conditions)
 	}
 	managedDrift, ok := payload["managedDrift"].([]any)
-	if !ok || len(managedDrift) != 4 {
+	if !ok || len(managedDrift) != 5 {
 		t.Fatalf("expected managedDrift array in overview deployment payload, got %#v", payload["managedDrift"])
 	}
 	driftItem := requireManagedDriftItemByField(t, managedDrift, "artifact")
 	if driftItem["severity"] != string(domain.ManagedDriftSeverityHigh) || driftItem["desired"] != "ghcr.io/devopsartfactory/payments-api:2026-04-16.2" {
 		t.Fatalf("expected managedDrift artifact item fields in overview deployment payload, got %#v", driftItem)
 	}
+	if taskDefinitionImageDrift := requireManagedDriftItemByField(t, managedDrift, "runtimeContext.taskDefinition.image"); taskDefinitionImageDrift["desired"] != "ghcr.io/devopsartfactory/payments-api:2026-04-16.2" || taskDefinitionImageDrift["actual"] != "ghcr.io/devopsartfactory/payments-api:2026-04-16.1" || taskDefinitionImageDrift["severity"] != string(domain.ManagedDriftSeverityHigh) {
+		t.Fatalf("expected managedDrift task-definition image item fields in overview deployment payload, got %#v", taskDefinitionImageDrift)
+	}
 	runtimeManagedDrift, ok := runtimeSummary["managedDrift"].([]any)
-	if !ok || len(runtimeManagedDrift) != 4 {
+	if !ok || len(runtimeManagedDrift) != 5 {
 		t.Fatalf("expected runtimeSummary.managedDrift array in overview deployment payload, got %#v", runtimeSummary["managedDrift"])
 	}
 	if desiredCapacityDrift := requireManagedDriftItemByField(t, runtimeManagedDrift, "runtimeContext.capacity.desired"); desiredCapacityDrift["desired"] != "6" || desiredCapacityDrift["actual"] != "4" || desiredCapacityDrift["severity"] != string(domain.ManagedDriftSeverityHigh) {
@@ -2884,6 +2890,9 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 	}
 	if maxCapacityDrift := requireManagedDriftItemByField(t, runtimeManagedDrift, "runtimeContext.capacity.max"); maxCapacityDrift["desired"] != "12" || maxCapacityDrift["actual"] != "8" || maxCapacityDrift["severity"] != string(domain.ManagedDriftSeverityLow) {
 		t.Fatalf("expected runtimeSummary max-capacity drift item fields, got %#v", maxCapacityDrift)
+	}
+	if taskDefinitionImageDrift := requireManagedDriftItemByField(t, runtimeManagedDrift, "runtimeContext.taskDefinition.image"); taskDefinitionImageDrift["desired"] != "ghcr.io/devopsartfactory/payments-api:2026-04-16.2" || taskDefinitionImageDrift["actual"] != "ghcr.io/devopsartfactory/payments-api:2026-04-16.1" || taskDefinitionImageDrift["severity"] != string(domain.ManagedDriftSeverityHigh) {
+		t.Fatalf("expected runtimeSummary task-definition image drift item fields, got %#v", taskDefinitionImageDrift)
 	}
 	if _, exists := payload["ManagedDrift"]; exists {
 		t.Fatalf("unexpected Go-style managedDrift field name in %#v", payload)

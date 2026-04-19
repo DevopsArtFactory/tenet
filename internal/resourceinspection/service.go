@@ -105,17 +105,18 @@ type ListenerActionTargetInspection struct {
 }
 
 type ECSServiceInspection struct {
-	ClusterARN     string                 `json:"clusterArn"`
-	ServiceARN     string                 `json:"serviceArn"`
-	ServiceName    string                 `json:"serviceName"`
-	Status         string                 `json:"status"`
-	LaunchType     string                 `json:"launchType,omitempty"`
-	DesiredCount   int32                  `json:"desiredCount"`
-	RunningCount   int32                  `json:"runningCount"`
-	PendingCount   int32                  `json:"pendingCount"`
-	TaskDefinition string                 `json:"taskDefinition"`
-	Deployments    []ECSDeploymentSummary `json:"deployments"`
-	Events         []ECSServiceEvent      `json:"events"`
+	ClusterARN          string                 `json:"clusterArn"`
+	ServiceARN          string                 `json:"serviceArn"`
+	ServiceName         string                 `json:"serviceName"`
+	Status              string                 `json:"status"`
+	LaunchType          string                 `json:"launchType,omitempty"`
+	DesiredCount        int32                  `json:"desiredCount"`
+	RunningCount        int32                  `json:"runningCount"`
+	PendingCount        int32                  `json:"pendingCount"`
+	TaskDefinition      string                 `json:"taskDefinition"`
+	TaskDefinitionImage string                 `json:"taskDefinitionImage,omitempty"`
+	Deployments         []ECSDeploymentSummary `json:"deployments"`
+	Events              []ECSServiceEvent      `json:"events"`
 }
 
 type ECSDeploymentSummary struct {
@@ -676,7 +677,16 @@ func (s Service) inspectECSServiceFromAWS(ctx context.Context, req ECSRequest) (
 	if service == nil {
 		return ECSServiceInspection{}, resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
 	}
-	return ecsInspectionFromService(*service, aws.ToString(clusterARN)), nil
+	taskDefinitionImage := ""
+	if taskDefinitionARN := strings.TrimSpace(aws.ToString(service.TaskDefinition)); taskDefinitionARN != "" {
+		out, err := clients.ECS.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{
+			TaskDefinition: aws.String(taskDefinitionARN),
+		})
+		if err == nil {
+			taskDefinitionImage = ecsTaskDefinitionImage(out.TaskDefinition)
+		}
+	}
+	return ecsInspectionFromService(*service, aws.ToString(clusterARN), taskDefinitionImage), nil
 }
 
 func (s Service) inspectAutoScalingGroupFromAWS(ctx context.Context, req AutoScalingGroupRequest) (AutoScalingInspection, error) {
@@ -696,7 +706,7 @@ func (s Service) inspectAutoScalingGroupFromAWS(ctx context.Context, req AutoSca
 	return autoScalingInspectionFromGroup(out.AutoScalingGroups[0]), nil
 }
 
-func ecsInspectionFromService(service ecstypes.Service, clusterARN string) ECSServiceInspection {
+func ecsInspectionFromService(service ecstypes.Service, clusterARN string, taskDefinitionImage string) ECSServiceInspection {
 	deployments := append([]ecstypes.Deployment(nil), service.Deployments...)
 	sort.SliceStable(deployments, func(i, j int) bool {
 		left := aws.ToTime(deployments[i].CreatedAt)
@@ -747,18 +757,40 @@ func ecsInspectionFromService(service ecstypes.Service, clusterARN string) ECSSe
 	}
 
 	return ECSServiceInspection{
-		ClusterARN:     clusterARN,
-		ServiceARN:     aws.ToString(service.ServiceArn),
-		ServiceName:    aws.ToString(service.ServiceName),
-		Status:         aws.ToString(service.Status),
-		LaunchType:     string(service.LaunchType),
-		DesiredCount:   service.DesiredCount,
-		RunningCount:   service.RunningCount,
-		PendingCount:   service.PendingCount,
-		TaskDefinition: aws.ToString(service.TaskDefinition),
-		Deployments:    deploymentSummaries,
-		Events:         eventSummaries,
+		ClusterARN:          clusterARN,
+		ServiceARN:          aws.ToString(service.ServiceArn),
+		ServiceName:         aws.ToString(service.ServiceName),
+		Status:              aws.ToString(service.Status),
+		LaunchType:          string(service.LaunchType),
+		DesiredCount:        service.DesiredCount,
+		RunningCount:        service.RunningCount,
+		PendingCount:        service.PendingCount,
+		TaskDefinition:      aws.ToString(service.TaskDefinition),
+		TaskDefinitionImage: strings.TrimSpace(taskDefinitionImage),
+		Deployments:         deploymentSummaries,
+		Events:              eventSummaries,
 	}
+}
+
+func ecsTaskDefinitionImage(taskDefinition *ecstypes.TaskDefinition) string {
+	if taskDefinition == nil {
+		return ""
+	}
+	images := make(map[string]struct{}, len(taskDefinition.ContainerDefinitions))
+	for _, container := range taskDefinition.ContainerDefinitions {
+		image := strings.TrimSpace(aws.ToString(container.Image))
+		if image == "" {
+			continue
+		}
+		images[image] = struct{}{}
+	}
+	if len(images) != 1 {
+		return ""
+	}
+	for image := range images {
+		return image
+	}
+	return ""
 }
 
 func autoScalingInspectionFromGroup(group asgtypes.AutoScalingGroup) AutoScalingInspection {
