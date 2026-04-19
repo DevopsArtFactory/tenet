@@ -5160,6 +5160,84 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
 		runNodeHarness(t, nodeProgram)
 	})
 
+	t.Run("bookmarked plan and apply loads show operator read guidance for auth failures", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+const planPreview = ` + string(planPreviewReadyJSON) + `;
+` + domHarness + `
+const scenarios = [
+  {
+    name: 'bookmarked plan preview 401',
+    search: '?page=plan&deployment=api-prod&planId=plan_ready_123',
+    expectedCalls: '/v1/overview/deployments/api-prod, /v1/plans/plan_ready_123',
+    fetch(url) {
+      if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+      if (url === '/v1/plans/plan_ready_123') return Promise.resolve({ ok: false, status: 401, text: () => Promise.resolve('unauthenticated: operator identity missing') });
+      throw new Error('unexpected fetch url for ' + this.name + ': ' + url);
+    },
+    expected: [
+      'Authenticated operator required',
+      'Tenet rejected GET /v1/plans/plan_ready_123 because authenticated identity is required on this operator read route.',
+      'Deployment-derived context is still shown below and Apply Plan stays disabled until a persisted ready preview is available.',
+      'Derived approval guidance',
+      'Plan preview actions',
+    ],
+    unexpected: 'Failed to load the selected plan preview',
+  },
+  {
+    name: 'bookmarked apply request 403',
+    search: '?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123',
+    expectedCalls: '/v1/overview/deployments/api-prod, /v1/plans/plan_ready_123, /v1/applies/apply_failed_123',
+    fetch(url) {
+      if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+      if (url === '/v1/plans/plan_ready_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+      if (url === '/v1/applies/apply_failed_123') return Promise.resolve({ ok: false, status: 403, text: () => Promise.resolve('forbidden: operator does not have access to this deployment') });
+      throw new Error('unexpected fetch url for ' + this.name + ': ' + url);
+    },
+    expected: [
+      'Operator access denied',
+      'Tenet rejected GET /v1/applies/apply_failed_123 after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment.',
+      'Deployment and plan-derived context are still shown below.',
+      'Stored plan preview',
+      'Server-authored approval summary',
+    ],
+    unexpected: 'Failed to load the selected apply request',
+  },
+];
+
+(async () => {
+  for (const scenario of scenarios) {
+    const document = new Document();
+    document.byID.set('toolbar', document.createElement('section'));
+    document.byID.set('summary', document.createElement('section'));
+    document.byID.set('accounts', document.createElement('section'));
+    const fetchCalls = [];
+    const initialSearch = scenario.search;
+    const window = { location: { pathname: '/', search: initialSearch, hash: '' } };
+    const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+    const fetch = (url) => {
+      fetchCalls.push(String(url));
+      return scenario.fetch(url);
+    };
+    new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+    await settle();
+    await settle();
+    await settle();
+    if (fetchCalls.join(', ') !== scenario.expectedCalls) throw new Error('unexpected fetch sequence for ' + scenario.name + ': ' + fetchCalls.join(', '));
+    if (window.location.search !== initialSearch) throw new Error('expected bookmarkable URL to stay unchanged for ' + scenario.name + ', got ' + window.location.search);
+    const root = document.getElementById('accounts');
+    const text = collectText(root).join(' | ');
+    scenario.expected.forEach((fragment) => {
+      if (!text.includes(fragment)) throw new Error('expected fragment for ' + scenario.name + ': ' + fragment + '\nUI text: ' + text);
+    });
+    if (scenario.unexpected && text.includes(scenario.unexpected)) throw new Error('unexpected generic failure copy for ' + scenario.name + ': ' + text);
+  }
+})();
+`
+		runNodeHarness(t, nodeProgram)
+	})
+
 	t.Run("refresh controls reload bookmarked plan and apply records without changing the URL", func(t *testing.T) {
 		applyRecordQueuedJSON, err := json.Marshal(map[string]any{
 			"id":             "apply_refresh_123",
@@ -5278,6 +5356,119 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('1/2 terminal · 1 running · 0 queued')) throw new Error('expected updated lifecycle summary after refresh');
   if (!text.includes('Current step 2 of 2 · Completed 1 of 2')) throw new Error('expected updated lifecycle metadata after refresh');
   if (!text.includes('Running apply operation')) throw new Error('expected running apply operation after refresh');
+})();
+`
+		runNodeHarness(t, nodeProgram)
+	})
+
+	t.Run("plan and apply refresh auth failures keep bookmarkable context visible", func(t *testing.T) {
+		applyRecordQueuedJSON, err := json.Marshal(map[string]any{
+			"id":             "apply_refresh_123",
+			"planId":         "plan_ready_123",
+			"deploymentName": "api-prod",
+			"status":         "queued",
+			"createdAt":      "2026-04-18T08:00:00Z",
+			"operations": []map[string]any{
+				{"status": "queued", "phase": "Preparing", "target": "queue-target", "summary": "Queued summary"},
+			},
+			"source": map[string]any{
+				"planId":        "plan_ready_123",
+				"route":         "/v1/plans/plan_ready_123",
+				"planStatus":    "ready",
+				"planCreatedAt": "2026-04-17T09:00:00Z",
+				"fingerprint":   "fp_plan_ready",
+			},
+		})
+		if err != nil {
+			t.Fatalf("marshal queued refresh auth apply record: %v", err)
+		}
+
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+const planPreview = ` + string(planPreviewReadyJSON) + `;
+const applyQueuedRecord = ` + string(applyRecordQueuedJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+process.on('unhandledRejection', () => {});
+const fetchCalls = [];
+let planFetchCount = 0;
+let applyFetchCount = 0;
+const initialSearch = '?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_refresh_123';
+const window = { location: { pathname: '/', search: initialSearch, hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/plans/plan_ready_123') {
+    planFetchCount += 1;
+    if (planFetchCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+    return Promise.resolve({ ok: false, status: 401, text: () => Promise.resolve('unauthenticated: operator identity missing') });
+  }
+  if (url === '/v1/applies/apply_refresh_123') {
+    applyFetchCount += 1;
+    if (applyFetchCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve(applyQueuedRecord) });
+    return Promise.resolve({ ok: false, status: 403, text: () => Promise.resolve('forbidden: operator does not have access to this deployment') });
+  }
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  await settle();
+  const root = document.getElementById('accounts');
+  let text = collectText(root).join(' | ');
+  if (!text.includes('Immutable apply request apply_refresh_123 is loaded from GET /v1/applies/apply_refresh_123 and recorded as queued.')) throw new Error('expected queued apply message before refresh auth failures');
+  let buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  let refreshPlan = buttons.find((node) => node.textContent === 'Refresh plan preview');
+  let refreshApply = buttons.find((node) => node.textContent === 'Refresh apply request');
+  let applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');
+  if (!refreshPlan || !refreshApply || !applyPlan) throw new Error('expected workspace controls before refresh auth failures');
+  if (refreshPlan.disabled || refreshApply.disabled || applyPlan.disabled) throw new Error('expected refresh and apply controls enabled before refresh auth failures');
+
+  refreshPlan.dispatch('click');
+  await settle();
+  await settle();
+  await settle();
+  text = collectText(root).join(' | ');
+  if (planFetchCount !== 2) throw new Error('expected plan refresh to retry GET /v1/plans/{planId}');
+  if (window.location.search !== initialSearch) throw new Error('expected plan refresh auth failure to preserve bookmarkable URL');
+  if (!text.includes('Authenticated operator required')) throw new Error('expected plan refresh auth heading');
+  if (!text.includes('Tenet rejected GET /v1/plans/plan_ready_123 because authenticated identity is required on this operator read route.')) throw new Error('expected plan refresh auth guidance');
+  if (!text.includes('Stored plan preview')) throw new Error('expected stored plan preview to remain visible after plan refresh auth failure');
+  if (!text.includes('fp_plan_ready')) throw new Error('expected stored plan fingerprint to remain visible after plan refresh auth failure');
+  if (text.includes('Failed to load the selected plan preview')) throw new Error('expected plan refresh auth failure to avoid generic load error copy');
+  buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  refreshPlan = buttons.find((node) => node.textContent === 'Refresh plan preview');
+  refreshApply = buttons.find((node) => node.textContent === 'Refresh apply request');
+  applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');
+  if (!refreshPlan || !refreshApply || !applyPlan) throw new Error('expected workspace controls after plan refresh auth failure');
+  if (refreshPlan.disabled || refreshApply.disabled) throw new Error('expected refresh buttons re-enabled after plan refresh auth failure');
+  if (!applyPlan.disabled) throw new Error('expected Apply Plan disabled while plan preview auth failure is active');
+
+  refreshApply.dispatch('click');
+  await settle();
+  await settle();
+  await settle();
+  text = collectText(root).join(' | ');
+  if (applyFetchCount !== 2) throw new Error('expected apply refresh to retry GET /v1/applies/{applyId}');
+  if (window.location.search !== initialSearch) throw new Error('expected apply refresh auth failure to preserve bookmarkable URL');
+  if (!text.includes('Operator access denied')) throw new Error('expected apply refresh access-denied heading');
+  if (!text.includes('Tenet rejected GET /v1/applies/apply_refresh_123 after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment.')) throw new Error('expected apply refresh access-denied guidance');
+  if (!text.includes('Stored apply request')) throw new Error('expected stored apply request to remain visible after apply refresh auth failure');
+  if (!text.includes('Immutable apply request loaded from GET /v1/applies/apply_refresh_123.')) throw new Error('expected stored apply operations to remain visible after apply refresh auth failure');
+  if (text.includes('Failed to load the selected apply request')) throw new Error('expected apply refresh auth failure to avoid generic load error copy');
+  buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  refreshPlan = buttons.find((node) => node.textContent === 'Refresh plan preview');
+  refreshApply = buttons.find((node) => node.textContent === 'Refresh apply request');
+  if (!refreshPlan || !refreshApply) throw new Error('expected refresh buttons after apply refresh auth failure');
+  if (refreshPlan.disabled || refreshApply.disabled) throw new Error('expected refresh buttons re-enabled after apply refresh auth failure');
+  const expectedCalls = '/v1/overview/deployments/api-prod, /v1/plans/plan_ready_123, /v1/applies/apply_refresh_123, /v1/plans/plan_ready_123, /v1/applies/apply_refresh_123';
+  if (fetchCalls.join(', ') !== expectedCalls) throw new Error('unexpected fetch sequence for refresh auth failures: ' + fetchCalls.join(', '));
 })();
 `
 		runNodeHarness(t, nodeProgram)
