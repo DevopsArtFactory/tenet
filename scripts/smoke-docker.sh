@@ -11,6 +11,7 @@ INVALID_AUDIT_ACTION_BODY=$(mktemp)
 INVALID_APPLY_TRANSITION_BODY=$(mktemp)
 UNKNOWN_APPLY_TRANSITION_BODY=$(mktemp)
 TERMINAL_APPLY_TRANSITION_BODY=$(mktemp)
+AUTH_UNAUTHENTICATED_COLLECTION_BODY=$(mktemp)
 WEBHOOK_PUSH_BODY_FILE=$(mktemp)
 WEBHOOK_PING_BODY_FILE=$(mktemp)
 INVALID_WEBHOOK_BODY=$(mktemp)
@@ -118,7 +119,7 @@ cleanup() {
   fi
 
   "${COMPOSE[@]}" down --remove-orphans >/dev/null 2>&1 || true
-  rm -f "$INVALID_AUDIT_ACTION_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$WEBHOOK_PUSH_BODY_FILE" "$WEBHOOK_PING_BODY_FILE" "$INVALID_WEBHOOK_BODY"
+  rm -f "$INVALID_AUDIT_ACTION_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" "$WEBHOOK_PUSH_BODY_FILE" "$WEBHOOK_PING_BODY_FILE" "$INVALID_WEBHOOK_BODY"
   rm -rf "$PAYLOAD_DIR"
 }
 
@@ -188,6 +189,15 @@ restart_api_with_apply_mode() {
   local apply_enabled=$1
 
   TENET_AWS_ENABLE_APPLY="$apply_enabled" "${COMPOSE[@]}" up -d api >/dev/null
+  wait_for_api_health
+}
+
+restart_api_with_frontdoor_read_auth() {
+  TENET_AWS_ENABLE_APPLY=false \
+  TENET_API_TRUST_AUTHENTICATED_HEADERS=true \
+  TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=false \
+  TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true \
+  "${COMPOSE[@]}" up -d api >/dev/null
   wait_for_api_health
 }
 
@@ -847,6 +857,47 @@ if ! assert_structured_api_request_logs "$api_logs" "$healthz_request_id" "$summ
   echo "smoke-docker: api logs missing correlated structured request entries" >&2
   exit 1
 fi
+
+restart_api_with_frontdoor_read_auth
+
+auth_unauthenticated_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" -w "%{http_code}" \
+  "$API_BASE_URL/v1/overview/applications")
+filtered_applications_collection=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-prod, worker-prod" \
+  "$API_BASE_URL/v1/overview/applications")
+empty_applications_collection=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  "$API_BASE_URL/v1/overview/applications")
+filtered_applications_collection_path=$(write_payload filtered-applications-collection.json "$filtered_applications_collection")
+empty_applications_collection_path=$(write_payload empty-applications-collection.json "$empty_applications_collection")
+
+AUTH_UNAUTHENTICATED_COLLECTION_STATUS="$auth_unauthenticated_collection_status" \
+AUTH_UNAUTHENTICATED_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_COLLECTION_BODY" \
+FILTERED_APPLICATIONS_COLLECTION_PATH="$filtered_applications_collection_path" \
+EMPTY_APPLICATIONS_COLLECTION_PATH="$empty_applications_collection_path" \
+python3 - <<'PY'
+import json
+import os
+
+with open(os.environ["AUTH_UNAUTHENTICATED_COLLECTION_BODY_PATH"], encoding="utf-8") as fh:
+    unauthenticated_collection_body = fh.read()
+with open(os.environ["FILTERED_APPLICATIONS_COLLECTION_PATH"], encoding="utf-8") as fh:
+    filtered_applications_collection = json.load(fh)
+with open(os.environ["EMPTY_APPLICATIONS_COLLECTION_PATH"], encoding="utf-8") as fh:
+    empty_applications_collection = json.load(fh)
+
+assert os.environ["AUTH_UNAUTHENTICATED_COLLECTION_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_COLLECTION_STATUS"]
+assert unauthenticated_collection_body.strip() == "unauthenticated: authenticated identity is required for this operator read route", unauthenticated_collection_body
+filtered_application_names = {row["name"] for row in filtered_applications_collection}
+assert "worker-prod" in filtered_application_names, filtered_applications_collection
+assert filtered_application_names == {"payments-api-prod", "worker-prod"}, filtered_applications_collection
+assert empty_applications_collection == [], empty_applications_collection
+PY
 
 restart_api_with_apply_mode true
 
