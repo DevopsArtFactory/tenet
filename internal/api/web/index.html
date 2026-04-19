@@ -1376,6 +1376,33 @@
           description: bookmarkedResource.description || 'No linked resource metadata is available for this selection.',
         };
       };
+      const createWorkspaceQuickNav = (detail, mode) => {
+        const deploymentName = detail.name || currentPageState.deployment || '';
+        const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';
+        const strip = createElement('section', 'quick-nav-strip');
+        const workspaceLinks = createElement('div', 'quick-nav-links');
+        workspaceLinks.append(
+          createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self'),
+          createNavLink(buildPageURL('drift', { deployment: deploymentName }), 'Drift view', '_self'),
+          createNavLink(buildPageURL('plan', { deployment: deploymentName }), 'Plan/apply', '_self'),
+          createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self'),
+        );
+        const groups = createElement('div', 'quick-nav-groups');
+        const workspaceGroup = createElement('div', 'quick-nav-group');
+        workspaceGroup.append(
+          createElement('div', 'quick-nav-label', 'Deployment workspaces'),
+          workspaceLinks,
+        );
+        groups.append(workspaceGroup);
+        const head = createElement('div', 'quick-nav-head');
+        head.append(
+          createElement('div', 'quick-nav-title', 'Quick navigation'),
+          createElement('div', 'quick-nav-current', `${deploymentName || 'Deployment'} · ${currentWorkspace}`),
+        );
+
+        strip.append(head, groups);
+        return strip;
+      };
       const createResourceQuickNav = (detail, resource) => {
         const deploymentName = detail.name || currentPageState.deployment || '';
         const strip = createElement('section', 'quick-nav-strip');
@@ -3708,7 +3735,7 @@
           }));
         }
 
-        header.append(head, ...sections);
+        header.append(head, createWorkspaceQuickNav(detail, mode), ...sections);
         root.replaceChildren(header);
       };
 

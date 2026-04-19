@@ -766,6 +766,11 @@ assert "createNavLink(buildPageURL('drift', { deployment: detail.name }), 'Drift
 assert "createNavLink(buildPageURL('plan', { deployment: detail.name }), 'Plan/apply', '_self')" in ui, ui
 assert "createNavLink(buildPageURL('audit', { deployment: detail.name }), 'Audit log', '_self')" in ui, ui
 assert "createNavLink(buildPageURL('audit', { deployment: detail.name || currentPageState.deployment || '' }), 'Audit log', '_self')" in ui, ui
+assert "const createWorkspaceQuickNav = (detail, mode) => {" in ui, ui
+assert "const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';" in ui, ui
+assert "createElement('div', 'quick-nav-label', 'Deployment workspaces')" in ui, ui
+assert "createElement('div', 'quick-nav-current', `${deploymentName || 'Deployment'} · ${currentWorkspace}`)" in ui, ui
+assert "header.append(head, createWorkspaceQuickNav(detail, mode), ...sections);" in ui, ui
 assert "const createResourceQuickNav = (detail, resource) => {" in ui, ui
 assert "createElement('div', 'quick-nav-title', 'Quick navigation')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Sibling resources')" in ui, ui
