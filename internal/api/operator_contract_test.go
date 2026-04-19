@@ -950,6 +950,75 @@ func TestResourceDrillDownFrontDoorAuthOperatorContract(t *testing.T) {
 	}
 }
 
+func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
+	localSmoke := readRepoFile(t, "scripts/smoke-local.sh")
+	for _, fragment := range []string{
+		`AUTH_UNAUTHENTICATED_EVENTS_BODY=$(mktemp)`,
+		`AUTH_FORBIDDEN_EVENTS_BODY=$(mktemp)`,
+		`auth_unauthenticated_events_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_EVENTS_BODY" -w "%{http_code}" \`,
+		`auth_forbidden_events_status=$(curl -sS -o "$AUTH_FORBIDDEN_EVENTS_BODY" -w "%{http_code}" \`,
+		`allowed_events_read=$(curl -fsS \`,
+		`"http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/events")`,
+		`assert os.environ['AUTH_UNAUTHENTICATED_EVENTS_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_EVENTS_STATUS']`,
+		`assert unauthenticated_events_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_events_body`,
+		`assert os.environ['AUTH_FORBIDDEN_EVENTS_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_EVENTS_STATUS']`,
+		`assert forbidden_events_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_events_body`,
+		`assert allowed_events_read['deploymentName'] == 'payments-api-staging', allowed_events_read`,
+		`assert isinstance(allowed_events_read.get('events'), list), allowed_events_read`,
+	} {
+		if !strings.Contains(localSmoke, fragment) {
+			t.Fatalf("expected smoke-local deployment events auth contract to include %q", fragment)
+		}
+	}
+
+	dockerSmoke := readRepoFile(t, "scripts/smoke-docker.sh")
+	for _, fragment := range []string{
+		`AUTH_UNAUTHENTICATED_EVENTS_BODY=$(mktemp)`,
+		`AUTH_FORBIDDEN_EVENTS_BODY=$(mktemp)`,
+		`auth_unauthenticated_events_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_EVENTS_BODY" -w "%{http_code}" \`,
+		`auth_forbidden_events_status=$(curl -sS -o "$AUTH_FORBIDDEN_EVENTS_BODY" -w "%{http_code}" \`,
+		`allowed_events_read=$(curl -fsS \`,
+		`"$API_BASE_URL/v1/overview/deployments/payments-api-staging/events")`,
+		`assert os.environ["AUTH_UNAUTHENTICATED_EVENTS_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_EVENTS_STATUS"]`,
+		`assert unauthenticated_events_body.strip() == "unauthenticated: authenticated identity is required for this operator read route", unauthenticated_events_body`,
+		`assert os.environ["AUTH_FORBIDDEN_EVENTS_STATUS"] == "403", os.environ["AUTH_FORBIDDEN_EVENTS_STATUS"]`,
+		`assert forbidden_events_body.strip() == "forbidden: operator does not have access to this deployment", forbidden_events_body`,
+		`assert allowed_events_read["deploymentName"] == "payments-api-staging", allowed_events_read`,
+		`assert isinstance(allowed_events_read.get("events"), list), allowed_events_read`,
+	} {
+		if !strings.Contains(dockerSmoke, fragment) {
+			t.Fatalf("expected smoke-docker deployment events auth contract to include %q", fragment)
+		}
+	}
+
+	readme := readRepoFile(t, "README.md")
+	for _, fragment := range []string{
+		"`GET /v1/overview/deployments/{deploymentName}/events`",
+		"`401 Unauthorized` unauthenticated reads",
+		"`403 Forbidden` authenticated-but-unauthorized reads",
+		"`200 OK` authorized reads",
+		"`deploymentName` plus `events` list payload contract",
+		"`events` array",
+	} {
+		if !strings.Contains(readme, fragment) {
+			t.Fatalf("expected README deployment events auth contract to include %q", fragment)
+		}
+	}
+
+	localRuntimeDoc := readRepoFile(t, "docs/architecture/tenet-v1-local-runtime.md")
+	for _, fragment := range []string{
+		"`GET /v1/overview/deployments/{deploymentName}/events`",
+		"`401` unauthenticated reads",
+		"`403` authenticated-but-unauthorized reads",
+		"`200 OK` authorized reads",
+		"`deploymentName` plus `events` list payload contract",
+	} {
+		if !strings.Contains(localRuntimeDoc, fragment) {
+			t.Fatalf("expected local runtime doc deployment events auth contract to include %q", fragment)
+		}
+	}
+}
+
 func TestGitHubWebhookOperatorContract(t *testing.T) {
 	compose := readRepoFile(t, "compose.yaml")
 	for _, fragment := range []string{
