@@ -35,6 +35,7 @@ TERMINAL_APPLY_TRANSITION_BODY=$(mktemp)
 INVALID_WEBHOOK_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_PLAN_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_APPLY_BODY=$(mktemp)
+AUTH_UNAUTHENTICATED_TRANSITION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_COLLECTION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY=$(mktemp)
@@ -48,6 +49,7 @@ AUTH_FORBIDDEN_READ_BODY=$(mktemp)
 AUTH_FORBIDDEN_STATUS_READ_BODY=***
 AUTH_FORBIDDEN_PLAN_WRITE_BODY=$(mktemp)
 AUTH_FORBIDDEN_APPLY_WRITE_BODY=$(mktemp)
+AUTH_FORBIDDEN_TRANSITION_BODY=$(mktemp)
 AUTH_FORBIDDEN_PLAN_READ_BODY=***
 AUTH_FORBIDDEN_APPLY_READ_BODY=***
 AUTH_FORBIDDEN_AUDIT_BODY=***
@@ -61,7 +63,7 @@ cleanup() {
     kill "$API_PID" 2>/dev/null || true
     wait "$API_PID" 2>/dev/null || true
   fi
-  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$INVALID_WEBHOOK_BODY" "$AUTH_UNAUTHENTICATED_PLAN_BODY" "$AUTH_UNAUTHENTICATED_APPLY_BODY" "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_READ_BODY" "$AUTH_UNAUTHENTICATED_STATUS_READ_BODY" "$AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY" "$AUTH_FORBIDDEN_GROUP_DETAIL_BODY" "$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" "$AUTH_FORBIDDEN_READ_BODY" "$AUTH_FORBIDDEN_STATUS_READ_BODY" "$AUTH_FORBIDDEN_PLAN_WRITE_BODY" "$AUTH_FORBIDDEN_APPLY_WRITE_BODY" "$AUTH_FORBIDDEN_PLAN_READ_BODY" "$AUTH_FORBIDDEN_APPLY_READ_BODY" "$AUTH_FORBIDDEN_AUDIT_BODY"
+  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$INVALID_WEBHOOK_BODY" "$AUTH_UNAUTHENTICATED_PLAN_BODY" "$AUTH_UNAUTHENTICATED_APPLY_BODY" "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_READ_BODY" "$AUTH_UNAUTHENTICATED_STATUS_READ_BODY" "$AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY" "$AUTH_FORBIDDEN_GROUP_DETAIL_BODY" "$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" "$AUTH_FORBIDDEN_READ_BODY" "$AUTH_FORBIDDEN_STATUS_READ_BODY" "$AUTH_FORBIDDEN_PLAN_WRITE_BODY" "$AUTH_FORBIDDEN_APPLY_WRITE_BODY" "$AUTH_FORBIDDEN_TRANSITION_BODY" "$AUTH_FORBIDDEN_PLAN_READ_BODY" "$AUTH_FORBIDDEN_APPLY_READ_BODY" "$AUTH_FORBIDDEN_AUDIT_BODY"
   rm -rf "$PAYLOAD_DIR" "$REPO_ROOT"
 }
 trap cleanup EXIT
@@ -934,6 +936,11 @@ frontdoor_apply_record=$(curl -fsS -X POST \
   "http://$HOST:$PORT/v1/applies/plans/$frontdoor_plan_id")
 frontdoor_apply_record_path=$(write_payload frontdoor-apply-record.json "$frontdoor_apply_record")
 frontdoor_apply_id=$(json_string_field_from_path "$frontdoor_apply_record_path" id)
+auth_unauthenticated_transition_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" -w "%{http_code}" \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  --data '{"status":"running","step":1}' \
+  "http://$HOST:$PORT/v1/applies/$frontdoor_apply_id/transitions")
 if [[ "$APPLY_ENABLED" == "true" ]]; then
   frontdoor_apply_record_get=$(wait_for_apply_status "$frontdoor_apply_id" failed)
 else
@@ -943,13 +950,15 @@ frontdoor_audit_logs=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs?deployment=pa
 frontdoor_apply_record_get_path=$(write_payload frontdoor-apply-record-get.json "$frontdoor_apply_record_get")
 frontdoor_audit_logs_path=$(write_payload frontdoor-audit-logs.json "$frontdoor_audit_logs")
 
-AUTH_UNAUTHENTICATED_PLAN_STATUS="$auth_unauthenticated_plan_status" AUTH_UNAUTHENTICATED_PLAN_BODY_PATH="$AUTH_UNAUTHENTICATED_PLAN_BODY" AUTH_UNAUTHENTICATED_APPLY_STATUS="$auth_unauthenticated_apply_status" AUTH_UNAUTHENTICATED_APPLY_BODY_PATH="$AUTH_UNAUTHENTICATED_APPLY_BODY" FRONTDOOR_PLAN_PREVIEW_PATH="$frontdoor_plan_preview_path" FRONTDOOR_APPLY_RECORD_PATH="$frontdoor_apply_record_path" FRONTDOOR_APPLY_RECORD_GET_PATH="$frontdoor_apply_record_get_path" FRONTDOOR_AUDIT_LOGS_PATH="$frontdoor_audit_logs_path" python3 - <<'PY'
+AUTH_UNAUTHENTICATED_PLAN_STATUS="$auth_unauthenticated_plan_status" AUTH_UNAUTHENTICATED_PLAN_BODY_PATH="$AUTH_UNAUTHENTICATED_PLAN_BODY" AUTH_UNAUTHENTICATED_APPLY_STATUS="$auth_unauthenticated_apply_status" AUTH_UNAUTHENTICATED_APPLY_BODY_PATH="$AUTH_UNAUTHENTICATED_APPLY_BODY" AUTH_UNAUTHENTICATED_TRANSITION_STATUS="$auth_unauthenticated_transition_status" AUTH_UNAUTHENTICATED_TRANSITION_BODY_PATH="$AUTH_UNAUTHENTICATED_TRANSITION_BODY" FRONTDOOR_PLAN_PREVIEW_PATH="$frontdoor_plan_preview_path" FRONTDOOR_APPLY_RECORD_PATH="$frontdoor_apply_record_path" FRONTDOOR_APPLY_RECORD_GET_PATH="$frontdoor_apply_record_get_path" FRONTDOOR_AUDIT_LOGS_PATH="$frontdoor_audit_logs_path" python3 - <<'PY'
 import json, os
 
 with open(os.environ['AUTH_UNAUTHENTICATED_PLAN_BODY_PATH'], encoding='utf-8') as fh:
     unauthenticated_plan_body = fh.read()
 with open(os.environ['AUTH_UNAUTHENTICATED_APPLY_BODY_PATH'], encoding='utf-8') as fh:
     unauthenticated_apply_body = fh.read()
+with open(os.environ['AUTH_UNAUTHENTICATED_TRANSITION_BODY_PATH'], encoding='utf-8') as fh:
+    unauthenticated_transition_body = fh.read()
 with open(os.environ['FRONTDOOR_PLAN_PREVIEW_PATH'], encoding='utf-8') as fh:
     frontdoor_plan_preview = json.load(fh)
 with open(os.environ['FRONTDOOR_APPLY_RECORD_PATH'], encoding='utf-8') as fh:
@@ -963,6 +972,8 @@ assert os.environ['AUTH_UNAUTHENTICATED_PLAN_STATUS'] == '401', os.environ['AUTH
 assert unauthenticated_plan_body.strip() == 'unauthenticated: authenticated identity is required for this operator write route', unauthenticated_plan_body
 assert os.environ['AUTH_UNAUTHENTICATED_APPLY_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_APPLY_STATUS']
 assert unauthenticated_apply_body.strip() == 'unauthenticated: authenticated identity is required for this operator write route', unauthenticated_apply_body
+assert os.environ['AUTH_UNAUTHENTICATED_TRANSITION_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_TRANSITION_STATUS']
+assert unauthenticated_transition_body.strip() == 'unauthenticated: authenticated identity is required for this operator write route', unauthenticated_transition_body
 
 for payload in (frontdoor_plan_preview, frontdoor_apply_record, frontdoor_apply_record_get):
     actor = payload['actor']
@@ -999,6 +1010,11 @@ auth_unauthenticated_plan_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_PLAN_
   "http://$HOST:$PORT/v1/plans/$frontdoor_plan_id")
 auth_unauthenticated_apply_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" -w "%{http_code}" \
   "http://$HOST:$PORT/v1/applies/$frontdoor_apply_id")
+auth_unauthenticated_transition_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" -w "%{http_code}" \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  --data '{"status":"running","step":1}' \
+  "http://$HOST:$PORT/v1/applies/$frontdoor_apply_id/transitions")
 auth_forbidden_plan_write_status=$(curl -sS -o "$AUTH_FORBIDDEN_PLAN_WRITE_BODY" -w "%{http_code}" \
   -X POST \
   -H "Content-Type: application/json" \
@@ -1015,6 +1031,15 @@ auth_forbidden_apply_write_status=$(curl -sS -o "$AUTH_FORBIDDEN_APPLY_WRITE_BOD
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authorized-Deployments: worker-prod" \
   "http://$HOST:$PORT/v1/applies/plans/$frontdoor_plan_id")
+auth_forbidden_transition_status=$(curl -sS -o "$AUTH_FORBIDDEN_TRANSITION_BODY" -w "%{http_code}" \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: worker-prod" \
+  --data '{"status":"running","step":1}' \
+  "http://$HOST:$PORT/v1/applies/$frontdoor_apply_id/transitions")
 auth_forbidden_read_status=$(curl -sS -o "$AUTH_FORBIDDEN_READ_BODY" -w "%{http_code}" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
@@ -1146,7 +1171,7 @@ allowed_status_read_path=$(write_payload allowed-status-read.json "$allowed_stat
 filtered_status_collection_path=$(write_payload filtered-status-collection.json "$filtered_status_collection")
 empty_status_collection_path=$(write_payload empty-status-collection.json "$empty_status_collection")
 
-AUTH_UNAUTHENTICATED_COLLECTION_STATUS="$auth_unauthenticated_collection_status" AUTH_UNAUTHENTICATED_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_COLLECTION_BODY" AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS="$auth_unauthenticated_status_collection_status" AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_STATUS="$auth_unauthenticated_account_collection_status" AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" AUTH_UNAUTHENTICATED_READ_STATUS="$auth_unauthenticated_read_status" AUTH_UNAUTHENTICATED_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_READ_BODY" AUTH_UNAUTHENTICATED_STATUS_READ_STATUS="$auth_unauthenticated_status_read_status" AUTH_UNAUTHENTICATED_STATUS_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_STATUS_READ_BODY" AUTH_FORBIDDEN_ACCOUNT_DETAIL_STATUS="$auth_forbidden_account_detail_status" AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY_PATH="$AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY" AUTH_FORBIDDEN_GROUP_DETAIL_STATUS="$auth_forbidden_group_detail_status" AUTH_FORBIDDEN_GROUP_DETAIL_BODY_PATH="$AUTH_FORBIDDEN_GROUP_DETAIL_BODY" AUTH_UNAUTHENTICATED_PLAN_READ_STATUS="$auth_unauthenticated_plan_read_status" AUTH_UNAUTHENTICATED_PLAN_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" AUTH_UNAUTHENTICATED_APPLY_READ_STATUS="$auth_unauthenticated_apply_read_status" AUTH_UNAUTHENTICATED_APPLY_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" AUTH_FORBIDDEN_PLAN_WRITE_STATUS="$auth_forbidden_plan_write_status" AUTH_FORBIDDEN_PLAN_WRITE_BODY_PATH="$AUTH_FORBIDDEN_PLAN_WRITE_BODY" AUTH_FORBIDDEN_APPLY_WRITE_STATUS="$auth_forbidden_apply_write_status" AUTH_FORBIDDEN_APPLY_WRITE_BODY_PATH="$AUTH_FORBIDDEN_APPLY_WRITE_BODY" AUTH_FORBIDDEN_READ_STATUS="$auth_forbidden_read_status" AUTH_FORBIDDEN_READ_BODY_PATH="$AUTH_FORBIDDEN_READ_BODY" AUTH_FORBIDDEN_STATUS_READ_STATUS="$auth_forbidden_status_read_status" AUTH_FORBIDDEN_STATUS_READ_BODY_PATH="$AUTH_FORBIDDEN_STATUS_READ_BODY" AUTH_FORBIDDEN_PLAN_READ_STATUS="$auth_forbidden_plan_read_status" AUTH_FORBIDDEN_PLAN_READ_BODY_PATH="$AUTH_FORBIDDEN_PLAN_READ_BODY" AUTH_FORBIDDEN_APPLY_READ_STATUS="$auth_forbidden_apply_read_status" AUTH_FORBIDDEN_APPLY_READ_BODY_PATH="$AUTH_FORBIDDEN_APPLY_READ_BODY" AUTH_FORBIDDEN_AUDIT_STATUS="$auth_forbidden_audit_status" AUTH_FORBIDDEN_AUDIT_BODY_PATH="$AUTH_FORBIDDEN_AUDIT_BODY" ALLOWED_GUARDED_READ_PATH="$allowed_guarded_read_path" ALLOWED_STATUS_READ_PATH="$allowed_status_read_path" ALLOWED_PLAN_READ_PATH="$allowed_plan_read_path" ALLOWED_APPLY_READ_PATH="$allowed_apply_read_path" FILTERED_APPLICATIONS_COLLECTION_PATH="$filtered_applications_collection_path" FILTERED_STATUS_COLLECTION_PATH="$filtered_status_collection_path" FILTERED_ACCOUNTS_COLLECTION_PATH="$filtered_accounts_collection_path" FILTERED_ACCOUNT_DETAIL_PATH="$filtered_account_detail_path" FILTERED_GROUP_DETAIL_PATH="$filtered_group_detail_path" EMPTY_APPLICATIONS_COLLECTION_PATH="$empty_applications_collection_path" EMPTY_STATUS_COLLECTION_PATH="$empty_status_collection_path" EMPTY_ACCOUNTS_COLLECTION_PATH="$empty_accounts_collection_path" ALLOWED_SCOPED_AUDIT_PATH="$allowed_scoped_audit_path" FRONTDOOR_PLAN_ID="$frontdoor_plan_id" FRONTDOOR_APPLY_ID="$frontdoor_apply_id" python3 - <<'PY'
+AUTH_UNAUTHENTICATED_COLLECTION_STATUS="$auth_unauthenticated_collection_status" AUTH_UNAUTHENTICATED_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_COLLECTION_BODY" AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS="$auth_unauthenticated_status_collection_status" AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_STATUS="$auth_unauthenticated_account_collection_status" AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" AUTH_UNAUTHENTICATED_READ_STATUS="$auth_unauthenticated_read_status" AUTH_UNAUTHENTICATED_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_READ_BODY" AUTH_UNAUTHENTICATED_STATUS_READ_STATUS="$auth_unauthenticated_status_read_status" AUTH_UNAUTHENTICATED_STATUS_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_STATUS_READ_BODY" AUTH_FORBIDDEN_ACCOUNT_DETAIL_STATUS="$auth_forbidden_account_detail_status" AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY_PATH="$AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY" AUTH_FORBIDDEN_GROUP_DETAIL_STATUS="$auth_forbidden_group_detail_status" AUTH_FORBIDDEN_GROUP_DETAIL_BODY_PATH="$AUTH_FORBIDDEN_GROUP_DETAIL_BODY" AUTH_UNAUTHENTICATED_PLAN_READ_STATUS="$auth_unauthenticated_plan_read_status" AUTH_UNAUTHENTICATED_PLAN_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" AUTH_UNAUTHENTICATED_APPLY_READ_STATUS="$auth_unauthenticated_apply_read_status" AUTH_UNAUTHENTICATED_APPLY_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" AUTH_UNAUTHENTICATED_TRANSITION_STATUS="$auth_unauthenticated_transition_status" AUTH_UNAUTHENTICATED_TRANSITION_BODY_PATH="$AUTH_UNAUTHENTICATED_TRANSITION_BODY" AUTH_FORBIDDEN_PLAN_WRITE_STATUS="$auth_forbidden_plan_write_status" AUTH_FORBIDDEN_PLAN_WRITE_BODY_PATH="$AUTH_FORBIDDEN_PLAN_WRITE_BODY" AUTH_FORBIDDEN_APPLY_WRITE_STATUS="$auth_forbidden_apply_write_status" AUTH_FORBIDDEN_APPLY_WRITE_BODY_PATH="$AUTH_FORBIDDEN_APPLY_WRITE_BODY" AUTH_FORBIDDEN_TRANSITION_STATUS="$auth_forbidden_transition_status" AUTH_FORBIDDEN_TRANSITION_BODY_PATH="$AUTH_FORBIDDEN_TRANSITION_BODY" AUTH_FORBIDDEN_READ_STATUS="$auth_forbidden_read_status" AUTH_FORBIDDEN_READ_BODY_PATH="$AUTH_FORBIDDEN_READ_BODY" AUTH_FORBIDDEN_STATUS_READ_STATUS="$auth_forbidden_status_read_status" AUTH_FORBIDDEN_STATUS_READ_BODY_PATH="$AUTH_FORBIDDEN_STATUS_READ_BODY" AUTH_FORBIDDEN_PLAN_READ_STATUS="$auth_forbidden_plan_read_status" AUTH_FORBIDDEN_PLAN_READ_BODY_PATH="$AUTH_FORBIDDEN_PLAN_READ_BODY" AUTH_FORBIDDEN_APPLY_READ_STATUS="$auth_forbidden_apply_read_status" AUTH_FORBIDDEN_APPLY_READ_BODY_PATH="$AUTH_FORBIDDEN_APPLY_READ_BODY" AUTH_FORBIDDEN_AUDIT_STATUS="$auth_forbidden_audit_status" AUTH_FORBIDDEN_AUDIT_BODY_PATH="$AUTH_FORBIDDEN_AUDIT_BODY" ALLOWED_GUARDED_READ_PATH="$allowed_guarded_read_path" ALLOWED_STATUS_READ_PATH="$allowed_status_read_path" ALLOWED_PLAN_READ_PATH="$allowed_plan_read_path" ALLOWED_APPLY_READ_PATH="$allowed_apply_read_path" FILTERED_APPLICATIONS_COLLECTION_PATH="$filtered_applications_collection_path" FILTERED_STATUS_COLLECTION_PATH="$filtered_status_collection_path" FILTERED_ACCOUNTS_COLLECTION_PATH="$filtered_accounts_collection_path" FILTERED_ACCOUNT_DETAIL_PATH="$filtered_account_detail_path" FILTERED_GROUP_DETAIL_PATH="$filtered_group_detail_path" EMPTY_APPLICATIONS_COLLECTION_PATH="$empty_applications_collection_path" EMPTY_STATUS_COLLECTION_PATH="$empty_status_collection_path" EMPTY_ACCOUNTS_COLLECTION_PATH="$empty_accounts_collection_path" ALLOWED_SCOPED_AUDIT_PATH="$allowed_scoped_audit_path" FRONTDOOR_PLAN_ID="$frontdoor_plan_id" FRONTDOOR_APPLY_ID="$frontdoor_apply_id" python3 - <<'PY'
 import json, os
 
 with open(os.environ['AUTH_UNAUTHENTICATED_COLLECTION_BODY_PATH'], encoding='utf-8') as fh:
@@ -1167,10 +1192,14 @@ with open(os.environ['AUTH_UNAUTHENTICATED_PLAN_READ_BODY_PATH'], encoding='utf-
     unauthenticated_plan_read_body = fh.read()
 with open(os.environ['AUTH_UNAUTHENTICATED_APPLY_READ_BODY_PATH'], encoding='utf-8') as fh:
     unauthenticated_apply_read_body = fh.read()
+with open(os.environ['AUTH_UNAUTHENTICATED_TRANSITION_BODY_PATH'], encoding='utf-8') as fh:
+    unauthenticated_transition_body = fh.read()
 with open(os.environ['AUTH_FORBIDDEN_PLAN_WRITE_BODY_PATH'], encoding='utf-8') as fh:
     forbidden_plan_write_body = fh.read()
 with open(os.environ['AUTH_FORBIDDEN_APPLY_WRITE_BODY_PATH'], encoding='utf-8') as fh:
     forbidden_apply_write_body = fh.read()
+with open(os.environ['AUTH_FORBIDDEN_TRANSITION_BODY_PATH'], encoding='utf-8') as fh:
+    forbidden_transition_body = fh.read()
 with open(os.environ['AUTH_FORBIDDEN_READ_BODY_PATH'], encoding='utf-8') as fh:
     forbidden_read_body = fh.read()
 with open(os.environ['AUTH_FORBIDDEN_STATUS_READ_BODY_PATH'], encoding='utf-8') as fh:
@@ -1226,10 +1255,14 @@ assert os.environ['AUTH_UNAUTHENTICATED_PLAN_READ_STATUS'] == '401', os.environ[
 assert unauthenticated_plan_read_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_plan_read_body
 assert os.environ['AUTH_UNAUTHENTICATED_APPLY_READ_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_APPLY_READ_STATUS']
 assert unauthenticated_apply_read_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_apply_read_body
+assert os.environ['AUTH_UNAUTHENTICATED_TRANSITION_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_TRANSITION_STATUS']
+assert unauthenticated_transition_body.strip() == 'unauthenticated: authenticated identity is required for this operator write route', unauthenticated_transition_body
 assert os.environ['AUTH_FORBIDDEN_PLAN_WRITE_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_PLAN_WRITE_STATUS']
 assert forbidden_plan_write_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_plan_write_body
 assert os.environ['AUTH_FORBIDDEN_APPLY_WRITE_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_APPLY_WRITE_STATUS']
 assert forbidden_apply_write_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_apply_write_body
+assert os.environ['AUTH_FORBIDDEN_TRANSITION_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_TRANSITION_STATUS']
+assert forbidden_transition_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_transition_body
 assert os.environ['AUTH_FORBIDDEN_READ_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_READ_STATUS']
 assert forbidden_read_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_read_body
 assert os.environ['AUTH_FORBIDDEN_STATUS_READ_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_STATUS_READ_STATUS']
