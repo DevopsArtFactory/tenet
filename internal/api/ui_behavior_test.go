@@ -2507,10 +2507,12 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!toolbarText.includes('Back to application')) throw new Error('expected resource page back link');
   const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
   const pageLinks = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
+  const quickNavChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
   const backLink = toolbarLinks.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.target === '_self');
   if (!backLink) throw new Error('expected resource page self-navigation back link');
   if (backLink.rel) throw new Error('expected resource page back link to avoid new-tab rel attributes');
   if (!accountsText.includes('Quick navigation')) throw new Error('expected resource page quick navigation strip');
+  if (!accountsText.includes('Current resource')) throw new Error('expected resource page current-resource label');
   const quickBackLink = pageLinks.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Back to application' && node.target === '_self');
   if (!quickBackLink || quickBackLink.rel) throw new Error('expected resource page quick navigation back link');
   const driftLink = pageLinks.find((node) => node.href === '/?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Drift view' && node.target === '_self');
@@ -2519,6 +2521,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!planLink || planLink.rel) throw new Error('expected resource page quick navigation plan link');
   const auditLink = pageLinks.find((node) => node.href === '/?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Audit log' && node.target === '_self');
   if (!auditLink || auditLink.rel) throw new Error('expected resource page quick navigation audit link');
+  const currentResourceChip = quickNavChips.find((node) => node.textContent === 'payments-api-staging Deployment Group');
+  if (!currentResourceChip) throw new Error('expected resource page current-resource chip');
   const siblingLink = pageLinks.find((node) => node.textContent === 'payments-api-staging ECS Service'
     && node.target === '_self'
     && node.href.includes('/?page=resource')
@@ -4252,6 +4256,7 @@ async function render(detail) {
   const text = collectText(run.document.getElementById('accounts')).join(' | ');
   const toolbarText = collectText(run.document.getElementById('toolbar')).join(' | ');
   const workspaceLinks = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'A');
+  const workspaceChips = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
   const workspaceBackLink = workspaceLinks.find((node) => node.href === '/?page=application&deployment=api-prod' && node.textContent === 'Back to application' && node.target === '_self');
   const workspaceDriftLink = workspaceLinks.find((node) => node.href === '/?page=drift&deployment=api-prod' && node.textContent === 'Drift view' && node.target === '_self');
   const workspacePlanLink = workspaceLinks.find((node) => node.href === '/?page=plan&deployment=api-prod' && node.textContent === 'Plan/apply' && node.target === '_self');
@@ -4265,7 +4270,8 @@ async function render(detail) {
   if (!text.includes('Linked resources')) throw new Error('expected drift workspace linked-resources group label');
   if (!text.includes('api-prod · Drift view')) throw new Error('expected workspace quick navigation current-state label');
   if (!workspaceBackLink || workspaceBackLink.rel) throw new Error('expected drift workspace quick navigation back link');
-  if (!workspaceDriftLink || workspaceDriftLink.rel) throw new Error('expected drift workspace quick navigation self link');
+  if (workspaceDriftLink) throw new Error('expected drift workspace quick navigation to render active workspace as a chip');
+  if (!workspaceChips.find((node) => node.textContent === 'Drift view')) throw new Error('expected drift workspace quick navigation chip');
   if (!workspacePlanLink || workspacePlanLink.rel) throw new Error('expected drift workspace quick navigation plan link');
   if (!workspaceAuditLink || workspaceAuditLink.rel) throw new Error('expected drift workspace quick navigation audit link');
   if (!workspaceResourceLink || workspaceResourceLink.rel) throw new Error('expected drift workspace quick navigation resource link');
@@ -4847,6 +4853,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/deployments/api-prod') throw new Error('expected only deployment detail before create, got ' + fetchCalls.join(', '));
   let text = collectText(root).join(' | ');
   const linksBeforeCreate = collectNodes(root, (node) => node.tagName === 'A');
+  const chipsBeforeCreate = collectNodes(root, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
   const workspaceBackLink = linksBeforeCreate.find((node) => node.href === '/?page=application&deployment=api-prod' && node.textContent === 'Back to application' && node.target === '_self');
   const workspaceDriftLink = linksBeforeCreate.find((node) => node.href === '/?page=drift&deployment=api-prod' && node.textContent === 'Drift view' && node.target === '_self');
   const workspacePlanLink = linksBeforeCreate.find((node) => node.href === '/?page=plan&deployment=api-prod' && node.textContent === 'Plan/apply' && node.target === '_self');
@@ -4857,7 +4864,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('api-prod · Plan/apply')) throw new Error('expected plan workspace quick navigation current-state label');
   if (!workspaceBackLink || workspaceBackLink.rel) throw new Error('expected plan workspace quick navigation back link');
   if (!workspaceDriftLink || workspaceDriftLink.rel) throw new Error('expected plan workspace quick navigation drift link');
-  if (!workspacePlanLink || workspacePlanLink.rel) throw new Error('expected plan workspace quick navigation self link');
+  if (workspacePlanLink) throw new Error('expected plan workspace quick navigation to render active workspace as a chip');
+  if (!chipsBeforeCreate.find((node) => node.textContent === 'Plan/apply')) throw new Error('expected plan workspace quick navigation chip');
   if (!workspaceAuditLink || workspaceAuditLink.rel) throw new Error('expected plan workspace quick navigation audit link');
   if (!text.includes('No stored plan preview yet')) throw new Error('expected idle plan-preview heading');
   if (!text.includes('Create Plan will POST /v1/plans/deployments/api-prod')) throw new Error('expected idle create-plan guidance');
@@ -5875,6 +5883,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const quickNavDriftLink = links.find((node) => node.href === '/console?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Drift view');
   const quickNavPlanLink = links.find((node) => node.href === '/console?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Plan/apply');
   const quickNavAuditLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2' && node.textContent === 'Audit log');
+  const quickNavChip = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip').find((node) => node.textContent === 'Audit log');
   const applicationLink = links.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Open application drill-down');
   if (!applicationLink || applicationLink.target !== '_self' || applicationLink.rel) throw new Error('expected audit application self link');
   const workspaceLink = links.find((node) => node.href === '/console?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&planId=plan_ready_123&applyId=apply_failed_123' && node.textContent === 'Open plan/apply workspace');
@@ -5885,7 +5894,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!quickNavBackLink || quickNavBackLink.target !== '_self' || quickNavBackLink.rel) throw new Error('expected audit quick navigation back link');
   if (!quickNavDriftLink || quickNavDriftLink.target !== '_self' || quickNavDriftLink.rel) throw new Error('expected audit quick navigation drift link');
   if (!quickNavPlanLink || quickNavPlanLink.target !== '_self' || quickNavPlanLink.rel) throw new Error('expected audit quick navigation plan link');
-  if (!quickNavAuditLink || quickNavAuditLink.target !== '_self' || quickNavAuditLink.rel) throw new Error('expected audit quick navigation self link');
+  if (quickNavAuditLink) throw new Error('expected audit quick navigation to render active workspace as a chip');
+  if (!quickNavChip) throw new Error('expected audit quick navigation chip');
 })();
 `
 		runNodeHarness(t, nodeProgram)
@@ -6056,7 +6066,9 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   if (!accountsText.includes('1 entry · newest record first · deployment payments-api-prod · action apply.requested · limit 2')) throw new Error('expected active deployment, action, and limit filter copy in audit timeline');
   const auditQuickNavLink = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A').find((node) => node.href === '/console?page=audit&q=payments&deployment=payments-api-prod&action=apply.requested&limit=2' && node.textContent === 'Audit log');
-  if (!auditQuickNavLink || auditQuickNavLink.target !== '_self' || auditQuickNavLink.rel) throw new Error('expected audit quick navigation self link to preserve action and limit state');
+  const auditQuickNavChip = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip').find((node) => node.textContent === 'Audit log');
+  if (auditQuickNavLink) throw new Error('expected audit quick navigation to render active workspace as a chip while preserving URL state');
+  if (!auditQuickNavChip) throw new Error('expected audit quick navigation chip to preserve action and limit state');
   const actionSelect = document.querySelector('[data-toolbar-field="Action"]');
   if (!actionSelect || actionSelect.value !== 'apply.requested') throw new Error('expected action select to reflect URL state');
   const limitSelect = document.querySelector('[data-toolbar-field="Limit"]');

@@ -141,6 +141,7 @@ The embedded `/?page=resource&deployment={name}&resourceType={type}&resourceId={
 Current behavior:
 - keeps all links bookmarkable and `_self` inside the embedded shell
 - includes `Back to application`, `Drift view`, `Plan/apply`, and deployment-scoped `Audit log` links
+- renders the current resource as an explicit non-click chip so the strip does not present the active destination as a lateral link
 - derives sibling resource links only from the already loaded deployment-detail payload, so the strip does not introduce another fetch path
 - keeps the anchors outside toggle buttons and other nested interactive controls
 
@@ -209,7 +210,7 @@ Current drift workspace behavior:
 - keeps machine-readable `runtimeSummary.changes[]` rows while also rendering human-readable `runtimeSummary.changeDetails[]`
 - shows deployment context and status conditions
 - adds an in-place `Refresh drift workspace` control that re-runs only `GET /v1/overview/deployments/{deploymentName}` in place, keeps the bookmarkable `/?page=drift...` URL stable, disables only while that refresh is active, and leaves the current read-only workspace content visible with explicit loading/error copy
-- adds a quick-navigation strip for `Back to application`, `Drift view`, `Plan/apply`, and deployment-scoped `Audit log`, keeping the current workspace obvious while preserving `_self` bookmarkable navigation inside the embedded shell
+- adds a quick-navigation strip for `Back to application`, `Drift view`, `Plan/apply`, and deployment-scoped `Audit log`, keeping the current workspace obvious with a non-click active chip while preserving `_self` bookmarkable navigation for the other destinations inside the embedded shell
 - adds direct `_self` resource drill-down links to that drift quick-navigation strip using the same grouped normalized resource inventory already used by the application/resource pages, with explicit `No linked resources are available in this drift workspace yet.` copy when no linked resources are available
 - prefers backend-authored additive `managedDrift[]` rows from the deployment-detail payload when present, normalizes them into the same safe read-only table, and falls back to the existing client-derived artifact/generation/runtime-intent comparisons for older payloads
 - controller-authored rows can now include live-backed EC2 Auto Scaling Group capacity evidence for `asgWeightedTargetGroups` and `asgInstanceRefresh` deployments when live AWS inspection succeeds, using stable field names under `runtimeContext.capacity.{desired,min,max}`
@@ -251,7 +252,7 @@ Current plan/apply workspace behavior:
 - when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`, that stored `GET /v1/applies/{applyId}` reload now uses the same trusted `X-Tenet-Authenticated-*` identity plus `X-Tenet-Authorized-Deployments` allowlist contract as other guarded operator reads, using the persisted apply deployment
 - renders stored immutable apply metadata plus `Open bookmarked apply` (`_self`) and `Apply JSON` links, keeps the current disabled-by-default failed behavior explicit, documents the opt-in queued backend contract behind `TENET_AWS_ENABLE_APPLY=true`, adds a compact operator-facing apply lifecycle summary beside the stored record, and now surfaces stored lifecycle timing/progress metrics from `lifecycle.updatedAt` / `startedAt` / `finishedAt` / `currentStep` / `completedSteps` / `totalSteps` when present
 - when a stored immutable apply record includes additive `operations[]`, renders progress counts in that lifecycle summary plus a dedicated `Apply operations` table whose status labels stay readable for queued/running/succeeded/failed/cancelled rows without relying on mutable preview/fallback context; the stored rows currently use pending statuses for the default disabled path or queued statuses for the opt-in enabled path, while missing lifecycle timing/step fields stay as placeholders instead of synthetic progress values
-- keeps the same quick-navigation strip available inside the plan/apply workspace so operators can jump to `Back to application`, `Drift view`, `Plan/apply`, and deployment-scoped `Audit log` without relying on browser back or leaving the bookmarkable route
+- keeps the same quick-navigation strip available inside the plan/apply workspace so operators can jump to `Back to application`, `Drift view`, `Plan/apply`, and deployment-scoped `Audit log` without relying on browser back or leaving the bookmarkable route, with the active workspace shown as a non-click chip instead of a self-link
 - returns to the application detail page through the embedded back link so the drill-down path stays tight
 - keeps the toolbar `Audit log` link deployment-scoped so operators land on `/?page=audit&deployment={name}` instead of the global audit slice
 
