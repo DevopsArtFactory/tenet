@@ -3704,6 +3704,125 @@ func TestRouterOverviewDeploymentRejectsInvalidNames(t *testing.T) {
 }
 
 func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
+	t.Run("enforces deployment read authorization and preserves unavailable payload when authorized", func(t *testing.T) {
+		const (
+			path                 = "/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service"
+			deploymentName       = "worker-prod"
+			resourceType         = "ecsService"
+			resourceName         = "worker-prod-service"
+			unavailableReason    = "resource logs are unavailable because live AWS access is not configured for this local runtime"
+			authenticatedID      = "front-door-123"
+			authenticatedName    = "Front Door Operator"
+			authenticatedEmail   = "frontdoor@example.com"
+			forbiddenDeployments = "payments-api-staging"
+			allowedDeployments   = "worker-prod, payments-api-staging"
+		)
+
+		expected := resourcelogs.Result{
+			DeploymentName: deploymentName,
+			ResourceType:   resourceType,
+			ResourceName:   resourceName,
+			LookupContext: resourcelogs.LookupContext{
+				Region:                 "ap-northeast-2",
+				ControlAccountID:       "123456789012",
+				TargetAccountID:        "123456789012",
+				CrossAccount:           false,
+				ObserverRoleConfigured: false,
+			},
+			Available:         false,
+			Entries:           []resourcelogs.Entry{},
+			UnavailableReason: unavailableReason,
+		}
+
+		var overviewCalls int
+		var resourceLogCalls int
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				overviewCalls++
+				if name != deploymentName {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceLogs: func(_ context.Context, gotDeploymentName, gotResourceType, gotResourceName string) (resourcelogs.Result, error) {
+				resourceLogCalls++
+				if gotDeploymentName != deploymentName || gotResourceType != resourceType || gotResourceName != resourceName {
+					t.Fatalf("unexpected resource logs request: deployment=%q type=%q name=%q", gotDeploymentName, gotResourceType, gotResourceName)
+				}
+				return expected, nil
+			},
+		})
+
+		newAuthenticatedRequest := func(authorizedDeployments string) *http.Request {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req.Header.Set(requestactor.AuthenticatedHeaderID, authenticatedID)
+			req.Header.Set(requestactor.AuthenticatedHeaderName, authenticatedName)
+			req.Header.Set(requestactor.AuthenticatedHeaderEmail, authenticatedEmail)
+			if authorizedDeployments != "" {
+				req.Header.Set(requestactor.AuthorizedDeploymentsHeader, authorizedDeployments)
+			}
+			return req
+		}
+
+		t.Run("unauthenticated", func(t *testing.T) {
+			resp := httptest.NewRecorder()
+			router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, path, nil))
+
+			if resp.Code != http.StatusUnauthorized {
+				t.Fatalf("expected 401, got %d", resp.Code)
+			}
+			if body := resp.Body.String(); body != "unauthenticated: authenticated identity is required for this operator read route\n" {
+				t.Fatalf("unexpected 401 response body: %q", body)
+			}
+			if overviewCalls != 0 || resourceLogCalls != 0 {
+				t.Fatalf("expected auth guard to short-circuit before providers, got overview=%d resourceLogs=%d", overviewCalls, resourceLogCalls)
+			}
+		})
+
+		t.Run("forbidden", func(t *testing.T) {
+			resp := httptest.NewRecorder()
+			router.ServeHTTP(resp, newAuthenticatedRequest(forbiddenDeployments))
+
+			if resp.Code != http.StatusForbidden {
+				t.Fatalf("expected 403, got %d", resp.Code)
+			}
+			if body := resp.Body.String(); body != "forbidden: operator does not have access to this deployment\n" {
+				t.Fatalf("unexpected 403 response body: %q", body)
+			}
+			if overviewCalls != 0 || resourceLogCalls != 0 {
+				t.Fatalf("expected auth guard to short-circuit before providers, got overview=%d resourceLogs=%d", overviewCalls, resourceLogCalls)
+			}
+		})
+
+		t.Run("allowed keeps unavailable payload", func(t *testing.T) {
+			resp := httptest.NewRecorder()
+			router.ServeHTTP(resp, newAuthenticatedRequest(allowedDeployments))
+
+			if resp.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+			}
+			if overviewCalls != 1 || resourceLogCalls != 1 {
+				t.Fatalf("expected allowed read to hit both providers once, got overview=%d resourceLogs=%d", overviewCalls, resourceLogCalls)
+			}
+
+			var got resourcelogs.Result
+			if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+				t.Fatalf("decode resource logs payload: %v", err)
+			}
+			if !reflect.DeepEqual(got, expected) {
+				t.Fatalf("unexpected resource logs payload: got %+v want %+v", got, expected)
+			}
+			if got.Available {
+				t.Fatalf("expected unavailable payload, got %+v", got)
+			}
+			if got.UnavailableReason != unavailableReason {
+				t.Fatalf("expected unavailable reason %q, got %q", unavailableReason, got.UnavailableReason)
+			}
+		})
+	})
+
 	t.Run("returns resource log payload", func(t *testing.T) {
 		expected := resourcelogs.Result{
 			DeploymentName: "api-prod",
@@ -4019,6 +4138,124 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 }
 
 func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
+	t.Run("enforces deployment read authorization and preserves unavailable payload when authorized", func(t *testing.T) {
+		const (
+			path                 = "/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service"
+			deploymentName       = "worker-prod"
+			resourceType         = "ecsService"
+			resourceName         = "worker-prod-service"
+			unavailableReason    = "resource inspection is unavailable because live AWS access is not configured for this local runtime"
+			authenticatedID      = "front-door-123"
+			authenticatedName    = "Front Door Operator"
+			authenticatedEmail   = "frontdoor@example.com"
+			forbiddenDeployments = "payments-api-staging"
+			allowedDeployments   = "worker-prod, payments-api-staging"
+		)
+
+		expected := resourceinspection.Result{
+			DeploymentName: deploymentName,
+			ResourceType:   resourceType,
+			ResourceName:   resourceName,
+			LookupContext: resourceinspection.LookupContext{
+				Region:                 "ap-northeast-2",
+				ControlAccountID:       "123456789012",
+				TargetAccountID:        "123456789012",
+				CrossAccount:           false,
+				ObserverRoleConfigured: false,
+			},
+			Available:         false,
+			UnavailableReason: unavailableReason,
+		}
+
+		var overviewCalls int
+		var inspectionCalls int
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				overviewCalls++
+				if name != deploymentName {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceInspection: func(_ context.Context, gotDeploymentName, gotResourceType, gotResourceName string) (resourceinspection.Result, error) {
+				inspectionCalls++
+				if gotDeploymentName != deploymentName || gotResourceType != resourceType || gotResourceName != resourceName {
+					t.Fatalf("unexpected resource inspection request: deployment=%q type=%q name=%q", gotDeploymentName, gotResourceType, gotResourceName)
+				}
+				return expected, nil
+			},
+		})
+
+		newAuthenticatedRequest := func(authorizedDeployments string) *http.Request {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req.Header.Set(requestactor.AuthenticatedHeaderID, authenticatedID)
+			req.Header.Set(requestactor.AuthenticatedHeaderName, authenticatedName)
+			req.Header.Set(requestactor.AuthenticatedHeaderEmail, authenticatedEmail)
+			if authorizedDeployments != "" {
+				req.Header.Set(requestactor.AuthorizedDeploymentsHeader, authorizedDeployments)
+			}
+			return req
+		}
+
+		t.Run("unauthenticated", func(t *testing.T) {
+			resp := httptest.NewRecorder()
+			router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, path, nil))
+
+			if resp.Code != http.StatusUnauthorized {
+				t.Fatalf("expected 401, got %d", resp.Code)
+			}
+			if body := resp.Body.String(); body != "unauthenticated: authenticated identity is required for this operator read route\n" {
+				t.Fatalf("unexpected 401 response body: %q", body)
+			}
+			if overviewCalls != 0 || inspectionCalls != 0 {
+				t.Fatalf("expected auth guard to short-circuit before providers, got overview=%d inspection=%d", overviewCalls, inspectionCalls)
+			}
+		})
+
+		t.Run("forbidden", func(t *testing.T) {
+			resp := httptest.NewRecorder()
+			router.ServeHTTP(resp, newAuthenticatedRequest(forbiddenDeployments))
+
+			if resp.Code != http.StatusForbidden {
+				t.Fatalf("expected 403, got %d", resp.Code)
+			}
+			if body := resp.Body.String(); body != "forbidden: operator does not have access to this deployment\n" {
+				t.Fatalf("unexpected 403 response body: %q", body)
+			}
+			if overviewCalls != 0 || inspectionCalls != 0 {
+				t.Fatalf("expected auth guard to short-circuit before providers, got overview=%d inspection=%d", overviewCalls, inspectionCalls)
+			}
+		})
+
+		t.Run("allowed keeps unavailable payload", func(t *testing.T) {
+			resp := httptest.NewRecorder()
+			router.ServeHTTP(resp, newAuthenticatedRequest(allowedDeployments))
+
+			if resp.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+			}
+			if overviewCalls != 1 || inspectionCalls != 1 {
+				t.Fatalf("expected allowed read to hit both providers once, got overview=%d inspection=%d", overviewCalls, inspectionCalls)
+			}
+
+			var got resourceinspection.Result
+			if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+				t.Fatalf("decode resource inspection payload: %v", err)
+			}
+			if !reflect.DeepEqual(got, expected) {
+				t.Fatalf("unexpected resource inspection payload: got %+v want %+v", got, expected)
+			}
+			if got.Available {
+				t.Fatalf("expected unavailable payload, got %+v", got)
+			}
+			if got.UnavailableReason != unavailableReason {
+				t.Fatalf("expected unavailable reason %q, got %q", unavailableReason, got.UnavailableReason)
+			}
+		})
+	})
+
 	t.Run("returns resource inspection payload", func(t *testing.T) {
 		expected := resourceinspection.Result{
 			DeploymentName: "api-prod",

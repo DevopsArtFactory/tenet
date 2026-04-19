@@ -14,8 +14,12 @@ TERMINAL_APPLY_TRANSITION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_COLLECTION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_TRANSITION_BODY=$(mktemp)
+AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY=$(mktemp)
+AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY=$(mktemp)
 AUTH_FORBIDDEN_STATUS_READ_BODY=$(mktemp)
 AUTH_FORBIDDEN_TRANSITION_BODY=$(mktemp)
+AUTH_FORBIDDEN_RESOURCE_LOGS_BODY=$(mktemp)
+AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY=$(mktemp)
 WEBHOOK_PUSH_BODY_FILE=$(mktemp)
 WEBHOOK_PING_BODY_FILE=$(mktemp)
 INVALID_WEBHOOK_BODY=$(mktemp)
@@ -123,7 +127,7 @@ cleanup() {
   fi
 
   "${COMPOSE[@]}" down --remove-orphans >/dev/null 2>&1 || true
-  rm -f "$INVALID_AUDIT_ACTION_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" "$AUTH_FORBIDDEN_STATUS_READ_BODY" "$AUTH_FORBIDDEN_TRANSITION_BODY" "$WEBHOOK_PUSH_BODY_FILE" "$WEBHOOK_PING_BODY_FILE" "$INVALID_WEBHOOK_BODY"
+  rm -f "$INVALID_AUDIT_ACTION_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_STATUS_READ_BODY" "$AUTH_FORBIDDEN_TRANSITION_BODY" "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" "$WEBHOOK_PUSH_BODY_FILE" "$WEBHOOK_PING_BODY_FILE" "$INVALID_WEBHOOK_BODY"
   rm -rf "$PAYLOAD_DIR"
 }
 
@@ -886,12 +890,28 @@ auth_unauthenticated_transition_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_TRAN
   -H "Content-Type: application/json" \
   --data '{"status":"running","step":1}' \
   "$API_BASE_URL/v1/applies/$apply_id/transitions")
+auth_unauthenticated_resource_logs_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" -w "%{http_code}" \
+  "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
+auth_unauthenticated_resource_inspection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" -w "%{http_code}" \
+  "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service")
 auth_forbidden_status_read_status=$(curl -sS -o "$AUTH_FORBIDDEN_STATUS_READ_BODY" -w "%{http_code}" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authorized-Deployments: worker-prod" \
   "$API_BASE_URL/v1/status/deployments/payments-api-staging")
+auth_forbidden_resource_logs_status=$(curl -sS -o "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" -w "%{http_code}" \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-staging" \
+  "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
+auth_forbidden_resource_inspection_status=$(curl -sS -o "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" -w "%{http_code}" \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-staging" \
+  "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service")
 auth_forbidden_transition_status=$(curl -sS -o "$AUTH_FORBIDDEN_TRANSITION_BODY" -w "%{http_code}" \
   -X POST \
   -H "Content-Type: application/json" \
@@ -907,6 +927,18 @@ allowed_status_read=$(curl -fsS \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
   "$API_BASE_URL/v1/status/deployments/payments-api-staging")
+allowed_resource_logs=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: worker-prod, payments-api-staging" \
+  "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
+allowed_resource_inspection=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: worker-prod, payments-api-staging" \
+  "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service")
 filtered_applications_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
@@ -932,6 +964,8 @@ empty_status_collection=$(curl -fsS \
 restarted_plan_preview_path=$(write_payload restarted-plan-preview.json "$restarted_plan_preview")
 restarted_apply_record_path=$(write_payload restarted-apply-record.json "$restarted_apply_record")
 allowed_status_read_path=$(write_payload allowed-status-read.json "$allowed_status_read")
+allowed_resource_logs_path=$(write_payload allowed-resource-logs.json "$allowed_resource_logs")
+allowed_resource_inspection_path=$(write_payload allowed-resource-inspection.json "$allowed_resource_inspection")
 filtered_applications_collection_path=$(write_payload filtered-applications-collection.json "$filtered_applications_collection")
 filtered_status_collection_path=$(write_payload filtered-status-collection.json "$filtered_status_collection")
 empty_applications_collection_path=$(write_payload empty-applications-collection.json "$empty_applications_collection")
@@ -947,11 +981,21 @@ AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS="$auth_unauthenticated_status_coll
 AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" \
 AUTH_UNAUTHENTICATED_TRANSITION_STATUS="$auth_unauthenticated_transition_status" \
 AUTH_UNAUTHENTICATED_TRANSITION_BODY_PATH="$AUTH_UNAUTHENTICATED_TRANSITION_BODY" \
+AUTH_UNAUTHENTICATED_RESOURCE_LOGS_STATUS="$auth_unauthenticated_resource_logs_status" \
+AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY_PATH="$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" \
+AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_STATUS="$auth_unauthenticated_resource_inspection_status" \
+AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" \
 AUTH_FORBIDDEN_STATUS_READ_STATUS="$auth_forbidden_status_read_status" \
 AUTH_FORBIDDEN_STATUS_READ_BODY_PATH="$AUTH_FORBIDDEN_STATUS_READ_BODY" \
 AUTH_FORBIDDEN_TRANSITION_STATUS="$auth_forbidden_transition_status" \
 AUTH_FORBIDDEN_TRANSITION_BODY_PATH="$AUTH_FORBIDDEN_TRANSITION_BODY" \
+AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS="$auth_forbidden_resource_logs_status" \
+AUTH_FORBIDDEN_RESOURCE_LOGS_BODY_PATH="$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" \
+AUTH_FORBIDDEN_RESOURCE_INSPECTION_STATUS="$auth_forbidden_resource_inspection_status" \
+AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY_PATH="$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" \
 ALLOWED_STATUS_READ_PATH="$allowed_status_read_path" \
+ALLOWED_RESOURCE_LOGS_PATH="$allowed_resource_logs_path" \
+ALLOWED_RESOURCE_INSPECTION_PATH="$allowed_resource_inspection_path" \
 FILTERED_APPLICATIONS_COLLECTION_PATH="$filtered_applications_collection_path" \
 FILTERED_STATUS_COLLECTION_PATH="$filtered_status_collection_path" \
 EMPTY_APPLICATIONS_COLLECTION_PATH="$empty_applications_collection_path" \
@@ -966,6 +1010,10 @@ with open(os.environ["AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY_PATH"], encodi
     unauthenticated_status_collection_body = fh.read()
 with open(os.environ["AUTH_UNAUTHENTICATED_TRANSITION_BODY_PATH"], encoding="utf-8") as fh:
     unauthenticated_transition_body = fh.read()
+with open(os.environ["AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY_PATH"], encoding="utf-8") as fh:
+    unauthenticated_resource_logs_body = fh.read()
+with open(os.environ["AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY_PATH"], encoding="utf-8") as fh:
+    unauthenticated_resource_inspection_body = fh.read()
 with open(os.environ["RESTARTED_PLAN_PREVIEW_PATH"], encoding="utf-8") as fh:
     restarted_plan_preview = json.load(fh)
 with open(os.environ["RESTARTED_APPLY_RECORD_PATH"], encoding="utf-8") as fh:
@@ -974,8 +1022,16 @@ with open(os.environ["AUTH_FORBIDDEN_STATUS_READ_BODY_PATH"], encoding="utf-8") 
     forbidden_status_read_body = fh.read()
 with open(os.environ["AUTH_FORBIDDEN_TRANSITION_BODY_PATH"], encoding="utf-8") as fh:
     forbidden_transition_body = fh.read()
+with open(os.environ["AUTH_FORBIDDEN_RESOURCE_LOGS_BODY_PATH"], encoding="utf-8") as fh:
+    forbidden_resource_logs_body = fh.read()
+with open(os.environ["AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY_PATH"], encoding="utf-8") as fh:
+    forbidden_resource_inspection_body = fh.read()
 with open(os.environ["ALLOWED_STATUS_READ_PATH"], encoding="utf-8") as fh:
     allowed_status_read = json.load(fh)
+with open(os.environ["ALLOWED_RESOURCE_LOGS_PATH"], encoding="utf-8") as fh:
+    allowed_resource_logs = json.load(fh)
+with open(os.environ["ALLOWED_RESOURCE_INSPECTION_PATH"], encoding="utf-8") as fh:
+    allowed_resource_inspection = json.load(fh)
 with open(os.environ["FILTERED_APPLICATIONS_COLLECTION_PATH"], encoding="utf-8") as fh:
     filtered_applications_collection = json.load(fh)
 with open(os.environ["FILTERED_STATUS_COLLECTION_PATH"], encoding="utf-8") as fh:
@@ -996,11 +1052,35 @@ assert os.environ["AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS"] == "401", os.
 assert unauthenticated_status_collection_body.strip() == "unauthenticated: authenticated identity is required for this operator read route", unauthenticated_status_collection_body
 assert os.environ["AUTH_UNAUTHENTICATED_TRANSITION_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_TRANSITION_STATUS"]
 assert unauthenticated_transition_body.strip() == "unauthenticated: authenticated identity is required for this operator write route", unauthenticated_transition_body
+assert os.environ["AUTH_UNAUTHENTICATED_RESOURCE_LOGS_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_RESOURCE_LOGS_STATUS"]
+assert unauthenticated_resource_logs_body.strip() == "unauthenticated: authenticated identity is required for this operator read route", unauthenticated_resource_logs_body
+assert os.environ["AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_STATUS"]
+assert unauthenticated_resource_inspection_body.strip() == "unauthenticated: authenticated identity is required for this operator read route", unauthenticated_resource_inspection_body
 assert os.environ["AUTH_FORBIDDEN_STATUS_READ_STATUS"] == "403", os.environ["AUTH_FORBIDDEN_STATUS_READ_STATUS"]
 assert forbidden_status_read_body.strip() == "forbidden: operator does not have access to this deployment", forbidden_status_read_body
 assert os.environ["AUTH_FORBIDDEN_TRANSITION_STATUS"] == "403", os.environ["AUTH_FORBIDDEN_TRANSITION_STATUS"]
 assert forbidden_transition_body.strip() == "forbidden: operator does not have access to this deployment", forbidden_transition_body
+assert os.environ["AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS"] == "403", os.environ["AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS"]
+assert forbidden_resource_logs_body.strip() == "forbidden: operator does not have access to this deployment", forbidden_resource_logs_body
+assert os.environ["AUTH_FORBIDDEN_RESOURCE_INSPECTION_STATUS"] == "403", os.environ["AUTH_FORBIDDEN_RESOURCE_INSPECTION_STATUS"]
+assert forbidden_resource_inspection_body.strip() == "forbidden: operator does not have access to this deployment", forbidden_resource_inspection_body
 assert allowed_status_read["deploymentName"] == "payments-api-staging", allowed_status_read
+assert allowed_resource_logs["deploymentName"] == "worker-prod", allowed_resource_logs
+assert allowed_resource_logs["resourceType"] == "ecsService", allowed_resource_logs
+assert allowed_resource_logs["resourceName"] == "worker-prod-service", allowed_resource_logs
+assert isinstance(allowed_resource_logs["available"], bool), allowed_resource_logs
+if allowed_resource_logs["available"]:
+    assert isinstance(allowed_resource_logs.get("source"), str) and allowed_resource_logs["source"], allowed_resource_logs
+else:
+    assert isinstance(allowed_resource_logs.get("unavailableReason"), str) and allowed_resource_logs["unavailableReason"], allowed_resource_logs
+assert allowed_resource_inspection["deploymentName"] == "worker-prod", allowed_resource_inspection
+assert allowed_resource_inspection["resourceType"] == "ecsService", allowed_resource_inspection
+assert allowed_resource_inspection["resourceName"] == "worker-prod-service", allowed_resource_inspection
+assert isinstance(allowed_resource_inspection["available"], bool), allowed_resource_inspection
+if allowed_resource_inspection["available"]:
+    assert isinstance(allowed_resource_inspection.get("source"), str) and allowed_resource_inspection["source"], allowed_resource_inspection
+else:
+    assert isinstance(allowed_resource_inspection.get("unavailableReason"), str) and allowed_resource_inspection["unavailableReason"], allowed_resource_inspection
 filtered_application_names = {row["name"] for row in filtered_applications_collection}
 assert "worker-prod" in filtered_application_names, filtered_applications_collection
 assert filtered_application_names == {"payments-api-prod", "worker-prod"}, filtered_applications_collection
