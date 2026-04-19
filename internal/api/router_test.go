@@ -1143,6 +1143,159 @@ func TestRouterAuditLogsMethodNotAllowed(t *testing.T) {
 	}
 }
 
+func TestRouterDeploymentReadAuthorization(t *testing.T) {
+	newGuardedRouter := func(t *testing.T) (http.Handler, *int) {
+		t.Helper()
+
+		providerCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			OverviewApplications: func(context.Context) ([]catalog.ApplicationOverview, error) {
+				providerCalls++
+				return []catalog.ApplicationOverview{{Name: "api-prod"}}, nil
+			},
+			OverviewApplication: func(_ context.Context, name string) (catalog.ApplicationOverviewDetail, error) {
+				providerCalls++
+				return catalog.ApplicationOverviewDetail{Name: name}, nil
+			},
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				providerCalls++
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentEvents: func(_ context.Context, name string) (catalog.DeploymentOverviewEvents, error) {
+				providerCalls++
+				return catalog.DeploymentOverviewEvents{DeploymentName: name}, nil
+			},
+			OverviewDeploymentResourceLogs: func(_ context.Context, name, resourceType, resourceName string) (resourcelogs.Result, error) {
+				providerCalls++
+				return resourcelogs.Result{DeploymentName: name, ResourceType: resourceType, ResourceName: resourceName}, nil
+			},
+			OverviewDeploymentResourceInspection: func(_ context.Context, name, resourceType, resourceName string) (resourceinspection.Result, error) {
+				providerCalls++
+				return resourceinspection.Result{DeploymentName: name, ResourceType: resourceType, ResourceName: resourceName, Available: true}, nil
+			},
+			AuditLogs: func(_ context.Context, query auditlog.Query) (auditlog.Result, error) {
+				providerCalls++
+				return auditlog.Result{
+					Entries: []auditlog.Entry{{
+						Action:         string(auditlog.ActionApplyRequested),
+						DeploymentName: query.DeploymentName,
+					}},
+				}, nil
+			},
+		})
+
+		return router, &providerCalls
+	}
+
+	newAuthenticatedRequest := func(path string, authorizedDeployments string) *http.Request {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+		if authorizedDeployments != "" {
+			req.Header.Set(requestactor.AuthorizedDeploymentsHeader, authorizedDeployments)
+		}
+		return req
+	}
+
+	guardedRoutes := []struct {
+		name string
+		path string
+	}{
+		{name: "overview application detail", path: "/v1/overview/applications/api-prod"},
+		{name: "overview deployment detail", path: "/v1/overview/deployments/api-prod"},
+		{name: "overview deployment events", path: "/v1/overview/deployments/api-prod/events"},
+		{name: "overview deployment resource logs", path: "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service"},
+		{name: "overview deployment resource inspection", path: "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service"},
+		{name: "deployment scoped audit logs", path: "/v1/audit-logs?deployment=api-prod&action=apply.requested&limit=1"},
+	}
+
+	for _, tc := range guardedRoutes {
+		t.Run(tc.name+" unauthenticated", func(t *testing.T) {
+			router, providerCalls := newGuardedRouter(t)
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusUnauthorized {
+				t.Fatalf("expected 401, got %d", resp.Code)
+			}
+			if body := resp.Body.String(); body != "unauthenticated: authenticated identity is required for this operator read route\n" {
+				t.Fatalf("unexpected 401 response body: %q", body)
+			}
+			if *providerCalls != 0 {
+				t.Fatalf("expected auth guard to short-circuit before providers, got %d calls", *providerCalls)
+			}
+		})
+
+		t.Run(tc.name+" forbidden", func(t *testing.T) {
+			router, providerCalls := newGuardedRouter(t)
+			req := newAuthenticatedRequest(tc.path, "worker-prod")
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusForbidden {
+				t.Fatalf("expected 403, got %d", resp.Code)
+			}
+			if body := resp.Body.String(); body != "forbidden: operator does not have access to this deployment\n" {
+				t.Fatalf("unexpected 403 response body: %q", body)
+			}
+			if *providerCalls != 0 {
+				t.Fatalf("expected auth guard to short-circuit before providers, got %d calls", *providerCalls)
+			}
+		})
+
+		t.Run(tc.name+" allowed", func(t *testing.T) {
+			router, providerCalls := newGuardedRouter(t)
+			req := newAuthenticatedRequest(tc.path, "api-prod, worker-prod")
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+			}
+			if *providerCalls == 0 {
+				t.Fatal("expected guarded route provider to run")
+			}
+		})
+	}
+
+	t.Run("unscoped audit logs remain unchanged", func(t *testing.T) {
+		router, providerCalls := newGuardedRouter(t)
+		req := httptest.NewRequest(http.MethodGet, "/v1/audit-logs?action=apply.requested&limit=1", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if *providerCalls != 1 {
+			t.Fatalf("expected unscoped audit logs provider call, got %d", *providerCalls)
+		}
+	})
+
+	t.Run("overview applications collection remains unchanged", func(t *testing.T) {
+		router, providerCalls := newGuardedRouter(t)
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/applications", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if *providerCalls != 1 {
+			t.Fatalf("expected overview applications provider call, got %d", *providerCalls)
+		}
+	})
+}
+
 func TestRouterDeploymentStatuses(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},

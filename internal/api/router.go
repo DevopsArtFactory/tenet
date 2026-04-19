@@ -45,6 +45,10 @@ func respondUnauthenticatedError(w http.ResponseWriter, message string) {
 	http.Error(w, message, http.StatusUnauthorized)
 }
 
+func respondForbiddenError(w http.ResponseWriter, message string) {
+	http.Error(w, message, http.StatusForbidden)
+}
+
 func isRequestContextError(err error) bool {
 	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
@@ -116,6 +120,22 @@ func requireAuthenticatedIdentity(w http.ResponseWriter, r *http.Request) bool {
 	return false
 }
 
+func requireDeploymentReadAuthorization(w http.ResponseWriter, r *http.Request, enabled bool, deploymentName string) bool {
+	if !enabled {
+		return true
+	}
+	identity := requestactor.AuthenticatedIdentityFromContext(r.Context())
+	if !identity.Authenticated {
+		respondUnauthenticatedError(w, "unauthenticated: authenticated identity is required for this operator read route")
+		return false
+	}
+	if requestactor.AuthorizedDeploymentsFromContext(r.Context()).Allows(deploymentName) {
+		return true
+	}
+	respondForbiddenError(w, "forbidden: operator does not have access to this deployment")
+	return false
+}
+
 // Options configures the API router.
 type Options struct {
 	BuildInfo                            buildinfo.Info
@@ -124,6 +144,7 @@ type Options struct {
 	GitHubWebhookSecret                  string
 	TrustAuthenticatedHeaders            bool
 	RequireAuthenticatedIdentity         bool
+	RequireDeploymentReadAuthorization   bool
 	GitHubWebhookDesiredStateSource      githubwebhook.DesiredStateSourceConfig
 	GitHubWebhookRefreshPublisher        controllerrefresh.Publisher
 	CatalogSummary                       func(context.Context) (catalog.Summary, error)
@@ -344,6 +365,9 @@ func NewRouter(options Options) http.Handler {
 			http.Error(w, "invalid deployment name", http.StatusBadRequest)
 			return
 		}
+		if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, name) {
+			return
+		}
 		detail, err := options.OverviewApplication(r.Context(), name)
 		if err != nil {
 			respondReadLookupError(w, err, "overview application unavailable")
@@ -419,6 +443,9 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "invalid deployment name", http.StatusBadRequest)
 				return
 			}
+			if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, name) {
+				return
+			}
 			events, err := options.OverviewDeploymentEvents(r.Context(), name)
 			if err != nil {
 				respondReadLookupError(w, err, "overview deployment events unavailable")
@@ -438,6 +465,9 @@ func NewRouter(options Options) http.Handler {
 			name := strings.TrimSuffix(path, "/resource-logs")
 			if name == "" || strings.Contains(name, "/") {
 				http.Error(w, "invalid deployment name", http.StatusBadRequest)
+				return
+			}
+			if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, name) {
 				return
 			}
 			resourceType, resourceName, ok := parseResourceQuery(w, r)
@@ -469,6 +499,9 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "invalid deployment name", http.StatusBadRequest)
 				return
 			}
+			if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, name) {
+				return
+			}
 			resourceType, resourceName, ok := parseResourceQuery(w, r)
 			if !ok {
 				return
@@ -494,6 +527,9 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "invalid deployment name", http.StatusBadRequest)
 				return
 			}
+			if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, name) {
+				return
+			}
 			detail, err := options.OverviewDeployment(r.Context(), name)
 			if err != nil {
 				respondReadLookupError(w, err, "overview deployment unavailable")
@@ -516,6 +552,9 @@ func NewRouter(options Options) http.Handler {
 			deploymentName := strings.TrimSpace(r.URL.Query().Get("deployment"))
 			if deploymentName == "" || strings.Contains(deploymentName, "/") {
 				http.Error(w, "invalid deployment query", http.StatusBadRequest)
+				return
+			}
+			if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, deploymentName) {
 				return
 			}
 			query.DeploymentName = deploymentName
@@ -723,7 +762,7 @@ func NewRouter(options Options) http.Handler {
 	handler = panicRecoveryMiddleware(logger, handler)
 	handler = requestTimeoutMiddleware(options.RequestTimeout, handler)
 	handler = requestLoggingMiddleware(logger, handler)
-	handler = requestActorMiddleware(options.TrustAuthenticatedHeaders || options.RequireAuthenticatedIdentity, handler)
+	handler = requestActorMiddleware(options.TrustAuthenticatedHeaders || options.RequireAuthenticatedIdentity || options.RequireDeploymentReadAuthorization, handler)
 	handler = requestIDMiddleware(handler)
 	return handler
 }

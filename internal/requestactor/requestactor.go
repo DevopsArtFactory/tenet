@@ -15,9 +15,10 @@ const (
 	HeaderAliasName  = "X-User-Name"
 	HeaderAliasEmail = "X-User-Email"
 
-	AuthenticatedHeaderID    = "X-Tenet-Authenticated-Id"
-	AuthenticatedHeaderName  = "X-Tenet-Authenticated-Name"
-	AuthenticatedHeaderEmail = "X-Tenet-Authenticated-Email"
+	AuthenticatedHeaderID       = "X-Tenet-Authenticated-Id"
+	AuthenticatedHeaderName     = "X-Tenet-Authenticated-Name"
+	AuthenticatedHeaderEmail    = "X-Tenet-Authenticated-Email"
+	AuthorizedDeploymentsHeader = "X-Tenet-Authorized-Deployments"
 
 	UnavailableReason                      = "actor information is unavailable because no authenticated request context was available for this local request"
 	AuthenticatedIdentityUnavailableReason = "authenticated identity is unavailable because no trusted forwarded identity headers were available for this request"
@@ -25,6 +26,7 @@ const (
 
 type actorContextKey struct{}
 type authenticatedIdentityContextKey struct{}
+type authorizedDeploymentsContextKey struct{}
 
 // Actor captures request-scoped operator identity without inventing missing auth data.
 type Actor struct {
@@ -45,6 +47,11 @@ type AuthenticatedIdentity struct {
 	Reason        string `json:"reason,omitempty"`
 }
 
+// AuthorizedDeployments captures the trusted front-door deployment allowlist for one request.
+type AuthorizedDeployments struct {
+	Names []string `json:"names,omitempty"`
+}
+
 // WithContext stores one normalized request actor on the context.
 func WithContext(ctx context.Context, actor Actor) context.Context {
 	if ctx == nil {
@@ -59,6 +66,14 @@ func WithAuthenticatedIdentityContext(ctx context.Context, identity Authenticate
 		ctx = context.Background()
 	}
 	return context.WithValue(ctx, authenticatedIdentityContextKey{}, NormalizeAuthenticatedIdentity(identity))
+}
+
+// WithAuthorizedDeploymentsContext stores one normalized deployment allowlist on the context.
+func WithAuthorizedDeploymentsContext(ctx context.Context, deployments AuthorizedDeployments) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, authorizedDeploymentsContextKey{}, NormalizeAuthorizedDeployments(deployments))
 }
 
 // FromContext returns the normalized request actor stored on the context.
@@ -85,6 +100,15 @@ func AuthenticatedIdentityFromContext(ctx context.Context) AuthenticatedIdentity
 	}
 	identity, _ := ctx.Value(authenticatedIdentityContextKey{}).(AuthenticatedIdentity)
 	return NormalizeAuthenticatedIdentity(identity)
+}
+
+// AuthorizedDeploymentsFromContext returns the normalized deployment allowlist stored on the context.
+func AuthorizedDeploymentsFromContext(ctx context.Context) AuthorizedDeployments {
+	if ctx == nil {
+		return NormalizeAuthorizedDeployments(AuthorizedDeployments{})
+	}
+	deployments, _ := ctx.Value(authorizedDeploymentsContextKey{}).(AuthorizedDeployments)
+	return NormalizeAuthorizedDeployments(deployments)
 }
 
 // FromHeaders derives explicit local-friendly actor context from Tenet request headers.
@@ -120,6 +144,23 @@ func AuthenticatedIdentityFromHeaders(header http.Header) AuthenticatedIdentity 
 	return NormalizeAuthenticatedIdentity(identity)
 }
 
+// AuthorizedDeploymentsFromHeaders derives one normalized deployment allowlist from trusted
+// forwarded front-door headers.
+func AuthorizedDeploymentsFromHeaders(header http.Header) AuthorizedDeployments {
+	if header == nil {
+		return NormalizeAuthorizedDeployments(AuthorizedDeployments{})
+	}
+	names := make([]string, 0)
+	for _, raw := range header.Values(AuthorizedDeploymentsHeader) {
+		for _, candidate := range strings.Split(raw, ",") {
+			if name := strings.TrimSpace(candidate); name != "" {
+				names = append(names, name)
+			}
+		}
+	}
+	return NormalizeAuthorizedDeployments(AuthorizedDeployments{Names: names})
+}
+
 // ProjectAuthenticatedIdentity maps a trusted authenticated identity into persisted actor fields.
 func ProjectAuthenticatedIdentity(identity AuthenticatedIdentity) Actor {
 	if !NormalizeAuthenticatedIdentity(identity).Authenticated {
@@ -131,6 +172,16 @@ func ProjectAuthenticatedIdentity(identity AuthenticatedIdentity) Actor {
 		Name:      identity.Name,
 		Email:     identity.Email,
 	})
+}
+
+// Allows reports whether the deployment is present in the exact trusted allowlist.
+func (deployments AuthorizedDeployments) Allows(deploymentName string) bool {
+	for _, authorized := range NormalizeAuthorizedDeployments(deployments).Names {
+		if authorized == deploymentName {
+			return true
+		}
+	}
+	return false
 }
 
 func headerValue(header http.Header, primary string, aliases ...string) string {
@@ -174,4 +225,31 @@ func NormalizeAuthenticatedIdentity(identity AuthenticatedIdentity) Authenticate
 		identity.Reason = AuthenticatedIdentityUnavailableReason
 	}
 	return identity
+}
+
+// NormalizeAuthorizedDeployments trims whitespace, drops empties, and keeps the allowlist stable.
+func NormalizeAuthorizedDeployments(deployments AuthorizedDeployments) AuthorizedDeployments {
+	if len(deployments.Names) == 0 {
+		deployments.Names = nil
+		return deployments
+	}
+	seen := make(map[string]struct{}, len(deployments.Names))
+	names := make([]string, 0, len(deployments.Names))
+	for _, raw := range deployments.Names {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		deployments.Names = nil
+		return deployments
+	}
+	deployments.Names = names
+	return deployments
 }

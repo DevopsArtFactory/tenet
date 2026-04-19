@@ -507,6 +507,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		`TENET_API_TRUST_AUTHENTICATED_HEADERS: ${TENET_API_TRUST_AUTHENTICATED_HEADERS:-false}`,
 		`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY: ${TENET_API_ENFORCE_AUTHENTICATED_IDENTITY:-false}`,
+		`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION: ${TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION:-false}`,
 	} {
 		if !strings.Contains(compose, fragment) {
 			t.Fatalf("expected compose auth contract to include %q", fragment)
@@ -517,17 +518,30 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		`AUTH_TRUSTED_HEADERS=${TENET_API_TRUST_AUTHENTICATED_HEADERS:-false}`,
 		`AUTH_ENFORCED=${TENET_API_ENFORCE_AUTHENTICATED_IDENTITY:-false}`,
+		`AUTH_READ_ENFORCED=${TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION:-false}`,
 		`TENET_API_TRUST_AUTHENTICATED_HEADERS="$trust_authenticated_headers"`,
 		`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY="$enforce_authenticated_identity"`,
-		`start_api true true`,
+		`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION="$enforce_deployment_read_authorization"`,
+		`start_api true true false`,
+		`start_api true false true`,
 		`"http://$HOST:$PORT/v1/plans/deployments/payments-api-prod"`,
 		`"http://$HOST:$PORT/v1/applies/plans/$plan_id"`,
 		`"X-Tenet-Authenticated-Id: front-door-123"`,
 		`"X-Tenet-Authenticated-Name: Front Door Operator"`,
 		`"X-Tenet-Authenticated-Email: frontdoor@example.com"`,
+		`"X-Tenet-Authorized-Deployments: worker-prod"`,
+		`"X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod"`,
 		`assert os.environ['AUTH_UNAUTHENTICATED_PLAN_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_PLAN_STATUS']`,
 		`assert unauthenticated_plan_body.strip() == 'unauthenticated: authenticated identity is required for this operator write route', unauthenticated_plan_body`,
 		`assert os.environ['AUTH_UNAUTHENTICATED_APPLY_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_APPLY_STATUS']`,
+		`assert os.environ['AUTH_UNAUTHENTICATED_READ_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_READ_STATUS']`,
+		`assert unauthenticated_read_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_read_body`,
+		`assert os.environ['AUTH_FORBIDDEN_READ_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_READ_STATUS']`,
+		`assert forbidden_read_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_read_body`,
+		`assert allowed_guarded_read['name'] == 'payments-api-staging', allowed_guarded_read`,
+		`assert os.environ['AUTH_FORBIDDEN_AUDIT_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_AUDIT_STATUS']`,
+		`assert forbidden_audit_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_audit_body`,
+		`assert allowed_scoped_audit['entries'][0]['deploymentName'] == 'payments-api-staging', allowed_scoped_audit`,
 		`assert 'Authenticated operator required' in ui, ui`,
 		`assert 'const operatorWriteAuthRequiredMessage = (route, action) => ` + "`Tenet rejected ${route} because authenticated identity is required on operator write routes. When auth enforcement is enabled, retry ${action} through the trusted front door so it can authenticate you and forward trusted identity headers.`;" + `' in ui, ui`,
 		`assert actor['id'] == 'front-door-123', payload`,
@@ -542,14 +556,20 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		"TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
 		"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
+		"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***",
 		"`X-Tenet-Authenticated-Id`",
 		"`X-Tenet-Authenticated-Name`",
 		"`X-Tenet-Authenticated-Email`",
+		"`X-Tenet-Authorized-Deployments`",
 		"`401 Unauthorized`",
 		"`unauthenticated: authenticated identity is required for this operator write route`",
+		"`unauthenticated: authenticated identity is required for this operator read route`",
+		"`forbidden: operator does not have access to this deployment`",
 		"authenticated identity is required on operator write routes",
+		"Collection routes such as `GET /v1/overview/applications` and unscoped audit reads such as `GET /v1/audit-logs` remain unchanged in this slice.",
 		"retry through the trusted front door",
-		"only enable either setting when every request reaches Tenet through a front door that authenticates the caller and strips any client-supplied `X-Tenet-Authenticated-*` headers",
+		"only enable any of these settings when every request reaches Tenet through a front door that authenticates the caller, strips any client-supplied `X-Tenet-Authenticated-*` headers",
+		"strips any client-supplied `X-Tenet-Authorized-Deployments` header",
 		"Do not expose a header-trusting `tenet-api` instance directly to untrusted clients",
 		"when those explicit actor headers are absent and trusted `X-Tenet-Authenticated-*` headers are present, Tenet now projects the authenticated identity into the persisted actor fields",
 		"restarting `tenet-api`",
@@ -563,12 +583,16 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		"TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
 		"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
+		"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***",
 		"`X-Tenet-Authenticated-Id`",
 		"`X-Tenet-Authenticated-Name`",
 		"`X-Tenet-Authenticated-Email`",
+		"`X-Tenet-Authorized-Deployments`",
 		"`401 Unauthorized` plus `unauthenticated: authenticated identity is required for this operator write route`",
+		"`401 Unauthorized` plus `unauthenticated: authenticated identity is required for this operator read route`",
+		"`403 Forbidden` plus `forbidden: operator does not have access to this deployment`",
 		"Tenet can also consume trusted front-door identity headers when the API instance is configured for them.",
-		"Only enable that trust when a front door authenticates the caller and strips any client-supplied `X-Tenet-Authenticated-*` headers before forwarding trusted identity values.",
+		"Only enable that trust when a front door authenticates the caller and strips any client-supplied `X-Tenet-Authenticated-*` headers and `X-Tenet-Authorized-Deployments` before forwarding trusted values.",
 		"A directly exposed header-trusting API instance is not a safe deployment shape",
 		"Tenet projects that authenticated identity into the persisted actor fields for immutable plan/apply records and therefore into their projected audit entries.",
 	} {
@@ -581,12 +605,41 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		"TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
 		"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
+		"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***",
+		"`X-Tenet-Authorized-Deployments`",
 		"`X-Tenet-Authenticated-*` headers project into persisted plan/apply/audit actor fields",
+		"deployment-scoped reads enforce trusted `X-Tenet-Authenticated-*` identity plus `X-Tenet-Authorized-Deployments`",
 		"the bookmarkable `/?page=plan` workspace still includes operator-facing guidance for those auth-gated write failures",
-		"do it only behind a front door that authenticates callers and strips inbound `X-Tenet-Authenticated-*` headers",
+		"strips inbound `X-Tenet-Authenticated-*` headers and `X-Tenet-Authorized-Deployments`",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
 			t.Fatalf("expected local runtime doc front-door auth contract to include %q", fragment)
+		}
+	}
+
+	overviewFeatureDoc := readRepoFile(t, "docs/features/overview-dashboard.md")
+	for _, fragment := range []string{
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`",
+		"`X-Tenet-Authorized-Deployments`",
+		"`GET /v1/overview/deployments/{deploymentName}/events`",
+		"`GET /v1/overview/deployments/{deploymentName}/resource-logs`",
+		"`GET /v1/overview/deployments/{deploymentName}/resource-inspection`",
+		"unscoped collection reads stay unchanged",
+	} {
+		if !strings.Contains(overviewFeatureDoc, fragment) {
+			t.Fatalf("expected overview feature doc front-door auth contract to include %q", fragment)
+		}
+	}
+
+	overviewUIDoc := readRepoFile(t, "docs/architecture/tenet-v1-overview-ui.md")
+	for _, fragment := range []string{
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`",
+		"`X-Tenet-Authorized-Deployments`",
+		"deployment-scoped `GET /v1/audit-logs?deployment={deploymentName}`",
+		"list and unscoped audit routes remain unchanged",
+	} {
+		if !strings.Contains(overviewUIDoc, fragment) {
+			t.Fatalf("expected overview UI doc front-door auth contract to include %q", fragment)
 		}
 	}
 }
@@ -645,8 +698,10 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		"`TENET_API_TRUST_AUTHENTICATED_HEADERS=true`",
 		"`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true`",
-		"strip any inbound `X-Tenet-Authenticated-*` headers from untrusted clients",
-		"callers can spoof operator identity by sending those headers directly",
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`",
+		"`X-Tenet-Authorized-Deployments`",
+		"strip any inbound `X-Tenet-Authenticated-*` headers and `X-Tenet-Authorized-Deployments` from untrusted clients",
+		"callers can spoof operator identity or deployment access by sending those headers directly",
 		"`TENET_GITHUB_WEBHOOK_SECRET`",
 		"`POST /api/v1/github/webhook`",
 		"`smoke-webhook-secret`",

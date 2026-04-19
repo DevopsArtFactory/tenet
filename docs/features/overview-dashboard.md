@@ -93,6 +93,7 @@ Current behavior:
 - breadcrumb/back-link to the applications overview
 - top-level application summary for account/region context
 - `_self` `Drift view` and `_self` `Plan/apply` links so operators enter the deployment workspaces from the application detail page instead of the account rows
+- when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`, this route also requires trusted `X-Tenet-Authenticated-*` identity plus `X-Tenet-Authorized-Deployments` to include the exact deployment name
 - initial `GET /v1/overview/applications/{deploymentName}` auth failures are status-aware: `401` tells operators to retry the same bookmarkable page through the trusted front door so authenticated identity can be provided, while `403` explains that identity was recognized but the current operator is not authorized for that route/deployment
 - `Controller runtime events` section backed by `GET /v1/overview/deployments/{deploymentName}/events`
 - explicit `Loading controller runtime events…`, empty, unavailable, and generic fetch-error states for that section
@@ -131,7 +132,7 @@ Resource-list fallback contract:
 
 The existing `Drift view` and `Plan/apply` workspace shells remain available as deeper read-only troubleshooting pages, but they are now entered from the application detail page instead of older account-row shortcuts.
 
-The bookmarkable `/?page=resource&deployment={name}...` and `/?page=drift&deployment={name}` entry loads both depend on `GET /v1/overview/deployments/{deploymentName}` and now distinguish initial auth failures: `401` tells operators to retry the same bookmarkable page through the trusted front door so authenticated identity can be provided, while `403` explains that identity was recognized but the current operator is not authorized for that route or deployment.
+The bookmarkable `/?page=resource&deployment={name}...` and `/?page=drift&deployment={name}` entry loads both depend on `GET /v1/overview/deployments/{deploymentName}` and now distinguish initial auth failures: `401` tells operators to retry the same bookmarkable page through the trusted front door so authenticated identity can be provided, while `403` explains that identity was recognized but the current operator is not authorized for that route or deployment. When `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`, the same narrow read gate also applies to `GET /v1/overview/deployments/{deploymentName}/events`, `GET /v1/overview/deployments/{deploymentName}/resource-logs`, and `GET /v1/overview/deployments/{deploymentName}/resource-inspection`, using the exact deployment allowlist from trusted `X-Tenet-Authorized-Deployments`.
 
 ### Resource detail quick navigation
 
@@ -159,6 +160,7 @@ Current behavior:
 - renders an in-place `Refresh audit log` control that re-runs only `GET /v1/audit-logs` for the current bookmarkable audit route, disables only while that audit fetch is active, and preserves the same deployment/action/limit query state
 - renders explicit `Loading audit log…`, empty, unavailable (`503`), and generic fetch-error states for non-auth failures
 - renders distinct initial auth guidance for `GET /v1/audit-logs`: `401` tells operators to retry the same bookmarkable page through the trusted front door so authenticated identity can be provided, while `403` explains that identity was recognized but the current operator is not authorized for that route or deployment
+- that auth gate is still narrow: only deployment-scoped `GET /v1/audit-logs?deployment={deploymentName}` reads require the trusted `X-Tenet-Authorized-Deployments` allowlist when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`; unscoped collection reads stay unchanged
 - makes an active deployment filter obvious in both the page chrome and body when `deployment={deploymentName}` is present
 - adds the same quick-navigation strip used in the drift/plan workspaces when `deployment={deploymentName}` is present, with `_self` links for `Back to application`, `Drift view`, `Plan/apply`, and the current deployment-scoped `Audit log` route
 - renders deployment-specific empty-state copy when one deployment is selected and no persisted audit entries match, while keeping the generic unfiltered empty state unchanged

@@ -16,6 +16,7 @@ FIXTURE_STATUS_PATH=${TENET_STATUS_PATH:-$ROOT/examples/local-status/deployments
 APPLY_ENABLED=${TENET_AWS_ENABLE_APPLY:-false}
 AUTH_TRUSTED_HEADERS=${TENET_API_TRUST_AUTHENTICATED_HEADERS:-false}
 AUTH_ENFORCED=${TENET_API_ENFORCE_AUTHENTICATED_IDENTITY:-false}
+AUTH_READ_ENFORCED=${TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION:-false}
 WEBHOOK_SECRET=${TENET_GITHUB_WEBHOOK_SECRET:-smoke-webhook-secret}
 STATUS_PATH=$(mktemp)
 PLAN_STORE_PATH=$(mktemp)
@@ -34,6 +35,9 @@ TERMINAL_APPLY_TRANSITION_BODY=$(mktemp)
 INVALID_WEBHOOK_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_PLAN_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_APPLY_BODY=$(mktemp)
+AUTH_UNAUTHENTICATED_READ_BODY=$(mktemp)
+AUTH_FORBIDDEN_READ_BODY=$(mktemp)
+AUTH_FORBIDDEN_AUDIT_BODY=$(mktemp)
 cp -R "$SOURCE_REPO_ROOT/." "$REPO_ROOT/"
 cleanup() {
   if [[ -n "${CONTROLLER_PID:-}" ]] && kill -0 "$CONTROLLER_PID" 2>/dev/null; then
@@ -44,7 +48,7 @@ cleanup() {
     kill "$API_PID" 2>/dev/null || true
     wait "$API_PID" 2>/dev/null || true
   fi
-  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$INVALID_WEBHOOK_BODY" "$AUTH_UNAUTHENTICATED_PLAN_BODY" "$AUTH_UNAUTHENTICATED_APPLY_BODY"
+  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$INVALID_WEBHOOK_BODY" "$AUTH_UNAUTHENTICATED_PLAN_BODY" "$AUTH_UNAUTHENTICATED_APPLY_BODY" "$AUTH_UNAUTHENTICATED_READ_BODY" "$AUTH_FORBIDDEN_READ_BODY" "$AUTH_FORBIDDEN_AUDIT_BODY"
   rm -rf "$PAYLOAD_DIR" "$REPO_ROOT"
 }
 trap cleanup EXIT
@@ -134,8 +138,9 @@ stop_api() {
 start_api() {
   local trust_authenticated_headers=$1
   local enforce_authenticated_identity=$2
+  local enforce_deployment_read_authorization=$3
 
-  TENET_API_ADDR=":$PORT" TENET_CATALOG_SOURCE=filesystem TENET_REPO_ROOT="$REPO_ROOT" TENET_STATUS_PATH="$STATUS_PATH" TENET_PLAN_STORE_PATH="$PLAN_STORE_PATH" TENET_APPLY_STORE_PATH="$APPLY_STORE_PATH" TENET_AWS_ENABLE_APPLY="$APPLY_ENABLED" TENET_API_TRUST_AUTHENTICATED_HEADERS="$trust_authenticated_headers" TENET_API_ENFORCE_AUTHENTICATED_IDENTITY="$enforce_authenticated_identity" TENET_GITHUB_WEBHOOK_SECRET="$WEBHOOK_SECRET" \
+  TENET_API_ADDR=":$PORT" TENET_CATALOG_SOURCE=filesystem TENET_REPO_ROOT="$REPO_ROOT" TENET_STATUS_PATH="$STATUS_PATH" TENET_PLAN_STORE_PATH="$PLAN_STORE_PATH" TENET_APPLY_STORE_PATH="$APPLY_STORE_PATH" TENET_AWS_ENABLE_APPLY="$APPLY_ENABLED" TENET_API_TRUST_AUTHENTICATED_HEADERS="$trust_authenticated_headers" TENET_API_ENFORCE_AUTHENTICATED_IDENTITY="$enforce_authenticated_identity" TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION="$enforce_deployment_read_authorization" TENET_GITHUB_WEBHOOK_SECRET="$WEBHOOK_SECRET" \
     go run ./cmd/tenet-api >"$LOG_FILE" 2>&1 &
   API_PID=$!
 
@@ -151,7 +156,7 @@ start_api() {
   return 1
 }
 
-start_api "$AUTH_TRUSTED_HEADERS" "$AUTH_ENFORCED"
+start_api "$AUTH_TRUSTED_HEADERS" "$AUTH_ENFORCED" "$AUTH_READ_ENFORCED"
 
 curl -fsS "http://$HOST:$PORT/healthz" >/dev/null
 assert_request_id_header "http://$HOST:$PORT/healthz"
@@ -874,7 +879,7 @@ PY
 
 stop_api
 rm -f "$PLAN_STORE_PATH" "$APPLY_STORE_PATH"
-start_api true true
+start_api true true false
 
 auth_unauthenticated_plan_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_PLAN_BODY" -w "%{http_code}" \
   -X POST \
@@ -947,6 +952,68 @@ assert entry['actor']['name'] == 'Front Door Operator', entry
 assert entry['actor']['email'] == 'frontdoor@example.com', entry
 print('smoke-local: front-door auth path ok')
 PY
+
+stop_api
+start_api true false true
+
+auth_unauthenticated_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_READ_BODY" -w "%{http_code}" \
+  "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging")
+auth_forbidden_read_status=$(curl -sS -o "$AUTH_FORBIDDEN_READ_BODY" -w "%{http_code}" \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: worker-prod" \
+  "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging")
+allowed_guarded_read=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
+  "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging")
+auth_forbidden_audit_status=$(curl -sS -o "$AUTH_FORBIDDEN_AUDIT_BODY" -w "%{http_code}" \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: worker-prod" \
+  "http://$HOST:$PORT/v1/audit-logs?deployment=payments-api-staging&action=apply.requested&limit=1")
+allowed_scoped_audit=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
+  "http://$HOST:$PORT/v1/audit-logs?deployment=payments-api-staging&action=apply.requested&limit=1")
+allowed_guarded_read_path=$(write_payload allowed-guarded-read.json "$allowed_guarded_read")
+allowed_scoped_audit_path=$(write_payload allowed-scoped-audit.json "$allowed_scoped_audit")
+
+AUTH_UNAUTHENTICATED_READ_STATUS="$auth_unauthenticated_read_status" AUTH_UNAUTHENTICATED_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_READ_BODY" AUTH_FORBIDDEN_READ_STATUS="$auth_forbidden_read_status" AUTH_FORBIDDEN_READ_BODY_PATH="$AUTH_FORBIDDEN_READ_BODY" AUTH_FORBIDDEN_AUDIT_STATUS="$auth_forbidden_audit_status" AUTH_FORBIDDEN_AUDIT_BODY_PATH="$AUTH_FORBIDDEN_AUDIT_BODY" ALLOWED_GUARDED_READ_PATH="$allowed_guarded_read_path" ALLOWED_SCOPED_AUDIT_PATH="$allowed_scoped_audit_path" python3 - <<'PY'
+import json, os
+
+with open(os.environ['AUTH_UNAUTHENTICATED_READ_BODY_PATH'], encoding='utf-8') as fh:
+    unauthenticated_read_body = fh.read()
+with open(os.environ['AUTH_FORBIDDEN_READ_BODY_PATH'], encoding='utf-8') as fh:
+    forbidden_read_body = fh.read()
+with open(os.environ['AUTH_FORBIDDEN_AUDIT_BODY_PATH'], encoding='utf-8') as fh:
+    forbidden_audit_body = fh.read()
+with open(os.environ['ALLOWED_GUARDED_READ_PATH'], encoding='utf-8') as fh:
+    allowed_guarded_read = json.load(fh)
+with open(os.environ['ALLOWED_SCOPED_AUDIT_PATH'], encoding='utf-8') as fh:
+    allowed_scoped_audit = json.load(fh)
+
+assert os.environ['AUTH_UNAUTHENTICATED_READ_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_READ_STATUS']
+assert unauthenticated_read_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_read_body
+assert os.environ['AUTH_FORBIDDEN_READ_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_READ_STATUS']
+assert forbidden_read_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_read_body
+assert allowed_guarded_read['name'] == 'payments-api-staging', allowed_guarded_read
+assert os.environ['AUTH_FORBIDDEN_AUDIT_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_AUDIT_STATUS']
+assert forbidden_audit_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_audit_body
+assert len(allowed_scoped_audit['entries']) == 1, allowed_scoped_audit
+assert allowed_scoped_audit['entries'][0]['deploymentName'] == 'payments-api-staging', allowed_scoped_audit
+assert allowed_scoped_audit['entries'][0]['action'] == 'apply.requested', allowed_scoped_audit
+print('smoke-local: deployment read auth path ok')
+PY
+
+stop_api
+start_api "$AUTH_TRUSTED_HEADERS" "$AUTH_ENFORCED" false
 
 TENET_REPO_ROOT="$REPO_ROOT" TENET_STATUS_PATH="$STATUS_PATH" TENET_CONTROLLER_REQUEUE_SECONDS=1 TENET_CONTROLLER_WORKERS=1 \
   go run ./cmd/tenet-controller >"$CONTROLLER_LOG_FILE" 2>&1 &

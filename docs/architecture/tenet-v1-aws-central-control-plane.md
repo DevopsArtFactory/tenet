@@ -91,7 +91,7 @@ Recommended pattern:
 
 The UI is embedded in `tenet-api`, so you do not need a separate frontend service.
 
-If you enable `TENET_API_TRUST_AUTHENTICATED_HEADERS=true` and/or `TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true`, keep that `tenet-api` instance behind the same authenticating front door. The proxy/load balancer layer must strip any inbound `X-Tenet-Authenticated-*` headers from untrusted clients and then add its own trusted forwarded identity values, or callers can spoof operator identity by sending those headers directly.
+If you enable `TENET_API_TRUST_AUTHENTICATED_HEADERS=true`, `TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true`, and/or `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`, keep that `tenet-api` instance behind the same authenticating front door. The proxy/load balancer layer must strip any inbound `X-Tenet-Authenticated-*` headers and `X-Tenet-Authorized-Deployments` from untrusted clients and then add its own trusted forwarded identity plus deployment-allowlist values, or callers can spoof operator identity or deployment access by sending those headers directly.
 
 ### 5. Secrets and credentials
 
