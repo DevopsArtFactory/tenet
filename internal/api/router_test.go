@@ -1184,6 +1184,18 @@ func TestRouterDeploymentReadAuthorization(t *testing.T) {
 					}},
 				}, nil
 			},
+			DeploymentStatuses: func(context.Context) ([]statusstore.Snapshot, error) {
+				providerCalls++
+				return []statusstore.Snapshot{
+					{DeploymentName: "api-prod"},
+					{DeploymentName: "worker-prod"},
+					{DeploymentName: "payments-api-staging"},
+				}, nil
+			},
+			DeploymentStatus: func(_ context.Context, name string) (statusstore.Snapshot, error) {
+				providerCalls++
+				return statusstore.Snapshot{DeploymentName: name}, nil
+			},
 		})
 
 		return router, &providerCalls
@@ -1204,6 +1216,7 @@ func TestRouterDeploymentReadAuthorization(t *testing.T) {
 		name string
 		path string
 	}{
+		{name: "deployment status detail", path: "/v1/status/deployments/api-prod"},
 		{name: "overview application detail", path: "/v1/overview/applications/api-prod"},
 		{name: "overview deployment detail", path: "/v1/overview/deployments/api-prod"},
 		{name: "overview deployment events", path: "/v1/overview/deployments/api-prod/events"},
@@ -1277,6 +1290,84 @@ func TestRouterDeploymentReadAuthorization(t *testing.T) {
 		}
 		if *providerCalls != 1 {
 			t.Fatalf("expected unscoped audit logs provider call, got %d", *providerCalls)
+		}
+	})
+
+	t.Run("deployment status collection unauthenticated", func(t *testing.T) {
+		router, providerCalls := newGuardedRouter(t)
+		req := httptest.NewRequest(http.MethodGet, "/v1/status/deployments", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != "unauthenticated: authenticated identity is required for this operator read route\n" {
+			t.Fatalf("unexpected 401 response body: %q", body)
+		}
+		if *providerCalls != 0 {
+			t.Fatalf("expected auth guard to short-circuit before providers, got %d calls", *providerCalls)
+		}
+	})
+
+	t.Run("deployment status collection filters allowed deployments", func(t *testing.T) {
+		router, providerCalls := newGuardedRouter(t)
+		req := newAuthenticatedRequest("/v1/status/deployments", "payments-api-staging, worker-prod")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		var snapshots []statusstore.Snapshot
+		if err := json.Unmarshal(resp.Body.Bytes(), &snapshots); err != nil {
+			t.Fatalf("decode deployment statuses: %v", err)
+		}
+		want := []statusstore.Snapshot{{DeploymentName: "worker-prod"}, {DeploymentName: "payments-api-staging"}}
+		if !reflect.DeepEqual(snapshots, want) {
+			t.Fatalf("unexpected filtered deployment statuses: got %+v want %+v", snapshots, want)
+		}
+		if *providerCalls != 1 {
+			t.Fatalf("expected deployment statuses provider call, got %d", *providerCalls)
+		}
+	})
+
+	t.Run("deployment status collection returns empty array when allowlist has no matches", func(t *testing.T) {
+		router, providerCalls := newGuardedRouter(t)
+		req := newAuthenticatedRequest("/v1/status/deployments", "missing-prod")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if body := strings.TrimSpace(resp.Body.String()); body != "[]" {
+			t.Fatalf("expected empty JSON array, got %q", body)
+		}
+		if *providerCalls != 1 {
+			t.Fatalf("expected deployment statuses provider call, got %d", *providerCalls)
+		}
+	})
+
+	t.Run("deployment status collection returns empty array when allowlist header is absent", func(t *testing.T) {
+		router, providerCalls := newGuardedRouter(t)
+		req := httptest.NewRequest(http.MethodGet, "/v1/status/deployments", nil)
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if body := strings.TrimSpace(resp.Body.String()); body != "[]" {
+			t.Fatalf("expected empty JSON array, got %q", body)
+		}
+		if *providerCalls != 1 {
+			t.Fatalf("expected deployment statuses provider call, got %d", *providerCalls)
 		}
 	})
 
