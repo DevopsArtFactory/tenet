@@ -279,6 +279,9 @@ terminal_apply_transition_status=$(curl -sS -o "$TERMINAL_APPLY_TRANSITION_BODY"
   "$API_BASE_URL/v1/applies/$apply_id/transitions")
 actor_plan_preview=$(curl -fsS -X POST \
   -H 'Content-Type: application/json' \
+  -H 'X-Tenet-Actor-Id: explicit-456' \
+  -H 'X-Tenet-Actor-Name: Alex Explicit' \
+  -H 'X-Tenet-Actor-Email: alex.explicit@example.com' \
   -H 'X-User-ID: operator-123' \
   -H 'X-User-Name: Jane Operator' \
   -H 'X-User-Email: jane@example.com' \
@@ -293,6 +296,9 @@ PY
 )
 actor_plan_preview_get=$(curl -fsS "$API_BASE_URL/v1/plans/$actor_plan_id")
 actor_apply_record=$(curl -fsS -X POST \
+  -H 'X-Tenet-Actor-Id: explicit-456' \
+  -H 'X-Tenet-Actor-Name: Alex Explicit' \
+  -H 'X-Tenet-Actor-Email: alex.explicit@example.com' \
   -H 'X-User-ID: operator-123' \
   -H 'X-User-Name: Jane Operator' \
   -H 'X-User-Email: jane@example.com' \
@@ -517,15 +523,15 @@ assert "apply request lifecycle transition is invalid:" in terminal_apply_transi
 assert f"{apply_record['id']} is already terminal with status failed" in terminal_apply_transition, terminal_apply_transition
 assert actor_plan_preview["deploymentName"] == "payments-api-staging", actor_plan_preview
 assert actor_plan_preview["actor"]["available"] is True, actor_plan_preview
-assert actor_plan_preview["actor"]["id"] == "operator-123", actor_plan_preview
-assert actor_plan_preview["actor"]["name"] == "Jane Operator", actor_plan_preview
-assert actor_plan_preview["actor"]["email"] == "jane@example.com", actor_plan_preview
+assert actor_plan_preview["actor"]["id"] == "explicit-456", actor_plan_preview
+assert actor_plan_preview["actor"]["name"] == "Alex Explicit", actor_plan_preview
+assert actor_plan_preview["actor"]["email"] == "alex.explicit@example.com", actor_plan_preview
 assert actor_plan_preview_get == actor_plan_preview, (actor_plan_preview_get, actor_plan_preview)
 assert actor_apply_record["deploymentName"] == "payments-api-staging", actor_apply_record
 assert actor_apply_record["actor"]["available"] is True, actor_apply_record
-assert actor_apply_record["actor"]["id"] == "operator-123", actor_apply_record
-assert actor_apply_record["actor"]["name"] == "Jane Operator", actor_apply_record
-assert actor_apply_record["actor"]["email"] == "jane@example.com", actor_apply_record
+assert actor_apply_record["actor"]["id"] == "explicit-456", actor_apply_record
+assert actor_apply_record["actor"]["name"] == "Alex Explicit", actor_apply_record
+assert actor_apply_record["actor"]["email"] == "alex.explicit@example.com", actor_apply_record
 assert isinstance(actor_apply_record.get("operations", []), list) and actor_apply_record["operations"], actor_apply_record
 assert all(operation["status"] == "pending" for operation in actor_apply_record["operations"]), actor_apply_record
 assert actor_apply_record_get == actor_apply_record, (actor_apply_record_get, actor_apply_record)
@@ -576,9 +582,9 @@ assert isinstance(actor_audit_logs.get("entries"), list), actor_audit_logs
 assert len(actor_audit_logs["entries"]) == 1, actor_audit_logs
 assert actor_audit_logs["entries"][0]["deploymentName"] == "payments-api-staging", actor_audit_logs
 assert actor_audit_logs["entries"][0]["actor"]["available"] is True, actor_audit_logs
-assert actor_audit_logs["entries"][0]["actor"]["id"] == "operator-123", actor_audit_logs
-assert actor_audit_logs["entries"][0]["actor"]["name"] == "Jane Operator", actor_audit_logs
-assert actor_audit_logs["entries"][0]["actor"]["email"] == "jane@example.com", actor_audit_logs
+assert actor_audit_logs["entries"][0]["actor"]["id"] == "explicit-456", actor_audit_logs
+assert actor_audit_logs["entries"][0]["actor"]["name"] == "Alex Explicit", actor_audit_logs
+assert actor_audit_logs["entries"][0]["actor"]["email"] == "alex.explicit@example.com", actor_audit_logs
 
 assert deployment_events["deploymentName"] == "payments-api-prod", deployment_events
 assert isinstance(deployment_events.get("events"), list), deployment_events
