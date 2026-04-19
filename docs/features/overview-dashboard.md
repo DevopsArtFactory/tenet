@@ -156,6 +156,7 @@ Current behavior:
 - renders an in-place `Refresh audit log` control that re-runs only `GET /v1/audit-logs` for the current bookmarkable audit route, disables only while that audit fetch is active, and preserves the same deployment/action/limit query state
 - renders explicit `Loading audit log…`, empty, unavailable (`503`), and generic fetch-error states
 - makes an active deployment filter obvious in both the page chrome and body when `deployment={deploymentName}` is present
+- adds the same quick-navigation strip used in the drift/plan workspaces when `deployment={deploymentName}` is present, with `_self` links for `Back to application`, `Drift view`, `Plan/apply`, and the current deployment-scoped `Audit log` route
 - renders deployment-specific empty-state copy when one deployment is selected and no persisted audit entries match, while keeping the generic unfiltered empty state unchanged
 - keeps the current `/?page=audit...` URL/query state stable while leaving the current audit content visible with explicit loading/error copy during an in-place refresh of the same route
 - keeps entries newest-first even if the client receives an unsorted payload
@@ -211,6 +212,14 @@ Current drift workspace behavior:
 - adds filtered-empty copy that tells operators the current query/severity controls are hiding all reported drift rows
 - keeps client-side severity filtering, query filtering, and sorting consistent across both backend-authored and fallback-derived drift rows
 - keeps the toolbar `Audit log` link deployment-scoped so operators land on `/?page=audit&deployment={name}` instead of the global audit slice
+
+### Deployment-scoped audit workspace
+
+Current deployment-scoped audit behavior:
+- reuses the embedded shell and the same `GET /v1/audit-logs` route family
+- leaves the global `/?page=audit` route unchanged when no deployment filter is present
+- adds the same compact quick-navigation strip as the drift/plan workspaces when `deployment={name}` is present
+- keeps that strip bookmarkable by routing through `buildPageURL(...)`, so `q`, `sync`, `account`, `deployment`, and current audit `action` / `limit` state survive `_self` navigation
 
 ### Plan/apply workspace
 

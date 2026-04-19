@@ -1376,9 +1376,8 @@
           description: bookmarkedResource.description || 'No linked resource metadata is available for this selection.',
         };
       };
-      const createWorkspaceQuickNav = (detail, mode) => {
-        const deploymentName = detail.name || currentPageState.deployment || '';
-        const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';
+      const createDeploymentQuickNav = (deploymentName, currentWorkspace) => {
+        if (!deploymentName) return null;
         const strip = createElement('section', 'quick-nav-strip');
         const workspaceLinks = createElement('div', 'quick-nav-links');
         workspaceLinks.append(
@@ -1403,6 +1402,12 @@
         strip.append(head, groups);
         return strip;
       };
+      const createWorkspaceQuickNav = (detail, mode) => {
+        const deploymentName = detail.name || currentPageState.deployment || '';
+        const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';
+        return createDeploymentQuickNav(deploymentName, currentWorkspace);
+      };
+      const createAuditQuickNav = () => createDeploymentQuickNav(auditDeploymentName(), 'Audit log');
       const createResourceQuickNav = (detail, resource) => {
         const deploymentName = detail.name || currentPageState.deployment || '';
         const strip = createElement('section', 'quick-nav-strip');
@@ -2379,6 +2384,10 @@
         if (deploymentCallout) {
           page.append(deploymentCallout);
         }
+        const quickNav = createAuditQuickNav();
+        if (quickNav) {
+          page.append(quickNav);
+        }
         const stateNode = createElement('div', 'detail-state', text);
         if (className) stateNode.classList.add(className);
         if (detailText) {
@@ -2401,6 +2410,10 @@
         const deploymentCallout = createAuditDeploymentContextCallout();
         if (deploymentCallout) {
           page.append(deploymentCallout);
+        }
+        const quickNav = createAuditQuickNav();
+        if (quickNav) {
+          page.append(quickNav);
         }
         if (refreshStateText) {
           page.append(createElement('div', auditState?.status === 'error' ? 'detail-state error' : 'detail-state', refreshStateText));

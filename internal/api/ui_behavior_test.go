@@ -5438,10 +5438,21 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const rowTexts = rows.map((node) => collectText(node).join(' | '));
   if (!rowTexts[0].includes('apply.requested')) throw new Error('expected newest audit entry first, got ' + rowTexts.join(' || '));
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
+  const quickNavBackLink = links.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Back to application');
+  const quickNavDriftLink = links.find((node) => node.href === '/console?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Drift view');
+  const quickNavPlanLink = links.find((node) => node.href === '/console?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Plan/apply');
+  const quickNavAuditLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2' && node.textContent === 'Audit log');
   const applicationLink = links.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Open application drill-down');
   if (!applicationLink || applicationLink.target !== '_self' || applicationLink.rel) throw new Error('expected audit application self link');
   const workspaceLink = links.find((node) => node.href === '/console?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&planId=plan_ready_123&applyId=apply_failed_123' && node.textContent === 'Open plan/apply workspace');
   if (!workspaceLink || workspaceLink.target !== '_self' || workspaceLink.rel) throw new Error('expected audit plan/apply self link');
+  if (!accountsText.includes('Quick navigation')) throw new Error('expected deployment-scoped audit quick navigation strip');
+  if (!accountsText.includes('Deployment workspaces')) throw new Error('expected deployment-scoped audit quick navigation group label');
+  if (!accountsText.includes('payments-api-prod · Audit log')) throw new Error('expected deployment-scoped audit quick navigation current-state label');
+  if (!quickNavBackLink || quickNavBackLink.target !== '_self' || quickNavBackLink.rel) throw new Error('expected audit quick navigation back link');
+  if (!quickNavDriftLink || quickNavDriftLink.target !== '_self' || quickNavDriftLink.rel) throw new Error('expected audit quick navigation drift link');
+  if (!quickNavPlanLink || quickNavPlanLink.target !== '_self' || quickNavPlanLink.rel) throw new Error('expected audit quick navigation plan link');
+  if (!quickNavAuditLink || quickNavAuditLink.target !== '_self' || quickNavAuditLink.rel) throw new Error('expected audit quick navigation self link');
 })();
 `
 		runNodeHarness(t, nodeProgram)
@@ -5611,6 +5622,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!toolbarText.includes('Audit filters: deployment payments-api-prod · action apply.requested · limit 2')) throw new Error('expected deployment, action, and limit filters in toolbar');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   if (!accountsText.includes('1 entry · newest record first · deployment payments-api-prod · action apply.requested · limit 2')) throw new Error('expected active deployment, action, and limit filter copy in audit timeline');
+  const auditQuickNavLink = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A').find((node) => node.href === '/console?page=audit&q=payments&deployment=payments-api-prod&action=apply.requested&limit=2' && node.textContent === 'Audit log');
+  if (!auditQuickNavLink || auditQuickNavLink.target !== '_self' || auditQuickNavLink.rel) throw new Error('expected audit quick navigation self link to preserve action and limit state');
   const actionSelect = document.querySelector('[data-toolbar-field="Action"]');
   if (!actionSelect || actionSelect.value !== 'apply.requested') throw new Error('expected action select to reflect URL state');
   const limitSelect = document.querySelector('[data-toolbar-field="Limit"]');
@@ -5669,6 +5682,7 @@ async function renderWithFetch(fetchImpl, search = '?page=audit') {
   await settle();
   const emptyText = collectText(loadingRun.document.getElementById('accounts')).join(' | ');
   if (!emptyText.includes('No audit activity has been persisted yet.')) throw new Error('expected audit empty state after resolve');
+  if (emptyText.includes('Quick navigation')) throw new Error('did not expect audit quick navigation without a deployment filter');
 
   const unavailableRun = await renderWithFetch(() => Promise.resolve({
     ok: false,

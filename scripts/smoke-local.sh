@@ -780,6 +780,10 @@ assert "No sibling linked resources are available for this application." in ui, 
 assert 'Audit timeline' in audit_ui, audit_ui
 assert 'Deployment audit timeline' in audit_ui, audit_ui
 assert 'Active deployment context' in audit_ui, audit_ui
+assert 'Quick navigation' in audit_ui, audit_ui
+assert 'Deployment workspaces' in audit_ui, audit_ui
+assert "const createAuditQuickNav = () => createDeploymentQuickNav(auditDeploymentName(), 'Audit log');" in audit_ui, audit_ui
+assert "createElement('div', 'quick-nav-current', `${deploymentName || 'Deployment'} · ${currentWorkspace}`)" in audit_ui, audit_ui
 assert 'Immutable plan preview and apply-request activity for deployment ${deploymentName} rendered from GET /v1/audit-logs.' in audit_ui, audit_ui
 assert 'No audit activity has been persisted yet for deployment ${currentPageState.deployment}.' in audit_ui, audit_ui
 assert 'Loading audit log…' in audit_ui, audit_ui
@@ -791,6 +795,7 @@ assert "const createAuditLogsActions = (isLoading = false) => [" in audit_ui, au
 assert "const auditLogsRefreshStateText = (auditState) => {" in audit_ui, audit_ui
 assert "const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {" in audit_ui, audit_ui
 assert "if (action) params.set('action', action);" in audit_ui, audit_ui
+assert "const createAuditQuickNav = () => createDeploymentQuickNav(auditDeploymentName(), 'Audit log');" in audit_ui, audit_ui
 assert "const normalizeAuditLimit = (value) => {" in audit_ui, audit_ui
 assert "const auditLimitSelectOptions = (limit) => {" in audit_ui, audit_ui
 assert "const syncAuditQueryParams = (params, pageState) => {" in audit_ui, audit_ui
