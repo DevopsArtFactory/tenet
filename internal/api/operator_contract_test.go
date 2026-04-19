@@ -531,8 +531,11 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		`"X-Tenet-Authenticated-Id: front-door-123"`,
 		`"X-Tenet-Authenticated-Name: Front Door Operator"`,
 		`"X-Tenet-Authenticated-Email: frontdoor@example.com"`,
+		`"http://$HOST:$PORT/v1/overview/applications"`,
 		`"X-Tenet-Authorized-Deployments: worker-prod"`,
 		`"X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod"`,
+		`assert os.environ['AUTH_UNAUTHENTICATED_COLLECTION_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_COLLECTION_STATUS']`,
+		`assert unauthenticated_collection_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_collection_body`,
 		`assert os.environ['AUTH_UNAUTHENTICATED_PLAN_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_PLAN_STATUS']`,
 		`assert unauthenticated_plan_body.strip() == 'unauthenticated: authenticated identity is required for this operator write route', unauthenticated_plan_body`,
 		`assert os.environ['AUTH_UNAUTHENTICATED_APPLY_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_APPLY_STATUS']`,
@@ -545,6 +548,10 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		`assert os.environ['AUTH_FORBIDDEN_APPLY_READ_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_APPLY_READ_STATUS']`,
 		`assert forbidden_read_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_read_body`,
 		`assert allowed_guarded_read['name'] == 'payments-api-staging', allowed_guarded_read`,
+		`filtered_application_names = {row['name'] for row in filtered_applications_collection}`,
+		`assert 'worker-prod' in filtered_application_names, filtered_applications_collection`,
+		`assert filtered_application_names == {'payments-api-prod', 'worker-prod'}, filtered_applications_collection`,
+		`assert empty_applications_collection == [], empty_applications_collection`,
 		`assert allowed_plan_read['deploymentName'] == 'payments-api-staging', allowed_plan_read`,
 		`assert allowed_apply_read['deploymentName'] == 'payments-api-staging', allowed_apply_read`,
 		`assert os.environ['AUTH_FORBIDDEN_AUDIT_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_AUDIT_STATUS']`,
@@ -574,7 +581,10 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`unauthenticated: authenticated identity is required for this operator read route`",
 		"`forbidden: operator does not have access to this deployment`",
 		"authenticated identity is required on operator write routes",
-		"Collection routes such as `GET /v1/overview/applications` and unscoped audit reads such as `GET /v1/audit-logs` remain unchanged in this slice.",
+		"`GET /v1/overview/applications` now requires trusted authenticated identity and filters the returned application rows to only deployments present in that allowlist",
+		"`GET /v1/audit-logs` remain unchanged in this slice",
+		"`200 OK` with an empty JSON array",
+		"trusted allowlist is missing or none of the returned rows match it",
 		"retry through the trusted front door",
 		"only enable any of these settings when every request reaches Tenet through a front door that authenticates the caller, strips any client-supplied `X-Tenet-Authenticated-*` headers",
 		"strips any client-supplied `X-Tenet-Authorized-Deployments` header",
@@ -634,7 +644,9 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`GET /v1/overview/deployments/{deploymentName}/events`",
 		"`GET /v1/overview/deployments/{deploymentName}/resource-logs`",
 		"`GET /v1/overview/deployments/{deploymentName}/resource-inspection`",
-		"unscoped collection reads stay unchanged",
+		"`GET /v1/overview/applications` requires trusted `X-Tenet-Authenticated-*` identity and filters returned rows through the trusted `X-Tenet-Authorized-Deployments` allowlist",
+		"when the applications allowlist is omitted or matches nothing, the API returns `200 OK` with `[]`",
+		"unscoped audit reads stay unchanged",
 	} {
 		if !strings.Contains(overviewFeatureDoc, fragment) {
 			t.Fatalf("expected overview feature doc front-door auth contract to include %q", fragment)
@@ -648,7 +660,9 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`GET /v1/plans/{planId}`",
 		"`GET /v1/applies/{applyId}`",
 		"deployment-scoped `GET /v1/audit-logs?deployment={deploymentName}`",
-		"list and unscoped audit routes remain unchanged",
+		"`GET /v1/overview/applications`, which now requires trusted identity and filters returned rows through the trusted `X-Tenet-Authorized-Deployments` allowlist",
+		"returning `200 OK` with `[]` when that allowlist is omitted or has no matching deployments",
+		"unscoped audit routes remain unchanged",
 	} {
 		if !strings.Contains(overviewUIDoc, fragment) {
 			t.Fatalf("expected overview UI doc front-door auth contract to include %q", fragment)

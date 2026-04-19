@@ -150,6 +150,19 @@ func requireDeploymentReadAuthorization(w http.ResponseWriter, r *http.Request, 
 	return requireDeploymentReadAccess(w, r, enabled, deploymentName)
 }
 
+func filterAuthorizedApplicationOverviews(applications []catalog.ApplicationOverview, authorized requestactor.AuthorizedDeployments, enabled bool) []catalog.ApplicationOverview {
+	if !enabled {
+		return applications
+	}
+	filtered := make([]catalog.ApplicationOverview, 0, len(applications))
+	for _, application := range applications {
+		if authorized.Allows(application.Name) {
+			filtered = append(filtered, application)
+		}
+	}
+	return filtered
+}
+
 // Options configures the API router.
 type Options struct {
 	BuildInfo                            buildinfo.Info
@@ -354,6 +367,9 @@ func NewRouter(options Options) http.Handler {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
+		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization) {
+			return
+		}
 		if options.OverviewApplications == nil {
 			http.Error(w, "overview applications unavailable", http.StatusServiceUnavailable)
 			return
@@ -363,6 +379,11 @@ func NewRouter(options Options) http.Handler {
 			respondReadProviderError(w, err, "overview applications unavailable")
 			return
 		}
+		applications = filterAuthorizedApplicationOverviews(
+			applications,
+			requestactor.AuthorizedDeploymentsFromContext(r.Context()),
+			options.RequireDeploymentReadAuthorization,
+		)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(applications)
 	})
