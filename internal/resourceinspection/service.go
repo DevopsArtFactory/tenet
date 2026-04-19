@@ -105,18 +105,21 @@ type ListenerActionTargetInspection struct {
 }
 
 type ECSServiceInspection struct {
-	ClusterARN          string                 `json:"clusterArn"`
-	ServiceARN          string                 `json:"serviceArn"`
-	ServiceName         string                 `json:"serviceName"`
-	Status              string                 `json:"status"`
-	LaunchType          string                 `json:"launchType,omitempty"`
-	DesiredCount        int32                  `json:"desiredCount"`
-	RunningCount        int32                  `json:"runningCount"`
-	PendingCount        int32                  `json:"pendingCount"`
-	TaskDefinition      string                 `json:"taskDefinition"`
-	TaskDefinitionImage string                 `json:"taskDefinitionImage,omitempty"`
-	Deployments         []ECSDeploymentSummary `json:"deployments"`
-	Events              []ECSServiceEvent      `json:"events"`
+	ClusterARN                    string                 `json:"clusterArn"`
+	ServiceARN                    string                 `json:"serviceArn"`
+	ServiceName                   string                 `json:"serviceName"`
+	Status                        string                 `json:"status"`
+	LaunchType                    string                 `json:"launchType,omitempty"`
+	DesiredCount                  int32                  `json:"desiredCount"`
+	RunningCount                  int32                  `json:"runningCount"`
+	PendingCount                  int32                  `json:"pendingCount"`
+	MinimumHealthyPercent         *int32                 `json:"minimumHealthyPercent,omitempty"`
+	MaximumPercent                *int32                 `json:"maximumPercent,omitempty"`
+	HealthCheckGracePeriodSeconds *int32                 `json:"healthCheckGracePeriodSeconds,omitempty"`
+	TaskDefinition                string                 `json:"taskDefinition"`
+	TaskDefinitionImage           string                 `json:"taskDefinitionImage,omitempty"`
+	Deployments                   []ECSDeploymentSummary `json:"deployments"`
+	Events                        []ECSServiceEvent      `json:"events"`
 }
 
 type ECSDeploymentSummary struct {
@@ -707,6 +710,13 @@ func (s Service) inspectAutoScalingGroupFromAWS(ctx context.Context, req AutoSca
 }
 
 func ecsInspectionFromService(service ecstypes.Service, clusterARN string, taskDefinitionImage string) ECSServiceInspection {
+	var minimumHealthyPercent *int32
+	var maximumPercent *int32
+	if service.DeploymentConfiguration != nil {
+		minimumHealthyPercent = cloneInt32(service.DeploymentConfiguration.MinimumHealthyPercent)
+		maximumPercent = cloneInt32(service.DeploymentConfiguration.MaximumPercent)
+	}
+
 	deployments := append([]ecstypes.Deployment(nil), service.Deployments...)
 	sort.SliceStable(deployments, func(i, j int) bool {
 		left := aws.ToTime(deployments[i].CreatedAt)
@@ -757,19 +767,30 @@ func ecsInspectionFromService(service ecstypes.Service, clusterARN string, taskD
 	}
 
 	return ECSServiceInspection{
-		ClusterARN:          clusterARN,
-		ServiceARN:          aws.ToString(service.ServiceArn),
-		ServiceName:         aws.ToString(service.ServiceName),
-		Status:              aws.ToString(service.Status),
-		LaunchType:          string(service.LaunchType),
-		DesiredCount:        service.DesiredCount,
-		RunningCount:        service.RunningCount,
-		PendingCount:        service.PendingCount,
-		TaskDefinition:      aws.ToString(service.TaskDefinition),
-		TaskDefinitionImage: strings.TrimSpace(taskDefinitionImage),
-		Deployments:         deploymentSummaries,
-		Events:              eventSummaries,
+		ClusterARN:                    clusterARN,
+		ServiceARN:                    aws.ToString(service.ServiceArn),
+		ServiceName:                   aws.ToString(service.ServiceName),
+		Status:                        aws.ToString(service.Status),
+		LaunchType:                    string(service.LaunchType),
+		DesiredCount:                  service.DesiredCount,
+		RunningCount:                  service.RunningCount,
+		PendingCount:                  service.PendingCount,
+		MinimumHealthyPercent:         minimumHealthyPercent,
+		MaximumPercent:                maximumPercent,
+		HealthCheckGracePeriodSeconds: cloneInt32(service.HealthCheckGracePeriodSeconds),
+		TaskDefinition:                aws.ToString(service.TaskDefinition),
+		TaskDefinitionImage:           strings.TrimSpace(taskDefinitionImage),
+		Deployments:                   deploymentSummaries,
+		Events:                        eventSummaries,
 	}
+}
+
+func cloneInt32(value *int32) *int32 {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
 }
 
 func ecsTaskDefinitionImage(taskDefinition *ecstypes.TaskDefinition) string {

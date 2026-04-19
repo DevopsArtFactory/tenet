@@ -646,6 +646,15 @@ assert isinstance(worker_resource_inspection.get("lookupContext"), dict), worker
 if worker_resource_inspection["available"]:
     assert worker_resource_inspection.get("source") == "ecs_service", worker_resource_inspection
     assert isinstance(worker_resource_inspection.get("ecsService"), dict), worker_resource_inspection
+    assert isinstance(worker_resource_inspection["ecsService"].get("serviceName"), str) and worker_resource_inspection["ecsService"]["serviceName"], worker_resource_inspection
+    minimum_healthy_percent = worker_resource_inspection["ecsService"].get("minimumHealthyPercent")
+    maximum_percent = worker_resource_inspection["ecsService"].get("maximumPercent")
+    health_check_grace_period_seconds = worker_resource_inspection["ecsService"].get("healthCheckGracePeriodSeconds")
+    assert minimum_healthy_percent is None or isinstance(minimum_healthy_percent, int), worker_resource_inspection
+    assert maximum_percent is None or isinstance(maximum_percent, int), worker_resource_inspection
+    assert health_check_grace_period_seconds is None or isinstance(health_check_grace_period_seconds, int), worker_resource_inspection
+    assert isinstance(worker_resource_inspection["ecsService"].get("deployments", []), list), worker_resource_inspection
+    assert isinstance(worker_resource_inspection["ecsService"].get("events", []), list), worker_resource_inspection
 else:
     assert isinstance(worker_resource_inspection.get("unavailableReason"), str) and worker_resource_inspection["unavailableReason"], worker_resource_inspection
 
