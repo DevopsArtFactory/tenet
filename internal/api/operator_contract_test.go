@@ -586,16 +586,31 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true \`,
 		`auth_unauthenticated_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" -w "%{http_code}" \`,
 		`"$API_BASE_URL/v1/overview/applications")`,
+		`auth_unauthenticated_status_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" -w "%{http_code}" \`,
+		`"$API_BASE_URL/v1/status/deployments")`,
+		`auth_forbidden_status_read_status=$(curl -sS -o "$AUTH_FORBIDDEN_STATUS_READ_BODY" -w "%{http_code}" \`,
+		`"$API_BASE_URL/v1/status/deployments/payments-api-staging")`,
+		`allowed_status_read=$(curl -fsS \`,
+		`filtered_status_collection=$(curl -fsS \`,
+		`empty_status_collection=$(curl -fsS \`,
 		`"X-Tenet-Authenticated-Id: front-door-123"`,
 		`"X-Tenet-Authenticated-Name: Front Door Operator"`,
 		`"X-Tenet-Authenticated-Email: frontdoor@example.com"`,
 		`"X-Tenet-Authorized-Deployments: payments-api-prod, worker-prod"`,
 		`assert os.environ["AUTH_UNAUTHENTICATED_COLLECTION_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_COLLECTION_STATUS"]`,
 		`assert unauthenticated_collection_body.strip() == "unauthenticated: authenticated identity is required for this operator read route", unauthenticated_collection_body`,
+		`assert os.environ["AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS"]`,
+		`assert unauthenticated_status_collection_body.strip() == "unauthenticated: authenticated identity is required for this operator read route", unauthenticated_status_collection_body`,
+		`assert os.environ["AUTH_FORBIDDEN_STATUS_READ_STATUS"] == "403", os.environ["AUTH_FORBIDDEN_STATUS_READ_STATUS"]`,
+		`assert forbidden_status_read_body.strip() == "forbidden: operator does not have access to this deployment", forbidden_status_read_body`,
+		`assert allowed_status_read["deploymentName"] == "payments-api-staging", allowed_status_read`,
 		`filtered_application_names = {row["name"] for row in filtered_applications_collection}`,
 		`assert "worker-prod" in filtered_application_names, filtered_applications_collection`,
 		`assert filtered_application_names == {"payments-api-prod", "worker-prod"}, filtered_applications_collection`,
+		`filtered_status_deployment_names = {row["deploymentName"] for row in filtered_status_collection}`,
+		`assert filtered_status_deployment_names == {"payments-api-prod"}, filtered_status_collection`,
 		`assert empty_applications_collection == [], empty_applications_collection`,
+		`assert empty_status_collection == [], empty_status_collection`,
 	} {
 		if !strings.Contains(dockerSmoke, fragment) {
 			t.Fatalf("expected smoke-docker front-door auth contract to include %q", fragment)
@@ -628,9 +643,12 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"Do not expose a header-trusting `tenet-api` instance directly to untrusted clients",
 		"when those explicit actor headers are absent and trusted `X-Tenet-Authenticated-*` headers are present, Tenet now projects the authenticated identity into the persisted actor fields",
 		"restarting `tenet-api`",
-		"restarts the Compose `api` service with `TENET_API_TRUST_AUTHENTICATED_HEADERS=true` plus `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` to prove unauthenticated `GET /v1/overview/applications` fails with `401`",
-		"trusted `X-Tenet-Authorized-Deployments` filters the returned application rows",
-		"omitting that allowlist returns `[]`",
+		"restarts the Compose `api` service with `TENET_API_TRUST_AUTHENTICATED_HEADERS=true` plus `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` to prove unauthenticated `GET /v1/overview/applications`, unauthenticated `GET /v1/status/deployments`, and unauthenticated `GET /v1/overview/accounts` fail with `401`",
+		"unauthenticated `GET /v1/status/deployments`",
+		"trusted `X-Tenet-Authorized-Deployments` filters the returned application rows, raw status snapshots, and account aggregates",
+		"omitting that allowlist returns `[]` for those guarded collections",
+		"`GET /v1/status/deployments/{deploymentName}` outside the allowlist fails with `403`",
+		"one allowed raw status detail read succeeds",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README front-door auth contract to include %q", fragment)
@@ -669,9 +687,12 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"deployment-scoped reads enforce trusted `X-Tenet-Authenticated-*` identity plus `X-Tenet-Authorized-Deployments`",
 		"the bookmarkable `/?page=plan` workspace still includes operator-facing guidance for those auth-gated write failures",
 		"strips inbound `X-Tenet-Authenticated-*` headers and `X-Tenet-Authorized-Deployments`",
-		"restarts the Compose `api` service with `TENET_API_TRUST_AUTHENTICATED_HEADERS=true` plus `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` to prove unauthenticated `GET /v1/overview/applications` fails with `401`",
-		"trusted `X-Tenet-Authorized-Deployments` filters the returned application rows",
-		"omitting that allowlist returns `[]`",
+		"restarts the Compose `api` service with `TENET_API_TRUST_AUTHENTICATED_HEADERS=true` plus `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` to prove unauthenticated `GET /v1/overview/applications`, unauthenticated `GET /v1/status/deployments`, and unauthenticated `GET /v1/overview/accounts` fail with `401`",
+		"unauthenticated `GET /v1/status/deployments`",
+		"trusted `X-Tenet-Authorized-Deployments` filters the returned application rows, raw status snapshots, and account aggregates",
+		"omitting that allowlist returns `[]` for those guarded collections",
+		"`GET /v1/status/deployments/{deploymentName}` outside the allowlist fails with `403`",
+		"one allowed raw status detail read succeeds",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
 			t.Fatalf("expected local runtime doc front-door auth contract to include %q", fragment)
@@ -683,11 +704,12 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***`",
 		"`X-Tenet-Authenticated-*`",
 		"`X-Tenet-Authorized-Deployments`",
-		"`GET /v1/status/deployments` now requires trusted authenticated identity and filters returned snapshots through the trusted allowlist",
+		"`GET /v1/status/deployments` requires trusted `X-Tenet-Authenticated-*` identity and filters returned snapshots through the trusted `X-Tenet-Authorized-Deployments` allowlist",
 		"`GET /v1/status/deployments/{deploymentName}` requires exact deployment membership in that same allowlist",
 		"`401 Unauthorized` plus `unauthenticated: authenticated identity is required for this operator read route`",
 		"`403 Forbidden` plus `forbidden: operator does not have access to this deployment`",
 		"`200 OK` with `[]`",
+		"`make smoke-docker` restarts the Compose `api` service with trusted-header auth enabled and proves this exact route contract",
 		"Only enable that trust when a front door authenticates the caller and strips any client-supplied `X-Tenet-Authenticated-*` headers and `X-Tenet-Authorized-Deployments` before forwarding trusted values.",
 	} {
 		if !strings.Contains(deploymentStatusDoc, fragment) {

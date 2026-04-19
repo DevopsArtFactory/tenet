@@ -12,6 +12,8 @@ INVALID_APPLY_TRANSITION_BODY=$(mktemp)
 UNKNOWN_APPLY_TRANSITION_BODY=$(mktemp)
 TERMINAL_APPLY_TRANSITION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_COLLECTION_BODY=$(mktemp)
+AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY=$(mktemp)
+AUTH_FORBIDDEN_STATUS_READ_BODY=$(mktemp)
 WEBHOOK_PUSH_BODY_FILE=$(mktemp)
 WEBHOOK_PING_BODY_FILE=$(mktemp)
 INVALID_WEBHOOK_BODY=$(mktemp)
@@ -119,7 +121,7 @@ cleanup() {
   fi
 
   "${COMPOSE[@]}" down --remove-orphans >/dev/null 2>&1 || true
-  rm -f "$INVALID_AUDIT_ACTION_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" "$WEBHOOK_PUSH_BODY_FILE" "$WEBHOOK_PING_BODY_FILE" "$INVALID_WEBHOOK_BODY"
+  rm -f "$INVALID_AUDIT_ACTION_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" "$AUTH_FORBIDDEN_STATUS_READ_BODY" "$WEBHOOK_PUSH_BODY_FILE" "$WEBHOOK_PING_BODY_FILE" "$INVALID_WEBHOOK_BODY"
   rm -rf "$PAYLOAD_DIR"
 }
 
@@ -862,41 +864,94 @@ restart_api_with_frontdoor_read_auth
 
 auth_unauthenticated_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" -w "%{http_code}" \
   "$API_BASE_URL/v1/overview/applications")
+auth_unauthenticated_status_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" -w "%{http_code}" \
+  "$API_BASE_URL/v1/status/deployments")
+auth_forbidden_status_read_status=$(curl -sS -o "$AUTH_FORBIDDEN_STATUS_READ_BODY" -w "%{http_code}" \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: worker-prod" \
+  "$API_BASE_URL/v1/status/deployments/payments-api-staging")
+allowed_status_read=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
+  "$API_BASE_URL/v1/status/deployments/payments-api-staging")
 filtered_applications_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authorized-Deployments: payments-api-prod, worker-prod" \
   "$API_BASE_URL/v1/overview/applications")
+filtered_status_collection=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-prod, worker-prod" \
+  "$API_BASE_URL/v1/status/deployments")
 empty_applications_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   "$API_BASE_URL/v1/overview/applications")
+empty_status_collection=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  "$API_BASE_URL/v1/status/deployments")
+allowed_status_read_path=$(write_payload allowed-status-read.json "$allowed_status_read")
 filtered_applications_collection_path=$(write_payload filtered-applications-collection.json "$filtered_applications_collection")
+filtered_status_collection_path=$(write_payload filtered-status-collection.json "$filtered_status_collection")
 empty_applications_collection_path=$(write_payload empty-applications-collection.json "$empty_applications_collection")
+empty_status_collection_path=$(write_payload empty-status-collection.json "$empty_status_collection")
 
 AUTH_UNAUTHENTICATED_COLLECTION_STATUS="$auth_unauthenticated_collection_status" \
 AUTH_UNAUTHENTICATED_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_COLLECTION_BODY" \
+AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS="$auth_unauthenticated_status_collection_status" \
+AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" \
+AUTH_FORBIDDEN_STATUS_READ_STATUS="$auth_forbidden_status_read_status" \
+AUTH_FORBIDDEN_STATUS_READ_BODY_PATH="$AUTH_FORBIDDEN_STATUS_READ_BODY" \
+ALLOWED_STATUS_READ_PATH="$allowed_status_read_path" \
 FILTERED_APPLICATIONS_COLLECTION_PATH="$filtered_applications_collection_path" \
+FILTERED_STATUS_COLLECTION_PATH="$filtered_status_collection_path" \
 EMPTY_APPLICATIONS_COLLECTION_PATH="$empty_applications_collection_path" \
+EMPTY_STATUS_COLLECTION_PATH="$empty_status_collection_path" \
 python3 - <<'PY'
 import json
 import os
 
 with open(os.environ["AUTH_UNAUTHENTICATED_COLLECTION_BODY_PATH"], encoding="utf-8") as fh:
     unauthenticated_collection_body = fh.read()
+with open(os.environ["AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY_PATH"], encoding="utf-8") as fh:
+    unauthenticated_status_collection_body = fh.read()
+with open(os.environ["AUTH_FORBIDDEN_STATUS_READ_BODY_PATH"], encoding="utf-8") as fh:
+    forbidden_status_read_body = fh.read()
+with open(os.environ["ALLOWED_STATUS_READ_PATH"], encoding="utf-8") as fh:
+    allowed_status_read = json.load(fh)
 with open(os.environ["FILTERED_APPLICATIONS_COLLECTION_PATH"], encoding="utf-8") as fh:
     filtered_applications_collection = json.load(fh)
+with open(os.environ["FILTERED_STATUS_COLLECTION_PATH"], encoding="utf-8") as fh:
+    filtered_status_collection = json.load(fh)
 with open(os.environ["EMPTY_APPLICATIONS_COLLECTION_PATH"], encoding="utf-8") as fh:
     empty_applications_collection = json.load(fh)
+with open(os.environ["EMPTY_STATUS_COLLECTION_PATH"], encoding="utf-8") as fh:
+    empty_status_collection = json.load(fh)
 
 assert os.environ["AUTH_UNAUTHENTICATED_COLLECTION_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_COLLECTION_STATUS"]
 assert unauthenticated_collection_body.strip() == "unauthenticated: authenticated identity is required for this operator read route", unauthenticated_collection_body
+assert os.environ["AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS"]
+assert unauthenticated_status_collection_body.strip() == "unauthenticated: authenticated identity is required for this operator read route", unauthenticated_status_collection_body
+assert os.environ["AUTH_FORBIDDEN_STATUS_READ_STATUS"] == "403", os.environ["AUTH_FORBIDDEN_STATUS_READ_STATUS"]
+assert forbidden_status_read_body.strip() == "forbidden: operator does not have access to this deployment", forbidden_status_read_body
+assert allowed_status_read["deploymentName"] == "payments-api-staging", allowed_status_read
 filtered_application_names = {row["name"] for row in filtered_applications_collection}
 assert "worker-prod" in filtered_application_names, filtered_applications_collection
 assert filtered_application_names == {"payments-api-prod", "worker-prod"}, filtered_applications_collection
+filtered_status_deployment_names = {row["deploymentName"] for row in filtered_status_collection}
+assert filtered_status_deployment_names == {"payments-api-prod"}, filtered_status_collection
 assert empty_applications_collection == [], empty_applications_collection
+assert empty_status_collection == [], empty_status_collection
 PY
 
 restart_api_with_apply_mode true
