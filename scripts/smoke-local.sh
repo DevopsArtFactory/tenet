@@ -41,6 +41,7 @@ AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_READ_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_STATUS_READ_BODY=$(mktemp)
+AUTH_UNAUTHENTICATED_EVENTS_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY=$(mktemp)
 AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY=$(mktemp)
@@ -48,15 +49,16 @@ AUTH_FORBIDDEN_GROUP_DETAIL_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_PLAN_READ_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_APPLY_READ_BODY=$(mktemp)
 AUTH_FORBIDDEN_READ_BODY=$(mktemp)
-AUTH_FORBIDDEN_STATUS_READ_BODY=***
+AUTH_FORBIDDEN_STATUS_READ_BODY=$(mktemp)
+AUTH_FORBIDDEN_EVENTS_BODY=$(mktemp)
 AUTH_FORBIDDEN_RESOURCE_LOGS_BODY=$(mktemp)
 AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY=$(mktemp)
 AUTH_FORBIDDEN_PLAN_WRITE_BODY=$(mktemp)
 AUTH_FORBIDDEN_APPLY_WRITE_BODY=$(mktemp)
 AUTH_FORBIDDEN_TRANSITION_BODY=$(mktemp)
-AUTH_FORBIDDEN_PLAN_READ_BODY=***
-AUTH_FORBIDDEN_APPLY_READ_BODY=***
-AUTH_FORBIDDEN_AUDIT_BODY=***
+AUTH_FORBIDDEN_PLAN_READ_BODY=$(mktemp)
+AUTH_FORBIDDEN_APPLY_READ_BODY=$(mktemp)
+AUTH_FORBIDDEN_AUDIT_BODY=$(mktemp)
 cp -R "$SOURCE_REPO_ROOT/." "$REPO_ROOT/"
 cleanup() {
   if [[ -n "${CONTROLLER_PID:-}" ]] && kill -0 "$CONTROLLER_PID" 2>/dev/null; then
@@ -67,7 +69,7 @@ cleanup() {
     kill "$API_PID" 2>/dev/null || true
     wait "$API_PID" 2>/dev/null || true
   fi
-  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$INVALID_WEBHOOK_BODY" "$AUTH_UNAUTHENTICATED_PLAN_BODY" "$AUTH_UNAUTHENTICATED_APPLY_BODY" "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_READ_BODY" "$AUTH_UNAUTHENTICATED_STATUS_READ_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY" "$AUTH_FORBIDDEN_GROUP_DETAIL_BODY" "$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" "$AUTH_FORBIDDEN_READ_BODY" "$AUTH_FORBIDDEN_STATUS_READ_BODY" "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_PLAN_WRITE_BODY" "$AUTH_FORBIDDEN_APPLY_WRITE_BODY" "$AUTH_FORBIDDEN_TRANSITION_BODY" "$AUTH_FORBIDDEN_PLAN_READ_BODY" "$AUTH_FORBIDDEN_APPLY_READ_BODY" "$AUTH_FORBIDDEN_AUDIT_BODY"
+  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$INVALID_WEBHOOK_BODY" "$AUTH_UNAUTHENTICATED_PLAN_BODY" "$AUTH_UNAUTHENTICATED_APPLY_BODY" "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_READ_BODY" "$AUTH_UNAUTHENTICATED_STATUS_READ_BODY" "$AUTH_UNAUTHENTICATED_EVENTS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY" "$AUTH_FORBIDDEN_GROUP_DETAIL_BODY" "$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" "$AUTH_FORBIDDEN_READ_BODY" "$AUTH_FORBIDDEN_STATUS_READ_BODY" "$AUTH_FORBIDDEN_EVENTS_BODY" "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_PLAN_WRITE_BODY" "$AUTH_FORBIDDEN_APPLY_WRITE_BODY" "$AUTH_FORBIDDEN_TRANSITION_BODY" "$AUTH_FORBIDDEN_PLAN_READ_BODY" "$AUTH_FORBIDDEN_APPLY_READ_BODY" "$AUTH_FORBIDDEN_AUDIT_BODY"
   rm -rf "$PAYLOAD_DIR" "$REPO_ROOT"
 }
 trap cleanup EXIT
@@ -1036,6 +1038,8 @@ auth_unauthenticated_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_READ_BODY"
   "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging")
 auth_unauthenticated_status_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_STATUS_READ_BODY" -w "%{http_code}" \
   "http://$HOST:$PORT/v1/status/deployments/payments-api-staging")
+auth_unauthenticated_events_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_EVENTS_BODY" -w "%{http_code}" \
+  "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/events")
 auth_unauthenticated_resource_logs_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" -w "%{http_code}" \
   "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 auth_unauthenticated_resource_inspection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" -w "%{http_code}" \
@@ -1086,6 +1090,12 @@ auth_forbidden_status_read_status=$(curl -sS -o "$AUTH_FORBIDDEN_STATUS_READ_BOD
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authorized-Deployments: worker-prod" \
   "http://$HOST:$PORT/v1/status/deployments/payments-api-staging")
+auth_forbidden_events_status=$(curl -sS -o "$AUTH_FORBIDDEN_EVENTS_BODY" -w "%{http_code}" \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: worker-prod" \
+  "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/events")
 auth_forbidden_resource_logs_status=$(curl -sS -o "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" -w "%{http_code}" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
@@ -1134,6 +1144,12 @@ allowed_status_read=$(curl -fsS \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
   "http://$HOST:$PORT/v1/status/deployments/payments-api-staging")
+allowed_events_read=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
+  "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/events")
 allowed_resource_logs=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
@@ -1218,6 +1234,7 @@ allowed_scoped_audit=$(curl -fsS \
 allowed_guarded_read_path=$(write_payload allowed-guarded-read.json "$allowed_guarded_read")
 allowed_plan_read_path=$(write_payload allowed-plan-read.json "$allowed_plan_read")
 allowed_apply_read_path=$(write_payload allowed-apply-read.json "$allowed_apply_read")
+allowed_events_read_path=$(write_payload allowed-events-read.json "$allowed_events_read")
 allowed_resource_logs_path=$(write_payload allowed-resource-logs.json "$allowed_resource_logs")
 allowed_resource_inspection_path=$(write_payload allowed-resource-inspection.json "$allowed_resource_inspection")
 filtered_applications_collection_path=$(write_payload filtered-applications-collection.json "$filtered_applications_collection")
@@ -1231,7 +1248,7 @@ allowed_status_read_path=$(write_payload allowed-status-read.json "$allowed_stat
 filtered_status_collection_path=$(write_payload filtered-status-collection.json "$filtered_status_collection")
 empty_status_collection_path=$(write_payload empty-status-collection.json "$empty_status_collection")
 
-AUTH_UNAUTHENTICATED_COLLECTION_STATUS="$auth_unauthenticated_collection_status" AUTH_UNAUTHENTICATED_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_COLLECTION_BODY" AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS="$auth_unauthenticated_status_collection_status" AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_STATUS="$auth_unauthenticated_account_collection_status" AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" AUTH_UNAUTHENTICATED_READ_STATUS="$auth_unauthenticated_read_status" AUTH_UNAUTHENTICATED_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_READ_BODY" AUTH_UNAUTHENTICATED_STATUS_READ_STATUS="$auth_unauthenticated_status_read_status" AUTH_UNAUTHENTICATED_STATUS_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_STATUS_READ_BODY" AUTH_UNAUTHENTICATED_RESOURCE_LOGS_STATUS="$auth_unauthenticated_resource_logs_status" AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY_PATH="$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_STATUS="$auth_unauthenticated_resource_inspection_status" AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" AUTH_FORBIDDEN_ACCOUNT_DETAIL_STATUS="$auth_forbidden_account_detail_status" AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY_PATH="$AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY" AUTH_FORBIDDEN_GROUP_DETAIL_STATUS="$auth_forbidden_group_detail_status" AUTH_FORBIDDEN_GROUP_DETAIL_BODY_PATH="$AUTH_FORBIDDEN_GROUP_DETAIL_BODY" AUTH_UNAUTHENTICATED_PLAN_READ_STATUS="$auth_unauthenticated_plan_read_status" AUTH_UNAUTHENTICATED_PLAN_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" AUTH_UNAUTHENTICATED_APPLY_READ_STATUS="$auth_unauthenticated_apply_read_status" AUTH_UNAUTHENTICATED_APPLY_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" AUTH_UNAUTHENTICATED_TRANSITION_STATUS="$auth_unauthenticated_transition_status" AUTH_UNAUTHENTICATED_TRANSITION_BODY_PATH="$AUTH_UNAUTHENTICATED_TRANSITION_BODY" AUTH_FORBIDDEN_PLAN_WRITE_STATUS="$auth_forbidden_plan_write_status" AUTH_FORBIDDEN_PLAN_WRITE_BODY_PATH="$AUTH_FORBIDDEN_PLAN_WRITE_BODY" AUTH_FORBIDDEN_APPLY_WRITE_STATUS="$auth_forbidden_apply_write_status" AUTH_FORBIDDEN_APPLY_WRITE_BODY_PATH="$AUTH_FORBIDDEN_APPLY_WRITE_BODY" AUTH_FORBIDDEN_TRANSITION_STATUS="$auth_forbidden_transition_status" AUTH_FORBIDDEN_TRANSITION_BODY_PATH="$AUTH_FORBIDDEN_TRANSITION_BODY" AUTH_FORBIDDEN_READ_STATUS="$auth_forbidden_read_status" AUTH_FORBIDDEN_READ_BODY_PATH="$AUTH_FORBIDDEN_READ_BODY" AUTH_FORBIDDEN_STATUS_READ_STATUS="$auth_forbidden_status_read_status" AUTH_FORBIDDEN_STATUS_READ_BODY_PATH="$AUTH_FORBIDDEN_STATUS_READ_BODY" AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS="$auth_forbidden_resource_logs_status" AUTH_FORBIDDEN_RESOURCE_LOGS_BODY_PATH="$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" AUTH_FORBIDDEN_RESOURCE_INSPECTION_STATUS="$auth_forbidden_resource_inspection_status" AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY_PATH="$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" AUTH_FORBIDDEN_PLAN_READ_STATUS="$auth_forbidden_plan_read_status" AUTH_FORBIDDEN_PLAN_READ_BODY_PATH="$AUTH_FORBIDDEN_PLAN_READ_BODY" AUTH_FORBIDDEN_APPLY_READ_STATUS="$auth_forbidden_apply_read_status" AUTH_FORBIDDEN_APPLY_READ_BODY_PATH="$AUTH_FORBIDDEN_APPLY_READ_BODY" AUTH_FORBIDDEN_AUDIT_STATUS="$auth_forbidden_audit_status" AUTH_FORBIDDEN_AUDIT_BODY_PATH="$AUTH_FORBIDDEN_AUDIT_BODY" ALLOWED_GUARDED_READ_PATH="$allowed_guarded_read_path" ALLOWED_STATUS_READ_PATH="$allowed_status_read_path" ALLOWED_PLAN_READ_PATH="$allowed_plan_read_path" ALLOWED_APPLY_READ_PATH="$allowed_apply_read_path" ALLOWED_RESOURCE_LOGS_PATH="$allowed_resource_logs_path" ALLOWED_RESOURCE_INSPECTION_PATH="$allowed_resource_inspection_path" FILTERED_APPLICATIONS_COLLECTION_PATH="$filtered_applications_collection_path" FILTERED_STATUS_COLLECTION_PATH="$filtered_status_collection_path" FILTERED_ACCOUNTS_COLLECTION_PATH="$filtered_accounts_collection_path" FILTERED_ACCOUNT_DETAIL_PATH="$filtered_account_detail_path" FILTERED_GROUP_DETAIL_PATH="$filtered_group_detail_path" EMPTY_APPLICATIONS_COLLECTION_PATH="$empty_applications_collection_path" EMPTY_STATUS_COLLECTION_PATH="$empty_status_collection_path" EMPTY_ACCOUNTS_COLLECTION_PATH="$empty_accounts_collection_path" ALLOWED_SCOPED_AUDIT_PATH="$allowed_scoped_audit_path" FRONTDOOR_PLAN_ID="$frontdoor_plan_id" FRONTDOOR_APPLY_ID="$frontdoor_apply_id" python3 - <<'PY'
+AUTH_UNAUTHENTICATED_COLLECTION_STATUS="$auth_unauthenticated_collection_status" AUTH_UNAUTHENTICATED_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_COLLECTION_BODY" AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS="$auth_unauthenticated_status_collection_status" AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_STATUS="$auth_unauthenticated_account_collection_status" AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" AUTH_UNAUTHENTICATED_READ_STATUS="$auth_unauthenticated_read_status" AUTH_UNAUTHENTICATED_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_READ_BODY" AUTH_UNAUTHENTICATED_STATUS_READ_STATUS="$auth_unauthenticated_status_read_status" AUTH_UNAUTHENTICATED_STATUS_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_STATUS_READ_BODY" AUTH_UNAUTHENTICATED_EVENTS_STATUS="$auth_unauthenticated_events_status" AUTH_UNAUTHENTICATED_EVENTS_BODY_PATH="$AUTH_UNAUTHENTICATED_EVENTS_BODY" AUTH_UNAUTHENTICATED_RESOURCE_LOGS_STATUS="$auth_unauthenticated_resource_logs_status" AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY_PATH="$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_STATUS="$auth_unauthenticated_resource_inspection_status" AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" AUTH_FORBIDDEN_ACCOUNT_DETAIL_STATUS="$auth_forbidden_account_detail_status" AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY_PATH="$AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY" AUTH_FORBIDDEN_GROUP_DETAIL_STATUS="$auth_forbidden_group_detail_status" AUTH_FORBIDDEN_GROUP_DETAIL_BODY_PATH="$AUTH_FORBIDDEN_GROUP_DETAIL_BODY" AUTH_UNAUTHENTICATED_PLAN_READ_STATUS="$auth_unauthenticated_plan_read_status" AUTH_UNAUTHENTICATED_PLAN_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" AUTH_UNAUTHENTICATED_APPLY_READ_STATUS="$auth_unauthenticated_apply_read_status" AUTH_UNAUTHENTICATED_APPLY_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" AUTH_UNAUTHENTICATED_TRANSITION_STATUS="$auth_unauthenticated_transition_status" AUTH_UNAUTHENTICATED_TRANSITION_BODY_PATH="$AUTH_UNAUTHENTICATED_TRANSITION_BODY" AUTH_FORBIDDEN_PLAN_WRITE_STATUS="$auth_forbidden_plan_write_status" AUTH_FORBIDDEN_PLAN_WRITE_BODY_PATH="$AUTH_FORBIDDEN_PLAN_WRITE_BODY" AUTH_FORBIDDEN_APPLY_WRITE_STATUS="$auth_forbidden_apply_write_status" AUTH_FORBIDDEN_APPLY_WRITE_BODY_PATH="$AUTH_FORBIDDEN_APPLY_WRITE_BODY" AUTH_FORBIDDEN_TRANSITION_STATUS="$auth_forbidden_transition_status" AUTH_FORBIDDEN_TRANSITION_BODY_PATH="$AUTH_FORBIDDEN_TRANSITION_BODY" AUTH_FORBIDDEN_READ_STATUS="$auth_forbidden_read_status" AUTH_FORBIDDEN_READ_BODY_PATH="$AUTH_FORBIDDEN_READ_BODY" AUTH_FORBIDDEN_STATUS_READ_STATUS="$auth_forbidden_status_read_status" AUTH_FORBIDDEN_STATUS_READ_BODY_PATH="$AUTH_FORBIDDEN_STATUS_READ_BODY" AUTH_FORBIDDEN_EVENTS_STATUS="$auth_forbidden_events_status" AUTH_FORBIDDEN_EVENTS_BODY_PATH="$AUTH_FORBIDDEN_EVENTS_BODY" AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS="$auth_forbidden_resource_logs_status" AUTH_FORBIDDEN_RESOURCE_LOGS_BODY_PATH="$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" AUTH_FORBIDDEN_RESOURCE_INSPECTION_STATUS="$auth_forbidden_resource_inspection_status" AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY_PATH="$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" AUTH_FORBIDDEN_PLAN_READ_STATUS="$auth_forbidden_plan_read_status" AUTH_FORBIDDEN_PLAN_READ_BODY_PATH="$AUTH_FORBIDDEN_PLAN_READ_BODY" AUTH_FORBIDDEN_APPLY_READ_STATUS="$auth_forbidden_apply_read_status" AUTH_FORBIDDEN_APPLY_READ_BODY_PATH="$AUTH_FORBIDDEN_APPLY_READ_BODY" AUTH_FORBIDDEN_AUDIT_STATUS="$auth_forbidden_audit_status" AUTH_FORBIDDEN_AUDIT_BODY_PATH="$AUTH_FORBIDDEN_AUDIT_BODY" ALLOWED_GUARDED_READ_PATH="$allowed_guarded_read_path" ALLOWED_STATUS_READ_PATH="$allowed_status_read_path" ALLOWED_PLAN_READ_PATH="$allowed_plan_read_path" ALLOWED_APPLY_READ_PATH="$allowed_apply_read_path" ALLOWED_EVENTS_READ_PATH="$allowed_events_read_path" ALLOWED_RESOURCE_LOGS_PATH="$allowed_resource_logs_path" ALLOWED_RESOURCE_INSPECTION_PATH="$allowed_resource_inspection_path" FILTERED_APPLICATIONS_COLLECTION_PATH="$filtered_applications_collection_path" FILTERED_STATUS_COLLECTION_PATH="$filtered_status_collection_path" FILTERED_ACCOUNTS_COLLECTION_PATH="$filtered_accounts_collection_path" FILTERED_ACCOUNT_DETAIL_PATH="$filtered_account_detail_path" FILTERED_GROUP_DETAIL_PATH="$filtered_group_detail_path" EMPTY_APPLICATIONS_COLLECTION_PATH="$empty_applications_collection_path" EMPTY_STATUS_COLLECTION_PATH="$empty_status_collection_path" EMPTY_ACCOUNTS_COLLECTION_PATH="$empty_accounts_collection_path" ALLOWED_SCOPED_AUDIT_PATH="$allowed_scoped_audit_path" FRONTDOOR_PLAN_ID="$frontdoor_plan_id" FRONTDOOR_APPLY_ID="$frontdoor_apply_id" python3 - <<'PY'
 import json, os
 
 with open(os.environ['AUTH_UNAUTHENTICATED_COLLECTION_BODY_PATH'], encoding='utf-8') as fh:
@@ -1244,6 +1261,8 @@ with open(os.environ['AUTH_UNAUTHENTICATED_READ_BODY_PATH'], encoding='utf-8') a
     unauthenticated_read_body = fh.read()
 with open(os.environ['AUTH_UNAUTHENTICATED_STATUS_READ_BODY_PATH'], encoding='utf-8') as fh:
     unauthenticated_status_read_body = fh.read()
+with open(os.environ['AUTH_UNAUTHENTICATED_EVENTS_BODY_PATH'], encoding='utf-8') as fh:
+    unauthenticated_events_body = fh.read()
 with open(os.environ['AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY_PATH'], encoding='utf-8') as fh:
     unauthenticated_resource_logs_body = fh.read()
 with open(os.environ['AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY_PATH'], encoding='utf-8') as fh:
@@ -1268,6 +1287,8 @@ with open(os.environ['AUTH_FORBIDDEN_READ_BODY_PATH'], encoding='utf-8') as fh:
     forbidden_read_body = fh.read()
 with open(os.environ['AUTH_FORBIDDEN_STATUS_READ_BODY_PATH'], encoding='utf-8') as fh:
     forbidden_status_read_body = fh.read()
+with open(os.environ['AUTH_FORBIDDEN_EVENTS_BODY_PATH'], encoding='utf-8') as fh:
+    forbidden_events_body = fh.read()
 with open(os.environ['AUTH_FORBIDDEN_RESOURCE_LOGS_BODY_PATH'], encoding='utf-8') as fh:
     forbidden_resource_logs_body = fh.read()
 with open(os.environ['AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY_PATH'], encoding='utf-8') as fh:
@@ -1286,6 +1307,8 @@ with open(os.environ['ALLOWED_PLAN_READ_PATH'], encoding='utf-8') as fh:
     allowed_plan_read = json.load(fh)
 with open(os.environ['ALLOWED_APPLY_READ_PATH'], encoding='utf-8') as fh:
     allowed_apply_read = json.load(fh)
+with open(os.environ['ALLOWED_EVENTS_READ_PATH'], encoding='utf-8') as fh:
+    allowed_events_read = json.load(fh)
 with open(os.environ['ALLOWED_RESOURCE_LOGS_PATH'], encoding='utf-8') as fh:
     allowed_resource_logs = json.load(fh)
 with open(os.environ['ALLOWED_RESOURCE_INSPECTION_PATH'], encoding='utf-8') as fh:
@@ -1319,6 +1342,8 @@ assert os.environ['AUTH_UNAUTHENTICATED_READ_STATUS'] == '401', os.environ['AUTH
 assert unauthenticated_read_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_read_body
 assert os.environ['AUTH_UNAUTHENTICATED_STATUS_READ_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_STATUS_READ_STATUS']
 assert unauthenticated_status_read_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_status_read_body
+assert os.environ['AUTH_UNAUTHENTICATED_EVENTS_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_EVENTS_STATUS']
+assert unauthenticated_events_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_events_body
 assert os.environ['AUTH_UNAUTHENTICATED_RESOURCE_LOGS_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_RESOURCE_LOGS_STATUS']
 assert unauthenticated_resource_logs_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_resource_logs_body
 assert os.environ['AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_STATUS']
@@ -1343,6 +1368,8 @@ assert os.environ['AUTH_FORBIDDEN_READ_STATUS'] == '403', os.environ['AUTH_FORBI
 assert forbidden_read_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_read_body
 assert os.environ['AUTH_FORBIDDEN_STATUS_READ_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_STATUS_READ_STATUS']
 assert forbidden_status_read_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_status_read_body
+assert os.environ['AUTH_FORBIDDEN_EVENTS_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_EVENTS_STATUS']
+assert forbidden_events_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_events_body
 assert os.environ['AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS']
 assert forbidden_resource_logs_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_resource_logs_body
 assert os.environ['AUTH_FORBIDDEN_RESOURCE_INSPECTION_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_RESOURCE_INSPECTION_STATUS']
@@ -1357,6 +1384,8 @@ assert allowed_plan_read['id'] == os.environ['FRONTDOOR_PLAN_ID'], allowed_plan_
 assert allowed_plan_read['deploymentName'] == 'payments-api-staging', allowed_plan_read
 assert allowed_apply_read['id'] == os.environ['FRONTDOOR_APPLY_ID'], allowed_apply_read
 assert allowed_apply_read['deploymentName'] == 'payments-api-staging', allowed_apply_read
+assert allowed_events_read['deploymentName'] == 'payments-api-staging', allowed_events_read
+assert isinstance(allowed_events_read.get('events'), list), allowed_events_read
 assert allowed_resource_logs['deploymentName'] == 'worker-prod', allowed_resource_logs
 assert allowed_resource_logs['resourceType'] == 'ecsService', allowed_resource_logs
 assert allowed_resource_logs['resourceName'] == 'worker-prod-service', allowed_resource_logs

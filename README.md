@@ -150,6 +150,8 @@ GitHub Actions mirrors those checks in two lanes under `.github/workflows/ci-smo
 
 Both smoke scripts keep intermediate deployment-detail, plan-preview, and apply-record payloads on temp files via the shared `write_payload` helper instead of passing full JSON blobs through environment variables. That keeps the shell/Python handoff portable on Linux CI runners where environment-size limits are tighter than local shells.
 
+The same trusted front-door read contract also now explicitly covers `GET /v1/overview/deployments/{deploymentName}/events`: smoke/docs verification treat it like the other deployment-scoped drill-down routes, with `401 Unauthorized` unauthenticated reads, `403 Forbidden` authenticated-but-unauthorized reads, and `200 OK` authorized reads while preserving the existing `deploymentName` plus `events` list payload contract.
+
 ### Run with Docker
 
 ```bash
