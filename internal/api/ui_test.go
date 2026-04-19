@@ -2215,7 +2215,7 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis;",
 			"the request-actor header contract by sending conflicting `X-Tenet-Actor-*` and `X-User-*` identities together",
 			"fetches the bookmarkable `/?page=application&deployment=payments-api-prod` route, the bookmarkable `/?page=account&accountId=123456789012` route, and one representative bookmarkable `/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan` route",
-			"checks only raw embedded application/account/resource shell strings that prove those drill-down pages can render and navigate, plus the landing-page helper strings that keep `/` and the bookmarkable account drill-down on the shared operator-read auth guidance path under trusted front-door auth",
+			"checks only raw embedded application/account/resource shell strings that prove those drill-down pages can render and navigate, plus the landing-page helper strings that keep `/`, the bookmarkable application drill-down, and the bookmarkable account drill-down on the shared operator-read auth guidance path under trusted front-door auth",
 			"the front-door auth contract by restarting `tenet-api`",
 			"Front-door auth remains additive and opt-in.",
 			"TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
@@ -2264,7 +2264,7 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"including the persisted `POST /v1/applies/{applyId}/transitions` write route",
 			"unauthenticated transition callers still short-circuit with the operator-write `401` before any apply lookup",
 			"the bookmarkable `/?page=plan` workspace still includes operator-facing guidance for those auth-gated write failures",
-			"the bookmarkable `/?page=account&accountId=123456789012` drill-down stays on the shared operator-read guidance path",
+			"the bookmarkable application drill-down `/?page=application&deployment=payments-api-prod` and `/?page=account&accountId=123456789012` drill-down both stay on the shared operator-read guidance path alongside `/`, resource, drift, audit, and plan workspace bookmarks",
 			"do it only behind a front door that authenticates callers and strips inbound `X-Tenet-Authenticated-*` headers",
 			"### Docker stack smoke check",
 			"make smoke-docker",
@@ -2272,7 +2272,7 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"checks representative endpoints plus deployment-events/resource-logs/audit-log JSON shapes, verifies representative `Request-Id` response headers, fetches the full `GET /v1/audit-logs` collection and asserts the expected `plan.created` and `apply.requested` actions are present without depending on `limit=2`, still fetches `GET /v1/audit-logs?action=apply.requested&limit=2` to verify exact-action filtering, rejects `action=invalid.action` with `400 Bad Request`,",
 			"non-empty controller-authored `managedDrift[]` evidence in `GET /v1/overview/deployments/payments-api-prod` with stable `field` / `desired` / `actual` / `severity` rows and aligned `runtimeSummary.managedDrift`",
 			"mirrors the direct-process actor coverage by sending both header families with conflicting identities on a `payments-api-staging` plan/apply flow and verifying that the explicit `X-Tenet-Actor-*` actor survives the stored plan preview, stored apply request, and deployment-scoped `GET /v1/audit-logs?deployment=payments-api-staging&action=apply.requested&limit=1` retrieval",
-			"the bookmarkable `/?page=account&accountId=123456789012` route",
+			"the bookmarkable application drill-down shell `/?page=application&deployment=payments-api-prod` keeps the shared operator-read guidance contract in the raw served HTML alongside the landing page, account, resource, drift, and audit shells",
 			"fetches the bookmarkable `/?page=drift&deployment=payments-api-prod` workspace URL",
 			"confirms the drift page source still includes `Active drift source`, `Current source: controller-authored managedDrift rows.`, `Drift summary`, and field-level table headers such as `Field path` / `Desired` / `Actual` / `Severity`",
 			"reuses that smoke-created terminal `applyId` to verify the executor-facing transition-route boundaries (`400` malformed JSON, `404` unknown apply, `409` invalid terminal move with operator-facing text)",
@@ -2370,12 +2370,12 @@ func TestDockerSmokeDocsDescribeEmbeddedReadAuthGuidanceCoverage(t *testing.T) {
 	files := map[string][]string{
 		"../../README.md": {
 			"checks raw embedded application/account/resource/drift/audit/plan shell HTML/script fragments instead of runtime DOM text",
-			"the bookmarkable `/?page=account&accountId=123456789012` route",
+			"including the bookmarkable `/?page=application&deployment=payments-api-prod` drill-down",
 			"the shipped operator read-auth guidance hooks for initial `401` / `403` failures remain present",
 		},
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
 			"checks raw embedded application/account/resource/drift/audit shell HTML/script fragments instead of runtime DOM text",
-			"the bookmarkable `/?page=account&accountId=123456789012` route",
+			"the bookmarkable application drill-down shell `/?page=application&deployment=payments-api-prod` keeps the shared operator-read guidance contract in the raw served HTML alongside the landing page, account, resource, drift, and audit shells",
 			"the shipped operator read-auth guidance hooks for initial `401` / `403` failures remain present",
 		},
 	}
