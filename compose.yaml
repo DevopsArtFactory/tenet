@@ -20,6 +20,8 @@ services:
       TENET_STATUS_BACKEND: redis
       TENET_REDIS_ADDR: redis:6379
       TENET_STATUS_SEED_PATH: /workspace/examples/local-status/deployments.json
+      TENET_PLAN_STORE_PATH: /tmp/tenet/plan-previews.json
+      TENET_APPLY_STORE_PATH: /tmp/tenet/apply-requests.json
       TENET_AWS_ENABLE_APPLY: ${TENET_AWS_ENABLE_APPLY:-false}
       TENET_API_TRUST_AUTHENTICATED_HEADERS: ${TENET_API_TRUST_AUTHENTICATED_HEADERS:-false}
       TENET_API_ENFORCE_AUTHENTICATED_IDENTITY: ${TENET_API_ENFORCE_AUTHENTICATED_IDENTITY:-false}
@@ -27,6 +29,7 @@ services:
       TENET_GITHUB_WEBHOOK_SECRET: ${TENET_GITHUB_WEBHOOK_SECRET:-smoke-webhook-secret}
     volumes:
       - ./examples:/workspace/examples:ro
+      - tenet-api-tmp:/tmp
     ports:
       - "8080:8080"
     depends_on:
@@ -55,3 +58,6 @@ services:
     depends_on:
       api:
         condition: service_healthy
+
+volumes:
+  tenet-api-tmp:
