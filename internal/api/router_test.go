@@ -3816,6 +3816,50 @@ func TestRouterCreateDeploymentPlanPreviewPropagatesAliasRequestActor(t *testing
 	}
 }
 
+func TestRouterCreateDeploymentPlanPreviewProjectsAuthenticatedIdentityIntoActor(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo:                    buildinfo.Info{Version: "dev", Commit: "abc123"},
+		TrustAuthenticatedHeaders:    true,
+		RequireAuthenticatedIdentity: true,
+		CreateDeploymentPlanPreview: func(ctx context.Context, deploymentName string, req planpreview.CreateRequest) (planpreview.CreateResult, error) {
+			identity := requestactor.AuthenticatedIdentityFromContext(ctx)
+			if !identity.Authenticated || identity.ID != "front-door-123" || identity.Name != "Front Door Operator" || identity.Email != "frontdoor@example.com" {
+				t.Fatalf("expected propagated authenticated identity, got %+v", identity)
+			}
+			return planpreview.CreateResult{
+				Created: true,
+				Record: planpreview.Record{
+					ID:             "plan_1234abcd",
+					DeploymentName: deploymentName,
+					Status:         planpreview.StatusReady,
+					CreatedAt:      "2026-04-17T08:00:00Z",
+					Actor:          requestactor.FromContext(ctx),
+					Source:         planpreview.SourceContext{DeploymentName: deploymentName, Route: "/v1/overview/deployments/api-prod", Fingerprint: req.IfMatch},
+				},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/plans/deployments/api-prod", strings.NewReader(`{"ifMatch":"plan_input"}`))
+	req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+	req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+	req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d with body %q", resp.Code, resp.Body.String())
+	}
+	var record planpreview.Record
+	if err := json.Unmarshal(resp.Body.Bytes(), &record); err != nil {
+		t.Fatalf("failed to decode plan preview: %v", err)
+	}
+	if !record.Actor.Available || record.Actor.ID != "front-door-123" || record.Actor.Name != "Front Door Operator" || record.Actor.Email != "frontdoor@example.com" {
+		t.Fatalf("expected projected actor from authenticated identity, got %+v", record.Actor)
+	}
+}
+
 func TestRouterCreateDeploymentPlanPreviewStatusCodes(t *testing.T) {
 	t.Run("unavailable", func(t *testing.T) {
 		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
@@ -3826,6 +3870,28 @@ func TestRouterCreateDeploymentPlanPreviewStatusCodes(t *testing.T) {
 
 		if resp.Code != http.StatusServiceUnavailable {
 			t.Fatalf("expected 503, got %d", resp.Code)
+		}
+	})
+
+	t.Run("unauthenticated when operator auth is enforced", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo:                    buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireAuthenticatedIdentity: true,
+			CreateDeploymentPlanPreview: func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error) {
+				t.Fatal("create provider should not run without authenticated identity")
+				return planpreview.CreateResult{}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/plans/deployments/api-prod", strings.NewReader(`{}`))
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != "unauthenticated: authenticated identity is required for this operator write route\n" {
+			t.Fatalf("unexpected unauthenticated response body: %q", body)
 		}
 	})
 
@@ -4145,6 +4211,56 @@ func TestRouterCreateApplyRequestPrefersExplicitActorHeadersOverAliases(t *testi
 	}
 }
 
+func TestRouterCreateApplyRequestProjectsAuthenticatedIdentityIntoActor(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo:                    buildinfo.Info{Version: "dev", Commit: "abc123"},
+		TrustAuthenticatedHeaders:    true,
+		RequireAuthenticatedIdentity: true,
+		CreateApplyRequest: func(ctx context.Context, planID string) (applyrequest.CreateResult, error) {
+			identity := requestactor.AuthenticatedIdentityFromContext(ctx)
+			if !identity.Authenticated || identity.ID != "front-door-123" || identity.Name != "Front Door Operator" || identity.Email != "frontdoor@example.com" {
+				t.Fatalf("expected propagated authenticated identity, got %+v", identity)
+			}
+			return applyrequest.CreateResult{
+				Created: true,
+				Record: applyrequest.Record{
+					ID:             "apply_1234abcd",
+					PlanID:         planID,
+					DeploymentName: "api-prod",
+					Status:         applyrequest.StatusFailed,
+					CreatedAt:      "2026-04-18T08:00:00Z",
+					Actor:          requestactor.FromContext(ctx),
+					Error:          "apply execution is disabled",
+					Lifecycle:      applyrequest.Lifecycle{UpdatedAt: "2026-04-18T08:00:00Z", FinishedAt: "2026-04-18T08:00:00Z", TotalSteps: 1},
+					Operations: []applyrequest.Operation{
+						{Status: applyrequest.OperationStatusPending, Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."},
+					},
+					Source: applyrequest.SourceContext{PlanID: planID, Route: "/v1/plans/plan_1234abcd", PlanStatus: "ready"},
+				},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/applies/plans/plan_1234abcd", nil)
+	req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+	req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+	req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d with body %q", resp.Code, resp.Body.String())
+	}
+	var record applyrequest.Record
+	if err := json.Unmarshal(resp.Body.Bytes(), &record); err != nil {
+		t.Fatalf("failed to decode apply request: %v", err)
+	}
+	if !record.Actor.Available || record.Actor.ID != "front-door-123" || record.Actor.Name != "Front Door Operator" || record.Actor.Email != "frontdoor@example.com" {
+		t.Fatalf("expected projected actor from authenticated identity, got %+v", record.Actor)
+	}
+}
+
 func TestRouterCreateApplyRequestStatusCodes(t *testing.T) {
 	t.Run("unavailable", func(t *testing.T) {
 		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
@@ -4155,6 +4271,28 @@ func TestRouterCreateApplyRequestStatusCodes(t *testing.T) {
 
 		if resp.Code != http.StatusServiceUnavailable {
 			t.Fatalf("expected 503, got %d", resp.Code)
+		}
+	})
+
+	t.Run("unauthenticated when operator auth is enforced", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo:                    buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireAuthenticatedIdentity: true,
+			CreateApplyRequest: func(context.Context, string) (applyrequest.CreateResult, error) {
+				t.Fatal("create provider should not run without authenticated identity")
+				return applyrequest.CreateResult{}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/plans/plan_1234abcd", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != "unauthenticated: authenticated identity is required for this operator write route\n" {
+			t.Fatalf("unexpected unauthenticated response body: %q", body)
 		}
 	})
 

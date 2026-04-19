@@ -21,6 +21,8 @@ services:
       TENET_REDIS_ADDR: redis:6379
       TENET_STATUS_SEED_PATH: /workspace/examples/local-status/deployments.json
       TENET_AWS_ENABLE_APPLY: ${TENET_AWS_ENABLE_APPLY:-false}
+      TENET_API_TRUST_AUTHENTICATED_HEADERS: ${TENET_API_TRUST_AUTHENTICATED_HEADERS:-false}
+      TENET_API_ENFORCE_AUTHENTICATED_IDENTITY: ${TENET_API_ENFORCE_AUTHENTICATED_IDENTITY:-false}
       TENET_GITHUB_WEBHOOK_SECRET: ${TENET_GITHUB_WEBHOOK_SECRET:-smoke-webhook-secret}
     volumes:
       - ./examples:/workspace/examples:ro

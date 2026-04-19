@@ -14,6 +14,8 @@ SOURCE_REPO_ROOT=${TENET_REPO_ROOT:-$ROOT/examples/local-repo}
 REPO_ROOT=$(mktemp -d)
 FIXTURE_STATUS_PATH=${TENET_STATUS_PATH:-$ROOT/examples/local-status/deployments.json}
 APPLY_ENABLED=${TENET_AWS_ENABLE_APPLY:-false}
+AUTH_TRUSTED_HEADERS=${TENET_API_TRUST_AUTHENTICATED_HEADERS:-false}
+AUTH_ENFORCED=${TENET_API_ENFORCE_AUTHENTICATED_IDENTITY:-false}
 WEBHOOK_SECRET=${TENET_GITHUB_WEBHOOK_SECRET:-smoke-webhook-secret}
 STATUS_PATH=$(mktemp)
 PLAN_STORE_PATH=$(mktemp)
@@ -30,6 +32,8 @@ INVALID_APPLY_TRANSITION_BODY=$(mktemp)
 UNKNOWN_APPLY_TRANSITION_BODY=$(mktemp)
 TERMINAL_APPLY_TRANSITION_BODY=$(mktemp)
 INVALID_WEBHOOK_BODY=$(mktemp)
+AUTH_UNAUTHENTICATED_PLAN_BODY=$(mktemp)
+AUTH_UNAUTHENTICATED_APPLY_BODY=$(mktemp)
 cp -R "$SOURCE_REPO_ROOT/." "$REPO_ROOT/"
 cleanup() {
   if [[ -n "${CONTROLLER_PID:-}" ]] && kill -0 "$CONTROLLER_PID" 2>/dev/null; then
@@ -40,7 +44,7 @@ cleanup() {
     kill "$API_PID" 2>/dev/null || true
     wait "$API_PID" 2>/dev/null || true
   fi
-  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$INVALID_WEBHOOK_BODY"
+  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$INVALID_WEBHOOK_BODY" "$AUTH_UNAUTHENTICATED_PLAN_BODY" "$AUTH_UNAUTHENTICATED_APPLY_BODY"
   rm -rf "$PAYLOAD_DIR" "$REPO_ROOT"
 }
 trap cleanup EXIT
@@ -96,16 +100,40 @@ PY
   return 1
 }
 
-TENET_API_ADDR=":$PORT" TENET_CATALOG_SOURCE=filesystem TENET_REPO_ROOT="$REPO_ROOT" TENET_STATUS_PATH="$STATUS_PATH" TENET_PLAN_STORE_PATH="$PLAN_STORE_PATH" TENET_APPLY_STORE_PATH="$APPLY_STORE_PATH" TENET_AWS_ENABLE_APPLY="$APPLY_ENABLED" TENET_GITHUB_WEBHOOK_SECRET="$WEBHOOK_SECRET" \
-  go run ./cmd/tenet-api >"$LOG_FILE" 2>&1 &
-API_PID=$!
-
-for _ in $(seq 1 30); do
-  if curl -fsS "http://$HOST:$PORT/healthz" >/dev/null 2>&1; then
-    break
+stop_api() {
+  if [[ -n "${API_PID:-}" ]] && kill -0 "$API_PID" 2>/dev/null; then
+    kill "$API_PID" 2>/dev/null || true
+    wait "$API_PID" 2>/dev/null || true
   fi
-  sleep 1
-done
+  lingering_api_pids=$(lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true)
+  if [[ -n "$lingering_api_pids" ]]; then
+    kill $lingering_api_pids 2>/dev/null || true
+    sleep 1
+  fi
+  API_PID=""
+}
+
+start_api() {
+  local trust_authenticated_headers=$1
+  local enforce_authenticated_identity=$2
+
+  TENET_API_ADDR=":$PORT" TENET_CATALOG_SOURCE=filesystem TENET_REPO_ROOT="$REPO_ROOT" TENET_STATUS_PATH="$STATUS_PATH" TENET_PLAN_STORE_PATH="$PLAN_STORE_PATH" TENET_APPLY_STORE_PATH="$APPLY_STORE_PATH" TENET_AWS_ENABLE_APPLY="$APPLY_ENABLED" TENET_API_TRUST_AUTHENTICATED_HEADERS="$trust_authenticated_headers" TENET_API_ENFORCE_AUTHENTICATED_IDENTITY="$enforce_authenticated_identity" TENET_GITHUB_WEBHOOK_SECRET="$WEBHOOK_SECRET" \
+    go run ./cmd/tenet-api >"$LOG_FILE" 2>&1 &
+  API_PID=$!
+
+  for _ in $(seq 1 30); do
+    if curl -fsS "http://$HOST:$PORT/healthz" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "tenet-api did not become healthy" >&2
+  cat "$LOG_FILE" >&2 || true
+  return 1
+}
+
+start_api "$AUTH_TRUSTED_HEADERS" "$AUTH_ENFORCED"
 
 curl -fsS "http://$HOST:$PORT/healthz" >/dev/null
 assert_request_id_header "http://$HOST:$PORT/healthz"
@@ -809,6 +837,83 @@ assert 'Queued apply operation' in apply_ui, apply_ui
 assert '/v1/applies/' in apply_ui, apply_ui
 assert 'The ordered execution sequence below comes from the persisted apply record' in apply_ui, apply_ui
 print('smoke-local: fixture api path ok')
+PY
+
+stop_api
+rm -f "$PLAN_STORE_PATH" "$APPLY_STORE_PATH"
+start_api true true
+
+auth_unauthenticated_plan_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_PLAN_BODY" -w "%{http_code}" \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{}' \
+  "http://$HOST:$PORT/v1/plans/deployments/payments-api-prod")
+auth_unauthenticated_apply_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_APPLY_BODY" -w "%{http_code}" \
+  -X POST \
+  "http://$HOST:$PORT/v1/applies/plans/$plan_id")
+frontdoor_plan_preview=$(curl -fsS -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -d '{}' \
+  "http://$HOST:$PORT/v1/plans/deployments/payments-api-staging")
+frontdoor_plan_id=$(FRONTDOOR_PLAN_PREVIEW_JSON="$frontdoor_plan_preview" python3 - <<'PY'
+import json, os
+print(json.loads(os.environ['FRONTDOOR_PLAN_PREVIEW_JSON'])['id'])
+PY
+)
+frontdoor_apply_record=$(curl -fsS -X POST \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  "http://$HOST:$PORT/v1/applies/plans/$frontdoor_plan_id")
+frontdoor_apply_id=$(FRONTDOOR_APPLY_RECORD_JSON="$frontdoor_apply_record" python3 - <<'PY'
+import json, os
+print(json.loads(os.environ['FRONTDOOR_APPLY_RECORD_JSON'])['id'])
+PY
+)
+if [[ "$APPLY_ENABLED" == "true" ]]; then
+  frontdoor_apply_record_get=$(wait_for_apply_status "$frontdoor_apply_id" failed)
+else
+  frontdoor_apply_record_get=$(curl -fsS "http://$HOST:$PORT/v1/applies/$frontdoor_apply_id")
+fi
+frontdoor_audit_logs=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs?deployment=payments-api-staging&action=apply.requested&limit=1")
+
+AUTH_UNAUTHENTICATED_PLAN_STATUS="$auth_unauthenticated_plan_status" AUTH_UNAUTHENTICATED_PLAN_BODY_PATH="$AUTH_UNAUTHENTICATED_PLAN_BODY" AUTH_UNAUTHENTICATED_APPLY_STATUS="$auth_unauthenticated_apply_status" AUTH_UNAUTHENTICATED_APPLY_BODY_PATH="$AUTH_UNAUTHENTICATED_APPLY_BODY" FRONTDOOR_PLAN_PREVIEW_JSON="$frontdoor_plan_preview" FRONTDOOR_APPLY_RECORD_JSON="$frontdoor_apply_record" FRONTDOOR_APPLY_RECORD_GET_JSON="$frontdoor_apply_record_get" FRONTDOOR_AUDIT_LOGS_JSON="$frontdoor_audit_logs" python3 - <<'PY'
+import json, os
+
+with open(os.environ['AUTH_UNAUTHENTICATED_PLAN_BODY_PATH'], encoding='utf-8') as fh:
+    unauthenticated_plan_body = fh.read()
+with open(os.environ['AUTH_UNAUTHENTICATED_APPLY_BODY_PATH'], encoding='utf-8') as fh:
+    unauthenticated_apply_body = fh.read()
+
+frontdoor_plan_preview = json.loads(os.environ['FRONTDOOR_PLAN_PREVIEW_JSON'])
+frontdoor_apply_record = json.loads(os.environ['FRONTDOOR_APPLY_RECORD_JSON'])
+frontdoor_apply_record_get = json.loads(os.environ['FRONTDOOR_APPLY_RECORD_GET_JSON'])
+frontdoor_audit_logs = json.loads(os.environ['FRONTDOOR_AUDIT_LOGS_JSON'])
+
+assert os.environ['AUTH_UNAUTHENTICATED_PLAN_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_PLAN_STATUS']
+assert unauthenticated_plan_body.strip() == 'unauthenticated: authenticated identity is required for this operator write route', unauthenticated_plan_body
+assert os.environ['AUTH_UNAUTHENTICATED_APPLY_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_APPLY_STATUS']
+assert unauthenticated_apply_body.strip() == 'unauthenticated: authenticated identity is required for this operator write route', unauthenticated_apply_body
+
+for payload in (frontdoor_plan_preview, frontdoor_apply_record, frontdoor_apply_record_get):
+    actor = payload['actor']
+    assert actor['available'] is True, payload
+    assert actor['id'] == 'front-door-123', payload
+    assert actor['name'] == 'Front Door Operator', payload
+    assert actor['email'] == 'frontdoor@example.com', payload
+
+entries = frontdoor_audit_logs['entries']
+assert len(entries) == 1, frontdoor_audit_logs
+entry = entries[0]
+assert entry['action'] == 'apply.requested', entry
+assert entry['actor']['available'] is True, entry
+assert entry['actor']['id'] == 'front-door-123', entry
+assert entry['actor']['name'] == 'Front Door Operator', entry
+assert entry['actor']['email'] == 'frontdoor@example.com', entry
+print('smoke-local: front-door auth path ok')
 PY
 
 TENET_REPO_ROOT="$REPO_ROOT" TENET_STATUS_PATH="$STATUS_PATH" TENET_CONTROLLER_REQUEUE_SECONDS=1 TENET_CONTROLLER_WORKERS=1 \

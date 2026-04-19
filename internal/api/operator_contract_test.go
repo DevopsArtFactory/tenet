@@ -419,6 +419,85 @@ func TestAuditLogOperatorContract(t *testing.T) {
 	}
 }
 
+func TestFrontDoorAuthOperatorContract(t *testing.T) {
+	compose := readRepoFile(t, "compose.yaml")
+	for _, fragment := range []string{
+		`TENET_API_TRUST_AUTHENTICATED_HEADERS: ${TENET_API_TRUST_AUTHENTICATED_HEADERS:-false}`,
+		`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY: ${TENET_API_ENFORCE_AUTHENTICATED_IDENTITY:-false}`,
+	} {
+		if !strings.Contains(compose, fragment) {
+			t.Fatalf("expected compose auth contract to include %q", fragment)
+		}
+	}
+
+	script := readRepoFile(t, "scripts/smoke-local.sh")
+	for _, fragment := range []string{
+		`AUTH_TRUSTED_HEADERS=${TENET_API_TRUST_AUTHENTICATED_HEADERS:-false}`,
+		`AUTH_ENFORCED=${TENET_API_ENFORCE_AUTHENTICATED_IDENTITY:-false}`,
+		`TENET_API_TRUST_AUTHENTICATED_HEADERS="$trust_authenticated_headers"`,
+		`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY="$enforce_authenticated_identity"`,
+		`start_api true true`,
+		`"http://$HOST:$PORT/v1/plans/deployments/payments-api-prod"`,
+		`"http://$HOST:$PORT/v1/applies/plans/$plan_id"`,
+		`"X-Tenet-Authenticated-Id: front-door-123"`,
+		`"X-Tenet-Authenticated-Name: Front Door Operator"`,
+		`"X-Tenet-Authenticated-Email: frontdoor@example.com"`,
+		`assert os.environ['AUTH_UNAUTHENTICATED_PLAN_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_PLAN_STATUS']`,
+		`assert unauthenticated_plan_body.strip() == 'unauthenticated: authenticated identity is required for this operator write route', unauthenticated_plan_body`,
+		`assert os.environ['AUTH_UNAUTHENTICATED_APPLY_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_APPLY_STATUS']`,
+		`assert actor['id'] == 'front-door-123', payload`,
+		`assert entry['actor']['email'] == 'frontdoor@example.com', entry`,
+	} {
+		if !strings.Contains(script, fragment) {
+			t.Fatalf("expected smoke-local front-door auth contract to include %q", fragment)
+		}
+	}
+
+	readme := readRepoFile(t, "README.md")
+	for _, fragment := range []string{
+		"`TENET_API_TRUST_AUTHENTICATED_HEADERS=true`",
+		"`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true`",
+		"`X-Tenet-Authenticated-Id`",
+		"`X-Tenet-Authenticated-Name`",
+		"`X-Tenet-Authenticated-Email`",
+		"`401 Unauthorized`",
+		"`unauthenticated: authenticated identity is required for this operator write route`",
+		"when those explicit actor headers are absent and trusted `X-Tenet-Authenticated-*` headers are present, Tenet now projects the authenticated identity into the persisted actor fields",
+		"restarting `tenet-api` with `TENET_API_TRUST_AUTHENTICATED_HEADERS=true` plus `TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true`",
+	} {
+		if !strings.Contains(readme, fragment) {
+			t.Fatalf("expected README front-door auth contract to include %q", fragment)
+		}
+	}
+
+	auditDoc := readRepoFile(t, "docs/architecture/tenet-v1-audit-log-api.md")
+	for _, fragment := range []string{
+		"`TENET_API_TRUST_AUTHENTICATED_HEADERS=true`",
+		"`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true`",
+		"`X-Tenet-Authenticated-Id`",
+		"`X-Tenet-Authenticated-Name`",
+		"`X-Tenet-Authenticated-Email`",
+		"`401 Unauthorized` plus `unauthenticated: authenticated identity is required for this operator write route`",
+		"Tenet can also consume trusted front-door identity headers when the API instance is configured for them.",
+		"Tenet projects that authenticated identity into the persisted actor fields for immutable plan/apply records and therefore into their projected audit entries.",
+	} {
+		if !strings.Contains(auditDoc, fragment) {
+			t.Fatalf("expected audit doc front-door auth contract to include %q", fragment)
+		}
+	}
+
+	localRuntimeDoc := readRepoFile(t, "docs/architecture/tenet-v1-local-runtime.md")
+	for _, fragment := range []string{
+		"`TENET_API_TRUST_AUTHENTICATED_HEADERS=true`",
+		"`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true`",
+		"`X-Tenet-Authenticated-*` headers project into persisted plan/apply/audit actor fields",
+	} {
+		if !strings.Contains(localRuntimeDoc, fragment) {
+			t.Fatalf("expected local runtime doc front-door auth contract to include %q", fragment)
+		}
+	}
+}
+
 func TestGitHubWebhookOperatorContract(t *testing.T) {
 	compose := readRepoFile(t, "compose.yaml")
 	for _, fragment := range []string{
