@@ -26,6 +26,10 @@ import (
 
 type contextKey string
 
+func int32Ptr(v int32) *int32 {
+	return &v
+}
+
 type recordingRuntimeStore struct {
 	listContexts []context.Context
 	saveContexts []context.Context
@@ -2037,6 +2041,32 @@ func TestDeriveManagedDriftItemsAddsLiveECSDesiredCapacityEvidence(t *testing.T)
 	}
 }
 
+func TestDeriveManagedDriftItemsAddsLiveECSDeploymentConfigEvidence(t *testing.T) {
+	for _, executionMode := range []string{"ecsCodeDeploy", "ecsRolling"} {
+		t.Run(executionMode, func(t *testing.T) {
+			deployment := domain.Deployment{
+				Name:          "payments-worker-prod",
+				ExecutionMode: executionMode,
+				RolloutConfig: domain.DeploymentRolloutConfig{
+					Strategy: domain.DeploymentRolloutStrategy{MinHealthyPercent: 80},
+					Capacity: domain.DeploymentRolloutCapacity{Desired: 3, Min: 1, Max: 5},
+				},
+			}
+
+			got := deriveManagedDriftItems(deployment, domain.DeploymentStatus{}, &runtimeLiveCapacityObservation{
+				Desired:               3,
+				MinimumHealthyPercent: int32Ptr(100),
+			})
+			want := []domain.ManagedDriftItem{
+				{Field: "runtimeContext.deploymentConfig.minimumHealthyPercent", Desired: "80", Actual: "100", Severity: domain.ManagedDriftSeverityMedium},
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("expected live ECS deployment-config drift evidence, got %+v", got)
+			}
+		})
+	}
+}
+
 func TestDeriveManagedDriftItemsAddsLiveECSTaskDefinitionImageEvidence(t *testing.T) {
 	for _, executionMode := range []string{"ecsCodeDeploy", "ecsRolling"} {
 		t.Run(executionMode, func(t *testing.T) {
@@ -2087,8 +2117,9 @@ func TestRuntimeLiveCapacityLookupFromInspectionUsesECSServiceDesiredCount(t *te
 		InspectECSService: func(_ context.Context, req resourceinspection.ECSRequest) (resourceinspection.ECSServiceInspection, error) {
 			gotReq = req
 			return resourceinspection.ECSServiceInspection{
-				DesiredCount:        3,
-				TaskDefinitionImage: "ghcr.io/devopsartfactory/payments-worker:1.2.3",
+				DesiredCount:          3,
+				MinimumHealthyPercent: int32Ptr(100),
+				TaskDefinitionImage:   "ghcr.io/devopsartfactory/payments-worker:1.2.3",
 			}, nil
 		},
 	})
@@ -2098,8 +2129,9 @@ func TestRuntimeLiveCapacityLookupFromInspectionUsesECSServiceDesiredCount(t *te
 		t.Fatalf("runtimeLiveCapacityLookupFromInspection returned error: %v", err)
 	}
 	if !reflect.DeepEqual(got, &runtimeLiveCapacityObservation{
-		Desired:             3,
-		TaskDefinitionImage: "ghcr.io/devopsartfactory/payments-worker:1.2.3",
+		Desired:               3,
+		MinimumHealthyPercent: int32Ptr(100),
+		TaskDefinitionImage:   "ghcr.io/devopsartfactory/payments-worker:1.2.3",
 	}) {
 		t.Fatalf("expected ECS desired-count observation, got %+v", got)
 	}

@@ -31,10 +31,11 @@ const (
 var runtimeHistoryNow = time.Now
 
 type runtimeLiveCapacityObservation struct {
-	Desired             int
-	Min                 int
-	Max                 int
-	TaskDefinitionImage string
+	Desired               int
+	Min                   int
+	Max                   int
+	TaskDefinitionImage   string
+	MinimumHealthyPercent *int32
 }
 
 var runtimeLiveCapacityLookup = runtimeLiveCapacityLookupFromInspection
@@ -287,8 +288,9 @@ func runtimeLiveCapacityLookupFromInspection(ctx context.Context, inspector reso
 	}
 	if result.ECSService != nil {
 		return &runtimeLiveCapacityObservation{
-			Desired:             int(result.ECSService.DesiredCount),
-			TaskDefinitionImage: strings.TrimSpace(result.ECSService.TaskDefinitionImage),
+			Desired:               int(result.ECSService.DesiredCount),
+			TaskDefinitionImage:   strings.TrimSpace(result.ECSService.TaskDefinitionImage),
+			MinimumHealthyPercent: result.ECSService.MinimumHealthyPercent,
 		}, nil
 	}
 	return nil, nil
@@ -365,6 +367,14 @@ func deriveManagedDriftItems(deployment domain.Deployment, status domain.Deploym
 				Desired:  desiredImage,
 				Actual:   liveCapacity.TaskDefinitionImage,
 				Severity: domain.ManagedDriftSeverityHigh,
+			})
+		}
+		if desiredMinHealthy := deployment.RolloutConfig.Strategy.MinHealthyPercent; desiredMinHealthy > 0 && liveCapacity.MinimumHealthyPercent != nil && desiredMinHealthy != int(*liveCapacity.MinimumHealthyPercent) {
+			items = append(items, domain.ManagedDriftItem{
+				Field:    "runtimeContext.deploymentConfig.minimumHealthyPercent",
+				Desired:  fmt.Sprintf("%d", desiredMinHealthy),
+				Actual:   fmt.Sprintf("%d", *liveCapacity.MinimumHealthyPercent),
+				Severity: domain.ManagedDriftSeverityMedium,
 			})
 		}
 		desiredCapacity := deployment.RolloutConfig.Capacity
