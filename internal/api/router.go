@@ -150,6 +150,16 @@ func requireDeploymentReadAuthorization(w http.ResponseWriter, r *http.Request, 
 	return requireDeploymentReadAccess(w, r, enabled, deploymentName)
 }
 
+func requireDeploymentWriteAuthorization(w http.ResponseWriter, r *http.Request, enabled bool, deploymentName string) bool {
+	if !enabled {
+		return true
+	}
+	if !requireAuthenticatedIdentity(w, r) {
+		return false
+	}
+	return requireDeploymentReadAccess(w, r, enabled, deploymentName)
+}
+
 func filterAuthorizedApplicationOverviews(applications []catalog.ApplicationOverview, authorized requestactor.AuthorizedDeployments, enabled bool) []catalog.ApplicationOverview {
 	if !enabled {
 		return applications
@@ -802,6 +812,9 @@ func NewRouter(options Options) http.Handler {
 			http.Error(w, "invalid deployment name", http.StatusBadRequest)
 			return
 		}
+		if !requireDeploymentWriteAuthorization(w, r, options.RequireDeploymentReadAuthorization, name) {
+			return
+		}
 		var req planpreview.CreateRequest
 		decoder := json.NewDecoder(r.Body)
 		decoder.DisallowUnknownFields()
@@ -867,6 +880,20 @@ func NewRouter(options Options) http.Handler {
 		if planID == "" || strings.Contains(planID, "/") {
 			http.Error(w, "invalid plan id", http.StatusBadRequest)
 			return
+		}
+		if options.RequireDeploymentReadAuthorization {
+			if options.PlanPreview == nil {
+				http.Error(w, "plan preview unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			planRecord, err := options.PlanPreview(r.Context(), planID)
+			if err != nil {
+				respondLookupError(w, err)
+				return
+			}
+			if !requireDeploymentWriteAuthorization(w, r, true, planRecord.DeploymentName) {
+				return
+			}
 		}
 		result, err := options.CreateApplyRequest(r.Context(), planID)
 		if err != nil {

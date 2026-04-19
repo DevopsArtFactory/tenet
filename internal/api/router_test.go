@@ -4712,6 +4712,67 @@ func TestRouterCreateDeploymentPlanPreviewStatusCodes(t *testing.T) {
 		}
 	})
 
+	t.Run("deployment authorization short-circuits unauthorized create", func(t *testing.T) {
+		providerCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			CreateDeploymentPlanPreview: func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error) {
+				providerCalls++
+				t.Fatal("create provider should not run without deployment access")
+				return planpreview.CreateResult{}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/plans/deployments/api-prod", strings.NewReader(`{}`))
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+		req.Header.Set(requestactor.AuthorizedDeploymentsHeader, "worker-prod")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != "forbidden: operator does not have access to this deployment\n" {
+			t.Fatalf("unexpected forbidden response body: %q", body)
+		}
+		if providerCalls != 0 {
+			t.Fatalf("expected authz guard to short-circuit before create provider, got %d calls", providerCalls)
+		}
+	})
+
+	t.Run("deployment authorization allows authorized create", func(t *testing.T) {
+		providerCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			CreateDeploymentPlanPreview: func(_ context.Context, deploymentName string, req planpreview.CreateRequest) (planpreview.CreateResult, error) {
+				providerCalls++
+				if deploymentName != "api-prod" {
+					t.Fatalf("unexpected deployment name %q", deploymentName)
+				}
+				return planpreview.CreateResult{Created: true, Record: planpreview.Record{ID: "plan_1234abcd", DeploymentName: deploymentName, Status: planpreview.StatusReady, CreatedAt: "2026-04-17T08:00:00Z", Source: planpreview.SourceContext{DeploymentName: deploymentName, Fingerprint: req.IfMatch}}}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/plans/deployments/api-prod", strings.NewReader(`{"ifMatch":"plan_input"}`))
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+		req.Header.Set(requestactor.AuthorizedDeploymentsHeader, "api-prod, worker-prod")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if providerCalls != 1 {
+			t.Fatalf("expected create provider to run once, got %d calls", providerCalls)
+		}
+	})
+
 	t.Run("invalid body", func(t *testing.T) {
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
@@ -5110,6 +5171,80 @@ func TestRouterCreateApplyRequestStatusCodes(t *testing.T) {
 		}
 		if body := resp.Body.String(); body != "unauthenticated: authenticated identity is required for this operator write route\n" {
 			t.Fatalf("unexpected unauthenticated response body: %q", body)
+		}
+	})
+
+	t.Run("deployment authorization short-circuits unauthorized create", func(t *testing.T) {
+		planLookupCalls := 0
+		createCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			PlanPreview: func(context.Context, string) (planpreview.Record, error) {
+				planLookupCalls++
+				return planpreview.Record{ID: "plan_1234abcd", DeploymentName: "api-prod", Status: planpreview.StatusReady, CreatedAt: "2026-04-18T08:00:00Z"}, nil
+			},
+			CreateApplyRequest: func(context.Context, string) (applyrequest.CreateResult, error) {
+				createCalls++
+				t.Fatal("create provider should not run without deployment access")
+				return applyrequest.CreateResult{}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/plans/plan_1234abcd", nil)
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+		req.Header.Set(requestactor.AuthorizedDeploymentsHeader, "worker-prod")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != "forbidden: operator does not have access to this deployment\n" {
+			t.Fatalf("unexpected forbidden response body: %q", body)
+		}
+		if planLookupCalls != 1 {
+			t.Fatalf("expected one plan lookup before authz denial, got %d calls", planLookupCalls)
+		}
+		if createCalls != 0 {
+			t.Fatalf("expected authz guard to short-circuit before create provider, got %d calls", createCalls)
+		}
+	})
+
+	t.Run("deployment authorization allows authorized create", func(t *testing.T) {
+		planLookupCalls := 0
+		createCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			PlanPreview: func(context.Context, string) (planpreview.Record, error) {
+				planLookupCalls++
+				return planpreview.Record{ID: "plan_1234abcd", DeploymentName: "api-prod", Status: planpreview.StatusReady, CreatedAt: "2026-04-18T08:00:00Z"}, nil
+			},
+			CreateApplyRequest: func(_ context.Context, planID string) (applyrequest.CreateResult, error) {
+				createCalls++
+				return applyrequest.CreateResult{Created: true, Record: applyrequest.Record{ID: "apply_1234abcd", PlanID: planID, DeploymentName: "api-prod", Status: applyrequest.StatusFailed, CreatedAt: "2026-04-18T08:00:00Z"}}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/plans/plan_1234abcd", nil)
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+		req.Header.Set(requestactor.AuthorizedDeploymentsHeader, "api-prod, worker-prod")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if planLookupCalls != 1 {
+			t.Fatalf("expected one plan lookup, got %d calls", planLookupCalls)
+		}
+		if createCalls != 1 {
+			t.Fatalf("expected create provider to run once, got %d calls", createCalls)
 		}
 	})
 
