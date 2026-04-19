@@ -770,7 +770,10 @@ for fragment in (
     "Apply JSON",
     "Apply Plan will POST /v1/applies/plans/${planState.record.id}, persist an immutable apply request, and update this workspace URL with a shareable applyId.",
     "Live execution is intentionally disabled by default, so failed immutable apply records are expected and useful for operator review.",
-    "fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-logs?${params.toString()}`)",
+    "const buildResourceLogsRoute = (deploymentName, resource) => {",
+    "const resourceLogsReadRoute = (deploymentName, resource) => `GET ${buildResourceLogsRoute(deploymentName, resource)}`;",
+    "const buildResourceInspectionRoute = (deploymentName, resource) => {",
+    "const resourceInspectionReadRoute = (deploymentName, resource) => `GET ${buildResourceInspectionRoute(deploymentName, resource)}`;",
     "params.get('planId') || ''",
     "params.get('applyId') || ''",
 ):
