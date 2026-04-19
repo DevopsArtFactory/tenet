@@ -770,6 +770,7 @@ assert "buildPageURL('application', { deployment: deployment.name })" in ui, ui
 assert 'Drift view' in ui, ui
 assert 'Plan/apply' in ui, ui
 assert 'Linked resources' in ui, ui
+assert 'Breadcrumbs' in ui, ui
 assert 'No linked resources are available in this drift workspace yet.' in ui, ui
 assert 'Current source: controller-authored managedDrift rows.' in ui, ui
 assert 'Current source: derived fallback read-model heuristics.' in ui, ui
@@ -797,6 +798,11 @@ assert 'Auto Scaling Group name' in ui, ui
 assert 'Launch template' in ui, ui
 assert 'Target group ARNs' in ui, ui
 assert 'Mixed instances overrides' in ui, ui
+assert "const createBreadcrumbChrome = (items) => {" in ui, ui
+assert "const createDeploymentBreadcrumb = ({ deploymentName = '', awsAccountId = '', accountName = '', currentLabel = '' } = {}) => {" in ui, ui
+assert "head.append(createElement('div', 'breadcrumb-title', 'Breadcrumbs'));" in ui, ui
+assert "awsAccountId ? { label: accountBreadcrumbLabel(accountName, awsAccountId), href: buildPageURL('account', { accountId: awsAccountId }) } : null," in ui, ui
+assert "trail.append(createBreadcrumbCurrentChip(item.label, item.ariaLabel || `Current destination: ${item.label}`));" in ui, ui
 assert "const createQuickNavChip = (text, ariaLabel) => {" in ui, ui
 assert "createQuickNavChip('Drift view', 'Current workspace: Drift view')" in ui, ui
 assert "createQuickNavChip('Plan/apply', 'Current workspace: Plan/apply')" in ui, ui
@@ -822,10 +828,12 @@ assert "const fetchAccountDetail = (accountID) => fetchEmbeddedReadRouteJSON(`/v
 assert "failure: 'account detail request failed'," in ui, ui
 assert "const applicationDetail = currentPageState.page === 'application' ? fetchApplicationDetail(currentPageState.deployment) : fetchDeploymentDetail(currentPageState.deployment);" in application_ui, application_ui
 assert "const renderApplicationDetailPage = (detail) => {" in application_ui, application_ui
+assert "const breadcrumb = createDeploymentBreadcrumb({" in application_ui, application_ui
 assert "createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')" in application_ui, application_ui
 assert 'Application resources' in application_ui, application_ui
 assert "const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);" in resource_ui, resource_ui
 assert "const renderResourceDetailPage = (detail) => {" in resource_ui, resource_ui
+assert "currentLabel: resource.name," in resource_ui, resource_ui
 assert "const createResourceQuickNav = (detail, resource) => {" in resource_ui, resource_ui
 assert "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')" in resource_ui, resource_ui
 assert "createNavLink(buildPageURL('resource', {" in resource_ui, resource_ui
@@ -835,6 +843,7 @@ assert 'No linked resources are available in this drift workspace yet.' in ui, u
 assert 'Audit timeline' in audit_ui, audit_ui
 assert 'Deployment audit timeline' in audit_ui, audit_ui
 assert 'Active deployment context' in audit_ui, audit_ui
+assert 'Breadcrumbs' in audit_ui, audit_ui
 assert 'Quick navigation' in audit_ui, audit_ui
 assert 'Deployment workspaces' in audit_ui, audit_ui
 assert "const createAuditQuickNav = () => createDeploymentQuickNav(auditDeploymentName(), 'Audit log');" in audit_ui, audit_ui

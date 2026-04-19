@@ -90,9 +90,12 @@
       .detail-state { padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.03); color: var(--muted); }
       .detail-state.error { border-color: rgba(255,123,123,.28); color: #ffd0d0; }
       .detail-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
-      .quick-nav-strip { display:grid; gap: 12px; padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.03); }
-      .quick-nav-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap: 10px; }
-      .quick-nav-title, .quick-nav-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+      .breadcrumb-strip, .quick-nav-strip { display:grid; gap: 12px; padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.03); }
+      .breadcrumb-head, .quick-nav-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap: 10px; }
+      .breadcrumb-title, .quick-nav-title, .quick-nav-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+      .breadcrumb-trail { display:flex; flex-wrap:wrap; align-items:center; gap: 10px; }
+      .breadcrumb-separator { color: var(--muted); font-size: 13px; }
+      .breadcrumb-current { border-color: rgba(255,255,255,.1); background: rgba(255,255,255,.06); }
       .quick-nav-current, .quick-nav-empty { color: var(--muted); font-size: 13px; }
       .quick-nav-groups, .quick-nav-group { display:grid; gap: 10px; }
       .quick-nav-links { display:flex; flex-wrap:wrap; gap: 10px; }
@@ -727,6 +730,37 @@
         if (ariaLabel) chip.setAttribute('aria-label', ariaLabel);
         return chip;
       };
+      const createBreadcrumbCurrentChip = (text, ariaLabel) => {
+        const chip = createQuickNavChip(text, ariaLabel);
+        chip.classList.add('breadcrumb-current');
+        return chip;
+      };
+      const accountBreadcrumbLabel = (accountName, awsAccountId) => {
+        if (accountName && awsAccountId) return `${accountName} (${awsAccountId})`;
+        if (awsAccountId) return awsAccountId;
+        if (accountName) return accountName;
+        return 'Account';
+      };
+      const createBreadcrumbChrome = (items) => {
+        const trailItems = (items || []).filter((item) => item?.label);
+        if (trailItems.length < 2) return null;
+        const strip = createElement('section', 'breadcrumb-strip');
+        const head = createElement('div', 'breadcrumb-head');
+        const trail = createElement('div', 'breadcrumb-trail');
+        trailItems.forEach((item, index) => {
+          if (index > 0) {
+            trail.append(createElement('span', 'breadcrumb-separator', '/'));
+          }
+          if (item.href) {
+            trail.append(createNavLink(item.href, item.label, '_self'));
+            return;
+          }
+          trail.append(createBreadcrumbCurrentChip(item.label, item.ariaLabel || `Current destination: ${item.label}`));
+        });
+        head.append(createElement('div', 'breadcrumb-title', 'Breadcrumbs'));
+        strip.append(head, trail);
+        return strip;
+      };
       const sortAuditEntries = (entries) => (entries || [])
         .map((entry, index) => ({
           entry,
@@ -1092,6 +1126,15 @@
         const pathname = window.location.pathname || '/';
         return query ? `${pathname}?${query}` : pathname;
       };
+      const createDeploymentBreadcrumb = ({ deploymentName = '', awsAccountId = '', accountName = '', currentLabel = '' } = {}) => {
+        const activeLabel = currentLabel || deploymentName || 'Application';
+        return createBreadcrumbChrome([
+          { label: 'Applications', href: buildPageURL('applications') },
+          awsAccountId ? { label: accountBreadcrumbLabel(accountName, awsAccountId), href: buildPageURL('account', { accountId: awsAccountId }) } : null,
+          deploymentName && activeLabel !== deploymentName ? { label: deploymentName, href: buildPageURL('application', { deployment: deploymentName }) } : null,
+          { label: activeLabel, ariaLabel: `Current destination: ${activeLabel}` },
+        ]);
+      };
       const buildAuditLogsRoute = ({ deploymentName = '', action = '', limit = 0 } = {}) => {
         const params = new URLSearchParams();
         if (deploymentName) params.set('deployment', deploymentName);
@@ -1301,6 +1344,15 @@
         );
         summary.replaceChildren(detailSummary);
         const page = createElement('article', 'account');
+        const breadcrumb = createDeploymentBreadcrumb({
+          deploymentName: detail.name || currentPageState.deployment || '',
+          awsAccountId: detail.awsAccountId || '',
+          accountName: detail.accountName || '',
+          currentLabel: detail.name || currentPageState.deployment || 'Application',
+        });
+        if (breadcrumb) {
+          page.append(breadcrumb);
+        }
         page.append(
           createElement('h2', 'account-name', 'Application resources'),
           createElement('div', 'account-meta', 'Grouped linked resources for the selected application. Open drift or plan/apply from here before the final resource page.'),
@@ -1508,6 +1560,15 @@
         );
         summary.replaceChildren(detailSummary);
         const page = createElement('article', 'account');
+        const breadcrumb = createDeploymentBreadcrumb({
+          deploymentName: detail.name || currentPageState.deployment || '',
+          awsAccountId: detail.awsAccountId || '',
+          accountName: detail.accountName || '',
+          currentLabel: resource.name,
+        });
+        if (breadcrumb) {
+          page.append(breadcrumb);
+        }
         page.append(
           createElement('h2', 'account-name', 'Resource detail'),
           createElement('div', 'account-meta', `Focused rollout/runtime context for ${resource.name}.`),
@@ -2473,6 +2534,13 @@
         renderAuditPageChrome();
         const root = document.getElementById('accounts');
         const page = createElement('article', 'account');
+        const breadcrumb = createDeploymentBreadcrumb({
+          deploymentName: auditDeploymentName(),
+          currentLabel: 'Audit log',
+        });
+        if (breadcrumb) {
+          page.append(breadcrumb);
+        }
         page.append(
           createDetailSectionHeader('Audit timeline', createAuditLogsActions(auditLogsPageState.status === 'loading')),
           createAuditLogsIntro(),
@@ -2500,6 +2568,13 @@
         const page = createElement('article', 'account');
         const entries = sortAuditEntries(result?.entries || []);
         const refreshStateText = auditLogsRefreshStateText(auditState);
+        const breadcrumb = createDeploymentBreadcrumb({
+          deploymentName: auditDeploymentName(),
+          currentLabel: 'Audit log',
+        });
+        if (breadcrumb) {
+          page.append(breadcrumb);
+        }
         page.append(
           createDetailSectionHeader('Audit timeline', createAuditLogsActions(auditState?.status === 'loading')),
           createAuditLogsIntro(),
@@ -3447,8 +3522,15 @@
         const summary = document.getElementById('summary');
         const root = document.getElementById('accounts');
         const workspaceTitle = mode === 'drift' ? 'Drift viewer' : 'Plan and apply';
+        const workspaceBreadcrumbLabel = mode === 'drift' ? 'Drift view' : 'Plan/apply';
         const emptyTitle = mode === 'drift' ? 'Field-level drift' : 'Plan operations';
         const header = createElement('article', 'account');
+        const breadcrumb = createDeploymentBreadcrumb({
+          deploymentName: detail.name || currentPageState.deployment || '',
+          awsAccountId: detail.awsAccountId || '',
+          accountName: detail.accountName || '',
+          currentLabel: workspaceBreadcrumbLabel,
+        });
         const head = createElement('div', 'account-head');
         const titleWrap = createElement('div');
         titleWrap.append(
@@ -3961,6 +4043,9 @@
           }));
         }
 
+        if (breadcrumb) {
+          header.append(breadcrumb);
+        }
         header.append(head, createWorkspaceQuickNav(detail, mode), ...sections);
         root.replaceChildren(header);
       };
