@@ -1238,6 +1238,24 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Failed to refresh drift workspace:' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains drift refresh error copy")
 	}
+	if !strings.Contains(text, "application_ui=$(curl -fsS \"http://$HOST:$PORT/?page=application&deployment=payments-api-prod\")") {
+		t.Fatalf("expected smoke-local.sh to fetch bookmarkable application page")
+	}
+	if !strings.Contains(text, "resource_ui=$(curl -fsS \"http://$HOST:$PORT/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan%3A%3Apayments-api-prod-weighted-routing%3A%3AWeighted+routing+plan\")") {
+		t.Fatalf("expected smoke-local.sh to fetch bookmarkable resource page")
+	}
+	if !strings.Contains(text, "assert \"const fetchApplicationDetail = (deploymentName) => fetch(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`)\" in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert application page fetch route contract")
+	}
+	if !strings.Contains(text, "assert \"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')\" in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert application page resource link contract")
+	}
+	if !strings.Contains(text, "assert \"const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);\" in resource_ui, resource_ui") {
+		t.Fatalf("expected smoke-local.sh to assert resource page bookmark contract")
+	}
+	if !strings.Contains(text, "assert \"createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')\" in resource_ui, resource_ui") {
+		t.Fatalf("expected smoke-local.sh to assert resource page back-link contract")
+	}
 	if !strings.Contains(text, "assert 'Audit timeline' in audit_ui, audit_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains audit timeline copy")
 	}
@@ -1676,6 +1694,16 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"json_string_field_from_path() {",
 			"response_path=$(write_payload wait-for-apply-status.json \"$response\")",
 			"current_status=$(json_string_field_from_path \"$response_path\" status)",
+			"application_ui=$(curl -fsS \"$API_BASE_URL/?page=application&deployment=payments-api-prod\")",
+			"resource_ui=$(curl -fsS \"$API_BASE_URL/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan%3A%3Apayments-api-prod-weighted-routing%3A%3AWeighted+routing+plan\")",
+			"APPLICATION_UI_PATH=\"$application_ui_path\"",
+			"RESOURCE_UI_PATH=\"$resource_ui_path\"",
+			"application_ui = read_text(\"APPLICATION_UI_PATH\")",
+			"resource_ui = read_text(\"RESOURCE_UI_PATH\")",
+			"const fetchApplicationDetail = (deploymentName) => fetch(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`)",
+			"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')",
+			"const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);",
+			"createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')",
 			"config --services",
 			"for service in api controller redis; do",
 			"assert_request_id_header() {",
@@ -1857,6 +1885,8 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 		"../../README.md": {
 			"Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis;",
 			"the request-actor header contract by sending conflicting `X-Tenet-Actor-*` and `X-User-*` identities together",
+			"fetches the bookmarkable `/?page=application&deployment=payments-api-prod` route and one representative bookmarkable `/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan` route",
+			"checks only raw embedded application/resource shell strings that prove those drill-down pages can render and navigate",
 			"the front-door auth contract by restarting `tenet-api`",
 			"Front-door auth remains additive and opt-in.",
 			"TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
@@ -1890,6 +1920,8 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
 			"Use `make smoke-local` for the fastest fixture-backed regression check when you only need direct-process validation.",
 			"proves additive `X-User-*` alias support plus explicit `X-Tenet-Actor-*` precedence by sending both header families with conflicting identities",
+			"fetches the bookmarkable `/?page=application&deployment=payments-api-prod` route plus one representative bookmarkable `/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan` route",
+			"asserts only the raw embedded application/resource shell strings needed to prove those drill-down pages can render and navigate",
 			"restarts `tenet-api` with `TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
 			"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
 			"the bookmarkable `/?page=plan` workspace still includes operator-facing guidance for those auth-gated write failures",
