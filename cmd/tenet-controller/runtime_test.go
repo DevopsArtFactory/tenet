@@ -1988,6 +1988,74 @@ func TestDeriveManagedDriftItemsAddsLiveEC2CapacityEvidence(t *testing.T) {
 	})
 }
 
+func TestDeriveManagedDriftItemsAddsLiveECSDesiredCapacityEvidence(t *testing.T) {
+	for _, executionMode := range []string{"ecsCodeDeploy", "ecsRolling"} {
+		t.Run(executionMode, func(t *testing.T) {
+			deployment := domain.Deployment{
+				Name:          "payments-worker-prod",
+				ExecutionMode: executionMode,
+				RolloutConfig: domain.DeploymentRolloutConfig{
+					Capacity: domain.DeploymentRolloutCapacity{Desired: 3, Min: 1, Max: 5},
+				},
+			}
+
+			got := deriveManagedDriftItems(deployment, domain.DeploymentStatus{}, &runtimeLiveCapacityObservation{
+				Desired: 2,
+			})
+			want := []domain.ManagedDriftItem{
+				{Field: "runtimeContext.capacity.desired", Desired: "3", Actual: "2", Severity: domain.ManagedDriftSeverityMedium},
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("expected live ECS desired-capacity drift evidence, got %+v", got)
+			}
+		})
+	}
+}
+
+func TestRuntimeLiveCapacityLookupFromInspectionUsesECSServiceDesiredCount(t *testing.T) {
+	deployment := domain.Deployment{
+		Name:           "payments-worker-prod",
+		EnvironmentRef: "prod-apne2",
+		ExecutionMode:  "ecsRolling",
+	}
+	accounts := []domain.Account{{
+		Name:           "prod-core",
+		AWSAccountID:   "123456789012",
+		AllowedRegions: []string{"ap-northeast-2"},
+	}}
+	environments := []domain.Environment{{
+		Name:       "prod-apne2",
+		AccountRef: "prod-core",
+		Region:     "ap-northeast-2",
+	}}
+
+	var gotReq resourceinspection.ECSRequest
+	inspector := resourceinspection.NewService(resourceinspection.Options{
+		InspectECSService: func(_ context.Context, req resourceinspection.ECSRequest) (resourceinspection.ECSServiceInspection, error) {
+			gotReq = req
+			return resourceinspection.ECSServiceInspection{
+				DesiredCount: 3,
+			}, nil
+		},
+	})
+
+	got, err := runtimeLiveCapacityLookupFromInspection(context.Background(), inspector, accounts, environments, deployment)
+	if err != nil {
+		t.Fatalf("runtimeLiveCapacityLookupFromInspection returned error: %v", err)
+	}
+	if !reflect.DeepEqual(got, &runtimeLiveCapacityObservation{Desired: 3}) {
+		t.Fatalf("expected ECS desired-count observation, got %+v", got)
+	}
+	if gotReq != (resourceinspection.ECSRequest{
+		DeploymentName:  "payments-worker-prod",
+		ResourceName:    "payments-worker-prod-service",
+		Region:          "ap-northeast-2",
+		TargetAccountID: "123456789012",
+	}) {
+		t.Fatalf("unexpected ECS lookup request: %+v", gotReq)
+	}
+}
+
 func TestEmitRuntimePlansSkipsLiveCapacityDriftWhenLookupUnavailable(t *testing.T) {
 	root := t.TempDir()
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
@@ -2016,6 +2084,37 @@ func TestEmitRuntimePlansSkipsLiveCapacityDriftWhenLookupUnavailable(t *testing.
 	}
 	if status.Rollout == nil || status.Rollout.ExecutionMode != "asgWeightedTargetGroups" {
 		t.Fatalf("expected reconcile to continue producing rollout context, got %+v", status.Rollout)
+	}
+}
+
+func TestEmitRuntimePlansSkipsLiveECSCapacityDriftWhenLookupUnavailable(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "worker-prod.json"), `{"name":"worker-prod","appRef":"payments-worker","environmentRef":"prod-apne2","target":{"type":"ecs"},"strategy":{"type":"rolling"},"traffic":{"port":8080},"capacity":{"desired":3,"min":1,"max":5},"image":"ghcr.io/devopsartfactory/payments-worker:1.2.3"}`)
+
+	oldLookup := runtimeLiveCapacityLookup
+	runtimeLiveCapacityLookup = func(context.Context, resourceinspection.Service, []domain.Account, []domain.Environment, domain.Deployment) (*runtimeLiveCapacityObservation, error) {
+		return nil, errors.New("aws unavailable")
+	}
+	defer func() { runtimeLiveCapacityLookup = oldLookup }()
+
+	store := &recordingRuntimeStore{}
+	logger := log.New(bytes.NewBuffer(nil), "", 0)
+	config := startupConfig{RepoRoot: root}
+
+	if err := emitRuntimePlans(context.Background(), logger, config, store); err != nil {
+		t.Fatalf("expected live-capacity lookup failure to stay best-effort, got %v", err)
+	}
+	if len(store.snapshots) != 1 {
+		t.Fatalf("expected one persisted snapshot, got %+v", store.snapshots)
+	}
+	status := store.snapshots[0].Status
+	if len(status.ManagedDrift) != 0 {
+		t.Fatalf("expected unavailable live ECS lookup to avoid fabricating drift rows, got %+v", status.ManagedDrift)
+	}
+	if status.Rollout == nil || status.Rollout.ExecutionMode != "ecsRolling" {
+		t.Fatalf("expected reconcile to continue producing ECS rollout context, got %+v", status.Rollout)
 	}
 }
 
