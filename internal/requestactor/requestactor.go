@@ -11,6 +11,10 @@ const (
 	HeaderName  = "X-Tenet-Actor-Name"
 	HeaderEmail = "X-Tenet-Actor-Email"
 
+	HeaderAliasID    = "X-User-ID"
+	HeaderAliasName  = "X-User-Name"
+	HeaderAliasEmail = "X-User-Email"
+
 	UnavailableReason = "actor information is unavailable because no authenticated request context was available for this local request"
 )
 
@@ -48,14 +52,26 @@ func FromHeaders(header http.Header) Actor {
 		return Normalize(Actor{})
 	}
 	actor := Actor{
-		ID:    strings.TrimSpace(header.Get(HeaderID)),
-		Name:  strings.TrimSpace(header.Get(HeaderName)),
-		Email: strings.TrimSpace(header.Get(HeaderEmail)),
+		ID:    headerValue(header, HeaderID, HeaderAliasID),
+		Name:  headerValue(header, HeaderName, HeaderAliasName),
+		Email: headerValue(header, HeaderEmail, HeaderAliasEmail),
 	}
 	if actor.ID != "" || actor.Name != "" || actor.Email != "" {
 		actor.Available = true
 	}
 	return Normalize(actor)
+}
+
+func headerValue(header http.Header, primary string, aliases ...string) string {
+	if value := strings.TrimSpace(header.Get(primary)); value != "" {
+		return value
+	}
+	for _, alias := range aliases {
+		if value := strings.TrimSpace(header.Get(alias)); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // Normalize keeps unavailable actors explicit and strips fallback fields from available actors.
