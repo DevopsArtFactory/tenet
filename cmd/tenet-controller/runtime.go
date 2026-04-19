@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/domain"
+	"github.com/DevopsArtFactory/tenet/internal/placement"
 	"github.com/DevopsArtFactory/tenet/internal/reconcile"
+	"github.com/DevopsArtFactory/tenet/internal/resourceinspection"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
 
@@ -27,6 +29,14 @@ const (
 )
 
 var runtimeHistoryNow = time.Now
+
+type runtimeLiveCapacityObservation struct {
+	Desired int
+	Min     int
+	Max     int
+}
+
+var runtimeLiveCapacityLookup = runtimeLiveCapacityLookupFromInspection
 
 func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupConfig, store statusstore.Store) error {
 	source := config.catalogSource()
@@ -88,6 +98,7 @@ func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupCon
 	}
 
 	planner := reconcile.Planner{}
+	liveInspectionService := resourceinspection.NewService(resourceinspection.Options{EnableAWS: true})
 	for _, deployment := range compiled.Deployments {
 		status := statuses[deployment.Name]
 		previousStatus := status
@@ -95,7 +106,8 @@ func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupCon
 		plan := planner.Build(deployment, status)
 		status = normalizeRuntimeStatus(deployment, status, plan)
 		status.Rollout = deriveRolloutSummary(deployment, status, plan)
-		status.ManagedDrift = deriveManagedDriftItems(deployment, status)
+		liveCapacity := runtimeLiveCapacity(ctx, logger, liveInspectionService, compiled.Accounts, compiled.Environments, deployment)
+		status.ManagedDrift = deriveManagedDriftItems(deployment, status, liveCapacity)
 		status = applyControllerManagedDriftStatus(status, plan)
 		status.History = appendRuntimeHistory(previousStatus, status)
 		currentStatuses[deployment.Name] = status
@@ -227,8 +239,63 @@ func normalizeRuntimeHistoryEntryContext(entry domain.StatusHistoryEntry, fallba
 	return entry
 }
 
-func deriveManagedDriftItems(deployment domain.Deployment, status domain.DeploymentStatus) []domain.ManagedDriftItem {
-	items := make([]domain.ManagedDriftItem, 0, 5)
+func runtimeLiveCapacity(ctx context.Context, logger *log.Logger, inspector resourceinspection.Service, accounts []domain.Account, environments []domain.Environment, deployment domain.Deployment) *runtimeLiveCapacityObservation {
+	observation, err := runtimeLiveCapacityLookup(ctx, inspector, accounts, environments, deployment)
+	if err == nil {
+		return observation
+	}
+	if logger != nil {
+		logger.Printf(
+			"controller live managed drift enrichment skipped deployment=%s execution_mode=%s err=%v",
+			deployment.Name,
+			deployment.ExecutionMode,
+			err,
+		)
+	}
+	return nil
+}
+
+func runtimeLiveCapacityLookupFromInspection(ctx context.Context, inspector resourceinspection.Service, accounts []domain.Account, environments []domain.Environment, deployment domain.Deployment) (*runtimeLiveCapacityObservation, error) {
+	resourceType, resourceName, ok := runtimeLiveCapacityResource(deployment)
+	if !ok {
+		return nil, nil
+	}
+	resolved, err := (placement.Resolver{}).Resolve(accounts, environments, deployment)
+	if err != nil {
+		return nil, err
+	}
+	result, err := inspector.Inspect(ctx, resourceinspection.Request{
+		DeploymentName:  deployment.Name,
+		ResourceType:    resourceType,
+		ResourceName:    resourceName,
+		TargetAccountID: resolved.AccountID,
+		Region:          resolved.Region,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !result.Available || result.AutoScalingGroup == nil {
+		return nil, nil
+	}
+	return &runtimeLiveCapacityObservation{
+		Desired: int(result.AutoScalingGroup.DesiredCapacity),
+		Min:     int(result.AutoScalingGroup.MinSize),
+		Max:     int(result.AutoScalingGroup.MaxSize),
+	}, nil
+}
+
+func runtimeLiveCapacityResource(deployment domain.Deployment) (resourceType string, resourceName string, ok bool) {
+	for _, detail := range deriveRolloutExecutionDetails(deployment) {
+		switch detail.Resource {
+		case "candidateAutoScalingGroup", "serviceAutoScalingGroup":
+			return detail.Resource, detail.Name, true
+		}
+	}
+	return "", "", false
+}
+
+func deriveManagedDriftItems(deployment domain.Deployment, status domain.DeploymentStatus, liveCapacity *runtimeLiveCapacityObservation) []domain.ManagedDriftItem {
+	items := make([]domain.ManagedDriftItem, 0, 8)
 
 	desiredArtifact := describeDeploymentArtifact(deployment.DesiredArtifact)
 	actualArtifact := describeDeploymentArtifact(status.DeployedArtifact)
@@ -276,6 +343,34 @@ func deriveManagedDriftItems(deployment domain.Deployment, status domain.Deploym
 				Field:    "runtimeContext.executionMode",
 				Desired:  deployment.ExecutionMode,
 				Actual:   status.Rollout.ExecutionMode,
+				Severity: domain.ManagedDriftSeverityMedium,
+			})
+		}
+	}
+
+	if liveCapacity != nil {
+		desiredCapacity := deployment.RolloutConfig.Capacity
+		if desiredCapacity.Desired != liveCapacity.Desired {
+			items = append(items, domain.ManagedDriftItem{
+				Field:    "runtimeContext.capacity.desired",
+				Desired:  fmt.Sprintf("%d", desiredCapacity.Desired),
+				Actual:   fmt.Sprintf("%d", liveCapacity.Desired),
+				Severity: domain.ManagedDriftSeverityMedium,
+			})
+		}
+		if desiredCapacity.Min != liveCapacity.Min {
+			items = append(items, domain.ManagedDriftItem{
+				Field:    "runtimeContext.capacity.min",
+				Desired:  fmt.Sprintf("%d", desiredCapacity.Min),
+				Actual:   fmt.Sprintf("%d", liveCapacity.Min),
+				Severity: domain.ManagedDriftSeverityMedium,
+			})
+		}
+		if desiredCapacity.Max != liveCapacity.Max {
+			items = append(items, domain.ManagedDriftItem{
+				Field:    "runtimeContext.capacity.max",
+				Desired:  fmt.Sprintf("%d", desiredCapacity.Max),
+				Actual:   fmt.Sprintf("%d", liveCapacity.Max),
 				Severity: domain.ManagedDriftSeverityMedium,
 			})
 		}
