@@ -86,11 +86,21 @@ func TestDockerUpOperatorContract(t *testing.T) {
 func TestReadOnlyApplyOperatorContract(t *testing.T) {
 	dockerSmoke := readRepoFile(t, "scripts/smoke-docker.sh")
 	for _, fragment := range []string{
+		`json_string_field_from_path() {`,
+		`response_path=$(write_payload wait-for-apply-status.json "$response")`,
+		`current_status=$(json_string_field_from_path "$response_path" status)`,
 		`restart_api_with_apply_mode() {`,
 		`TENET_AWS_ENABLE_APPLY="$apply_enabled" "${COMPOSE[@]}" up -d api >/dev/null`,
 		`drift_ui=$(curl -fsS "$API_BASE_URL/?page=drift&deployment=payments-api-prod")`,
 		`"$API_BASE_URL/v1/applies/$apply_id/transitions"`,
 		`"$API_BASE_URL/v1/applies/apply_smoke_missing/transitions"`,
+		`deployment_detail_extract_path=$(write_payload deployment-detail.extract.json "$deployment_detail")`,
+		`deployment_source_fingerprint=$(json_string_field_from_path "$deployment_detail_extract_path" sourceFingerprint)`,
+		`plan_preview_extract_path=$(write_payload plan-preview.extract.json "$plan_preview")`,
+		`plan_id=$(json_string_field_from_path "$plan_preview_extract_path" id)`,
+		`plan_status=$(PLAN_PREVIEW_PATH="$plan_preview_extract_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_extract_path" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" python3 - <<'PY'`,
+		`apply_record_extract_path=$(write_payload apply-record.extract.json "$apply_record")`,
+		`apply_id=$(json_string_field_from_path "$apply_record_extract_path" id)`,
 		`managed_drift = deployment_detail.get("managedDrift")`,
 		`runtime_managed_drift = (deployment_detail.get("runtimeSummary") or {}).get("managedDrift")`,
 		`assert isinstance(managed_drift, list) and managed_drift, deployment_detail`,
@@ -127,9 +137,23 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 			t.Fatalf("expected smoke-docker queued apply contract to include %q", fragment)
 		}
 	}
+	for _, fragment := range []string{
+		`DEPLOYMENT_DETAIL_JSON="$deployment_detail"`,
+		`PLAN_PREVIEW_JSON="$plan_preview"`,
+		`APPLY_RECORD_JSON="$apply_record"`,
+		`QUEUED_PLAN_PREVIEW_JSON="$queued_plan_preview"`,
+		`QUEUED_APPLY_RECORD_JSON="$queued_apply_record"`,
+	} {
+		if strings.Contains(dockerSmoke, fragment) {
+			t.Fatalf("expected smoke-docker to avoid env-blob JSON parsing fragment %q", fragment)
+		}
+	}
 
 	script := readRepoFile(t, "scripts/smoke-local.sh")
 	for _, fragment := range []string{
+		`json_string_field_from_path() {`,
+		`response_path=$(write_payload wait-for-apply-status.json "$response")`,
+		`current_status=$(json_string_field_from_path "$response_path" status)`,
 		`TENET_APPLY_STORE_PATH="$APPLY_STORE_PATH"`,
 		`TENET_AWS_ENABLE_APPLY="$APPLY_ENABLED"`,
 		`curl -fsS -X POST "http://$HOST:$PORT/v1/applies/plans/$plan_id"`,
@@ -157,9 +181,29 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		`assert os.environ['STALE_APPLY_CONFLICT_STATUS'] == '409', os.environ['STALE_APPLY_CONFLICT_STATUS']`,
 		`assert 'create a new plan preview before applying' in stale_apply_conflict, stale_apply_conflict`,
 		`curl -fsS "http://$HOST:$PORT/v1/audit-logs?deployment=payments-api-stale&action=apply.requested"`,
+		`deployment_detail_extract_path=$(write_payload deployment-detail.extract.json "$deployment_detail")`,
+		`deployment_source_fingerprint=$(json_string_field_from_path "$deployment_detail_extract_path" sourceFingerprint)`,
+		`plan_preview_extract_path=$(write_payload plan-preview.extract.json "$plan_preview")`,
+		`plan_id=$(json_string_field_from_path "$plan_preview_extract_path" id)`,
+		`apply_record_extract_path=$(write_payload apply-record.extract.json "$apply_record")`,
+		`apply_id=$(json_string_field_from_path "$apply_record_extract_path" id)`,
+		`frontdoor_plan_preview_path=$(write_payload frontdoor-plan-preview.json "$frontdoor_plan_preview")`,
+		`FRONTDOOR_PLAN_PREVIEW_PATH="$frontdoor_plan_preview_path"`,
+		`controller_detail_probe_path=$(write_payload controller-detail-probe.json "$controller_detail")`,
 	} {
 		if !strings.Contains(script, fragment) {
 			t.Fatalf("expected smoke-local apply contract to include %q", fragment)
+		}
+	}
+	for _, fragment := range []string{
+		`DEPLOYMENT_DETAIL_JSON="$deployment_detail"`,
+		`PLAN_PREVIEW_JSON="$plan_preview"`,
+		`APPLY_RECORD_JSON="$apply_record"`,
+		`FRONTDOOR_PLAN_PREVIEW_JSON="$frontdoor_plan_preview"`,
+		`CONTROLLER_DETAIL_JSON="$controller_detail"`,
+	} {
+		if strings.Contains(script, fragment) {
+			t.Fatalf("expected smoke-local to avoid env-blob JSON parsing fragment %q", fragment)
 		}
 	}
 
@@ -185,6 +229,9 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"terminal `applyId`",
 		"clear operator-facing text",
 		"create a fresh preview",
+		"temp files via the shared `write_payload` helper",
+		"environment variables",
+		"Linux CI runners",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README apply contract to include %q", fragment)
@@ -199,6 +246,8 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"`409` invalid terminal move",
 		"operator-facing text",
 		"smoke-created terminal `applyId`",
+		"temp files through the shared `write_payload` helper",
+		"Linux CI runners with tighter environment-size limits",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
 			t.Fatalf("expected local runtime doc apply contract to include %q", fragment)

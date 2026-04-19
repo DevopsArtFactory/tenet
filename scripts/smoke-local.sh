@@ -57,6 +57,26 @@ write_payload() {
   printf '%s' "$path"
 }
 
+json_string_field_from_path() {
+  local path=$1
+  local field=$2
+
+  python3 - "$path" "$field" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+value = payload.get(sys.argv[2])
+if value is None:
+    print("")
+elif not isinstance(value, str):
+    raise SystemExit(f"expected string field {sys.argv[2]!r} in {sys.argv[1]}")
+else:
+    print(value.strip())
+PY
+}
+
 assert_request_id_header() {
   local url=$1
   local headers
@@ -81,14 +101,12 @@ wait_for_apply_status() {
   local apply_id=$1
   local expected_status=$2
   local response='{}'
+  local response_path
 
   for _ in $(seq 1 50); do
     response=$(curl -fsS "http://$HOST:$PORT/v1/applies/$apply_id")
-    current_status=$(APPLY_RECORD_JSON="$response" python3 - <<'PY'
-import json, os
-print(json.loads(os.environ['APPLY_RECORD_JSON'])['status'])
-PY
-)
+    response_path=$(write_payload wait-for-apply-status.json "$response")
+    current_status=$(json_string_field_from_path "$response_path" status)
     if [[ "$current_status" == "$expected_status" ]]; then
       printf '%s' "$response"
       return 0
@@ -150,24 +168,15 @@ account_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts/123456789012
 group_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/accounts/123456789012/projects/payments-api/environments/prod-apne2")
 deployment_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod")
 deployment_events_fixture=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/events")
-deployment_source_fingerprint=$(DEPLOYMENT_DETAIL_JSON="$deployment_detail" python3 - <<'PY'
-import json, os
-print(json.loads(os.environ['DEPLOYMENT_DETAIL_JSON'])['sourceFingerprint'])
-PY
-)
+deployment_detail_extract_path=$(write_payload deployment-detail.extract.json "$deployment_detail")
+deployment_source_fingerprint=$(json_string_field_from_path "$deployment_detail_extract_path" sourceFingerprint)
 plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d "{\"ifMatch\":\"$deployment_source_fingerprint\"}" "http://$HOST:$PORT/v1/plans/deployments/payments-api-prod")
-plan_id=$(PLAN_PREVIEW_JSON="$plan_preview" python3 - <<'PY'
-import json, os
-print(json.loads(os.environ['PLAN_PREVIEW_JSON'])['id'])
-PY
-)
+plan_preview_extract_path=$(write_payload plan-preview.extract.json "$plan_preview")
+plan_id=$(json_string_field_from_path "$plan_preview_extract_path" id)
 plan_preview_get=$(curl -fsS "http://$HOST:$PORT/v1/plans/$plan_id")
 apply_record=$(curl -fsS -X POST "http://$HOST:$PORT/v1/applies/plans/$plan_id")
-apply_id=$(APPLY_RECORD_JSON="$apply_record" python3 - <<'PY'
-import json, os
-print(json.loads(os.environ['APPLY_RECORD_JSON'])['id'])
-PY
-)
+apply_record_extract_path=$(write_payload apply-record.extract.json "$apply_record")
+apply_id=$(json_string_field_from_path "$apply_record_extract_path" id)
 if [[ "$APPLY_ENABLED" == "true" ]]; then
   apply_record_get=$(wait_for_apply_status "$apply_id" failed)
 else
@@ -198,11 +207,8 @@ actor_plan_preview=$(curl -fsS -X POST \
   -H "X-User-Email: jane@example.com" \
   -d '{}' \
   "http://$HOST:$PORT/v1/plans/deployments/payments-api-staging")
-actor_plan_id=$(ACTOR_PLAN_PREVIEW_JSON="$actor_plan_preview" python3 - <<'PY'
-import json, os
-print(json.loads(os.environ['ACTOR_PLAN_PREVIEW_JSON'])['id'])
-PY
-)
+actor_plan_preview_extract_path=$(write_payload actor-plan-preview.extract.json "$actor_plan_preview")
+actor_plan_id=$(json_string_field_from_path "$actor_plan_preview_extract_path" id)
 actor_plan_preview_get=$(curl -fsS "http://$HOST:$PORT/v1/plans/$actor_plan_id")
 actor_apply_record=$(curl -fsS -X POST \
   -H "X-Tenet-Actor-Id: explicit-456" \
@@ -212,11 +218,8 @@ actor_apply_record=$(curl -fsS -X POST \
   -H "X-User-Name: Jane Operator" \
   -H "X-User-Email: jane@example.com" \
   "http://$HOST:$PORT/v1/applies/plans/$actor_plan_id")
-actor_apply_id=$(ACTOR_APPLY_RECORD_JSON="$actor_apply_record" python3 - <<'PY'
-import json, os
-print(json.loads(os.environ['ACTOR_APPLY_RECORD_JSON'])['id'])
-PY
-)
+actor_apply_record_extract_path=$(write_payload actor-apply-record.extract.json "$actor_apply_record")
+actor_apply_id=$(json_string_field_from_path "$actor_apply_record_extract_path" id)
 if [[ "$APPLY_ENABLED" == "true" ]]; then
   actor_apply_record_get=$(wait_for_apply_status "$actor_apply_id" failed)
 else
@@ -246,17 +249,11 @@ stacks:
         ami_id: ami-1234567890abcdef0
 EOF
 stale_apply_deployment_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-stale")
-stale_apply_source_fingerprint=$(DEPLOYMENT_DETAIL_JSON="$stale_apply_deployment_detail" python3 - <<'PY'
-import json, os
-print(json.loads(os.environ['DEPLOYMENT_DETAIL_JSON'])['sourceFingerprint'])
-PY
-)
+stale_apply_deployment_detail_extract_path=$(write_payload stale-apply-deployment-detail.extract.json "$stale_apply_deployment_detail")
+stale_apply_source_fingerprint=$(json_string_field_from_path "$stale_apply_deployment_detail_extract_path" sourceFingerprint)
 stale_apply_plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d "{\"ifMatch\":\"$stale_apply_source_fingerprint\"}" "http://$HOST:$PORT/v1/plans/deployments/payments-api-stale")
-stale_apply_plan_id=$(STALE_APPLY_PLAN_PREVIEW_JSON="$stale_apply_plan_preview" python3 - <<'PY'
-import json, os
-print(json.loads(os.environ['STALE_APPLY_PLAN_PREVIEW_JSON'])['id'])
-PY
-)
+stale_apply_plan_preview_extract_path=$(write_payload stale-apply-plan-preview.extract.json "$stale_apply_plan_preview")
+stale_apply_plan_id=$(json_string_field_from_path "$stale_apply_plan_preview_extract_path" id)
 python3 - <<'PY' "$REPO_ROOT/deployments/payments-api-stale.yaml"
 from pathlib import Path
 import sys
@@ -858,40 +855,39 @@ frontdoor_plan_preview=$(curl -fsS -X POST \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -d '{}' \
   "http://$HOST:$PORT/v1/plans/deployments/payments-api-staging")
-frontdoor_plan_id=$(FRONTDOOR_PLAN_PREVIEW_JSON="$frontdoor_plan_preview" python3 - <<'PY'
-import json, os
-print(json.loads(os.environ['FRONTDOOR_PLAN_PREVIEW_JSON'])['id'])
-PY
-)
+frontdoor_plan_preview_path=$(write_payload frontdoor-plan-preview.json "$frontdoor_plan_preview")
+frontdoor_plan_id=$(json_string_field_from_path "$frontdoor_plan_preview_path" id)
 frontdoor_apply_record=$(curl -fsS -X POST \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   "http://$HOST:$PORT/v1/applies/plans/$frontdoor_plan_id")
-frontdoor_apply_id=$(FRONTDOOR_APPLY_RECORD_JSON="$frontdoor_apply_record" python3 - <<'PY'
-import json, os
-print(json.loads(os.environ['FRONTDOOR_APPLY_RECORD_JSON'])['id'])
-PY
-)
+frontdoor_apply_record_path=$(write_payload frontdoor-apply-record.json "$frontdoor_apply_record")
+frontdoor_apply_id=$(json_string_field_from_path "$frontdoor_apply_record_path" id)
 if [[ "$APPLY_ENABLED" == "true" ]]; then
   frontdoor_apply_record_get=$(wait_for_apply_status "$frontdoor_apply_id" failed)
 else
   frontdoor_apply_record_get=$(curl -fsS "http://$HOST:$PORT/v1/applies/$frontdoor_apply_id")
 fi
 frontdoor_audit_logs=$(curl -fsS "http://$HOST:$PORT/v1/audit-logs?deployment=payments-api-staging&action=apply.requested&limit=1")
+frontdoor_apply_record_get_path=$(write_payload frontdoor-apply-record-get.json "$frontdoor_apply_record_get")
+frontdoor_audit_logs_path=$(write_payload frontdoor-audit-logs.json "$frontdoor_audit_logs")
 
-AUTH_UNAUTHENTICATED_PLAN_STATUS="$auth_unauthenticated_plan_status" AUTH_UNAUTHENTICATED_PLAN_BODY_PATH="$AUTH_UNAUTHENTICATED_PLAN_BODY" AUTH_UNAUTHENTICATED_APPLY_STATUS="$auth_unauthenticated_apply_status" AUTH_UNAUTHENTICATED_APPLY_BODY_PATH="$AUTH_UNAUTHENTICATED_APPLY_BODY" FRONTDOOR_PLAN_PREVIEW_JSON="$frontdoor_plan_preview" FRONTDOOR_APPLY_RECORD_JSON="$frontdoor_apply_record" FRONTDOOR_APPLY_RECORD_GET_JSON="$frontdoor_apply_record_get" FRONTDOOR_AUDIT_LOGS_JSON="$frontdoor_audit_logs" python3 - <<'PY'
+AUTH_UNAUTHENTICATED_PLAN_STATUS="$auth_unauthenticated_plan_status" AUTH_UNAUTHENTICATED_PLAN_BODY_PATH="$AUTH_UNAUTHENTICATED_PLAN_BODY" AUTH_UNAUTHENTICATED_APPLY_STATUS="$auth_unauthenticated_apply_status" AUTH_UNAUTHENTICATED_APPLY_BODY_PATH="$AUTH_UNAUTHENTICATED_APPLY_BODY" FRONTDOOR_PLAN_PREVIEW_PATH="$frontdoor_plan_preview_path" FRONTDOOR_APPLY_RECORD_PATH="$frontdoor_apply_record_path" FRONTDOOR_APPLY_RECORD_GET_PATH="$frontdoor_apply_record_get_path" FRONTDOOR_AUDIT_LOGS_PATH="$frontdoor_audit_logs_path" python3 - <<'PY'
 import json, os
 
 with open(os.environ['AUTH_UNAUTHENTICATED_PLAN_BODY_PATH'], encoding='utf-8') as fh:
     unauthenticated_plan_body = fh.read()
 with open(os.environ['AUTH_UNAUTHENTICATED_APPLY_BODY_PATH'], encoding='utf-8') as fh:
     unauthenticated_apply_body = fh.read()
-
-frontdoor_plan_preview = json.loads(os.environ['FRONTDOOR_PLAN_PREVIEW_JSON'])
-frontdoor_apply_record = json.loads(os.environ['FRONTDOOR_APPLY_RECORD_JSON'])
-frontdoor_apply_record_get = json.loads(os.environ['FRONTDOOR_APPLY_RECORD_GET_JSON'])
-frontdoor_audit_logs = json.loads(os.environ['FRONTDOOR_AUDIT_LOGS_JSON'])
+with open(os.environ['FRONTDOOR_PLAN_PREVIEW_PATH'], encoding='utf-8') as fh:
+    frontdoor_plan_preview = json.load(fh)
+with open(os.environ['FRONTDOOR_APPLY_RECORD_PATH'], encoding='utf-8') as fh:
+    frontdoor_apply_record = json.load(fh)
+with open(os.environ['FRONTDOOR_APPLY_RECORD_GET_PATH'], encoding='utf-8') as fh:
+    frontdoor_apply_record_get = json.load(fh)
+with open(os.environ['FRONTDOOR_AUDIT_LOGS_PATH'], encoding='utf-8') as fh:
+    frontdoor_audit_logs = json.load(fh)
 
 assert os.environ['AUTH_UNAUTHENTICATED_PLAN_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_PLAN_STATUS']
 assert unauthenticated_plan_body.strip() == 'unauthenticated: authenticated identity is required for this operator write route', unauthenticated_plan_body
@@ -927,9 +923,13 @@ for _ in $(seq 1 30); do
     sleep 1
     continue
   fi
-  if CONTROLLER_DETAIL_JSON="$controller_detail" python3 - <<'PY'
+  controller_detail_probe_path=$(write_payload controller-detail-probe.json "$controller_detail")
+  if CONTROLLER_DETAIL_PATH="$controller_detail_probe_path" python3 - <<'PY'
 import json, os, sys
-payload = json.loads(os.environ['CONTROLLER_DETAIL_JSON'])
+
+with open(os.environ['CONTROLLER_DETAIL_PATH'], encoding='utf-8') as fh:
+    payload = json.load(fh)
+
 runtime_change_details = (payload.get('runtimeSummary') or {}).get('changeDetails') or []
 history = payload.get('history') or []
 history_change_details = (history[0].get('changeDetails') if history else []) or []
@@ -952,10 +952,16 @@ fi
 
 controller_detail=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod")
 controller_events=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/events")
-CONTROLLER_DETAIL_JSON="$controller_detail" CONTROLLER_EVENTS_JSON="$controller_events" python3 - <<'PY'
+controller_detail_path=$(write_payload controller-detail.json "$controller_detail")
+controller_events_path=$(write_payload controller-events.json "$controller_events")
+CONTROLLER_DETAIL_PATH="$controller_detail_path" CONTROLLER_EVENTS_PATH="$controller_events_path" python3 - <<'PY'
 import json, os
-payload = json.loads(os.environ['CONTROLLER_DETAIL_JSON'])
-events_payload = json.loads(os.environ['CONTROLLER_EVENTS_JSON'])
+
+with open(os.environ['CONTROLLER_DETAIL_PATH'], encoding='utf-8') as fh:
+    payload = json.load(fh)
+with open(os.environ['CONTROLLER_EVENTS_PATH'], encoding='utf-8') as fh:
+    events_payload = json.load(fh)
+
 runtime_change_details = (payload.get('runtimeSummary') or {}).get('changeDetails') or []
 history = payload.get('history') or []
 history_change_details = (history[0].get('changeDetails') if history else []) or []

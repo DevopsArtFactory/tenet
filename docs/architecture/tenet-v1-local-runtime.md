@@ -64,6 +64,8 @@ Use `make smoke-docker` when you need to validate the containerized local stack 
 
 GitHub Actions uses the same split so contributors and operators can read CI failures in the same terms as local reproduction. `.github/workflows/ci-smoke.yml` runs a fast lane on every pull request plus pushes to `main`; it pins the Go toolchain from `go.mod`, then runs `go test ./...` and `make smoke-local`. A separate slower Docker lane runs `make smoke-docker` only on pushes to `main` and manual `workflow_dispatch` runs, which keeps the PR path fast while still exercising the full containerized stack in automation.
 
+Both smoke scripts intentionally persist intermediate deployment-detail, plan-preview, and apply-record JSON to temp files through the shared `write_payload` helper before Python reads them back. Keeping those payloads file-backed avoids large environment-variable blobs and stays portable across Linux CI runners with tighter environment-size limits.
+
 The same smoke flow also verifies that representative responses carry a `Request-Id` header and that the local API process emits structured request logs. Operators should capture that response ID when an API call fails; Tenet threads the same value through the request context, echoes it back in explicit timeout/panic responses, and logs it on both request-completion and panic-recovery paths so API failures are easy to correlate with backend/provider diagnostics.
 
 ### Full Docker stack

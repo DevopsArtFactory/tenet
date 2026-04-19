@@ -1231,6 +1231,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains audit refresh error copy")
 	}
 	for _, fragment := range []string{
+		"json_string_field_from_path() {",
+		"response_path=$(write_payload wait-for-apply-status.json \"$response\")",
+		"current_status=$(json_string_field_from_path \"$response_path\" status)",
 		"assert_request_id_header() {",
 		"assert headers.get(\"request-id\"), headers",
 		"assert_request_id_header \"http://$HOST:$PORT/healthz\"",
@@ -1440,6 +1443,17 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 			t.Fatalf("expected smoke-local.sh to include %q", fragment)
 		}
 	}
+	for _, fragment := range []string{
+		"DEPLOYMENT_DETAIL_JSON=\"$deployment_detail\"",
+		"PLAN_PREVIEW_JSON=\"$plan_preview\"",
+		"APPLY_RECORD_JSON=\"$apply_record\"",
+		"FRONTDOOR_PLAN_PREVIEW_JSON=\"$frontdoor_plan_preview\"",
+		"CONTROLLER_DETAIL_JSON=\"$controller_detail\"",
+	} {
+		if strings.Contains(text, fragment) {
+			t.Fatalf("expected smoke-local.sh to avoid env-blob JSON parsing fragment %q", fragment)
+		}
+	}
 }
 
 func TestOverviewDocsLockECSRollingFallbackContract(t *testing.T) {
@@ -1632,6 +1646,9 @@ func TestManualTenetAPIDocsUseListenAddressContract(t *testing.T) {
 func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 	files := map[string][]string{
 		"../../scripts/smoke-docker.sh": {
+			"json_string_field_from_path() {",
+			"response_path=$(write_payload wait-for-apply-status.json \"$response\")",
+			"current_status=$(json_string_field_from_path \"$response_path\" status)",
 			"config --services",
 			"for service in api controller redis; do",
 			"assert_request_id_header() {",
@@ -1660,7 +1677,13 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"curl -fsS \"$API_BASE_URL/v1/catalog/summary\"",
 			"curl -fsS \"$API_BASE_URL/v1/overview/applications\"",
 			"curl -fsS \"$API_BASE_URL/v1/overview/deployments/payments-api-prod\"",
-			"deployment_source_fingerprint=$(DEPLOYMENT_DETAIL_JSON=\"$deployment_detail\" python3 - <<'PY'",
+			"deployment_detail_extract_path=$(write_payload deployment-detail.extract.json \"$deployment_detail\")",
+			"deployment_source_fingerprint=$(json_string_field_from_path \"$deployment_detail_extract_path\" sourceFingerprint)",
+			"plan_preview_extract_path=$(write_payload plan-preview.extract.json \"$plan_preview\")",
+			"plan_id=$(json_string_field_from_path \"$plan_preview_extract_path\" id)",
+			"plan_status=$(PLAN_PREVIEW_PATH=\"$plan_preview_extract_path\" PLAN_PREVIEW_GET_PATH=\"$plan_preview_get_extract_path\" DEPLOYMENT_SOURCE_FINGERPRINT=\"$deployment_source_fingerprint\" python3 - <<'PY'",
+			"apply_record_extract_path=$(write_payload apply-record.extract.json \"$apply_record\")",
+			"apply_id=$(json_string_field_from_path \"$apply_record_extract_path\" id)",
 			"managed_drift = deployment_detail.get(\"managedDrift\")",
 			"runtime_managed_drift = (deployment_detail.get(\"runtimeSummary\") or {}).get(\"managedDrift\")",
 			"assert isinstance(managed_drift, list) and managed_drift, deployment_detail",
@@ -1833,6 +1856,8 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"`TENET_AWS_ENABLE_APPLY=true make docker-up`",
 			"correlated structured `http_request` logs with stable fields such as `request_id`, `method`, `path`, `status`, `duration_ms`, and `result` for the bookmarkable drift workspace request and the deployment-scoped audit workspace request",
 			"`Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Lookup region`, and `Observer role configured`",
+			"temp files via the shared `write_payload` helper",
+			"Linux CI runners",
 			"make smoke-docker",
 		},
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
@@ -1860,6 +1885,8 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"`TENET_AWS_ENABLE_APPLY=true make docker-up`",
 			"correlated structured `http_request` logs with stable fields such as `request_id`, `method`, `path`, `status`, `duration_ms`, and `result` for the bookmarkable drift workspace request and the deployment-scoped audit workspace request",
 			"`Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Lookup region`, and `Observer role configured`",
+			"temp files through the shared `write_payload` helper",
+			"Linux CI runners with tighter environment-size limits",
 			"`docker compose down --remove-orphans` even on failure",
 		},
 	}
@@ -1874,6 +1901,22 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			if !strings.Contains(text, fragment) {
 				t.Fatalf("expected %s to include %q", path, fragment)
 			}
+		}
+	}
+	dockerSmokeBody, err := os.ReadFile("../../scripts/smoke-docker.sh")
+	if err != nil {
+		t.Fatalf("read ../../scripts/smoke-docker.sh: %v", err)
+	}
+	dockerSmoke := string(dockerSmokeBody)
+	for _, fragment := range []string{
+		"DEPLOYMENT_DETAIL_JSON=\"$deployment_detail\"",
+		"PLAN_PREVIEW_JSON=\"$plan_preview\"",
+		"APPLY_RECORD_JSON=\"$apply_record\"",
+		"QUEUED_PLAN_PREVIEW_JSON=\"$queued_plan_preview\"",
+		"QUEUED_APPLY_RECORD_JSON=\"$queued_apply_record\"",
+	} {
+		if strings.Contains(dockerSmoke, fragment) {
+			t.Fatalf("expected smoke-docker.sh to avoid env-blob JSON parsing fragment %q", fragment)
 		}
 	}
 }
