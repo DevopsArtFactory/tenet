@@ -279,34 +279,36 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 	}
 }
 
-func TestManagedCapacityDriftDocsPreferFocusedContractCoverageOverLocalSmoke(t *testing.T) {
+func TestManagedLiveDriftDocsPreferFocusedContractCoverageOverLocalSmoke(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
 	for _, fragment := range []string{
 		"`runtimeContext.capacity.desired`, `runtimeContext.capacity.min`, and `runtimeContext.capacity.max`",
-		"Focused `go test ./internal/api` contract coverage locks that additive JSON/UI detail because local smoke may legitimately lack AWS access and therefore does not claim to prove live-backed capacity rows.",
+		"`runtimeContext.taskDefinition.image`",
+		"Focused `go test ./internal/api` contract coverage locks that additive JSON/UI detail because local smoke may legitimately lack AWS access and therefore does not claim to prove live-backed capacity/image rows.",
 	} {
 		if !strings.Contains(readme, fragment) {
-			t.Fatalf("expected README managed capacity drift docs to include %q", fragment)
+			t.Fatalf("expected README managed live drift docs to include %q", fragment)
 		}
 	}
 
 	featureDoc := readRepoFile(t, "docs/features/overview-dashboard.md")
 	for _, fragment := range []string{
 		"`runtimeContext.capacity.{desired,min,max}`",
-		"focused router/UI contract tests lock that additive live-backed capacity detail because local smoke may legitimately lack AWS access and therefore does not claim to prove those rows",
+		"`runtimeContext.taskDefinition.image`",
+		"focused router/UI contract tests lock that additive live-backed capacity/image detail because local smoke may legitimately lack AWS access and therefore does not claim to prove those rows",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
-			t.Fatalf("expected overview dashboard doc to include %q", fragment)
+			t.Fatalf("expected overview dashboard managed live drift doc to include %q", fragment)
 		}
 	}
 
 	localRuntimeDoc := readRepoFile(t, "docs/architecture/tenet-v1-local-runtime.md")
 	for _, fragment := range []string{
-		"Neither local smoke path claims to prove live-backed `managedDrift[]` capacity rows under `runtimeContext.capacity.{desired,min,max}`.",
+		"`runtimeContext.taskDefinition.image`",
 		"Local runs may legitimately lack AWS access, so focused `go test ./internal/api` contract coverage locks that additive JSON/UI detail instead.",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
-			t.Fatalf("expected local runtime doc to include %q", fragment)
+			t.Fatalf("expected local runtime managed live drift doc to include %q", fragment)
 		}
 	}
 }

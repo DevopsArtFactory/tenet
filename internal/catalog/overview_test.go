@@ -787,6 +787,7 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 				ManagedDrift: []domain.ManagedDriftItem{
 					{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6", Severity: domain.ManagedDriftSeverityHigh},
 					{Field: "generation", Desired: "8", Actual: "7", Severity: domain.ManagedDriftSeverityMedium},
+					{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh},
 				},
 				Conditions: []domain.Condition{
 					{Type: "Progressing", Status: true, Reason: "RolloutInFlight", Message: "candidate receiving traffic"},
@@ -805,6 +806,7 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 						ManagedDrift: []domain.ManagedDriftItem{
 							{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6", Severity: domain.ManagedDriftSeverityHigh},
 							{Field: "generation", Desired: "7", Actual: "6", Severity: domain.ManagedDriftSeverityMedium},
+							{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh},
 						},
 						ChangeDetails: []string{"Summary changed to Accepted rollout for r7"},
 					},
@@ -821,6 +823,7 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 						ManagedDrift: []domain.ManagedDriftItem{
 							{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6", Severity: domain.ManagedDriftSeverityHigh},
 							{Field: "generation", Desired: "8", Actual: "7", Severity: domain.ManagedDriftSeverityMedium},
+							{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh},
 						},
 						ChangeDetails: []string{"Sync changed to Reconciling: new artifact", "Current step changed from CreateCandidateCapacity to ShiftTrafficCanary"},
 					},
@@ -894,10 +897,10 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	if len(detail.Conditions) != 1 || detail.Conditions[0].Reason != "RolloutInFlight" {
 		t.Fatalf("expected conditions to be surfaced, got %+v", detail.Conditions)
 	}
-	if len(detail.ManagedDrift) != 2 || detail.ManagedDrift[0].Field != "artifact" || detail.ManagedDrift[1].Field != "generation" {
+	if len(detail.ManagedDrift) != 3 || detail.ManagedDrift[0].Field != "artifact" || detail.ManagedDrift[1].Field != "generation" || detail.ManagedDrift[2].Field != "runtimeContext.taskDefinition.image" {
 		t.Fatalf("expected managed drift to be surfaced on deployment detail, got %+v", detail.ManagedDrift)
 	}
-	if detail.RuntimeSummary == nil || len(detail.RuntimeSummary.ManagedDrift) != 2 || detail.RuntimeSummary.ManagedDrift[0].Field != "artifact" || detail.RuntimeSummary.ManagedDrift[1].Field != "generation" {
+	if detail.RuntimeSummary == nil || len(detail.RuntimeSummary.ManagedDrift) != 3 || detail.RuntimeSummary.ManagedDrift[0].Field != "artifact" || detail.RuntimeSummary.ManagedDrift[1].Field != "generation" || detail.RuntimeSummary.ManagedDrift[2].Field != "runtimeContext.taskDefinition.image" {
 		t.Fatalf("expected managed drift in runtime summary, got %+v", detail.RuntimeSummary)
 	}
 	if len(detail.History) != 2 {
@@ -967,7 +970,7 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 		t.Fatalf("failed to decode deployment detail JSON: %v", err)
 	}
 	managedDrift, ok := decoded["managedDrift"].([]any)
-	if !ok || len(managedDrift) != 2 {
+	if !ok || len(managedDrift) != 3 {
 		t.Fatalf("expected deployment detail managedDrift array, got %#v", decoded["managedDrift"])
 	}
 	driftItem, ok := managedDrift[0].(map[string]any)
@@ -979,7 +982,7 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 		t.Fatalf("expected runtimeSummary object, got %#v", decoded["runtimeSummary"])
 	}
 	runtimeManagedDrift, ok := runtimeSummary["managedDrift"].([]any)
-	if !ok || len(runtimeManagedDrift) != 2 {
+	if !ok || len(runtimeManagedDrift) != 3 {
 		t.Fatalf("expected runtimeSummary.managedDrift array, got %#v", runtimeSummary["managedDrift"])
 	}
 	history, ok := decoded["history"].([]any)
@@ -991,7 +994,7 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 		t.Fatalf("expected history[1] object, got %#v", history[1])
 	}
 	historyManagedDrift, ok := historyEntry["managedDrift"].([]any)
-	if !ok || len(historyManagedDrift) != 2 {
+	if !ok || len(historyManagedDrift) != 3 {
 		t.Fatalf("expected history managedDrift array, got %#v", historyEntry["managedDrift"])
 	}
 	if _, exists := decoded["ManagedDrift"]; exists {
@@ -1288,6 +1291,7 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 				ManagedDrift: []domain.ManagedDriftItem{
 					{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6", Severity: domain.ManagedDriftSeverityHigh},
 					{Field: "generation", Desired: "8", Actual: "7", Severity: domain.ManagedDriftSeverityMedium},
+					{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh},
 				},
 				Conditions: []domain.Condition{
 					{Type: "Progressing", Status: true, Reason: "RolloutInFlight", Message: "candidate receiving traffic"},
@@ -1306,6 +1310,7 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 						ManagedDrift: []domain.ManagedDriftItem{
 							{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6", Severity: domain.ManagedDriftSeverityHigh},
 							{Field: "generation", Desired: "7", Actual: "6", Severity: domain.ManagedDriftSeverityMedium},
+							{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh},
 						},
 						ChangeDetails: []string{"Summary changed to Accepted rollout for r7"},
 					},
@@ -1322,6 +1327,7 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 						ManagedDrift: []domain.ManagedDriftItem{
 							{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6", Severity: domain.ManagedDriftSeverityHigh},
 							{Field: "generation", Desired: "8", Actual: "7", Severity: domain.ManagedDriftSeverityMedium},
+							{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh},
 						},
 						ChangeDetails: []string{"Sync changed to Reconciling: progressing", "Current step changed from CreateCandidateCapacity to ShiftTrafficCanary"},
 					},
@@ -1402,7 +1408,7 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 	if detail.RuntimeSummary == nil || detail.RuntimeSummary.CurrentStep != "ShiftTrafficCanary" || detail.RuntimeSummary.HistoryCount != 2 {
 		t.Fatalf("expected runtime summary fields for application page, got %+v", detail.RuntimeSummary)
 	}
-	if len(detail.ManagedDrift) != 2 || detail.ManagedDrift[0].Field != "artifact" || detail.RuntimeSummary == nil || len(detail.RuntimeSummary.ManagedDrift) != 2 {
+	if len(detail.ManagedDrift) != 3 || detail.ManagedDrift[0].Field != "artifact" || detail.RuntimeSummary == nil || len(detail.RuntimeSummary.ManagedDrift) != 3 {
 		t.Fatalf("expected managed drift fields for application page, got detail=%+v runtime=%+v", detail.ManagedDrift, detail.RuntimeSummary)
 	}
 	if detail.Rollout == nil || detail.Rollout.Phase != domain.RolloutPhasePromoting || detail.Rollout.CurrentStep != "ShiftTrafficCanary" || len(detail.Rollout.Steps) != 2 {
