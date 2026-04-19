@@ -808,6 +808,8 @@ assert 'Plan preview actions' in ui, ui
 assert 'Apply request actions' in ui, ui
 assert 'Plan preview approval guidance' in ui, ui
 assert 'Create Plan will POST /v1/plans/deployments/${deploymentName}, store an immutable server-authored preview, and update this workspace URL with a shareable planId.' in ui, ui
+assert 'Authenticated operator required' in ui, ui
+assert 'const operatorWriteAuthRequiredMessage = (route, action) => `Tenet rejected ${route} because authenticated identity is required on operator write routes. When auth enforcement is enabled, retry ${action} through the trusted front door so it can authenticate you and forward trusted identity headers.`;' in ui, ui
 assert 'Refresh plan preview' in ui, ui
 assert 'Refresh apply request' in ui, ui
 assert 'const loadPlanPreviewRecord = (planId) => {' in ui, ui

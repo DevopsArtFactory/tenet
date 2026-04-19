@@ -494,6 +494,8 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		`assert os.environ['AUTH_UNAUTHENTICATED_PLAN_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_PLAN_STATUS']`,
 		`assert unauthenticated_plan_body.strip() == 'unauthenticated: authenticated identity is required for this operator write route', unauthenticated_plan_body`,
 		`assert os.environ['AUTH_UNAUTHENTICATED_APPLY_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_APPLY_STATUS']`,
+		`assert 'Authenticated operator required' in ui, ui`,
+		`assert 'const operatorWriteAuthRequiredMessage = (route, action) => ` + "`Tenet rejected ${route} because authenticated identity is required on operator write routes. When auth enforcement is enabled, retry ${action} through the trusted front door so it can authenticate you and forward trusted identity headers.`;" + `' in ui, ui`,
 		`assert actor['id'] == 'front-door-123', payload`,
 		`assert entry['actor']['email'] == 'frontdoor@example.com', entry`,
 	} {
@@ -511,6 +513,8 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`X-Tenet-Authenticated-Email`",
 		"`401 Unauthorized`",
 		"`unauthenticated: authenticated identity is required for this operator write route`",
+		"authenticated identity is required on operator write routes",
+		"retry through the trusted front door",
 		"only enable either setting when every request reaches Tenet through a front door that authenticates the caller and strips any client-supplied `X-Tenet-Authenticated-*` headers",
 		"Do not expose a header-trusting `tenet-api` instance directly to untrusted clients",
 		"when those explicit actor headers are absent and trusted `X-Tenet-Authenticated-*` headers are present, Tenet now projects the authenticated identity into the persisted actor fields",
@@ -544,6 +548,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
 		"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
 		"`X-Tenet-Authenticated-*` headers project into persisted plan/apply/audit actor fields",
+		"the bookmarkable `/?page=plan` workspace still includes operator-facing guidance for those auth-gated write failures",
 		"do it only behind a front door that authenticates callers and strips inbound `X-Tenet-Authenticated-*` headers",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {

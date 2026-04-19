@@ -4707,6 +4707,124 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
 		runNodeHarness(t, nodeProgram)
 	})
 
+	t.Run("create plan unauthorized explains trusted front door auth requirement", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url, options = {}) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/plans/deployments/api-prod') {
+    if (options.method !== 'POST') throw new Error('expected create plan POST');
+    return Promise.resolve({
+      ok: false,
+      status: 401,
+      text: () => Promise.resolve('unauthenticated: authenticated identity is required for this operator write route'),
+    });
+  }
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  const root = document.getElementById('accounts');
+  let buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  const createPlan = buttons.find((node) => node.textContent === 'Create Plan');
+  if (!createPlan) throw new Error('expected Create Plan button before unauthorized create');
+  createPlan.dispatch('click');
+  await settle();
+  await settle();
+  await settle();
+  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/deployments/api-prod') throw new Error('unexpected fetch sequence after unauthorized create: ' + fetchCalls.join(', '));
+  if (window.location.search !== '?page=plan&deployment=api-prod') throw new Error('expected unauthorized create to preserve workspace URL, got ' + window.location.search);
+  const text = collectText(root).join(' | ');
+  if (!text.includes('Authenticated operator required')) throw new Error('expected operator-auth heading for unauthorized create');
+  if (!text.includes('Tenet rejected POST /v1/plans/deployments/api-prod because authenticated identity is required on operator write routes.')) throw new Error('expected operator-facing create auth explanation');
+  if (!text.includes('retry Create Plan through the trusted front door so it can authenticate you and forward trusted identity headers.')) throw new Error('expected trusted front door create guidance');
+  if (text.includes('Failed to create a plan preview')) throw new Error('expected unauthorized create to avoid generic fetch-error copy');
+  buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  const createPlanAfter = buttons.find((node) => node.textContent === 'Create Plan');
+  const applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');
+  const refreshPlan = buttons.find((node) => node.textContent === 'Refresh plan preview');
+  const refreshApply = buttons.find((node) => node.textContent === 'Refresh apply request');
+  if (!createPlanAfter || !applyPlan || !refreshPlan || !refreshApply) throw new Error('expected plan workspace action buttons after unauthorized create');
+  if (createPlanAfter.disabled || !applyPlan.disabled) throw new Error('expected Create Plan enabled and Apply Plan disabled after unauthorized create');
+  if (!refreshPlan.disabled || !refreshApply.disabled) throw new Error('expected refresh buttons disabled without stored records after unauthorized create');
+})();
+`
+		runNodeHarness(t, nodeProgram)
+	})
+
+	t.Run("apply create unauthorized explains trusted front door auth requirement", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+const planPreview = ` + string(planPreviewReadyJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod&planId=plan_ready_123', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url, options = {}) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/plans/plan_ready_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+  if (url === '/v1/applies/plans/plan_ready_123') {
+    if (options.method !== 'POST') throw new Error('expected apply create POST');
+    return Promise.resolve({
+      ok: false,
+      status: 401,
+      text: () => Promise.resolve('unauthenticated: authenticated identity is required for this operator write route'),
+    });
+  }
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  await settle();
+  const root = document.getElementById('accounts');
+  let buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  const applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');
+  if (!applyPlan || applyPlan.disabled) throw new Error('expected Apply Plan enabled before unauthorized apply create');
+  applyPlan.dispatch('click');
+  await settle();
+  await settle();
+  await settle();
+  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/plan_ready_123, /v1/applies/plans/plan_ready_123') throw new Error('unexpected fetch sequence after unauthorized apply create: ' + fetchCalls.join(', '));
+  if (window.location.search !== '?page=plan&deployment=api-prod&planId=plan_ready_123') throw new Error('expected unauthorized apply create to preserve plan workspace URL, got ' + window.location.search);
+  const text = collectText(root).join(' | ');
+  if (!text.includes('Authenticated operator required')) throw new Error('expected operator-auth heading for unauthorized apply create');
+  if (!text.includes('Auth required')) throw new Error('expected apply auth-required pill copy');
+  if (!text.includes('Tenet rejected POST /v1/applies/plans/plan_ready_123 because authenticated identity is required on operator write routes.')) throw new Error('expected operator-facing apply auth explanation');
+  if (!text.includes('retry Apply Plan through the trusted front door so it can authenticate you and forward trusted identity headers.')) throw new Error('expected trusted front door apply guidance');
+  if (text.includes('Failed to create an apply request')) throw new Error('expected unauthorized apply create to avoid generic fetch-error copy');
+  buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  const createPlan = buttons.find((node) => node.textContent === 'Create Plan');
+  const applyPlanAfter = buttons.find((node) => node.textContent === 'Apply Plan');
+  const refreshPlan = buttons.find((node) => node.textContent === 'Refresh plan preview');
+  const refreshApply = buttons.find((node) => node.textContent === 'Refresh apply request');
+  if (!createPlan || !applyPlanAfter || !refreshPlan || !refreshApply) throw new Error('expected plan workspace action buttons after unauthorized apply create');
+  if (createPlan.disabled || applyPlanAfter.disabled) throw new Error('expected create/apply actions to stay enabled after unauthorized apply create');
+  if (refreshPlan.disabled || !refreshApply.disabled) throw new Error('expected only plan refresh enabled after unauthorized apply create');
+})();
+`
+		runNodeHarness(t, nodeProgram)
+	})
+
 	t.Run("bookmarked plan id loads stored failed preview", func(t *testing.T) {
 		nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;

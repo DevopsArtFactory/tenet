@@ -2951,6 +2951,8 @@
         const record = planState?.record;
         return Boolean(planState?.status === 'ready' && record?.status === 'ready' && record?.id);
       };
+      const operatorWriteAuthRequiredState = (state) => state?.request === 'create' && state?.status === 'fetch-error' && Number(state?.error?.status) === 401;
+      const operatorWriteAuthRequiredMessage = (route, action) => `Tenet rejected ${route} because authenticated identity is required on operator write routes. When auth enforcement is enabled, retry ${action} through the trusted front door so it can authenticate you and forward trusted identity headers.`;
       const planPreviewStateMessage = (planState, detail) => {
         const deploymentName = detail.name || currentPageState.deployment || 'deployment';
         const activePlanRecord = planState?.record || null;
@@ -2971,6 +2973,9 @@
             }
             return `POST /v1/plans/deployments/${deploymentName} is currently unavailable. Deployment-derived context is still shown below and Apply Plan stays disabled until a persisted ready preview is available.`;
           case 'fetch-error':
+            if (operatorWriteAuthRequiredState(planState)) {
+              return `${operatorWriteAuthRequiredMessage(`POST /v1/plans/deployments/${deploymentName}`, 'Create Plan')} Deployment-derived context is still shown below and Apply Plan stays disabled until a persisted ready preview is available.`;
+            }
             return `${planState.request === 'load' ? 'Failed to load the selected plan preview' : 'Failed to create a plan preview'}: ${planState.error?.message || 'unknown error'}. Deployment-derived context is still shown below and Apply Plan stays disabled until a persisted ready preview is available.`;
           default:
             return `Create Plan will POST /v1/plans/deployments/${deploymentName}, store an immutable server-authored preview, and update this workspace URL with a shareable planId. Until then, the deployment-derived context below stays available for operator review while Apply Plan waits for a loaded persisted ready preview with a valid planId.`;
@@ -2997,6 +3002,9 @@
           case 'unavailable':
             return 'Plan preview unavailable';
           case 'fetch-error':
+            if (operatorWriteAuthRequiredState(planState)) {
+              return 'Authenticated operator required';
+            }
             return 'Plan preview fetch error';
           default:
             return 'No stored plan preview yet';
@@ -3044,6 +3052,9 @@
             }
             return `POST /v1/applies/plans/${activePlanID || 'planId'} is currently unavailable. Deployment and plan-derived context are still shown below.`;
           case 'fetch-error':
+            if (operatorWriteAuthRequiredState(applyState)) {
+              return `${operatorWriteAuthRequiredMessage(`POST /v1/applies/plans/${activePlanID || 'planId'}`, 'Apply Plan')} Deployment and plan-derived context are still shown below.`;
+            }
             return `${applyState.request === 'load' ? 'Failed to load the selected apply request' : 'Failed to create an apply request'}: ${applyState.error?.message || 'unknown error'}. Deployment and plan-derived context are still shown below.`;
           default:
             if (planPreviewCanApply(planState)) {
@@ -3079,6 +3090,9 @@
           case 'unavailable':
             return 'Apply request unavailable';
           case 'fetch-error':
+            if (operatorWriteAuthRequiredState(applyState)) {
+              return 'Authenticated operator required';
+            }
             return 'Apply request fetch error';
           default:
             return 'No stored apply request yet';
@@ -3634,7 +3648,7 @@
           const applyStateHead = createElement('div', 'workspace-callout-head');
           applyStateHead.append(
             createElement('div', 'workspace-callout-label', applyRecordStatusHeading(applyState)),
-            createElement('span', applyStatusPillClassName(applyState?.status), applyState?.status === 'idle' ? 'Awaiting apply request' : applyState?.status === 'loading' ? 'Loading' : applyState?.status === 'unavailable' ? 'Unavailable' : applyState?.status === 'fetch-error' ? 'Fetch error' : applyRecordStatusLabel(applyState?.status)),
+            createElement('span', applyStatusPillClassName(applyState?.status), applyState?.status === 'idle' ? 'Awaiting apply request' : applyState?.status === 'loading' ? 'Loading' : applyState?.status === 'unavailable' ? 'Unavailable' : applyState?.status === 'fetch-error' ? operatorWriteAuthRequiredState(applyState) ? 'Auth required' : 'Fetch error' : applyRecordStatusLabel(applyState?.status)),
           );
           if (applyStateClassName) {
             applyStateCallout.classList.add(applyStateClassName);
