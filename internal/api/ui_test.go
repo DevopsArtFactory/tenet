@@ -1796,6 +1796,8 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 		},
 		"../../compose.yaml": {
 			"TENET_AWS_ENABLE_APPLY: ${TENET_AWS_ENABLE_APPLY:-false}",
+			"TENET_API_TRUST_AUTHENTICATED_HEADERS: ${TENET_API_TRUST_AUTHENTICATED_HEADERS:-false}",
+			"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY: ${TENET_API_ENFORCE_AUTHENTICATED_IDENTITY:-false}",
 		},
 		"../../Makefile": {
 			".PHONY: test fmt docker-build docker-up docker-down smoke-local smoke-docker",
@@ -1803,7 +1805,14 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"./scripts/smoke-docker.sh",
 		},
 		"../../README.md": {
-			"Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis; it now also proves the executor-facing `POST /v1/applies/{applyId}/transitions` boundary on a smoke-created terminal apply record (`400` malformed JSON, `404` unknown apply, `409` invalid terminal move) plus the request-actor header contract by sending conflicting `X-Tenet-Actor-*` and `X-User-*` identities together and verifying the stored plan preview, stored apply request, and deployment-scoped audit lookup keep the explicit `X-Tenet-Actor-*` values.",
+			"Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis;",
+			"the request-actor header contract by sending conflicting `X-Tenet-Actor-*` and `X-User-*` identities together",
+			"the front-door auth contract by restarting `tenet-api` with `TENET_API_TRUST_AUTHENTICATED_HEADERS=true` plus `TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true`",
+
+			"Front-door auth remains additive and opt-in.",
+			"`TENET_API_TRUST_AUTHENTICATED_HEADERS=true`",
+			"`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true`",
+			"`X-Tenet-Authenticated-Id`",
 			"Use `make smoke-docker` when you need to validate `compose.yaml`, confirm the `api`/`controller`/`redis` service contract",
 			"additive `X-User-*` alias support plus explicit `X-Tenet-Actor-*` precedence through immutable plan/apply/audit records",
 			"checks representative endpoints plus deployment-events/resource-logs/audit-log JSON shapes, verifies representative `Request-Id` response headers, fetches the full `GET /v1/audit-logs` collection and asserts the expected `plan.created` and `apply.requested` actions are present without depending on `limit=2`, still fetches `GET /v1/audit-logs?action=apply.requested&limit=2` to verify exact-action filtering, rejects `action=invalid.action` with `400 Bad Request`,",
@@ -1828,6 +1837,7 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
 			"Use `make smoke-local` for the fastest fixture-backed regression check when you only need direct-process validation.",
 			"proves additive `X-User-*` alias support plus explicit `X-Tenet-Actor-*` precedence by sending both header families with conflicting identities",
+			"restarts `tenet-api` with `TENET_API_TRUST_AUTHENTICATED_HEADERS=true` plus `TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true` to prove unauthenticated operator writes fail with `401`",
 			"### Docker stack smoke check",
 			"make smoke-docker",
 			"asserts the `api`, `controller`, and `redis` services are present in `compose.yaml`",

@@ -18,6 +18,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/controllerrefresh"
 	"github.com/DevopsArtFactory/tenet/internal/githubwebhook"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
+	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 	"github.com/DevopsArtFactory/tenet/internal/resourceinspection"
 	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
@@ -38,6 +39,10 @@ func respondInternalError(w http.ResponseWriter) {
 
 func respondUnavailableError(w http.ResponseWriter, message string) {
 	http.Error(w, message, http.StatusServiceUnavailable)
+}
+
+func respondUnauthenticatedError(w http.ResponseWriter, message string) {
+	http.Error(w, message, http.StatusUnauthorized)
 }
 
 func isRequestContextError(err error) bool {
@@ -102,12 +107,23 @@ func parseResourceQuery(w http.ResponseWriter, r *http.Request) (resourceType st
 	return resourceType, resourceName, true
 }
 
+func requireAuthenticatedIdentity(w http.ResponseWriter, r *http.Request) bool {
+	identity := requestactor.AuthenticatedIdentityFromContext(r.Context())
+	if identity.Authenticated {
+		return true
+	}
+	respondUnauthenticatedError(w, "unauthenticated: authenticated identity is required for this operator write route")
+	return false
+}
+
 // Options configures the API router.
 type Options struct {
 	BuildInfo                            buildinfo.Info
 	Logger                               *slog.Logger
 	RequestTimeout                       time.Duration
 	GitHubWebhookSecret                  string
+	TrustAuthenticatedHeaders            bool
+	RequireAuthenticatedIdentity         bool
 	GitHubWebhookDesiredStateSource      githubwebhook.DesiredStateSourceConfig
 	GitHubWebhookRefreshPublisher        controllerrefresh.Publisher
 	CatalogSummary                       func(context.Context) (catalog.Summary, error)
@@ -532,6 +548,9 @@ func NewRouter(options Options) http.Handler {
 		if !requireMethod(w, r, http.MethodPost) {
 			return
 		}
+		if options.RequireAuthenticatedIdentity && !requireAuthenticatedIdentity(w, r) {
+			return
+		}
 		if options.CreateDeploymentPlanPreview == nil {
 			http.Error(w, "deployment plan preview unavailable", http.StatusServiceUnavailable)
 			return
@@ -587,6 +606,9 @@ func NewRouter(options Options) http.Handler {
 	})
 	mux.HandleFunc("/v1/applies/plans/", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodPost) {
+			return
+		}
+		if options.RequireAuthenticatedIdentity && !requireAuthenticatedIdentity(w, r) {
 			return
 		}
 		if options.CreateApplyRequest == nil {
@@ -701,7 +723,7 @@ func NewRouter(options Options) http.Handler {
 	handler = panicRecoveryMiddleware(logger, handler)
 	handler = requestTimeoutMiddleware(options.RequestTimeout, handler)
 	handler = requestLoggingMiddleware(logger, handler)
-	handler = requestActorMiddleware(handler)
+	handler = requestActorMiddleware(options.TrustAuthenticatedHeaders || options.RequireAuthenticatedIdentity, handler)
 	handler = requestIDMiddleware(handler)
 	return handler
 }

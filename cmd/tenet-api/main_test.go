@@ -181,6 +181,42 @@ func TestRequestTimeoutFromEnv(t *testing.T) {
 	})
 }
 
+func TestTrustedAuthenticatedHeadersEnabled(t *testing.T) {
+	t.Run("defaults to false", func(t *testing.T) {
+		t.Setenv("TENET_API_TRUST_AUTHENTICATED_HEADERS", "")
+
+		if trustedAuthenticatedHeadersEnabled() {
+			t.Fatal("expected trusted authenticated headers to be disabled by default")
+		}
+	})
+
+	t.Run("accepts true", func(t *testing.T) {
+		t.Setenv("TENET_API_TRUST_AUTHENTICATED_HEADERS", "true")
+
+		if !trustedAuthenticatedHeadersEnabled() {
+			t.Fatal("expected trusted authenticated headers to be enabled")
+		}
+	})
+}
+
+func TestOperatorWriteAuthenticationEnforced(t *testing.T) {
+	t.Run("defaults to false", func(t *testing.T) {
+		t.Setenv("TENET_API_ENFORCE_AUTHENTICATED_IDENTITY", "")
+
+		if operatorWriteAuthenticationEnforced() {
+			t.Fatal("expected operator write authentication to be disabled by default")
+		}
+	})
+
+	t.Run("accepts true", func(t *testing.T) {
+		t.Setenv("TENET_API_ENFORCE_AUTHENTICATED_IDENTITY", "true")
+
+		if !operatorWriteAuthenticationEnforced() {
+			t.Fatal("expected operator write authentication to be enabled")
+		}
+	})
+}
+
 func TestNewAPIOptionsIncludesGitHubWebhookSecretFromEnv(t *testing.T) {
 	t.Setenv("TENET_GITHUB_WEBHOOK_SECRET", "top-secret")
 
@@ -189,8 +225,28 @@ func TestNewAPIOptionsIncludesGitHubWebhookSecretFromEnv(t *testing.T) {
 	if options.GitHubWebhookSecret != "top-secret" {
 		t.Fatalf("expected webhook secret from env, got %q", options.GitHubWebhookSecret)
 	}
+	if options.TrustAuthenticatedHeaders {
+		t.Fatalf("expected trusted authenticated headers to default off, got %+v", options)
+	}
+	if options.RequireAuthenticatedIdentity {
+		t.Fatalf("expected operator write authentication to default off, got %+v", options)
+	}
 	if options.GitHubWebhookDesiredStateSource.Kind != githubwebhook.DesiredStateSourceKindFilesystem {
 		t.Fatalf("expected filesystem desired-state source for webhook matching, got %+v", options.GitHubWebhookDesiredStateSource)
+	}
+}
+
+func TestNewAPIOptionsIncludesAuthenticatedIdentityConfigFromEnv(t *testing.T) {
+	t.Setenv("TENET_API_TRUST_AUTHENTICATED_HEADERS", "true")
+	t.Setenv("TENET_API_ENFORCE_AUTHENTICATED_IDENTITY", "true")
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, writeRepositoryFixture(t), nil)
+
+	if !options.TrustAuthenticatedHeaders {
+		t.Fatalf("expected trusted authenticated headers to be enabled, got %+v", options)
+	}
+	if !options.RequireAuthenticatedIdentity {
+		t.Fatalf("expected operator write authentication to be enabled, got %+v", options)
 	}
 }
 
@@ -565,6 +621,54 @@ func TestAPIOptionsAuditLogsProjectPersistedPlanAndApplyRecords(t *testing.T) {
 	}
 	if !applyEntry.Actor.Available || applyEntry.Actor.Name != "Jane Operator" || applyEntry.Actor.Email != "jane@example.com" {
 		t.Fatalf("expected projected available actor contract, got %+v", applyEntry.Actor)
+	}
+}
+
+func TestAPIOptionsAuditLogsProjectAuthenticatedIdentityIntoActorWhenExplicitActorMissing(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	t.Setenv("TENET_PLAN_STORE_PATH", filepath.Join(t.TempDir(), "plan-previews.json"))
+	t.Setenv("TENET_APPLY_STORE_PATH", filepath.Join(t.TempDir(), "apply-requests.json"))
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
+	if options.CreateDeploymentPlanPreview == nil || options.CreateApplyRequest == nil || options.AuditLogs == nil {
+		t.Fatalf("expected audit log dependencies to be wired")
+	}
+
+	ctx := requestactor.WithAuthenticatedIdentityContext(context.Background(), requestactor.AuthenticatedIdentity{
+		Authenticated: true,
+		ID:            "front-door-123",
+		Name:          "Front Door Operator",
+		Email:         "frontdoor@example.com",
+	})
+
+	plan, err := options.CreateDeploymentPlanPreview(ctx, "api-prod", planpreview.CreateRequest{})
+	if err != nil {
+		t.Fatalf("CreateDeploymentPlanPreview returned error: %v", err)
+	}
+	apply, err := options.CreateApplyRequest(ctx, plan.Record.ID)
+	if err != nil {
+		t.Fatalf("CreateApplyRequest returned error: %v", err)
+	}
+
+	result, err := options.AuditLogs(context.Background(), auditlog.Query{Limit: 2})
+	if err != nil {
+		t.Fatalf("AuditLogs returned error: %v", err)
+	}
+
+	var applyEntry auditlog.Entry
+	foundApply := false
+	for _, entry := range result.Entries {
+		if entry.ApplyID == apply.Record.ID {
+			applyEntry = entry
+			foundApply = true
+			break
+		}
+	}
+	if !foundApply {
+		t.Fatalf("expected apply audit entry in %+v", result.Entries)
+	}
+	if !applyEntry.Actor.Available || applyEntry.Actor.ID != "front-door-123" || applyEntry.Actor.Name != "Front Door Operator" || applyEntry.Actor.Email != "frontdoor@example.com" {
+		t.Fatalf("expected projected actor from authenticated identity, got %+v", applyEntry.Actor)
 	}
 }
 
