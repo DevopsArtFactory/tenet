@@ -637,11 +637,15 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"() => workspaceState?.onRefresh?.().catch(() => {}),",
 		"const driftRefreshState = driftWorkspaceRefreshStateText(workspaceState);",
 		"workspaceState?.status === 'error' ? 'detail-state error' : 'detail-state'",
-		"let driftQuery = workspaceState?.filters?.query || '';",
-		"let driftSeverity = workspaceState?.filters?.severity || 'all';",
-		"let driftSort = workspaceState?.filters?.sort || 'field';",
+		"const defaultDriftFilters = { query: '', severity: 'all', sort: 'field' };",
+		"const hasActiveDriftFilters = () => (",
+		"let driftQuery = workspaceState?.filters?.query || defaultDriftFilters.query;",
+		"let driftSeverity = workspaceState?.filters?.severity || defaultDriftFilters.severity;",
+		"let driftSort = workspaceState?.filters?.sort || defaultDriftFilters.sort;",
 		"const syncDriftFilters = () => {",
 		"workspaceState.filters = {",
+		"'Clear drift filters',",
+		"'Drift filters: defaults'",
 		"createInput('Filter drift rows', driftQuery, 'Filter by field, value, or condition context', (event) => {",
 		"syncDriftFilters();",
 		"createMetric('Drift summary', driftSummaryCopy(driftRows.length, filteredRows.length), 'summary')",
@@ -1259,6 +1263,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Refresh drift workspace' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh drift workspace")
 	}
+	if !strings.Contains(text, "assert 'Clear drift filters' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains Clear drift filters")
+	}
 	if !strings.Contains(text, "assert 'Refreshing drift workspace from GET /v1/overview/deployments/{deploymentName}…' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains drift refresh loading copy")
 	}
@@ -1604,6 +1611,32 @@ func TestOverviewDocsDescribeInPlaceDriftWorkspaceRefresh(t *testing.T) {
 			"`Refresh drift workspace`",
 			"`GET /v1/overview/deployments/{deploymentName}` in place",
 			"keep the bookmarkable `/?page=drift...` route unchanged",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
+	}
+}
+
+func TestOverviewDocsDescribeClearDriftFiltersControl(t *testing.T) {
+	files := map[string][]string{
+		"../../README.md": {
+			"`Clear drift filters`",
+			"resets the drift query, severity, and sort controls back to their defaults in one step without changing the bookmarkable route or re-fetching deployment detail",
+		},
+		"../../docs/features/overview-dashboard.md": {
+			"`Clear drift filters`",
+			"resets the drift query, severity, and sort controls back to their defaults in one step without mutating the bookmarkable `/?page=drift...` route or re-running the deployment-detail fetch",
 		},
 	}
 

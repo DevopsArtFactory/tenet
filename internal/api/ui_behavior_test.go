@@ -4244,6 +4244,11 @@ async function render(detail) {
   if (!text.includes('low')) throw new Error('expected low severity indicator');
   if (text.includes('No derived fallback field-level drift was detected from the deployment read model.')) throw new Error('expected non-empty drift data to avoid empty state');
   if (!text.includes("<script>alert('xss')</script> ALB production listener still targets the legacy task set")) throw new Error('expected drift condition message to render as text');
+  let buttons = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  const clearDriftFiltersButton = buttons.find((node) => node.textContent === 'Clear drift filters');
+  if (!clearDriftFiltersButton) throw new Error('expected drift clear-filters control');
+  if (!clearDriftFiltersButton.disabled) throw new Error('expected drift clear-filters control disabled with default controls');
+  if (run.window.location.search !== '?page=drift&deployment=api-prod') throw new Error('expected default drift route to stay bookmarkable');
 
   const severityField = run.document.querySelector('[data-toolbar-field="Severity"]');
   if (!severityField) throw new Error('expected drift severity filter control');
@@ -4254,6 +4259,8 @@ async function render(detail) {
   if (!highOnlyText.includes('artifact')) throw new Error('expected high severity filter to retain artifact row');
   if (highOnlyText.includes('condition.Healthy')) throw new Error('expected high severity filter to remove low-severity condition row');
   if (!highOnlyText.includes('Showing 2 drift rows out of 7 drift rows after filters.')) throw new Error('expected high severity summary to reflect visible fallback rows');
+  if (clearDriftFiltersButton.disabled) throw new Error('expected drift clear-filters control enabled after severity change');
+  if (run.window.location.search !== '?page=drift&deployment=api-prod') throw new Error('expected severity change not to mutate drift route');
 
   const queryField = run.document.querySelector('[data-toolbar-field="Filter drift rows"]');
   if (!queryField) throw new Error('expected drift query filter control');
@@ -4283,6 +4290,26 @@ async function render(detail) {
   if (!rowTexts.length) throw new Error('expected rendered drift table rows');
   if (!rowTexts[0].includes('artifact')) throw new Error('expected severity sort to place artifact drift first');
   if (!rowTexts[rowTexts.length - 1].includes('condition.Healthy')) throw new Error('expected severity sort to place low severity drift last');
+  severityField.value = 'high';
+  severityField.dispatch('change', { target: severityField });
+  queryField.value = 'targetderegistrationlag';
+  queryField.dispatch('input', { target: queryField });
+  await settle();
+  let controlsText = collectText(run.document.getElementById('accounts')).join(' | ');
+  if (!controlsText.includes('Drift filters: search “targetderegistrationlag” · severity high · sort severity')) throw new Error('expected drift filter summary to reflect all active controls');
+  clearDriftFiltersButton.dispatch('click');
+  await settle();
+  if (queryField.value !== '') throw new Error('expected clear drift filters to reset query control');
+  if (severityField.value !== 'all') throw new Error('expected clear drift filters to reset severity control');
+  if (sortField.value !== 'field') throw new Error('expected clear drift filters to reset sort control');
+  if (!clearDriftFiltersButton.disabled) throw new Error('expected clear drift filters to disable after resetting defaults');
+  controlsText = collectText(run.document.getElementById('accounts')).join(' | ');
+  if (!controlsText.includes('Drift filters: defaults')) throw new Error('expected drift filter summary to return to defaults after clearing');
+  if (!controlsText.includes('Showing all 7 drift rows.')) throw new Error('expected clear drift filters to restore all drift rows');
+  const clearedRows = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'TR').slice(1).map((node) => collectText(node).join(' | '));
+  if (!clearedRows.length) throw new Error('expected cleared drift filters to restore table rows');
+  if (!clearedRows[clearedRows.length - 1].includes('runtimeContext.targetType')) throw new Error('expected clear drift filters to restore default field sort');
+  if (run.window.location.search !== '?page=drift&deployment=api-prod') throw new Error('expected clear drift filters to preserve bookmarkable drift route');
   queryField.value = 'missing-signal';
   queryField.dispatch('input', { target: queryField });
   await settle();
