@@ -5541,6 +5541,168 @@ func TestRouterTransitionApplyRequest(t *testing.T) {
 		}
 	})
 
+	t.Run("unauthenticated when operator auth is enforced", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo:                    buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireAuthenticatedIdentity: true,
+			TransitionApplyRequest: func(context.Context, string, applyrequest.TransitionRequest) (applyrequest.Record, error) {
+				t.Fatal("apply transition provider should not run without authenticated identity")
+				return applyrequest.Record{}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/transitions", strings.NewReader(`{"status":"running","step":1}`))
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != "unauthenticated: authenticated identity is required for this operator write route\n" {
+			t.Fatalf("unexpected unauthenticated response body: %q", body)
+		}
+	})
+
+	t.Run("deployment authorization short-circuits unauthenticated transition before apply lookup", func(t *testing.T) {
+		applyLookupCalls := 0
+		transitionCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
+				applyLookupCalls++
+				t.Fatal("apply lookup should not run without authenticated identity")
+				return applyrequest.Record{}, nil
+			},
+			TransitionApplyRequest: func(context.Context, string, applyrequest.TransitionRequest) (applyrequest.Record, error) {
+				transitionCalls++
+				t.Fatal("apply transition provider should not run without authenticated identity")
+				return applyrequest.Record{}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/transitions", strings.NewReader(`{"status":"running","step":1}`))
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != "unauthenticated: authenticated identity is required for this operator write route\n" {
+			t.Fatalf("unexpected unauthenticated response body: %q", body)
+		}
+		if applyLookupCalls != 0 {
+			t.Fatalf("expected auth guard to short-circuit before apply lookup, got %d calls", applyLookupCalls)
+		}
+		if transitionCalls != 0 {
+			t.Fatalf("expected auth guard to short-circuit before transition provider, got %d calls", transitionCalls)
+		}
+	})
+
+	t.Run("deployment authorization short-circuits unauthorized transition after apply lookup", func(t *testing.T) {
+		applyLookupCalls := 0
+		transitionCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
+				applyLookupCalls++
+				return applyrequest.Record{ID: "apply_1234abcd", DeploymentName: "api-prod", Status: applyrequest.StatusFailed, CreatedAt: "2026-04-18T08:00:00Z"}, nil
+			},
+			TransitionApplyRequest: func(context.Context, string, applyrequest.TransitionRequest) (applyrequest.Record, error) {
+				transitionCalls++
+				t.Fatal("apply transition provider should not run without deployment access")
+				return applyrequest.Record{}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/transitions", strings.NewReader(`{"status":"running","step":1}`))
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+		req.Header.Set(requestactor.AuthorizedDeploymentsHeader, "worker-prod")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != "forbidden: operator does not have access to this deployment\n" {
+			t.Fatalf("unexpected forbidden response body: %q", body)
+		}
+		if applyLookupCalls != 1 {
+			t.Fatalf("expected one apply lookup before authz denial, got %d calls", applyLookupCalls)
+		}
+		if transitionCalls != 0 {
+			t.Fatalf("expected authz guard to short-circuit before transition provider, got %d calls", transitionCalls)
+		}
+	})
+
+	t.Run("deployment authorization preserves not found after auth passes", func(t *testing.T) {
+		applyLookupCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
+				applyLookupCalls++
+				return applyrequest.Record{}, applyrequest.ErrNotFound
+			},
+			TransitionApplyRequest: func(context.Context, string, applyrequest.TransitionRequest) (applyrequest.Record, error) {
+				t.Fatal("apply transition provider should not run when apply lookup fails")
+				return applyrequest.Record{}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_missing/transitions", strings.NewReader(`{"status":"running","step":1}`))
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+		req.Header.Set(requestactor.AuthorizedDeploymentsHeader, "api-prod")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", resp.Code)
+		}
+		if applyLookupCalls != 1 {
+			t.Fatalf("expected one apply lookup before not found, got %d calls", applyLookupCalls)
+		}
+	})
+
+	t.Run("deployment authorization allows authorized transition and preserves invalid body", func(t *testing.T) {
+		applyLookupCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
+				applyLookupCalls++
+				return applyrequest.Record{ID: "apply_1234abcd", DeploymentName: "api-prod", Status: applyrequest.StatusFailed, CreatedAt: "2026-04-18T08:00:00Z"}, nil
+			},
+			TransitionApplyRequest: func(context.Context, string, applyrequest.TransitionRequest) (applyrequest.Record, error) {
+				t.Fatal("apply transition provider should not run on invalid body")
+				return applyrequest.Record{}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/transitions", strings.NewReader(`{"status":"running","step":1`))
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+		req.Header.Set(requestactor.AuthorizedDeploymentsHeader, "api-prod, worker-prod")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != "invalid apply transition request body\n" {
+			t.Fatalf("expected invalid body response, got %q", body)
+		}
+		if applyLookupCalls != 1 {
+			t.Fatalf("expected one apply lookup before body validation, got %d calls", applyLookupCalls)
+		}
+	})
+
 	for _, tc := range []struct {
 		name string
 		body string

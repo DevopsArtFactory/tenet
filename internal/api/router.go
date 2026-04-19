@@ -936,6 +936,23 @@ func NewRouter(options Options) http.Handler {
 			if !requireMethod(w, r, http.MethodPost) {
 				return
 			}
+			if (options.RequireAuthenticatedIdentity || options.RequireDeploymentReadAuthorization) && !requireAuthenticatedIdentity(w, r) {
+				return
+			}
+			if options.RequireDeploymentReadAuthorization {
+				if options.ApplyRequest == nil {
+					http.Error(w, "apply request unavailable", http.StatusServiceUnavailable)
+					return
+				}
+				record, err := options.ApplyRequest(r.Context(), segments[0])
+				if err != nil {
+					respondLookupError(w, err)
+					return
+				}
+				if !requireDeploymentReadAccess(w, r, true, record.DeploymentName) {
+					return
+				}
+			}
 			if options.TransitionApplyRequest == nil {
 				http.Error(w, "apply request transition unavailable", http.StatusServiceUnavailable)
 				return
