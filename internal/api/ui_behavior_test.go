@@ -161,6 +161,33 @@ const scenarios = [
     unexpected: 'Failed to load overview:',
   },
   {
+    name: 'account 401 keeps bookmarked route and explains trusted front door retry',
+    search: '?page=account&accountId=210987654321&q=payments&sync=OutOfSync&account=210987654321',
+    route: '/v1/overview/accounts/210987654321',
+    status: 401,
+    body: 'unauthenticated: operator identity missing',
+    expected: [
+      'Account detail',
+      'Authenticated operator required',
+      'Tenet rejected GET /v1/overview/accounts/210987654321 because authenticated identity is required on this operator read route.',
+      'Retry this bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers.',
+    ],
+    unexpected: 'Failed to load overview:',
+  },
+  {
+    name: 'account 403 keeps bookmarked route and explains operator authorization failure',
+    search: '?page=account&accountId=210987654321&q=payments',
+    route: '/v1/overview/accounts/210987654321',
+    status: 403,
+    body: 'forbidden: operator does not have access to this deployment',
+    expected: [
+      'Account detail',
+      'Operator access denied',
+      'Tenet rejected GET /v1/overview/accounts/210987654321 after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment.',
+    ],
+    unexpected: 'Failed to load overview:',
+  },
+  {
     name: 'application 401 keeps bookmarked route and explains trusted front door retry',
     search: '?page=application&deployment=api-prod',
     route: '/v1/overview/applications/api-prod',
@@ -1011,8 +1038,16 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   if (!toolbarText.includes('Back to applications')) throw new Error('expected application route back link');
   const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
+  const accountLinks = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
+  const breadcrumbChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className.includes('breadcrumb-current'));
   const backLink = toolbarLinks.find((node) => node.href === '/?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.target === '_self');
   if (!backLink) throw new Error('expected application route self-navigation back link');
+  if (!accountsText.includes('Breadcrumbs')) throw new Error('expected application route breadcrumb chrome');
+  const applicationsBreadcrumb = accountLinks.find((node) => node.href === '/?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.textContent === 'Applications' && node.target === '_self');
+  if (!applicationsBreadcrumb || applicationsBreadcrumb.rel) throw new Error('expected application route applications breadcrumb link');
+  const accountBreadcrumb = accountLinks.find((node) => node.href === '/?page=account&q=payments&sync=OutOfSync&account=210987654321&accountId=210987654321' && node.textContent === 'staging-core (210987654321)' && node.target === '_self');
+  if (!accountBreadcrumb || accountBreadcrumb.rel) throw new Error('expected application route account breadcrumb link');
+  if (!breadcrumbChips.find((node) => node.textContent === 'payments-api-staging')) throw new Error('expected application route current breadcrumb chip');
   if (!summaryText.includes('payments-api-staging')) throw new Error('expected application route summary title');
   if (!summaryText.includes('Application detail page: show only application-linked resources before the final resource-detail page.')) throw new Error('expected application route drill-down guidance');
   if (!accountsText.includes('Application resources')) throw new Error('expected application route resources body');
@@ -2508,9 +2543,18 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
   const pageLinks = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
   const quickNavChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
+  const breadcrumbChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className.includes('breadcrumb-current'));
   const backLink = toolbarLinks.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.target === '_self');
   if (!backLink) throw new Error('expected resource page self-navigation back link');
   if (backLink.rel) throw new Error('expected resource page back link to avoid new-tab rel attributes');
+  if (!accountsText.includes('Breadcrumbs')) throw new Error('expected resource page breadcrumb chrome');
+  const applicationsBreadcrumb = pageLinks.find((node) => node.href === '/?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.textContent === 'Applications' && node.target === '_self');
+  if (!applicationsBreadcrumb || applicationsBreadcrumb.rel) throw new Error('expected resource page applications breadcrumb link');
+  const accountBreadcrumb = pageLinks.find((node) => node.href === '/?page=account&q=payments&sync=OutOfSync&account=210987654321&accountId=210987654321' && node.textContent === 'staging-core (210987654321)' && node.target === '_self');
+  if (!accountBreadcrumb || accountBreadcrumb.rel) throw new Error('expected resource page account breadcrumb link');
+  const applicationBreadcrumb = pageLinks.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'payments-api-staging' && node.target === '_self');
+  if (!applicationBreadcrumb || applicationBreadcrumb.rel) throw new Error('expected resource page application breadcrumb link');
+  if (!breadcrumbChips.find((node) => node.textContent === 'payments-api-staging Deployment Group')) throw new Error('expected resource page current breadcrumb chip');
   if (!accountsText.includes('Quick navigation')) throw new Error('expected resource page quick navigation strip');
   if (!accountsText.includes('Current resource')) throw new Error('expected resource page current-resource label');
   const quickBackLink = pageLinks.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Back to application' && node.target === '_self');
@@ -4257,6 +4301,10 @@ async function render(detail) {
   const toolbarText = collectText(run.document.getElementById('toolbar')).join(' | ');
   const workspaceLinks = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'A');
   const workspaceChips = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
+  const breadcrumbChips = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className.includes('breadcrumb-current'));
+  const applicationsBreadcrumb = workspaceLinks.find((node) => node.href === '/?page=applications' && node.textContent === 'Applications' && node.target === '_self');
+  const accountBreadcrumb = workspaceLinks.find((node) => node.href === '/?page=account&accountId=123456789012' && node.textContent.includes('123456789012') && node.target === '_self');
+  const applicationBreadcrumb = workspaceLinks.find((node) => node.href === '/?page=application&deployment=api-prod' && node.textContent === 'api-prod' && node.target === '_self');
   const workspaceBackLink = workspaceLinks.find((node) => node.href === '/?page=application&deployment=api-prod' && node.textContent === 'Back to application' && node.target === '_self');
   const workspaceDriftLink = workspaceLinks.find((node) => node.href === '/?page=drift&deployment=api-prod' && node.textContent === 'Drift view' && node.target === '_self');
   const workspacePlanLink = workspaceLinks.find((node) => node.href === '/?page=plan&deployment=api-prod' && node.textContent === 'Plan/apply' && node.target === '_self');
@@ -4265,6 +4313,11 @@ async function render(detail) {
   if (!text.includes('Drift viewer')) throw new Error('expected drift workspace title');
   if (!toolbarText.includes('Back to application')) throw new Error('expected workspace back link');
   if (!toolbarText.includes('api-prod')) throw new Error('expected workspace active deployment title');
+  if (!text.includes('Breadcrumbs')) throw new Error('expected drift workspace breadcrumb chrome');
+  if (!applicationsBreadcrumb || applicationsBreadcrumb.rel) throw new Error('expected drift workspace applications breadcrumb link');
+  if (accountBreadcrumb) throw new Error('expected drift workspace to omit account breadcrumb when awsAccountId is unavailable');
+  if (!applicationBreadcrumb || applicationBreadcrumb.rel) throw new Error('expected drift workspace application breadcrumb link');
+  if (!breadcrumbChips.find((node) => node.textContent === 'Drift view')) throw new Error('expected drift workspace current breadcrumb chip');
   if (!text.includes('Quick navigation')) throw new Error('expected workspace quick navigation strip');
   if (!text.includes('Deployment workspaces')) throw new Error('expected workspace quick navigation group label');
   if (!text.includes('Linked resources')) throw new Error('expected drift workspace linked-resources group label');
@@ -4854,11 +4907,20 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   let text = collectText(root).join(' | ');
   const linksBeforeCreate = collectNodes(root, (node) => node.tagName === 'A');
   const chipsBeforeCreate = collectNodes(root, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
+  const breadcrumbChipsBeforeCreate = collectNodes(root, (node) => node.tagName === 'SPAN' && node.className.includes('breadcrumb-current'));
+  const applicationsBreadcrumb = linksBeforeCreate.find((node) => node.href === '/?page=applications' && node.textContent === 'Applications' && node.target === '_self');
+  const accountBreadcrumb = linksBeforeCreate.find((node) => node.href === '/?page=account&accountId=123456789012' && node.textContent.includes('123456789012') && node.target === '_self');
+  const applicationBreadcrumb = linksBeforeCreate.find((node) => node.href === '/?page=application&deployment=api-prod' && node.textContent === 'api-prod' && node.target === '_self');
   const workspaceBackLink = linksBeforeCreate.find((node) => node.href === '/?page=application&deployment=api-prod' && node.textContent === 'Back to application' && node.target === '_self');
   const workspaceDriftLink = linksBeforeCreate.find((node) => node.href === '/?page=drift&deployment=api-prod' && node.textContent === 'Drift view' && node.target === '_self');
   const workspacePlanLink = linksBeforeCreate.find((node) => node.href === '/?page=plan&deployment=api-prod' && node.textContent === 'Plan/apply' && node.target === '_self');
   const workspaceAuditLink = linksBeforeCreate.find((node) => node.href === '/?page=audit&deployment=api-prod' && node.textContent === 'Audit log' && node.target === '_self');
   if (!text.includes('Plan and apply')) throw new Error('expected plan workspace title');
+  if (!text.includes('Breadcrumbs')) throw new Error('expected plan workspace breadcrumb chrome');
+  if (!applicationsBreadcrumb || applicationsBreadcrumb.rel) throw new Error('expected plan workspace applications breadcrumb link');
+  if (accountBreadcrumb) throw new Error('expected plan workspace to omit account breadcrumb when awsAccountId is unavailable');
+  if (!applicationBreadcrumb || applicationBreadcrumb.rel) throw new Error('expected plan workspace application breadcrumb link');
+  if (!breadcrumbChipsBeforeCreate.find((node) => node.textContent === 'Plan/apply')) throw new Error('expected plan workspace current breadcrumb chip');
   if (!text.includes('Quick navigation')) throw new Error('expected plan workspace quick navigation strip');
   if (!text.includes('Deployment workspaces')) throw new Error('expected plan workspace quick navigation group label');
   if (!text.includes('api-prod · Plan/apply')) throw new Error('expected plan workspace quick navigation current-state label');
@@ -5976,6 +6038,9 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const rowTexts = rows.map((node) => collectText(node).join(' | '));
   if (!rowTexts[0].includes('apply.requested')) throw new Error('expected newest audit entry first, got ' + rowTexts.join(' || '));
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
+  const breadcrumbChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className.includes('breadcrumb-current'));
+  const applicationsBreadcrumb = links.find((node) => node.href === '/console?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.textContent === 'Applications' && node.target === '_self');
+  const applicationBreadcrumb = links.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'payments-api-prod' && node.target === '_self');
   const quickNavBackLink = links.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Back to application');
   const quickNavDriftLink = links.find((node) => node.href === '/console?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Drift view');
   const quickNavPlanLink = links.find((node) => node.href === '/console?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Plan/apply');
@@ -5985,6 +6050,10 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!applicationLink || applicationLink.target !== '_self' || applicationLink.rel) throw new Error('expected audit application self link');
   const workspaceLink = links.find((node) => node.href === '/console?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&planId=plan_ready_123&applyId=apply_failed_123' && node.textContent === 'Open plan/apply workspace');
   if (!workspaceLink || workspaceLink.target !== '_self' || workspaceLink.rel) throw new Error('expected audit plan/apply self link');
+  if (!accountsText.includes('Breadcrumbs')) throw new Error('expected deployment-scoped audit breadcrumb chrome');
+  if (!applicationsBreadcrumb || applicationsBreadcrumb.rel) throw new Error('expected audit applications breadcrumb link');
+  if (!applicationBreadcrumb || applicationBreadcrumb.rel) throw new Error('expected audit application breadcrumb link');
+  if (!breadcrumbChips.find((node) => node.textContent === 'Audit log')) throw new Error('expected audit current breadcrumb chip');
   if (!accountsText.includes('Quick navigation')) throw new Error('expected deployment-scoped audit quick navigation strip');
   if (!accountsText.includes('Deployment workspaces')) throw new Error('expected deployment-scoped audit quick navigation group label');
   if (!accountsText.includes('payments-api-prod · Audit log')) throw new Error('expected deployment-scoped audit quick navigation current-state label');

@@ -259,6 +259,39 @@ func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUIIncludesBreadcrumbChromeForDrillDownPages(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const createBreadcrumbCurrentChip = (text, ariaLabel) => {",
+		"chip.classList.add('breadcrumb-current');",
+		"const accountBreadcrumbLabel = (accountName, awsAccountId) => {",
+		"return `${accountName} (${awsAccountId})`;",
+		"const createBreadcrumbChrome = (items) => {",
+		"const trailItems = (items || []).filter((item) => item?.label);",
+		"if (trailItems.length < 2) return null;",
+		"const trail = createElement('div', 'breadcrumb-trail');",
+		"trail.append(createElement('span', 'breadcrumb-separator', '/'));",
+		"head.append(createElement('div', 'breadcrumb-title', 'Breadcrumbs'));",
+		"trail.append(createNavLink(item.href, item.label, '_self'));",
+		"trail.append(createBreadcrumbCurrentChip(item.label, item.ariaLabel || `Current destination: ${item.label}`));",
+		"const createDeploymentBreadcrumb = ({ deploymentName = '', awsAccountId = '', accountName = '', currentLabel = '' } = {}) => {",
+		"{ label: 'Applications', href: buildPageURL('applications') },",
+		"awsAccountId ? { label: accountBreadcrumbLabel(accountName, awsAccountId), href: buildPageURL('account', { accountId: awsAccountId }) } : null,",
+		"deploymentName && activeLabel !== deploymentName ? { label: deploymentName, href: buildPageURL('application', { deployment: deploymentName }) } : null,",
+		"const breadcrumb = createDeploymentBreadcrumb({",
+		"currentLabel: detail.name || currentPageState.deployment || 'Application',",
+		"currentLabel: resource.name,",
+		"currentLabel: workspaceBreadcrumbLabel,",
+		"currentLabel: 'Audit log',",
+		"'Breadcrumbs'",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+}
+
 func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 	body := string(indexHTML)
 
@@ -283,6 +316,7 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"return query ? `${pathname}?${query}` : pathname;",
 		"const renderApplicationsOverview = (applications, focusState = null) => {",
 		"Application status overview",
+		"Account detail",
 		"Last update",
 		"Search applications",
 		"Open audit log",
@@ -341,6 +375,9 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"const auditLimitSelectOptions = (limit) => {",
 		"const presets = [1, 2, 5, 10, 20, 50];",
 		"const fetchEmbeddedReadRouteJSON = (route, labels) => fetch(route)",
+		"const fetchAccountDetail = (accountID) => fetchEmbeddedReadRouteJSON(`/v1/overview/accounts/${encodeURIComponent(accountID)}`, {",
+		"unavailable: 'account detail unavailable',",
+		"failure: 'account detail request failed',",
 		"const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {",
 		"unavailable: 'application detail unavailable',",
 		"failure: 'application detail request failed',",
@@ -843,11 +880,15 @@ func TestEmbeddedUIIncludesOverviewStatusInFetchErrors(t *testing.T) {
 		"const fetchApplicationsOverview = () => fetchEmbeddedReadRouteJSON('/v1/overview/applications', {",
 		"unavailable: 'applications overview unavailable',",
 		"failure: 'applications overview request failed',",
+		"const fetchAccountDetail = (accountID) => fetchEmbeddedReadRouteJSON(`/v1/overview/accounts/${encodeURIComponent(accountID)}`, {",
+		"unavailable: 'account detail unavailable',",
+		"failure: 'account detail request failed',",
 		"const labels = changeLabels(runtimeSummary?.changes);",
 		"['Latest runtime', runtimeSummaryText(deployment.runtimeSummary), 'summary']",
 		"['Latest changes', changeLabelsText(deployment.runtimeSummary?.changes)]",
 		"['Runtime timestamp', runtimeSummaryTimestamp(deployment.runtimeSummary)]",
 		"fetchApplicationsOverview()",
+		"fetchAccountDetail(currentPageState.accountId)",
 		"renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);",
 		"renderEmptyState(`Failed to load overview: ${error.message}`);",
 	} {
@@ -2062,6 +2103,8 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"the bookmarkable `/?page=drift&deployment=payments-api-prod` workspace source/summary/table copy",
 			"mirrors the direct-process actor coverage by sending both header families with conflicting identities on a `payments-api-staging` plan/apply flow and verifying that the explicit `X-Tenet-Actor-*` actor survives the stored plan preview, stored apply request, and deployment-scoped `GET /v1/audit-logs?deployment=payments-api-staging&action=apply.requested&limit=1` retrieval",
 			"reuses that stable terminal `applyId` to prove `POST /v1/applies/{applyId}/transitions` rejects malformed JSON with `400`, unknown apply IDs with `404`, and invalid lifecycle moves with `409` plus operator-facing terminal-state text",
+			"unauthenticated `POST /v1/applies/{applyId}/transitions` fail with `401`",
+			"authenticated but unauthorized `POST /v1/applies/{applyId}/transitions` fails with `403`",
 			"`GET /v1/audit-logs?deployment={deploymentName}`",
 			"`GET /v1/audit-logs?deployment={deploymentName}&limit={n}`",
 			"the bookmarkable `/?page=audit&deployment={deploymentName}&action={action}&limit={n}` audit view",
@@ -2085,6 +2128,8 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"asserts only the raw embedded application/resource shell strings needed to prove those drill-down pages can render and navigate",
 			"restarts `tenet-api` with `TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
 			"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
+			"including the persisted `POST /v1/applies/{applyId}/transitions` write route",
+			"unauthenticated transition callers still short-circuit with the operator-write `401` before any apply lookup",
 			"the bookmarkable `/?page=plan` workspace still includes operator-facing guidance for those auth-gated write failures",
 			"do it only behind a front door that authenticates callers and strips inbound `X-Tenet-Authenticated-*` headers",
 			"### Docker stack smoke check",
@@ -2096,6 +2141,8 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"fetches the bookmarkable `/?page=drift&deployment=payments-api-prod` workspace URL",
 			"confirms the drift page source still includes `Active drift source`, `Current source: controller-authored managedDrift rows.`, `Drift summary`, and field-level table headers such as `Field path` / `Desired` / `Actual` / `Severity`",
 			"reuses that smoke-created terminal `applyId` to verify the executor-facing transition-route boundaries (`400` malformed JSON, `404` unknown apply, `409` invalid terminal move with operator-facing text)",
+			"unauthenticated `POST /v1/applies/{applyId}/transitions` fail with `401`",
+			"authenticated but unauthorized `POST /v1/applies/{applyId}/transitions` fails with `403`",
 			"the bookmarkable `/?page=audit&deployment={deploymentName}&action={action}&limit={n}` audit workspace URL",
 			"`Audit filters: action apply.requested · limit 2`",
 			"POST /v1/plans/deployments/payments-api-prod",
@@ -2112,7 +2159,9 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 		},
 		"../../docs/architecture/tenet-v1-overview-ui.md": {
 			"`/?page=plan&deployment={deploymentName}&planId={planId}` workspace keeps the URL shareable/bookmarkable",
-			"when `POST /v1/plans/deployments/{deploymentName}` or `POST /v1/applies/plans/{planId}` returns `401 Unauthorized` under auth enforcement, the embedded workspace explains that authenticated identity is required on operator write routes and tells operators to retry through the trusted front door instead of showing generic fetch-error copy",
+			"`POST /v1/applies/{applyId}/transitions`",
+			"when `POST /v1/plans/deployments/{deploymentName}`, `POST /v1/applies/plans/{planId}`, or `POST /v1/applies/{applyId}/transitions` returns `401 Unauthorized` under auth enforcement, the embedded workspace explains that authenticated identity is required on operator write routes and tells operators to retry through the trusted front door instead of showing generic fetch-error copy",
+			"the persisted apply deployment for transitions",
 			"trusted front door",
 		},
 	}
