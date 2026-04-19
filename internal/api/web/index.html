@@ -3463,9 +3463,15 @@
           }
           const driftRows = deploymentDriftRows(detail);
           const driftSource = deploymentDriftSource(detail);
-          let driftQuery = workspaceState?.filters?.query || '';
-          let driftSeverity = workspaceState?.filters?.severity || 'all';
-          let driftSort = workspaceState?.filters?.sort || 'field';
+          const defaultDriftFilters = { query: '', severity: 'all', sort: 'field' };
+          let driftQuery = workspaceState?.filters?.query || defaultDriftFilters.query;
+          let driftSeverity = workspaceState?.filters?.severity || defaultDriftFilters.severity;
+          let driftSort = workspaceState?.filters?.sort || defaultDriftFilters.sort;
+          const hasActiveDriftFilters = () => (
+            driftQuery !== defaultDriftFilters.query
+            || driftSeverity !== defaultDriftFilters.severity
+            || driftSort !== defaultDriftFilters.sort
+          );
           const syncDriftFilters = () => {
             if (!workspaceState) return;
             workspaceState.filters = {
@@ -3475,8 +3481,26 @@
             };
           };
           const driftControls = createElement('div', 'toolbar-grid');
+          const driftToolbarActions = createElement('div', 'toolbar-actions');
           const driftSummary = createElement('div', 'metrics');
           const driftTableWrap = createElement('div', 'drift-table-wrap');
+          let driftQueryInput = null;
+          let driftSeveritySelect = null;
+          let driftSortSelect = null;
+          const clearDriftFiltersButton = createRefreshButton(
+            'Clear drift filters',
+            !hasActiveDriftFilters(),
+            () => {
+              driftQuery = defaultDriftFilters.query;
+              driftSeverity = defaultDriftFilters.severity;
+              driftSort = defaultDriftFilters.sort;
+              syncDriftFilters();
+              if (driftQueryInput) driftQueryInput.value = driftQuery;
+              if (driftSeveritySelect) driftSeveritySelect.value = driftSeverity;
+              if (driftSortSelect) driftSortSelect.value = driftSort;
+              renderDriftRows();
+            },
+          );
           const renderDriftRows = () => {
             const searchNeedle = driftQuery.trim().toLowerCase();
             const filteredRows = driftRows
@@ -3493,6 +3517,15 @@
                 return left.field.localeCompare(right.field);
               });
             const filteredCounts = driftSeverityCounts(filteredRows);
+            const activeDriftFilters = [];
+            if (driftQuery.trim()) activeDriftFilters.push(`search “${driftQuery.trim()}”`);
+            if (driftSeverity !== defaultDriftFilters.severity) activeDriftFilters.push(`severity ${driftSeverity}`);
+            if (driftSort !== defaultDriftFilters.sort) activeDriftFilters.push(`sort ${driftSort}`);
+            clearDriftFiltersButton.disabled = !hasActiveDriftFilters();
+            driftToolbarActions.replaceChildren(
+              createElement('div', 'toolbar-active', activeDriftFilters.length ? `Drift filters: ${activeDriftFilters.join(' · ')}` : 'Drift filters: defaults'),
+              clearDriftFiltersButton,
+            );
             driftSummary.replaceChildren(
               createMetric('Drift summary', driftSummaryCopy(driftRows.length, filteredRows.length), 'summary'),
               createMetric('Total rows', String(driftRows.length)),
@@ -3533,31 +3566,33 @@
             table.append(thead, tbody);
             driftTableWrap.replaceChildren(table);
           };
-          driftControls.append(
-            createInput('Filter drift rows', driftQuery, 'Filter by field, value, or condition context', (event) => {
-              driftQuery = event.target.value || '';
-              syncDriftFilters();
-              renderDriftRows();
-            }),
-            createSelect('Severity', driftSeverity, [
-              { value: 'all', label: 'All severities' },
-              { value: 'high', label: 'High' },
-              { value: 'medium', label: 'Medium' },
-              { value: 'low', label: 'Low' },
-            ], (event) => {
-              driftSeverity = event.target.value || 'all';
-              syncDriftFilters();
-              renderDriftRows();
-            }),
-            createSelect('Sort by', driftSort, [
-              { value: 'field', label: 'Field path' },
-              { value: 'severity', label: 'Severity' },
-            ], (event) => {
-              driftSort = event.target.value || 'field';
-              syncDriftFilters();
-              renderDriftRows();
-            }),
-          );
+          const driftQueryField = createInput('Filter drift rows', driftQuery, 'Filter by field, value, or condition context', (event) => {
+            driftQuery = event.target.value || '';
+            syncDriftFilters();
+            renderDriftRows();
+          });
+          driftQueryInput = driftQueryField.children[1];
+          const driftSeverityField = createSelect('Severity', driftSeverity, [
+            { value: 'all', label: 'All severities' },
+            { value: 'high', label: 'High' },
+            { value: 'medium', label: 'Medium' },
+            { value: 'low', label: 'Low' },
+          ], (event) => {
+            driftSeverity = event.target.value || defaultDriftFilters.severity;
+            syncDriftFilters();
+            renderDriftRows();
+          });
+          driftSeveritySelect = driftSeverityField.children[1];
+          const driftSortField = createSelect('Sort by', driftSort, [
+            { value: 'field', label: 'Field path' },
+            { value: 'severity', label: 'Severity' },
+          ], (event) => {
+            driftSort = event.target.value || defaultDriftFilters.sort;
+            syncDriftFilters();
+            renderDriftRows();
+          });
+          driftSortSelect = driftSortField.children[1];
+          driftControls.append(driftQueryField, driftSeverityField, driftSortField);
           const driftSourceCallout = createElement('div', 'workspace-callout');
           const driftSourceHead = createElement('div', 'workspace-callout-head');
           driftSourceHead.append(
@@ -3570,7 +3605,7 @@
             createElement('div', 'workspace-callout-factors', driftSource.factors),
           );
           driftSection.append(driftSourceCallout);
-          driftSection.append(driftControls, driftSummary, driftTableWrap);
+          driftSection.append(driftControls, driftToolbarActions, driftSummary, driftTableWrap);
           renderDriftRows();
           sections.push(driftSection);
 
