@@ -277,6 +277,34 @@ terminal_apply_transition_status=$(curl -sS -o "$TERMINAL_APPLY_TRANSITION_BODY"
   -H 'Content-Type: application/json' \
   --data '{"status":"running","step":1}' \
   "$API_BASE_URL/v1/applies/$apply_id/transitions")
+actor_plan_preview=$(curl -fsS -X POST \
+  -H 'Content-Type: application/json' \
+  -H 'X-Tenet-Actor-Id: operator-123' \
+  -H 'X-Tenet-Actor-Name: Jane Operator' \
+  -H 'X-Tenet-Actor-Email: jane@example.com' \
+  -d '{}' \
+  "$API_BASE_URL/v1/plans/deployments/payments-api-staging")
+actor_plan_id=$(ACTOR_PLAN_PREVIEW_JSON="$actor_plan_preview" python3 - <<'PY'
+import json
+import os
+
+print(json.loads(os.environ["ACTOR_PLAN_PREVIEW_JSON"])["id"])
+PY
+)
+actor_plan_preview_get=$(curl -fsS "$API_BASE_URL/v1/plans/$actor_plan_id")
+actor_apply_record=$(curl -fsS -X POST \
+  -H 'X-Tenet-Actor-Id: operator-123' \
+  -H 'X-Tenet-Actor-Name: Jane Operator' \
+  -H 'X-Tenet-Actor-Email: jane@example.com' \
+  "$API_BASE_URL/v1/applies/plans/$actor_plan_id")
+actor_apply_id=$(ACTOR_APPLY_RECORD_JSON="$actor_apply_record" python3 - <<'PY'
+import json
+import os
+
+print(json.loads(os.environ["ACTOR_APPLY_RECORD_JSON"])["id"])
+PY
+)
+actor_apply_record_get=$(curl -fsS "$API_BASE_URL/v1/applies/$actor_apply_id")
 deployment_events=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/events")
 worker_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 worker_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service")
@@ -287,6 +315,7 @@ test_listener_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deploym
 traffic_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")
 audit_logs=$(curl -fsS "$API_BASE_URL/v1/audit-logs")
 audit_logs_action_filtered=$(curl -fsS "$API_BASE_URL/v1/audit-logs?action=apply.requested&limit=2")
+actor_audit_logs=$(curl -fsS "$API_BASE_URL/v1/audit-logs?deployment=payments-api-staging&action=apply.requested&limit=1")
 invalid_audit_action_status=$(curl -sS -o "$INVALID_AUDIT_ACTION_BODY" -w "%{http_code}" "$API_BASE_URL/v1/audit-logs?action=invalid.action")
 webhook_push_body=$(cat <<'EOF'
 {"ref":"refs/heads/main","before":"1111111111111111111111111111111111111111","after":"2222222222222222222222222222222222222222","repository":{"full_name":"acme/platform-config"},"head_commit":{"id":"2222222222222222222222222222222222222222","message":"update deployment","timestamp":"2026-04-18T15:00:00Z"},"commits":[{"id":"a","added":["deployments/api.yaml"],"modified":["environments/prod.yaml"],"removed":[]},{"id":"b","added":["accounts/prod.yaml"],"modified":["deployments/worker.yaml"],"removed":["deployments/old.yaml"]}]}
@@ -350,6 +379,10 @@ apply_record_get_path=$(write_payload apply-record-get.json "$apply_record_get")
 invalid_apply_transition_path=$(write_payload invalid-apply-transition.txt "$(cat "$INVALID_APPLY_TRANSITION_BODY")")
 unknown_apply_transition_path=$(write_payload unknown-apply-transition.txt "$(cat "$UNKNOWN_APPLY_TRANSITION_BODY")")
 terminal_apply_transition_path=$(write_payload terminal-apply-transition.txt "$(cat "$TERMINAL_APPLY_TRANSITION_BODY")")
+actor_plan_preview_path=$(write_payload actor-plan-preview.json "$actor_plan_preview")
+actor_plan_preview_get_path=$(write_payload actor-plan-preview-get.json "$actor_plan_preview_get")
+actor_apply_record_path=$(write_payload actor-apply-record.json "$actor_apply_record")
+actor_apply_record_get_path=$(write_payload actor-apply-record-get.json "$actor_apply_record_get")
 deployment_events_path=$(write_payload deployment-events.json "$deployment_events")
 worker_resource_logs_path=$(write_payload worker-resource-logs.json "$worker_resource_logs")
 worker_resource_inspection_path=$(write_payload worker-resource-inspection.json "$worker_resource_inspection")
@@ -360,6 +393,7 @@ test_listener_resource_inspection_path=$(write_payload test-listener-resource-in
 traffic_resource_inspection_path=$(write_payload traffic-resource-inspection.json "$traffic_resource_inspection")
 audit_logs_path=$(write_payload audit-logs.json "$audit_logs")
 audit_logs_action_filtered_path=$(write_payload audit-logs-action-filtered.json "$audit_logs_action_filtered")
+actor_audit_logs_path=$(write_payload actor-audit-logs.json "$actor_audit_logs")
 webhook_push_path=$(write_payload webhook-push.json "$webhook_push")
 webhook_ping_path=$(write_payload webhook-ping.json "$webhook_ping")
 invalid_webhook_path=$(write_payload invalid-webhook.txt "$invalid_webhook")
@@ -368,7 +402,7 @@ drift_ui_path=$(write_payload drift-ui.html "$drift_ui")
 audit_ui_path=$(write_payload audit-ui.html "$audit_ui")
 plan_apply_ui_path=$(write_payload plan-apply-ui.html "$plan_apply_ui")
 
-SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" INVALID_APPLY_TRANSITION_STATUS="$invalid_apply_transition_status" INVALID_APPLY_TRANSITION_PATH="$invalid_apply_transition_path" UNKNOWN_APPLY_TRANSITION_STATUS="$unknown_apply_transition_status" UNKNOWN_APPLY_TRANSITION_PATH="$unknown_apply_transition_path" TERMINAL_APPLY_TRANSITION_STATUS="$terminal_apply_transition_status" TERMINAL_APPLY_TRANSITION_PATH="$terminal_apply_transition_path" DEPLOYMENT_EVENTS_PATH="$deployment_events_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PUSH_STATUS="$webhook_push_status" WEBHOOK_PING_PATH="$webhook_ping_path" WEBHOOK_PING_STATUS="$webhook_ping_status" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" UI_PATH="$ui_path" DRIFT_UI_PATH="$drift_ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_APPLY_UI_PATH="$plan_apply_ui_path" python3 - <<'PY'
+SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" INVALID_APPLY_TRANSITION_STATUS="$invalid_apply_transition_status" INVALID_APPLY_TRANSITION_PATH="$invalid_apply_transition_path" UNKNOWN_APPLY_TRANSITION_STATUS="$unknown_apply_transition_status" UNKNOWN_APPLY_TRANSITION_PATH="$unknown_apply_transition_path" TERMINAL_APPLY_TRANSITION_STATUS="$terminal_apply_transition_status" TERMINAL_APPLY_TRANSITION_PATH="$terminal_apply_transition_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" DEPLOYMENT_EVENTS_PATH="$deployment_events_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PUSH_STATUS="$webhook_push_status" WEBHOOK_PING_PATH="$webhook_ping_path" WEBHOOK_PING_STATUS="$webhook_ping_status" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" UI_PATH="$ui_path" DRIFT_UI_PATH="$drift_ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_APPLY_UI_PATH="$plan_apply_ui_path" python3 - <<'PY'
 import json, os
 
 def read_json(path_env):
@@ -391,6 +425,10 @@ apply_record_get = read_json("APPLY_RECORD_GET_PATH")
 invalid_apply_transition = read_text("INVALID_APPLY_TRANSITION_PATH")
 unknown_apply_transition = read_text("UNKNOWN_APPLY_TRANSITION_PATH")
 terminal_apply_transition = read_text("TERMINAL_APPLY_TRANSITION_PATH")
+actor_plan_preview = read_json("ACTOR_PLAN_PREVIEW_PATH")
+actor_plan_preview_get = read_json("ACTOR_PLAN_PREVIEW_GET_PATH")
+actor_apply_record = read_json("ACTOR_APPLY_RECORD_PATH")
+actor_apply_record_get = read_json("ACTOR_APPLY_RECORD_GET_PATH")
 deployment_events = read_json("DEPLOYMENT_EVENTS_PATH")
 worker_resource_logs = read_json("WORKER_RESOURCE_LOGS_PATH")
 worker_resource_inspection = read_json("WORKER_RESOURCE_INSPECTION_PATH")
@@ -401,6 +439,7 @@ test_listener_resource_inspection = read_json("TEST_LISTENER_RESOURCE_INSPECTION
 traffic_resource_inspection = read_json("TRAFFIC_RESOURCE_INSPECTION_PATH")
 audit_logs = read_json("AUDIT_LOGS_PATH")
 audit_logs_action_filtered = read_json("AUDIT_LOGS_ACTION_FILTERED_PATH")
+actor_audit_logs = read_json("ACTOR_AUDIT_LOGS_PATH")
 invalid_audit_action_body = read_text("INVALID_AUDIT_ACTION_BODY_PATH")
 webhook_push = read_json("WEBHOOK_PUSH_PATH")
 webhook_ping = read_json("WEBHOOK_PING_PATH")
@@ -476,6 +515,20 @@ assert "apply request not found" in unknown_apply_transition, unknown_apply_tran
 assert os.environ["TERMINAL_APPLY_TRANSITION_STATUS"] == "409", os.environ["TERMINAL_APPLY_TRANSITION_STATUS"]
 assert "apply request lifecycle transition is invalid:" in terminal_apply_transition, terminal_apply_transition
 assert f"{apply_record['id']} is already terminal with status failed" in terminal_apply_transition, terminal_apply_transition
+assert actor_plan_preview["deploymentName"] == "payments-api-staging", actor_plan_preview
+assert actor_plan_preview["actor"]["available"] is True, actor_plan_preview
+assert actor_plan_preview["actor"]["id"] == "operator-123", actor_plan_preview
+assert actor_plan_preview["actor"]["name"] == "Jane Operator", actor_plan_preview
+assert actor_plan_preview["actor"]["email"] == "jane@example.com", actor_plan_preview
+assert actor_plan_preview_get == actor_plan_preview, (actor_plan_preview_get, actor_plan_preview)
+assert actor_apply_record["deploymentName"] == "payments-api-staging", actor_apply_record
+assert actor_apply_record["actor"]["available"] is True, actor_apply_record
+assert actor_apply_record["actor"]["id"] == "operator-123", actor_apply_record
+assert actor_apply_record["actor"]["name"] == "Jane Operator", actor_apply_record
+assert actor_apply_record["actor"]["email"] == "jane@example.com", actor_apply_record
+assert isinstance(actor_apply_record.get("operations", []), list) and actor_apply_record["operations"], actor_apply_record
+assert all(operation["status"] == "pending" for operation in actor_apply_record["operations"]), actor_apply_record
+assert actor_apply_record_get == actor_apply_record, (actor_apply_record_get, actor_apply_record)
 
 assert isinstance(audit_logs.get("entries"), list), audit_logs
 assert any(entry["action"] == "apply.requested" for entry in audit_logs["entries"]), audit_logs
@@ -510,13 +563,22 @@ assert "desiredStateSourceMatch" not in webhook_ping, webhook_ping
 assert os.environ["INVALID_WEBHOOK_STATUS"] == "400", os.environ["INVALID_WEBHOOK_STATUS"]
 assert "github webhook signature mismatch" in invalid_webhook, invalid_webhook
 for entry in audit_logs["entries"]:
-    assert entry["deploymentName"] == "payments-api-prod", entry
     assert entry["appRef"] == "payments-api", entry
-    assert entry["environmentRef"] == "prod-apne2", entry
-    assert entry["actor"]["available"] is False, entry
-    assert "no authenticated request context" in entry["actor"]["reason"], entry
+    assert entry["environmentRef"] in {"prod-apne2", "staging-apne2"}, entry
     assert isinstance(entry.get("metadata", {}), dict), entry
     assert isinstance(entry.get("source", {}), dict), entry
+fallback_entries = [entry for entry in audit_logs["entries"] if entry["deploymentName"] == "payments-api-prod"]
+assert fallback_entries, audit_logs
+for entry in fallback_entries:
+    assert entry["actor"]["available"] is False, entry
+    assert "no authenticated request context" in entry["actor"]["reason"], entry
+assert isinstance(actor_audit_logs.get("entries"), list), actor_audit_logs
+assert len(actor_audit_logs["entries"]) == 1, actor_audit_logs
+assert actor_audit_logs["entries"][0]["deploymentName"] == "payments-api-staging", actor_audit_logs
+assert actor_audit_logs["entries"][0]["actor"]["available"] is True, actor_audit_logs
+assert actor_audit_logs["entries"][0]["actor"]["id"] == "operator-123", actor_audit_logs
+assert actor_audit_logs["entries"][0]["actor"]["name"] == "Jane Operator", actor_audit_logs
+assert actor_audit_logs["entries"][0]["actor"]["email"] == "jane@example.com", actor_audit_logs
 
 assert deployment_events["deploymentName"] == "payments-api-prod", deployment_events
 assert isinstance(deployment_events.get("events"), list), deployment_events
