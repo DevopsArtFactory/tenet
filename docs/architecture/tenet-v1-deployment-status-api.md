@@ -26,3 +26,17 @@ The deployment overview read models now intentionally copy the latest artifact/c
 That additive copy keeps overview/detail consumers from having to diff the full `status` object or scrape the newest history entry just to show the latest runtime artifact/condition context in a compact UI row.
 
 These payloads are still deterministic persisted read models, but they now document the richer runtime shape Tenet serves today. The bounded runtime-history retention cap remains 10 entries per deployment.
+
+## Front-door auth
+
+`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***` now covers this raw status family too.
+
+- `GET /v1/status/deployments` now requires trusted authenticated identity and filters returned snapshots through the trusted `X-Tenet-Authorized-Deployments` allowlist.
+- `GET /v1/status/deployments` now requires trusted authenticated identity and filters returned snapshots through the trusted allowlist.
+- `GET /v1/status/deployments` returns `200 OK` with `[]` when the trusted allowlist is omitted or none of the returned snapshots match it.
+- `GET /v1/status/deployments/{deploymentName}` requires exact deployment membership in that same allowlist.
+- when enabled, missing trusted authenticated identity returns `401 Unauthorized` plus `unauthenticated: authenticated identity is required for this operator read route`.
+- when enabled, recognized identity without access to the requested deployment returns `403 Forbidden` plus `forbidden: operator does not have access to this deployment`.
+- when disabled, both status routes keep their previous unauthenticated local-runtime behavior unchanged.
+
+Only enable that trust when a front door authenticates the caller and strips any client-supplied `X-Tenet-Authenticated-*` headers and `X-Tenet-Authorized-Deployments` before forwarding trusted values.

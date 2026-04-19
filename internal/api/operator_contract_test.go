@@ -532,26 +532,38 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		`"X-Tenet-Authenticated-Name: Front Door Operator"`,
 		`"X-Tenet-Authenticated-Email: frontdoor@example.com"`,
 		`"http://$HOST:$PORT/v1/overview/applications"`,
+		`"http://$HOST:$PORT/v1/status/deployments"`,
+		`"http://$HOST:$PORT/v1/status/deployments/payments-api-staging"`,
 		`"X-Tenet-Authorized-Deployments: worker-prod"`,
 		`"X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod"`,
 		`assert os.environ['AUTH_UNAUTHENTICATED_COLLECTION_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_COLLECTION_STATUS']`,
+		`assert os.environ['AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS']`,
 		`assert unauthenticated_collection_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_collection_body`,
+		`assert unauthenticated_status_collection_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_status_collection_body`,
 		`assert os.environ['AUTH_UNAUTHENTICATED_PLAN_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_PLAN_STATUS']`,
 		`assert unauthenticated_plan_body.strip() == 'unauthenticated: authenticated identity is required for this operator write route', unauthenticated_plan_body`,
 		`assert os.environ['AUTH_UNAUTHENTICATED_APPLY_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_APPLY_STATUS']`,
 		`assert os.environ['AUTH_UNAUTHENTICATED_READ_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_READ_STATUS']`,
+		`assert os.environ['AUTH_UNAUTHENTICATED_STATUS_READ_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_STATUS_READ_STATUS']`,
 		`assert os.environ['AUTH_UNAUTHENTICATED_PLAN_READ_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_PLAN_READ_STATUS']`,
 		`assert os.environ['AUTH_UNAUTHENTICATED_APPLY_READ_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_APPLY_READ_STATUS']`,
 		`assert unauthenticated_read_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_read_body`,
+		`assert unauthenticated_status_read_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_status_read_body`,
 		`assert os.environ['AUTH_FORBIDDEN_READ_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_READ_STATUS']`,
+		`assert os.environ['AUTH_FORBIDDEN_STATUS_READ_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_STATUS_READ_STATUS']`,
 		`assert os.environ['AUTH_FORBIDDEN_PLAN_READ_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_PLAN_READ_STATUS']`,
 		`assert os.environ['AUTH_FORBIDDEN_APPLY_READ_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_APPLY_READ_STATUS']`,
 		`assert forbidden_read_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_read_body`,
+		`assert forbidden_status_read_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_status_read_body`,
+		`assert allowed_status_read['deploymentName'] == 'payments-api-staging', allowed_status_read`,
+		`filtered_status_deployment_names = {row['deploymentName'] for row in filtered_status_collection}`,
+		`assert filtered_status_deployment_names == {'payments-api-prod'}, filtered_status_collection`,
 		`assert allowed_guarded_read['name'] == 'payments-api-staging', allowed_guarded_read`,
 		`filtered_application_names = {row['name'] for row in filtered_applications_collection}`,
 		`assert 'worker-prod' in filtered_application_names, filtered_applications_collection`,
 		`assert filtered_application_names == {'payments-api-prod', 'worker-prod'}, filtered_applications_collection`,
 		`assert empty_applications_collection == [], empty_applications_collection`,
+		`assert empty_status_collection == [], empty_status_collection`,
 		`assert allowed_plan_read['deploymentName'] == 'payments-api-staging', allowed_plan_read`,
 		`assert allowed_apply_read['deploymentName'] == 'payments-api-staging', allowed_apply_read`,
 		`assert os.environ['AUTH_FORBIDDEN_AUDIT_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_AUDIT_STATUS']`,
@@ -605,6 +617,8 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`forbidden: operator does not have access to this deployment`",
 		"authenticated identity is required on operator write routes",
 		"`GET /v1/overview/applications` now requires trusted authenticated identity and filters the returned application rows to only deployments present in that allowlist",
+		"`GET /v1/status/deployments` now follows the same collection contract",
+		"`GET /v1/status/deployments/{deploymentName}` now reuses the same scoped deployment-read authorization contract",
 		"`GET /v1/audit-logs` remain unchanged in this slice",
 		"`200 OK` with an empty JSON array",
 		"trusted allowlist is missing or none of the returned rows match it",
@@ -661,6 +675,37 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
 			t.Fatalf("expected local runtime doc front-door auth contract to include %q", fragment)
+		}
+	}
+
+	deploymentStatusDoc := readRepoFile(t, "docs/architecture/tenet-v1-deployment-status-api.md")
+	for _, fragment := range []string{
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***`",
+		"`X-Tenet-Authenticated-*`",
+		"`X-Tenet-Authorized-Deployments`",
+		"`GET /v1/status/deployments` now requires trusted authenticated identity and filters returned snapshots through the trusted allowlist",
+		"`GET /v1/status/deployments/{deploymentName}` requires exact deployment membership in that same allowlist",
+		"`401 Unauthorized` plus `unauthenticated: authenticated identity is required for this operator read route`",
+		"`403 Forbidden` plus `forbidden: operator does not have access to this deployment`",
+		"`200 OK` with `[]`",
+		"Only enable that trust when a front door authenticates the caller and strips any client-supplied `X-Tenet-Authenticated-*` headers and `X-Tenet-Authorized-Deployments` before forwarding trusted values.",
+	} {
+		if !strings.Contains(deploymentStatusDoc, fragment) {
+			t.Fatalf("expected deployment status doc front-door auth contract to include %q", fragment)
+		}
+	}
+
+	runtimeRolloutSummaryDoc := readRepoFile(t, "docs/architecture/tenet-v1-runtime-rollout-summary.md")
+	for _, fragment := range []string{
+		"`GET /v1/status/deployments`",
+		"`GET /v1/status/deployments/{deploymentName}`",
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`",
+		"`X-Tenet-Authorized-Deployments`",
+		"the raw status collection now requires trusted authenticated identity and filters snapshots to the authorized deployment subset",
+		"the raw status detail route now follows the same deployment-scoped `401` / `403` contract as other guarded operator reads",
+	} {
+		if !strings.Contains(runtimeRolloutSummaryDoc, fragment) {
+			t.Fatalf("expected runtime rollout summary doc front-door auth contract to include %q", fragment)
 		}
 	}
 

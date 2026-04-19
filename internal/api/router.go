@@ -186,6 +186,19 @@ func filterAuthorizedDeploymentOverviews(deployments []catalog.DeploymentOvervie
 	return filtered
 }
 
+func filterAuthorizedStatusSnapshots(snapshots []statusstore.Snapshot, authorized requestactor.AuthorizedDeployments, enabled bool) []statusstore.Snapshot {
+	if !enabled {
+		return snapshots
+	}
+	filtered := make([]statusstore.Snapshot, 0, len(snapshots))
+	for _, snapshot := range snapshots {
+		if authorized.Allows(snapshot.DeploymentName) {
+			filtered = append(filtered, snapshot)
+		}
+	}
+	return filtered
+}
+
 func summarizeDeploymentOverviews(deployments []catalog.DeploymentOverview) deploymentOverviewCounts {
 	counts := deploymentOverviewCounts{
 		deploymentCount: len(deployments),
@@ -926,6 +939,9 @@ func NewRouter(options Options) http.Handler {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
+		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization) {
+			return
+		}
 		if options.DeploymentStatuses == nil {
 			http.Error(w, "deployment statuses unavailable", http.StatusServiceUnavailable)
 			return
@@ -935,6 +951,7 @@ func NewRouter(options Options) http.Handler {
 			respondReadProviderError(w, err, "deployment statuses unavailable")
 			return
 		}
+		snapshots = filterAuthorizedStatusSnapshots(snapshots, requestactor.AuthorizedDeploymentsFromContext(r.Context()), options.RequireDeploymentReadAuthorization)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(snapshots)
 	})
@@ -949,6 +966,9 @@ func NewRouter(options Options) http.Handler {
 		name := strings.TrimPrefix(r.URL.Path, "/v1/status/deployments/")
 		if name == "" || strings.Contains(name, "/") {
 			http.Error(w, "invalid deployment name", http.StatusBadRequest)
+			return
+		}
+		if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, name) {
 			return
 		}
 		snapshot, err := options.DeploymentStatus(r.Context(), name)
