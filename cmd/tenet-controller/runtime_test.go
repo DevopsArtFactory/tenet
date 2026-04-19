@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/githubcontents"
 	"github.com/DevopsArtFactory/tenet/internal/manifest"
 	"github.com/DevopsArtFactory/tenet/internal/reconcile"
+	"github.com/DevopsArtFactory/tenet/internal/resourceinspection"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
 )
 
@@ -1925,7 +1927,7 @@ func TestDeriveManagedDriftItemsCoversArtifactGenerationAndRuntimeIntent(t *test
 		},
 	}
 
-	got := deriveManagedDriftItems(deployment, status)
+	got := deriveManagedDriftItems(deployment, status, nil)
 	want := []domain.ManagedDriftItem{
 		{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r9", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7", Severity: domain.ManagedDriftSeverityHigh},
 		{Field: "generation", Desired: "9", Actual: "7", Severity: domain.ManagedDriftSeverityMedium},
@@ -1935,6 +1937,85 @@ func TestDeriveManagedDriftItemsCoversArtifactGenerationAndRuntimeIntent(t *test
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("expected deterministic managed drift items, got %+v", got)
+	}
+}
+
+func TestDeriveManagedDriftItemsAddsLiveEC2CapacityEvidence(t *testing.T) {
+	t.Run("weighted target groups", func(t *testing.T) {
+		deployment := domain.Deployment{
+			Name:          "payments-api-prod",
+			ExecutionMode: "asgWeightedTargetGroups",
+			RolloutConfig: domain.DeploymentRolloutConfig{
+				Capacity: domain.DeploymentRolloutCapacity{Desired: 4, Min: 2, Max: 8},
+			},
+		}
+
+		got := deriveManagedDriftItems(deployment, domain.DeploymentStatus{}, &runtimeLiveCapacityObservation{
+			Desired: 3,
+			Min:     1,
+			Max:     6,
+		})
+		want := []domain.ManagedDriftItem{
+			{Field: "runtimeContext.capacity.desired", Desired: "4", Actual: "3", Severity: domain.ManagedDriftSeverityMedium},
+			{Field: "runtimeContext.capacity.max", Desired: "8", Actual: "6", Severity: domain.ManagedDriftSeverityMedium},
+			{Field: "runtimeContext.capacity.min", Desired: "2", Actual: "1", Severity: domain.ManagedDriftSeverityMedium},
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("expected live EC2 capacity drift evidence, got %+v", got)
+		}
+	})
+
+	t.Run("instance refresh", func(t *testing.T) {
+		deployment := domain.Deployment{
+			Name:          "payments-api-refresh",
+			ExecutionMode: "asgInstanceRefresh",
+			RolloutConfig: domain.DeploymentRolloutConfig{
+				Capacity: domain.DeploymentRolloutCapacity{Desired: 2, Min: 1, Max: 3},
+			},
+		}
+
+		got := deriveManagedDriftItems(deployment, domain.DeploymentStatus{}, &runtimeLiveCapacityObservation{
+			Desired: 2,
+			Min:     1,
+			Max:     5,
+		})
+		want := []domain.ManagedDriftItem{
+			{Field: "runtimeContext.capacity.max", Desired: "3", Actual: "5", Severity: domain.ManagedDriftSeverityMedium},
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("expected instance refresh live capacity drift evidence, got %+v", got)
+		}
+	})
+}
+
+func TestEmitRuntimePlansSkipsLiveCapacityDriftWhenLookupUnavailable(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","binary":"s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":4,"min":2,"max":8},"userdata":{"type":"file","path":"userdata/api-prod.sh"}}`)
+
+	oldLookup := runtimeLiveCapacityLookup
+	runtimeLiveCapacityLookup = func(context.Context, resourceinspection.Service, []domain.Account, []domain.Environment, domain.Deployment) (*runtimeLiveCapacityObservation, error) {
+		return nil, errors.New("aws unavailable")
+	}
+	defer func() { runtimeLiveCapacityLookup = oldLookup }()
+
+	store := &recordingRuntimeStore{}
+	logger := log.New(bytes.NewBuffer(nil), "", 0)
+	config := startupConfig{RepoRoot: root}
+
+	if err := emitRuntimePlans(context.Background(), logger, config, store); err != nil {
+		t.Fatalf("expected live-capacity lookup failure to stay best-effort, got %v", err)
+	}
+	if len(store.snapshots) != 1 {
+		t.Fatalf("expected one persisted snapshot, got %+v", store.snapshots)
+	}
+	status := store.snapshots[0].Status
+	if len(status.ManagedDrift) != 0 {
+		t.Fatalf("expected unavailable live lookup to avoid fabricating drift rows, got %+v", status.ManagedDrift)
+	}
+	if status.Rollout == nil || status.Rollout.ExecutionMode != "asgWeightedTargetGroups" {
+		t.Fatalf("expected reconcile to continue producing rollout context, got %+v", status.Rollout)
 	}
 }
 
@@ -2623,7 +2704,8 @@ func compiledRuntimeStatusForTest(t *testing.T, root string, deploymentName stri
 		plan := planner.Build(deployment, status)
 		status = normalizeRuntimeStatus(deployment, status, plan)
 		status.Rollout = deriveRolloutSummary(deployment, status, plan)
-		status.ManagedDrift = deriveManagedDriftItems(deployment, status)
+		liveCapacity := runtimeLiveCapacity(context.Background(), nil, resourceinspection.Service{}, compiled.Accounts, compiled.Environments, deployment)
+		status.ManagedDrift = deriveManagedDriftItems(deployment, status, liveCapacity)
 		status.History = appendRuntimeHistory(previous, status)
 		return status
 	}
