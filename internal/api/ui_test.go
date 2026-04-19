@@ -362,7 +362,7 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"createSelect('Limit', String(currentPageState.auditLimit || ''), auditLimitSelectOptions(currentPageState.auditLimit), (event) => {",
 		"Audit filters: none",
 		"Audit filters: ${activeFilters.join(' · ')}",
-		"const createDeploymentQuickNav = (deploymentName, currentWorkspace) => {",
+		"const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null) => {",
 		"const createAuditQuickNav = () => createDeploymentQuickNav(auditDeploymentName(), 'Audit log');",
 		"const renderAuditLogsState = (text, className = '', detailText = '') => {",
 		"const quickNav = createAuditQuickNav();",
@@ -587,16 +587,23 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"const backLink = createNavLink(buildPageURL('application', { deployment: detail.name || currentPageState.deployment || '' }), 'Back to application');",
 		"backLink.target = '_self';",
 		"backLink.rel = '';",
-		"const createDeploymentQuickNav = (deploymentName, currentWorkspace) => {",
+		"const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null) => {",
 		"const createWorkspaceQuickNav = (detail, mode) => {",
 		"const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';",
-		"return createDeploymentQuickNav(deploymentName, currentWorkspace);",
+		"const linkedResources = mode === 'drift' ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;",
+		"return createDeploymentQuickNav(deploymentName, currentWorkspace, linkedResources);",
 		"createElement('div', 'quick-nav-label', 'Deployment workspaces')",
+		"createElement('div', 'quick-nav-label', 'Linked resources')",
 		"createElement('div', 'quick-nav-current', `${deploymentName || 'Deployment'} · ${currentWorkspace}`)",
 		"createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')",
 		"createNavLink(buildPageURL('drift', { deployment: deploymentName }), 'Drift view', '_self')",
 		"createNavLink(buildPageURL('plan', { deployment: deploymentName }), 'Plan/apply', '_self')",
 		"createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self')",
+		"linkedResources.forEach((resource) => {",
+		"resourceType: resource.type,",
+		"resourceId: resource.id,",
+		"}), resource.name, '_self'));",
+		"'No linked resources are available in this drift workspace yet.'",
 		"header.append(head, createWorkspaceQuickNav(detail, mode), ...sections);",
 		"const emptyTitle = mode === 'drift' ? 'Field-level drift' : 'Plan operations';",
 		"const driftSeverityRank = (severity) => {",
@@ -1266,6 +1273,12 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Clear drift filters' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Clear drift filters")
 	}
+	if !strings.Contains(text, "assert 'Linked resources' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains drift linked-resources copy")
+	}
+	if !strings.Contains(text, "assert 'No linked resources are available in this drift workspace yet.' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains drift linked-resources empty-state copy")
+	}
 	if !strings.Contains(text, "assert 'Refreshing drift workspace from GET /v1/overview/deployments/{deploymentName}…' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains drift refresh loading copy")
 	}
@@ -1472,6 +1485,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Current source: controller-authored managedDrift rows.' in ui, ui") || !strings.Contains(text, "assert 'Current source: derived fallback read-model heuristics.' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains drift-source callout copy")
 	}
+	if !strings.Contains(text, "assert \"const linkedResources = mode === 'drift' ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;\" in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert drift workspace resource-link contract")
+	}
 	for _, fragment := range []string{
 		"assert 'Drift summary' in ui, ui",
 		"assert 'Total rows' in ui, ui",
@@ -1637,6 +1653,36 @@ func TestOverviewDocsDescribeClearDriftFiltersControl(t *testing.T) {
 		"../../docs/features/overview-dashboard.md": {
 			"`Clear drift filters`",
 			"resets the drift query, severity, and sort controls back to their defaults in one step without mutating the bookmarkable `/?page=drift...` route or re-running the deployment-detail fetch",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
+	}
+}
+
+func TestOverviewDocsDescribeDriftWorkspaceResourceQuickLinks(t *testing.T) {
+	files := map[string][]string{
+		"../../README.md": {
+			"direct `_self` resource drill-down links built from the same grouped normalized resource inventory",
+			"`No linked resources are available in this drift workspace yet.`",
+		},
+		"../../docs/features/overview-dashboard.md": {
+			"direct `_self` resource drill-down links",
+			"`No linked resources are available in this drift workspace yet.`",
+		},
+		"../../docs/architecture/tenet-v1-overview-ui.md": {
+			"direct `_self` resource drill-down links",
+			"`No linked resources are available in this drift workspace yet.`",
 		},
 	}
 
@@ -1902,6 +1948,7 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"Drift viewer",
 			"Field-level drift",
 			"Active drift source",
+			"Linked resources",
 			"Current source: controller-authored managedDrift rows.",
 			"managedDrift is present in the deployment detail payload, so fallback read-model heuristics stay suppressed for this deployment.",
 			"Drift summary",
