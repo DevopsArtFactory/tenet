@@ -17,6 +17,13 @@ import (
 const (
 	runtimeHistorySourceController = "controller"
 	runtimeHistoryMaxEntries       = 10
+	controllerMarkedSyncedReason   = "Controller marked deployment synced"
+	controllerDriftedSyncReason    = "Controller detected managed drift in completed deployment"
+	controllerHealthySyncedSummary = "Deployment is healthy and synced"
+	controllerHealthyDriftSummary  = "Deployment is healthy but has managed drift"
+	rolloutHealthySyncedSummary    = "Deployment is synced and healthy"
+	rolloutSyncedSummary           = "Deployment is synced"
+	rolloutManagedDriftSummary     = "Deployment has managed drift"
 )
 
 var runtimeHistoryNow = time.Now
@@ -89,7 +96,7 @@ func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupCon
 		status = normalizeRuntimeStatus(deployment, status, plan)
 		status.Rollout = deriveRolloutSummary(deployment, status, plan)
 		status.ManagedDrift = deriveManagedDriftItems(deployment, status)
-		status = applyControllerManagedDriftSyncState(status, plan)
+		status = applyControllerManagedDriftStatus(status, plan)
 		status.History = appendRuntimeHistory(previousStatus, status)
 		currentStatuses[deployment.Name] = status
 		logger.Printf(
@@ -545,10 +552,10 @@ func normalizeRuntimeStatus(deployment domain.Deployment, status domain.Deployme
 	switch {
 	case completed:
 		if syncEmpty {
-			status.Sync = domain.Sync{State: domain.SyncStateSynced, Reason: "Controller marked deployment synced"}
+			status.Sync = domain.Sync{State: domain.SyncStateSynced, Reason: controllerMarkedSyncedReason}
 		}
 		if healthEmpty {
-			status.Health = domain.Health{Overall: domain.HealthHealthy, Summary: "Deployment is healthy and synced"}
+			status.Health = domain.Health{Overall: domain.HealthHealthy, Summary: controllerHealthySyncedSummary}
 		}
 		if status.ObservedGeneration == 0 {
 			status.ObservedGeneration = deployment.Generation
@@ -572,15 +579,24 @@ func normalizeRuntimeStatus(deployment domain.Deployment, status domain.Deployme
 	return status
 }
 
-func applyControllerManagedDriftSyncState(status domain.DeploymentStatus, plan reconcile.Plan) domain.DeploymentStatus {
-	if len(status.ManagedDrift) == 0 || status.Sync.State != domain.SyncStateSynced || status.Sync.Reason != "Controller marked deployment synced" {
+func applyControllerManagedDriftStatus(status domain.DeploymentStatus, plan reconcile.Plan) domain.DeploymentStatus {
+	if len(status.ManagedDrift) == 0 {
 		return status
 	}
 	currentIndex := currentRolloutStepIndex(plan)
 	if !completedRolloutStep(plan, currentIndex) {
 		return status
 	}
-	status.Sync = domain.Sync{State: domain.SyncStateDrifted, Reason: "Controller detected managed drift in completed deployment"}
+	controllerOwnedSync := status.Sync == (domain.Sync{State: domain.SyncStateSynced, Reason: controllerMarkedSyncedReason})
+	if controllerOwnedSync {
+		status.Sync = domain.Sync{State: domain.SyncStateDrifted, Reason: controllerDriftedSyncReason}
+		if status.Health == (domain.Health{Overall: domain.HealthHealthy, Summary: controllerHealthySyncedSummary}) {
+			status.Health = domain.Health{Overall: domain.HealthHealthy, Summary: controllerHealthyDriftSummary}
+		}
+	}
+	if status.Rollout != nil && (status.Rollout.Summary == rolloutHealthySyncedSummary || status.Rollout.Summary == rolloutSyncedSummary) {
+		status.Rollout.Summary = rolloutManagedDriftSummary
+	}
 	return status
 }
 
@@ -589,7 +605,7 @@ func controllerRuntimeSyncReason(plan reconcile.Plan, currentIndex int) string {
 		return "Controller paused rollout"
 	}
 	if plan.Steps[currentIndex].Kind == reconcile.StepMarkSynced {
-		return "Controller marked deployment synced"
+		return controllerMarkedSyncedReason
 	}
 	return fmt.Sprintf("Controller progressing rollout at %s", plan.Steps[currentIndex].Kind)
 }
@@ -972,9 +988,9 @@ func rolloutSummaryForStep(deployment domain.Deployment, status domain.Deploymen
 		return "Stabilizing ECS service after rolling update"
 	case reconcile.StepMarkSynced:
 		if status.Sync.State == domain.SyncStateSynced && status.Health.Overall == domain.HealthHealthy {
-			return "Deployment is synced and healthy"
+			return rolloutHealthySyncedSummary
 		}
-		return "Deployment is synced"
+		return rolloutSyncedSummary
 	case reconcile.StepAwaitFreshDesired:
 		return "Waiting for fresher desired state"
 	default:

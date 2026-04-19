@@ -2471,7 +2471,7 @@ func TestRouterOverviewDeployment(t *testing.T) {
 	}
 }
 
-func TestDeploymentOverviewDetailRoutePreservesDriftedSyncStateInRawPayload(t *testing.T) {
+func TestDeploymentOverviewDetailRoutePreservesDriftedControllerSummariesInRawPayload(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 		OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
@@ -2488,8 +2488,9 @@ func TestDeploymentOverviewDetailRoutePreservesDriftedSyncStateInRawPayload(t *t
 					Severity: domain.ManagedDriftSeverityHigh,
 				}},
 				RuntimeSummary: &domain.RuntimeSummary{
-					Sync:   domain.Sync{State: domain.SyncStateDrifted, Reason: "Controller detected managed drift in completed deployment"},
-					Health: domain.Health{Overall: domain.HealthHealthy, Summary: "Deployment is healthy and synced"},
+					Summary: "Deployment has managed drift",
+					Sync:    domain.Sync{State: domain.SyncStateDrifted, Reason: "Controller detected managed drift in completed deployment"},
+					Health:  domain.Health{Overall: domain.HealthHealthy, Summary: "Deployment is healthy but has managed drift"},
 					ManagedDrift: []domain.ManagedDriftItem{{
 						Field:    "artifact",
 						Desired:  "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7",
@@ -2524,9 +2525,16 @@ func TestDeploymentOverviewDetailRoutePreservesDriftedSyncStateInRawPayload(t *t
 	if !ok {
 		t.Fatalf("expected runtimeSummary object in raw payload, got %#v", payload["runtimeSummary"])
 	}
+	if runtimeSummary["summary"] != "Deployment has managed drift" {
+		t.Fatalf("expected runtimeSummary.summary to keep drift-aware controller wording, got %#v", runtimeSummary["summary"])
+	}
 	runtimeSync, ok := runtimeSummary["sync"].(map[string]any)
 	if !ok || runtimeSync["state"] != string(domain.SyncStateDrifted) || runtimeSync["reason"] != "Controller detected managed drift in completed deployment" {
 		t.Fatalf("expected runtimeSummary.sync drifted fields, got %#v", runtimeSummary["sync"])
+	}
+	runtimeHealth, ok := runtimeSummary["health"].(map[string]any)
+	if !ok || runtimeHealth["overall"] != string(domain.HealthHealthy) || runtimeHealth["summary"] != "Deployment is healthy but has managed drift" {
+		t.Fatalf("expected runtimeSummary.health drift-aware fields, got %#v", runtimeSummary["health"])
 	}
 }
 

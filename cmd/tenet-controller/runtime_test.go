@@ -359,8 +359,8 @@ func TestNormalizeRuntimeStatusDerivesControllerOwnedDefaults(t *testing.T) {
 			plan:       reconcile.Plan{Steps: []reconcile.Step{{Kind: reconcile.StepMarkSynced}}},
 			want: domain.DeploymentStatus{
 				ObservedGeneration: 7,
-				Sync:               domain.Sync{State: domain.SyncStateSynced, Reason: "Controller marked deployment synced"},
-				Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "Deployment is healthy and synced"},
+				Sync:               domain.Sync{State: domain.SyncStateSynced, Reason: controllerMarkedSyncedReason},
+				Health:             domain.Health{Overall: domain.HealthHealthy, Summary: controllerHealthySyncedSummary},
 			},
 		},
 		{
@@ -436,7 +436,7 @@ func TestNormalizeRuntimeStatusDerivesControllerOwnedDefaults(t *testing.T) {
 	}
 }
 
-func TestApplyControllerManagedDriftSyncState(t *testing.T) {
+func TestApplyControllerManagedDriftStatus(t *testing.T) {
 	completedPlan := reconcile.Plan{Steps: []reconcile.Step{{Kind: reconcile.StepMarkSynced}}}
 	reconcilingPlan := reconcile.Plan{Steps: []reconcile.Step{{Kind: reconcile.StepResolvePlacement}, {Kind: reconcile.StepObserveCurrentState}, {Kind: reconcile.StepCreateCandidateCapacity}}}
 
@@ -444,48 +444,69 @@ func TestApplyControllerManagedDriftSyncState(t *testing.T) {
 		name   string
 		status domain.DeploymentStatus
 		plan   reconcile.Plan
-		want   domain.Sync
+		want   domain.DeploymentStatus
 	}{
 		{
-			name: "marks controller-owned completed sync as drifted when managed drift exists",
+			name: "marks controller-owned completed sync and text as drift-aware when managed drift exists",
 			status: domain.DeploymentStatus{
-				Sync:         domain.Sync{State: domain.SyncStateSynced, Reason: "Controller marked deployment synced"},
+				Sync:         domain.Sync{State: domain.SyncStateSynced, Reason: controllerMarkedSyncedReason},
+				Health:       domain.Health{Overall: domain.HealthHealthy, Summary: controllerHealthySyncedSummary},
 				ManagedDrift: []domain.ManagedDriftItem{{Field: "artifact", Desired: "v9", Actual: "v7", Severity: domain.ManagedDriftSeverityHigh}},
+				Rollout:      &domain.RolloutSummary{Phase: domain.RolloutPhaseCompleted, Summary: rolloutHealthySyncedSummary},
 			},
 			plan: completedPlan,
-			want: domain.Sync{State: domain.SyncStateDrifted, Reason: "Controller detected managed drift in completed deployment"},
+			want: domain.DeploymentStatus{
+				Sync:         domain.Sync{State: domain.SyncStateDrifted, Reason: controllerDriftedSyncReason},
+				Health:       domain.Health{Overall: domain.HealthHealthy, Summary: controllerHealthyDriftSummary},
+				ManagedDrift: []domain.ManagedDriftItem{{Field: "artifact", Desired: "v9", Actual: "v7", Severity: domain.ManagedDriftSeverityHigh}},
+				Rollout:      &domain.RolloutSummary{Phase: domain.RolloutPhaseCompleted, Summary: rolloutManagedDriftSummary},
+			},
 		},
 		{
-			name: "preserves seeded synced snapshots even when managed drift exists",
+			name: "preserves seeded sync and health while still updating generic controller-authored completed summary",
 			status: domain.DeploymentStatus{
 				Sync:         domain.Sync{State: domain.SyncStateSynced, Reason: "seeded sync"},
+				Health:       domain.Health{Overall: domain.HealthHealthy, Summary: "seeded health"},
 				ManagedDrift: []domain.ManagedDriftItem{{Field: "artifact", Desired: "v9", Actual: "v7", Severity: domain.ManagedDriftSeverityHigh}},
+				Rollout:      &domain.RolloutSummary{Phase: domain.RolloutPhaseCompleted, Summary: rolloutSyncedSummary},
 			},
 			plan: completedPlan,
-			want: domain.Sync{State: domain.SyncStateSynced, Reason: "seeded sync"},
+			want: domain.DeploymentStatus{
+				Sync:         domain.Sync{State: domain.SyncStateSynced, Reason: "seeded sync"},
+				Health:       domain.Health{Overall: domain.HealthHealthy, Summary: "seeded health"},
+				ManagedDrift: []domain.ManagedDriftItem{{Field: "artifact", Desired: "v9", Actual: "v7", Severity: domain.ManagedDriftSeverityHigh}},
+				Rollout:      &domain.RolloutSummary{Phase: domain.RolloutPhaseCompleted, Summary: rolloutManagedDriftSummary},
+			},
 		},
 		{
-			name: "preserves reconciling sync while rollout is still active",
+			name: "preserves active rollout behavior",
 			status: domain.DeploymentStatus{
 				Sync:         domain.Sync{State: domain.SyncStateReconciling, Reason: "Controller progressing rollout at CreateCandidateCapacity"},
+				Health:       domain.Health{Overall: domain.HealthProgressing, Summary: "Creating candidate capacity for weighted target groups"},
 				ManagedDrift: []domain.ManagedDriftItem{{Field: "artifact", Desired: "v9", Actual: "v7", Severity: domain.ManagedDriftSeverityHigh}},
+				Rollout:      &domain.RolloutSummary{Phase: domain.RolloutPhaseProvisioning, CurrentStep: string(reconcile.StepCreateCandidateCapacity), Summary: "Creating candidate capacity for weighted target groups"},
 			},
 			plan: reconcilingPlan,
-			want: domain.Sync{State: domain.SyncStateReconciling, Reason: "Controller progressing rollout at CreateCandidateCapacity"},
+			want: domain.DeploymentStatus{
+				Sync:         domain.Sync{State: domain.SyncStateReconciling, Reason: "Controller progressing rollout at CreateCandidateCapacity"},
+				Health:       domain.Health{Overall: domain.HealthProgressing, Summary: "Creating candidate capacity for weighted target groups"},
+				ManagedDrift: []domain.ManagedDriftItem{{Field: "artifact", Desired: "v9", Actual: "v7", Severity: domain.ManagedDriftSeverityHigh}},
+				Rollout:      &domain.RolloutSummary{Phase: domain.RolloutPhaseProvisioning, CurrentStep: string(reconcile.StepCreateCandidateCapacity), Summary: "Creating candidate capacity for weighted target groups"},
+			},
 		},
 		{
 			name:   "preserves controller-owned synced state when no managed drift exists",
-			status: domain.DeploymentStatus{Sync: domain.Sync{State: domain.SyncStateSynced, Reason: "Controller marked deployment synced"}},
+			status: domain.DeploymentStatus{Sync: domain.Sync{State: domain.SyncStateSynced, Reason: controllerMarkedSyncedReason}},
 			plan:   completedPlan,
-			want:   domain.Sync{State: domain.SyncStateSynced, Reason: "Controller marked deployment synced"},
+			want:   domain.DeploymentStatus{Sync: domain.Sync{State: domain.SyncStateSynced, Reason: controllerMarkedSyncedReason}},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := applyControllerManagedDriftSyncState(tt.status, tt.plan)
-			if got.Sync != tt.want {
-				t.Fatalf("expected sync %+v, got %+v", tt.want, got.Sync)
+			got := applyControllerManagedDriftStatus(tt.status, tt.plan)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("expected status %+v, got %+v", tt.want, got)
 			}
 		})
 	}
@@ -568,7 +589,7 @@ func TestEmitRuntimePlansBackfillsObservedGenerationForSyncedHealthySnapshotBefo
 	if status.Health != (domain.Health{Overall: domain.HealthHealthy, Summary: "seeded health"}) {
 		t.Fatalf("expected seeded health to be preserved, got %+v", status.Health)
 	}
-	if status.Rollout == nil || status.Rollout.Phase != domain.RolloutPhaseCompleted || status.Rollout.CurrentStep != "" || status.Rollout.Summary != "Deployment is synced and healthy" {
+	if status.Rollout == nil || status.Rollout.Phase != domain.RolloutPhaseCompleted || status.Rollout.CurrentStep != "" || status.Rollout.Summary != rolloutHealthySyncedSummary {
 		t.Fatalf("expected synced rollout summary after pre-planning observed generation backfill, got %+v", status.Rollout)
 	}
 }
@@ -1477,7 +1498,7 @@ func TestEmitRuntimePlansPersistsHealthySyncedRolloutSummaryWhenGenerationsMatch
 	if status.Rollout.CurrentStep != "" {
 		t.Fatalf("expected completed rollout to clear current step, got %+v", status.Rollout)
 	}
-	if status.Rollout.Summary != "Deployment is synced and healthy" {
+	if status.Rollout.Summary != rolloutHealthySyncedSummary {
 		t.Fatalf("expected healthy synced rollout summary, got %+v", status.Rollout)
 	}
 	wantStatuses := []string{"completed"}
@@ -2138,6 +2159,12 @@ func TestEmitRuntimePlansMarksControllerOwnedCompletedSyncAsDriftedWhenManagedDr
 	if status.Sync != (domain.Sync{State: domain.SyncStateSynced, Reason: "seeded sync"}) {
 		t.Fatalf("expected seeded sync to remain authoritative, got %+v", status.Sync)
 	}
+	if status.Health != (domain.Health{Overall: domain.HealthHealthy, Summary: "seeded health"}) {
+		t.Fatalf("expected seeded health to remain authoritative, got %+v", status.Health)
+	}
+	if status.Rollout == nil || status.Rollout.CurrentStep != string(reconcile.StepCreateCandidateCapacity) || status.Rollout.Summary != "Creating candidate capacity for weighted target groups" {
+		t.Fatalf("expected active rollout summary to remain authoritative while seeded sync/health stay intact, got %+v", status.Rollout)
+	}
 	if len(status.ManagedDrift) == 0 || status.ManagedDrift[0].Field != "artifact" {
 		t.Fatalf("expected managed artifact drift to be persisted, got %+v", status.ManagedDrift)
 	}
@@ -2146,8 +2173,8 @@ func TestEmitRuntimePlansMarksControllerOwnedCompletedSyncAsDriftedWhenManagedDr
 		DeploymentName: "api-prod",
 		Status: domain.DeploymentStatus{
 			ObservedGeneration: desiredGeneration,
-			Sync:               domain.Sync{State: domain.SyncStateSynced, Reason: "Controller marked deployment synced"},
-			Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "Deployment is healthy and synced"},
+			Sync:               domain.Sync{State: domain.SyncStateSynced, Reason: controllerMarkedSyncedReason},
+			Health:             domain.Health{Overall: domain.HealthHealthy, Summary: controllerHealthySyncedSummary},
 			DeployedArtifact:   domain.DeploymentArtifact{Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6"},
 		},
 	}}}
@@ -2158,11 +2185,20 @@ func TestEmitRuntimePlansMarksControllerOwnedCompletedSyncAsDriftedWhenManagedDr
 		t.Fatalf("expected one recording-store snapshot, got %+v", store.snapshots)
 	}
 	controllerStatus := store.snapshots[0].Status
-	if controllerStatus.Sync != (domain.Sync{State: domain.SyncStateDrifted, Reason: "Controller detected managed drift in completed deployment"}) {
+	if controllerStatus.Sync != (domain.Sync{State: domain.SyncStateDrifted, Reason: controllerDriftedSyncReason}) {
 		t.Fatalf("expected controller-owned sync to be marked drifted, got %+v", controllerStatus.Sync)
+	}
+	if controllerStatus.Health != (domain.Health{Overall: domain.HealthHealthy, Summary: controllerHealthyDriftSummary}) {
+		t.Fatalf("expected controller-owned health summary to become drift-aware, got %+v", controllerStatus.Health)
+	}
+	if controllerStatus.Rollout == nil || controllerStatus.Rollout.Summary != rolloutManagedDriftSummary {
+		t.Fatalf("expected controller-authored completed rollout summary to become drift-aware, got %+v", controllerStatus.Rollout)
 	}
 	if len(controllerStatus.History) != 1 || controllerStatus.History[0].Sync != controllerStatus.Sync {
 		t.Fatalf("expected bootstrapped history to capture drifted sync, got %+v", controllerStatus.History)
+	}
+	if len(controllerStatus.History) != 1 || controllerStatus.History[0].Health != controllerStatus.Health || controllerStatus.History[0].Summary != rolloutManagedDriftSummary {
+		t.Fatalf("expected bootstrapped history to capture drift-aware controller text, got %+v", controllerStatus.History)
 	}
 }
 
