@@ -161,6 +161,33 @@ const scenarios = [
     unexpected: 'Failed to load overview:',
   },
   {
+    name: 'account 401 keeps bookmarked route and explains trusted front door retry',
+    search: '?page=account&accountId=210987654321&q=payments&sync=OutOfSync&account=210987654321',
+    route: '/v1/overview/accounts/210987654321',
+    status: 401,
+    body: 'unauthenticated: operator identity missing',
+    expected: [
+      'Account detail',
+      'Authenticated operator required',
+      'Tenet rejected GET /v1/overview/accounts/210987654321 because authenticated identity is required on this operator read route.',
+      'Retry this bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers.',
+    ],
+    unexpected: 'Failed to load overview:',
+  },
+  {
+    name: 'account 403 keeps bookmarked route and explains operator authorization failure',
+    search: '?page=account&accountId=210987654321&q=payments',
+    route: '/v1/overview/accounts/210987654321',
+    status: 403,
+    body: 'forbidden: operator does not have access to this deployment',
+    expected: [
+      'Account detail',
+      'Operator access denied',
+      'Tenet rejected GET /v1/overview/accounts/210987654321 after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment.',
+    ],
+    unexpected: 'Failed to load overview:',
+  },
+  {
     name: 'application 401 keeps bookmarked route and explains trusted front door retry',
     search: '?page=application&deployment=api-prod',
     route: '/v1/overview/applications/api-prod',

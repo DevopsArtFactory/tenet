@@ -1636,6 +1636,8 @@
         switch (page) {
           case 'applications':
             return 'Applications overview';
+          case 'account':
+            return 'Account detail';
           case 'application':
             return 'Application detail';
           case 'resource':
@@ -1649,10 +1651,13 @@
         }
       };
       const buildEmbeddedPageReadRoute = (pageState = currentPageState) => {
+        const accountID = pageState?.accountId || '{awsAccountId}';
         const deploymentName = pageState?.deployment || '{deploymentName}';
         switch (pageState?.page) {
           case 'applications':
             return 'GET /v1/overview/applications';
+          case 'account':
+            return `GET /v1/overview/accounts/${accountID}`;
           case 'application':
             return `GET /v1/overview/applications/${deploymentName}`;
           case 'resource':
@@ -2202,6 +2207,10 @@
       const fetchApplicationsOverview = () => fetchEmbeddedReadRouteJSON('/v1/overview/applications', {
         unavailable: 'applications overview unavailable',
         failure: 'applications overview request failed',
+      });
+      const fetchAccountDetail = (accountID) => fetchEmbeddedReadRouteJSON(`/v1/overview/accounts/${encodeURIComponent(accountID)}`, {
+        unavailable: 'account detail unavailable',
+        failure: 'account detail request failed',
       });
       const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {
         unavailable: 'application detail unavailable',
@@ -4213,15 +4222,15 @@
         if (!currentPageState.accountId) {
           renderEmptyState('account page is missing an accountId query parameter');
         } else {
-          fetch(`/v1/overview/accounts/${encodeURIComponent(currentPageState.accountId)}`)
-            .then((response) => {
-              if (!response.ok) throw new Error(`overview request failed (${response.status})`);
-              return response.json();
-            })
+          fetchAccountDetail(currentPageState.accountId)
             .then((account) => {
               renderAccountDetailPage(account);
             })
             .catch((error) => {
+              if (operatorReadFailureHeading(error)) {
+                renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);
+                return;
+              }
               renderEmptyState(`Failed to load overview: ${error.message}`);
             });
         }

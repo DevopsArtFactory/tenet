@@ -213,6 +213,9 @@ The page is backed directly by `GET /v1/audit-logs` and currently focuses on:
 - explicit actor-unavailable or actor-unknown labeling instead of fabricated identity
 - `_self` links back into `/?page=application&deployment={deploymentName}` as `Open application drill-down` and `/?page=plan&deployment={deploymentName}&planId={planId}&applyId={applyId}` as `Open plan/apply workspace` when those identifiers exist
 
+### Account detail
+Open `/?page=account&accountId={awsAccountId}` to get the denser account/group deployment slice without leaving the embedded shell. Its initial `GET /v1/overview/accounts/{awsAccountId}` load now uses the same operator-read auth handling as the other bookmarkable drill-downs: `401` tells the operator to reopen the same page through the trusted front door so identity can be forwarded, `403` explains that identity was recognized but this operator is not authorized for that route or deployment, and other statuses keep the existing unavailable/generic fetch-error behavior.
+
 ### Application detail
 Open one application to see the linked rollout resources grouped into clear sections such as:
 - workloads
