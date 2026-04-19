@@ -1811,6 +1811,16 @@
         }
         return button;
       };
+      const renderOperatorReadFailurePanel = (container, title, actions, route, error) => {
+        const heading = operatorReadFailureHeading(error);
+        if (!heading) return false;
+        container.replaceChildren(
+          createDetailSectionHeader(title, actions),
+          createElement('div', 'detail-state error', heading),
+          createElement('div', 'detail-condition-meta', operatorReadFailureMessage(route, error)),
+        );
+        return true;
+      };
       const renderDetailState = (container, text, className = '') => {
         const stateNode = createElement('div', 'detail-state', text);
         if (className) stateNode.classList.add(className);
@@ -1865,6 +1875,14 @@
           () => renderResourceLogsSection(section, deploymentName, resource, { force: true }).catch(() => {}),
         ),
       ];
+      const buildResourceLogsRoute = (deploymentName, resource) => {
+        const params = new URLSearchParams({
+          resourceType: resource?.type || '',
+          resourceName: resource?.name || '',
+        });
+        return `/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-logs?${params.toString()}`;
+      };
+      const resourceLogsReadRoute = (deploymentName, resource) => `GET ${buildResourceLogsRoute(deploymentName, resource)}`;
       const lookupContextFields = (lookupContext) => resourceLogsLookupContextFields(lookupContext);
       const createLookupContextGrid = (lookupContext, extraFields = []) => {
         const metadata = createElement('div', 'detail-grid');
@@ -1886,15 +1904,7 @@
         return '—';
       };
       const fetchResourceLogs = (deploymentName, resource) => {
-        const params = new URLSearchParams({
-          resourceType: resource.type || '',
-          resourceName: resource.name || '',
-        });
-        return fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-logs?${params.toString()}`)
-          .then((response) => {
-            if (!response.ok) throw new Error(`resource logs request failed (${response.status})`);
-            return response.json();
-          });
+        return fetchResourcePanelJSON(buildResourceLogsRoute(deploymentName, resource), 'resource logs request failed');
       };
       const renderResourceLogsPayload = (section, deploymentName, resource, result) => {
         const actions = createResourceLogsActions(section, deploymentName, resource);
@@ -1968,14 +1978,25 @@
           .catch((error) => {
             const current = resourceLogStateByKey.get(logsKey);
             resourceLogStateByKey.set(logsKey, { status: 'error', error });
-            (current?.sections || []).forEach((container) => renderResourceLogsState(
-              container,
-              `Failed to load recent logs: ${error.message}`,
-              'error',
-              [],
-              [],
-              createResourceLogsActions(container, deploymentName, resource),
-            ));
+            (current?.sections || []).forEach((container) => {
+              if (renderOperatorReadFailurePanel(
+                container,
+                'Recent logs',
+                createResourceLogsActions(container, deploymentName, resource),
+                resourceLogsReadRoute(deploymentName, resource),
+                error,
+              )) {
+                return;
+              }
+              renderResourceLogsState(
+                container,
+                `Failed to load recent logs: ${error.message}`,
+                'error',
+                [],
+                [],
+                createResourceLogsActions(container, deploymentName, resource),
+              );
+            });
             throw error;
           });
 
@@ -1983,17 +2004,16 @@
         return promise;
       };
       const resourceInspectionCacheKey = (deploymentName, resource) => resourceLogCacheKey(deploymentName, resource);
-      const fetchResourceInspection = (deploymentName, resource) => {
+      const buildResourceInspectionRoute = (deploymentName, resource) => {
         const params = new URLSearchParams({
-          resourceType: resource.type || '',
-          resourceName: resource.name || '',
+          resourceType: resource?.type || '',
+          resourceName: resource?.name || '',
         });
-        return Promise.resolve()
-          .then(() => fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-inspection?${params.toString()}`))
-          .then((response) => {
-            if (!response.ok) throw new Error(`resource inspection request failed (${response.status})`);
-            return response.json();
-          });
+        return `/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-inspection?${params.toString()}`;
+      };
+      const resourceInspectionReadRoute = (deploymentName, resource) => `GET ${buildResourceInspectionRoute(deploymentName, resource)}`;
+      const fetchResourceInspection = (deploymentName, resource) => {
+        return fetchResourcePanelJSON(buildResourceInspectionRoute(deploymentName, resource), 'resource inspection request failed');
       };
       const createResourceInspectionActions = (section, deploymentName, resource, isLoading = false) => [
         createRefreshButton(
@@ -2272,14 +2292,25 @@
           .catch((error) => {
             const current = resourceInspectionStateByKey.get(inspectionKey);
             resourceInspectionStateByKey.set(inspectionKey, { status: 'error', error });
-            (current?.sections || []).forEach((container) => renderResourceInspectionState(
-              container,
-              `Failed to load live inspection: ${error.message}`,
-              'error',
-              [],
-              [],
-              createResourceInspectionActions(container, deploymentName, resource),
-            ));
+            (current?.sections || []).forEach((container) => {
+              if (renderOperatorReadFailurePanel(
+                container,
+                'Live inspection',
+                createResourceInspectionActions(container, deploymentName, resource),
+                resourceInspectionReadRoute(deploymentName, resource),
+                error,
+              )) {
+                return;
+              }
+              renderResourceInspectionState(
+                container,
+                `Failed to load live inspection: ${error.message}`,
+                'error',
+                [],
+                [],
+                createResourceInspectionActions(container, deploymentName, resource),
+              );
+            });
             throw error;
           });
 
@@ -2301,6 +2332,18 @@
           })
           .catch(() => fallback);
       };
+      const fetchResourcePanelJSON = (route, failureLabel) => Promise.resolve()
+        .then(() => fetch(route))
+        .then((response) => {
+          if (response.ok) return response.json();
+          const fallback = `${failureLabel} (${response.status})`;
+          if (response.status === 401 || response.status === 403) {
+            return responseErrorMessage(response, fallback).then((message) => {
+              throw requestError('fetch-error', message, response.status);
+            });
+          }
+          throw new Error(fallback);
+        });
       const fetchEmbeddedReadRouteJSON = (route, labels) => fetch(route)
         .then((response) => {
           if (response.ok) return response.json();
