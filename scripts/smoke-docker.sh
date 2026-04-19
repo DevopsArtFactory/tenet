@@ -132,6 +132,26 @@ write_payload() {
   printf '%s' "$path"
 }
 
+json_string_field_from_path() {
+  local path=$1
+  local field=$2
+
+  python3 - "$path" "$field" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+value = payload.get(sys.argv[2])
+if value is None:
+    print("")
+elif not isinstance(value, str):
+    raise SystemExit(f"expected string field {sys.argv[2]!r} in {sys.argv[1]}")
+else:
+    print(value.strip())
+PY
+}
+
 wait_for_api_health() {
   for _ in $(seq 1 60); do
     if curl -fsS "$API_BASE_URL/healthz" >/dev/null 2>&1; then
@@ -147,16 +167,12 @@ wait_for_apply_status() {
   local apply_id=$1
   local expected_status=$2
   local response='{}'
+  local response_path
 
   for _ in $(seq 1 50); do
     response=$(curl -fsS "$API_BASE_URL/v1/applies/$apply_id")
-    current_status=$(APPLY_RECORD_JSON="$response" python3 - <<'PY'
-import json
-import os
-
-print(json.loads(os.environ["APPLY_RECORD_JSON"])["status"])
-PY
-)
+    response_path=$(write_payload wait-for-apply-status.json "$response")
+    current_status=$(json_string_field_from_path "$response_path" status)
     if [[ "$current_status" == "$expected_status" ]]; then
       printf '%s' "$response"
       return 0
@@ -196,13 +212,8 @@ audit_logs_request_id=$(assert_request_id_header "$API_BASE_URL/v1/audit-logs?ac
 summary=$(curl -fsS "$API_BASE_URL/v1/catalog/summary")
 applications=$(curl -fsS "$API_BASE_URL/v1/overview/applications")
 deployment_detail=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod")
-deployment_source_fingerprint=$(DEPLOYMENT_DETAIL_JSON="$deployment_detail" python3 - <<'PY'
-import json
-import os
-
-print((json.loads(os.environ["DEPLOYMENT_DETAIL_JSON"]).get("sourceFingerprint") or "").strip())
-PY
-)
+deployment_detail_extract_path=$(write_payload deployment-detail.extract.json "$deployment_detail")
+deployment_source_fingerprint=$(json_string_field_from_path "$deployment_detail_extract_path" sourceFingerprint)
 plan_preview_request_body=$(DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" python3 - <<'PY'
 import json
 import os
@@ -212,20 +223,18 @@ print(json.dumps({"ifMatch": fingerprint} if fingerprint else {}))
 PY
 )
 plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d "$plan_preview_request_body" "$API_BASE_URL/v1/plans/deployments/payments-api-prod")
-plan_id=$(PLAN_PREVIEW_JSON="$plan_preview" python3 - <<'PY'
-import json
-import os
-
-print(json.loads(os.environ["PLAN_PREVIEW_JSON"])["id"])
-PY
-)
+plan_preview_extract_path=$(write_payload plan-preview.extract.json "$plan_preview")
+plan_id=$(json_string_field_from_path "$plan_preview_extract_path" id)
 plan_preview_get=$(curl -fsS "$API_BASE_URL/v1/plans/$plan_id")
-plan_status=$(PLAN_PREVIEW_JSON="$plan_preview" PLAN_PREVIEW_GET_JSON="$plan_preview_get" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" python3 - <<'PY'
+plan_preview_get_extract_path=$(write_payload plan-preview-get.extract.json "$plan_preview_get")
+plan_status=$(PLAN_PREVIEW_PATH="$plan_preview_extract_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_extract_path" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" python3 - <<'PY'
 import json
 import os
 
-plan_preview = json.loads(os.environ["PLAN_PREVIEW_JSON"])
-plan_preview_get = json.loads(os.environ["PLAN_PREVIEW_GET_JSON"])
+with open(os.environ["PLAN_PREVIEW_PATH"], encoding="utf-8") as fh:
+    plan_preview = json.load(fh)
+with open(os.environ["PLAN_PREVIEW_GET_PATH"], encoding="utf-8") as fh:
+    plan_preview_get = json.load(fh)
 deployment_source_fingerprint = os.environ["DEPLOYMENT_SOURCE_FINGERPRINT"]
 
 assert plan_preview["deploymentName"] == "payments-api-prod", plan_preview
@@ -254,13 +263,8 @@ if [[ "$plan_status" != "ready" ]]; then
   exit 1
 fi
 apply_record=$(curl -fsS -X POST "$API_BASE_URL/v1/applies/plans/$plan_id")
-apply_id=$(APPLY_RECORD_JSON="$apply_record" python3 - <<'PY'
-import json
-import os
-
-print(json.loads(os.environ["APPLY_RECORD_JSON"])["id"])
-PY
-)
+apply_record_extract_path=$(write_payload apply-record.extract.json "$apply_record")
+apply_id=$(json_string_field_from_path "$apply_record_extract_path" id)
 apply_record_get=$(curl -fsS "$API_BASE_URL/v1/applies/$apply_id")
 invalid_apply_transition_status=$(curl -sS -o "$INVALID_APPLY_TRANSITION_BODY" -w "%{http_code}" \
   -X POST \
@@ -287,13 +291,8 @@ actor_plan_preview=$(curl -fsS -X POST \
   -H 'X-User-Email: jane@example.com' \
   -d '{}' \
   "$API_BASE_URL/v1/plans/deployments/payments-api-staging")
-actor_plan_id=$(ACTOR_PLAN_PREVIEW_JSON="$actor_plan_preview" python3 - <<'PY'
-import json
-import os
-
-print(json.loads(os.environ["ACTOR_PLAN_PREVIEW_JSON"])["id"])
-PY
-)
+actor_plan_preview_extract_path=$(write_payload actor-plan-preview.extract.json "$actor_plan_preview")
+actor_plan_id=$(json_string_field_from_path "$actor_plan_preview_extract_path" id)
 actor_plan_preview_get=$(curl -fsS "$API_BASE_URL/v1/plans/$actor_plan_id")
 actor_apply_record=$(curl -fsS -X POST \
   -H 'X-Tenet-Actor-Id: explicit-456' \
@@ -303,13 +302,8 @@ actor_apply_record=$(curl -fsS -X POST \
   -H 'X-User-Name: Jane Operator' \
   -H 'X-User-Email: jane@example.com' \
   "$API_BASE_URL/v1/applies/plans/$actor_plan_id")
-actor_apply_id=$(ACTOR_APPLY_RECORD_JSON="$actor_apply_record" python3 - <<'PY'
-import json
-import os
-
-print(json.loads(os.environ["ACTOR_APPLY_RECORD_JSON"])["id"])
-PY
-)
+actor_apply_record_extract_path=$(write_payload actor-apply-record.extract.json "$actor_apply_record")
+actor_apply_id=$(json_string_field_from_path "$actor_apply_record_extract_path" id)
 actor_apply_record_get=$(curl -fsS "$API_BASE_URL/v1/applies/$actor_apply_id")
 deployment_events=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/events")
 worker_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
@@ -794,36 +788,32 @@ fi
 restart_api_with_apply_mode true
 
 queued_plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d "$plan_preview_request_body" "$API_BASE_URL/v1/plans/deployments/payments-api-prod")
-queued_plan_id=$(QUEUED_PLAN_PREVIEW_JSON="$queued_plan_preview" python3 - <<'PY'
-import json
-import os
-
-print(json.loads(os.environ["QUEUED_PLAN_PREVIEW_JSON"])["id"])
-PY
-)
+queued_plan_preview_path=$(write_payload queued-plan-preview.json "$queued_plan_preview")
+queued_plan_id=$(json_string_field_from_path "$queued_plan_preview_path" id)
 queued_plan_preview_get=$(curl -fsS "$API_BASE_URL/v1/plans/$queued_plan_id")
 queued_apply_record=$(curl -fsS -X POST "$API_BASE_URL/v1/applies/plans/$queued_plan_id")
-queued_apply_id=$(QUEUED_APPLY_RECORD_JSON="$queued_apply_record" python3 - <<'PY'
-import json
-import os
-
-print(json.loads(os.environ["QUEUED_APPLY_RECORD_JSON"])["id"])
-PY
-)
+queued_apply_record_path=$(write_payload queued-apply-record.json "$queued_apply_record")
+queued_apply_id=$(json_string_field_from_path "$queued_apply_record_path" id)
 queued_apply_record_get=$(wait_for_apply_status "$queued_apply_id" failed)
+queued_plan_preview_get_path=$(write_payload queued-plan-preview-get.json "$queued_plan_preview_get")
+queued_apply_record_get_path=$(write_payload queued-apply-record-get.json "$queued_apply_record_get")
 
-QUEUED_PLAN_PREVIEW_JSON="$queued_plan_preview" \
-QUEUED_PLAN_PREVIEW_GET_JSON="$queued_plan_preview_get" \
-QUEUED_APPLY_RECORD_JSON="$queued_apply_record" \
-QUEUED_APPLY_RECORD_GET_JSON="$queued_apply_record_get" \
+QUEUED_PLAN_PREVIEW_PATH="$queued_plan_preview_path" \
+QUEUED_PLAN_PREVIEW_GET_PATH="$queued_plan_preview_get_path" \
+QUEUED_APPLY_RECORD_PATH="$queued_apply_record_path" \
+QUEUED_APPLY_RECORD_GET_PATH="$queued_apply_record_get_path" \
 python3 - <<'PY'
 import json
 import os
 
-queued_plan_preview = json.loads(os.environ["QUEUED_PLAN_PREVIEW_JSON"])
-queued_plan_preview_get = json.loads(os.environ["QUEUED_PLAN_PREVIEW_GET_JSON"])
-queued_apply_record = json.loads(os.environ["QUEUED_APPLY_RECORD_JSON"])
-queued_apply_record_get = json.loads(os.environ["QUEUED_APPLY_RECORD_GET_JSON"])
+with open(os.environ["QUEUED_PLAN_PREVIEW_PATH"], encoding="utf-8") as fh:
+    queued_plan_preview = json.load(fh)
+with open(os.environ["QUEUED_PLAN_PREVIEW_GET_PATH"], encoding="utf-8") as fh:
+    queued_plan_preview_get = json.load(fh)
+with open(os.environ["QUEUED_APPLY_RECORD_PATH"], encoding="utf-8") as fh:
+    queued_apply_record = json.load(fh)
+with open(os.environ["QUEUED_APPLY_RECORD_GET_PATH"], encoding="utf-8") as fh:
+    queued_apply_record_get = json.load(fh)
 
 assert queued_plan_preview["deploymentName"] == "payments-api-prod", queued_plan_preview
 assert queued_plan_preview["status"] == "ready", queued_plan_preview

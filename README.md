@@ -146,6 +146,8 @@ Use `make smoke-local` for the fastest fixture-backed API/UI regression check wh
 
 GitHub Actions mirrors those checks in two lanes under `.github/workflows/ci-smoke.yml`. The fast lane runs on every pull request plus pushes to `main`, pins the Go toolchain from `go.mod`, then runs `go test ./...` and `make smoke-local`. The slower Docker lane stays outside the PR fast path and runs `make smoke-docker` only on pushes to `main` and manual `workflow_dispatch` runs.
 
+Both smoke scripts keep intermediate deployment-detail, plan-preview, and apply-record payloads on temp files via the shared `write_payload` helper instead of passing full JSON blobs through environment variables. That keeps the shell/Python handoff portable on Linux CI runners where environment-size limits are tighter than local shells.
+
 ### Run with Docker
 
 ```bash
