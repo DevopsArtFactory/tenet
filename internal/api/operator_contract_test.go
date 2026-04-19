@@ -608,7 +608,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		`assert "worker-prod" in filtered_application_names, filtered_applications_collection`,
 		`assert filtered_application_names == {"payments-api-prod", "worker-prod"}, filtered_applications_collection`,
 		`filtered_status_deployment_names = {row["deploymentName"] for row in filtered_status_collection}`,
-		`assert filtered_status_deployment_names == {"payments-api-prod"}, filtered_status_collection`,
+		`assert filtered_status_deployment_names == {"payments-api-prod", "worker-prod"}, filtered_status_collection`,
 		`assert empty_applications_collection == [], empty_applications_collection`,
 		`assert empty_status_collection == [], empty_status_collection`,
 	} {
@@ -646,6 +646,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"restarts the Compose `api` service with `TENET_API_TRUST_AUTHENTICATED_HEADERS=true` plus `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` to prove unauthenticated `GET /v1/overview/applications`, unauthenticated `GET /v1/status/deployments`, and unauthenticated `GET /v1/overview/accounts` fail with `401`",
 		"unauthenticated `GET /v1/status/deployments`",
 		"trusted `X-Tenet-Authorized-Deployments` filters the returned application rows, raw status snapshots, and account aggregates",
+		"when both `payments-api-prod` and `worker-prod` are allowlisted, the Compose smoke proves the controller-populated raw status collection returns both rows",
 		"omitting that allowlist returns `[]` for those guarded collections",
 		"`GET /v1/status/deployments/{deploymentName}` outside the allowlist fails with `403`",
 		"one allowed raw status detail read succeeds",
@@ -690,6 +691,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"restarts the Compose `api` service with `TENET_API_TRUST_AUTHENTICATED_HEADERS=true` plus `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` to prove unauthenticated `GET /v1/overview/applications`, unauthenticated `GET /v1/status/deployments`, and unauthenticated `GET /v1/overview/accounts` fail with `401`",
 		"unauthenticated `GET /v1/status/deployments`",
 		"trusted `X-Tenet-Authorized-Deployments` filters the returned application rows, raw status snapshots, and account aggregates",
+		"when both `payments-api-prod` and `worker-prod` are allowlisted, the Compose smoke proves the controller-populated raw status collection returns both rows",
 		"omitting that allowlist returns `[]` for those guarded collections",
 		"`GET /v1/status/deployments/{deploymentName}` outside the allowlist fails with `403`",
 		"one allowed raw status detail read succeeds",
@@ -710,6 +712,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`403 Forbidden` plus `forbidden: operator does not have access to this deployment`",
 		"`200 OK` with `[]`",
 		"`make smoke-docker` restarts the Compose `api` service with trusted-header auth enabled and proves this exact route contract",
+		"when both `payments-api-prod` and `worker-prod` are allowlisted, the Compose smoke proves the controller-populated raw status collection returns both rows",
 		"Only enable that trust when a front door authenticates the caller and strips any client-supplied `X-Tenet-Authenticated-*` headers and `X-Tenet-Authorized-Deployments` before forwarding trusted values.",
 	} {
 		if !strings.Contains(deploymentStatusDoc, fragment) {
