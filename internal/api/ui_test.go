@@ -450,10 +450,12 @@ func TestEmbeddedUIIncludesOperatorReadAuthGuidanceContract(t *testing.T) {
 		"const operatorFetchErrorPillLabel = (state) => {",
 		"if (operatorReadStateForbidden(state)) return 'Access denied';",
 		"const embeddedPageTitle = (page) => {",
+		"return 'Applications overview';",
 		"return 'Application detail';",
 		"return 'Resource detail';",
 		"return 'Drift viewer';",
 		"const buildEmbeddedPageReadRoute = (pageState = currentPageState) => {",
+		"return 'GET /v1/overview/applications';",
 		"return `GET /v1/overview/applications/${deploymentName}`;",
 		"return `GET /v1/overview/deployments/${deploymentName}`;",
 		"return `GET ${buildAuditLogsRoute({",
@@ -825,12 +827,15 @@ func TestEmbeddedUIIncludesOverviewStatusInFetchErrors(t *testing.T) {
 	body := string(indexHTML)
 
 	for _, fragment := range []string{
-		"fetch('/v1/overview/applications')",
-		"if (!response.ok) throw new Error(`overview request failed (${response.status})`);",
+		"const fetchApplicationsOverview = () => fetchEmbeddedReadRouteJSON('/v1/overview/applications', {",
+		"unavailable: 'applications overview unavailable',",
+		"failure: 'applications overview request failed',",
 		"const labels = changeLabels(runtimeSummary?.changes);",
 		"['Latest runtime', runtimeSummaryText(deployment.runtimeSummary), 'summary']",
 		"['Latest changes', changeLabelsText(deployment.runtimeSummary?.changes)]",
 		"['Runtime timestamp', runtimeSummaryTimestamp(deployment.runtimeSummary)]",
+		"fetchApplicationsOverview()",
+		"renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);",
 		"renderEmptyState(`Failed to load overview: ${error.message}`);",
 	} {
 		if !strings.Contains(body, fragment) {
@@ -1302,6 +1307,12 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert \"const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page fetch route contract")
+	}
+	if !strings.Contains(text, "assert \"const fetchApplicationsOverview = () => fetchEmbeddedReadRouteJSON('/v1/overview/applications', {\" in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert applications landing page fetch route contract")
+	}
+	if !strings.Contains(text, "assert \"return 'Applications overview';\" in ui, ui") || !strings.Contains(text, "assert \"return 'GET /v1/overview/applications';\" in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert landing-page operator read auth labels")
 	}
 	if !strings.Contains(text, "assert \"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page resource link contract")

@@ -134,6 +134,33 @@ async function settle() { await Promise.resolve(); await new Promise((resolve) =
 
 const scenarios = [
   {
+    name: 'applications overview 401 explains trusted front door retry',
+    search: '?q=payments&sync=OutOfSync&account=210987654321',
+    route: '/v1/overview/applications',
+    status: 401,
+    body: 'unauthenticated: operator identity missing',
+    expected: [
+      'Applications overview',
+      'Authenticated operator required',
+      'Tenet rejected GET /v1/overview/applications because authenticated identity is required on this operator read route.',
+      'Retry this bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers.',
+    ],
+    unexpected: 'Failed to load overview:',
+  },
+  {
+    name: 'applications overview 403 explains operator authorization failure',
+    search: '?q=payments',
+    route: '/v1/overview/applications',
+    status: 403,
+    body: 'forbidden: operator does not have access to this deployment',
+    expected: [
+      'Applications overview',
+      'Operator access denied',
+      'Tenet rejected GET /v1/overview/applications after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment.',
+    ],
+    unexpected: 'Failed to load overview:',
+  },
+  {
     name: 'application 401 keeps bookmarked route and explains trusted front door retry',
     search: '?page=application&deployment=api-prod',
     route: '/v1/overview/applications/api-prod',

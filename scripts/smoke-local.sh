@@ -744,6 +744,10 @@ assert isinstance(traffic_resource_inspection['trafficRoutingResource'].get('sum
 assert 'Application status overview' in ui, ui
 assert '/v1/overview/applications' in ui, ui
 assert '/v1/overview/applications/${encodeURIComponent(deploymentName)}' in ui, ui
+assert "const fetchApplicationsOverview = () => fetchEmbeddedReadRouteJSON('/v1/overview/applications', {" in ui, ui
+assert "failure: 'applications overview request failed'," in ui, ui
+assert "return 'Applications overview';" in ui, ui
+assert "return 'GET /v1/overview/applications';" in ui, ui
 assert 'Open account' in ui, ui
 assert 'Open application' in ui, ui
 assert 'Open audit log' in ui, ui

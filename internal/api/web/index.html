@@ -1617,6 +1617,8 @@
       };
       const embeddedPageTitle = (page) => {
         switch (page) {
+          case 'applications':
+            return 'Applications overview';
           case 'application':
             return 'Application detail';
           case 'resource':
@@ -1632,6 +1634,8 @@
       const buildEmbeddedPageReadRoute = (pageState = currentPageState) => {
         const deploymentName = pageState?.deployment || '{deploymentName}';
         switch (pageState?.page) {
+          case 'applications':
+            return 'GET /v1/overview/applications';
           case 'application':
             return `GET /v1/overview/applications/${deploymentName}`;
           case 'resource':
@@ -2178,6 +2182,10 @@
             throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);
           });
         });
+      const fetchApplicationsOverview = () => fetchEmbeddedReadRouteJSON('/v1/overview/applications', {
+        unavailable: 'applications overview unavailable',
+        failure: 'applications overview request failed',
+      });
       const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {
         unavailable: 'application detail unavailable',
         failure: 'application detail request failed',
@@ -4153,11 +4161,7 @@
       currentPageState = parsePageState();
       currentViewState = parseViewState();
       if (currentPageState.page === 'applications') {
-        fetch('/v1/overview/applications')
-          .then((response) => {
-            if (!response.ok) throw new Error(`overview request failed (${response.status})`);
-            return response.json();
-          })
+        fetchApplicationsOverview()
           .then((applications) => {
             allApplications = applications;
             currentViewState = normalizeViewState(applications, parseViewState());
@@ -4165,6 +4169,10 @@
             renderApplicationsOverview(applications);
           })
           .catch((error) => {
+            if (operatorReadFailureHeading(error)) {
+              renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);
+              return;
+            }
             renderEmptyState(`Failed to load overview: ${error.message}`);
           });
       } else if (currentPageState.page === 'audit') {
