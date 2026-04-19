@@ -1907,6 +1907,31 @@ func TestAppendRuntimeHistoryTracksArtifactAndConditionChanges(t *testing.T) {
 	}
 }
 
+func TestRuntimeHistoryChangeDetailsDescribeManagedDriftRowDeltas(t *testing.T) {
+	previous := domain.StatusHistoryEntry{
+		ManagedDrift: []domain.ManagedDriftItem{
+			{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6", Severity: domain.ManagedDriftSeverityHigh},
+			{Field: "generation", Desired: "9", Actual: "7", Severity: domain.ManagedDriftSeverityMedium},
+		},
+	}
+	current := domain.StatusHistoryEntry{
+		ManagedDrift: []domain.ManagedDriftItem{
+			{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r8", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7", Severity: domain.ManagedDriftSeverityHigh},
+			{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityMedium},
+		},
+	}
+
+	if changes := runtimeHistoryChanges(previous, current); !reflect.DeepEqual(changes, []string{"managedDrift"}) {
+		t.Fatalf("expected managedDrift to remain a single aligned change label, got %+v", changes)
+	}
+	want := []string{
+		"Managed drift changed: added rows runtimeContext.capacity.desired [medium] (desired=6, actual=4); removed rows generation [medium] (desired=9, actual=7); updated rows artifact from [high] (desired=s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7, actual=s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6) to [high] (desired=s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r8, actual=s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7)",
+	}
+	if details := runtimeHistoryChangeDetails(previous, current); !reflect.DeepEqual(details, want) {
+		t.Fatalf("expected managed drift changeDetails to describe deterministic row deltas, got %+v", details)
+	}
+}
+
 func TestDeriveManagedDriftItemsCoversArtifactGenerationAndRuntimeIntent(t *testing.T) {
 	deployment := domain.Deployment{
 		Name:            "payments-api-prod",

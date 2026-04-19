@@ -406,20 +406,22 @@ func normalizeManagedDriftItems(items []domain.ManagedDriftItem) []domain.Manage
 	}
 	normalized := append([]domain.ManagedDriftItem(nil), items...)
 	sort.Slice(normalized, func(i, j int) bool {
-		left := normalized[i]
-		right := normalized[j]
-		if left.Field != right.Field {
-			return left.Field < right.Field
-		}
-		if left.Desired != right.Desired {
-			return left.Desired < right.Desired
-		}
-		if left.Actual != right.Actual {
-			return left.Actual < right.Actual
-		}
-		return left.Severity < right.Severity
+		return managedDriftItemLess(normalized[i], normalized[j])
 	})
 	return normalized
+}
+
+func managedDriftItemLess(left domain.ManagedDriftItem, right domain.ManagedDriftItem) bool {
+	if left.Field != right.Field {
+		return left.Field < right.Field
+	}
+	if left.Desired != right.Desired {
+		return left.Desired < right.Desired
+	}
+	if left.Actual != right.Actual {
+		return left.Actual < right.Actual
+	}
+	return left.Severity < right.Severity
 }
 
 func runtimeHistoryHasControllerEntry(history []domain.StatusHistoryEntry) bool {
@@ -461,7 +463,7 @@ func runtimeHistoryDiff(previous domain.StatusHistoryEntry, current domain.Statu
 	}
 	if !reflect.DeepEqual(previous.ManagedDrift, current.ManagedDrift) {
 		changes = append(changes, "managedDrift")
-		details = append(details, fmt.Sprintf("Managed drift changed to %s", describeManagedDrift(current.ManagedDrift)))
+		details = append(details, describeManagedDriftDelta(previous.ManagedDrift, current.ManagedDrift))
 	}
 	if !runtimeHistoryConditionsEqual(previous.Conditions, current.Conditions) {
 		changes = append(changes, "conditions")
@@ -533,6 +535,129 @@ func describeManagedDrift(items []domain.ManagedDriftItem) string {
 		parts = append(parts, part)
 	}
 	return strings.Join(parts, ", ")
+}
+
+func describeManagedDriftDelta(previous []domain.ManagedDriftItem, current []domain.ManagedDriftItem) string {
+	previousItems := normalizeManagedDriftItems(previous)
+	currentItems := normalizeManagedDriftItems(current)
+	if !managedDriftItemsHaveUniqueFields(previousItems) || !managedDriftItemsHaveUniqueFields(currentItems) {
+		return fmt.Sprintf("Managed drift changed to %s", describeManagedDrift(currentItems))
+	}
+
+	previousByField := make(map[string]domain.ManagedDriftItem, len(previousItems))
+	for _, item := range previousItems {
+		previousByField[item.Field] = item
+	}
+	currentByField := make(map[string]domain.ManagedDriftItem, len(currentItems))
+	for _, item := range currentItems {
+		currentByField[item.Field] = item
+	}
+
+	added := make([]domain.ManagedDriftItem, 0)
+	removed := make([]domain.ManagedDriftItem, 0)
+	updated := make([]managedDriftUpdate, 0)
+	for _, item := range currentItems {
+		previousItem, ok := previousByField[item.Field]
+		if !ok {
+			added = append(added, item)
+			continue
+		}
+		if previousItem != item {
+			updated = append(updated, managedDriftUpdate{
+				Previous: previousItem,
+				Current:  item,
+			})
+		}
+	}
+	for _, item := range previousItems {
+		if _, ok := currentByField[item.Field]; !ok {
+			removed = append(removed, item)
+		}
+	}
+
+	parts := make([]string, 0, 3)
+	if len(added) > 0 {
+		labels := make([]string, 0, len(added))
+		for _, item := range normalizeManagedDriftItems(added) {
+			labels = append(labels, describeManagedDriftRow(item))
+		}
+		parts = append(parts, "added rows "+strings.Join(labels, ", "))
+	}
+	if len(removed) > 0 {
+		labels := make([]string, 0, len(removed))
+		for _, item := range normalizeManagedDriftItems(removed) {
+			labels = append(labels, describeManagedDriftRow(item))
+		}
+		parts = append(parts, "removed rows "+strings.Join(labels, ", "))
+	}
+	if len(updated) > 0 {
+		sort.Slice(updated, func(i, j int) bool {
+			left := updated[i]
+			right := updated[j]
+			if left.Current.Field != right.Current.Field {
+				return left.Current.Field < right.Current.Field
+			}
+			if managedDriftItemLess(left.Previous, right.Previous) {
+				return true
+			}
+			if managedDriftItemLess(right.Previous, left.Previous) {
+				return false
+			}
+			return managedDriftItemLess(left.Current, right.Current)
+		})
+		labels := make([]string, 0, len(updated))
+		for _, item := range updated {
+			labels = append(labels, describeManagedDriftUpdate(item.Previous, item.Current))
+		}
+		parts = append(parts, "updated rows "+strings.Join(labels, ", "))
+	}
+	if len(parts) == 0 {
+		return fmt.Sprintf("Managed drift changed to %s", describeManagedDrift(currentItems))
+	}
+	return "Managed drift changed: " + strings.Join(parts, "; ")
+}
+
+type managedDriftUpdate struct {
+	Previous domain.ManagedDriftItem
+	Current  domain.ManagedDriftItem
+}
+
+func managedDriftItemsHaveUniqueFields(items []domain.ManagedDriftItem) bool {
+	seen := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		if _, ok := seen[item.Field]; ok {
+			return false
+		}
+		seen[item.Field] = struct{}{}
+	}
+	return true
+}
+
+func describeManagedDriftRow(item domain.ManagedDriftItem) string {
+	state := describeManagedDriftRowState(item)
+	if state == "" {
+		return valueOrUnknown(item.Field)
+	}
+	return fmt.Sprintf("%s %s", valueOrUnknown(item.Field), state)
+}
+
+func describeManagedDriftUpdate(previous domain.ManagedDriftItem, current domain.ManagedDriftItem) string {
+	field := current.Field
+	if field == "" {
+		field = previous.Field
+	}
+	return fmt.Sprintf("%s from %s to %s", valueOrUnknown(field), describeManagedDriftRowState(previous), describeManagedDriftRowState(current))
+}
+
+func describeManagedDriftRowState(item domain.ManagedDriftItem) string {
+	parts := make([]string, 0, 2)
+	if item.Severity != "" {
+		parts = append(parts, fmt.Sprintf("[%s]", item.Severity))
+	}
+	if item.Desired != "" || item.Actual != "" {
+		parts = append(parts, fmt.Sprintf("(desired=%s, actual=%s)", valueOrUnknown(item.Desired), valueOrUnknown(item.Actual)))
+	}
+	return strings.Join(parts, " ")
 }
 
 func describeConditions(conditions []domain.Condition) string {
