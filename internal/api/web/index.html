@@ -96,6 +96,7 @@
       .quick-nav-current, .quick-nav-empty { color: var(--muted); font-size: 13px; }
       .quick-nav-groups, .quick-nav-group { display:grid; gap: 10px; }
       .quick-nav-links { display:flex; flex-wrap:wrap; gap: 10px; }
+      .quick-nav-chip { display:inline-flex; align-items:center; padding: 6px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; border: 1px solid rgba(103,183,255,.24); background: rgba(103,183,255,.08); color: var(--text); }
       .detail-section { padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.05); background: rgba(255,255,255,.03); }
       .detail-section h4 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
       .detail-section-head { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap: 10px; margin-bottom: 10px; }
@@ -720,6 +721,11 @@
         link.target = target;
         link.rel = target === '_blank' ? 'noreferrer noopener' : '';
         return link;
+      };
+      const createQuickNavChip = (text, ariaLabel) => {
+        const chip = createElement('span', 'quick-nav-chip', text);
+        if (ariaLabel) chip.setAttribute('aria-label', ariaLabel);
+        return chip;
       };
       const sortAuditEntries = (entries) => (entries || [])
         .map((entry, index) => ({
@@ -1382,9 +1388,15 @@
         const workspaceLinks = createElement('div', 'quick-nav-links');
         workspaceLinks.append(
           createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self'),
-          createNavLink(buildPageURL('drift', { deployment: deploymentName }), 'Drift view', '_self'),
-          createNavLink(buildPageURL('plan', { deployment: deploymentName }), 'Plan/apply', '_self'),
-          createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self'),
+          currentWorkspace === 'Drift view'
+            ? createQuickNavChip('Drift view', 'Current workspace: Drift view')
+            : createNavLink(buildPageURL('drift', { deployment: deploymentName }), 'Drift view', '_self'),
+          currentWorkspace === 'Plan/apply'
+            ? createQuickNavChip('Plan/apply', 'Current workspace: Plan/apply')
+            : createNavLink(buildPageURL('plan', { deployment: deploymentName }), 'Plan/apply', '_self'),
+          currentWorkspace === 'Audit log'
+            ? createQuickNavChip('Audit log', 'Current workspace: Audit log')
+            : createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self'),
         );
         const groups = createElement('div', 'quick-nav-groups');
         const workspaceGroup = createElement('div', 'quick-nav-group');
@@ -1456,6 +1468,11 @@
           createElement('div', 'quick-nav-label', 'Application'),
           shellLinks,
         );
+        const currentResourceGroup = createElement('div', 'quick-nav-group');
+        currentResourceGroup.append(
+          createElement('div', 'quick-nav-label', 'Current resource'),
+          createQuickNavChip(resource.name, `Current resource: ${resource.name}`),
+        );
         const siblingGroup = createElement('div', 'quick-nav-group');
         siblingGroup.append(createElement('div', 'quick-nav-label', 'Sibling resources'));
         if (siblingLinks.children.length) {
@@ -1463,7 +1480,7 @@
         } else {
           siblingGroup.append(createElement('div', 'quick-nav-empty', 'No sibling linked resources are available for this application.'));
         }
-        groups.append(appGroup, siblingGroup);
+        groups.append(appGroup, currentResourceGroup, siblingGroup);
         const head = createElement('div', 'quick-nav-head');
         head.append(
           createElement('div', 'quick-nav-title', 'Quick navigation'),

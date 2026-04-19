@@ -785,9 +785,10 @@ assert 'Auto Scaling Group name' in ui, ui
 assert 'Launch template' in ui, ui
 assert 'Target group ARNs' in ui, ui
 assert 'Mixed instances overrides' in ui, ui
-assert "createNavLink(buildPageURL('drift', { deployment: detail.name }), 'Drift view', '_self')" in ui, ui
-assert "createNavLink(buildPageURL('plan', { deployment: detail.name }), 'Plan/apply', '_self')" in ui, ui
-assert "createNavLink(buildPageURL('audit', { deployment: detail.name }), 'Audit log', '_self')" in ui, ui
+assert "const createQuickNavChip = (text, ariaLabel) => {" in ui, ui
+assert "createQuickNavChip('Drift view', 'Current workspace: Drift view')" in ui, ui
+assert "createQuickNavChip('Plan/apply', 'Current workspace: Plan/apply')" in ui, ui
+assert "createQuickNavChip('Audit log', 'Current workspace: Audit log')" in ui, ui
 assert "createNavLink(buildPageURL('audit', { deployment: detail.name || currentPageState.deployment || '' }), 'Audit log', '_self')" in ui, ui
 assert "const createWorkspaceQuickNav = (detail, mode) => {" in ui, ui
 assert "const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';" in ui, ui
@@ -798,7 +799,9 @@ assert "createElement('div', 'quick-nav-current', `${deploymentName || 'Deployme
 assert "header.append(head, createWorkspaceQuickNav(detail, mode), ...sections);" in ui, ui
 assert "const createResourceQuickNav = (detail, resource) => {" in ui, ui
 assert "createElement('div', 'quick-nav-title', 'Quick navigation')" in ui, ui
+assert "createElement('div', 'quick-nav-label', 'Current resource')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Sibling resources')" in ui, ui
+assert "createQuickNavChip(resource.name, `Current resource: ${resource.name}`)" in ui, ui
 assert "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')" in ui, ui
 assert "createNavLink(buildPageURL('resource', {" in ui, ui
 assert "No sibling linked resources are available for this application." in ui, ui
