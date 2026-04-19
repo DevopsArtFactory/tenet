@@ -89,6 +89,7 @@ func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupCon
 		status = normalizeRuntimeStatus(deployment, status, plan)
 		status.Rollout = deriveRolloutSummary(deployment, status, plan)
 		status.ManagedDrift = deriveManagedDriftItems(deployment, status)
+		status = applyControllerManagedDriftSyncState(status, plan)
 		status.History = appendRuntimeHistory(previousStatus, status)
 		currentStatuses[deployment.Name] = status
 		logger.Printf(
@@ -568,6 +569,18 @@ func normalizeRuntimeStatus(deployment domain.Deployment, status domain.Deployme
 		}
 	}
 
+	return status
+}
+
+func applyControllerManagedDriftSyncState(status domain.DeploymentStatus, plan reconcile.Plan) domain.DeploymentStatus {
+	if len(status.ManagedDrift) == 0 || status.Sync.State != domain.SyncStateSynced || status.Sync.Reason != "Controller marked deployment synced" {
+		return status
+	}
+	currentIndex := currentRolloutStepIndex(plan)
+	if !completedRolloutStep(plan, currentIndex) {
+		return status
+	}
+	status.Sync = domain.Sync{State: domain.SyncStateDrifted, Reason: "Controller detected managed drift in completed deployment"}
 	return status
 }
 

@@ -2471,6 +2471,65 @@ func TestRouterOverviewDeployment(t *testing.T) {
 	}
 }
 
+func TestDeploymentOverviewDetailRoutePreservesDriftedSyncStateInRawPayload(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+			if name != "api-prod" {
+				return catalog.DeploymentOverviewDetail{}, statusstore.ErrNotFound
+			}
+			return catalog.DeploymentOverviewDetail{
+				Name: "api-prod",
+				Sync: domain.Sync{State: domain.SyncStateDrifted, Reason: "Controller detected managed drift in completed deployment"},
+				ManagedDrift: []domain.ManagedDriftItem{{
+					Field:    "artifact",
+					Desired:  "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7",
+					Actual:   "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6",
+					Severity: domain.ManagedDriftSeverityHigh,
+				}},
+				RuntimeSummary: &domain.RuntimeSummary{
+					Sync:   domain.Sync{State: domain.SyncStateDrifted, Reason: "Controller detected managed drift in completed deployment"},
+					Health: domain.Health{Overall: domain.HealthHealthy, Summary: "Deployment is healthy and synced"},
+					ManagedDrift: []domain.ManagedDriftItem{{
+						Field:    "artifact",
+						Desired:  "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7",
+						Actual:   "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r6",
+						Severity: domain.ManagedDriftSeverityHigh,
+					}},
+					DesiredGeneration:  7,
+					ObservedGeneration: 7,
+					RolloutPhase:       domain.RolloutPhaseCompleted,
+					HistoryCount:       1,
+				},
+			}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode raw overview deployment payload: %v", err)
+	}
+	sync, ok := payload["sync"].(map[string]any)
+	if !ok || sync["state"] != string(domain.SyncStateDrifted) || sync["reason"] != "Controller detected managed drift in completed deployment" {
+		t.Fatalf("expected drifted sync fields in raw payload, got %#v", payload["sync"])
+	}
+	runtimeSummary, ok := payload["runtimeSummary"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected runtimeSummary object in raw payload, got %#v", payload["runtimeSummary"])
+	}
+	runtimeSync, ok := runtimeSummary["sync"].(map[string]any)
+	if !ok || runtimeSync["state"] != string(domain.SyncStateDrifted) || runtimeSync["reason"] != "Controller detected managed drift in completed deployment" {
+		t.Fatalf("expected runtimeSummary.sync drifted fields, got %#v", runtimeSummary["sync"])
+	}
+}
+
 func TestDeploymentOverviewDetailRouteOmitsRuntimeSummarySourceWithoutHistory(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
