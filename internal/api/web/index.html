@@ -2373,16 +2373,12 @@
           failure: 'audit log request failed',
         });
       };
-      const fetchDeploymentEvents = (deploymentName) => fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`)
-        .then((response) => {
-          if (response.ok) return response.json();
-          const fallback = response.status === 503
-            ? `deployment events unavailable (${response.status})`
-            : `deployment events request failed (${response.status})`;
-          return responseErrorMessage(response, fallback).then((message) => {
-            throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);
-          });
-        });
+      const buildDeploymentEventsReadRoute = (deploymentName) => `/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`;
+      const deploymentEventsReadRoute = (deploymentName) => `GET ${buildDeploymentEventsReadRoute(deploymentName)}`;
+      const fetchDeploymentEvents = (deploymentName) => fetchEmbeddedReadRouteJSON(buildDeploymentEventsReadRoute(deploymentName), {
+        unavailable: 'deployment events unavailable',
+        failure: 'deployment events request failed',
+      });
       const fetchDeploymentDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}`, {
         unavailable: 'deployment detail unavailable',
         failure: 'detail request failed',
@@ -2512,6 +2508,14 @@
         if (!force && cached?.status === 'error') {
           if (cached.error?.kind === 'unavailable') {
             renderDeploymentEventsState(section, deploymentName, 'Controller runtime events are currently unavailable.', 'error', cached.error.message);
+          } else if (renderOperatorReadFailurePanel(
+            section,
+            'Controller runtime events',
+            createDeploymentEventsActions(section, deploymentName),
+            deploymentEventsReadRoute(deploymentName),
+            cached.error,
+          )) {
+            return Promise.reject(cached.error);
           } else {
             renderDeploymentEventsState(section, deploymentName, `Failed to load controller runtime events: ${cached.error?.message || 'unknown error'}`, 'error');
           }
@@ -2532,6 +2536,15 @@
             (current?.sections || []).forEach((container) => {
               if (error?.kind === 'unavailable') {
                 renderDeploymentEventsState(container, deploymentName, 'Controller runtime events are currently unavailable.', 'error', error.message);
+                return;
+              }
+              if (renderOperatorReadFailurePanel(
+                container,
+                'Controller runtime events',
+                createDeploymentEventsActions(container, deploymentName),
+                deploymentEventsReadRoute(deploymentName),
+                error,
+              )) {
                 return;
               }
               renderDeploymentEventsState(container, deploymentName, `Failed to load controller runtime events: ${error.message}`, 'error');

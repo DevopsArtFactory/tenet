@@ -807,6 +807,10 @@ assert 'Controller-derived runtime events from GET /v1/overview/deployments/{dep
 assert 'Loading controller runtime events…' in ui, ui
 assert 'No controller runtime events have been persisted yet.' in ui, ui
 assert 'Controller runtime events are currently unavailable.' in ui, ui
+assert "const deploymentEventsReadRoute = (deploymentName) => `GET ${buildDeploymentEventsReadRoute(deploymentName)}`;" in ui, ui
+assert "createDeploymentEventsActions(section, deploymentName)," in ui, ui
+assert "createDeploymentEventsActions(container, deploymentName)," in ui, ui
+assert "deploymentEventsReadRoute(deploymentName)," in ui, ui
 assert 'Live inspection' in ui, ui
 assert 'Loading live inspection…' in ui, ui
 assert 'Live inspection is unavailable for this resource.' in ui, ui
@@ -869,6 +873,10 @@ assert_fragments("application_ui", application_ui, operator_read_auth_fragments 
     "return `GET /v1/overview/applications/${deploymentName}`;",
     "const renderOperatorReadFailurePage = (pageLabel, route, error) => {",
     "renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);",
+    "const deploymentEventsReadRoute = (deploymentName) => `GET ${buildDeploymentEventsReadRoute(deploymentName)}`;",
+    "createDeploymentEventsActions(section, deploymentName),",
+    "createDeploymentEventsActions(container, deploymentName),",
+    "deploymentEventsReadRoute(deploymentName),",
 ))
 assert_fragments("account_ui", account_ui, operator_read_auth_fragments + (
     "return 'Account detail';",

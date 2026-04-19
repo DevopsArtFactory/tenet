@@ -2135,6 +2135,55 @@ async function render(fetchImpl) {
   refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
   if (!refreshEvents || refreshEvents.disabled) throw new Error('expected runtime-events refresh button enabled in unavailable state');
 
+  let authFetchCount = 0;
+  let resolveAuthRefresh;
+  const unauthorizedView = await render((url) => {
+    if (url === detailURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === eventsURL) {
+      authFetchCount += 1;
+      if (authFetchCount === 1) return Promise.resolve({ ok: false, status: 401, text: () => Promise.resolve('unauthenticated: operator identity missing') });
+      if (authFetchCount === 2) {
+        return new Promise((resolve) => { resolveAuthRefresh = resolve; });
+      }
+      throw new Error('unexpected unauthorized-view deployment events fetch count: ' + authFetchCount);
+    }
+    throw new Error('unexpected fetch url: ' + url);
+  });
+  let authText = collectText(unauthorizedView.document.getElementById('accounts')).join(' | ');
+  if (!authText.includes('Authenticated operator required')) throw new Error('expected operator auth-required heading for deployment events');
+  if (!authText.includes('Tenet rejected GET /v1/overview/deployments/payments-api-staging/events because authenticated identity is required on this operator read route. Retry this bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers.')) throw new Error('expected trusted front door guidance for deployment events 401');
+  if (authText.includes('Failed to load controller runtime events:')) throw new Error('expected deployment events 401 to replace generic fetch error copy');
+  buttons = collectNodes(unauthorizedView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
+  if (!refreshEvents || refreshEvents.disabled) throw new Error('expected runtime-events refresh button enabled in auth-required state');
+  refreshEvents.dispatch('click');
+  await settle();
+  buttons = collectNodes(unauthorizedView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
+  if (!refreshEvents || !refreshEvents.disabled) throw new Error('expected runtime-events refresh button disabled during auth-required refresh');
+  if (authFetchCount !== 2) throw new Error('expected runtime-events auth-required refresh to bypass cached error state');
+  if (unauthorizedView.fetchCalls.filter((url) => url === detailURL).length !== 1) throw new Error('expected auth-required refresh to avoid reloading application detail');
+  if (unauthorizedView.window.location.search !== initialSearch) throw new Error('expected auth-required refresh to preserve bookmarkable application route');
+  resolveAuthRefresh({ ok: true, json: () => Promise.resolve(refreshedEventsBody) });
+  await settle();
+  await settle();
+  authText = collectText(unauthorizedView.document.getElementById('accounts')).join(' | ');
+  if (!authText.includes('Completed traffic shift for v2')) throw new Error('expected auth-required refresh to render refreshed deployment events payload');
+  if (authText.includes('Authenticated operator required')) throw new Error('expected auth-required refresh to replace stale operator guidance');
+
+  const forbiddenView = await render((url) => {
+    if (url === detailURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === eventsURL) return Promise.resolve({ ok: false, status: 403, text: () => Promise.resolve('forbidden: operator does not have access to this deployment') });
+    throw new Error('unexpected fetch url: ' + url);
+  });
+  const forbiddenText = collectText(forbiddenView.document.getElementById('accounts')).join(' | ');
+  if (!forbiddenText.includes('Operator access denied')) throw new Error('expected operator access-denied heading for deployment events');
+  if (!forbiddenText.includes('Tenet rejected GET /v1/overview/deployments/payments-api-staging/events after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment.')) throw new Error('expected operator access-denied guidance for deployment events 403');
+  if (forbiddenText.includes('Failed to load controller runtime events:')) throw new Error('expected deployment events 403 to replace generic fetch error copy');
+  buttons = collectNodes(forbiddenView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
+  if (!refreshEvents || refreshEvents.disabled) throw new Error('expected runtime-events refresh button enabled in access-denied state');
+
   let errorFetchCount = 0;
   let resolveErrorRefresh;
   const errorView = await render((url) => {
