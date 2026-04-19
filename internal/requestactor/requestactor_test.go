@@ -3,6 +3,7 @@ package requestactor
 import (
 	"context"
 	"net/http"
+	"reflect"
 	"testing"
 )
 
@@ -77,6 +78,28 @@ func TestAuthenticatedIdentityFromHeadersReturnsAuthenticatedIdentity(t *testing
 	}
 }
 
+func TestAuthorizedDeploymentsFromHeadersReturnsNormalizedAllowlist(t *testing.T) {
+	header := http.Header{}
+	header.Add(AuthorizedDeploymentsHeader, "payments-api-prod, payments-api-staging ,,worker-prod")
+	header.Add(AuthorizedDeploymentsHeader, "payments-api-prod")
+
+	deployments := AuthorizedDeploymentsFromHeaders(header)
+	want := []string{"payments-api-prod", "payments-api-staging", "worker-prod"}
+	if !reflect.DeepEqual(deployments.Names, want) {
+		t.Fatalf("unexpected deployment allowlist: got %#v want %#v", deployments.Names, want)
+	}
+}
+
+func TestAuthorizedDeploymentsAllowsOnlyExactDeploymentMatches(t *testing.T) {
+	deployments := AuthorizedDeployments{Names: []string{"payments-api-prod", "worker-prod"}}
+	if !deployments.Allows("payments-api-prod") {
+		t.Fatalf("expected allowlist to authorize exact deployment")
+	}
+	if deployments.Allows("payments-api") {
+		t.Fatalf("expected allowlist to reject non-exact deployment")
+	}
+}
+
 func TestFromHeadersPrefersExplicitTenetHeadersOverAliases(t *testing.T) {
 	header := http.Header{}
 	header.Set(HeaderID, "operator-123")
@@ -137,5 +160,17 @@ func TestFromContextPrefersExplicitActorOverAuthenticatedIdentity(t *testing.T) 
 	actor := FromContext(ctx)
 	if !actor.Available || actor.ID != "operator-123" || actor.Name != "Jane Operator" || actor.Email != "jane@example.com" {
 		t.Fatalf("expected explicit actor to override authenticated identity, got %+v", actor)
+	}
+}
+
+func TestWithAuthorizedDeploymentsContextRoundTrip(t *testing.T) {
+	ctx := WithAuthorizedDeploymentsContext(context.Background(), AuthorizedDeployments{
+		Names: []string{"payments-api-prod", " worker-prod ", "payments-api-prod"},
+	})
+
+	deployments := AuthorizedDeploymentsFromContext(ctx)
+	want := []string{"payments-api-prod", "worker-prod"}
+	if !reflect.DeepEqual(deployments.Names, want) {
+		t.Fatalf("unexpected context deployment allowlist: got %#v want %#v", deployments.Names, want)
 	}
 }

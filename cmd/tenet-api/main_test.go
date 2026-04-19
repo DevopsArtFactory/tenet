@@ -217,6 +217,24 @@ func TestOperatorWriteAuthenticationEnforced(t *testing.T) {
 	})
 }
 
+func TestOperatorDeploymentReadAuthorizationEnforced(t *testing.T) {
+	t.Run("defaults to false", func(t *testing.T) {
+		t.Setenv("TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION", "")
+
+		if operatorDeploymentReadAuthorizationEnforced() {
+			t.Fatal("expected deployment read authorization to be disabled by default")
+		}
+	})
+
+	t.Run("accepts true", func(t *testing.T) {
+		t.Setenv("TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION", "true")
+
+		if !operatorDeploymentReadAuthorizationEnforced() {
+			t.Fatal("expected deployment read authorization to be enabled")
+		}
+	})
+}
+
 func TestNewAPIOptionsIncludesGitHubWebhookSecretFromEnv(t *testing.T) {
 	t.Setenv("TENET_GITHUB_WEBHOOK_SECRET", "top-secret")
 
@@ -231,6 +249,9 @@ func TestNewAPIOptionsIncludesGitHubWebhookSecretFromEnv(t *testing.T) {
 	if options.RequireAuthenticatedIdentity {
 		t.Fatalf("expected operator write authentication to default off, got %+v", options)
 	}
+	if options.RequireDeploymentReadAuthorization {
+		t.Fatalf("expected deployment read authorization to default off, got %+v", options)
+	}
 	if options.GitHubWebhookDesiredStateSource.Kind != githubwebhook.DesiredStateSourceKindFilesystem {
 		t.Fatalf("expected filesystem desired-state source for webhook matching, got %+v", options.GitHubWebhookDesiredStateSource)
 	}
@@ -239,6 +260,7 @@ func TestNewAPIOptionsIncludesGitHubWebhookSecretFromEnv(t *testing.T) {
 func TestNewAPIOptionsIncludesAuthenticatedIdentityConfigFromEnv(t *testing.T) {
 	t.Setenv("TENET_API_TRUST_AUTHENTICATED_HEADERS", "true")
 	t.Setenv("TENET_API_ENFORCE_AUTHENTICATED_IDENTITY", "true")
+	t.Setenv("TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION", "true")
 
 	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, writeRepositoryFixture(t), nil)
 
@@ -247,6 +269,27 @@ func TestNewAPIOptionsIncludesAuthenticatedIdentityConfigFromEnv(t *testing.T) {
 	}
 	if !options.RequireAuthenticatedIdentity {
 		t.Fatalf("expected operator write authentication to be enabled, got %+v", options)
+	}
+	if !options.RequireDeploymentReadAuthorization {
+		t.Fatalf("expected deployment read authorization to be enabled, got %+v", options)
+	}
+}
+
+func TestNewAPIOptionsReadAuthorizationEnforcementAlsoTrustsAuthenticatedHeaders(t *testing.T) {
+	t.Setenv("TENET_API_TRUST_AUTHENTICATED_HEADERS", "")
+	t.Setenv("TENET_API_ENFORCE_AUTHENTICATED_IDENTITY", "")
+	t.Setenv("TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION", "true")
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, writeRepositoryFixture(t), nil)
+
+	if !options.TrustAuthenticatedHeaders {
+		t.Fatalf("expected deployment read authorization to enable trusted authenticated headers, got %+v", options)
+	}
+	if options.RequireAuthenticatedIdentity {
+		t.Fatalf("expected operator write authentication to remain disabled, got %+v", options)
+	}
+	if !options.RequireDeploymentReadAuthorization {
+		t.Fatalf("expected deployment read authorization to be enabled, got %+v", options)
 	}
 }
 
