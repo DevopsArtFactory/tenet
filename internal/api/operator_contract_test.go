@@ -455,15 +455,17 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 
 	readme := readRepoFile(t, "README.md")
 	for _, fragment := range []string{
-		"`TENET_API_TRUST_AUTHENTICATED_HEADERS=true`",
-		"`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true`",
+		"TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
+		"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
 		"`X-Tenet-Authenticated-Id`",
 		"`X-Tenet-Authenticated-Name`",
 		"`X-Tenet-Authenticated-Email`",
 		"`401 Unauthorized`",
 		"`unauthenticated: authenticated identity is required for this operator write route`",
+		"only enable either setting when every request reaches Tenet through a front door that authenticates the caller and strips any client-supplied `X-Tenet-Authenticated-*` headers",
+		"Do not expose a header-trusting `tenet-api` instance directly to untrusted clients",
 		"when those explicit actor headers are absent and trusted `X-Tenet-Authenticated-*` headers are present, Tenet now projects the authenticated identity into the persisted actor fields",
-		"restarting `tenet-api` with `TENET_API_TRUST_AUTHENTICATED_HEADERS=true` plus `TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true`",
+		"restarting `tenet-api`",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README front-door auth contract to include %q", fragment)
@@ -472,13 +474,15 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 
 	auditDoc := readRepoFile(t, "docs/architecture/tenet-v1-audit-log-api.md")
 	for _, fragment := range []string{
-		"`TENET_API_TRUST_AUTHENTICATED_HEADERS=true`",
-		"`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true`",
+		"TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
+		"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
 		"`X-Tenet-Authenticated-Id`",
 		"`X-Tenet-Authenticated-Name`",
 		"`X-Tenet-Authenticated-Email`",
 		"`401 Unauthorized` plus `unauthenticated: authenticated identity is required for this operator write route`",
 		"Tenet can also consume trusted front-door identity headers when the API instance is configured for them.",
+		"Only enable that trust when a front door authenticates the caller and strips any client-supplied `X-Tenet-Authenticated-*` headers before forwarding trusted identity values.",
+		"A directly exposed header-trusting API instance is not a safe deployment shape",
 		"Tenet projects that authenticated identity into the persisted actor fields for immutable plan/apply records and therefore into their projected audit entries.",
 	} {
 		if !strings.Contains(auditDoc, fragment) {
@@ -488,9 +492,10 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 
 	localRuntimeDoc := readRepoFile(t, "docs/architecture/tenet-v1-local-runtime.md")
 	for _, fragment := range []string{
-		"`TENET_API_TRUST_AUTHENTICATED_HEADERS=true`",
-		"`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true`",
+		"TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
+		"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
 		"`X-Tenet-Authenticated-*` headers project into persisted plan/apply/audit actor fields",
+		"do it only behind a front door that authenticates callers and strips inbound `X-Tenet-Authenticated-*` headers",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
 			t.Fatalf("expected local runtime doc front-door auth contract to include %q", fragment)
@@ -550,6 +555,10 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 
 	controlPlaneDoc := readRepoFile(t, "docs/architecture/tenet-v1-aws-central-control-plane.md")
 	for _, fragment := range []string{
+		"`TENET_API_TRUST_AUTHENTICATED_HEADERS=true`",
+		"`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true`",
+		"strip any inbound `X-Tenet-Authenticated-*` headers from untrusted clients",
+		"callers can spoof operator identity by sending those headers directly",
 		"`TENET_GITHUB_WEBHOOK_SECRET`",
 		"`POST /api/v1/github/webhook`",
 		"`smoke-webhook-secret`",
