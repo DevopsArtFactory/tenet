@@ -844,6 +844,11 @@ assert 'Plan preview approval guidance' in ui, ui
 assert 'Create Plan will POST /v1/plans/deployments/${deploymentName}, store an immutable server-authored preview, and update this workspace URL with a shareable planId.' in ui, ui
 assert 'Authenticated operator required' in ui, ui
 assert 'const operatorWriteAuthRequiredMessage = (route, action) => `Tenet rejected ${route} because authenticated identity is required on operator write routes. When auth enforcement is enabled, retry ${action} through the trusted front door so it can authenticate you and forward trusted identity headers.`;' in ui, ui
+assert "const operatorPlanPreviewReadRoute = (planId) => `GET /v1/plans/${planId || 'planId'}`;" in ui, ui
+assert "const operatorApplyRequestReadRoute = (applyId) => `GET /v1/applies/${applyId || 'applyId'}`;" in ui, ui
+assert "return `${operatorReadFailureMessage(operatorPlanPreviewReadRoute(activePlanId), planState.error)} Deployment-derived context is still shown below and Apply Plan stays disabled until a persisted ready preview is available.`;" in ui, ui
+assert "return `${operatorReadFailureMessage(operatorApplyRequestReadRoute(activeApplyID), applyState.error)} Deployment and plan-derived context are still shown below.`;" in ui, ui
+assert "if (operatorReadStateForbidden(state)) return 'Access denied';" in ui, ui
 assert 'Refresh plan preview' in ui, ui
 assert 'Refresh apply request' in ui, ui
 assert 'const loadPlanPreviewRecord = (planId) => {' in ui, ui
@@ -858,6 +863,8 @@ assert 'Server-authored plan preview loaded from GET /v1/plans/${activePlanRecor
 assert 'Future immutable lifecycle states render here as queued, running, succeeded, cancelled, or failed.' in ui, ui
 assert 'Apply Plan activates only when a loaded persisted ready plan preview with a valid planId is present.' in ui, ui
 assert 'Live execution is intentionally disabled by default, so failed immutable apply records are expected and useful for operator review.' in ui, ui
+assert 'GET /v1/plans/${activePlanId} is currently unavailable. Deployment-derived context is still shown below and Apply Plan stays disabled until the persisted ready preview can be loaded again.' in ui, ui
+assert 'GET /v1/applies/${activeApplyID} is currently unavailable. Deployment and plan-derived context are still shown below.' in ui, ui
 assert 'Apply lifecycle summary' in ui, ui
 assert "params.get('planId') || ''" in ui, ui
 assert "params.get('applyId') || ''" in ui, ui

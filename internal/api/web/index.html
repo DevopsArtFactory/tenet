@@ -3053,6 +3053,20 @@
         }
         return error?.message || 'unknown error';
       };
+      const operatorReadStateAuthRequired = (state) => state?.request === 'load' && state?.status === 'fetch-error' && operatorReadAuthRequiredState(state?.error);
+      const operatorReadStateForbidden = (state) => state?.request === 'load' && state?.status === 'fetch-error' && operatorReadForbiddenState(state?.error);
+      const operatorReadStateHeading = (state) => {
+        if (operatorReadStateAuthRequired(state)) return 'Authenticated operator required';
+        if (operatorReadStateForbidden(state)) return 'Operator access denied';
+        return '';
+      };
+      const operatorPlanPreviewReadRoute = (planId) => `GET /v1/plans/${planId || 'planId'}`;
+      const operatorApplyRequestReadRoute = (applyId) => `GET /v1/applies/${applyId || 'applyId'}`;
+      const operatorFetchErrorPillLabel = (state) => {
+        if (operatorReadStateAuthRequired(state) || operatorWriteAuthRequiredState(state)) return 'Auth required';
+        if (operatorReadStateForbidden(state)) return 'Access denied';
+        return 'Fetch error';
+      };
       const operatorWriteAuthRequiredState = (state) => state?.request === 'create' && state?.status === 'fetch-error' && Number(state?.error?.status) === 401;
       const operatorWriteAuthRequiredMessage = (route, action) => `Tenet rejected ${route} because authenticated identity is required on operator write routes. When auth enforcement is enabled, retry ${action} through the trusted front door so it can authenticate you and forward trusted identity headers.`;
       const planPreviewStateMessage = (planState, detail) => {
@@ -3075,6 +3089,9 @@
             }
             return `POST /v1/plans/deployments/${deploymentName} is currently unavailable. Deployment-derived context is still shown below and Apply Plan stays disabled until a persisted ready preview is available.`;
           case 'fetch-error':
+            if (operatorReadStateHeading(planState)) {
+              return `${operatorReadFailureMessage(operatorPlanPreviewReadRoute(activePlanId), planState.error)} Deployment-derived context is still shown below and Apply Plan stays disabled until a persisted ready preview is available.`;
+            }
             if (operatorWriteAuthRequiredState(planState)) {
               return `${operatorWriteAuthRequiredMessage(`POST /v1/plans/deployments/${deploymentName}`, 'Create Plan')} Deployment-derived context is still shown below and Apply Plan stays disabled until a persisted ready preview is available.`;
             }
@@ -3104,6 +3121,9 @@
           case 'unavailable':
             return 'Plan preview unavailable';
           case 'fetch-error':
+            if (operatorReadStateHeading(planState)) {
+              return operatorReadStateHeading(planState);
+            }
             if (operatorWriteAuthRequiredState(planState)) {
               return 'Authenticated operator required';
             }
@@ -3154,6 +3174,9 @@
             }
             return `POST /v1/applies/plans/${activePlanID || 'planId'} is currently unavailable. Deployment and plan-derived context are still shown below.`;
           case 'fetch-error':
+            if (operatorReadStateHeading(applyState)) {
+              return `${operatorReadFailureMessage(operatorApplyRequestReadRoute(activeApplyID), applyState.error)} Deployment and plan-derived context are still shown below.`;
+            }
             if (operatorWriteAuthRequiredState(applyState)) {
               return `${operatorWriteAuthRequiredMessage(`POST /v1/applies/plans/${activePlanID || 'planId'}`, 'Apply Plan')} Deployment and plan-derived context are still shown below.`;
             }
@@ -3192,6 +3215,9 @@
           case 'unavailable':
             return 'Apply request unavailable';
           case 'fetch-error':
+            if (operatorReadStateHeading(applyState)) {
+              return operatorReadStateHeading(applyState);
+            }
             if (operatorWriteAuthRequiredState(applyState)) {
               return 'Authenticated operator required';
             }
@@ -3785,7 +3811,7 @@
           const applyStateHead = createElement('div', 'workspace-callout-head');
           applyStateHead.append(
             createElement('div', 'workspace-callout-label', applyRecordStatusHeading(applyState)),
-            createElement('span', applyStatusPillClassName(applyState?.status), applyState?.status === 'idle' ? 'Awaiting apply request' : applyState?.status === 'loading' ? 'Loading' : applyState?.status === 'unavailable' ? 'Unavailable' : applyState?.status === 'fetch-error' ? operatorWriteAuthRequiredState(applyState) ? 'Auth required' : 'Fetch error' : applyRecordStatusLabel(applyState?.status)),
+            createElement('span', applyStatusPillClassName(applyState?.status), applyState?.status === 'idle' ? 'Awaiting apply request' : applyState?.status === 'loading' ? 'Loading' : applyState?.status === 'unavailable' ? 'Unavailable' : applyState?.status === 'fetch-error' ? operatorFetchErrorPillLabel(applyState) : applyRecordStatusLabel(applyState?.status)),
           );
           if (applyStateClassName) {
             applyStateCallout.classList.add(applyStateClassName);
