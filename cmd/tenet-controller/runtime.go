@@ -274,20 +274,28 @@ func runtimeLiveCapacityLookupFromInspection(ctx context.Context, inspector reso
 	if err != nil {
 		return nil, err
 	}
-	if !result.Available || result.AutoScalingGroup == nil {
+	if !result.Available {
 		return nil, nil
 	}
-	return &runtimeLiveCapacityObservation{
-		Desired: int(result.AutoScalingGroup.DesiredCapacity),
-		Min:     int(result.AutoScalingGroup.MinSize),
-		Max:     int(result.AutoScalingGroup.MaxSize),
-	}, nil
+	if result.AutoScalingGroup != nil {
+		return &runtimeLiveCapacityObservation{
+			Desired: int(result.AutoScalingGroup.DesiredCapacity),
+			Min:     int(result.AutoScalingGroup.MinSize),
+			Max:     int(result.AutoScalingGroup.MaxSize),
+		}, nil
+	}
+	if result.ECSService != nil {
+		return &runtimeLiveCapacityObservation{
+			Desired: int(result.ECSService.DesiredCount),
+		}, nil
+	}
+	return nil, nil
 }
 
 func runtimeLiveCapacityResource(deployment domain.Deployment) (resourceType string, resourceName string, ok bool) {
 	for _, detail := range deriveRolloutExecutionDetails(deployment) {
 		switch detail.Resource {
-		case "candidateAutoScalingGroup", "serviceAutoScalingGroup":
+		case "candidateAutoScalingGroup", "serviceAutoScalingGroup", "ecsService":
 			return detail.Resource, detail.Name, true
 		}
 	}
@@ -358,21 +366,24 @@ func deriveManagedDriftItems(deployment domain.Deployment, status domain.Deploym
 				Severity: domain.ManagedDriftSeverityMedium,
 			})
 		}
-		if desiredCapacity.Min != liveCapacity.Min {
-			items = append(items, domain.ManagedDriftItem{
-				Field:    "runtimeContext.capacity.min",
-				Desired:  fmt.Sprintf("%d", desiredCapacity.Min),
-				Actual:   fmt.Sprintf("%d", liveCapacity.Min),
-				Severity: domain.ManagedDriftSeverityMedium,
-			})
-		}
-		if desiredCapacity.Max != liveCapacity.Max {
-			items = append(items, domain.ManagedDriftItem{
-				Field:    "runtimeContext.capacity.max",
-				Desired:  fmt.Sprintf("%d", desiredCapacity.Max),
-				Actual:   fmt.Sprintf("%d", liveCapacity.Max),
-				Severity: domain.ManagedDriftSeverityMedium,
-			})
+		switch deployment.ExecutionMode {
+		case "asgWeightedTargetGroups", "asgInstanceRefresh":
+			if desiredCapacity.Min != liveCapacity.Min {
+				items = append(items, domain.ManagedDriftItem{
+					Field:    "runtimeContext.capacity.min",
+					Desired:  fmt.Sprintf("%d", desiredCapacity.Min),
+					Actual:   fmt.Sprintf("%d", liveCapacity.Min),
+					Severity: domain.ManagedDriftSeverityMedium,
+				})
+			}
+			if desiredCapacity.Max != liveCapacity.Max {
+				items = append(items, domain.ManagedDriftItem{
+					Field:    "runtimeContext.capacity.max",
+					Desired:  fmt.Sprintf("%d", desiredCapacity.Max),
+					Actual:   fmt.Sprintf("%d", liveCapacity.Max),
+					Severity: domain.ManagedDriftSeverityMedium,
+				})
+			}
 		}
 	}
 
