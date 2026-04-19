@@ -418,6 +418,12 @@ def read_text(path_env):
     with open(os.environ[path_env], encoding="utf-8") as fh:
         return fh.read()
 
+
+def assert_fragments(label, body, fragments):
+    for fragment in fragments:
+        assert fragment in body, {"label": label, "missing": fragment}
+
+
 summary = read_json("SUMMARY_PATH")
 applications = read_json("APPLICATIONS_PATH")
 deployment_detail = read_json("DEPLOYMENT_DETAIL_PATH")
@@ -674,6 +680,35 @@ assert isinstance(traffic_resource_inspection.get("trafficRoutingResource"), dic
 assert traffic_resource_inspection["trafficRoutingResource"].get("kind") == "trafficShiftPlan", traffic_resource_inspection
 assert traffic_resource_inspection["trafficRoutingResource"].get("inspectionMode") == "summary_only", traffic_resource_inspection
 assert isinstance(traffic_resource_inspection["trafficRoutingResource"].get("summary"), str) and traffic_resource_inspection["trafficRoutingResource"]["summary"], traffic_resource_inspection
+
+operator_read_auth_fragments = (
+    "const operatorReadAuthRequiredState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 401;",
+    "const operatorReadForbiddenState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 403;",
+    "const operatorReadAuthRequiredMessage = (route) => `Tenet rejected ${route} because authenticated identity is required on this operator read route. Retry this bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers.`;",
+    "const operatorReadForbiddenMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized for that route or deployment.`;",
+)
+assert_fragments("application_ui", application_ui, operator_read_auth_fragments + (
+    "return 'Application detail';",
+    "return `GET /v1/overview/applications/${deploymentName}`;",
+    "const renderOperatorReadFailurePage = (pageLabel, route, error) => {",
+    "renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);",
+))
+assert_fragments("resource_ui", resource_ui, operator_read_auth_fragments + (
+    "return 'Resource detail';",
+    "return `GET /v1/overview/deployments/${deploymentName}`;",
+    "const renderOperatorReadFailurePage = (pageLabel, route, error) => {",
+    "renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);",
+))
+assert_fragments("drift_ui", drift_ui, operator_read_auth_fragments + (
+    "return 'Drift viewer';",
+    "return `GET /v1/overview/deployments/${deploymentName}`;",
+    "const renderOperatorReadFailurePage = (pageLabel, route, error) => {",
+    "renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);",
+))
+assert_fragments("audit_ui", audit_ui, operator_read_auth_fragments + (
+    "return `GET ${buildAuditLogsRoute({",
+    "renderAuditLogsState(operatorReadFailureHeading(error), 'error', operatorReadFailureMessage(buildEmbeddedPageReadRoute(currentPageState), error));",
+))
 
 for fragment in (
     "Open account",
