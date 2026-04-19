@@ -1376,7 +1376,7 @@
           description: bookmarkedResource.description || 'No linked resource metadata is available for this selection.',
         };
       };
-      const createDeploymentQuickNav = (deploymentName, currentWorkspace) => {
+      const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null) => {
         if (!deploymentName) return null;
         const strip = createElement('section', 'quick-nav-strip');
         const workspaceLinks = createElement('div', 'quick-nav-links');
@@ -1393,6 +1393,24 @@
           workspaceLinks,
         );
         groups.append(workspaceGroup);
+        if (Array.isArray(linkedResources)) {
+          const resourceGroup = createElement('div', 'quick-nav-group');
+          resourceGroup.append(createElement('div', 'quick-nav-label', 'Linked resources'));
+          if (linkedResources.length) {
+            const resourceLinks = createElement('div', 'quick-nav-links');
+            linkedResources.forEach((resource) => {
+              resourceLinks.append(createNavLink(buildPageURL('resource', {
+                deployment: deploymentName,
+                resourceType: resource.type,
+                resourceId: resource.id,
+              }), resource.name, '_self'));
+            });
+            resourceGroup.append(resourceLinks);
+          } else {
+            resourceGroup.append(createElement('div', 'quick-nav-empty', 'No linked resources are available in this drift workspace yet.'));
+          }
+          groups.append(resourceGroup);
+        }
         const head = createElement('div', 'quick-nav-head');
         head.append(
           createElement('div', 'quick-nav-title', 'Quick navigation'),
@@ -1405,7 +1423,8 @@
       const createWorkspaceQuickNav = (detail, mode) => {
         const deploymentName = detail.name || currentPageState.deployment || '';
         const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';
-        return createDeploymentQuickNav(deploymentName, currentWorkspace);
+        const linkedResources = mode === 'drift' ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;
+        return createDeploymentQuickNav(deploymentName, currentWorkspace, linkedResources);
       };
       const createAuditQuickNav = () => createDeploymentQuickNav(auditDeploymentName(), 'Audit log');
       const createResourceQuickNav = (detail, resource) => {

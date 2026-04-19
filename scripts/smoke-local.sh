@@ -743,6 +743,8 @@ assert "buildPageURL('account', { accountId: deployment.awsAccountId })" in ui, 
 assert "buildPageURL('application', { deployment: deployment.name })" in ui, ui
 assert 'Drift view' in ui, ui
 assert 'Plan/apply' in ui, ui
+assert 'Linked resources' in ui, ui
+assert 'No linked resources are available in this drift workspace yet.' in ui, ui
 assert 'Current source: controller-authored managedDrift rows.' in ui, ui
 assert 'Current source: derived fallback read-model heuristics.' in ui, ui
 assert 'Drift summary' in ui, ui
@@ -775,7 +777,9 @@ assert "createNavLink(buildPageURL('audit', { deployment: detail.name }), 'Audit
 assert "createNavLink(buildPageURL('audit', { deployment: detail.name || currentPageState.deployment || '' }), 'Audit log', '_self')" in ui, ui
 assert "const createWorkspaceQuickNav = (detail, mode) => {" in ui, ui
 assert "const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';" in ui, ui
+assert "const linkedResources = mode === 'drift' ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Deployment workspaces')" in ui, ui
+assert "createElement('div', 'quick-nav-label', 'Linked resources')" in ui, ui
 assert "createElement('div', 'quick-nav-current', `${deploymentName || 'Deployment'} · ${currentWorkspace}`)" in ui, ui
 assert "header.append(head, createWorkspaceQuickNav(detail, mode), ...sections);" in ui, ui
 assert "const createResourceQuickNav = (detail, resource) => {" in ui, ui
@@ -795,6 +799,8 @@ assert "const createResourceQuickNav = (detail, resource) => {" in resource_ui, 
 assert "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')" in resource_ui, resource_ui
 assert "createNavLink(buildPageURL('resource', {" in resource_ui, resource_ui
 assert 'Quick navigation' in resource_ui, resource_ui
+assert 'Linked resources' in ui, ui
+assert 'No linked resources are available in this drift workspace yet.' in ui, ui
 assert 'Audit timeline' in audit_ui, audit_ui
 assert 'Deployment audit timeline' in audit_ui, audit_ui
 assert 'Active deployment context' in audit_ui, audit_ui

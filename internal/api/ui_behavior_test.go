@@ -4082,12 +4082,38 @@ func TestDeploymentWorkspaceDriftViewWithNodeHarness(t *testing.T) {
 		t.Fatalf("marshal empty detail body: %v", err)
 	}
 
+	noLinkedResourcesDetailJSON, err := json.Marshal(map[string]any{
+		"name":             "api-no-links",
+		"appRef":           "payments",
+		"environmentRef":   "prod",
+		"region":           "us-west-2",
+		"accountName":      "acct-a",
+		"awsAccountId":     "111111111111",
+		"sync":             map[string]any{"state": "Synced", "reason": "latest desired generation applied"},
+		"health":           map[string]any{"overall": "Healthy", "summary": "service steady"},
+		"desiredArtifact":  map[string]any{"image": "ghcr.io/example/payments:v9"},
+		"deployedArtifact": map[string]any{"image": "ghcr.io/example/payments:v9"},
+		"runtimeSummary": map[string]any{
+			"source":           "deployment-controller",
+			"timestamp":        "2026-04-16T06:53:00Z",
+			"historyCount":     1,
+			"changes":          []string{},
+			"deployedArtifact": map[string]any{"image": "ghcr.io/example/payments:v9"},
+			"conditions":       []map[string]any{},
+		},
+		"conditions": []map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("marshal no linked resources detail body: %v", err)
+	}
+
 	nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;
 const managedDetail = ` + string(managedDetailJSON) + `;
 const managedEmptyDetail = ` + string(managedEmptyDetailJSON) + `;
 const driftDetail = ` + string(driftDetailJSON) + `;
 const emptyDetail = ` + string(emptyDetailJSON) + `;
+const noLinkedResourcesDetail = ` + string(noLinkedResourcesDetailJSON) + `;
 class Element {
   constructor(tagName, ownerDocument) {
     this.tagName = String(tagName).toUpperCase();
@@ -4196,16 +4222,19 @@ async function render(detail) {
   const workspaceDriftLink = workspaceLinks.find((node) => node.href === '/?page=drift&deployment=api-prod' && node.textContent === 'Drift view' && node.target === '_self');
   const workspacePlanLink = workspaceLinks.find((node) => node.href === '/?page=plan&deployment=api-prod' && node.textContent === 'Plan/apply' && node.target === '_self');
   const workspaceAuditLink = workspaceLinks.find((node) => node.href === '/?page=audit&deployment=api-prod' && node.textContent === 'Audit log' && node.target === '_self');
+  const workspaceResourceLink = workspaceLinks.find((node) => node.href === '/?page=resource&deployment=api-prod&resourceType=aws_lb_listener_rule.payments_prod&resourceId=aws_lb_listener_rule.payments_prod%3A%3Aprod-router%3A%3ARoutes+production+traffic+to+the+stable+target+group' && node.textContent === 'prod-router' && node.target === '_self');
   if (!text.includes('Drift viewer')) throw new Error('expected drift workspace title');
   if (!toolbarText.includes('Back to application')) throw new Error('expected workspace back link');
   if (!toolbarText.includes('api-prod')) throw new Error('expected workspace active deployment title');
   if (!text.includes('Quick navigation')) throw new Error('expected workspace quick navigation strip');
   if (!text.includes('Deployment workspaces')) throw new Error('expected workspace quick navigation group label');
+  if (!text.includes('Linked resources')) throw new Error('expected drift workspace linked-resources group label');
   if (!text.includes('api-prod · Drift view')) throw new Error('expected workspace quick navigation current-state label');
   if (!workspaceBackLink || workspaceBackLink.rel) throw new Error('expected drift workspace quick navigation back link');
   if (!workspaceDriftLink || workspaceDriftLink.rel) throw new Error('expected drift workspace quick navigation self link');
   if (!workspacePlanLink || workspacePlanLink.rel) throw new Error('expected drift workspace quick navigation plan link');
   if (!workspaceAuditLink || workspaceAuditLink.rel) throw new Error('expected drift workspace quick navigation audit link');
+  if (!workspaceResourceLink || workspaceResourceLink.rel) throw new Error('expected drift workspace quick navigation resource link');
   if (!text.includes('Latest runtime signals')) throw new Error('expected drift workspace runtime signals section');
   if (!text.includes('deployment-controller')) throw new Error('expected drift workspace runtime source value');
   if (!text.includes('Target ec2 · Strategy canary · Execution asgWeightedTargetGroups')) throw new Error('expected drift workspace runtime context value');
@@ -4323,6 +4352,13 @@ async function render(detail) {
   if (!emptyText.includes('No field-level drift rows are currently reported.')) throw new Error('expected empty fallback drift summary copy');
   if (!emptyText.includes('No derived fallback field-level drift was detected from the deployment read model.')) throw new Error('expected empty drift workspace message');
   if (emptyText.includes('condition.')) throw new Error('expected empty drift workspace to omit condition rows');
+
+  const noLinksRun = await render(noLinkedResourcesDetail);
+  const noLinksText = collectText(noLinksRun.document.getElementById('accounts')).join(' | ');
+  const noLinksResourceLinks = collectNodes(noLinksRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.href.includes('?page=resource&deployment=api-no-links'));
+  if (!noLinksText.includes('Linked resources')) throw new Error('expected no-links drift workspace quick navigation group label');
+  if (!noLinksText.includes('No linked resources are available in this drift workspace yet.')) throw new Error('expected explicit no-links drift workspace copy');
+  if (noLinksResourceLinks.length !== 0) throw new Error('expected drift workspace with no linked resources to suppress broken resource links');
 })();
 `
 
