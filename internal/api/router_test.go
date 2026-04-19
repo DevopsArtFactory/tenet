@@ -3777,6 +3777,45 @@ func TestRouterCreateDeploymentPlanPreviewPropagatesExplicitRequestActor(t *test
 	}
 }
 
+func TestRouterCreateDeploymentPlanPreviewPropagatesAliasRequestActor(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		CreateDeploymentPlanPreview: func(ctx context.Context, deploymentName string, req planpreview.CreateRequest) (planpreview.CreateResult, error) {
+			actor := requestactor.FromContext(ctx)
+			return planpreview.CreateResult{
+				Created: true,
+				Record: planpreview.Record{
+					ID:             "plan_1234abcd",
+					DeploymentName: deploymentName,
+					Status:         planpreview.StatusReady,
+					CreatedAt:      "2026-04-17T08:00:00Z",
+					Actor:          actor,
+					Source:         planpreview.SourceContext{DeploymentName: deploymentName, Route: "/v1/overview/deployments/api-prod", Fingerprint: req.IfMatch},
+				},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/plans/deployments/api-prod", strings.NewReader(`{"ifMatch":"plan_input"}`))
+	req.Header.Set(requestactor.HeaderAliasID, "operator-123")
+	req.Header.Set(requestactor.HeaderAliasName, "Jane Operator")
+	req.Header.Set(requestactor.HeaderAliasEmail, "jane@example.com")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d with body %q", resp.Code, resp.Body.String())
+	}
+	var record planpreview.Record
+	if err := json.Unmarshal(resp.Body.Bytes(), &record); err != nil {
+		t.Fatalf("failed to decode plan preview: %v", err)
+	}
+	if !record.Actor.Available || record.Actor.ID != "operator-123" || record.Actor.Name != "Jane Operator" || record.Actor.Email != "jane@example.com" {
+		t.Fatalf("expected propagated alias request actor, got %+v", record.Actor)
+	}
+}
+
 func TestRouterCreateDeploymentPlanPreviewStatusCodes(t *testing.T) {
 	t.Run("unavailable", func(t *testing.T) {
 		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
@@ -4056,6 +4095,53 @@ func TestRouterCreateApplyRequestPropagatesExplicitRequestActor(t *testing.T) {
 	}
 	if !record.Actor.Available || record.Actor.Name != "Jane Operator" || record.Actor.Email != "jane@example.com" {
 		t.Fatalf("expected propagated request actor, got %+v", record.Actor)
+	}
+}
+
+func TestRouterCreateApplyRequestPrefersExplicitActorHeadersOverAliases(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		CreateApplyRequest: func(ctx context.Context, planID string) (applyrequest.CreateResult, error) {
+			return applyrequest.CreateResult{
+				Created: true,
+				Record: applyrequest.Record{
+					ID:             "apply_1234abcd",
+					PlanID:         planID,
+					DeploymentName: "api-prod",
+					Status:         applyrequest.StatusFailed,
+					CreatedAt:      "2026-04-18T08:00:00Z",
+					Actor:          requestactor.FromContext(ctx),
+					Error:          "apply execution is disabled",
+					Lifecycle:      applyrequest.Lifecycle{UpdatedAt: "2026-04-18T08:00:00Z", FinishedAt: "2026-04-18T08:00:00Z", TotalSteps: 1},
+					Operations: []applyrequest.Operation{
+						{Status: applyrequest.OperationStatusPending, Phase: "Provisioning", Target: "api-prod deployment", Summary: "Create replacement capacity for api-prod."},
+					},
+					Source: applyrequest.SourceContext{PlanID: planID, Route: "/v1/plans/plan_1234abcd", PlanStatus: "ready"},
+				},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/applies/plans/plan_1234abcd", nil)
+	req.Header.Set(requestactor.HeaderID, "operator-123")
+	req.Header.Set(requestactor.HeaderName, "Jane Operator")
+	req.Header.Set(requestactor.HeaderEmail, "jane@example.com")
+	req.Header.Set(requestactor.HeaderAliasID, "alias-456")
+	req.Header.Set(requestactor.HeaderAliasName, "Alias Operator")
+	req.Header.Set(requestactor.HeaderAliasEmail, "alias@example.com")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d with body %q", resp.Code, resp.Body.String())
+	}
+	var record applyrequest.Record
+	if err := json.Unmarshal(resp.Body.Bytes(), &record); err != nil {
+		t.Fatalf("failed to decode apply request: %v", err)
+	}
+	if !record.Actor.Available || record.Actor.ID != "operator-123" || record.Actor.Name != "Jane Operator" || record.Actor.Email != "jane@example.com" {
+		t.Fatalf("expected explicit request actor to override aliases, got %+v", record.Actor)
 	}
 }
 

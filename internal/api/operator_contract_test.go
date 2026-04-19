@@ -366,6 +366,9 @@ func TestAuditLogOperatorContract(t *testing.T) {
 		"`X-Tenet-Actor-Id`",
 		"`X-Tenet-Actor-Name`",
 		"`X-Tenet-Actor-Email`",
+		"`X-User-ID`",
+		"`X-User-Name`",
+		"`X-User-Email`",
 		"actor information is unavailable because no authenticated request context was available for this local request",
 		"`Audit filters: action apply.requested · limit 2`",
 		"`/v1/audit-logs` is the preferred v1 route shape for this local timeline",
@@ -393,6 +396,10 @@ func TestAuditLogOperatorContract(t *testing.T) {
 		"`X-Tenet-Actor-Id`",
 		"`X-Tenet-Actor-Name`",
 		"`X-Tenet-Actor-Email`",
+		"`X-User-ID`",
+		"`X-User-Name`",
+		"`X-User-Email`",
+		"Tenet prefers the explicit `X-Tenet-Actor-*` values over `X-User-*` aliases",
 		"`actor.available=false` plus an unavailable reason",
 	} {
 		if !strings.Contains(auditDoc, fragment) {

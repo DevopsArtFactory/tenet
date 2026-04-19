@@ -93,5 +93,6 @@ When request-scoped operator context is available, Tenet persists it additively 
 - `X-Tenet-Actor-Id`
 - `X-Tenet-Actor-Name`
 - `X-Tenet-Actor-Email`
+- compatible aliases `X-User-ID`, `X-User-Name`, and `X-User-Email`
 
-Those fields appear unchanged on the immutable `plan` / `apply` records and on their projected `GET /v1/audit-logs` entries. When no authenticated request context was present, Tenet keeps the contract explicit by returning `actor.available=false` plus an unavailable reason instead of inventing an identity.
+Those fields appear unchanged on the immutable `plan` / `apply` records and on their projected `GET /v1/audit-logs` entries. When both header families are present, Tenet prefers the explicit `X-Tenet-Actor-*` values over `X-User-*` aliases. When no authenticated request context was present, Tenet keeps the contract explicit by returning `actor.available=false` plus an unavailable reason instead of inventing an identity.

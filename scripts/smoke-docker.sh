@@ -279,9 +279,9 @@ terminal_apply_transition_status=$(curl -sS -o "$TERMINAL_APPLY_TRANSITION_BODY"
   "$API_BASE_URL/v1/applies/$apply_id/transitions")
 actor_plan_preview=$(curl -fsS -X POST \
   -H 'Content-Type: application/json' \
-  -H 'X-Tenet-Actor-Id: operator-123' \
-  -H 'X-Tenet-Actor-Name: Jane Operator' \
-  -H 'X-Tenet-Actor-Email: jane@example.com' \
+  -H 'X-User-ID: operator-123' \
+  -H 'X-User-Name: Jane Operator' \
+  -H 'X-User-Email: jane@example.com' \
   -d '{}' \
   "$API_BASE_URL/v1/plans/deployments/payments-api-staging")
 actor_plan_id=$(ACTOR_PLAN_PREVIEW_JSON="$actor_plan_preview" python3 - <<'PY'
@@ -293,9 +293,9 @@ PY
 )
 actor_plan_preview_get=$(curl -fsS "$API_BASE_URL/v1/plans/$actor_plan_id")
 actor_apply_record=$(curl -fsS -X POST \
-  -H 'X-Tenet-Actor-Id: operator-123' \
-  -H 'X-Tenet-Actor-Name: Jane Operator' \
-  -H 'X-Tenet-Actor-Email: jane@example.com' \
+  -H 'X-User-ID: operator-123' \
+  -H 'X-User-Name: Jane Operator' \
+  -H 'X-User-Email: jane@example.com' \
   "$API_BASE_URL/v1/applies/plans/$actor_plan_id")
 actor_apply_id=$(ACTOR_APPLY_RECORD_JSON="$actor_apply_record" python3 - <<'PY'
 import json

@@ -170,7 +170,7 @@ Operators can also fetch a read-only deployment event timeline from:
 
 This payload is derived from persisted `status.history` entries the controller authored for runtime changes. It is meant to support operator drill-down and timeline rendering, not to act as a full durable audit system yet.
 
-Separate from that controller-runtime timeline, the backend also exposes `GET /v1/audit-logs` as a local immutable audit projection over persisted plan preview and apply request records. The dedicated `/?page=audit` view now renders that route, showing recorded actor identity when explicit `X-Tenet-Actor-*` request headers were persisted and keeping `actor.available=false` explicit when no authenticated request context was present.
+Separate from that controller-runtime timeline, the backend also exposes `GET /v1/audit-logs` as a local immutable audit projection over persisted plan preview and apply request records. The dedicated `/?page=audit` view now renders that route, showing recorded actor identity when explicit `X-Tenet-Actor-*` request headers or additive `X-User-*` aliases were persisted and keeping `actor.available=false` explicit when no authenticated request context was present.
 
 Current behavior:
 - returns `deploymentName` plus an explicit `events[]` array
