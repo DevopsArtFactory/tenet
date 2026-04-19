@@ -120,7 +120,7 @@ func requireAuthenticatedIdentity(w http.ResponseWriter, r *http.Request) bool {
 	return false
 }
 
-func requireDeploymentReadAuthorization(w http.ResponseWriter, r *http.Request, enabled bool, deploymentName string) bool {
+func requireDeploymentReadIdentity(w http.ResponseWriter, r *http.Request, enabled bool) bool {
 	if !enabled {
 		return true
 	}
@@ -129,11 +129,25 @@ func requireDeploymentReadAuthorization(w http.ResponseWriter, r *http.Request, 
 		respondUnauthenticatedError(w, "unauthenticated: authenticated identity is required for this operator read route")
 		return false
 	}
+	return true
+}
+
+func requireDeploymentReadAccess(w http.ResponseWriter, r *http.Request, enabled bool, deploymentName string) bool {
+	if !enabled {
+		return true
+	}
 	if requestactor.AuthorizedDeploymentsFromContext(r.Context()).Allows(deploymentName) {
 		return true
 	}
 	respondForbiddenError(w, "forbidden: operator does not have access to this deployment")
 	return false
+}
+
+func requireDeploymentReadAuthorization(w http.ResponseWriter, r *http.Request, enabled bool, deploymentName string) bool {
+	if !requireDeploymentReadIdentity(w, r, enabled) {
+		return false
+	}
+	return requireDeploymentReadAccess(w, r, enabled, deploymentName)
 }
 
 // Options configures the API router.
@@ -635,9 +649,15 @@ func NewRouter(options Options) http.Handler {
 			http.Error(w, "invalid plan id", http.StatusBadRequest)
 			return
 		}
+		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization) {
+			return
+		}
 		record, err := options.PlanPreview(r.Context(), id)
 		if err != nil {
 			respondLookupError(w, err)
+			return
+		}
+		if !requireDeploymentReadAccess(w, r, options.RequireDeploymentReadAuthorization, record.DeploymentName) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -683,9 +703,15 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "apply request unavailable", http.StatusServiceUnavailable)
 				return
 			}
+			if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization) {
+				return
+			}
 			record, err := options.ApplyRequest(r.Context(), segments[0])
 			if err != nil {
 				respondLookupError(w, err)
+				return
+			}
+			if !requireDeploymentReadAccess(w, r, options.RequireDeploymentReadAuthorization, record.DeploymentName) {
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")

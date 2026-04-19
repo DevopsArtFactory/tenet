@@ -36,7 +36,11 @@ INVALID_WEBHOOK_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_PLAN_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_APPLY_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_READ_BODY=$(mktemp)
+AUTH_UNAUTHENTICATED_PLAN_READ_BODY=$(mktemp)
+AUTH_UNAUTHENTICATED_APPLY_READ_BODY=$(mktemp)
 AUTH_FORBIDDEN_READ_BODY=$(mktemp)
+AUTH_FORBIDDEN_PLAN_READ_BODY=$(mktemp)
+AUTH_FORBIDDEN_APPLY_READ_BODY=$(mktemp)
 AUTH_FORBIDDEN_AUDIT_BODY=$(mktemp)
 cp -R "$SOURCE_REPO_ROOT/." "$REPO_ROOT/"
 cleanup() {
@@ -48,7 +52,7 @@ cleanup() {
     kill "$API_PID" 2>/dev/null || true
     wait "$API_PID" 2>/dev/null || true
   fi
-  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$INVALID_WEBHOOK_BODY" "$AUTH_UNAUTHENTICATED_PLAN_BODY" "$AUTH_UNAUTHENTICATED_APPLY_BODY" "$AUTH_UNAUTHENTICATED_READ_BODY" "$AUTH_FORBIDDEN_READ_BODY" "$AUTH_FORBIDDEN_AUDIT_BODY"
+  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$INVALID_WEBHOOK_BODY" "$AUTH_UNAUTHENTICATED_PLAN_BODY" "$AUTH_UNAUTHENTICATED_APPLY_BODY" "$AUTH_UNAUTHENTICATED_READ_BODY" "$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" "$AUTH_FORBIDDEN_READ_BODY" "$AUTH_FORBIDDEN_PLAN_READ_BODY" "$AUTH_FORBIDDEN_APPLY_READ_BODY" "$AUTH_FORBIDDEN_AUDIT_BODY"
   rm -rf "$PAYLOAD_DIR" "$REPO_ROOT"
 }
 trap cleanup EXIT
@@ -965,18 +969,46 @@ start_api true false true
 
 auth_unauthenticated_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_READ_BODY" -w "%{http_code}" \
   "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging")
+auth_unauthenticated_plan_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" -w "%{http_code}" \
+  "http://$HOST:$PORT/v1/plans/$frontdoor_plan_id")
+auth_unauthenticated_apply_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" -w "%{http_code}" \
+  "http://$HOST:$PORT/v1/applies/$frontdoor_apply_id")
 auth_forbidden_read_status=$(curl -sS -o "$AUTH_FORBIDDEN_READ_BODY" -w "%{http_code}" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authorized-Deployments: worker-prod" \
   "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging")
+auth_forbidden_plan_read_status=$(curl -sS -o "$AUTH_FORBIDDEN_PLAN_READ_BODY" -w "%{http_code}" \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: worker-prod" \
+  "http://$HOST:$PORT/v1/plans/$frontdoor_plan_id")
+auth_forbidden_apply_read_status=$(curl -sS -o "$AUTH_FORBIDDEN_APPLY_READ_BODY" -w "%{http_code}" \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: worker-prod" \
+  "http://$HOST:$PORT/v1/applies/$frontdoor_apply_id")
 allowed_guarded_read=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
   "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging")
+allowed_plan_read=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
+  "http://$HOST:$PORT/v1/plans/$frontdoor_plan_id")
+allowed_apply_read=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
+  "http://$HOST:$PORT/v1/applies/$frontdoor_apply_id")
 auth_forbidden_audit_status=$(curl -sS -o "$AUTH_FORBIDDEN_AUDIT_BODY" -w "%{http_code}" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
@@ -990,27 +1022,53 @@ allowed_scoped_audit=$(curl -fsS \
   -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
   "http://$HOST:$PORT/v1/audit-logs?deployment=payments-api-staging&action=apply.requested&limit=1")
 allowed_guarded_read_path=$(write_payload allowed-guarded-read.json "$allowed_guarded_read")
+allowed_plan_read_path=$(write_payload allowed-plan-read.json "$allowed_plan_read")
+allowed_apply_read_path=$(write_payload allowed-apply-read.json "$allowed_apply_read")
 allowed_scoped_audit_path=$(write_payload allowed-scoped-audit.json "$allowed_scoped_audit")
 
-AUTH_UNAUTHENTICATED_READ_STATUS="$auth_unauthenticated_read_status" AUTH_UNAUTHENTICATED_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_READ_BODY" AUTH_FORBIDDEN_READ_STATUS="$auth_forbidden_read_status" AUTH_FORBIDDEN_READ_BODY_PATH="$AUTH_FORBIDDEN_READ_BODY" AUTH_FORBIDDEN_AUDIT_STATUS="$auth_forbidden_audit_status" AUTH_FORBIDDEN_AUDIT_BODY_PATH="$AUTH_FORBIDDEN_AUDIT_BODY" ALLOWED_GUARDED_READ_PATH="$allowed_guarded_read_path" ALLOWED_SCOPED_AUDIT_PATH="$allowed_scoped_audit_path" python3 - <<'PY'
+AUTH_UNAUTHENTICATED_READ_STATUS="$auth_unauthenticated_read_status" AUTH_UNAUTHENTICATED_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_READ_BODY" AUTH_UNAUTHENTICATED_PLAN_READ_STATUS="$auth_unauthenticated_plan_read_status" AUTH_UNAUTHENTICATED_PLAN_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" AUTH_UNAUTHENTICATED_APPLY_READ_STATUS="$auth_unauthenticated_apply_read_status" AUTH_UNAUTHENTICATED_APPLY_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" AUTH_FORBIDDEN_READ_STATUS="$auth_forbidden_read_status" AUTH_FORBIDDEN_READ_BODY_PATH="$AUTH_FORBIDDEN_READ_BODY" AUTH_FORBIDDEN_PLAN_READ_STATUS="$auth_forbidden_plan_read_status" AUTH_FORBIDDEN_PLAN_READ_BODY_PATH="$AUTH_FORBIDDEN_PLAN_READ_BODY" AUTH_FORBIDDEN_APPLY_READ_STATUS="$auth_forbidden_apply_read_status" AUTH_FORBIDDEN_APPLY_READ_BODY_PATH="$AUTH_FORBIDDEN_APPLY_READ_BODY" AUTH_FORBIDDEN_AUDIT_STATUS="$auth_forbidden_audit_status" AUTH_FORBIDDEN_AUDIT_BODY_PATH="$AUTH_FORBIDDEN_AUDIT_BODY" ALLOWED_GUARDED_READ_PATH="$allowed_guarded_read_path" ALLOWED_PLAN_READ_PATH="$allowed_plan_read_path" ALLOWED_APPLY_READ_PATH="$allowed_apply_read_path" ALLOWED_SCOPED_AUDIT_PATH="$allowed_scoped_audit_path" FRONTDOOR_PLAN_ID="$frontdoor_plan_id" FRONTDOOR_APPLY_ID="$frontdoor_apply_id" python3 - <<'PY'
 import json, os
 
 with open(os.environ['AUTH_UNAUTHENTICATED_READ_BODY_PATH'], encoding='utf-8') as fh:
     unauthenticated_read_body = fh.read()
+with open(os.environ['AUTH_UNAUTHENTICATED_PLAN_READ_BODY_PATH'], encoding='utf-8') as fh:
+    unauthenticated_plan_read_body = fh.read()
+with open(os.environ['AUTH_UNAUTHENTICATED_APPLY_READ_BODY_PATH'], encoding='utf-8') as fh:
+    unauthenticated_apply_read_body = fh.read()
 with open(os.environ['AUTH_FORBIDDEN_READ_BODY_PATH'], encoding='utf-8') as fh:
     forbidden_read_body = fh.read()
+with open(os.environ['AUTH_FORBIDDEN_PLAN_READ_BODY_PATH'], encoding='utf-8') as fh:
+    forbidden_plan_read_body = fh.read()
+with open(os.environ['AUTH_FORBIDDEN_APPLY_READ_BODY_PATH'], encoding='utf-8') as fh:
+    forbidden_apply_read_body = fh.read()
 with open(os.environ['AUTH_FORBIDDEN_AUDIT_BODY_PATH'], encoding='utf-8') as fh:
     forbidden_audit_body = fh.read()
 with open(os.environ['ALLOWED_GUARDED_READ_PATH'], encoding='utf-8') as fh:
     allowed_guarded_read = json.load(fh)
+with open(os.environ['ALLOWED_PLAN_READ_PATH'], encoding='utf-8') as fh:
+    allowed_plan_read = json.load(fh)
+with open(os.environ['ALLOWED_APPLY_READ_PATH'], encoding='utf-8') as fh:
+    allowed_apply_read = json.load(fh)
 with open(os.environ['ALLOWED_SCOPED_AUDIT_PATH'], encoding='utf-8') as fh:
     allowed_scoped_audit = json.load(fh)
 
 assert os.environ['AUTH_UNAUTHENTICATED_READ_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_READ_STATUS']
 assert unauthenticated_read_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_read_body
+assert os.environ['AUTH_UNAUTHENTICATED_PLAN_READ_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_PLAN_READ_STATUS']
+assert unauthenticated_plan_read_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_plan_read_body
+assert os.environ['AUTH_UNAUTHENTICATED_APPLY_READ_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_APPLY_READ_STATUS']
+assert unauthenticated_apply_read_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_apply_read_body
 assert os.environ['AUTH_FORBIDDEN_READ_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_READ_STATUS']
 assert forbidden_read_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_read_body
+assert os.environ['AUTH_FORBIDDEN_PLAN_READ_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_PLAN_READ_STATUS']
+assert forbidden_plan_read_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_plan_read_body
+assert os.environ['AUTH_FORBIDDEN_APPLY_READ_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_APPLY_READ_STATUS']
+assert forbidden_apply_read_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_apply_read_body
 assert allowed_guarded_read['name'] == 'payments-api-staging', allowed_guarded_read
+assert allowed_plan_read['id'] == os.environ['FRONTDOOR_PLAN_ID'], allowed_plan_read
+assert allowed_plan_read['deploymentName'] == 'payments-api-staging', allowed_plan_read
+assert allowed_apply_read['id'] == os.environ['FRONTDOOR_APPLY_ID'], allowed_apply_read
+assert allowed_apply_read['deploymentName'] == 'payments-api-staging', allowed_apply_read
 assert os.environ['AUTH_FORBIDDEN_AUDIT_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_AUDIT_STATUS']
 assert forbidden_audit_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_audit_body
 assert len(allowed_scoped_audit['entries']) == 1, allowed_scoped_audit

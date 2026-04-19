@@ -1294,6 +1294,139 @@ func TestRouterDeploymentReadAuthorization(t *testing.T) {
 			t.Fatalf("expected overview applications provider call, got %d", *providerCalls)
 		}
 	})
+
+	t.Run("immutable plan preview reads honor deployment authorization", func(t *testing.T) {
+		providerCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			PlanPreview: func(context.Context, string) (planpreview.Record, error) {
+				providerCalls++
+				return planpreview.Record{
+					ID:             "plan_1234abcd",
+					DeploymentName: "api-prod",
+					Status:         planpreview.StatusReady,
+					CreatedAt:      "2026-04-17T08:05:00Z",
+					Source:         planpreview.SourceContext{DeploymentName: "api-prod"},
+				}, nil
+			},
+		})
+
+		t.Run("unauthenticated", func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/v1/plans/plan_1234abcd", nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusUnauthorized {
+				t.Fatalf("expected 401, got %d", resp.Code)
+			}
+			if body := resp.Body.String(); body != "unauthenticated: authenticated identity is required for this operator read route\n" {
+				t.Fatalf("unexpected 401 response body: %q", body)
+			}
+			if providerCalls != 0 {
+				t.Fatalf("expected unauthenticated auth guard to short-circuit before lookup, got %d calls", providerCalls)
+			}
+		})
+
+		t.Run("forbidden", func(t *testing.T) {
+			req := newAuthenticatedRequest("/v1/plans/plan_1234abcd", "worker-prod")
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusForbidden {
+				t.Fatalf("expected 403, got %d", resp.Code)
+			}
+			if body := resp.Body.String(); body != "forbidden: operator does not have access to this deployment\n" {
+				t.Fatalf("unexpected 403 response body: %q", body)
+			}
+			if providerCalls != 1 {
+				t.Fatalf("expected forbidden lookup to load stored record once, got %d calls", providerCalls)
+			}
+		})
+
+		t.Run("allowed", func(t *testing.T) {
+			req := newAuthenticatedRequest("/v1/plans/plan_1234abcd", "api-prod, worker-prod")
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+			}
+			if providerCalls != 2 {
+				t.Fatalf("expected allowed lookup to load stored record once, got %d calls", providerCalls)
+			}
+		})
+	})
+
+	t.Run("immutable apply request reads honor deployment authorization", func(t *testing.T) {
+		providerCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
+				providerCalls++
+				return applyrequest.Record{
+					ID:             "apply_1234abcd",
+					PlanID:         "plan_1234abcd",
+					DeploymentName: "api-prod",
+					Status:         applyrequest.StatusFailed,
+					CreatedAt:      "2026-04-18T08:05:00Z",
+					Source:         applyrequest.SourceContext{PlanID: "plan_1234abcd"},
+				}, nil
+			},
+		})
+
+		t.Run("unauthenticated", func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/v1/applies/apply_1234abcd", nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusUnauthorized {
+				t.Fatalf("expected 401, got %d", resp.Code)
+			}
+			if body := resp.Body.String(); body != "unauthenticated: authenticated identity is required for this operator read route\n" {
+				t.Fatalf("unexpected 401 response body: %q", body)
+			}
+			if providerCalls != 0 {
+				t.Fatalf("expected unauthenticated auth guard to short-circuit before lookup, got %d calls", providerCalls)
+			}
+		})
+
+		t.Run("forbidden", func(t *testing.T) {
+			req := newAuthenticatedRequest("/v1/applies/apply_1234abcd", "worker-prod")
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusForbidden {
+				t.Fatalf("expected 403, got %d", resp.Code)
+			}
+			if body := resp.Body.String(); body != "forbidden: operator does not have access to this deployment\n" {
+				t.Fatalf("unexpected 403 response body: %q", body)
+			}
+			if providerCalls != 1 {
+				t.Fatalf("expected forbidden lookup to load stored record once, got %d calls", providerCalls)
+			}
+		})
+
+		t.Run("allowed", func(t *testing.T) {
+			req := newAuthenticatedRequest("/v1/applies/apply_1234abcd", "api-prod, worker-prod")
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+			}
+			if providerCalls != 2 {
+				t.Fatalf("expected allowed lookup to load stored record once, got %d calls", providerCalls)
+			}
+		})
+	})
 }
 
 func TestRouterDeploymentStatuses(t *testing.T) {
