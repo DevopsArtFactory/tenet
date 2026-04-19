@@ -4458,6 +4458,207 @@ async function render(detail) {
 	runNodeHarness(t, nodeProgram)
 }
 
+func TestDeploymentWorkspaceDriftSectionLinksWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	driftDetailJSON, err := json.Marshal(map[string]any{
+		"name":            "payments-api-prod",
+		"appRef":          "payments-api",
+		"environmentRef":  "prod",
+		"accountName":     "payments-prod",
+		"awsAccountId":    "210987654321",
+		"region":          "ap-northeast-2",
+		"targetType":      "ec2",
+		"strategy":        "canary",
+		"executionMode":   "asgWeightedTargetGroups",
+		"sync":            map[string]any{"state": "Drifted", "reason": "deployment detail still reports drift"},
+		"health":          map[string]any{"overall": "Unhealthy", "summary": "target registration still catching up"},
+		"desiredArtifact": map[string]any{"image": "ghcr.io/example/payments-api:v19"},
+		"deployedArtifact": map[string]any{
+			"image": "ghcr.io/example/payments-api:v18",
+		},
+		"runtimeSummary": map[string]any{
+			"source":        "deployment-controller",
+			"timestamp":     "2026-04-20T01:15:00Z",
+			"targetType":    "ec2",
+			"strategy":      "canary",
+			"executionMode": "asgWeightedTargetGroups",
+			"historyCount":  2,
+			"changes":       []string{"target registration still shifting"},
+			"conditions":    []map[string]any{{"type": "DriftDetected", "status": true, "reason": "TargetGroupMismatch"}},
+		},
+		"rollout": map[string]any{
+			"phase":       "ShiftTrafficLinear",
+			"currentStep": "ShiftTrafficLinear",
+			"execution": []map[string]any{{
+				"name":        "prod-router",
+				"resource":    "aws_lb_listener_rule.payments_api_prod",
+				"description": "Routes production traffic to the active target group",
+			}},
+		},
+		"conditions": []map[string]any{{
+			"type":    "DriftDetected",
+			"status":  true,
+			"reason":  "TargetGroupMismatch",
+			"message": "Weighted targets are still reconciling",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal drift detail body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const driftDetail = ` + string(driftDetailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.id = '';
+    this.classList = {
+      add: (...names) => {
+        const current = new Set(this.className.split(/\s+/).filter(Boolean));
+        names.forEach((name) => current.add(name));
+        this.className = Array.from(current).join(' ');
+      },
+      toggle: (name, force) => {
+        const current = new Set(this.className.split(/\s+/).filter(Boolean));
+        const shouldAdd = force === undefined ? !current.has(name) : Boolean(force);
+        if (shouldAdd) current.add(name); else current.delete(name);
+        this.className = Array.from(current).join(' ');
+      },
+    };
+  }
+  append(...nodes) {
+    nodes.forEach((node) => {
+      if (node == null) return;
+      if (typeof node === 'string') {
+        const textNode = new Element('#text', this.ownerDocument);
+        textNode.textContent = node;
+        node = textNode;
+      }
+      node.parentNode = this;
+      this.children.push(node);
+      if (this.tagName === 'SELECT' && node.tagName === 'OPTION' && (node.selected || this.value === '')) {
+        this.value = node.value;
+      }
+    });
+  }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  scrollIntoView(options) { this.ownerDocument.lastScrolledTarget = { id: this.id || '', options }; }
+}
+class InputElement extends Element { setSelectionRange() {} }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); this.lastScrolledTarget = null; }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) {
+    if (this.byID.has(id)) return this.byID.get(id) || null;
+    const stack = Array.from(this.byID.values());
+    while (stack.length) {
+      const node = stack.shift();
+      if (node?.id === id) return node;
+      stack.push(...(node.children || []));
+    }
+    return null;
+  }
+  querySelector(selector) {
+    const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/);
+    if (!dataMatch) return null;
+    const target = dataMatch[1];
+    const stack = Array.from(this.byID.values());
+    while (stack.length) {
+      const node = stack.shift();
+      if (node?.dataset?.toolbarField === target) return node;
+      stack.push(...(node.children || []));
+    }
+    return null;
+  }
+}
+const collectNodes = (root, predicate) => {
+  const matches = [];
+  const visit = (node) => {
+    if (!node) return;
+    if (predicate(node)) matches.push(node);
+    (node.children || []).forEach(visit);
+  };
+  visit(root);
+  return matches;
+};
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const initialSearch = '?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod';
+const window = { location: { pathname: '/console', search: initialSearch, hash: '#drift-status-conditions' } };
+const history = { replaceState(_state, _title, url) {
+  const [pathAndQuery, hash = ''] = String(url).split('#');
+  const [pathname, query = ''] = pathAndQuery.split('?');
+  window.location.pathname = pathname || '/console';
+  window.location.search = query ? '?' + query : '';
+  window.location.hash = hash ? '#' + hash : '';
+} };
+const fetchCalls = [];
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (String(url) === '/v1/overview/deployments/payments-api-prod') {
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(driftDetail) });
+  }
+  throw new Error('unexpected fetch url: ' + url);
+};
+(async () => {
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle();
+  await settle();
+  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/deployments/payments-api-prod') throw new Error('expected drift workspace hash route to load only deployment detail');
+  if (window.location.pathname !== '/console') throw new Error('expected drift workspace pathname to stay stable, got ' + window.location.pathname);
+  if (window.location.search !== initialSearch) throw new Error('expected drift workspace query to stay stable, got ' + window.location.search);
+  if (window.location.hash !== '#drift-status-conditions') throw new Error('expected initial drift workspace hash to stay stable, got ' + window.location.hash);
+  const accounts = document.getElementById('accounts');
+  const sectionLinks = collectNodes(accounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#drift-'));
+  const expectedLinks = [
+    ['/console?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod#drift-runtime-signals', 'Runtime signals'],
+    ['/console?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod#drift-rollout-execution', 'Rollout execution'],
+    ['/console?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod#drift-field-level', 'Field-level drift'],
+    ['/console?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod#drift-status-conditions', 'Status conditions'],
+  ];
+  if (sectionLinks.length !== expectedLinks.length) throw new Error('expected four drift section links, got ' + sectionLinks.length);
+  expectedLinks.forEach(([href, text]) => {
+    const link = sectionLinks.find((node) => node.href === href && node.textContent === text);
+    if (!link) throw new Error('missing drift section link ' + text + ' -> ' + href);
+    if (link.target !== '_self' || link.rel) throw new Error('expected drift section link to stay in-shell for ' + text);
+  });
+  const sectionIDs = collectNodes(accounts, (node) => typeof node.id === 'string' && node.id.startsWith('drift-')).map((node) => node.id).sort();
+  const expectedSectionIDs = ['drift-field-level', 'drift-rollout-execution', 'drift-runtime-signals', 'drift-status-conditions'];
+  if (JSON.stringify(sectionIDs) !== JSON.stringify(expectedSectionIDs)) throw new Error('unexpected drift section ids: ' + JSON.stringify(sectionIDs));
+  if (!document.lastScrolledTarget || document.lastScrolledTarget.id !== 'drift-status-conditions') throw new Error('expected initial drift workspace hash to scroll the matching section into view');
+})();
+`
+
+	runNodeHarness(t, nodeProgram)
+}
+
 func TestDeploymentWorkspaceDriftRefreshWithNodeHarness(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not installed")
@@ -6510,10 +6711,11 @@ class Element {
   addEventListener(type, handler) { this.listeners[type] = handler; }
   setAttribute(name, value) { this.attributes[name] = String(value); }
   getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  scrollIntoView(options) { this.ownerDocument.lastScrolledTarget = { id: this.id || '', options }; }
 }
 class InputElement extends Element { setSelectionRange() {} }
 class Document {
-  constructor() { this.activeElement = null; this.byID = new Map(); }
+  constructor() { this.activeElement = null; this.byID = new Map(); this.lastScrolledTarget = null; }
   createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
   getElementById(id) { return this.byID.get(id) || null; }
   querySelector() { return null; }

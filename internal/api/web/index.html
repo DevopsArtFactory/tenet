@@ -1126,6 +1126,21 @@
         const pathname = window.location.pathname || '/';
         return query ? `${pathname}?${query}` : pathname;
       };
+      const buildPageSectionURL = (page, sectionID, extras = {}) => {
+        const baseURL = buildPageURL(page, extras);
+        return sectionID ? `${baseURL}#${sectionID}` : baseURL;
+      };
+      const scrollToCurrentHashTarget = () => {
+        const hash = String(window.location.hash || '').trim();
+        if (!hash || hash === '#') return;
+        const targetID = hash.startsWith('#') ? hash.slice(1) : hash;
+        if (!targetID) return;
+        const target = document.getElementById(targetID);
+        if (!(target instanceof HTMLElement)) return;
+        if (typeof target.scrollIntoView === 'function') {
+          target.scrollIntoView({ block: 'start', behavior: 'auto' });
+        }
+      };
       const createDeploymentBreadcrumb = ({ deploymentName = '', awsAccountId = '', accountName = '', currentLabel = '' } = {}) => {
         const activeLabel = currentLabel || deploymentName || 'Application';
         return createBreadcrumbChrome([
@@ -1434,7 +1449,7 @@
           description: bookmarkedResource.description || 'No linked resource metadata is available for this selection.',
         };
       };
-      const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null) => {
+      const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = []) => {
         if (!deploymentName) return null;
         const strip = createElement('section', 'quick-nav-strip');
         const workspaceLinks = createElement('div', 'quick-nav-links');
@@ -1457,6 +1472,18 @@
           workspaceLinks,
         );
         groups.append(workspaceGroup);
+        if (Array.isArray(sectionLinks) && sectionLinks.length) {
+          const sectionGroup = createElement('div', 'quick-nav-group');
+          const sectionNavLinks = createElement('div', 'quick-nav-links');
+          sectionLinks.forEach((sectionLink) => {
+            sectionNavLinks.append(createNavLink(sectionLink.href, sectionLink.label, '_self'));
+          });
+          sectionGroup.append(
+            createElement('div', 'quick-nav-label', 'On this page'),
+            sectionNavLinks,
+          );
+          groups.append(sectionGroup);
+        }
         if (Array.isArray(linkedResources)) {
           const resourceGroup = createElement('div', 'quick-nav-group');
           resourceGroup.append(createElement('div', 'quick-nav-label', 'Linked resources'));
@@ -1488,7 +1515,15 @@
         const deploymentName = detail.name || currentPageState.deployment || '';
         const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';
         const linkedResources = mode === 'drift' ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;
-        return createDeploymentQuickNav(deploymentName, currentWorkspace, linkedResources);
+        const sectionLinks = mode === 'drift'
+          ? [
+            { label: 'Runtime signals', href: buildPageSectionURL('drift', 'drift-runtime-signals', { deployment: deploymentName }) },
+            { label: 'Rollout execution', href: buildPageSectionURL('drift', 'drift-rollout-execution', { deployment: deploymentName }) },
+            { label: 'Field-level drift', href: buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName }) },
+            { label: 'Status conditions', href: buildPageSectionURL('drift', 'drift-status-conditions', { deployment: deploymentName }) },
+          ]
+          : [];
+        return createDeploymentQuickNav(deploymentName, currentWorkspace, linkedResources, sectionLinks);
       };
       const createAuditQuickNav = () => createDeploymentQuickNav(auditDeploymentName(), 'Audit log');
       const createResourceQuickNav = (detail, resource) => {
@@ -3577,6 +3612,7 @@
 
         const sections = [];
         const runtimeSignalsSection = createDetailSection('Latest runtime signals');
+        if (mode === 'drift') runtimeSignalsSection.id = 'drift-runtime-signals';
         const runtimeSignals = createElement('div', 'detail-grid');
         [
           ['Runtime source', metricValue(detail.runtimeSummary?.source)],
@@ -3603,6 +3639,7 @@
         sections.push(runtimeSignalsSection);
 
         const executionSection = createDetailSection('Rollout execution');
+        if (mode === 'drift') executionSection.id = 'drift-rollout-execution';
         const execution = detail.rollout?.execution || [];
         if (!execution.length) {
           executionSection.append(createElement('div', 'detail-state', 'No rollout execution resources are currently reported.'));
@@ -3632,6 +3669,7 @@
             ),
           ];
           const driftSection = createElement('section', 'detail-section');
+          driftSection.id = 'drift-field-level';
           driftSection.append(createDetailSectionHeader(emptyTitle, driftActions));
           const driftRefreshState = driftWorkspaceRefreshStateText(workspaceState);
           if (driftRefreshState) {
@@ -3786,6 +3824,7 @@
           sections.push(driftSection);
 
           const conditionsSection = createDetailSection('Status conditions');
+          conditionsSection.id = 'drift-status-conditions';
           const conditions = detail.conditions || [];
           if (!conditions.length) {
             conditionsSection.append(createElement('div', 'detail-state', 'No deployment conditions are currently reported.'));
@@ -4048,6 +4087,7 @@
         }
         header.append(head, createWorkspaceQuickNav(detail, mode), ...sections);
         root.replaceChildren(header);
+        scrollToCurrentHashTarget();
       };
 
       const renderSummary = (accounts) => {

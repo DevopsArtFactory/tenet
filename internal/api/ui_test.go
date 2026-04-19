@@ -259,6 +259,32 @@ func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUIIncludesDriftSectionNavigation(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const buildPageSectionURL = (page, sectionID, extras = {}) => {",
+		"return sectionID ? `${baseURL}#${sectionID}` : baseURL;",
+		"const scrollToCurrentHashTarget = () => {",
+		"target.scrollIntoView({ block: 'start', behavior: 'auto' });",
+		"const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = []) => {",
+		"createElement('div', 'quick-nav-label', 'On this page')",
+		"buildPageSectionURL('drift', 'drift-runtime-signals', { deployment: deploymentName })",
+		"buildPageSectionURL('drift', 'drift-rollout-execution', { deployment: deploymentName })",
+		"buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName })",
+		"buildPageSectionURL('drift', 'drift-status-conditions', { deployment: deploymentName })",
+		"runtimeSignalsSection.id = 'drift-runtime-signals';",
+		"executionSection.id = 'drift-rollout-execution';",
+		"driftSection.id = 'drift-field-level';",
+		"conditionsSection.id = 'drift-status-conditions';",
+		"scrollToCurrentHashTarget();",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+}
+
 func TestEmbeddedUIIncludesBreadcrumbChromeForDrillDownPages(t *testing.T) {
 	body := string(indexHTML)
 
@@ -399,7 +425,7 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"createSelect('Limit', String(currentPageState.auditLimit || ''), auditLimitSelectOptions(currentPageState.auditLimit), (event) => {",
 		"Audit filters: none",
 		"Audit filters: ${activeFilters.join(' · ')}",
-		"const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null) => {",
+		"const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = []) => {",
 		"const createAuditQuickNav = () => createDeploymentQuickNav(auditDeploymentName(), 'Audit log');",
 		"const renderAuditLogsState = (text, className = '', detailText = '') => {",
 		"const quickNav = createAuditQuickNav();",
@@ -635,11 +661,16 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"const backLink = createNavLink(buildPageURL('application', { deployment: detail.name || currentPageState.deployment || '' }), 'Back to application');",
 		"backLink.target = '_self';",
 		"backLink.rel = '';",
-		"const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null) => {",
+		"const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = []) => {",
 		"const createWorkspaceQuickNav = (detail, mode) => {",
 		"const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';",
 		"const linkedResources = mode === 'drift' ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;",
-		"return createDeploymentQuickNav(deploymentName, currentWorkspace, linkedResources);",
+		"const sectionLinks = mode === 'drift'",
+		"buildPageSectionURL('drift', 'drift-runtime-signals', { deployment: deploymentName })",
+		"buildPageSectionURL('drift', 'drift-rollout-execution', { deployment: deploymentName })",
+		"buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName })",
+		"buildPageSectionURL('drift', 'drift-status-conditions', { deployment: deploymentName })",
+		"return createDeploymentQuickNav(deploymentName, currentWorkspace, linkedResources, sectionLinks);",
 		"createElement('div', 'quick-nav-label', 'Deployment workspaces')",
 		"createElement('div', 'quick-nav-label', 'Linked resources')",
 		"createElement('div', 'quick-nav-current', `${deploymentName || 'Deployment'} · ${currentWorkspace}`)",
@@ -1563,10 +1594,22 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		t.Fatalf("expected smoke-local.sh to assert drift workspace resource-link contract")
 	}
 	for _, fragment := range []string{
+		"assert 'On this page' in ui, ui",
 		"assert 'Drift summary' in ui, ui",
 		"assert 'Total rows' in ui, ui",
 		"assert 'Visible rows' in ui, ui",
 		"assert 'No field-level drift rows match the current filters. Adjust the query or severity filters to inspect reported drift.' in ui, ui",
+		"assert \"const buildPageSectionURL = (page, sectionID, extras = {}) => {\" in ui, ui",
+		"assert \"const scrollToCurrentHashTarget = () => {\" in ui, ui",
+		"assert \"target.scrollIntoView({ block: 'start', behavior: 'auto' });\" in ui, ui",
+		"assert \"buildPageSectionURL('drift', 'drift-runtime-signals', { deployment: deploymentName })\" in ui, ui",
+		"assert \"buildPageSectionURL('drift', 'drift-rollout-execution', { deployment: deploymentName })\" in ui, ui",
+		"assert \"buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName })\" in ui, ui",
+		"assert \"buildPageSectionURL('drift', 'drift-status-conditions', { deployment: deploymentName })\" in ui, ui",
+		"assert \"runtimeSignalsSection.id = 'drift-runtime-signals';\" in ui, ui",
+		"assert \"executionSection.id = 'drift-rollout-execution';\" in ui, ui",
+		"assert \"driftSection.id = 'drift-field-level';\" in ui, ui",
+		"assert \"conditionsSection.id = 'drift-status-conditions';\" in ui, ui",
 	} {
 		if !strings.Contains(text, fragment) {
 			t.Fatalf("expected smoke-local.sh to include %q", fragment)
@@ -1759,6 +1802,34 @@ func TestOverviewDocsDescribeDriftWorkspaceResourceQuickLinks(t *testing.T) {
 		"../../docs/architecture/tenet-v1-overview-ui.md": {
 			"direct `_self` resource drill-down links",
 			"`No linked resources are available in this drift workspace yet.`",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
+	}
+}
+
+func TestOverviewDocsDescribeDriftWorkspaceSectionNavigation(t *testing.T) {
+	files := map[string][]string{
+		"../../README.md": {
+			"`On this page` group",
+			"`Runtime signals`, `Rollout execution`, `Field-level drift`, and `Status conditions`",
+			"`/?page=drift&deployment={deploymentName}#drift-field-level`",
+		},
+		"../../docs/features/overview-dashboard.md": {
+			"`On this page` group",
+			"`Runtime signals`, `Rollout execution`, `Field-level drift`, and `Status conditions`",
+			"`/?page=drift&deployment={name}#drift-field-level`",
 		},
 	}
 
