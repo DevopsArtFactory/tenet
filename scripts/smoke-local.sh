@@ -351,6 +351,7 @@ ui=$(curl -fsS "http://$HOST:$PORT/")
 application_ui=$(curl -fsS "http://$HOST:$PORT/?page=application&deployment=payments-api-prod")
 account_ui=$(curl -fsS "http://$HOST:$PORT/?page=account&accountId=123456789012")
 resource_ui=$(curl -fsS "http://$HOST:$PORT/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan%3A%3Apayments-api-prod-weighted-routing%3A%3AWeighted+routing+plan")
+ecs_resource_ui=$(curl -fsS "http://$HOST:$PORT/?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=ecsService%3A%3Aworker-prod-service%3A%3AECS+service+Tenet+updates+with+native+rolling+deployment")
 audit_ui=$(curl -fsS "http://$HOST:$PORT/?page=audit&deployment=payments-api-prod&action=apply.requested&limit=1")
 plan_ui=$(curl -fsS "http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id")
 apply_ui=$(curl -fsS "http://$HOST:$PORT/?page=plan&deployment=payments-api-prod&planId=$plan_id&applyId=$apply_id")
@@ -399,11 +400,12 @@ ui_path=$(write_payload ui.html "$ui")
 application_ui_path=$(write_payload application-ui.html "$application_ui")
 account_ui_path=$(write_payload account-ui.html "$account_ui")
 resource_ui_path=$(write_payload resource-ui.html "$resource_ui")
+ecs_resource_ui_path=$(write_payload ecs-resource-ui.html "$ecs_resource_ui")
 audit_ui_path=$(write_payload audit-ui.html "$audit_ui")
 plan_ui_path=$(write_payload plan-ui.html "$plan_ui")
 apply_ui_path=$(write_payload apply-ui.html "$apply_ui")
 
-SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" INVALID_APPLY_TRANSITION_STATUS="$invalid_apply_transition_status" INVALID_APPLY_TRANSITION_PATH="$invalid_apply_transition_path" UNKNOWN_APPLY_TRANSITION_STATUS="$unknown_apply_transition_status" UNKNOWN_APPLY_TRANSITION_PATH="$unknown_apply_transition_path" TERMINAL_APPLY_TRANSITION_STATUS="$terminal_apply_transition_status" TERMINAL_APPLY_TRANSITION_PATH="$terminal_apply_transition_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" STALE_APPLY_PLAN_PREVIEW_PATH="$stale_apply_plan_preview_path" STALE_APPLY_CONFLICT_PATH="$stale_apply_conflict_path" STALE_APPLY_CONFLICT_STATUS="$stale_apply_conflict_status" STALE_APPLY_AUDIT_LOGS_PATH="$stale_apply_audit_logs_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PING_PATH="$webhook_ping_path" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" RESOURCE_LOGS_PATH="$resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" UI_PATH="$ui_path" APPLICATION_UI_PATH="$application_ui_path" ACCOUNT_UI_PATH="$account_ui_path" RESOURCE_UI_PATH="$resource_ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" APPLY_ENABLED="$APPLY_ENABLED" python3 - <<'PY'
+SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" APPLICATION_DETAIL_PATH="$application_detail_path" OVERVIEW_PATH="$overview_path" ACCOUNT_DETAIL_PATH="$account_detail_path" GROUP_DETAIL_PATH="$group_detail_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_EVENTS_FIXTURE_PATH="$deployment_events_fixture_path" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" INVALID_APPLY_TRANSITION_STATUS="$invalid_apply_transition_status" INVALID_APPLY_TRANSITION_PATH="$invalid_apply_transition_path" UNKNOWN_APPLY_TRANSITION_STATUS="$unknown_apply_transition_status" UNKNOWN_APPLY_TRANSITION_PATH="$unknown_apply_transition_path" TERMINAL_APPLY_TRANSITION_STATUS="$terminal_apply_transition_status" TERMINAL_APPLY_TRANSITION_PATH="$terminal_apply_transition_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" STALE_PLAN_PREVIEW_PATH="$stale_plan_preview_path" STALE_APPLY_PLAN_PREVIEW_PATH="$stale_apply_plan_preview_path" STALE_APPLY_CONFLICT_PATH="$stale_apply_conflict_path" STALE_APPLY_CONFLICT_STATUS="$stale_apply_conflict_status" STALE_APPLY_AUDIT_LOGS_PATH="$stale_apply_audit_logs_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" AUDIT_LOGS_FILTERED_PATH="$audit_logs_filtered_path" AUDIT_LOGS_EMPTY_PATH="$audit_logs_empty_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" STATUS_JSON_PATH="$status_json_path" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PING_PATH="$webhook_ping_path" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" RESOURCE_LOGS_PATH="$resource_logs_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" UI_PATH="$ui_path" APPLICATION_UI_PATH="$application_ui_path" ACCOUNT_UI_PATH="$account_ui_path" RESOURCE_UI_PATH="$resource_ui_path" ECS_RESOURCE_UI_PATH="$ecs_resource_ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_UI_PATH="$plan_ui_path" APPLY_UI_PATH="$apply_ui_path" APPLY_ENABLED="$APPLY_ENABLED" python3 - <<'PY'
 import json, os
 
 def read_json(path_env):
@@ -459,6 +461,7 @@ ui = read_text('UI_PATH')
 application_ui = read_text('APPLICATION_UI_PATH')
 account_ui = read_text('ACCOUNT_UI_PATH')
 resource_ui = read_text('RESOURCE_UI_PATH')
+ecs_resource_ui = read_text('ECS_RESOURCE_UI_PATH')
 audit_ui = read_text('AUDIT_UI_PATH')
 plan_ui = read_text('PLAN_UI_PATH')
 apply_ui = read_text('APPLY_UI_PATH')
@@ -873,12 +876,13 @@ assert_fragments("account_ui", account_ui, operator_read_auth_fragments + (
     "const renderOperatorReadFailurePage = (pageLabel, route, error) => {",
     "renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);",
 ))
-assert_fragments("resource_ui", resource_ui, operator_read_auth_fragments + (
-    "return 'Resource detail';",
-    "return `GET /v1/overview/deployments/${deploymentName}`;",
-    "const renderOperatorReadFailurePage = (pageLabel, route, error) => {",
-    "renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);",
-))
+for label, body in (("resource_ui", resource_ui), ("ecs_resource_ui", ecs_resource_ui)):
+    assert_fragments(label, body, operator_read_auth_fragments + (
+        "return 'Resource detail';",
+        "return `GET /v1/overview/deployments/${deploymentName}`;",
+        "const renderOperatorReadFailurePage = (pageLabel, route, error) => {",
+        "renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);",
+    ))
 assert_fragments("audit_ui", audit_ui, operator_read_auth_fragments + (
     "return `GET ${buildAuditLogsRoute({",
     "renderAuditLogsState(operatorReadFailureHeading(error), 'error', operatorReadFailureMessage(buildEmbeddedPageReadRoute(currentPageState), error));",
@@ -891,16 +895,17 @@ assert "const renderApplicationDetailPage = (detail) => {" in application_ui, ap
 assert "const breadcrumb = createDeploymentBreadcrumb({" in application_ui, application_ui
 assert "createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')" in application_ui, application_ui
 assert 'Application resources' in application_ui, application_ui
-assert "const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);" in resource_ui, resource_ui
-assert "const renderResourceDetailPage = (detail) => {" in resource_ui, resource_ui
-assert "currentLabel: resource.name," in resource_ui, resource_ui
-assert "const createResourceQuickNav = (detail, resource) => {" in resource_ui, resource_ui
-assert "const renderOperatorReadFailurePanel = (container, title, actions, route, error) => {" in resource_ui, resource_ui
-assert "const resourceLogsReadRoute = (deploymentName, resource) => `GET ${buildResourceLogsRoute(deploymentName, resource)}`;" in resource_ui, resource_ui
-assert "const resourceInspectionReadRoute = (deploymentName, resource) => `GET ${buildResourceInspectionRoute(deploymentName, resource)}`;" in resource_ui, resource_ui
-assert "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')" in resource_ui, resource_ui
-assert "createNavLink(buildPageURL('resource', {" in resource_ui, resource_ui
-assert 'Quick navigation' in resource_ui, resource_ui
+for body in (resource_ui, ecs_resource_ui):
+    assert "const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);" in body, body
+    assert "const renderResourceDetailPage = (detail) => {" in body, body
+    assert "currentLabel: resource.name," in body, body
+    assert "const createResourceQuickNav = (detail, resource) => {" in body, body
+    assert "const renderOperatorReadFailurePanel = (container, title, actions, route, error) => {" in body, body
+    assert "const resourceLogsReadRoute = (deploymentName, resource) => `GET ${buildResourceLogsRoute(deploymentName, resource)}`;" in body, body
+    assert "const resourceInspectionReadRoute = (deploymentName, resource) => `GET ${buildResourceInspectionRoute(deploymentName, resource)}`;" in body, body
+    assert "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')" in body, body
+    assert "createNavLink(buildPageURL('resource', {" in body, body
+    assert 'Quick navigation' in body, body
 assert 'Linked resources' in ui, ui
 assert 'No linked resources are available in this drift workspace yet.' in ui, ui
 assert 'Audit timeline' in audit_ui, audit_ui

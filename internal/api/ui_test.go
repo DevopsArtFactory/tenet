@@ -1423,6 +1423,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "resource_ui=$(curl -fsS \"http://$HOST:$PORT/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan%3A%3Apayments-api-prod-weighted-routing%3A%3AWeighted+routing+plan\")") {
 		t.Fatalf("expected smoke-local.sh to fetch bookmarkable resource page")
 	}
+	if !strings.Contains(text, "ecs_resource_ui=$(curl -fsS \"http://$HOST:$PORT/?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=ecsService%3A%3Aworker-prod-service%3A%3AECS+service+Tenet+updates+with+native+rolling+deployment\")") {
+		t.Fatalf("expected smoke-local.sh to fetch bookmarkable ecs resource page")
+	}
 	if !strings.Contains(text, "assert \"const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page fetch route contract")
 	}
@@ -1431,6 +1434,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert_fragments(\"account_ui\", account_ui, operator_read_auth_fragments + (") {
 		t.Fatalf("expected smoke-local.sh to lock account page operator-read auth guidance")
+	}
+	if !strings.Contains(text, "for label, body in ((\"resource_ui\", resource_ui), (\"ecs_resource_ui\", ecs_resource_ui)):") {
+		t.Fatalf("expected smoke-local.sh to assert both bookmarkable resource pages")
 	}
 	if !strings.Contains(text, "\"return 'Account detail';\",") || !strings.Contains(text, "\"return `GET /v1/overview/accounts/${accountID}`;\",") {
 		t.Fatalf("expected smoke-local.sh to assert account-page operator read auth labels")
@@ -1441,11 +1447,14 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page resource link contract")
 	}
-	if !strings.Contains(text, "assert \"const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);\" in resource_ui, resource_ui") {
-		t.Fatalf("expected smoke-local.sh to assert resource page bookmark contract")
+	if !strings.Contains(text, "for body in (resource_ui, ecs_resource_ui):") {
+		t.Fatalf("expected smoke-local.sh to iterate over both resource page payloads")
 	}
-	if !strings.Contains(text, "assert \"createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')\" in resource_ui, resource_ui") {
-		t.Fatalf("expected smoke-local.sh to assert resource page back-link contract")
+	if !strings.Contains(text, "assert \"const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);\" in body, body") {
+		t.Fatalf("expected smoke-local.sh to assert bookmarkable resource page contracts for both resource pages")
+	}
+	if !strings.Contains(text, "assert \"createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')\" in body, body") {
+		t.Fatalf("expected smoke-local.sh to assert resource page back-link contract for both resource pages")
 	}
 	if !strings.Contains(text, "assert 'Audit timeline' in audit_ui, audit_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains audit timeline copy")
@@ -1992,12 +2001,16 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"application_ui=$(curl -fsS \"$API_BASE_URL/?page=application&deployment=payments-api-prod\")",
 			"account_ui=$(curl -fsS \"$API_BASE_URL/?page=account&accountId=123456789012\")",
 			"resource_ui=$(curl -fsS \"$API_BASE_URL/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan%3A%3Apayments-api-prod-weighted-routing%3A%3AWeighted+routing+plan\")",
+			"ecs_resource_ui=$(curl -fsS \"$API_BASE_URL/?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=ecsService%3A%3Aworker-prod-service%3A%3AECS+service+Tenet+updates+with+native+rolling+deployment\")",
 			"APPLICATION_UI_PATH=\"$application_ui_path\"",
 			"ACCOUNT_UI_PATH=\"$account_ui_path\"",
 			"RESOURCE_UI_PATH=\"$resource_ui_path\"",
+			"ECS_RESOURCE_UI_PATH=\"$ecs_resource_ui_path\"",
 			"application_ui = read_text(\"APPLICATION_UI_PATH\")",
 			"account_ui = read_text(\"ACCOUNT_UI_PATH\")",
 			"resource_ui = read_text(\"RESOURCE_UI_PATH\")",
+			"ecs_resource_ui = read_text(\"ECS_RESOURCE_UI_PATH\")",
+			"for label, body in ((\"resource_ui\", resource_ui), (\"ecs_resource_ui\", ecs_resource_ui)):",
 			"const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {",
 			"const fetchAccountDetail = (accountID) => fetchEmbeddedReadRouteJSON(`/v1/overview/accounts/${encodeURIComponent(accountID)}`, {",
 			"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')",
@@ -2168,7 +2181,7 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"operator_read_auth_fragments = (",
 			"assert_fragments(\"application_ui\", application_ui, operator_read_auth_fragments + (",
 			"assert_fragments(\"account_ui\", account_ui, operator_read_auth_fragments + (",
-			"assert_fragments(\"resource_ui\", resource_ui, operator_read_auth_fragments + (",
+			"for label, body in ((\"resource_ui\", resource_ui), (\"ecs_resource_ui\", ecs_resource_ui)):",
 			"assert_fragments(\"drift_ui\", drift_ui, operator_read_auth_fragments + (",
 			"assert_fragments(\"audit_ui\", audit_ui, operator_read_auth_fragments + (",
 			"\"const operatorReadAuthRequiredState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 401;\"",
@@ -2214,7 +2227,7 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 		"../../README.md": {
 			"Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis;",
 			"the request-actor header contract by sending conflicting `X-Tenet-Actor-*` and `X-User-*` identities together",
-			"fetches the bookmarkable `/?page=application&deployment=payments-api-prod` route, the bookmarkable `/?page=account&accountId=123456789012` route, and one representative bookmarkable `/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan` route",
+			"fetches the bookmarkable `/?page=application&deployment=payments-api-prod` route, the bookmarkable `/?page=account&accountId=123456789012` route, the existing bookmarkable `/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan` route, plus one representative bookmarkable ECS resource route at `/?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=ecsService::worker-prod-service::ECS service Tenet updates with native rolling deployment`",
 			"checks only raw embedded application/account/resource shell strings that prove those drill-down pages can render and navigate, plus the landing-page helper strings that keep `/`, the bookmarkable application drill-down, and the bookmarkable account drill-down on the shared operator-read auth guidance path under trusted front-door auth",
 			"the front-door auth contract by restarting `tenet-api`",
 			"Front-door auth remains additive and opt-in.",
@@ -2257,7 +2270,7 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
 			"Use `make smoke-local` for the fastest fixture-backed regression check when you only need direct-process validation.",
 			"proves additive `X-User-*` alias support plus explicit `X-Tenet-Actor-*` precedence by sending both header families with conflicting identities",
-			"fetches the bookmarkable `/?page=application&deployment=payments-api-prod` route, the bookmarkable `/?page=account&accountId=123456789012` route, plus one representative bookmarkable `/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan` route",
+			"fetches the bookmarkable `/?page=application&deployment=payments-api-prod` route, the bookmarkable `/?page=account&accountId=123456789012` route, the existing bookmarkable `/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan` route, plus one representative bookmarkable ECS resource route at `/?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=ecsService::worker-prod-service::ECS service Tenet updates with native rolling deployment`",
 			"asserts only the raw embedded application/account/resource shell strings needed to prove those drill-down pages can render and navigate",
 			"restarts `tenet-api` with `TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
 			"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
