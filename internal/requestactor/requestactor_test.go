@@ -78,6 +78,51 @@ func TestAuthenticatedIdentityFromHeadersReturnsAuthenticatedIdentity(t *testing
 	}
 }
 
+func TestAuthenticatedIdentityFromHeadersFallsBackToAliasHeaders(t *testing.T) {
+	header := http.Header{}
+	header.Set(HeaderAliasID, "front-door-123")
+	header.Set(HeaderAliasName, "Front Door Operator")
+	header.Set(HeaderAliasEmail, "frontdoor@example.com")
+
+	identity := AuthenticatedIdentityFromHeaders(header)
+	if !identity.Authenticated {
+		t.Fatalf("expected authenticated identity, got %+v", identity)
+	}
+	if identity.ID != "front-door-123" || identity.Name != "Front Door Operator" || identity.Email != "frontdoor@example.com" {
+		t.Fatalf("unexpected alias-backed authenticated identity details: %+v", identity)
+	}
+}
+
+func TestAuthenticatedIdentityFromHeadersFallsBackPerFieldWhenExplicitTrustedHeadersAreMissing(t *testing.T) {
+	header := http.Header{}
+	header.Set(AuthenticatedHeaderID, "front-door-123")
+	header.Set(HeaderAliasName, "Front Door Operator")
+	header.Set(HeaderAliasEmail, "frontdoor@example.com")
+
+	identity := AuthenticatedIdentityFromHeaders(header)
+	if !identity.Authenticated {
+		t.Fatalf("expected authenticated identity, got %+v", identity)
+	}
+	if identity.ID != "front-door-123" || identity.Name != "Front Door Operator" || identity.Email != "frontdoor@example.com" {
+		t.Fatalf("unexpected mixed trusted/alias authenticated identity details: %+v", identity)
+	}
+}
+
+func TestAuthenticatedIdentityFromHeadersPrefersExplicitTrustedHeadersOverAliases(t *testing.T) {
+	header := http.Header{}
+	header.Set(AuthenticatedHeaderID, "front-door-123")
+	header.Set(AuthenticatedHeaderName, "Front Door Operator")
+	header.Set(AuthenticatedHeaderEmail, "frontdoor@example.com")
+	header.Set(HeaderAliasID, "alias-456")
+	header.Set(HeaderAliasName, "Alias Operator")
+	header.Set(HeaderAliasEmail, "alias@example.com")
+
+	identity := AuthenticatedIdentityFromHeaders(header)
+	if identity.ID != "front-door-123" || identity.Name != "Front Door Operator" || identity.Email != "frontdoor@example.com" {
+		t.Fatalf("expected explicit trusted headers to win, got %+v", identity)
+	}
+}
+
 func TestAuthorizedDeploymentsFromHeadersReturnsNormalizedAllowlist(t *testing.T) {
 	header := http.Header{}
 	header.Add(AuthorizedDeploymentsHeader, "payments-api-prod, payments-api-staging ,,worker-prod")
