@@ -2188,7 +2188,10 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"\"renderAuditLogsState(operatorReadFailureHeading(error), 'error', operatorReadFailureMessage(buildEmbeddedPageReadRoute(currentPageState), error));\"",
 			"params.get('planId') || ''",
 			"params.get('applyId') || ''",
-			"fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-logs?${params.toString()}`)",
+			"\"const buildResourceLogsRoute = (deploymentName, resource) => {\"",
+			"\"const resourceLogsReadRoute = (deploymentName, resource) => `GET ${buildResourceLogsRoute(deploymentName, resource)}`;\"",
+			"\"const buildResourceInspectionRoute = (deploymentName, resource) => {\"",
+			"\"const resourceInspectionReadRoute = (deploymentName, resource) => `GET ${buildResourceInspectionRoute(deploymentName, resource)}`;\"",
 			"logs api --tail=200",
 			"logs controller --tail=200",
 			"api logs missing correlated structured request entries",
@@ -2324,9 +2327,41 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 		"APPLY_RECORD_JSON=\"$apply_record\"",
 		"QUEUED_PLAN_PREVIEW_JSON=\"$queued_plan_preview\"",
 		"QUEUED_APPLY_RECORD_JSON=\"$queued_apply_record\"",
+		"fetch(`/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-logs?${params.toString()}`)",
 	} {
 		if strings.Contains(dockerSmoke, fragment) {
-			t.Fatalf("expected smoke-docker.sh to avoid env-blob JSON parsing fragment %q", fragment)
+			t.Fatalf("expected smoke-docker.sh to avoid stale or env-blob fragment %q", fragment)
+		}
+	}
+}
+
+func TestOverviewDocsDescribeResourceLazyPanelRefreshAndAuthGuidance(t *testing.T) {
+	files := map[string][]string{
+		"../../README.md": {
+			"`Refresh live inspection` control",
+			"`Refresh recent logs` control",
+			"re-run only that panel-local backend route in place",
+			"leaves the sibling panel and the rest of the resource page visible",
+			"replaces generic fetch-error copy with the same trusted-front-door / access-denied guidance used on other embedded read paths",
+		},
+		"../../docs/features/overview-dashboard.md": {
+			"`Refresh recent logs` and `Refresh live inspection` controls",
+			"re-run only that panel's backend route in place",
+			"leaves the sibling panel and the rest of the resource page visible",
+			"replaces generic fetch-error copy with the same trusted-front-door / access-denied guidance used on other embedded read paths",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
 		}
 	}
 }
