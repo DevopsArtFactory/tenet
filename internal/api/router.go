@@ -163,6 +163,129 @@ func filterAuthorizedApplicationOverviews(applications []catalog.ApplicationOver
 	return filtered
 }
 
+type deploymentOverviewCounts struct {
+	deploymentCount  int
+	projectCount     int
+	environmentCount int
+	syncedCount      int
+	progressingCount int
+	pausedCount      int
+	errorCount       int
+}
+
+func filterAuthorizedDeploymentOverviews(deployments []catalog.DeploymentOverview, authorized requestactor.AuthorizedDeployments, enabled bool) []catalog.DeploymentOverview {
+	if !enabled {
+		return deployments
+	}
+	filtered := make([]catalog.DeploymentOverview, 0, len(deployments))
+	for _, deployment := range deployments {
+		if authorized.Allows(deployment.Name) {
+			filtered = append(filtered, deployment)
+		}
+	}
+	return filtered
+}
+
+func summarizeDeploymentOverviews(deployments []catalog.DeploymentOverview) deploymentOverviewCounts {
+	counts := deploymentOverviewCounts{
+		deploymentCount: len(deployments),
+	}
+	projectRefs := make(map[string]struct{}, len(deployments))
+	environmentRefs := make(map[string]struct{}, len(deployments))
+	for _, deployment := range deployments {
+		if deployment.AppRef != "" {
+			projectRefs[deployment.AppRef] = struct{}{}
+		}
+		if deployment.EnvironmentRef != "" {
+			environmentRefs[deployment.EnvironmentRef] = struct{}{}
+		}
+		switch deployment.Sync.State {
+		case "Synced":
+			counts.syncedCount++
+		case "Reconciling", "OutOfSync", "Drifted":
+			counts.progressingCount++
+		case "Paused":
+			counts.pausedCount++
+		case "Error":
+			counts.errorCount++
+		}
+	}
+	counts.projectCount = len(projectRefs)
+	counts.environmentCount = len(environmentRefs)
+	return counts
+}
+
+func filterAuthorizedAccountOverviews(accounts []catalog.AccountOverview, authorized requestactor.AuthorizedDeployments, enabled bool) []catalog.AccountOverview {
+	if !enabled {
+		return accounts
+	}
+	filtered := make([]catalog.AccountOverview, 0, len(accounts))
+	for _, account := range accounts {
+		visibleDeployments := filterAuthorizedDeploymentOverviews(account.Deployments, authorized, enabled)
+		if len(visibleDeployments) == 0 {
+			continue
+		}
+		counts := summarizeDeploymentOverviews(visibleDeployments)
+		filtered = append(filtered, catalog.AccountOverview{
+			Name:             account.Name,
+			AWSAccountID:     account.AWSAccountID,
+			AllowedRegions:   account.AllowedRegions,
+			DeploymentCount:  counts.deploymentCount,
+			ProjectCount:     counts.projectCount,
+			EnvironmentCount: counts.environmentCount,
+			SyncedCount:      counts.syncedCount,
+			ProgressingCount: counts.progressingCount,
+			PausedCount:      counts.pausedCount,
+			ErrorCount:       counts.errorCount,
+			Deployments:      visibleDeployments,
+		})
+	}
+	return filtered
+}
+
+func filterAuthorizedAccountOverviewDetail(detail catalog.AccountOverviewDetail, authorized requestactor.AuthorizedDeployments, enabled bool) catalog.AccountOverviewDetail {
+	if !enabled {
+		return detail
+	}
+	visibleDeployments := filterAuthorizedDeploymentOverviews(detail.Deployments, authorized, enabled)
+	counts := summarizeDeploymentOverviews(visibleDeployments)
+	return catalog.AccountOverviewDetail{
+		Name:             detail.Name,
+		AWSAccountID:     detail.AWSAccountID,
+		AllowedRegions:   detail.AllowedRegions,
+		DeploymentCount:  counts.deploymentCount,
+		ProjectCount:     counts.projectCount,
+		EnvironmentCount: counts.environmentCount,
+		SyncedCount:      counts.syncedCount,
+		ProgressingCount: counts.progressingCount,
+		PausedCount:      counts.pausedCount,
+		ErrorCount:       counts.errorCount,
+		Deployments:      visibleDeployments,
+	}
+}
+
+func filterAuthorizedProjectEnvironmentOverviewDetail(detail catalog.ProjectEnvironmentOverviewDetail, authorized requestactor.AuthorizedDeployments, enabled bool) catalog.ProjectEnvironmentOverviewDetail {
+	if !enabled {
+		return detail
+	}
+	visibleDeployments := filterAuthorizedDeploymentOverviews(detail.Deployments, authorized, enabled)
+	counts := summarizeDeploymentOverviews(visibleDeployments)
+	return catalog.ProjectEnvironmentOverviewDetail{
+		AccountName:      detail.AccountName,
+		AWSAccountID:     detail.AWSAccountID,
+		AllowedRegions:   detail.AllowedRegions,
+		AppRef:           detail.AppRef,
+		EnvironmentRef:   detail.EnvironmentRef,
+		Region:           detail.Region,
+		DeploymentCount:  counts.deploymentCount,
+		SyncedCount:      counts.syncedCount,
+		ProgressingCount: counts.progressingCount,
+		PausedCount:      counts.pausedCount,
+		ErrorCount:       counts.errorCount,
+		Deployments:      visibleDeployments,
+	}
+}
+
 // Options configures the API router.
 type Options struct {
 	BuildInfo                            buildinfo.Info
@@ -415,6 +538,9 @@ func NewRouter(options Options) http.Handler {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
+		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization) {
+			return
+		}
 		if options.OverviewAccounts == nil {
 			http.Error(w, "overview accounts unavailable", http.StatusServiceUnavailable)
 			return
@@ -424,6 +550,11 @@ func NewRouter(options Options) http.Handler {
 			respondReadProviderError(w, err, "overview accounts unavailable")
 			return
 		}
+		accounts = filterAuthorizedAccountOverviews(
+			accounts,
+			requestactor.AuthorizedDeploymentsFromContext(r.Context()),
+			options.RequireDeploymentReadAuthorization,
+		)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(accounts)
 	})
@@ -439,9 +570,21 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "overview account unavailable", http.StatusServiceUnavailable)
 				return
 			}
+			if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization) {
+				return
+			}
 			detail, err := options.OverviewAccount(r.Context(), segments[0])
 			if err != nil {
 				respondReadLookupError(w, err, "overview account unavailable")
+				return
+			}
+			detail = filterAuthorizedAccountOverviewDetail(
+				detail,
+				requestactor.AuthorizedDeploymentsFromContext(r.Context()),
+				options.RequireDeploymentReadAuthorization,
+			)
+			if options.RequireDeploymentReadAuthorization && len(detail.Deployments) == 0 {
+				respondForbiddenError(w, "forbidden: operator does not have access to this deployment")
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -451,9 +594,21 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "overview project environment unavailable", http.StatusServiceUnavailable)
 				return
 			}
+			if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization) {
+				return
+			}
 			detail, err := options.OverviewProjectEnvironment(r.Context(), segments[0], segments[2], segments[4])
 			if err != nil {
 				respondReadLookupError(w, err, "overview project environment unavailable")
+				return
+			}
+			detail = filterAuthorizedProjectEnvironmentOverviewDetail(
+				detail,
+				requestactor.AuthorizedDeploymentsFromContext(r.Context()),
+				options.RequireDeploymentReadAuthorization,
+			)
+			if options.RequireDeploymentReadAuthorization && len(detail.Deployments) == 0 {
+				respondForbiddenError(w, "forbidden: operator does not have access to this deployment")
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
