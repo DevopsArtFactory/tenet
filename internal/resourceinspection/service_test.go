@@ -33,16 +33,19 @@ func TestServiceInspect(t *testing.T) {
 			InspectECSService: func(ctx context.Context, req ECSRequest) (ECSServiceInspection, error) {
 				gotLookup = req
 				return ECSServiceInspection{
-					ClusterARN:          "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
-					ServiceARN:          "arn:aws:ecs:ap-northeast-2:123456789012:service/payments/payments-api-prod-service",
-					ServiceName:         "payments-api-prod-service",
-					Status:              "ACTIVE",
-					LaunchType:          "FARGATE",
-					DesiredCount:        2,
-					RunningCount:        2,
-					PendingCount:        0,
-					TaskDefinition:      "payments-api:42",
-					TaskDefinitionImage: "ghcr.io/devopsartfactory/payments-api:2026-04-18.2",
+					ClusterARN:                    "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
+					ServiceARN:                    "arn:aws:ecs:ap-northeast-2:123456789012:service/payments/payments-api-prod-service",
+					ServiceName:                   "payments-api-prod-service",
+					Status:                        "ACTIVE",
+					LaunchType:                    "FARGATE",
+					DesiredCount:                  2,
+					RunningCount:                  2,
+					PendingCount:                  0,
+					MinimumHealthyPercent:         int32Ptr(100),
+					MaximumPercent:                int32Ptr(200),
+					HealthCheckGracePeriodSeconds: int32Ptr(45),
+					TaskDefinition:                "payments-api:42",
+					TaskDefinitionImage:           "ghcr.io/devopsartfactory/payments-api:2026-04-18.2",
 					Deployments: []ECSDeploymentSummary{{
 						ID:             "ecs-svc/123",
 						Status:         "PRIMARY",
@@ -89,16 +92,19 @@ func TestServiceInspect(t *testing.T) {
 			Available:      true,
 			Source:         SourceECSService,
 			ECSService: &ECSServiceInspection{
-				ClusterARN:          "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
-				ServiceARN:          "arn:aws:ecs:ap-northeast-2:123456789012:service/payments/payments-api-prod-service",
-				ServiceName:         "payments-api-prod-service",
-				Status:              "ACTIVE",
-				LaunchType:          "FARGATE",
-				DesiredCount:        2,
-				RunningCount:        2,
-				PendingCount:        0,
-				TaskDefinition:      "payments-api:42",
-				TaskDefinitionImage: "ghcr.io/devopsartfactory/payments-api:2026-04-18.2",
+				ClusterARN:                    "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
+				ServiceARN:                    "arn:aws:ecs:ap-northeast-2:123456789012:service/payments/payments-api-prod-service",
+				ServiceName:                   "payments-api-prod-service",
+				Status:                        "ACTIVE",
+				LaunchType:                    "FARGATE",
+				DesiredCount:                  2,
+				RunningCount:                  2,
+				PendingCount:                  0,
+				MinimumHealthyPercent:         int32Ptr(100),
+				MaximumPercent:                int32Ptr(200),
+				HealthCheckGracePeriodSeconds: int32Ptr(45),
+				TaskDefinition:                "payments-api:42",
+				TaskDefinitionImage:           "ghcr.io/devopsartfactory/payments-api:2026-04-18.2",
 				Deployments: []ECSDeploymentSummary{{
 					ID:             "ecs-svc/123",
 					Status:         "PRIMARY",
@@ -806,13 +812,18 @@ func TestServiceInspect(t *testing.T) {
 
 func TestECSInspectionFromServiceSortsDeploymentsAndEvents(t *testing.T) {
 	service := ecstypes.Service{
-		ServiceArn:     stringPtr("arn:service"),
-		ServiceName:    stringPtr("payments-api-prod-service"),
-		Status:         stringPtr("ACTIVE"),
-		TaskDefinition: stringPtr("payments-api:42"),
-		DesiredCount:   2,
-		RunningCount:   2,
-		PendingCount:   0,
+		ServiceArn:                    stringPtr("arn:service"),
+		ServiceName:                   stringPtr("payments-api-prod-service"),
+		Status:                        stringPtr("ACTIVE"),
+		TaskDefinition:                stringPtr("payments-api:42"),
+		DesiredCount:                  2,
+		RunningCount:                  2,
+		PendingCount:                  0,
+		HealthCheckGracePeriodSeconds: int32Ptr(30),
+		DeploymentConfiguration: &ecstypes.DeploymentConfiguration{
+			MinimumHealthyPercent: int32Ptr(90),
+			MaximumPercent:        int32Ptr(150),
+		},
 		Deployments: []ecstypes.Deployment{
 			{Id: stringPtr("secondary"), CreatedAt: timePtr(time.Date(2026, 4, 18, 0, 10, 0, 0, time.UTC))},
 			{Id: stringPtr("primary"), CreatedAt: timePtr(time.Date(2026, 4, 18, 0, 11, 0, 0, time.UTC))},
@@ -832,6 +843,15 @@ func TestECSInspectionFromServiceSortsDeploymentsAndEvents(t *testing.T) {
 	}
 	if got.TaskDefinitionImage != "ghcr.io/devopsartfactory/payments-api:2026-04-18.2" {
 		t.Fatalf("expected task-definition image evidence in ECS inspection payload, got %+v", got)
+	}
+	if got.MinimumHealthyPercent == nil || *got.MinimumHealthyPercent != 90 {
+		t.Fatalf("expected minimum healthy percent in ECS inspection payload, got %+v", got)
+	}
+	if got.MaximumPercent == nil || *got.MaximumPercent != 150 {
+		t.Fatalf("expected maximum percent in ECS inspection payload, got %+v", got)
+	}
+	if got.HealthCheckGracePeriodSeconds == nil || *got.HealthCheckGracePeriodSeconds != 30 {
+		t.Fatalf("expected health check grace period in ECS inspection payload, got %+v", got)
 	}
 }
 
@@ -1045,5 +1065,7 @@ func (f *fakeECSServiceAPI) DescribeServices(_ context.Context, input *ecs.Descr
 }
 
 func stringPtr(value string) *string { return &value }
+
+func int32Ptr(value int32) *int32 { return &value }
 
 func timePtr(value time.Time) *time.Time { return &value }

@@ -1877,6 +1877,14 @@
         if (typeof value === 'number' && Number.isFinite(value)) return String(value);
         return '—';
       };
+      const percentText = (value) => {
+        if (typeof value === 'number' && Number.isFinite(value)) return `${value}%`;
+        return '—';
+      };
+      const durationSecondsText = (value) => {
+        if (typeof value === 'number' && Number.isFinite(value)) return `${value} seconds`;
+        return '—';
+      };
       const fetchResourceLogs = (deploymentName, resource) => {
         const params = new URLSearchParams({
           resourceType: resource.type || '',
@@ -2043,6 +2051,9 @@
           ['Desired count', countText(service?.desiredCount)],
           ['Running count', countText(service?.runningCount)],
           ['Pending count', countText(service?.pendingCount)],
+          ['Minimum healthy percent', percentText(service?.minimumHealthyPercent)],
+          ['Maximum percent', percentText(service?.maximumPercent)],
+          ['Health check grace period', durationSecondsText(service?.healthCheckGracePeriodSeconds)],
           ['Task definition', textOrDash(service?.taskDefinition)],
           ['Cluster ARN', textOrDash(service?.clusterArn)],
           ['Service ARN', textOrDash(service?.serviceArn)],

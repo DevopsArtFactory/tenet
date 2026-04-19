@@ -1190,6 +1190,9 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 	localSmoke := readRepoFile(t, "scripts/smoke-local.sh")
 	for _, fragment := range []string{
 		`candidate_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate")`,
+		`minimum_healthy_percent = worker_resource_inspection['ecsService'].get('minimumHealthyPercent')`,
+		`maximum_percent = worker_resource_inspection['ecsService'].get('maximumPercent')`,
+		`health_check_grace_period_seconds = worker_resource_inspection['ecsService'].get('healthCheckGracePeriodSeconds')`,
 		`launch_template = candidate_resource_inspection['autoScalingGroup'].get('launchTemplate')`,
 		`mixed_instances_policy = candidate_resource_inspection['autoScalingGroup'].get('mixedInstancesPolicy')`,
 		`override_launch_template = override.get('launchTemplate')`,
@@ -1202,6 +1205,9 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 	dockerSmoke := readRepoFile(t, "scripts/smoke-docker.sh")
 	for _, fragment := range []string{
 		`candidate_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate")`,
+		`minimum_healthy_percent = worker_resource_inspection["ecsService"].get("minimumHealthyPercent")`,
+		`maximum_percent = worker_resource_inspection["ecsService"].get("maximumPercent")`,
+		`health_check_grace_period_seconds = worker_resource_inspection["ecsService"].get("healthCheckGracePeriodSeconds")`,
 		`launch_template = candidate_resource_inspection["autoScalingGroup"].get("launchTemplate")`,
 		`mixed_instances_policy = candidate_resource_inspection["autoScalingGroup"].get("mixedInstancesPolicy")`,
 		`override_launch_template = override.get("launchTemplate")`,
@@ -1214,6 +1220,9 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
 	for _, fragment := range []string{
 		"`autoScalingGroup`: group sizing/health settings, additive launch-template metadata, attached target groups, and current instances",
+		"`minimumHealthyPercent`",
+		"`maximumPercent`",
+		"`healthCheckGracePeriodSeconds`",
 		"`launchTemplate`",
 		"`mixedInstancesPolicy`",
 	} {
@@ -1224,6 +1233,9 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 
 	featureDoc := readRepoFile(t, "docs/features/overview-dashboard.md")
 	for _, fragment := range []string{
+		"`minimumHealthyPercent`",
+		"`maximumPercent`",
+		"`healthCheckGracePeriodSeconds`",
 		"`launchTemplate`",
 		"`mixedInstancesPolicy`",
 		"`DescribeAutoScalingGroups`",
@@ -1235,6 +1247,9 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 
 	uiDoc := readRepoFile(t, "docs/architecture/tenet-v1-overview-ui.md")
 	for _, fragment := range []string{
+		"`minimumHealthyPercent`",
+		"`maximumPercent`",
+		"`healthCheckGracePeriodSeconds`",
 		"`launchTemplate`",
 		"`mixedInstancesPolicy`",
 		"additive launch-template metadata",

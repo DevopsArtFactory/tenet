@@ -17,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+
 	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
 	"github.com/DevopsArtFactory/tenet/internal/auditlog"
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
@@ -4271,14 +4273,17 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 			Available: true,
 			Source:    resourceinspection.SourceECSService,
 			ECSService: &resourceinspection.ECSServiceInspection{
-				ClusterARN:     "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
-				ServiceARN:     "arn:aws:ecs:ap-northeast-2:123456789012:service/payments/payments-api-prod-service",
-				ServiceName:    "payments-api-prod-service",
-				Status:         "ACTIVE",
-				DesiredCount:   2,
-				RunningCount:   2,
-				PendingCount:   0,
-				TaskDefinition: "payments-api:42",
+				ClusterARN:                    "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
+				ServiceARN:                    "arn:aws:ecs:ap-northeast-2:123456789012:service/payments/payments-api-prod-service",
+				ServiceName:                   "payments-api-prod-service",
+				Status:                        "ACTIVE",
+				DesiredCount:                  2,
+				RunningCount:                  2,
+				PendingCount:                  0,
+				MinimumHealthyPercent:         aws.Int32(100),
+				MaximumPercent:                aws.Int32(200),
+				HealthCheckGracePeriodSeconds: aws.Int32(45),
+				TaskDefinition:                "payments-api:42",
 				Deployments: []resourceinspection.ECSDeploymentSummary{{
 					ID:             "ecs-svc/123",
 					Status:         "PRIMARY",
@@ -4351,6 +4356,15 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		for _, key := range []string{"deploymentName", "resourceType", "resourceName", "lookupContext", "available", "source", "ecsService", "unavailableReason"} {
 			if _, ok := raw[key]; !ok {
 				t.Fatalf("expected %q field in payload, got %#v", key, raw)
+			}
+		}
+		ecsService, ok := raw["ecsService"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected ecsService object in payload, got %#v", raw["ecsService"])
+		}
+		for _, key := range []string{"minimumHealthyPercent", "maximumPercent", "healthCheckGracePeriodSeconds"} {
+			if _, ok := ecsService[key]; !ok {
+				t.Fatalf("expected ECS service inspection field %q in payload, got %#v", key, ecsService)
 			}
 		}
 	})

@@ -79,7 +79,7 @@ The embedded resource page now includes a dedicated `Live inspection` panel that
 - loading
 - unavailable, with lookup context plus friendly copy mapped from `unavailableReason`
 - empty, when the route is available but there is no typed payload to show yet
-- supported, with operator-friendly fields for `ecsService`, Auto Scaling Group, and traffic-routing summary payloads
+- supported, with operator-friendly fields for `ecsService`, Auto Scaling Group, and traffic-routing summary payloads, including ECS deployment-configuration evidence when the live service reports it
 - a `Refresh live inspection` action that re-runs only the inspection route in place, disables while that inspection fetch is active, and preserves the bookmarkable resource URL
 
 The application/resource/drift/plan/audit drill-down pages now also render explicit breadcrumb chrome before their deeper sections. Those breadcrumbs keep prior drill-down levels as `_self` links, keep the current destination as a non-click chip, include the account step when the loaded deployment detail already exposes `awsAccountId`, and omit links that Tenet cannot build from already-loaded data. Resource, drift, plan, and deployment-scoped audit pages still keep their compact quick-navigation strip above the deeper detail sections. That strip is intentionally data-local: it builds `_self` links for `Back to application`, `Drift view`, `Plan/apply`, `Audit log`, and sibling linked resources using only the already loaded deployment-detail payload plus preserved URL state. It should not introduce nested interactive controls or a second fetch path just to support lateral navigation.
@@ -137,13 +137,13 @@ The additive inspection route stays read-only and local-friendly:
 - supported traffic-routing resources are `codeDeployDeploymentGroup`, `productionListener`, `testListener`, and `trafficShiftPlan`; `trafficShiftPlan` stays `summary_only`, while the CodeDeploy deployment-group/listener resources upgrade to `inspectionMode=live` when AWS inspection succeeds and fall back to the existing summary payload when it does not
 - `trafficShiftPlan` stays summary-only, while `codeDeployDeploymentGroup`, `productionListener`, and `testListener` preserve that summary fallback locally and add live AWS inspection details on the same `trafficRoutingResource` body when live lookup succeeds
 - responses always include `lookupContext` plus `available`
-- supported ECS payloads add `ecsService`
+- supported ECS payloads add `ecsService`, including additive `minimumHealthyPercent`, `maximumPercent`, and `healthCheckGracePeriodSeconds` fields when `DescribeServices` returns them
 - supported Auto Scaling payloads add `autoScalingGroup`, with optional `launchTemplate` and `mixedInstancesPolicy` metadata when the live Auto Scaling Group already exposes launch-template details through `DescribeAutoScalingGroups`
 - supported traffic-routing payloads add `trafficRoutingResource` with `kind`, `displayName`, `inspectionMode`, controller/fallback `summary`, and additive live `codeDeployDeploymentGroup` or `listener` details when available
 - unsupported or unavailable resources return `available=false` with an explicit `unavailableReason` instead of bubbling a vague provider error into the operator workflow
 
 In the embedded UI, the supported inspection payloads should stay intentionally operator-facing:
-- `ecsService`: service status, desired/running/pending counts, task definition, deployments, and recent ECS service events
+- `ecsService`: service status, desired/running/pending counts, deployment-configuration evidence (`minimumHealthyPercent`, `maximumPercent`, `healthCheckGracePeriodSeconds`) when available, task definition, deployments, and recent ECS service events
 - `autoScalingGroup`: sizing and health-check settings, additive launch-template metadata, target group ARNs, and current instances
 - `trafficRoutingResource`: summary-only or live traffic-routing context with explicit resource kind, display name, inspection mode, rollout summary text, and additive CodeDeploy deployment-group or listener details
 

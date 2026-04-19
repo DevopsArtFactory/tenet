@@ -2937,7 +2937,7 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!loadingText.includes('Live inspection')) throw new Error('expected resource page to render live inspection section heading while loading');
   if (!loadingText.includes('Loading live inspection…')) throw new Error('expected resource page to render loading state for live inspection');
   if (!loadingFetchCalls.includes(ecsInspectionURL)) throw new Error('expected resource page to lazy-load live inspection for the selected resource');
-  resolveInspection({ ok: true, json: () => Promise.resolve({ available: true, source: 'ecs_service', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn: 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-staging', serviceArn: 'arn:aws:ecs:ap-northeast-2:210987654321:service/payments-staging/payments-api-staging-service', serviceName: 'payments-api-staging-service', status: 'ACTIVE', launchType: 'FARGATE', desiredCount: 2, runningCount: 2, pendingCount: 0, taskDefinition: 'payments-api:42', deployments: [], events: [] } }) });
+  resolveInspection({ ok: true, json: () => Promise.resolve({ available: true, source: 'ecs_service', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn: 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-staging', serviceArn: 'arn:aws:ecs:ap-northeast-2:210987654321:service/payments-staging/payments-api-staging-service', serviceName: 'payments-api-staging-service', status: 'ACTIVE', launchType: 'FARGATE', desiredCount: 2, runningCount: 2, pendingCount: 0, minimumHealthyPercent: 100, maximumPercent: 200, healthCheckGracePeriodSeconds: 45, taskDefinition: 'payments-api:42', deployments: [], events: [] } }) });
   await settle();
 
   const summaryLogsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging+Deployment+Group';
@@ -2996,6 +2996,9 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
         desiredCount: 2,
         runningCount: 2,
         pendingCount: 0,
+        minimumHealthyPercent: 100,
+        maximumPercent: 200,
+        healthCheckGracePeriodSeconds: 45,
         taskDefinition: 'payments-api:42',
         deployments: [{ id: 'ecs-svc/123', status: 'PRIMARY', rolloutState: 'COMPLETED', rolloutStateReason: 'steady state', taskDefinition: 'payments-api:42', desiredCount: 2, runningCount: 2, pendingCount: 0, createdAt: '2026-04-18T00:10:00Z', updatedAt: '2026-04-18T00:11:00Z' }],
         events: [{ createdAt: '2026-04-18T00:12:00Z', message: '<img src=x onerror=1> service reached steady state' }],
@@ -3006,6 +3009,12 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   const ecsSupportedText = collectText(ecsSupportedRun.document.getElementById('accounts')).join(' | ');
   if (!ecsSupportedText.includes('Service name')) throw new Error('expected ECS inspection to render service name label');
   if (!ecsSupportedText.includes('payments-api-staging-service')) throw new Error('expected ECS inspection to render service name value');
+  if (!ecsSupportedText.includes('Minimum healthy percent')) throw new Error('expected ECS inspection to render minimum healthy percent label');
+  if (!ecsSupportedText.includes('100%')) throw new Error('expected ECS inspection to render minimum healthy percent value');
+  if (!ecsSupportedText.includes('Maximum percent')) throw new Error('expected ECS inspection to render maximum percent label');
+  if (!ecsSupportedText.includes('200%')) throw new Error('expected ECS inspection to render maximum percent value');
+  if (!ecsSupportedText.includes('Health check grace period')) throw new Error('expected ECS inspection to render health check grace period label');
+  if (!ecsSupportedText.includes('45 seconds')) throw new Error('expected ECS inspection to render health check grace period value');
   if (!ecsSupportedText.includes('Service deployments')) throw new Error('expected ECS inspection to render deployments section');
   if (!ecsSupportedText.includes('Deployment status · PRIMARY')) throw new Error('expected ECS inspection to render deployment status');
   if (!ecsSupportedText.includes('Rollout state · COMPLETED')) throw new Error('expected ECS inspection to render deployment rollout state');
