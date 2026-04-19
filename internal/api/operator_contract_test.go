@@ -839,6 +839,117 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 	}
 }
 
+func TestResourceDrillDownFrontDoorAuthOperatorContract(t *testing.T) {
+	localSmoke := readRepoFile(t, "scripts/smoke-local.sh")
+	for _, fragment := range []string{
+		`AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY=$(mktemp)`,
+		`AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY=$(mktemp)`,
+		`AUTH_FORBIDDEN_RESOURCE_LOGS_BODY=$(mktemp)`,
+		`AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY=$(mktemp)`,
+		`auth_unauthenticated_resource_logs_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" -w "%{http_code}" \`,
+		`auth_unauthenticated_resource_inspection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" -w "%{http_code}" \`,
+		`auth_forbidden_resource_logs_status=$(curl -sS -o "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" -w "%{http_code}" \`,
+		`auth_forbidden_resource_inspection_status=$(curl -sS -o "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" -w "%{http_code}" \`,
+		`allowed_resource_logs=$(curl -fsS \`,
+		`allowed_resource_inspection=$(curl -fsS \`,
+		`"http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")`,
+		`"http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service")`,
+		`assert os.environ['AUTH_UNAUTHENTICATED_RESOURCE_LOGS_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_RESOURCE_LOGS_STATUS']`,
+		`assert os.environ['AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_STATUS']`,
+		`assert os.environ['AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS']`,
+		`assert os.environ['AUTH_FORBIDDEN_RESOURCE_INSPECTION_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_RESOURCE_INSPECTION_STATUS']`,
+		`assert allowed_resource_logs['deploymentName'] == 'worker-prod', allowed_resource_logs`,
+		`assert allowed_resource_logs['resourceType'] == 'ecsService', allowed_resource_logs`,
+		`assert allowed_resource_logs['resourceName'] == 'worker-prod-service', allowed_resource_logs`,
+		`assert isinstance(allowed_resource_logs['available'], bool), allowed_resource_logs`,
+		`assert allowed_resource_inspection['deploymentName'] == 'worker-prod', allowed_resource_inspection`,
+		`assert allowed_resource_inspection['resourceType'] == 'ecsService', allowed_resource_inspection`,
+		`assert allowed_resource_inspection['resourceName'] == 'worker-prod-service', allowed_resource_inspection`,
+		`assert isinstance(allowed_resource_inspection['available'], bool), allowed_resource_inspection`,
+		`assert isinstance(allowed_resource_logs.get('unavailableReason'), str) and allowed_resource_logs['unavailableReason'], allowed_resource_logs`,
+		`assert isinstance(allowed_resource_inspection.get('unavailableReason'), str) and allowed_resource_inspection['unavailableReason'], allowed_resource_inspection`,
+	} {
+		if !strings.Contains(localSmoke, fragment) {
+			t.Fatalf("expected smoke-local resource drill-down auth contract to include %q", fragment)
+		}
+	}
+
+	dockerSmoke := readRepoFile(t, "scripts/smoke-docker.sh")
+	for _, fragment := range []string{
+		`AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY=$(mktemp)`,
+		`AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY=$(mktemp)`,
+		`AUTH_FORBIDDEN_RESOURCE_LOGS_BODY=$(mktemp)`,
+		`AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY=$(mktemp)`,
+		`auth_unauthenticated_resource_logs_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" -w "%{http_code}" \`,
+		`auth_unauthenticated_resource_inspection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" -w "%{http_code}" \`,
+		`auth_forbidden_resource_logs_status=$(curl -sS -o "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" -w "%{http_code}" \`,
+		`auth_forbidden_resource_inspection_status=$(curl -sS -o "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" -w "%{http_code}" \`,
+		`allowed_resource_logs=$(curl -fsS \`,
+		`allowed_resource_inspection=$(curl -fsS \`,
+		`"$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")`,
+		`"$API_BASE_URL/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service")`,
+		`assert os.environ["AUTH_UNAUTHENTICATED_RESOURCE_LOGS_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_RESOURCE_LOGS_STATUS"]`,
+		`assert os.environ["AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_STATUS"]`,
+		`assert os.environ["AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS"] == "403", os.environ["AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS"]`,
+		`assert os.environ["AUTH_FORBIDDEN_RESOURCE_INSPECTION_STATUS"] == "403", os.environ["AUTH_FORBIDDEN_RESOURCE_INSPECTION_STATUS"]`,
+		`assert allowed_resource_logs["deploymentName"] == "worker-prod", allowed_resource_logs`,
+		`assert allowed_resource_logs["resourceType"] == "ecsService", allowed_resource_logs`,
+		`assert allowed_resource_logs["resourceName"] == "worker-prod-service", allowed_resource_logs`,
+		`assert isinstance(allowed_resource_logs["available"], bool), allowed_resource_logs`,
+		`assert allowed_resource_inspection["deploymentName"] == "worker-prod", allowed_resource_inspection`,
+		`assert allowed_resource_inspection["resourceType"] == "ecsService", allowed_resource_inspection`,
+		`assert allowed_resource_inspection["resourceName"] == "worker-prod-service", allowed_resource_inspection`,
+		`assert isinstance(allowed_resource_inspection["available"], bool), allowed_resource_inspection`,
+		`assert isinstance(allowed_resource_logs.get("unavailableReason"), str) and allowed_resource_logs["unavailableReason"], allowed_resource_logs`,
+		`assert isinstance(allowed_resource_inspection.get("unavailableReason"), str) and allowed_resource_inspection["unavailableReason"], allowed_resource_inspection`,
+	} {
+		if !strings.Contains(dockerSmoke, fragment) {
+			t.Fatalf("expected smoke-docker resource drill-down auth contract to include %q", fragment)
+		}
+	}
+
+	readme := readRepoFile(t, "README.md")
+	for _, fragment := range []string{
+		"`GET /v1/overview/deployments/{deploymentName}/resource-logs`",
+		"`GET /v1/overview/deployments/{deploymentName}/resource-inspection`",
+		"`401 Unauthorized` unauthenticated reads",
+		"`403 Forbidden` authenticated-but-unauthorized reads",
+		"`200 OK` authorized reads",
+		"`available=false` plus explicit `unavailableReason` payload contract",
+	} {
+		if !strings.Contains(readme, fragment) {
+			t.Fatalf("expected README resource drill-down auth contract to include %q", fragment)
+		}
+	}
+
+	localRuntimeDoc := readRepoFile(t, "docs/architecture/tenet-v1-local-runtime.md")
+	for _, fragment := range []string{
+		"`GET /v1/overview/deployments/{deploymentName}/resource-logs`",
+		"`GET /v1/overview/deployments/{deploymentName}/resource-inspection`",
+		"`401` unauthenticated reads",
+		"`403` authenticated-but-unauthorized reads",
+		"`200 OK` authorized reads",
+		"`available=false` plus `unavailableReason` payload contract",
+	} {
+		if !strings.Contains(localRuntimeDoc, fragment) {
+			t.Fatalf("expected local runtime doc resource drill-down auth contract to include %q", fragment)
+		}
+	}
+
+	overviewUIDoc := readRepoFile(t, "docs/architecture/tenet-v1-overview-ui.md")
+	for _, fragment := range []string{
+		"`GET /v1/overview/deployments/{deploymentName}/resource-logs`",
+		"`GET /v1/overview/deployments/{deploymentName}/resource-inspection`",
+		"`401`",
+		"`403`",
+		"`available=false` plus `unavailableReason`",
+	} {
+		if !strings.Contains(overviewUIDoc, fragment) {
+			t.Fatalf("expected overview UI doc resource drill-down auth contract to include %q", fragment)
+		}
+	}
+}
+
 func TestGitHubWebhookOperatorContract(t *testing.T) {
 	compose := readRepoFile(t, "compose.yaml")
 	for _, fragment := range []string{
