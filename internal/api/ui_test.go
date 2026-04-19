@@ -259,6 +259,39 @@ func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUIIncludesBreadcrumbChromeForDrillDownPages(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const createBreadcrumbCurrentChip = (text, ariaLabel) => {",
+		"chip.classList.add('breadcrumb-current');",
+		"const accountBreadcrumbLabel = (accountName, awsAccountId) => {",
+		"return `${accountName} (${awsAccountId})`;",
+		"const createBreadcrumbChrome = (items) => {",
+		"const trailItems = (items || []).filter((item) => item?.label);",
+		"if (trailItems.length < 2) return null;",
+		"const trail = createElement('div', 'breadcrumb-trail');",
+		"trail.append(createElement('span', 'breadcrumb-separator', '/'));",
+		"head.append(createElement('div', 'breadcrumb-title', 'Breadcrumbs'));",
+		"trail.append(createNavLink(item.href, item.label, '_self'));",
+		"trail.append(createBreadcrumbCurrentChip(item.label, item.ariaLabel || `Current destination: ${item.label}`));",
+		"const createDeploymentBreadcrumb = ({ deploymentName = '', awsAccountId = '', accountName = '', currentLabel = '' } = {}) => {",
+		"{ label: 'Applications', href: buildPageURL('applications') },",
+		"awsAccountId ? { label: accountBreadcrumbLabel(accountName, awsAccountId), href: buildPageURL('account', { accountId: awsAccountId }) } : null,",
+		"deploymentName && activeLabel !== deploymentName ? { label: deploymentName, href: buildPageURL('application', { deployment: deploymentName }) } : null,",
+		"const breadcrumb = createDeploymentBreadcrumb({",
+		"currentLabel: detail.name || currentPageState.deployment || 'Application',",
+		"currentLabel: resource.name,",
+		"currentLabel: workspaceBreadcrumbLabel,",
+		"currentLabel: 'Audit log',",
+		"'Breadcrumbs'",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+}
+
 func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 	body := string(indexHTML)
 

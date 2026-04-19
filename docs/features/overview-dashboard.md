@@ -94,7 +94,7 @@ The underlying `/v1/overview/applications` payload is still a richer joined row 
 The application-detail route now loads `GET /v1/overview/applications/{deploymentName}` and renders grouped linked resources instead of deep deployment internals.
 
 Current behavior:
-- breadcrumb/back-link to the applications overview
+- breadcrumb/back-link to the applications overview, with an additive account step when `awsAccountId` is already known from the loaded deployment detail
 - top-level application summary for account/region context
 - `_self` `Drift view` and `_self` `Plan/apply` links so operators enter the deployment workspaces from the application detail page instead of the account rows
 - when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`, this route also requires trusted `X-Tenet-Authenticated-*` identity plus `X-Tenet-Authorized-Deployments` to include the exact deployment name
@@ -140,9 +140,11 @@ The bookmarkable `/?page=resource&deployment={name}...` and `/?page=drift&deploy
 
 ### Resource detail quick navigation
 
-The embedded `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}` page now includes a compact quick-navigation strip above the deeper runtime/log/inspection sections.
+The embedded `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}` page now includes explicit breadcrumb chrome plus the existing compact quick-navigation strip above the deeper runtime/log/inspection sections.
 
 Current behavior:
+- renders breadcrumb chrome with `_self` links for prior drill-down levels, including the account step when the loaded deployment detail exposes `awsAccountId`
+- keeps the current resource as a non-click breadcrumb chip instead of presenting it as a self link
 - keeps all links bookmarkable and `_self` inside the embedded shell
 - includes `Back to application`, `Drift view`, `Plan/apply`, and deployment-scoped `Audit log` links
 - renders the current resource as an explicit non-click chip so the strip does not present the active destination as a lateral link
@@ -167,6 +169,7 @@ Current behavior:
 - renders distinct initial auth guidance for `GET /v1/audit-logs`: `401` tells operators to retry the same bookmarkable page through the trusted front door so authenticated identity can be provided, while `403` explains that identity was recognized but the current operator is not authorized for that route or deployment
 - that auth gate is still narrow: `GET /v1/overview/applications` requires trusted `X-Tenet-Authenticated-*` identity and filters returned rows through the trusted `X-Tenet-Authorized-Deployments` allowlist when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=*** deployment-scoped `GET /v1/audit-logs?deployment={deploymentName}` reads still require exact deployment membership, while unscoped audit reads stay unchanged; when the applications allowlist is omitted or matches nothing, the API returns `200 OK` with `[]` so the overview stays read-only and explicit
 - makes an active deployment filter obvious in both the page chrome and body when `deployment={deploymentName}` is present
+- adds breadcrumb chrome for `Applications -> {deploymentName} -> Audit log` when a deployment filter is present, keeping prior levels as `_self` links and the current audit route as a non-click chip
 - adds the same quick-navigation strip used in the drift/plan workspaces when `deployment={deploymentName}` is present, with `_self` links for `Back to application`, `Drift view`, `Plan/apply`, and the current deployment-scoped `Audit log` route
 - renders deployment-specific empty-state copy when one deployment is selected and no persisted audit entries match, while keeping the generic unfiltered empty state unchanged
 - keeps the current `/?page=audit...` URL/query state stable while leaving the current audit content visible with explicit loading/error copy during an in-place refresh of the same route
@@ -214,6 +217,7 @@ Current drift workspace behavior:
 - keeps machine-readable `runtimeSummary.changes[]` rows while also rendering human-readable `runtimeSummary.changeDetails[]`
 - shows deployment context and status conditions
 - adds an in-place `Refresh drift workspace` control that re-runs only `GET /v1/overview/deployments/{deploymentName}` in place, keeps the bookmarkable `/?page=drift...` URL stable, disables only while that refresh is active, and leaves the current read-only workspace content visible with explicit loading/error copy
+- adds breadcrumb chrome for `Applications -> [Account] -> {deploymentName} -> Drift view`, omitting the account link when `awsAccountId` is missing and keeping `Drift view` as a non-click chip
 - adds a quick-navigation strip for `Back to application`, `Drift view`, `Plan/apply`, and deployment-scoped `Audit log`, keeping the current workspace obvious with a non-click active chip while preserving `_self` bookmarkable navigation for the other destinations inside the embedded shell
 - adds direct `_self` resource drill-down links to that drift quick-navigation strip using the same grouped normalized resource inventory already used by the application/resource pages, with explicit `No linked resources are available in this drift workspace yet.` copy when no linked resources are available
 - prefers backend-authored additive `managedDrift[]` rows from the deployment-detail payload when present, normalizes them into the same safe read-only table, and falls back to the existing client-derived artifact/generation/runtime-intent comparisons for older payloads
@@ -234,6 +238,7 @@ Current drift workspace behavior:
 Current deployment-scoped audit behavior:
 - reuses the embedded shell and the same `GET /v1/audit-logs` route family
 - leaves the global `/?page=audit` route unchanged when no deployment filter is present
+- adds breadcrumb chrome that keeps the applications overview and deployment detail as bookmarkable `_self` steps when the deployment is known, while leaving the current audit destination as a non-click chip
 - adds the same compact quick-navigation strip as the drift/plan workspaces when `deployment={name}` is present
 - keeps that strip bookmarkable by routing through `buildPageURL(...)`, so `q`, `sync`, `account`, `deployment`, and current audit `action` / `limit` state survive `_self` navigation
 
@@ -258,6 +263,7 @@ Current plan/apply workspace behavior:
 - relies on the backend to reject stale reviewed plans with `409 Conflict` when the current deployment-detail fingerprint no longer matches the preview fingerprint, so operators must create a fresh preview before a new immutable apply record is written
 - renders stored immutable apply metadata plus `Open bookmarked apply` (`_self`) and `Apply JSON` links, keeps the current disabled-by-default failed behavior explicit, documents the opt-in queued backend contract behind `TENET_AWS_ENABLE_APPLY=true`, adds a compact operator-facing apply lifecycle summary beside the stored record, and now surfaces stored lifecycle timing/progress metrics from `lifecycle.updatedAt` / `startedAt` / `finishedAt` / `currentStep` / `completedSteps` / `totalSteps` when present
 - when a stored immutable apply record includes additive `operations[]`, renders progress counts in that lifecycle summary plus a dedicated `Apply operations` table whose status labels stay readable for queued/running/succeeded/failed/cancelled rows without relying on mutable preview/fallback context; the stored rows currently use pending statuses for the default disabled path or queued statuses for the opt-in enabled path, while missing lifecycle timing/step fields stay as placeholders instead of synthetic progress values
+- adds breadcrumb chrome for `Applications -> [Account] -> {deploymentName} -> Plan/apply`, omitting the account link when `awsAccountId` is missing and keeping `Plan/apply` as a non-click chip
 - keeps the same quick-navigation strip available inside the plan/apply workspace so operators can jump to `Back to application`, `Drift view`, `Plan/apply`, and deployment-scoped `Audit log` without relying on browser back or leaving the bookmarkable route, with the active workspace shown as a non-click chip instead of a self-link
 - returns to the application detail page through the embedded back link so the drill-down path stays tight
 - keeps the toolbar `Audit log` link deployment-scoped so operators land on `/?page=audit&deployment={name}` instead of the global audit slice
