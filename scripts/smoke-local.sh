@@ -744,6 +744,11 @@ assert 'Immutable plan preview and apply-request activity for deployment ${deplo
 assert 'No audit activity has been persisted yet for deployment ${currentPageState.deployment}.' in audit_ui, audit_ui
 assert 'Loading audit log…' in audit_ui, audit_ui
 assert 'Audit log is currently unavailable.' in audit_ui, audit_ui
+assert 'Refresh audit log' in audit_ui, audit_ui
+assert 'Refreshing audit log from GET /v1/audit-logs…' in audit_ui, audit_ui
+assert 'Failed to refresh audit log:' in audit_ui, audit_ui
+assert "const createAuditLogsActions = (isLoading = false) => [" in audit_ui, audit_ui
+assert "const auditLogsRefreshStateText = (auditState) => {" in audit_ui, audit_ui
 assert "const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {" in audit_ui, audit_ui
 assert "if (action) params.set('action', action);" in audit_ui, audit_ui
 assert "const normalizeAuditLimit = (value) => {" in audit_ui, audit_ui

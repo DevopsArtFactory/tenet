@@ -153,9 +153,11 @@ Current behavior:
 - preserves optional `deployment`, `action`, and `limit` URL state when present
 - renders a safe action filter control for exactly `plan.created` and `apply.requested`
 - renders a safe limit selector in the audit toolbar with preset newest-first windows while still honoring bookmarked positive integers such as `limit=2`
+- renders an in-place `Refresh audit log` control that re-runs only `GET /v1/audit-logs` for the current bookmarkable audit route, disables only while that audit fetch is active, and preserves the same deployment/action/limit query state
 - renders explicit `Loading audit log…`, empty, unavailable (`503`), and generic fetch-error states
 - makes an active deployment filter obvious in both the page chrome and body when `deployment={deploymentName}` is present
 - renders deployment-specific empty-state copy when one deployment is selected and no persisted audit entries match, while keeping the generic unfiltered empty state unchanged
+- keeps the current `/?page=audit...` URL/query state stable while leaving the current audit content visible with explicit loading/error copy during an in-place refresh of the same route
 - keeps entries newest-first even if the client receives an unsorted payload
 - shows explicit labels for action, deployment/app/environment context, timestamp, actor availability, and plan/apply identifiers
 - keeps actor identity explicit rather than fabricated by rendering `Unavailable` / `Unknown` plus the server-authored reason text

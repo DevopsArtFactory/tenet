@@ -5286,6 +5286,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!accountsText.includes('apply execution is disabled')) throw new Error('expected apply metadata in audit row');
   const limitSelect = document.querySelector('[data-toolbar-field="Limit"]');
   if (!limitSelect || limitSelect.value !== '2') throw new Error('expected audit limit select to reflect bookmarkable URL state');
+  const refreshButton = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Refresh audit log');
+  if (!refreshButton || refreshButton.disabled) throw new Error('expected enabled audit refresh button after initial render');
   const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
   const backLink = toolbarLinks.find((node) => node.href === '/console?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.target === '_self');
   if (!backLink || backLink.rel) throw new Error('expected audit page back link to preserve filters');
@@ -5298,6 +5300,129 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!applicationLink || applicationLink.target !== '_self' || applicationLink.rel) throw new Error('expected audit application self link');
   const workspaceLink = links.find((node) => node.href === '/console?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&planId=plan_ready_123&applyId=apply_failed_123' && node.textContent === 'Open plan/apply workspace');
   if (!workspaceLink || workspaceLink.target !== '_self' || workspaceLink.rel) throw new Error('expected audit plan/apply self link');
+})();
+`
+		runNodeHarness(t, nodeProgram)
+	})
+
+	t.Run("audit refresh reloads the current route in place without changing bookmarkable state", func(t *testing.T) {
+		refreshedAuditLogsJSON, err := json.Marshal(map[string]any{
+			"entries": []map[string]any{
+				{
+					"timestamp":      "2026-04-19T09:00:00Z",
+					"action":         "apply.requested",
+					"deploymentName": "payments-api-prod",
+					"appRef":         "payments-api",
+					"environmentRef": "prod-apne2",
+					"planId":         "plan_ready_123",
+					"applyId":        "apply_running_123",
+					"actor": map[string]any{
+						"available": true,
+						"id":        "operator-123",
+						"name":      "Jane Operator",
+						"email":     "jane@example.com",
+					},
+					"metadata": map[string]any{
+						"status":            "running",
+						"planStatus":        "ready",
+						"sourceFingerprint": "fp_plan_ready",
+					},
+					"source": map[string]any{
+						"kind":        "applyRequest",
+						"recordRoute": "/v1/applies/apply_running_123",
+					},
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("marshal refreshed audit logs payload: %v", err)
+		}
+
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const initialAuditLogs = ` + string(auditLogsJSON) + `;
+const refreshedAuditLogs = ` + string(refreshedAuditLogsJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const route = '/v1/audit-logs?deployment=payments-api-prod&action=apply.requested&limit=2';
+const initialSearch = '?page=audit&deployment=payments-api-prod&action=apply.requested&limit=2';
+const window = { location: { pathname: '/', search: initialSearch, hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+let refreshFetchCount = 0;
+let resolveRefresh;
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url !== route) throw new Error('unexpected fetch url: ' + url);
+  refreshFetchCount += 1;
+  if (refreshFetchCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve(initialAuditLogs) });
+  if (refreshFetchCount === 2) return new Promise((resolve) => { resolveRefresh = resolve; });
+  throw new Error('unexpected audit fetch count: ' + refreshFetchCount);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  const root = document.getElementById('accounts');
+  let text = collectText(root).join(' | ');
+  if (!text.includes('apply_failed_123')) throw new Error('expected initial audit row before refresh');
+  let buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  let refreshButton = buttons.find((node) => node.textContent === 'Refresh audit log');
+  if (!refreshButton || refreshButton.disabled) throw new Error('expected enabled audit refresh button after initial render');
+  refreshButton.dispatch('click');
+  await settle();
+  buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  refreshButton = buttons.find((node) => node.textContent === 'Refresh audit log');
+  if (!refreshButton || !refreshButton.disabled) throw new Error('expected disabled audit refresh button only while fetch is in flight');
+  text = collectText(root).join(' | ');
+  if (!text.includes('Refreshing audit log from GET /v1/audit-logs…')) throw new Error('expected audit refresh loading copy');
+  if (!text.includes('apply_failed_123')) throw new Error('expected current audit content to remain visible during refresh');
+  if (fetchCalls.length !== 2 || fetchCalls[0] !== route || fetchCalls[1] !== route) throw new Error('expected audit refresh to re-fetch only the current audit route');
+  if (window.location.search !== initialSearch) throw new Error('expected audit refresh to preserve bookmarkable route');
+  resolveRefresh({ ok: true, json: () => Promise.resolve(refreshedAuditLogs) });
+  await settle();
+  await settle();
+  text = collectText(root).join(' | ');
+  if (!text.includes('apply_running_123')) throw new Error('expected refreshed audit content to render in place');
+  if (text.includes('apply_failed_123')) throw new Error('expected refreshed audit content to replace stale row');
+  buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  refreshButton = buttons.find((node) => node.textContent === 'Refresh audit log');
+  if (!refreshButton || refreshButton.disabled) throw new Error('expected audit refresh button re-enabled after refresh completes');
+
+  let errorFetchCount = 0;
+  const errorDocument = new Document();
+  errorDocument.byID.set('toolbar', errorDocument.createElement('section'));
+  errorDocument.byID.set('summary', errorDocument.createElement('section'));
+  errorDocument.byID.set('accounts', errorDocument.createElement('section'));
+  const errorWindow = { location: { pathname: '/', search: initialSearch, hash: '' } };
+  const errorHistory = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); errorWindow.location.pathname = pathname || '/'; errorWindow.location.search = query ? '?' + query : ''; } };
+  const errorFetch = (url) => {
+    if (url !== route) throw new Error('unexpected error fetch url: ' + url);
+    errorFetchCount += 1;
+    if (errorFetchCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve(initialAuditLogs) });
+    if (errorFetchCount === 2) return Promise.resolve({ ok: false, status: 500, text: () => Promise.resolve('boom') });
+    throw new Error('unexpected error audit fetch count: ' + errorFetchCount);
+  };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(errorWindow, errorDocument, errorFetch, errorHistory, Element, InputElement);
+  await settle();
+  await settle();
+  buttons = collectNodes(errorDocument.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  refreshButton = buttons.find((node) => node.textContent === 'Refresh audit log');
+  if (!refreshButton) throw new Error('expected audit refresh button in error scenario');
+  refreshButton.dispatch('click');
+  await settle();
+  await settle();
+  text = collectText(errorDocument.getElementById('accounts')).join(' | ');
+  if (!text.includes('Failed to refresh audit log: audit log request failed (500): boom')) throw new Error('expected audit refresh error copy');
+  if (!text.includes('apply_failed_123')) throw new Error('expected previous audit content to remain visible after refresh error');
+  buttons = collectNodes(errorDocument.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  refreshButton = buttons.find((node) => node.textContent === 'Refresh audit log');
+  if (!refreshButton || refreshButton.disabled) throw new Error('expected audit refresh button re-enabled after refresh error');
+  if (errorFetchCount !== 2) throw new Error('expected audit refresh error to retry exactly once');
+  if (errorWindow.location.search !== initialSearch) throw new Error('expected audit refresh error state to preserve bookmarkable route');
 })();
 `
 		runNodeHarness(t, nodeProgram)
@@ -5395,6 +5520,8 @@ async function renderWithFetch(fetchImpl, search = '?page=audit') {
   const loadingRun = await renderWithFetch(() => pending.promise);
   const loadingText = collectText(loadingRun.document.getElementById('accounts')).join(' | ');
   if (!loadingText.includes('Loading audit log…')) throw new Error('expected audit loading state');
+  const loadingRefreshButton = collectNodes(loadingRun.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Refresh audit log');
+  if (!loadingRefreshButton || !loadingRefreshButton.disabled) throw new Error('expected audit refresh button disabled during initial load');
   pending.resolve({ ok: true, json: () => Promise.resolve({ entries: [] }) });
   await settle();
   await settle();

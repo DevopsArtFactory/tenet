@@ -345,12 +345,14 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"const presets = [1, 2, 5, 10, 20, 50];",
 		"const fetchApplicationDetail = (deploymentName) => fetch(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`)",
 		"if (!response.ok) throw new Error(`application detail request failed (${response.status})`);",
-		"const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {",
+		"const buildAuditLogsRoute = ({ deploymentName = '', action = '', limit = 0 } = {}) => {",
 		"const params = new URLSearchParams();",
 		"if (deploymentName) params.set('deployment', deploymentName);",
 		"if (action) params.set('action', action);",
 		"if (limit > 0) params.set('limit', String(limit));",
-		"const route = params.toString() ? `/v1/audit-logs?${params.toString()}` : '/v1/audit-logs';",
+		"return params.toString() ? `/v1/audit-logs?${params.toString()}` : '/v1/audit-logs';",
+		"const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {",
+		"const route = buildAuditLogsRoute({ deploymentName, action, limit });",
 		"return fetch(route)",
 		"audit log API unavailable (${response.status})",
 		"audit log request failed (${response.status})",
@@ -368,7 +370,10 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"Open plan/apply workspace",
 		"createNavLink(buildPageURL('application', { deployment: entry.deploymentName }), 'Open application drill-down', '_self')",
 		"createNavLink(buildPageURL('plan', {",
-		"const loadAuditLogsPage = () => {",
+		"const createAuditLogsActions = (isLoading = false) => [",
+		"'Refresh audit log'",
+		"const auditLogsRefreshStateText = (auditState) => {",
+		"const loadAuditLogsPage = (options = {}) => {",
 		"deploymentName: currentPageState.deployment,",
 		"action: currentPageState.auditAction,",
 		"limit: currentPageState.auditLimit,",
@@ -406,7 +411,7 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"const applicationDetail = currentPageState.page === 'application' ? fetchApplicationDetail(currentPageState.deployment) : fetchDeploymentDetail(currentPageState.deployment);",
 		"applicationDetail",
 		"} else if (currentPageState.page === 'audit') {",
-		"loadAuditLogsPage();",
+		"loadAuditLogsPage().catch(() => {});",
 		"if (currentPageState.page === 'application') {",
 		"renderApplicationDetailPage(detail);",
 		"if (currentPageState.page === 'resource') {",
@@ -1216,6 +1221,15 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Audit timeline' in audit_ui, audit_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains audit timeline copy")
 	}
+	if !strings.Contains(text, "assert 'Refresh audit log' in audit_ui, audit_ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh audit log")
+	}
+	if !strings.Contains(text, "assert 'Refreshing audit log from GET /v1/audit-logs…' in audit_ui, audit_ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains audit refresh loading copy")
+	}
+	if !strings.Contains(text, "assert 'Failed to refresh audit log:' in audit_ui, audit_ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains audit refresh error copy")
+	}
 	for _, fragment := range []string{
 		"assert_request_id_header() {",
 		"assert headers.get(\"request-id\"), headers",
@@ -1284,6 +1298,11 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"assert 'No audit activity has been persisted yet for deployment ${currentPageState.deployment}.' in audit_ui, audit_ui",
 		"assert 'Loading audit log…' in audit_ui, audit_ui",
 		"assert 'Audit log is currently unavailable.' in audit_ui, audit_ui",
+		"assert 'Refresh audit log' in audit_ui, audit_ui",
+		"assert 'Refreshing audit log from GET /v1/audit-logs…' in audit_ui, audit_ui",
+		"assert 'Failed to refresh audit log:' in audit_ui, audit_ui",
+		"assert \"const createAuditLogsActions = (isLoading = false) => [\" in audit_ui, audit_ui",
+		"assert \"const auditLogsRefreshStateText = (auditState) => {\" in audit_ui, audit_ui",
 		"assert \"const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {\" in audit_ui, audit_ui",
 		"assert \"if (action) params.set('action', action);\" in audit_ui, audit_ui",
 		"assert \"createSelect('Action', currentPageState.auditAction, auditActionOptions, (event) => {\" in audit_ui, audit_ui",
@@ -1511,7 +1530,7 @@ func TestOverviewDocsDescribeInPlaceDriftWorkspaceRefresh(t *testing.T) {
 func TestAuditDocsDescribeBookmarkableLimitControl(t *testing.T) {
 	files := map[string][]string{
 		"../../README.md": {
-			"The audit toolbar now exposes the same limit as an explicit safe preset selector while still honoring bookmarked positive integers such as `?limit=2`.",
+			"The audit toolbar now exposes the same limit as an explicit safe preset selector",
 			"a bookmarkable limit control in the audit toolbar that updates the fetch route and URL in place while preserving deployment and action filters",
 		},
 		"../../docs/features/overview-dashboard.md": {
@@ -1520,6 +1539,32 @@ func TestAuditDocsDescribeBookmarkableLimitControl(t *testing.T) {
 		},
 		"../../docs/architecture/tenet-v1-overview-ui.md": {
 			"exposes the same bookmarkable limit through a safe toolbar selector that still honors positive-integer URLs such as `?limit=2`",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
+	}
+}
+
+func TestAuditDocsDescribeInPlaceRefreshControl(t *testing.T) {
+	files := map[string][]string{
+		"../../README.md": {
+			"`Refresh audit log` re-fetches only `GET /v1/audit-logs` in place",
+			"keeps the current bookmarkable `/?page=audit...` URL/query state stable",
+		},
+		"../../docs/features/overview-dashboard.md": {
+			"renders an in-place `Refresh audit log` control that re-runs only `GET /v1/audit-logs` for the current bookmarkable audit route",
+			"keeps the current `/?page=audit...` URL/query state stable while leaving the current audit content visible with explicit loading/error copy",
 		},
 	}
 
