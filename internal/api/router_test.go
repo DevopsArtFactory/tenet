@@ -4677,6 +4677,53 @@ func TestRouterCreateDeploymentPlanPreviewProjectsAuthenticatedIdentityIntoActor
 	}
 }
 
+func TestRouterCreateDeploymentPlanPreviewAcceptsAliasAuthenticatedIdentityWithoutChangingActorPrecedence(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo:                    buildinfo.Info{Version: "dev", Commit: "abc123"},
+		TrustAuthenticatedHeaders:    true,
+		RequireAuthenticatedIdentity: true,
+		CreateDeploymentPlanPreview: func(ctx context.Context, deploymentName string, req planpreview.CreateRequest) (planpreview.CreateResult, error) {
+			identity := requestactor.AuthenticatedIdentityFromContext(ctx)
+			if !identity.Authenticated || identity.ID != "front-door-123" || identity.Name != "Front Door Operator" || identity.Email != "frontdoor@example.com" {
+				t.Fatalf("expected alias-backed authenticated identity, got %+v", identity)
+			}
+			return planpreview.CreateResult{
+				Created: true,
+				Record: planpreview.Record{
+					ID:             "plan_1234abcd",
+					DeploymentName: deploymentName,
+					Status:         planpreview.StatusReady,
+					CreatedAt:      "2026-04-17T08:00:00Z",
+					Actor:          requestactor.FromContext(ctx),
+					Source:         planpreview.SourceContext{DeploymentName: deploymentName, Route: "/v1/overview/deployments/api-prod", Fingerprint: req.IfMatch},
+				},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/plans/deployments/api-prod", strings.NewReader(`{"ifMatch":"plan_input"}`))
+	req.Header.Set(requestactor.HeaderID, "explicit-456")
+	req.Header.Set(requestactor.HeaderName, "Alex Explicit")
+	req.Header.Set(requestactor.HeaderEmail, "alex.explicit@example.com")
+	req.Header.Set(requestactor.HeaderAliasID, "front-door-123")
+	req.Header.Set(requestactor.HeaderAliasName, "Front Door Operator")
+	req.Header.Set(requestactor.HeaderAliasEmail, "frontdoor@example.com")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d with body %q", resp.Code, resp.Body.String())
+	}
+	var record planpreview.Record
+	if err := json.Unmarshal(resp.Body.Bytes(), &record); err != nil {
+		t.Fatalf("failed to decode plan preview: %v", err)
+	}
+	if !record.Actor.Available || record.Actor.ID != "explicit-456" || record.Actor.Name != "Alex Explicit" || record.Actor.Email != "alex.explicit@example.com" {
+		t.Fatalf("expected explicit local actor to override alias-backed authenticated identity projection, got %+v", record.Actor)
+	}
+}
+
 func TestRouterCreateDeploymentPlanPreviewStatusCodes(t *testing.T) {
 	t.Run("unavailable", func(t *testing.T) {
 		router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})

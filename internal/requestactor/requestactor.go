@@ -128,15 +128,16 @@ func FromHeaders(header http.Header) Actor {
 }
 
 // AuthenticatedIdentityFromHeaders derives one authenticated identity from trusted forwarded
-// front-door headers.
+// front-door headers. Explicit X-Tenet-Authenticated-* values win, and X-User-* only fills
+// fields that are absent on that trusted path.
 func AuthenticatedIdentityFromHeaders(header http.Header) AuthenticatedIdentity {
 	if header == nil {
 		return NormalizeAuthenticatedIdentity(AuthenticatedIdentity{})
 	}
 	identity := AuthenticatedIdentity{
-		ID:    headerValue(header, AuthenticatedHeaderID),
-		Name:  headerValue(header, AuthenticatedHeaderName),
-		Email: headerValue(header, AuthenticatedHeaderEmail),
+		ID:    headerValue(header, AuthenticatedHeaderID, HeaderAliasID),
+		Name:  headerValue(header, AuthenticatedHeaderName, HeaderAliasName),
+		Email: headerValue(header, AuthenticatedHeaderEmail, HeaderAliasEmail),
 	}
 	if identity.ID != "" || identity.Name != "" || identity.Email != "" {
 		identity.Authenticated = true
