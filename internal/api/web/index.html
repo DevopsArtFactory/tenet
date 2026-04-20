@@ -2394,6 +2394,43 @@
           instancesSection,
         );
       };
+      const bootstrapSourceObservationText = (detail) => {
+        const desired = String(detail?.desiredBootstrapSource || '').trim();
+        const observed = String(detail?.observedBootstrapSource || '').trim();
+        if (!observed) {
+          return 'No explicit bootstrap-source marker was found in the observed launch template user data.';
+        }
+        if (!desired || desired === 'unspecified') {
+          return 'Observed launch template bootstrap source was found, but the normalized desired deployment bootstrap source is unspecified.';
+        }
+        if (desired === observed) {
+          return 'Observed launch template bootstrap source matches the normalized desired bootstrap source.';
+        }
+        return 'Observed launch template bootstrap source differs from the normalized desired bootstrap source.';
+      };
+      const renderUserDataBootstrapSourceInspection = (section, deploymentName, resource, result) => {
+        const detail = result?.userDataBootstrapSource;
+        const actions = createResourceInspectionActions(section, deploymentName, resource);
+        const metadata = createLookupContextGrid(result?.lookupContext, [
+          ['Inspection source', metricValue(result?.source)],
+          ['Desired bootstrap source', textOrDash(detail?.desiredBootstrapSource)],
+          ['Observed bootstrap source', textOrDash(detail?.observedBootstrapSource)],
+          ['Backing resource type', textOrDash(detail?.backingResourceType)],
+          ['Backing resource name', textOrDash(detail?.backingResourceName)],
+          ['Observed launch template', autoScalingLaunchTemplateText(detail?.launchTemplate)],
+        ]);
+        const summarySection = createElement('section', 'detail-section');
+        summarySection.append(
+          createElement('h4', '', 'Bootstrap source observation'),
+          createElement('p', 'detail-section-copy', bootstrapSourceObservationText(detail)),
+        );
+        section.replaceChildren(
+          createDetailSectionHeader('Live inspection', actions),
+          createElement('p', 'detail-section-copy', 'Live bootstrap-source inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
+          metadata,
+          summarySection,
+        );
+      };
       const trafficRoutingInspectionModeText = (value) => {
         switch (value) {
           case 'summary_only':
@@ -2442,6 +2479,10 @@
         }
         if (result?.autoScalingGroup) {
           renderAutoScalingGroupInspection(section, deploymentName, resource, result);
+          return;
+        }
+        if (result?.userDataBootstrapSource) {
+          renderUserDataBootstrapSourceInspection(section, deploymentName, resource, result);
           return;
         }
         if (result?.trafficRoutingResource) {

@@ -413,6 +413,8 @@ type resourceLookupRequest struct {
 	ResourceType        string
 	ResourceName        string
 	ResourceDescription string
+	BackingResourceType string
+	BackingResourceName string
 	ControlAccountID    string
 	TargetAccountID     string
 	Region              string
@@ -448,11 +450,14 @@ func loadOverviewDeploymentResourceRequest(
 	if err != nil {
 		return resourceLookupRequest{}, err
 	}
+	backingResourceType, backingResourceName := resourceInspectionBackingResource(detail, resourceType)
 	return resourceLookupRequest{
 		DeploymentName:      name,
 		ResourceType:        resourceType,
 		ResourceName:        resourceName,
 		ResourceDescription: resource.Description,
+		BackingResourceType: backingResourceType,
+		BackingResourceName: backingResourceName,
 		ControlAccountID:    detail.AWSAccountID,
 		TargetAccountID:     detail.AWSAccountID,
 		Region:              detail.Region,
@@ -495,6 +500,8 @@ func newOverviewDeploymentResourceInspectionProvider(
 			ResourceType:        request.ResourceType,
 			ResourceName:        request.ResourceName,
 			ResourceDescription: request.ResourceDescription,
+			BackingResourceType: request.BackingResourceType,
+			BackingResourceName: request.BackingResourceName,
 			ControlAccountID:    request.ControlAccountID,
 			TargetAccountID:     request.TargetAccountID,
 			Region:              request.Region,
@@ -510,6 +517,31 @@ func deploymentExecutionResource(detail catalog.DeploymentOverviewDetail, resour
 		}
 	}
 	return domain.RolloutExecutionDetail{}, false
+}
+
+func resourceInspectionBackingResource(detail catalog.DeploymentOverviewDetail, resourceType string) (string, string) {
+	if resourceType != "userDataBootstrapSource" {
+		return "", ""
+	}
+	preferredType := ""
+	switch detail.ExecutionMode {
+	case "asgWeightedTargetGroups":
+		preferredType = "candidateAutoScalingGroup"
+	case "asgInstanceRefresh":
+		preferredType = "serviceAutoScalingGroup"
+	}
+	for _, resource := range rolloutExecutionResources(detail) {
+		if preferredType != "" && resource.Resource == preferredType {
+			return resource.Resource, resource.Name
+		}
+	}
+	for _, resource := range rolloutExecutionResources(detail) {
+		switch resource.Resource {
+		case "candidateAutoScalingGroup", "serviceAutoScalingGroup":
+			return resource.Resource, resource.Name
+		}
+	}
+	return "", ""
 }
 
 func rolloutExecutionResources(detail catalog.DeploymentOverviewDetail) []domain.RolloutExecutionDetail {

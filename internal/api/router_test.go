@@ -4559,6 +4559,90 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 	})
 
+	t.Run("returns user data bootstrap source inspection payload", func(t *testing.T) {
+		expected := resourceinspection.Result{
+			DeploymentName: "api-prod",
+			ResourceType:   "userDataBootstrapSource",
+			ResourceName:   "file:userdata/api-prod.sh",
+			LookupContext: resourceinspection.LookupContext{
+				Region:                 "ap-northeast-2",
+				ControlAccountID:       "123456789012",
+				TargetAccountID:        "123456789012",
+				CrossAccount:           false,
+				ObserverRoleConfigured: true,
+			},
+			Available: true,
+			Source:    resourceinspection.SourceAutoScalingGroup,
+			UserDataBootstrapSource: &resourceinspection.UserDataBootstrapSourceInspection{
+				DesiredBootstrapSource:  "file:userdata/api-prod.sh",
+				ObservedBootstrapSource: "file:userdata/api-prod-legacy.sh",
+				BackingResourceType:     "candidateAutoScalingGroup",
+				BackingResourceName:     "api-prod-candidate",
+				LaunchTemplate: &resourceinspection.AutoScalingLaunchTemplateSummary{
+					ID:      "lt-abc123",
+					Name:    "api-prod-candidate",
+					Version: "$Default",
+				},
+			},
+		}
+
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "api-prod" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+				return expected, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=userDataBootstrapSource&resourceName=file:userdata/api-prod.sh", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+
+		var got resourceinspection.Result
+		if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+			t.Fatalf("failed to decode bootstrap-source inspection payload: %v", err)
+		}
+		if !reflect.DeepEqual(got, expected) {
+			t.Fatalf("unexpected bootstrap-source inspection payload: %+v", got)
+		}
+
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw bootstrap-source inspection payload: %v", err)
+		}
+		payload, ok := raw["userDataBootstrapSource"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected userDataBootstrapSource object in payload, got %#v", raw["userDataBootstrapSource"])
+		}
+		for key, want := range map[string]any{
+			"desiredBootstrapSource":  "file:userdata/api-prod.sh",
+			"observedBootstrapSource": "file:userdata/api-prod-legacy.sh",
+			"backingResourceType":     "candidateAutoScalingGroup",
+			"backingResourceName":     "api-prod-candidate",
+		} {
+			if got := payload[key]; !reflect.DeepEqual(got, want) {
+				t.Fatalf("expected userDataBootstrapSource[%q]=%v, got %#v", key, want, got)
+			}
+		}
+		launchTemplate, ok := payload["launchTemplate"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected launchTemplate object in payload, got %#v", payload["launchTemplate"])
+		}
+		if got := launchTemplate["name"]; got != "api-prod-candidate" {
+			t.Fatalf("expected launchTemplate name, got %#v", got)
+		}
+	})
+
 	t.Run("returns live traffic routing payload", func(t *testing.T) {
 		expected := resourceinspection.Result{
 			DeploymentName: "api-prod",

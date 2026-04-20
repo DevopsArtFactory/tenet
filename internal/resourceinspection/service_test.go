@@ -209,6 +209,68 @@ func TestServiceInspect(t *testing.T) {
 		}
 	})
 
+	t.Run("user data bootstrap source reuses auto scaling inspection evidence", func(t *testing.T) {
+		var gotLookup AutoScalingGroupRequest
+		service := NewService(Options{
+			InspectAutoScalingGroup: func(ctx context.Context, req AutoScalingGroupRequest) (AutoScalingInspection, error) {
+				gotLookup = req
+				return AutoScalingInspection{
+					AutoScalingGroupName:          "payments-api-prod-candidate",
+					LaunchTemplateBootstrapSource: "file:userdata/payments-api-prod-legacy.sh",
+					LaunchTemplate: &AutoScalingLaunchTemplateSummary{
+						ID:      "lt-abc123",
+						Name:    "payments-api-prod-candidate",
+						Version: "$Default",
+					},
+				}, nil
+			},
+		})
+
+		result, err := service.Inspect(context.Background(), Request{
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "userDataBootstrapSource",
+			ResourceName:        "file:userdata/payments-api-prod.sh",
+			BackingResourceType: "candidateAutoScalingGroup",
+			BackingResourceName: "payments-api-prod-candidate",
+			ControlAccountID:    "123456789012",
+			TargetAccountID:     "123456789012",
+			Region:              "ap-northeast-2",
+		})
+		if err != nil {
+			t.Fatalf("Inspect returned error: %v", err)
+		}
+		if !reflect.DeepEqual(gotLookup, AutoScalingGroupRequest{
+			DeploymentName:  "payments-api-prod",
+			ResourceName:    "payments-api-prod-candidate",
+			Region:          "ap-northeast-2",
+			TargetAccountID: "123456789012",
+		}) {
+			t.Fatalf("unexpected bootstrap-source lookup request: %+v", gotLookup)
+		}
+		want := Result{
+			DeploymentName: "payments-api-prod",
+			ResourceType:   "userDataBootstrapSource",
+			ResourceName:   "file:userdata/payments-api-prod.sh",
+			LookupContext:  expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
+			Available:      true,
+			Source:         SourceAutoScalingGroup,
+			UserDataBootstrapSource: &UserDataBootstrapSourceInspection{
+				DesiredBootstrapSource:  "file:userdata/payments-api-prod.sh",
+				ObservedBootstrapSource: "file:userdata/payments-api-prod-legacy.sh",
+				BackingResourceType:     "candidateAutoScalingGroup",
+				BackingResourceName:     "payments-api-prod-candidate",
+				LaunchTemplate: &AutoScalingLaunchTemplateSummary{
+					ID:      "lt-abc123",
+					Name:    "payments-api-prod-candidate",
+					Version: "$Default",
+				},
+			},
+		}
+		if !reflect.DeepEqual(result, want) {
+			t.Fatalf("unexpected bootstrap-source inspection result: %+v", result)
+		}
+	})
+
 	t.Run("traffic routing resources return explicit summary payloads when AWS inspection is disabled", func(t *testing.T) {
 		service := NewService(Options{})
 		for _, tc := range []struct {
