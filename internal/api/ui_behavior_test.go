@@ -121,10 +121,11 @@ class Element {
   setAttribute(name, value) { this.attributes[name] = String(value); }
   getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
   focus() { this.ownerDocument.activeElement = this; }
+  scrollIntoView(options) { this.ownerDocument.lastScrolledTarget = { id: this.id || '', options }; }
 }
 class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
 class Document {
-  constructor() { this.activeElement = null; this.byID = new Map(); }
+  constructor() { this.activeElement = null; this.byID = new Map(); this.lastScrolledTarget = null; }
   createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
   getElementById(id) { return this.byID.get(id) || null; }
   querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
@@ -5899,11 +5900,14 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!breadcrumbChipsBeforeCreate.find((node) => node.textContent === 'Plan/apply')) throw new Error('expected plan workspace current breadcrumb chip');
   if (!text.includes('Quick navigation')) throw new Error('expected plan workspace quick navigation strip');
   if (!text.includes('Deployment workspaces')) throw new Error('expected plan workspace quick navigation group label');
+  if (!text.includes('Current section')) throw new Error('expected plan workspace current-section group label before create');
+  if (!text.includes('No section is currently targeted.')) throw new Error('expected plan workspace empty current-section copy without hash');
   if (!text.includes('api-prod · Plan/apply')) throw new Error('expected plan workspace quick navigation current-state label');
   if (!workspaceBackLink || workspaceBackLink.rel) throw new Error('expected plan workspace quick navigation back link');
   if (!workspaceDriftLink || workspaceDriftLink.rel) throw new Error('expected plan workspace quick navigation drift link');
   if (workspacePlanLink) throw new Error('expected plan workspace quick navigation to render active workspace as a chip');
   if (!chipsBeforeCreate.find((node) => node.textContent === 'Plan/apply')) throw new Error('expected plan workspace quick navigation chip');
+  if (chipsBeforeCreate.find((node) => String(node.getAttribute('aria-label') || '').startsWith('Current section: '))) throw new Error('expected plan workspace without hash not to render a current-section chip');
   if (!workspaceAuditLink || workspaceAuditLink.rel) throw new Error('expected plan workspace quick navigation audit link');
   const sectionLinksBeforeCreate = collectNodes(root, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#plan-'));
   const expectedSectionLinksBeforeCreate = [
@@ -6458,13 +6462,30 @@ const collectNodes = (root, predicate) => {
   visit(root);
   return matches;
 };
+const createWindow = (initialSearch, hash) => {
+  const listeners = {};
+  return {
+    location: { pathname: '/console', search: initialSearch, hash },
+    addEventListener(type, handler) {
+      listeners[type] = listeners[type] || [];
+      listeners[type].push(handler);
+    },
+    dispatchEvent(event) {
+      const handlers = listeners[event?.type] || [];
+      handlers.forEach((handler) => handler.call(this, event));
+    },
+    dispatchHashChange() {
+      this.dispatchEvent({ type: 'hashchange', target: this });
+    },
+  };
+};
 async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
 const document = new Document();
 document.byID.set('toolbar', document.createElement('section'));
 document.byID.set('summary', document.createElement('section'));
 document.byID.set('accounts', document.createElement('section'));
 const initialSearch = '?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123';
-const window = { location: { pathname: '/console', search: initialSearch, hash: '#plan-apply-operations' } };
+const window = createWindow(initialSearch, '#plan-apply-operations');
 const history = { replaceState(_state, _title, url) {
   const [pathAndQuery, hash = ''] = String(url).split('#');
   const [pathname, query = ''] = pathAndQuery.split('?');
@@ -6491,6 +6512,9 @@ const fetch = (url) => {
   if (window.location.hash !== '#plan-apply-operations') throw new Error('expected plan workspace hash to stay stable, got ' + window.location.hash);
   if (!document.lastScrolledTarget || document.lastScrolledTarget.id !== 'plan-apply-operations') throw new Error('expected plan workspace hash to re-scroll matching apply section after async render');
   const accounts = document.getElementById('accounts');
+  const quickNavChips = collectNodes(accounts, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
+  const currentSectionChip = quickNavChips.find((node) => node.getAttribute('aria-label') === 'Current section: Apply operations');
+  if (!currentSectionChip) throw new Error('expected bookmarked plan/apply hash route to render the current-section chip');
   const sectionIDs = collectNodes(accounts, (node) => typeof node.id === 'string' && node.id.startsWith('plan-')).map((node) => node.id).sort();
   const expectedSectionIDs = ['plan-apply-actions', 'plan-apply-details', 'plan-apply-operations', 'plan-approval-guidance', 'plan-operations', 'plan-preview-actions', 'plan-rollout-execution', 'plan-runtime-signals', 'plan-stored-apply', 'plan-stored-preview'];
   if (JSON.stringify(sectionIDs) !== JSON.stringify(expectedSectionIDs)) throw new Error('unexpected plan section ids: ' + JSON.stringify(sectionIDs));
@@ -6504,15 +6528,26 @@ const fetch = (url) => {
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-actions', 'Apply request actions'],
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-stored-apply', 'Stored apply request'],
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-details', 'Apply request details'],
-    ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-operations', 'Apply operations'],
     ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-operations', 'Plan operations'],
   ];
-  if (sectionLinks.length !== expectedLinks.length) throw new Error('expected ten rendered plan section links after bookmarked apply load, got ' + sectionLinks.length);
+  if (sectionLinks.length !== expectedLinks.length) throw new Error('expected bookmarked plan/apply route to omit the active section from On this page links, got ' + sectionLinks.length);
   expectedLinks.forEach(([href, text]) => {
     const link = sectionLinks.find((node) => node.href === href && node.textContent === text);
     if (!link) throw new Error('missing plan section link ' + text + ' -> ' + href);
     if (link.target !== '_self' || link.rel) throw new Error('expected plan section link to stay in-shell for ' + text);
   });
+  if (sectionLinks.find((node) => node.textContent === 'Apply operations')) throw new Error('expected active plan section to be removed from On this page links');
+  window.location.hash = '#plan-stored-apply';
+  window.dispatchHashChange();
+  await settle();
+  const updatedAccounts = document.getElementById('accounts');
+  const updatedChips = collectNodes(updatedAccounts, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
+  const storedApplyChip = updatedChips.find((node) => node.getAttribute('aria-label') === 'Current section: Stored apply request');
+  if (!storedApplyChip) throw new Error('expected plan/apply hashchange to update the current-section chip');
+  const updatedSectionLinks = collectNodes(updatedAccounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#plan-'));
+  if (updatedSectionLinks.find((node) => node.textContent === 'Stored apply request')) throw new Error('expected updated plan/apply current section to be removed from On this page links after hashchange');
+  if (!updatedSectionLinks.find((node) => node.textContent === 'Apply operations')) throw new Error('expected previous plan/apply current section to return to On this page links after hashchange');
+  if (!document.lastScrolledTarget || document.lastScrolledTarget.id !== 'plan-stored-apply') throw new Error('expected plan/apply hashchange to scroll the new current section into view');
 })();
 `
 		runNodeHarness(t, nodeProgram)
