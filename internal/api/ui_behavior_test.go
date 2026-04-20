@@ -5401,6 +5401,24 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (workspacePlanLink) throw new Error('expected plan workspace quick navigation to render active workspace as a chip');
   if (!chipsBeforeCreate.find((node) => node.textContent === 'Plan/apply')) throw new Error('expected plan workspace quick navigation chip');
   if (!workspaceAuditLink || workspaceAuditLink.rel) throw new Error('expected plan workspace quick navigation audit link');
+  const sectionLinksBeforeCreate = collectNodes(root, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#plan-'));
+  const expectedSectionLinksBeforeCreate = [
+    ['/?page=plan&deployment=api-prod#plan-runtime-signals', 'Runtime signals'],
+    ['/?page=plan&deployment=api-prod#plan-rollout-execution', 'Rollout execution'],
+    ['/?page=plan&deployment=api-prod#plan-approval-guidance', 'Derived approval guidance'],
+    ['/?page=plan&deployment=api-prod#plan-preview-actions', 'Plan preview actions'],
+    ['/?page=plan&deployment=api-prod#plan-apply-actions', 'Apply request actions'],
+    ['/?page=plan&deployment=api-prod#plan-operations', 'Plan operations'],
+  ];
+  if (sectionLinksBeforeCreate.length !== expectedSectionLinksBeforeCreate.length) throw new Error('expected only rendered plan section links before create, got ' + sectionLinksBeforeCreate.length);
+  expectedSectionLinksBeforeCreate.forEach(([href, label]) => {
+    const link = sectionLinksBeforeCreate.find((node) => node.href === href && node.textContent === label);
+    if (!link) throw new Error('missing pre-create plan section link ' + label + ' -> ' + href);
+    if (link.target !== '_self' || link.rel) throw new Error('expected pre-create plan section link to stay in-shell for ' + label);
+  });
+  if (sectionLinksBeforeCreate.find((node) => node.href.includes('#plan-stored-preview') || node.href.includes('#plan-stored-apply') || node.href.includes('#plan-apply-operations'))) {
+    throw new Error('did not expect plan quick navigation links for unrendered stored preview/apply sections before create');
+  }
   if (!text.includes('No stored plan preview yet')) throw new Error('expected idle plan-preview heading');
   if (!text.includes('Create Plan will POST /v1/plans/deployments/api-prod')) throw new Error('expected idle create-plan guidance');
   if (!text.includes('Apply Plan activates only when a loaded persisted ready plan preview with a valid planId is present.')) throw new Error('expected idle apply gating guidance');
@@ -5438,6 +5456,24 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('server-preview-target')) throw new Error('expected server-authored target');
   if (!text.includes('Server-authored preview summary')) throw new Error('expected server-authored operation summary');
   const links = collectNodes(root, (node) => node.tagName === 'A');
+  const sectionLinksAfterCreate = collectNodes(root, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#plan-'));
+  const expectedSectionLinksAfterCreate = [
+    ['/?page=plan&deployment=api-prod&planId=plan_ready_123#plan-runtime-signals', 'Runtime signals'],
+    ['/?page=plan&deployment=api-prod&planId=plan_ready_123#plan-rollout-execution', 'Rollout execution'],
+    ['/?page=plan&deployment=api-prod&planId=plan_ready_123#plan-approval-guidance', 'Plan preview approval guidance'],
+    ['/?page=plan&deployment=api-prod&planId=plan_ready_123#plan-preview-actions', 'Plan preview actions'],
+    ['/?page=plan&deployment=api-prod&planId=plan_ready_123#plan-stored-preview', 'Stored plan preview'],
+    ['/?page=plan&deployment=api-prod&planId=plan_ready_123#plan-apply-actions', 'Apply request actions'],
+    ['/?page=plan&deployment=api-prod&planId=plan_ready_123#plan-operations', 'Plan operations'],
+  ];
+  if (sectionLinksAfterCreate.length !== expectedSectionLinksAfterCreate.length) throw new Error('expected only rendered plan section links after preview load, got ' + sectionLinksAfterCreate.length);
+  expectedSectionLinksAfterCreate.forEach(([href, label]) => {
+    const link = sectionLinksAfterCreate.find((node) => node.href === href && node.textContent === label);
+    if (!link) throw new Error('missing post-preview plan section link ' + label + ' -> ' + href);
+  });
+  if (sectionLinksAfterCreate.find((node) => node.href.includes('#plan-stored-apply') || node.href.includes('#plan-apply-details') || node.href.includes('#plan-apply-operations'))) {
+    throw new Error('did not expect apply section links before an apply record is rendered');
+  }
   const workspaceLink = links.find((node) => node.href === '/?page=plan&deployment=api-prod&planId=plan_ready_123' && node.textContent === 'Open bookmarked workspace');
   if (!workspaceLink || workspaceLink.target !== '_self' || workspaceLink.rel) throw new Error('expected bookmarked workspace self link after create');
   const planJSONLink = links.find((node) => node.href === '/v1/plans/plan_ready_123' && node.textContent === 'Plan JSON');
@@ -5475,6 +5511,25 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Tenet persisted this immutable apply request in read-only mode and did not contact AWS.')) throw new Error('expected immutable apply detail');
   if (!text.includes('Live execution is intentionally disabled by default for this backend slice.')) throw new Error('expected disabled-by-default apply detail');
   const applyLinks = collectNodes(root, (node) => node.tagName === 'A');
+  const sectionLinksAfterApply = collectNodes(root, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#plan-'));
+  const expectedSectionLinksAfterApply = [
+    ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-runtime-signals', 'Runtime signals'],
+    ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-rollout-execution', 'Rollout execution'],
+    ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-approval-guidance', 'Plan preview approval guidance'],
+    ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-preview-actions', 'Plan preview actions'],
+    ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-stored-preview', 'Stored plan preview'],
+    ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-actions', 'Apply request actions'],
+    ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-stored-apply', 'Stored apply request'],
+    ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-details', 'Apply request details'],
+    ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-operations', 'Apply operations'],
+    ['/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-operations', 'Plan operations'],
+  ];
+  if (sectionLinksAfterApply.length !== expectedSectionLinksAfterApply.length) throw new Error('expected rendered plan/apply section links after apply create, got ' + sectionLinksAfterApply.length);
+  expectedSectionLinksAfterApply.forEach(([href, label]) => {
+    const link = sectionLinksAfterApply.find((node) => node.href === href && node.textContent === label);
+    if (!link) throw new Error('missing post-apply plan section link ' + label + ' -> ' + href);
+    if (link.target !== '_self' || link.rel) throw new Error('expected post-apply plan section link to stay in-shell for ' + label);
+  });
   const updatedWorkspaceLink = applyLinks.find((node) => node.href === '/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123' && node.textContent === 'Open bookmarked workspace');
   if (!updatedWorkspaceLink || updatedWorkspaceLink.target !== '_self' || updatedWorkspaceLink.rel) throw new Error('expected bookmarked workspace self link to include applyId after apply create');
   const bookmarkedApplyLink = applyLinks.find((node) => node.href === '/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123' && node.textContent === 'Open bookmarked apply');
@@ -5821,6 +5876,139 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!createPlan || !applyPlan || !refreshPlan || !refreshApply) throw new Error('expected plan workspace action buttons on bookmarked apply');
   if (createPlan.disabled || applyPlan.disabled) throw new Error('expected Create Plan enabled and Apply Plan enabled on bookmarked apply backed by ready preview');
   if (refreshPlan.disabled || refreshApply.disabled) throw new Error('expected refresh buttons enabled on bookmarked apply');
+})();
+`
+		runNodeHarness(t, nodeProgram)
+	})
+
+	t.Run("bookmarked plan hash deep links re-scroll after async plan and apply sections render", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+const planPreview = ` + string(planPreviewReadyJSON) + `;
+const applyRecord = ` + string(applyRecordFailedJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION' && (node.selected || this.value === '')) { this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+  scrollIntoView(options) { this.ownerDocument.lastScrolledTarget = { id: this.id || '', options }; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); this.lastScrolledTarget = null; }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) {
+    if (this.byID.has(id)) return this.byID.get(id) || null;
+    const stack = Array.from(this.byID.values());
+    while (stack.length) {
+      const node = stack.shift();
+      if (node?.id === id) return node;
+      stack.push(...(node.children || []));
+    }
+    return null;
+  }
+  querySelector(selector) {
+    const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/);
+    if (!dataMatch) return null;
+    const target = dataMatch[1];
+    const stack = Array.from(this.byID.values());
+    while (stack.length) {
+      const node = stack.shift();
+      if (node?.dataset?.toolbarField === target) return node;
+      stack.push(...(node.children || []));
+    }
+    return null;
+  }
+}
+const collectNodes = (root, predicate) => {
+  const matches = [];
+  const visit = (node) => {
+    if (!node) return;
+    if (predicate(node)) matches.push(node);
+    (node.children || []).forEach(visit);
+  };
+  visit(root);
+  return matches;
+};
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const initialSearch = '?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123';
+const window = { location: { pathname: '/console', search: initialSearch, hash: '#plan-apply-operations' } };
+const history = { replaceState(_state, _title, url) {
+  const [pathAndQuery, hash = ''] = String(url).split('#');
+  const [pathname, query = ''] = pathAndQuery.split('?');
+  window.location.pathname = pathname || '/console';
+  window.location.search = query ? '?' + query : '';
+  window.location.hash = hash ? '#' + hash : '';
+} };
+const fetchCalls = [];
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (String(url) === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (String(url) === '/v1/plans/plan_ready_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+  if (String(url) === '/v1/applies/apply_failed_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(applyRecord) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+(async () => {
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle();
+  await settle();
+  await settle();
+  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/plan_ready_123, /v1/applies/apply_failed_123') throw new Error('expected bookmarked plan/apply hash route to load deployment detail plus stored plan/apply records');
+  if (window.location.pathname !== '/console') throw new Error('expected plan workspace pathname to stay stable, got ' + window.location.pathname);
+  if (window.location.search !== initialSearch) throw new Error('expected plan workspace query to stay stable, got ' + window.location.search);
+  if (window.location.hash !== '#plan-apply-operations') throw new Error('expected plan workspace hash to stay stable, got ' + window.location.hash);
+  if (!document.lastScrolledTarget || document.lastScrolledTarget.id !== 'plan-apply-operations') throw new Error('expected plan workspace hash to re-scroll matching apply section after async render');
+  const accounts = document.getElementById('accounts');
+  const sectionIDs = collectNodes(accounts, (node) => typeof node.id === 'string' && node.id.startsWith('plan-')).map((node) => node.id).sort();
+  const expectedSectionIDs = ['plan-apply-actions', 'plan-apply-details', 'plan-apply-operations', 'plan-approval-guidance', 'plan-operations', 'plan-preview-actions', 'plan-rollout-execution', 'plan-runtime-signals', 'plan-stored-apply', 'plan-stored-preview'];
+  if (JSON.stringify(sectionIDs) !== JSON.stringify(expectedSectionIDs)) throw new Error('unexpected plan section ids: ' + JSON.stringify(sectionIDs));
+  const sectionLinks = collectNodes(accounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#plan-'));
+  const expectedLinks = [
+    ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-runtime-signals', 'Runtime signals'],
+    ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-rollout-execution', 'Rollout execution'],
+    ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-approval-guidance', 'Plan preview approval guidance'],
+    ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-preview-actions', 'Plan preview actions'],
+    ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-stored-preview', 'Stored plan preview'],
+    ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-actions', 'Apply request actions'],
+    ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-stored-apply', 'Stored apply request'],
+    ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-details', 'Apply request details'],
+    ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-apply-operations', 'Apply operations'],
+    ['/console?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#plan-operations', 'Plan operations'],
+  ];
+  if (sectionLinks.length !== expectedLinks.length) throw new Error('expected ten rendered plan section links after bookmarked apply load, got ' + sectionLinks.length);
+  expectedLinks.forEach(([href, text]) => {
+    const link = sectionLinks.find((node) => node.href === href && node.textContent === text);
+    if (!link) throw new Error('missing plan section link ' + text + ' -> ' + href);
+    if (link.target !== '_self' || link.rel) throw new Error('expected plan section link to stay in-shell for ' + text);
+  });
 })();
 `
 		runNodeHarness(t, nodeProgram)

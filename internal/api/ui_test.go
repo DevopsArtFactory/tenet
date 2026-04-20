@@ -285,6 +285,36 @@ func TestEmbeddedUIIncludesDriftSectionNavigation(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUIIncludesPlanSectionNavigation(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const planSectionLinks = [];",
+		"const pushPlanSection = (section, sectionID, label) => {",
+		"section.id = sectionID;",
+		"href: buildPageSectionURL('plan', sectionID, {",
+		"planId: currentPageState.planId || planState?.planId || planState?.record?.id || '',",
+		"applyId: currentPageState.applyId || applyState?.applyId || applyState?.record?.id || '',",
+		"pushPlanSection(runtimeSignalsSection, 'plan-runtime-signals', 'Runtime signals');",
+		"pushPlanSection(executionSection, 'plan-rollout-execution', 'Rollout execution');",
+		"pushPlanSection(approvalSection, 'plan-approval-guidance', activePlanRecord ? 'Plan preview approval guidance' : 'Derived approval guidance');",
+		"pushPlanSection(actionsSection, 'plan-preview-actions', 'Plan preview actions');",
+		"pushPlanSection(previewSection, 'plan-stored-preview', 'Stored plan preview');",
+		"pushPlanSection(errorsSection, 'plan-preview-errors', 'Plan preview errors');",
+		"pushPlanSection(applySection, 'plan-apply-actions', 'Apply request actions');",
+		"pushPlanSection(recordSection, 'plan-stored-apply', 'Stored apply request');",
+		"pushPlanSection(recordDetailsSection, 'plan-apply-details', 'Apply request details');",
+		"pushPlanSection(applyOperationsSection, 'plan-apply-operations', 'Apply operations');",
+		"pushPlanSection(planOperationsSection, 'plan-operations', 'Plan operations');",
+		"header.append(head, createWorkspaceQuickNav(detail, mode, planSectionLinks), ...sections);",
+		"scrollToCurrentHashTarget();",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+}
+
 func TestEmbeddedUIIncludesBreadcrumbChromeForDrillDownPages(t *testing.T) {
 	body := string(indexHTML)
 
@@ -684,16 +714,18 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"backLink.target = '_self';",
 		"backLink.rel = '';",
 		"const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = []) => {",
-		"const createWorkspaceQuickNav = (detail, mode) => {",
+		"const createWorkspaceQuickNav = (detail, mode, sectionLinks = null) => {",
 		"const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';",
 		"const linkedResources = mode === 'drift' ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;",
-		"const sectionLinks = mode === 'drift'",
+		"const resolvedSectionLinks = mode === 'drift'",
 		"buildPageSectionURL('drift', 'drift-runtime-signals', { deployment: deploymentName })",
 		"buildPageSectionURL('drift', 'drift-rollout-execution', { deployment: deploymentName })",
 		"buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName })",
 		"buildPageSectionURL('drift', 'drift-status-conditions', { deployment: deploymentName })",
-		"return createDeploymentQuickNav(deploymentName, currentWorkspace, linkedResources, sectionLinks);",
+		"Array.isArray(sectionLinks) ? sectionLinks : [];",
+		"return createDeploymentQuickNav(deploymentName, currentWorkspace, linkedResources, resolvedSectionLinks);",
 		"createElement('div', 'quick-nav-label', 'Deployment workspaces')",
+		"createElement('div', 'quick-nav-label', 'On this page')",
 		"createElement('div', 'quick-nav-label', 'Linked resources')",
 		"createElement('div', 'quick-nav-current', `${deploymentName || 'Deployment'} · ${currentWorkspace}`)",
 		"createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')",
@@ -706,12 +738,14 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"currentWorkspace === 'Audit log'",
 		"createQuickNavChip('Audit log', 'Current workspace: Audit log')",
 		"createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self')",
+		"sectionLinks.forEach((sectionLink) => {",
+		"sectionNavLinks.append(createNavLink(sectionLink.href, sectionLink.label, '_self'));",
 		"linkedResources.forEach((resource) => {",
 		"resourceType: resource.type,",
 		"resourceId: resource.id,",
 		"}), resource.name, '_self'));",
 		"'No linked resources are available in this drift workspace yet.'",
-		"header.append(head, createWorkspaceQuickNav(detail, mode), ...sections);",
+		"header.append(head, createWorkspaceQuickNav(detail, mode, planSectionLinks), ...sections);",
 		"const emptyTitle = mode === 'drift' ? 'Field-level drift' : 'Plan operations';",
 		"const driftSeverityRank = (severity) => {",
 		"const driftSeverityCounts = (rows) => rows.reduce((counts, row) => {",
@@ -1681,6 +1715,15 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"assert 'Plan preview actions' in ui, ui",
 		"assert 'Apply request actions' in ui, ui",
 		"assert 'Plan preview approval guidance' in ui, ui",
+		"assert \"const pushPlanSection = (section, sectionID, label) => {\" in ui, ui",
+		"assert \"pushPlanSection(runtimeSignalsSection, 'plan-runtime-signals', 'Runtime signals');\" in ui, ui",
+		"assert \"pushPlanSection(executionSection, 'plan-rollout-execution', 'Rollout execution');\" in ui, ui",
+		"assert \"pushPlanSection(actionsSection, 'plan-preview-actions', 'Plan preview actions');\" in ui, ui",
+		"assert \"pushPlanSection(applySection, 'plan-apply-actions', 'Apply request actions');\" in ui, ui",
+		"assert \"pushPlanSection(planOperationsSection, 'plan-operations', 'Plan operations');\" in ui, ui",
+		"assert \"buildPageSectionURL('plan', sectionID, {\" in ui, ui",
+		"assert \"planId: currentPageState.planId || planState?.planId || planState?.record?.id || '',\" in ui, ui",
+		"assert \"applyId: currentPageState.applyId || applyState?.applyId || applyState?.record?.id || '',\" in ui, ui",
 		"assert 'Create Plan will POST /v1/plans/deployments/${deploymentName}, store an immutable server-authored preview, and update this workspace URL with a shareable planId.' in ui, ui",
 		"assert 'Authenticated operator required' in ui, ui",
 		"assert 'const operatorWriteAuthRequiredMessage = (route, action) => `Tenet rejected ${route} because authenticated identity is required on operator write routes. When auth enforcement is enabled, retry ${action} through the trusted front door so it can authenticate you and forward trusted identity headers.`;' in ui, ui",
@@ -1892,6 +1935,38 @@ func TestOverviewDocsDescribeDriftWorkspaceSectionNavigation(t *testing.T) {
 			"`On this page` group",
 			"`Runtime signals`, `Rollout execution`, `Field-level drift`, and `Status conditions`",
 			"`/?page=drift&deployment={name}#drift-field-level`",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
+	}
+}
+
+func TestOverviewDocsDescribePlanWorkspaceSectionNavigation(t *testing.T) {
+	files := map[string][]string{
+		"../../README.md": {
+			"`On this page` group",
+			"`plan-runtime-signals`, `plan-preview-actions`, `plan-stored-preview`, `plan-stored-apply`, `plan-apply-operations`, and `plan-operations`",
+			"`/?page=plan&deployment={deploymentName}&planId={planId}&applyId={applyId}#plan-apply-operations`",
+		},
+		"../../docs/features/overview-dashboard.md": {
+			"`On this page` group",
+			"`plan-runtime-signals`, `plan-preview-actions`, `plan-stored-preview`, `plan-stored-apply`, `plan-apply-operations`, and `plan-operations`",
+			"`/?page=plan&deployment={name}&planId={planId}&applyId={applyId}#plan-apply-operations`",
+		},
+		"../../docs/architecture/tenet-v1-overview-ui.md": {
+			"`buildPageSectionURL(...)` + `scrollToCurrentHashTarget()`",
+			"`plan-runtime-signals`, `plan-preview-actions`, `plan-stored-preview`, `plan-stored-apply`, `plan-apply-operations`, and `plan-operations`",
 		},
 	}
 
@@ -2184,9 +2259,12 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"No controller-authored field-level drift was reported for this deployment.",
 			"No field-level drift rows match the current filters. Adjust the query or severity filters to inspect reported drift.",
 			"Recent logs",
+			"On this page",
 			"Plan preview actions",
 			"Apply request actions",
 			"Plan preview approval guidance",
+			"Plan operations",
+			"buildPageSectionURL('plan', sectionID, {",
 			"Open bookmarked workspace",
 			"Plan JSON",
 			"Open bookmarked apply",
