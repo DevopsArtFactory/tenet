@@ -1152,7 +1152,7 @@
       };
       if (typeof window.addEventListener === 'function') {
         window.addEventListener('hashchange', () => {
-          if (currentPageState.page !== 'application' && currentPageState.page !== 'resource' && currentPageState.page !== 'drift') return;
+          if (currentPageState.page !== 'application' && currentPageState.page !== 'resource' && currentPageState.page !== 'drift' && currentPageState.page !== 'plan') return;
           syncActiveResourceQuickNav();
           scrollToCurrentHashTarget();
         });
@@ -1600,7 +1600,7 @@
           currentWorkspace,
           linkedResources,
           resolvedSectionLinks,
-          mode === 'drift' ? 'No section is currently targeted.' : '',
+          (mode === 'drift' || mode === 'plan') ? 'No section is currently targeted.' : '',
         );
       };
       const createApplicationQuickNav = (detail, sectionLinks = []) => {
@@ -3873,6 +3873,7 @@
         const pushPlanSection = (section, sectionID, label) => {
           section.id = sectionID;
           planSectionLinks.push({
+            sectionID,
             label,
             href: buildPageSectionURL('plan', sectionID, {
               deployment: detail.name || currentPageState.deployment || '',

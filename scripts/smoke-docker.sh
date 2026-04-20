@@ -793,7 +793,7 @@ for fragment in (
     "Linked resources",
     "const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = [], currentSectionEmptyLabel = '') => {",
     "const trackCurrentSection = Boolean(currentSectionEmptyLabel) && sectionLinks.some((sectionLink) => sectionLink?.sectionID);",
-    "mode === 'drift' ? 'No section is currently targeted.' : '',",
+    "(mode === 'drift' || mode === 'plan') ? 'No section is currently targeted.' : '',",
     "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)",
     "No section is currently targeted.",
     "No linked resources are available in this drift workspace yet.",
