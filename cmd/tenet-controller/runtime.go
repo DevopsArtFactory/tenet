@@ -31,11 +31,13 @@ const (
 var runtimeHistoryNow = time.Now
 
 type runtimeLiveCapacityObservation struct {
-	Desired               int
-	Min                   int
-	Max                   int
-	TaskDefinitionImage   string
-	MinimumHealthyPercent *int32
+	Desired                       int
+	Min                           int
+	Max                           int
+	TaskDefinitionImage           string
+	MinimumHealthyPercent         *int32
+	MaximumPercent                *int32
+	HealthCheckGracePeriodSeconds *int32
 }
 
 var runtimeLiveCapacityLookup = runtimeLiveCapacityLookupFromInspection
@@ -288,9 +290,11 @@ func runtimeLiveCapacityLookupFromInspection(ctx context.Context, inspector reso
 	}
 	if result.ECSService != nil {
 		return &runtimeLiveCapacityObservation{
-			Desired:               int(result.ECSService.DesiredCount),
-			TaskDefinitionImage:   strings.TrimSpace(result.ECSService.TaskDefinitionImage),
-			MinimumHealthyPercent: result.ECSService.MinimumHealthyPercent,
+			Desired:                       int(result.ECSService.DesiredCount),
+			TaskDefinitionImage:           strings.TrimSpace(result.ECSService.TaskDefinitionImage),
+			MinimumHealthyPercent:         result.ECSService.MinimumHealthyPercent,
+			MaximumPercent:                result.ECSService.MaximumPercent,
+			HealthCheckGracePeriodSeconds: result.ECSService.HealthCheckGracePeriodSeconds,
 		}, nil
 	}
 	return nil, nil
@@ -374,6 +378,22 @@ func deriveManagedDriftItems(deployment domain.Deployment, status domain.Deploym
 				Field:    "runtimeContext.deploymentConfig.minimumHealthyPercent",
 				Desired:  fmt.Sprintf("%d", desiredMinHealthy),
 				Actual:   fmt.Sprintf("%d", *liveCapacity.MinimumHealthyPercent),
+				Severity: domain.ManagedDriftSeverityMedium,
+			})
+		}
+		if liveCapacity.MaximumPercent != nil && int(*liveCapacity.MaximumPercent) != 200 {
+			items = append(items, domain.ManagedDriftItem{
+				Field:    "runtimeContext.deploymentConfig.maximumPercent",
+				Desired:  "200",
+				Actual:   fmt.Sprintf("%d", *liveCapacity.MaximumPercent),
+				Severity: domain.ManagedDriftSeverityMedium,
+			})
+		}
+		if desiredGracePeriod := deployment.RolloutConfig.Strategy.WarmupSeconds; desiredGracePeriod > 0 && liveCapacity.HealthCheckGracePeriodSeconds != nil && desiredGracePeriod != int(*liveCapacity.HealthCheckGracePeriodSeconds) {
+			items = append(items, domain.ManagedDriftItem{
+				Field:    "runtimeContext.deploymentConfig.healthCheckGracePeriodSeconds",
+				Desired:  fmt.Sprintf("%d", desiredGracePeriod),
+				Actual:   fmt.Sprintf("%d", *liveCapacity.HealthCheckGracePeriodSeconds),
 				Severity: domain.ManagedDriftSeverityMedium,
 			})
 		}
