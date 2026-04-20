@@ -1152,7 +1152,7 @@
       };
       if (typeof window.addEventListener === 'function') {
         window.addEventListener('hashchange', () => {
-          if (currentPageState.page !== 'resource') return;
+          if (currentPageState.page !== 'application' && currentPageState.page !== 'resource') return;
           syncActiveResourceQuickNav();
           scrollToCurrentHashTarget();
         });
@@ -1373,6 +1373,7 @@
         const pushApplicationSectionLink = (sectionID, label) => {
           if (!sectionID) return;
           applicationSectionLinks.push({
+            sectionID,
             label,
             href: buildPageSectionURL('application', sectionID, { deployment: deploymentName }),
           });
@@ -1453,6 +1454,8 @@
         renderDeploymentEventsSection(eventsSection, eventsDeploymentName).catch(() => {});
         page.append(rows, eventsSection);
         root.replaceChildren(page);
+        activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;
+        syncActiveResourceQuickNav();
         scrollToCurrentHashTarget();
       };
       const resolveResourceDetail = (detail) => {
@@ -1582,24 +1585,42 @@
           workspaceLinks,
         );
         groups.append(workspaceGroup);
-        if (Array.isArray(sectionLinks) && sectionLinks.length) {
-          const sectionGroup = createElement('div', 'quick-nav-group');
-          const sectionNavLinks = createElement('div', 'quick-nav-links');
-          sectionLinks.forEach((sectionLink) => {
-            sectionNavLinks.append(createNavLink(sectionLink.href, sectionLink.label, '_self'));
-          });
-          sectionGroup.append(
-            createElement('div', 'quick-nav-label', 'On this page'),
-            sectionNavLinks,
-          );
-          groups.append(sectionGroup);
-        }
+        const currentSectionGroup = createElement('div', 'quick-nav-group');
+        const sectionGroup = createElement('div', 'quick-nav-group');
+        const syncCurrentSection = () => {
+          const activeSectionID = currentHashTargetID();
+          const currentSectionLink = Array.isArray(sectionLinks)
+            ? sectionLinks.find((sectionLink) => sectionLink?.sectionID === activeSectionID)
+            : null;
+          currentSectionGroup.replaceChildren(createElement('div', 'quick-nav-label', 'Current section'));
+          if (currentSectionLink) {
+            currentSectionGroup.append(createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`));
+          } else {
+            currentSectionGroup.append(createElement('div', 'quick-nav-empty', 'No section is currently targeted.'));
+          }
+          sectionGroup.replaceChildren(createElement('div', 'quick-nav-label', 'On this page'));
+          const remainingSectionLinks = Array.isArray(sectionLinks)
+            ? sectionLinks.filter((sectionLink) => sectionLink?.sectionID !== currentSectionLink?.sectionID)
+            : [];
+          if (remainingSectionLinks.length) {
+            const sectionNavLinks = createElement('div', 'quick-nav-links');
+            remainingSectionLinks.forEach((sectionLink) => {
+              sectionNavLinks.append(createNavLink(sectionLink.href, sectionLink.label, '_self'));
+            });
+            sectionGroup.append(sectionNavLinks);
+          } else {
+            sectionGroup.append(createElement('div', 'quick-nav-empty', 'No additional section links are available for this application.'));
+          }
+        };
+        syncCurrentSection();
+        groups.append(currentSectionGroup, sectionGroup);
 
         const head = createElement('div', 'quick-nav-head');
         head.append(
           createElement('div', 'quick-nav-title', 'Quick navigation'),
           createElement('div', 'quick-nav-current', `${deploymentName || 'Deployment'} · Application detail`),
         );
+        strip.syncCurrentSection = syncCurrentSection;
         strip.append(head, groups);
         return strip;
       };
