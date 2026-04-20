@@ -38,13 +38,15 @@ const (
 var ErrNotImplemented = errors.New("resource log service not implemented")
 
 type Request struct {
-	DeploymentName   string
-	ResourceType     string
-	ResourceName     string
-	ControlAccountID string
-	TargetAccountID  string
-	Region           string
-	ObserverRoleARN  string
+	DeploymentName      string
+	ResourceType        string
+	ResourceName        string
+	BackingResourceType string
+	BackingResourceName string
+	ControlAccountID    string
+	TargetAccountID     string
+	Region              string
+	ObserverRoleARN     string
 }
 
 type Result struct {
@@ -133,7 +135,14 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 		}
 		entries := formatCloudWatchEntries(events, s.maxEntries())
 		return availableResult(req, SourceCloudWatch, entries), nil
-	case "candidateAutoScalingGroup", "serviceAutoScalingGroup":
+	case "candidateAutoScalingGroup", "serviceAutoScalingGroup", "userDataBootstrapSource":
+		resourceName := req.ResourceName
+		if req.ResourceType == "userDataBootstrapSource" {
+			resourceName = strings.TrimSpace(req.BackingResourceName)
+			if resourceName == "" {
+				return unavailableResult(req, UnavailableReasonNoLogSource), nil
+			}
+		}
 		list := s.options.ListASGInstanceConsoles
 		if list == nil {
 			if !s.options.EnableAWS {
@@ -143,7 +152,7 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 		}
 		consoles, err := list(ctx, ASGRequest{
 			DeploymentName:  req.DeploymentName,
-			ResourceName:    req.ResourceName,
+			ResourceName:    resourceName,
 			Region:          req.Region,
 			TargetAccountID: req.TargetAccountID,
 			ObserverRoleARN: req.ObserverRoleARN,
