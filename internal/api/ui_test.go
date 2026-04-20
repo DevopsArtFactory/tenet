@@ -1578,8 +1578,14 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"const fetchApplicationsOverview = () => fetchEmbeddedReadRouteJSON('/v1/overview/applications', {\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert applications landing page fetch route contract")
 	}
+	if !strings.Contains(text, "assert \"fetchApplicationsOverview()\" in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert landing-page boot loader uses fetchApplicationsOverview")
+	}
 	if !strings.Contains(text, "assert_fragments(\"account_ui\", account_ui, operator_read_auth_fragments + (") {
 		t.Fatalf("expected smoke-local.sh to lock account page operator-read auth guidance")
+	}
+	if !strings.Contains(text, "assert \"fetchAccountDetail(currentPageState.accountId)\" in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert account-page boot loader uses fetchAccountDetail")
 	}
 	if !strings.Contains(text, "for label, body in ((\"resource_ui\", resource_ui), (\"ecs_resource_ui\", ecs_resource_ui)):") {
 		t.Fatalf("expected smoke-local.sh to assert both bookmarkable resource pages")
@@ -2295,6 +2301,8 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"for label, body in ((\"resource_ui\", resource_ui), (\"ecs_resource_ui\", ecs_resource_ui), (\"bootstrap_resource_ui\", bootstrap_resource_ui)):",
 			"const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {",
 			"const fetchAccountDetail = (accountID) => fetchEmbeddedReadRouteJSON(`/v1/overview/accounts/${encodeURIComponent(accountID)}`, {",
+			"fetchApplicationsOverview()",
+			"fetchAccountDetail(currentPageState.accountId)",
 			"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')",
 			"const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);",
 			"createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')",

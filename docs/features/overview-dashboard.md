@@ -297,6 +297,8 @@ The dashboard now exposes the following navigation affordances across the curren
 
 The landing page itself is backed by `GET /v1/overview/applications`; the application-detail page uses `GET /v1/overview/applications/{deploymentName}`, while the deeper resource/workspace drill-down pages continue to reuse `GET /v1/overview/deployments/{deploymentName}`.
 
+The bookmarkable landing page and bookmarkable account detail page both use the shared embedded read-route helpers on initial load, so `401 Unauthorized` and `403 Forbidden` responses show the same trusted-front-door / access-denied guidance used by the other operator-read pages instead of a generic overview fetch failure.
+
 Important implementation constraints:
 - these links are rendered as sibling controls outside the expand-toggle button when they appear in expandable deployment contexts
 - interactive elements are not nested inside the toggle button
