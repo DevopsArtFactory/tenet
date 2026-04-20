@@ -2241,6 +2241,13 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"smoke-docker:",
 			"./scripts/smoke-docker.sh",
 		},
+		"../../.github/workflows/ci-smoke.yml": {
+			"name: CI Smoke",
+			"run: bash -n scripts/smoke-local.sh",
+			"run: make smoke-local",
+			"run: bash -n scripts/smoke-docker.sh",
+			"run: make smoke-docker",
+		},
 		"../../README.md": {
 			"Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis;",
 			"the request-actor header contract by sending conflicting `X-Tenet-Actor-*` and `X-User-*` identities together",
@@ -2282,6 +2289,8 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"`Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Lookup region`, and `Observer role configured`",
 			"temp files via the shared `write_payload` helper",
 			"Linux CI runners",
+			"syntax-checks `scripts/smoke-local.sh` with `bash -n`, then runs `make smoke-local`",
+			"syntax-checks `scripts/smoke-docker.sh` with `bash -n` before running `make smoke-docker`",
 			"make smoke-docker",
 		},
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
@@ -2323,6 +2332,8 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"`Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Lookup region`, and `Observer role configured`",
 			"temp files through the shared `write_payload` helper",
 			"Linux CI runners with tighter environment-size limits",
+			"syntax-checks `scripts/smoke-local.sh` with `bash -n`, then runs `make smoke-local`",
+			"syntax-checks `scripts/smoke-docker.sh` with `bash -n`, then runs `make smoke-docker`",
 			"`docker compose down --remove-orphans` even on failure",
 		},
 		"../../docs/architecture/tenet-v1-overview-ui.md": {
