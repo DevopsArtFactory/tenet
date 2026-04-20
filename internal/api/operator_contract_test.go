@@ -320,6 +320,8 @@ func TestManagedLiveDriftDocsPreferFocusedContractCoverageOverLocalSmoke(t *test
 	for _, fragment := range []string{
 		"`runtimeContext.capacity.desired`, `runtimeContext.capacity.min`, and `runtimeContext.capacity.max`",
 		"`runtimeContext.deploymentConfig.minimumHealthyPercent`",
+		"`runtimeContext.deploymentConfig.maximumPercent`",
+		"`runtimeContext.deploymentConfig.healthCheckGracePeriodSeconds`",
 		"`runtimeContext.taskDefinition.image`",
 		"Focused `go test ./internal/api` contract coverage locks that additive JSON/UI detail because local smoke may legitimately lack AWS access and therefore does not claim to prove live-backed capacity/deployment-config/image rows.",
 	} {
@@ -332,6 +334,8 @@ func TestManagedLiveDriftDocsPreferFocusedContractCoverageOverLocalSmoke(t *test
 	for _, fragment := range []string{
 		"`runtimeContext.capacity.{desired,min,max}`",
 		"`runtimeContext.deploymentConfig.minimumHealthyPercent`",
+		"`runtimeContext.deploymentConfig.maximumPercent`",
+		"`runtimeContext.deploymentConfig.healthCheckGracePeriodSeconds`",
 		"`runtimeContext.taskDefinition.image`",
 		"focused router/UI contract tests lock that additive live-backed capacity/deployment-config/image detail because local smoke may legitimately lack AWS access and therefore does not claim to prove those rows",
 	} {
@@ -343,6 +347,8 @@ func TestManagedLiveDriftDocsPreferFocusedContractCoverageOverLocalSmoke(t *test
 	localRuntimeDoc := readRepoFile(t, "docs/architecture/tenet-v1-local-runtime.md")
 	for _, fragment := range []string{
 		"`runtimeContext.deploymentConfig.minimumHealthyPercent`",
+		"`runtimeContext.deploymentConfig.maximumPercent`",
+		"`runtimeContext.deploymentConfig.healthCheckGracePeriodSeconds`",
 		"`runtimeContext.taskDefinition.image`",
 		"Local runs may legitimately lack AWS access, so focused `go test ./internal/api` contract coverage locks that additive JSON/UI detail instead.",
 	} {

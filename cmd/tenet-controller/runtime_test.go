@@ -2048,16 +2048,20 @@ func TestDeriveManagedDriftItemsAddsLiveECSDeploymentConfigEvidence(t *testing.T
 				Name:          "payments-worker-prod",
 				ExecutionMode: executionMode,
 				RolloutConfig: domain.DeploymentRolloutConfig{
-					Strategy: domain.DeploymentRolloutStrategy{MinHealthyPercent: 80},
+					Strategy: domain.DeploymentRolloutStrategy{MinHealthyPercent: 80, WarmupSeconds: 45},
 					Capacity: domain.DeploymentRolloutCapacity{Desired: 3, Min: 1, Max: 5},
 				},
 			}
 
 			got := deriveManagedDriftItems(deployment, domain.DeploymentStatus{}, &runtimeLiveCapacityObservation{
-				Desired:               3,
-				MinimumHealthyPercent: int32Ptr(100),
+				Desired:                       3,
+				MinimumHealthyPercent:         int32Ptr(100),
+				MaximumPercent:                int32Ptr(150),
+				HealthCheckGracePeriodSeconds: int32Ptr(30),
 			})
 			want := []domain.ManagedDriftItem{
+				{Field: "runtimeContext.deploymentConfig.healthCheckGracePeriodSeconds", Desired: "45", Actual: "30", Severity: domain.ManagedDriftSeverityMedium},
+				{Field: "runtimeContext.deploymentConfig.maximumPercent", Desired: "200", Actual: "150", Severity: domain.ManagedDriftSeverityMedium},
 				{Field: "runtimeContext.deploymentConfig.minimumHealthyPercent", Desired: "80", Actual: "100", Severity: domain.ManagedDriftSeverityMedium},
 			}
 			if !reflect.DeepEqual(got, want) {
@@ -2096,11 +2100,6 @@ func TestDeriveManagedDriftItemsAddsLiveECSTaskDefinitionImageEvidence(t *testin
 }
 
 func TestRuntimeLiveCapacityLookupFromInspectionUsesECSServiceDesiredCount(t *testing.T) {
-	deployment := domain.Deployment{
-		Name:           "payments-worker-prod",
-		EnvironmentRef: "prod-apne2",
-		ExecutionMode:  "ecsRolling",
-	}
 	accounts := []domain.Account{{
 		Name:           "prod-core",
 		AWSAccountID:   "123456789012",
@@ -2112,36 +2111,50 @@ func TestRuntimeLiveCapacityLookupFromInspectionUsesECSServiceDesiredCount(t *te
 		Region:     "ap-northeast-2",
 	}}
 
-	var gotReq resourceinspection.ECSRequest
-	inspector := resourceinspection.NewService(resourceinspection.Options{
-		InspectECSService: func(_ context.Context, req resourceinspection.ECSRequest) (resourceinspection.ECSServiceInspection, error) {
-			gotReq = req
-			return resourceinspection.ECSServiceInspection{
-				DesiredCount:          3,
-				MinimumHealthyPercent: int32Ptr(100),
-				TaskDefinitionImage:   "ghcr.io/devopsartfactory/payments-worker:1.2.3",
-			}, nil
-		},
-	})
+	for _, executionMode := range []string{"ecsCodeDeploy", "ecsRolling"} {
+		t.Run(executionMode, func(t *testing.T) {
+			deployment := domain.Deployment{
+				Name:           "payments-worker-prod",
+				EnvironmentRef: "prod-apne2",
+				ExecutionMode:  executionMode,
+			}
 
-	got, err := runtimeLiveCapacityLookupFromInspection(context.Background(), inspector, accounts, environments, deployment)
-	if err != nil {
-		t.Fatalf("runtimeLiveCapacityLookupFromInspection returned error: %v", err)
-	}
-	if !reflect.DeepEqual(got, &runtimeLiveCapacityObservation{
-		Desired:               3,
-		MinimumHealthyPercent: int32Ptr(100),
-		TaskDefinitionImage:   "ghcr.io/devopsartfactory/payments-worker:1.2.3",
-	}) {
-		t.Fatalf("expected ECS desired-count observation, got %+v", got)
-	}
-	if gotReq != (resourceinspection.ECSRequest{
-		DeploymentName:  "payments-worker-prod",
-		ResourceName:    "payments-worker-prod-service",
-		Region:          "ap-northeast-2",
-		TargetAccountID: "123456789012",
-	}) {
-		t.Fatalf("unexpected ECS lookup request: %+v", gotReq)
+			var gotReq resourceinspection.ECSRequest
+			inspector := resourceinspection.NewService(resourceinspection.Options{
+				InspectECSService: func(_ context.Context, req resourceinspection.ECSRequest) (resourceinspection.ECSServiceInspection, error) {
+					gotReq = req
+					return resourceinspection.ECSServiceInspection{
+						DesiredCount:                  3,
+						MinimumHealthyPercent:         int32Ptr(100),
+						MaximumPercent:                int32Ptr(200),
+						HealthCheckGracePeriodSeconds: int32Ptr(45),
+						TaskDefinitionImage:           "ghcr.io/devopsartfactory/payments-worker:1.2.3",
+					}, nil
+				},
+			})
+
+			got, err := runtimeLiveCapacityLookupFromInspection(context.Background(), inspector, accounts, environments, deployment)
+			if err != nil {
+				t.Fatalf("runtimeLiveCapacityLookupFromInspection returned error: %v", err)
+			}
+			if !reflect.DeepEqual(got, &runtimeLiveCapacityObservation{
+				Desired:                       3,
+				MinimumHealthyPercent:         int32Ptr(100),
+				MaximumPercent:                int32Ptr(200),
+				HealthCheckGracePeriodSeconds: int32Ptr(45),
+				TaskDefinitionImage:           "ghcr.io/devopsartfactory/payments-worker:1.2.3",
+			}) {
+				t.Fatalf("expected ECS desired-count observation, got %+v", got)
+			}
+			if gotReq != (resourceinspection.ECSRequest{
+				DeploymentName:  "payments-worker-prod",
+				ResourceName:    "payments-worker-prod-service",
+				Region:          "ap-northeast-2",
+				TargetAccountID: "123456789012",
+			}) {
+				t.Fatalf("unexpected ECS lookup request: %+v", gotReq)
+			}
+		})
 	}
 }
 
