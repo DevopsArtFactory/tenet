@@ -285,6 +285,28 @@ func TestEmbeddedUIIncludesDriftSectionNavigation(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUIIncludesApplicationSectionNavigation(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const createApplicationQuickNav = (detail, sectionLinks = []) => {",
+		"createElement('div', 'quick-nav-current', `${deploymentName || 'Deployment'} · Application detail`),",
+		"const applicationSectionIDs = {",
+		"'Workloads': 'application-workloads',",
+		"'Traffic routing': 'application-traffic-routing',",
+		"'Config and access': 'application-config-access',",
+		"pushApplicationSectionLink(groupSection.id, group.title);",
+		"eventsSection.id = 'application-runtime-events';",
+		"pushApplicationSectionLink(eventsSection.id, 'Controller runtime events');",
+		"const quickNav = createApplicationQuickNav(detail, applicationSectionLinks);",
+		"scrollToCurrentHashTarget();",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+}
+
 func TestEmbeddedUIIncludesPlanSectionNavigation(t *testing.T) {
 	body := string(indexHTML)
 
@@ -395,11 +417,18 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"Config and access",
 		"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')",
 		"const renderApplicationDetailPage = (detail) => {",
-		"const eventsDeploymentName = detail.name || currentPageState.deployment || '';",
+		"const applicationSectionIDs = {",
+		"const createApplicationQuickNav = (detail, sectionLinks = []) => {",
+		"const deploymentName = detail.name || currentPageState.deployment || '';",
+		"const eventsDeploymentName = deploymentName;",
 		"Application resources",
+		"eventsSection.id = 'application-runtime-events';",
+		"pushApplicationSectionLink(eventsSection.id, 'Controller runtime events');",
+		"const quickNav = createApplicationQuickNav(detail, applicationSectionLinks);",
 		"Open drift or plan/apply from here before the final resource page.",
 		"const eventsSection = createDetailSection('Controller runtime events');",
 		"renderDeploymentEventsSection(eventsSection, eventsDeploymentName).catch(() => {});",
+		"scrollToCurrentHashTarget();",
 		"backLink.target = '_self';",
 		"const renderResourceDetailPage = (detail) => {",
 		"Resource detail",
@@ -1487,6 +1516,18 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page resource link contract")
 	}
+	if !strings.Contains(text, "assert 'Quick navigation' in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert application page quick navigation copy")
+	}
+	if !strings.Contains(text, "assert 'On this page' in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert application page section navigation copy")
+	}
+	if !strings.Contains(text, "assert \"const createApplicationQuickNav = (detail, sectionLinks = []) => {\" in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert application page quick-nav helper contract")
+	}
+	if !strings.Contains(text, "assert \"eventsSection.id = 'application-runtime-events';\" in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert application page runtime-events anchor contract")
+	}
 	if !strings.Contains(text, "for body in (resource_ui, ecs_resource_ui):") {
 		t.Fatalf("expected smoke-local.sh to iterate over both resource page payloads")
 	}
@@ -1935,6 +1976,34 @@ func TestOverviewDocsDescribeDriftWorkspaceSectionNavigation(t *testing.T) {
 			"`On this page` group",
 			"`Runtime signals`, `Rollout execution`, `Field-level drift`, and `Status conditions`",
 			"`/?page=drift&deployment={name}#drift-field-level`",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
+	}
+}
+
+func TestOverviewDocsDescribeApplicationPageSectionNavigation(t *testing.T) {
+	files := map[string][]string{
+		"../../README.md": {
+			"`On this page` group",
+			"`Workloads`, `Traffic routing`, `Config and access`, and `Controller runtime events`",
+			"`/?page=application&deployment={deploymentName}#application-runtime-events`",
+		},
+		"../../docs/features/overview-dashboard.md": {
+			"`On this page` group",
+			"`Workloads`, `Traffic routing`, `Config and access`, and `Controller runtime events`",
+			"`/?page=application&deployment={name}#application-runtime-events`",
 		},
 	}
 

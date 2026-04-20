@@ -1346,7 +1346,21 @@
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
         const root = document.getElementById('accounts');
-        const eventsDeploymentName = detail.name || currentPageState.deployment || '';
+        const deploymentName = detail.name || currentPageState.deployment || '';
+        const eventsDeploymentName = deploymentName;
+        const applicationSectionIDs = {
+          'Workloads': 'application-workloads',
+          'Traffic routing': 'application-traffic-routing',
+          'Config and access': 'application-config-access',
+        };
+        const applicationSectionLinks = [];
+        const pushApplicationSectionLink = (sectionID, label) => {
+          if (!sectionID) return;
+          applicationSectionLinks.push({
+            label,
+            href: buildPageSectionURL('application', sectionID, { deployment: deploymentName }),
+          });
+        };
         const backLink = createNavLink(buildPageURL('applications'), 'Back to applications');
         backLink.target = '_self';
         backLink.rel = '';
@@ -1373,17 +1387,18 @@
           createElement('div', 'account-meta', 'Grouped linked resources for the selected application. Open drift or plan/apply from here before the final resource page.'),
         );
         const workspaceLinks = createElement('div', 'row-links row-links-shell');
-        if (detail.name) {
+        if (deploymentName) {
           workspaceLinks.append(
-            createNavLink(buildPageURL('drift', { deployment: detail.name }), 'Drift view', '_self'),
-            createNavLink(buildPageURL('plan', { deployment: detail.name }), 'Plan/apply', '_self'),
-            createNavLink(buildPageURL('audit', { deployment: detail.name }), 'Audit log', '_self'),
+            createNavLink(buildPageURL('drift', { deployment: deploymentName }), 'Drift view', '_self'),
+            createNavLink(buildPageURL('plan', { deployment: deploymentName }), 'Plan/apply', '_self'),
+            createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self'),
           );
         }
         page.append(workspaceLinks);
         const rows = createElement('div', 'rows');
         groupResourceSections(detail).forEach((group) => {
           const groupSection = createElement('section', 'deployment-group');
+          groupSection.id = applicationSectionIDs[group.title] || '';
           const groupHead = createElement('div', 'deployment-group-head');
           const groupTitleWrap = createElement('div');
           groupTitleWrap.append(
@@ -1410,11 +1425,19 @@
           });
           groupSection.append(groupHead, groupRows);
           rows.append(groupSection);
+          pushApplicationSectionLink(groupSection.id, group.title);
         });
         const eventsSection = createDetailSection('Controller runtime events');
+        eventsSection.id = 'application-runtime-events';
+        pushApplicationSectionLink(eventsSection.id, 'Controller runtime events');
+        const quickNav = createApplicationQuickNav(detail, applicationSectionLinks);
+        if (quickNav) {
+          page.append(quickNav);
+        }
         renderDeploymentEventsSection(eventsSection, eventsDeploymentName).catch(() => {});
         page.append(rows, eventsSection);
         root.replaceChildren(page);
+        scrollToCurrentHashTarget();
       };
       const resolveResourceDetail = (detail) => {
         const resources = groupResourceSections(detail).flatMap((group) => group.resources || []);
@@ -1524,6 +1547,45 @@
           ]
           : Array.isArray(sectionLinks) ? sectionLinks : [];
         return createDeploymentQuickNav(deploymentName, currentWorkspace, linkedResources, resolvedSectionLinks);
+      };
+      const createApplicationQuickNav = (detail, sectionLinks = []) => {
+        const deploymentName = detail.name || currentPageState.deployment || '';
+        if (!deploymentName) return null;
+        const strip = createElement('section', 'quick-nav-strip');
+        const workspaceLinks = createElement('div', 'quick-nav-links');
+        workspaceLinks.append(
+          createNavLink(buildPageURL('drift', { deployment: deploymentName }), 'Drift view', '_self'),
+          createNavLink(buildPageURL('plan', { deployment: deploymentName }), 'Plan/apply', '_self'),
+          createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self'),
+        );
+
+        const groups = createElement('div', 'quick-nav-groups');
+        const workspaceGroup = createElement('div', 'quick-nav-group');
+        workspaceGroup.append(
+          createElement('div', 'quick-nav-label', 'Deployment workspaces'),
+          workspaceLinks,
+        );
+        groups.append(workspaceGroup);
+        if (Array.isArray(sectionLinks) && sectionLinks.length) {
+          const sectionGroup = createElement('div', 'quick-nav-group');
+          const sectionNavLinks = createElement('div', 'quick-nav-links');
+          sectionLinks.forEach((sectionLink) => {
+            sectionNavLinks.append(createNavLink(sectionLink.href, sectionLink.label, '_self'));
+          });
+          sectionGroup.append(
+            createElement('div', 'quick-nav-label', 'On this page'),
+            sectionNavLinks,
+          );
+          groups.append(sectionGroup);
+        }
+
+        const head = createElement('div', 'quick-nav-head');
+        head.append(
+          createElement('div', 'quick-nav-title', 'Quick navigation'),
+          createElement('div', 'quick-nav-current', `${deploymentName || 'Deployment'} · Application detail`),
+        );
+        strip.append(head, groups);
+        return strip;
       };
       const createAuditQuickNav = () => createDeploymentQuickNav(auditDeploymentName(), 'Audit log');
       const createResourceQuickNav = (detail, resource) => {
