@@ -747,17 +747,28 @@ func TestIndexHTMLIncludesTolerantResourceBookmarkResolutionContract(t *testing.
 		"const parseResourceIdentity = (resourceId) => {",
 		"const [type = '', name = '', ...descriptionParts] = String(resourceId || '').split('::');",
 		"description: descriptionParts.join('::'),",
+		"const bootstrapSourceAliasIdentity = (value) => {",
+		"const resourceBookmarkAliasMatchesResolvedResource = (bookmarkedResource, resource) => {",
+		"if (bookmarkedResource.type !== 'userDataBootstrapSource') return false;",
+		"const bookmarkedAlias = bootstrapSourceAliasIdentity(bookmarkedResource.name);",
+		"const resolvedAlias = bootstrapSourceAliasIdentity(resource.name);",
 		"const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);",
 		"const exactMatch = resources.find((resource) => {",
 		"return resource.id === currentPageState.resourceId && resource.type === currentPageState.resourceType;",
+		"const aliasMatch = resources.find((resource) => resourceBookmarkAliasMatchesResolvedResource(bookmarkedResource, resource));",
 		"const tolerantMatch = resources.find((resource) => {",
 		"if (bookmarkedResource.type && resource.type !== bookmarkedResource.type) {",
 		"if (bookmarkedResource.name && resource.name !== bookmarkedResource.name) {",
 		"return Boolean(bookmarkedResource.type || bookmarkedResource.name);",
-		"return exactMatch || tolerantMatch || resources.find((resource) => {",
+		"return exactMatch || aliasMatch || tolerantMatch || resources.find((resource) => {",
 		"type: bookmarkedResource.type || currentPageState.resourceType || 'resource',",
 		"name: bookmarkedResource.name || bookmarkedResource.type || currentPageState.resourceType || 'Resource',",
 		"description: bookmarkedResource.description || 'No linked resource metadata is available for this selection.',",
+		"const createCurrentResourceRouteState = (resource) => {",
+		"const openedViaAlias = resourceBookmarkAliasMatchesResolvedResource(bookmarkedResource, resource);",
+		"routeResourceId: openedViaAlias ? bookmarkedResource.id : resource.id,",
+		"routeResourceType: currentPageState.resourceType || bookmarkedResource.type || resource.type,",
+		"Opened via bookmarked resource alias. Requested resource id ${resourceRouteState.routeResourceId}; resolved canonical resource id ${resource.id}.",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include tolerant resource bookmark resolution fragment %q", fragment)
@@ -1617,6 +1628,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);\" in body, body") {
 		t.Fatalf("expected smoke-local.sh to assert bookmarkable resource page contracts for both resource pages")
 	}
+	if !strings.Contains(text, "assert 'Opened via bookmarked resource alias.' in body, body") {
+		t.Fatalf("expected smoke-local.sh to assert alias-aware resource page copy")
+	}
 	if !strings.Contains(text, "assert \"createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')\" in body, body") {
 		t.Fatalf("expected smoke-local.sh to assert resource page back-link contract for both resource pages")
 	}
@@ -2305,6 +2319,7 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"fetchAccountDetail(currentPageState.accountId)",
 			"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')",
 			"const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);",
+			"Opened via bookmarked resource alias.",
 			"createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')",
 			"const createResourceQuickNav = (detail, resource, sectionLinks = []) => {",
 			"Current section",

@@ -817,6 +817,22 @@
           description: descriptionParts.join('::'),
         };
       };
+      const bootstrapSourceAliasIdentity = (value) => {
+        const text = String(value || '').trim();
+        if (!text) return '';
+        const [, ...pathParts] = text.split(':');
+        return pathParts.length ? pathParts.join(':') : text;
+      };
+      const resourceBookmarkAliasMatchesResolvedResource = (bookmarkedResource, resource) => {
+        if (!bookmarkedResource?.id || !resource) return false;
+        if (bookmarkedResource.id === resource.id) return false;
+        if (bookmarkedResource.type !== resource.type) return false;
+        if (bookmarkedResource.type !== 'userDataBootstrapSource') return false;
+        if (bookmarkedResource.description && resource.description && bookmarkedResource.description !== resource.description) return false;
+        const bookmarkedAlias = bootstrapSourceAliasIdentity(bookmarkedResource.name);
+        const resolvedAlias = bootstrapSourceAliasIdentity(resource.name);
+        return Boolean(bookmarkedAlias && resolvedAlias && bookmarkedAlias === resolvedAlias);
+      };
       const resourceLogCacheKey = (deploymentName, resource) => [deploymentName || '', resource.type || '', resource.name || '', resource.id || ''].join('::');
       const canonicalUserDataBootstrapSource = (userData) => {
         if (!userData || (!userData.type && !userData.path)) return 'unspecified';
@@ -1470,6 +1486,7 @@
           }
           return false;
         });
+        const aliasMatch = resources.find((resource) => resourceBookmarkAliasMatchesResolvedResource(bookmarkedResource, resource));
         const tolerantMatch = resources.find((resource) => {
           if (bookmarkedResource.type && resource.type !== bookmarkedResource.type) {
             return false;
@@ -1479,7 +1496,7 @@
           }
           return Boolean(bookmarkedResource.type || bookmarkedResource.name);
         });
-        return exactMatch || tolerantMatch || resources.find((resource) => {
+        return exactMatch || aliasMatch || tolerantMatch || resources.find((resource) => {
           if (currentPageState.resourceType) {
             return resource.type === currentPageState.resourceType;
           }
@@ -1489,6 +1506,16 @@
           type: bookmarkedResource.type || currentPageState.resourceType || 'resource',
           name: bookmarkedResource.name || bookmarkedResource.type || currentPageState.resourceType || 'Resource',
           description: bookmarkedResource.description || 'No linked resource metadata is available for this selection.',
+        };
+      };
+      const createCurrentResourceRouteState = (resource) => {
+        const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);
+        const openedViaAlias = resourceBookmarkAliasMatchesResolvedResource(bookmarkedResource, resource);
+        return {
+          bookmarkedResource,
+          openedViaAlias,
+          routeResourceType: currentPageState.resourceType || bookmarkedResource.type || resource.type,
+          routeResourceId: openedViaAlias ? bookmarkedResource.id : resource.id,
         };
       };
       const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = [], currentSectionEmptyLabel = '') => {
@@ -1746,6 +1773,7 @@
         const summary = document.getElementById('summary');
         const root = document.getElementById('accounts');
         const resource = resolveResourceDetail(detail);
+        const resourceRouteState = createCurrentResourceRouteState(resource);
         const deploymentName = detail.name || currentPageState.deployment || '';
         const resourceSectionLinks = [];
         const pushResourceSection = (section, sectionID, label) => {
@@ -1755,8 +1783,8 @@
             label,
             href: buildPageSectionURL('resource', sectionID, {
               deployment: deploymentName,
-              resourceType: resource.type,
-              resourceId: resource.id,
+              resourceType: resourceRouteState.routeResourceType,
+              resourceId: resourceRouteState.routeResourceId,
             }),
           });
         };
@@ -1786,6 +1814,9 @@
           createElement('h2', 'account-name', 'Resource detail'),
           createElement('div', 'account-meta', `Focused rollout/runtime context for ${resource.name}.`),
         );
+        if (resourceRouteState.openedViaAlias) {
+          page.append(createElement('div', 'detail-state', `Opened via bookmarked resource alias. Requested resource id ${resourceRouteState.routeResourceId}; resolved canonical resource id ${resource.id}.`));
+        }
         const shell = createElement('div', 'detail-grid');
         [
           ['Resource type', resource.type],

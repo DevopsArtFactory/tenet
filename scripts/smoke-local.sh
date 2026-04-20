@@ -946,6 +946,7 @@ assert "createElement('div', 'quick-nav-empty', 'No additional section links are
 assert "eventsSection.id = 'application-runtime-events';" in application_ui, application_ui
 for body in (resource_ui, ecs_resource_ui):
     assert "const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);" in body, body
+    assert 'Opened via bookmarked resource alias.' in body, body
     assert "const renderResourceDetailPage = (detail) => {" in body, body
     assert "currentLabel: resource.name," in body, body
     assert "const createResourceQuickNav = (detail, resource, sectionLinks = []) => {" in body, body

@@ -3127,6 +3127,217 @@ async function renderScenario(hash, fetchImpl) {
 	runNodeHarness(t, nodeProgram)
 }
 
+func TestResourceDetailPagePreservesBookmarkedAliasRouteIdentityWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	detailJSON, err := json.Marshal(map[string]any{
+		"name":            "payments-api-prod",
+		"accountName":     "prod-core",
+		"awsAccountId":    "123456789012",
+		"region":          "ap-northeast-2",
+		"targetType":      "ec2",
+		"strategy":        "canary",
+		"executionMode":   "asgWeightedTargetGroups",
+		"userData":        map[string]any{"type": "git", "path": "userdata/payments-api-prod.sh"},
+		"rolloutConfig":   map[string]any{"capacity": map[string]any{"desired": 4, "min": 2, "max": 8}, "strategy": map[string]any{"warmupSeconds": 90}},
+		"sync":            map[string]any{"state": "OutOfSync", "reason": "candidate capacity bootstrapping"},
+		"health":          map[string]any{"overall": "Progressing", "summary": "candidate warmup in progress"},
+		"desiredArtifact": map[string]any{"binary": "s3://artifacts/payments/v2.zip"},
+		"deployedArtifact": map[string]any{
+			"binary": "s3://artifacts/payments/v1.zip",
+		},
+		"runtimeSummary": map[string]any{
+			"source":        "deployment-controller",
+			"timestamp":     "2026-04-16T07:10:00Z",
+			"targetType":    "ec2",
+			"strategy":      "canary",
+			"executionMode": "asgWeightedTargetGroups",
+			"historyCount":  1,
+		},
+		"history":    []map[string]any{},
+		"conditions": []map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("marshal detail body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = {
+      add: (...names) => {
+        const current = new Set(this.className.split(/\s+/).filter(Boolean));
+        names.forEach((name) => current.add(name));
+        this.className = Array.from(current).join(' ');
+      },
+      toggle: (name, force) => {
+        const current = new Set(this.className.split(/\s+/).filter(Boolean));
+        const shouldAdd = force === undefined ? !current.has(name) : Boolean(force);
+        if (shouldAdd) current.add(name); else current.delete(name);
+        this.className = Array.from(current).join(' ');
+      },
+    };
+  }
+  append(...nodes) {
+    nodes.forEach((node) => {
+      if (node == null) return;
+      if (typeof node === 'string') {
+        const textNode = new Element('#text', this.ownerDocument);
+        textNode.textContent = node;
+        node = textNode;
+      }
+      node.parentNode = this;
+      this.children.push(node);
+      if (this.tagName === 'SELECT' && node.tagName === 'OPTION' && (node.selected || this.value === '')) {
+        this.value = node.value;
+      }
+    });
+  }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+  scrollIntoView(options) { this.ownerDocument.lastScrolledTarget = { id: this.id || '', options }; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() {
+    this.activeElement = null;
+    this.byID = new Map();
+    this.lastScrolledTarget = null;
+  }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) {
+    if (this.byID.has(id)) return this.byID.get(id) || null;
+    const stack = Array.from(this.byID.values());
+    while (stack.length) {
+      const node = stack.shift();
+      if (node?.id === id) return node;
+      stack.push(...(node.children || []));
+    }
+    return null;
+  }
+  querySelector(selector) {
+    const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/);
+    if (!dataMatch) return null;
+    const target = dataMatch[1];
+    const stack = Array.from(this.byID.values());
+    while (stack.length) {
+      const node = stack.shift();
+      if (node?.dataset?.toolbarField === target) return node;
+      stack.push(...(node.children || []));
+    }
+    return null;
+  }
+}
+const createDocument = () => {
+  const document = new Document();
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  return document;
+};
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => {
+  if (!node) return [];
+  const matches = [];
+  const visit = (current) => {
+    if (!current) return;
+    if (predicate(current)) matches.push(current);
+    (current.children || []).forEach(visit);
+  };
+  visit(node);
+  return matches;
+};
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const requestedAliasID = 'userDataBootstrapSource::file:userdata/payments-api-prod.sh::Normalized userdata bootstrap source for candidate EC2 capacity';
+const canonicalID = 'userDataBootstrapSource::git:userdata/payments-api-prod.sh::Normalized userdata bootstrap source for candidate EC2 capacity';
+const deploymentURL = '/v1/overview/deployments/payments-api-prod';
+const logsURL = '/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=userDataBootstrapSource&resourceName=git%3Auserdata%2Fpayments-api-prod.sh';
+const inspectionURL = '/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=userDataBootstrapSource&resourceName=git%3Auserdata%2Fpayments-api-prod.sh';
+
+(async () => {
+  const document = createDocument();
+  const window = {
+    location: {
+      pathname: '/console',
+      search: '?page=resource&deployment=payments-api-prod&resourceType=userDataBootstrapSource&resourceId=' + encodeURIComponent(requestedAliasID),
+      hash: '#resource-recent-logs',
+    },
+    addEventListener() {},
+  };
+  const fetchCalls = [];
+  const history = { replaceState(_state, _title, url) {
+    const [pathAndQuery, nextHash = ''] = String(url).split('#');
+    const [pathname, query = ''] = pathAndQuery.split('?');
+    window.location.pathname = pathname || '/console';
+    window.location.search = query ? '?' + query : '';
+    window.location.hash = nextHash ? '#' + nextHash : '';
+  } };
+  const fetch = (url) => {
+    fetchCalls.push(String(url));
+    if (url === deploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'no_log_source', entries: [] }) });
+    if (url === inspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: 'auto_scaling_group', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, unavailableReason: 'aws_unavailable' }) });
+    throw new Error('unexpected fetch url: ' + url);
+  };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle();
+  await settle();
+
+  if (!fetchCalls.includes(logsURL)) throw new Error('expected alias resource page to load recent logs with canonical resource name');
+  if (!fetchCalls.includes(inspectionURL)) throw new Error('expected alias resource page to load live inspection with canonical resource name');
+
+  const summaryText = collectText(document.getElementById('summary')).join(' | ');
+  const accountsRoot = document.getElementById('accounts');
+  const accountsText = collectText(accountsRoot).join(' | ');
+  if (!summaryText.includes('Resource detail')) throw new Error('expected alias resource page summary heading');
+  if (!accountsText.includes('Opened via bookmarked resource alias.')) throw new Error('expected alias resource page cue');
+  if (!accountsText.includes(requestedAliasID)) throw new Error('expected alias resource page cue to keep requested bookmarked resource id visible');
+  if (!accountsText.includes(canonicalID)) throw new Error('expected alias resource page to keep resolved canonical resource id visible');
+
+  const sectionLinks = collectNodes(accountsRoot, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#resource-'));
+  if (!sectionLinks.length) throw new Error('expected alias resource page section links');
+  sectionLinks.forEach((link) => {
+    const decodedHref = decodeURIComponent(link.href.replace(/\+/g, '%20'));
+    if (!decodedHref.includes('resourceId=' + requestedAliasID)) throw new Error('expected section link to preserve requested alias resource id, got ' + link.href);
+    if (decodedHref.includes('resourceId=' + canonicalID)) throw new Error('expected section link not to rewrite to canonical resource id, got ' + link.href);
+    if (link.target !== '_self' || link.rel) throw new Error('expected alias section link to stay in embedded UI');
+  });
+})();
+`
+
+	runNodeHarness(t, nodeProgram)
+}
+
 func TestResourceDetailPageRecentLogsWithNodeHarness(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not installed")

@@ -895,6 +895,7 @@ for fragment in (
 for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui):
     for fragment in (
         "const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);",
+        "Opened via bookmarked resource alias.",
         "const renderResourceDetailPage = (detail) => {",
         "const createResourceQuickNav = (detail, resource, sectionLinks = []) => {",
         "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')",
