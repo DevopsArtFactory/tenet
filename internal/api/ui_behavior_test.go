@@ -3653,8 +3653,39 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!bootstrapSupportedText.includes('candidateAutoScalingGroup')) throw new Error('expected bootstrap-source inspection to render backing resource type value');
   if (!bootstrapSupportedText.includes('Observed launch template')) throw new Error('expected bootstrap-source inspection to render observed launch template label');
   if (!bootstrapSupportedText.includes('payments-api-prod-candidate · version $Default · id lt-abc123')) throw new Error('expected bootstrap-source inspection to render observed launch template value');
+  if (!bootstrapSupportedText.includes('Resolved backing resource')) throw new Error('expected bootstrap-source inspection to render backing-resource handoff heading');
   if (!bootstrapSupportedText.includes('Bootstrap source observation')) throw new Error('expected bootstrap-source inspection to render observation summary heading');
   if (!bootstrapSupportedText.includes('Observed launch template bootstrap source differs from the normalized desired bootstrap source.')) throw new Error('expected bootstrap-source inspection to render mismatch summary');
+  const bootstrapLinks = collectNodes(bootstrapSupportedRun.document.getElementById('accounts'), (node) => node.tagName === 'A');
+  const bootstrapHandoffLink = bootstrapLinks.find((node) => node.textContent === 'Open payments-api-prod-candidate drill-down');
+  if (!bootstrapHandoffLink) throw new Error('expected bootstrap-source inspection to render backing-resource handoff link');
+  if (bootstrapHandoffLink.href !== '/?page=resource&deployment=payments-api-prod&resourceType=candidateAutoScalingGroup&resourceId=candidateAutoScalingGroup%3A%3Apayments-api-prod-candidate%3A%3ACandidate+capacity') throw new Error('expected bootstrap-source handoff link to reuse normalized resource detail route, got ' + bootstrapHandoffLink.href);
+  if (bootstrapHandoffLink.target !== '_self') throw new Error('expected bootstrap-source handoff link to stay inside embedded UI');
+  if (bootstrapHandoffLink.rel) throw new Error('expected bootstrap-source handoff link to avoid new-tab rel attributes');
+
+  const bootstrapMissingMatchRun = await renderWithFetch('?page=resource&deployment=payments-api-prod&resourceType=userDataBootstrapSource&resourceId=' + encodeURIComponent(bootstrapResourceID), (url) => {
+    if (url === asgDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(asgDetailBody) });
+    if (url === bootstrapLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({
+      available: true,
+      source: 'ec2_console',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true },
+      entries: [],
+    }) });
+    if (url === bootstrapInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({
+      available: true,
+      source: 'auto_scaling_group',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true },
+      userDataBootstrapSource: {
+        desiredBootstrapSource: 'file:userdata/payments-api-prod.sh',
+        observedBootstrapSource: 'file:userdata/payments-api-prod.sh',
+        backingResourceType: 'serviceAutoScalingGroup',
+        backingResourceName: 'payments-api-prod-service',
+      },
+    }) });
+    throw new Error('unexpected bootstrap-source mismatch fetch url: ' + url);
+  });
+  const bootstrapMissingMatchText = collectText(bootstrapMissingMatchRun.document.getElementById('accounts')).join(' | ');
+  if (bootstrapMissingMatchText.includes('Resolved backing resource')) throw new Error('expected bootstrap-source inspection to skip handoff when no matching resource metadata is available');
 
   const trafficShiftPlanLogsURL = '/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing';
   const trafficShiftPlanInspectionURL = '/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing';
