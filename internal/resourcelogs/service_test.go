@@ -391,12 +391,14 @@ func TestServiceRecent(t *testing.T) {
 			t.Fatalf("unexpected bootstrap-source ASG lookup request: %+v", gotLookup)
 		}
 		want := Result{
-			DeploymentName: "payments-api-prod",
-			ResourceType:   "userDataBootstrapSource",
-			ResourceName:   "file:userdata/payments-api-prod.sh",
-			LookupContext:  expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
-			Available:      true,
-			Source:         SourceEC2Console,
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "userDataBootstrapSource",
+			ResourceName:        "file:userdata/payments-api-prod.sh",
+			BackingResourceType: "candidateAutoScalingGroup",
+			BackingResourceName: "payments-api-prod-candidate",
+			LookupContext:       expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
+			Available:           true,
+			Source:              SourceEC2Console,
 			Entries: []Entry{
 				{Timestamp: "2026-04-16T07:11:30Z", Message: "refresh start"},
 				{Timestamp: "2026-04-16T07:11:45Z", Message: "refresh complete"},
@@ -613,12 +615,14 @@ func TestServiceRecent(t *testing.T) {
 			t.Fatalf("Recent returned error: %v", err)
 		}
 		want := Result{
-			DeploymentName:    "payments-api-prod",
-			ResourceType:      "userDataBootstrapSource",
-			ResourceName:      "file:userdata/payments-api-prod.sh",
-			LookupContext:     expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
-			Available:         false,
-			UnavailableReason: UnavailableReasonAWSUnavailable,
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "userDataBootstrapSource",
+			ResourceName:        "file:userdata/payments-api-prod.sh",
+			BackingResourceType: "candidateAutoScalingGroup",
+			BackingResourceName: "payments-api-prod-candidate",
+			LookupContext:       expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
+			Available:           false,
+			UnavailableReason:   UnavailableReasonAWSUnavailable,
 		}
 		if !reflect.DeepEqual(result, want) {
 			t.Fatalf("unexpected bootstrap-source AWS unavailable result: %+v", result)

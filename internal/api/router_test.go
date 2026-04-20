@@ -3904,6 +3904,12 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 				t.Fatalf("expected %q field in payload, got %#v", key, raw)
 			}
 		}
+		if _, ok := raw["backingResourceType"]; ok {
+			t.Fatalf("expected backingResourceType to be omitted for direct resource logs, got %#v", raw)
+		}
+		if _, ok := raw["backingResourceName"]; ok {
+			t.Fatalf("expected backingResourceName to be omitted for direct resource logs, got %#v", raw)
+		}
 		lookupContext, ok := raw["lookupContext"].(map[string]any)
 		if !ok {
 			t.Fatalf("expected lookupContext object in payload, got %#v", raw["lookupContext"])
@@ -3938,9 +3944,11 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 
 	t.Run("returns bootstrap-source log payloads without changing the route contract", func(t *testing.T) {
 		expected := resourcelogs.Result{
-			DeploymentName: "api-prod",
-			ResourceType:   "userDataBootstrapSource",
-			ResourceName:   "file:userdata/api-prod.sh",
+			DeploymentName:      "api-prod",
+			ResourceType:        "userDataBootstrapSource",
+			ResourceName:        "file:userdata/api-prod.sh",
+			BackingResourceType: "candidateAutoScalingGroup",
+			BackingResourceName: "api-prod-candidate",
 			LookupContext: resourcelogs.LookupContext{
 				Region:                 "ap-northeast-2",
 				ControlAccountID:       "123456789012",
@@ -4014,6 +4022,9 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		}
 		if raw["resourceType"] != "userDataBootstrapSource" || raw["source"] != string(resourcelogs.SourceEC2Console) {
 			t.Fatalf("expected bootstrap-source route to preserve resource type/source, got %#v", raw)
+		}
+		if raw["backingResourceType"] != "candidateAutoScalingGroup" || raw["backingResourceName"] != "api-prod-candidate" {
+			t.Fatalf("expected bootstrap-source route to surface backing resource identity, got %#v", raw)
 		}
 		entries, ok := raw["entries"].([]any)
 		if !ok || len(entries) != 2 {

@@ -50,14 +50,16 @@ type Request struct {
 }
 
 type Result struct {
-	DeploymentName    string        `json:"deploymentName"`
-	ResourceType      string        `json:"resourceType"`
-	ResourceName      string        `json:"resourceName"`
-	LookupContext     LookupContext `json:"lookupContext"`
-	Available         bool          `json:"available"`
-	Source            string        `json:"source"`
-	Entries           []Entry       `json:"entries"`
-	UnavailableReason string        `json:"unavailableReason"`
+	DeploymentName      string        `json:"deploymentName"`
+	ResourceType        string        `json:"resourceType"`
+	ResourceName        string        `json:"resourceName"`
+	BackingResourceType string        `json:"backingResourceType,omitempty"`
+	BackingResourceName string        `json:"backingResourceName,omitempty"`
+	LookupContext       LookupContext `json:"lookupContext"`
+	Available           bool          `json:"available"`
+	Source              string        `json:"source"`
+	Entries             []Entry       `json:"entries"`
+	UnavailableReason   string        `json:"unavailableReason"`
 }
 
 type LookupContext = resourceaws.LookupContext
@@ -209,25 +211,37 @@ func unavailableReasonForError(err error) (string, bool) {
 
 func unavailableResult(req Request, reason string) Result {
 	return Result{
-		DeploymentName:    req.DeploymentName,
-		ResourceType:      req.ResourceType,
-		ResourceName:      req.ResourceName,
-		LookupContext:     lookupContext(req),
-		Available:         false,
-		UnavailableReason: reason,
+		DeploymentName:      req.DeploymentName,
+		ResourceType:        req.ResourceType,
+		ResourceName:        req.ResourceName,
+		BackingResourceType: backingResourceType(req),
+		BackingResourceName: backingResourceName(req),
+		LookupContext:       lookupContext(req),
+		Available:           false,
+		UnavailableReason:   reason,
 	}
 }
 
 func availableResult(req Request, source string, entries []Entry) Result {
 	return Result{
-		DeploymentName: req.DeploymentName,
-		ResourceType:   req.ResourceType,
-		ResourceName:   req.ResourceName,
-		LookupContext:  lookupContext(req),
-		Available:      true,
-		Source:         source,
-		Entries:        entries,
+		DeploymentName:      req.DeploymentName,
+		ResourceType:        req.ResourceType,
+		ResourceName:        req.ResourceName,
+		BackingResourceType: backingResourceType(req),
+		BackingResourceName: backingResourceName(req),
+		LookupContext:       lookupContext(req),
+		Available:           true,
+		Source:              source,
+		Entries:             entries,
 	}
+}
+
+func backingResourceType(req Request) string {
+	return strings.TrimSpace(req.BackingResourceType)
+}
+
+func backingResourceName(req Request) string {
+	return strings.TrimSpace(req.BackingResourceName)
 }
 
 func lookupContext(req Request) LookupContext {
