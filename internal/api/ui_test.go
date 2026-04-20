@@ -233,25 +233,34 @@ func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
 	body := string(indexHTML)
 
 	for _, fragment := range []string{
-		"const createResourceQuickNav = (detail, resource) => {",
+		"const createResourceQuickNav = (detail, resource, sectionLinks = []) => {",
 		"const strip = createElement('section', 'quick-nav-strip');",
 		"createElement('div', 'quick-nav-title', 'Quick navigation')",
 		"createElement('div', 'quick-nav-current', `${deploymentName || 'Application'} · ${resource.name}`)",
 		"createElement('div', 'quick-nav-label', 'Application')",
 		"createElement('div', 'quick-nav-label', 'Current resource')",
+		"createElement('div', 'quick-nav-label', 'On this page')",
 		"createElement('div', 'quick-nav-label', 'Sibling resources')",
 		"createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')",
 		"createNavLink(buildPageURL('drift', { deployment: deploymentName }), 'Drift view', '_self')",
 		"createNavLink(buildPageURL('plan', { deployment: deploymentName }), 'Plan/apply', '_self')",
 		"createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self')",
 		"createQuickNavChip(resource.name, `Current resource: ${resource.name}`)",
+		"const pushResourceSection = (section, sectionID, label) => {",
+		"href: buildPageSectionURL('resource', sectionID, {",
+		"pushResourceSection(historySection, 'resource-runtime-history', 'Runtime history');",
+		"pushResourceSection(executionSection, 'resource-rollout-execution', 'Rollout execution');",
+		"pushResourceSection(conditionsSection, 'resource-status-conditions', 'Conditions');",
+		"pushResourceSection(inspectionSection, 'resource-live-inspection', 'Live inspection');",
+		"pushResourceSection(logsSection, 'resource-recent-logs', 'Recent logs');",
 		".filter((candidate) => candidate.id !== resource.id);",
 		"createNavLink(buildPageURL('resource', {",
 		"resourceType: sibling.type,",
 		"resourceId: sibling.id,",
 		"}), sibling.name, '_self')",
 		"'No sibling linked resources are available for this application.'",
-		"page.append(createResourceQuickNav(detail, resource), shell, historySection, executionSection, conditionsSection, inspectionSection, logsSection);",
+		"page.append(createResourceQuickNav(detail, resource, resourceSectionLinks), shell, historySection, executionSection, conditionsSection, inspectionSection, logsSection);",
+		"scrollToCurrentHashTarget();",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include %q", fragment)

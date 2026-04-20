@@ -1588,7 +1588,7 @@
         return strip;
       };
       const createAuditQuickNav = () => createDeploymentQuickNav(auditDeploymentName(), 'Audit log');
-      const createResourceQuickNav = (detail, resource) => {
+      const createResourceQuickNav = (detail, resource, sectionLinks = []) => {
         const deploymentName = detail.name || currentPageState.deployment || '';
         const strip = createElement('section', 'quick-nav-strip');
         const shellLinks = createElement('div', 'quick-nav-links');
@@ -1622,6 +1622,17 @@
           createElement('div', 'quick-nav-label', 'Current resource'),
           createQuickNavChip(resource.name, `Current resource: ${resource.name}`),
         );
+        const sectionGroup = createElement('div', 'quick-nav-group');
+        sectionGroup.append(createElement('div', 'quick-nav-label', 'On this page'));
+        if (Array.isArray(sectionLinks) && sectionLinks.length) {
+          const sectionNavLinks = createElement('div', 'quick-nav-links');
+          sectionLinks.forEach((sectionLink) => {
+            sectionNavLinks.append(createNavLink(sectionLink.href, sectionLink.label, '_self'));
+          });
+          sectionGroup.append(sectionNavLinks);
+        } else {
+          sectionGroup.append(createElement('div', 'quick-nav-empty', 'No section links are available for this resource yet.'));
+        }
         const siblingGroup = createElement('div', 'quick-nav-group');
         siblingGroup.append(createElement('div', 'quick-nav-label', 'Sibling resources'));
         if (siblingLinks.children.length) {
@@ -1629,7 +1640,7 @@
         } else {
           siblingGroup.append(createElement('div', 'quick-nav-empty', 'No sibling linked resources are available for this application.'));
         }
-        groups.append(appGroup, currentResourceGroup, siblingGroup);
+        groups.append(appGroup, currentResourceGroup, sectionGroup, siblingGroup);
         const head = createElement('div', 'quick-nav-head');
         head.append(
           createElement('div', 'quick-nav-title', 'Quick navigation'),
@@ -1644,6 +1655,19 @@
         const summary = document.getElementById('summary');
         const root = document.getElementById('accounts');
         const resource = resolveResourceDetail(detail);
+        const deploymentName = detail.name || currentPageState.deployment || '';
+        const resourceSectionLinks = [];
+        const pushResourceSection = (section, sectionID, label) => {
+          section.id = sectionID;
+          resourceSectionLinks.push({
+            label,
+            href: buildPageSectionURL('resource', sectionID, {
+              deployment: deploymentName,
+              resourceType: resource.type,
+              resourceId: resource.id,
+            }),
+          });
+        };
         const backLink = createNavLink(buildPageURL('application', { deployment: detail.name || currentPageState.deployment || '' }), 'Back to application');
         backLink.target = '_self';
         backLink.rel = '';
@@ -1693,6 +1717,7 @@
         ].forEach(([label, value]) => shell.append(createMetric(label, value)));
 
         const historySection = createDetailSection('Runtime history');
+        pushResourceSection(historySection, 'resource-runtime-history', 'Runtime history');
         const history = detail.history || [];
         if (!history.length) {
           historySection.append(createElement('div', 'detail-state', 'No recent runtime history is available yet.'));
@@ -1738,6 +1763,7 @@
         }
 
         const executionSection = createDetailSection('Rollout execution');
+        pushResourceSection(executionSection, 'resource-rollout-execution', 'Rollout execution');
         const execution = rolloutExecutionResources(detail).filter((item) => normalizeResource(item).id === resource.id);
         if (!execution.length) {
           executionSection.append(createElement('div', 'detail-state', 'No rollout execution resources are currently reported for this selection.'));
@@ -1758,6 +1784,7 @@
         }
 
         const conditionsSection = createDetailSection('Conditions');
+        pushResourceSection(conditionsSection, 'resource-status-conditions', 'Conditions');
         const conditions = detail.conditions || [];
         if (!conditions.length) {
           conditionsSection.append(createElement('div', 'detail-state', 'No deployment conditions reported.'));
@@ -1778,13 +1805,16 @@
         }
 
         const inspectionSection = createDetailSection('Live inspection');
+        pushResourceSection(inspectionSection, 'resource-live-inspection', 'Live inspection');
         renderResourceInspectionSection(inspectionSection, detail.name || currentPageState.deployment || '', resource).catch(() => {});
 
         const logsSection = createDetailSection('Recent logs');
+        pushResourceSection(logsSection, 'resource-recent-logs', 'Recent logs');
         renderResourceLogsSection(logsSection, detail.name || currentPageState.deployment || '', resource).catch(() => {});
 
-        page.append(createResourceQuickNav(detail, resource), shell, historySection, executionSection, conditionsSection, inspectionSection, logsSection);
+        page.append(createResourceQuickNav(detail, resource, resourceSectionLinks), shell, historySection, executionSection, conditionsSection, inspectionSection, logsSection);
         root.replaceChildren(page);
+        scrollToCurrentHashTarget();
       };
       const renderEmptyState = (message) => {
         const empty = createElement('div', 'empty', message);
@@ -2035,6 +2065,7 @@
             const current = resourceLogStateByKey.get(logsKey);
             resourceLogStateByKey.set(logsKey, { status: 'ready', result });
             (current?.sections || []).forEach((container) => renderResourceLogsPayload(container, deploymentName, resource, result));
+            scrollToCurrentHashTarget();
             return result;
           })
           .catch((error) => {
@@ -2059,6 +2090,7 @@
                 createResourceLogsActions(container, deploymentName, resource),
               );
             });
+            scrollToCurrentHashTarget();
             throw error;
           });
 
@@ -2349,6 +2381,7 @@
             const current = resourceInspectionStateByKey.get(inspectionKey);
             resourceInspectionStateByKey.set(inspectionKey, { status: 'ready', result });
             (current?.sections || []).forEach((container) => renderResourceInspectionPayload(container, deploymentName, resource, result));
+            scrollToCurrentHashTarget();
             return result;
           })
           .catch((error) => {
@@ -2373,6 +2406,7 @@
                 createResourceInspectionActions(container, deploymentName, resource),
               );
             });
+            scrollToCurrentHashTarget();
             throw error;
           });
 
