@@ -786,7 +786,9 @@ assert_fragments("account_ui", account_ui, operator_read_auth_fragments + (
     "const renderOperatorReadFailurePage = (pageLabel, route, error) => {",
     "renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);",
 ))
+assert "fetchApplicationsOverview()" in ui, ui
 assert "const fetchAccountDetail = (accountID) => fetchEmbeddedReadRouteJSON(`/v1/overview/accounts/${encodeURIComponent(accountID)}`, {" in account_ui, account_ui
+assert "fetchAccountDetail(currentPageState.accountId)" in account_ui, account_ui
 for label, body in (("resource_ui", resource_ui), ("ecs_resource_ui", ecs_resource_ui), ("bootstrap_resource_ui", bootstrap_resource_ui)):
     assert_fragments(label, body, operator_read_auth_fragments + (
         "return 'Resource detail';",
