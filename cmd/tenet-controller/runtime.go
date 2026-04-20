@@ -34,6 +34,7 @@ type runtimeLiveCapacityObservation struct {
 	Desired                       int
 	Min                           int
 	Max                           int
+	LaunchTemplateBootstrapSource string
 	TaskDefinitionImage           string
 	MinimumHealthyPercent         *int32
 	MaximumPercent                *int32
@@ -283,9 +284,10 @@ func runtimeLiveCapacityLookupFromInspection(ctx context.Context, inspector reso
 	}
 	if result.AutoScalingGroup != nil {
 		return &runtimeLiveCapacityObservation{
-			Desired: int(result.AutoScalingGroup.DesiredCapacity),
-			Min:     int(result.AutoScalingGroup.MinSize),
-			Max:     int(result.AutoScalingGroup.MaxSize),
+			Desired:                       int(result.AutoScalingGroup.DesiredCapacity),
+			Min:                           int(result.AutoScalingGroup.MinSize),
+			Max:                           int(result.AutoScalingGroup.MaxSize),
+			LaunchTemplateBootstrapSource: strings.TrimSpace(result.AutoScalingGroup.LaunchTemplateBootstrapSource),
 		}, nil
 	}
 	if result.ECSService != nil {
@@ -408,6 +410,14 @@ func deriveManagedDriftItems(deployment domain.Deployment, status domain.Deploym
 		}
 		switch deployment.ExecutionMode {
 		case "asgWeightedTargetGroups", "asgInstanceRefresh":
+			if desiredBootstrapSource := userDataBootstrapSource(deployment.UserData); desiredBootstrapSource != "unspecified" && liveCapacity.LaunchTemplateBootstrapSource != "" && desiredBootstrapSource != liveCapacity.LaunchTemplateBootstrapSource {
+				items = append(items, domain.ManagedDriftItem{
+					Field:    "runtimeContext.launchTemplate.bootstrapSource",
+					Desired:  desiredBootstrapSource,
+					Actual:   liveCapacity.LaunchTemplateBootstrapSource,
+					Severity: domain.ManagedDriftSeverityHigh,
+				})
+			}
 			if desiredCapacity.Min != liveCapacity.Min {
 				items = append(items, domain.ManagedDriftItem{
 					Field:    "runtimeContext.capacity.min",

@@ -2,6 +2,7 @@ package resourceinspection
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"reflect"
 	"testing"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	asgtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/aws/smithy-go"
@@ -958,6 +961,60 @@ func TestAutoScalingInspectionFromGroupSortsFieldsAndMapsLaunchTemplates(t *test
 	}
 }
 
+func TestAutoScalingLaunchTemplateBootstrapSourceFromGroupUsesPrimaryLaunchTemplate(t *testing.T) {
+	client := &fakeEC2LaunchTemplateAPI{
+		output: &ec2.DescribeLaunchTemplateVersionsOutput{
+			LaunchTemplateVersions: []ec2types.LaunchTemplateVersion{
+				{
+					LaunchTemplateData: &ec2types.ResponseLaunchTemplateData{
+						UserData: stringPtr(base64.StdEncoding.EncodeToString([]byte("export TENET_BOOTSTRAP_SOURCE=file:userdata/payments-api-prod.sh"))),
+					},
+				},
+			},
+		},
+	}
+
+	got, err := autoScalingLaunchTemplateBootstrapSourceFromGroup(context.Background(), client, asgtypes.AutoScalingGroup{
+		LaunchTemplate: &asgtypes.LaunchTemplateSpecification{
+			LaunchTemplateId:   stringPtr("lt-abc123"),
+			LaunchTemplateName: stringPtr("payments-api-prod-candidate"),
+			Version:            stringPtr("$Default"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("autoScalingLaunchTemplateBootstrapSourceFromGroup returned error: %v", err)
+	}
+	if got != "file:userdata/payments-api-prod.sh" {
+		t.Fatalf("expected parsed launch template bootstrap source, got %q", got)
+	}
+	if client.input == nil || aws.ToString(client.input.LaunchTemplateId) != "lt-abc123" || !reflect.DeepEqual(client.input.Versions, []string{"$Default"}) {
+		t.Fatalf("unexpected launch template lookup input: %+v", client.input)
+	}
+}
+
+func TestExtractLaunchTemplateBootstrapSourceSupportsCommonMarkers(t *testing.T) {
+	t.Run("environment assignment", func(t *testing.T) {
+		encoded := base64.StdEncoding.EncodeToString([]byte("#!/bin/bash\nexport TENET_BOOTSTRAP_SOURCE=file:userdata/api-prod.sh\n"))
+		if got := extractLaunchTemplateBootstrapSource(encoded); got != "file:userdata/api-prod.sh" {
+			t.Fatalf("expected environment assignment marker to decode, got %q", got)
+		}
+	})
+
+	t.Run("comment marker", func(t *testing.T) {
+		encoded := base64.StdEncoding.EncodeToString([]byte("# tenet bootstrap source: git:userdata/api-prod.sh\n"))
+		if got := extractLaunchTemplateBootstrapSource(encoded); got != "git:userdata/api-prod.sh" {
+			t.Fatalf("expected comment marker to decode, got %q", got)
+		}
+	})
+
+	t.Run("unparseable body stays empty", func(t *testing.T) {
+		encoded := base64.StdEncoding.EncodeToString([]byte("#!/bin/bash\necho bootstrapping\n"))
+		if got := extractLaunchTemplateBootstrapSource(encoded); got != "" {
+			t.Fatalf("expected unmatched launch template user data to stay empty, got %q", got)
+		}
+	})
+}
+
 func TestFindECSServiceReusesCachedClusterHintOnRepeatedLookup(t *testing.T) {
 	const (
 		region          = "ap-northeast-2"
@@ -1052,6 +1109,12 @@ type fakeECSServiceAPI struct {
 	describeCalls     []string
 }
 
+type fakeEC2LaunchTemplateAPI struct {
+	input  *ec2.DescribeLaunchTemplateVersionsInput
+	output *ec2.DescribeLaunchTemplateVersionsOutput
+	err    error
+}
+
 func (f *fakeECSServiceAPI) ListClusters(context.Context, *ecs.ListClustersInput, ...func(*ecs.Options)) (*ecs.ListClustersOutput, error) {
 	f.listCalls++
 	return &ecs.ListClustersOutput{ClusterArns: append([]string(nil), f.clusterARNs...)}, nil
@@ -1062,6 +1125,19 @@ func (f *fakeECSServiceAPI) DescribeServices(_ context.Context, input *ecs.Descr
 	f.describeCalls = append(f.describeCalls, clusterARN)
 	services := append([]ecstypes.Service(nil), f.servicesByCluster[clusterARN]...)
 	return &ecs.DescribeServicesOutput{Services: services}, nil
+}
+
+func (f *fakeEC2LaunchTemplateAPI) DescribeLaunchTemplateVersions(_ context.Context, input *ec2.DescribeLaunchTemplateVersionsInput, _ ...func(*ec2.Options)) (*ec2.DescribeLaunchTemplateVersionsOutput, error) {
+	cloned := *input
+	cloned.Versions = append([]string(nil), input.Versions...)
+	f.input = &cloned
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.output == nil {
+		return &ec2.DescribeLaunchTemplateVersionsOutput{}, nil
+	}
+	return f.output, nil
 }
 
 func stringPtr(value string) *string { return &value }

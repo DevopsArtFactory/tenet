@@ -2017,6 +2017,37 @@ func TestDeriveManagedDriftItemsAddsLiveEC2CapacityEvidence(t *testing.T) {
 	})
 }
 
+func TestDeriveManagedDriftItemsAddsLiveEC2BootstrapSourceEvidence(t *testing.T) {
+	for _, executionMode := range []string{"asgWeightedTargetGroups", "asgInstanceRefresh"} {
+		t.Run(executionMode, func(t *testing.T) {
+			deployment := domain.Deployment{
+				Name:          "payments-api-prod",
+				ExecutionMode: executionMode,
+				UserData:      domain.DeploymentUserData{Type: "file", Path: "userdata/api-prod.sh"},
+				RolloutConfig: domain.DeploymentRolloutConfig{
+					Capacity: domain.DeploymentRolloutCapacity{Desired: 4, Min: 2, Max: 8},
+				},
+			}
+
+			got := deriveManagedDriftItems(deployment, domain.DeploymentStatus{}, &runtimeLiveCapacityObservation{
+				Desired:                       4,
+				Min:                           2,
+				Max:                           8,
+				LaunchTemplateBootstrapSource: "file:userdata/api-prod-legacy.sh",
+			})
+			want := []domain.ManagedDriftItem{{
+				Field:    "runtimeContext.launchTemplate.bootstrapSource",
+				Desired:  "file:userdata/api-prod.sh",
+				Actual:   "file:userdata/api-prod-legacy.sh",
+				Severity: domain.ManagedDriftSeverityHigh,
+			}}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("expected live EC2 bootstrap-source drift evidence, got %+v", got)
+			}
+		})
+	}
+}
+
 func TestDeriveManagedDriftItemsAddsLiveECSDesiredCapacityEvidence(t *testing.T) {
 	for _, executionMode := range []string{"ecsCodeDeploy", "ecsRolling"} {
 		t.Run(executionMode, func(t *testing.T) {
@@ -2155,6 +2186,58 @@ func TestRuntimeLiveCapacityLookupFromInspectionUsesECSServiceDesiredCount(t *te
 				t.Fatalf("unexpected ECS lookup request: %+v", gotReq)
 			}
 		})
+	}
+}
+
+func TestRuntimeLiveCapacityLookupFromInspectionUsesAutoScalingBootstrapSource(t *testing.T) {
+	accounts := []domain.Account{{
+		Name:           "prod-core",
+		AWSAccountID:   "123456789012",
+		AllowedRegions: []string{"ap-northeast-2"},
+	}}
+	environments := []domain.Environment{{
+		Name:       "prod-apne2",
+		AccountRef: "prod-core",
+		Region:     "ap-northeast-2",
+	}}
+	deployment := domain.Deployment{
+		Name:           "payments-api-prod",
+		EnvironmentRef: "prod-apne2",
+		ExecutionMode:  "asgWeightedTargetGroups",
+	}
+
+	var gotReq resourceinspection.AutoScalingGroupRequest
+	inspector := resourceinspection.NewService(resourceinspection.Options{
+		InspectAutoScalingGroup: func(_ context.Context, req resourceinspection.AutoScalingGroupRequest) (resourceinspection.AutoScalingInspection, error) {
+			gotReq = req
+			return resourceinspection.AutoScalingInspection{
+				DesiredCapacity:               4,
+				MinSize:                       2,
+				MaxSize:                       8,
+				LaunchTemplateBootstrapSource: "file:userdata/api-prod.sh",
+			}, nil
+		},
+	})
+
+	got, err := runtimeLiveCapacityLookupFromInspection(context.Background(), inspector, accounts, environments, deployment)
+	if err != nil {
+		t.Fatalf("runtimeLiveCapacityLookupFromInspection returned error: %v", err)
+	}
+	if !reflect.DeepEqual(got, &runtimeLiveCapacityObservation{
+		Desired:                       4,
+		Min:                           2,
+		Max:                           8,
+		LaunchTemplateBootstrapSource: "file:userdata/api-prod.sh",
+	}) {
+		t.Fatalf("expected ASG bootstrap-source observation, got %+v", got)
+	}
+	if gotReq != (resourceinspection.AutoScalingGroupRequest{
+		DeploymentName:  "payments-api-prod",
+		ResourceName:    "payments-api-prod-candidate",
+		Region:          "ap-northeast-2",
+		TargetAccountID: "123456789012",
+	}) {
+		t.Fatalf("unexpected ASG lookup request: %+v", gotReq)
 	}
 }
 

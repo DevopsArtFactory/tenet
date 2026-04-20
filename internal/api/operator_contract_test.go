@@ -319,11 +319,12 @@ func TestManagedLiveDriftDocsPreferFocusedContractCoverageOverLocalSmoke(t *test
 	readme := readRepoFile(t, "README.md")
 	for _, fragment := range []string{
 		"`runtimeContext.capacity.desired`, `runtimeContext.capacity.min`, and `runtimeContext.capacity.max`",
+		"`runtimeContext.launchTemplate.bootstrapSource`",
 		"`runtimeContext.deploymentConfig.minimumHealthyPercent`",
 		"`runtimeContext.deploymentConfig.maximumPercent`",
 		"`runtimeContext.deploymentConfig.healthCheckGracePeriodSeconds`",
 		"`runtimeContext.taskDefinition.image`",
-		"Focused `go test ./internal/api` contract coverage locks that additive JSON/UI detail because local smoke may legitimately lack AWS access and therefore does not claim to prove live-backed capacity/deployment-config/image rows.",
+		"Focused `go test ./internal/api` contract coverage locks that additive JSON/UI detail because local smoke may legitimately lack AWS access and therefore does not claim to prove live-backed capacity/bootstrap-source/deployment-config/image rows.",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README managed live drift docs to include %q", fragment)
@@ -333,11 +334,12 @@ func TestManagedLiveDriftDocsPreferFocusedContractCoverageOverLocalSmoke(t *test
 	featureDoc := readRepoFile(t, "docs/features/overview-dashboard.md")
 	for _, fragment := range []string{
 		"`runtimeContext.capacity.{desired,min,max}`",
+		"`runtimeContext.launchTemplate.bootstrapSource`",
 		"`runtimeContext.deploymentConfig.minimumHealthyPercent`",
 		"`runtimeContext.deploymentConfig.maximumPercent`",
 		"`runtimeContext.deploymentConfig.healthCheckGracePeriodSeconds`",
 		"`runtimeContext.taskDefinition.image`",
-		"focused router/UI contract tests lock that additive live-backed capacity/deployment-config/image detail because local smoke may legitimately lack AWS access and therefore does not claim to prove those rows",
+		"focused router/UI contract tests lock that additive live-backed capacity/bootstrap-source/deployment-config/image detail because local smoke may legitimately lack AWS access and therefore does not claim to prove those rows",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
 			t.Fatalf("expected overview dashboard managed live drift doc to include %q", fragment)
@@ -346,6 +348,7 @@ func TestManagedLiveDriftDocsPreferFocusedContractCoverageOverLocalSmoke(t *test
 
 	localRuntimeDoc := readRepoFile(t, "docs/architecture/tenet-v1-local-runtime.md")
 	for _, fragment := range []string{
+		"`runtimeContext.launchTemplate.bootstrapSource`",
 		"`runtimeContext.deploymentConfig.minimumHealthyPercent`",
 		"`runtimeContext.deploymentConfig.maximumPercent`",
 		"`runtimeContext.deploymentConfig.healthCheckGracePeriodSeconds`",
