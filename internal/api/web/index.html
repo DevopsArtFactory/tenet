@@ -1511,19 +1511,19 @@
         strip.append(head, groups);
         return strip;
       };
-      const createWorkspaceQuickNav = (detail, mode) => {
+      const createWorkspaceQuickNav = (detail, mode, sectionLinks = null) => {
         const deploymentName = detail.name || currentPageState.deployment || '';
         const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';
         const linkedResources = mode === 'drift' ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;
-        const sectionLinks = mode === 'drift'
+        const resolvedSectionLinks = mode === 'drift'
           ? [
             { label: 'Runtime signals', href: buildPageSectionURL('drift', 'drift-runtime-signals', { deployment: deploymentName }) },
             { label: 'Rollout execution', href: buildPageSectionURL('drift', 'drift-rollout-execution', { deployment: deploymentName }) },
             { label: 'Field-level drift', href: buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName }) },
             { label: 'Status conditions', href: buildPageSectionURL('drift', 'drift-status-conditions', { deployment: deploymentName }) },
           ]
-          : [];
-        return createDeploymentQuickNav(deploymentName, currentWorkspace, linkedResources, sectionLinks);
+          : Array.isArray(sectionLinks) ? sectionLinks : [];
+        return createDeploymentQuickNav(deploymentName, currentWorkspace, linkedResources, resolvedSectionLinks);
       };
       const createAuditQuickNav = () => createDeploymentQuickNav(auditDeploymentName(), 'Audit log');
       const createResourceQuickNav = (detail, resource) => {
@@ -3678,6 +3678,19 @@
         summary.replaceChildren(workspaceSummary);
 
         const sections = [];
+        const planSectionLinks = [];
+        const pushPlanSection = (section, sectionID, label) => {
+          section.id = sectionID;
+          planSectionLinks.push({
+            label,
+            href: buildPageSectionURL('plan', sectionID, {
+              deployment: detail.name || currentPageState.deployment || '',
+              planId: currentPageState.planId || planState?.planId || planState?.record?.id || '',
+              applyId: currentPageState.applyId || applyState?.applyId || applyState?.record?.id || '',
+            }),
+          });
+          sections.push(section);
+        };
         const runtimeSignalsSection = createDetailSection('Latest runtime signals');
         if (mode === 'drift') runtimeSignalsSection.id = 'drift-runtime-signals';
         const runtimeSignals = createElement('div', 'detail-grid');
@@ -3703,7 +3716,11 @@
           });
           runtimeSignalsSection.append(runtimeChangesList);
         }
-        sections.push(runtimeSignalsSection);
+        if (mode === 'plan') {
+          pushPlanSection(runtimeSignalsSection, 'plan-runtime-signals', 'Runtime signals');
+        } else {
+          sections.push(runtimeSignalsSection);
+        }
 
         const executionSection = createDetailSection('Rollout execution');
         if (mode === 'drift') executionSection.id = 'drift-rollout-execution';
@@ -3725,7 +3742,11 @@
           });
           executionSection.append(executionList);
         }
-        sections.push(executionSection);
+        if (mode === 'plan') {
+          pushPlanSection(executionSection, 'plan-rollout-execution', 'Rollout execution');
+        } else {
+          sections.push(executionSection);
+        }
 
         if (mode === 'drift') {
           const driftActions = [
@@ -3947,7 +3968,7 @@
             approvalCallout.append(createElement('div', 'workspace-callout-factors', `Risk factors · ${riskReasons.join('; ')}`));
           }
           approvalSection.append(approvalCallout);
-          sections.push(approvalSection);
+          pushPlanSection(approvalSection, 'plan-approval-guidance', activePlanRecord ? 'Plan preview approval guidance' : 'Derived approval guidance');
 
           const actionsSection = createDetailSection('Plan preview actions');
           const actionBar = createElement('div', 'row-links');
@@ -4004,7 +4025,7 @@
             createElement('div', 'workspace-callout-label', planPreviewStatusHeading(planState)),
             planStateCallout,
           );
-          sections.push(actionsSection);
+          pushPlanSection(actionsSection, 'plan-preview-actions', 'Plan preview actions');
 
           if (activePlanRecord) {
             const previewSection = createDetailSection('Stored plan preview');
@@ -4029,7 +4050,7 @@
               previewGrid,
               previewLinks,
             );
-            sections.push(previewSection);
+            pushPlanSection(previewSection, 'plan-stored-preview', 'Stored plan preview');
           }
 
           if (activePlanRecord?.errors?.length) {
@@ -4039,7 +4060,7 @@
               errorList.append(createElement('li', '', textOrDash(entry)));
             });
             errorsSection.append(errorList);
-            sections.push(errorsSection);
+            pushPlanSection(errorsSection, 'plan-preview-errors', 'Plan preview errors');
           }
 
           const applySection = createDetailSection('Apply request actions');
@@ -4057,7 +4078,7 @@
             applyStateHead,
             applyStateCallout,
           );
-          sections.push(applySection);
+          pushPlanSection(applySection, 'plan-apply-actions', 'Apply request actions');
 
           if (activeApplyRecord) {
             const recordSection = createDetailSection('Stored apply request');
@@ -4110,7 +4131,7 @@
               recordSection.append(lifecycleMetadataGrid);
             }
             recordSection.append(recordLinks);
-            sections.push(recordSection);
+            pushPlanSection(recordSection, 'plan-stored-apply', 'Stored apply request');
           }
 
           if (activeApplyRecord?.error || activeApplyRecord?.details?.length) {
@@ -4125,19 +4146,20 @@
               });
               recordDetailsSection.append(detailsList);
             }
-            sections.push(recordDetailsSection);
+            pushPlanSection(recordDetailsSection, 'plan-apply-details', 'Apply request details');
           }
 
           if (activeApplyRecord) {
-            sections.push(createOperationsSection({
+            const applyOperationsSection = createOperationsSection({
               title: 'Apply operations',
               intro: `Immutable apply request loaded from GET /v1/applies/${activeApplyRecord.id}. The ordered execution sequence below comes from the persisted apply record, so operators can review intended execution order without depending on mutable plan-preview or deployment-derived context.`,
               operations: applyOperations(activeApplyRecord),
               emptyMessage: 'No additive apply operations are stored for this request.',
-            }));
+            });
+            pushPlanSection(applyOperationsSection, 'plan-apply-operations', 'Apply operations');
           }
 
-          sections.push(createOperationsSection({
+          const planOperationsSection = createOperationsSection({
             title: emptyTitle,
             intro: activePlanRecord
               ? `Server-authored plan preview loaded from GET /v1/plans/${activePlanRecord.id}.`
@@ -4146,13 +4168,14 @@
             emptyMessage: activePlanRecord
               ? 'No server-authored plan operations are stored for this preview.'
               : 'No derived plan operations are currently available.',
-          }));
+          });
+          pushPlanSection(planOperationsSection, 'plan-operations', 'Plan operations');
         }
 
         if (breadcrumb) {
           header.append(breadcrumb);
         }
-        header.append(head, createWorkspaceQuickNav(detail, mode), ...sections);
+        header.append(head, createWorkspaceQuickNav(detail, mode, planSectionLinks), ...sections);
         root.replaceChildren(header);
         scrollToCurrentHashTarget();
       };

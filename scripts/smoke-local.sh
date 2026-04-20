@@ -831,15 +831,17 @@ assert "createQuickNavChip('Drift view', 'Current workspace: Drift view')" in ui
 assert "createQuickNavChip('Plan/apply', 'Current workspace: Plan/apply')" in ui, ui
 assert "createQuickNavChip('Audit log', 'Current workspace: Audit log')" in ui, ui
 assert "createNavLink(buildPageURL('audit', { deployment: detail.name || currentPageState.deployment || '' }), 'Audit log', '_self')" in ui, ui
-assert "const createWorkspaceQuickNav = (detail, mode) => {" in ui, ui
+assert "const createWorkspaceQuickNav = (detail, mode, sectionLinks = null) => {" in ui, ui
 assert "const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';" in ui, ui
 assert "const linkedResources = mode === 'drift' ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;" in ui, ui
+assert "const resolvedSectionLinks = mode === 'drift'" in ui, ui
 assert "const buildPageSectionURL = (page, sectionID, extras = {}) => {" in ui, ui
 assert "const scrollToCurrentHashTarget = () => {" in ui, ui
 assert "target.scrollIntoView({ block: 'start', behavior: 'auto' });" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Deployment workspaces')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'On this page')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Linked resources')" in ui, ui
+assert "buildPageSectionURL('plan', sectionID, {" in ui, ui
 assert "buildPageSectionURL('drift', 'drift-runtime-signals', { deployment: deploymentName })" in ui, ui
 assert "buildPageSectionURL('drift', 'drift-rollout-execution', { deployment: deploymentName })" in ui, ui
 assert "buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName })" in ui, ui
@@ -849,7 +851,16 @@ assert "executionSection.id = 'drift-rollout-execution';" in ui, ui
 assert "driftSection.id = 'drift-field-level';" in ui, ui
 assert "conditionsSection.id = 'drift-status-conditions';" in ui, ui
 assert "createElement('div', 'quick-nav-current', `${deploymentName || 'Deployment'} · ${currentWorkspace}`)" in ui, ui
-assert "header.append(head, createWorkspaceQuickNav(detail, mode), ...sections);" in ui, ui
+assert "const pushPlanSection = (section, sectionID, label) => {" in ui, ui
+assert "href: buildPageSectionURL('plan', sectionID, {" in ui, ui
+assert "planId: currentPageState.planId || planState?.planId || planState?.record?.id || ''," in ui, ui
+assert "applyId: currentPageState.applyId || applyState?.applyId || applyState?.record?.id || ''," in ui, ui
+assert "pushPlanSection(runtimeSignalsSection, 'plan-runtime-signals', 'Runtime signals');" in ui, ui
+assert "pushPlanSection(executionSection, 'plan-rollout-execution', 'Rollout execution');" in ui, ui
+assert "pushPlanSection(actionsSection, 'plan-preview-actions', 'Plan preview actions');" in ui, ui
+assert "pushPlanSection(applySection, 'plan-apply-actions', 'Apply request actions');" in ui, ui
+assert "pushPlanSection(planOperationsSection, 'plan-operations', 'Plan operations');" in ui, ui
+assert "header.append(head, createWorkspaceQuickNav(detail, mode, planSectionLinks), ...sections);" in ui, ui
 assert "const createResourceQuickNav = (detail, resource) => {" in ui, ui
 assert "createElement('div', 'quick-nav-title', 'Quick navigation')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Current resource')" in ui, ui
@@ -982,7 +993,8 @@ assert 'GET /v1/applies/${activeApplyID} is currently unavailable. Deployment an
 assert 'Apply lifecycle summary' in ui, ui
 assert "params.get('planId') || ''" in ui, ui
 assert "params.get('applyId') || ''" in ui, ui
-
+assert 'On this page' in plan_ui, plan_ui
+assert "buildPageSectionURL('plan', sectionID, {" in plan_ui, plan_ui
 assert 'planId' in plan_ui, plan_ui
 assert 'applyId' in apply_ui, apply_ui
 assert 'Apply request failed' in apply_ui, apply_ui
