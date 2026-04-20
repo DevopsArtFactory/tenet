@@ -835,9 +835,13 @@ assert "const createWorkspaceQuickNav = (detail, mode, sectionLinks = null) => {
 assert "const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';" in ui, ui
 assert "const linkedResources = mode === 'drift' ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;" in ui, ui
 assert "const resolvedSectionLinks = mode === 'drift'" in ui, ui
+assert "createElement('div', 'quick-nav-label', 'Current section')" in ui, ui
+assert "mode === 'drift' ? 'No section is currently targeted.' : ''" in ui, ui
+assert "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)" in ui, ui
 assert "const buildPageSectionURL = (page, sectionID, extras = {}) => {" in ui, ui
 assert "const scrollToCurrentHashTarget = () => {" in ui, ui
 assert "target.scrollIntoView({ block: 'start', behavior: 'auto' });" in ui, ui
+assert "if (currentPageState.page !== 'application' && currentPageState.page !== 'resource' && currentPageState.page !== 'drift') return;" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Deployment workspaces')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'On this page')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Linked resources')" in ui, ui
@@ -860,7 +864,9 @@ assert "pushPlanSection(executionSection, 'plan-rollout-execution', 'Rollout exe
 assert "pushPlanSection(actionsSection, 'plan-preview-actions', 'Plan preview actions');" in ui, ui
 assert "pushPlanSection(applySection, 'plan-apply-actions', 'Apply request actions');" in ui, ui
 assert "pushPlanSection(planOperationsSection, 'plan-operations', 'Plan operations');" in ui, ui
-assert "header.append(head, createWorkspaceQuickNav(detail, mode, planSectionLinks), ...sections);" in ui, ui
+assert "const quickNav = createWorkspaceQuickNav(detail, mode, planSectionLinks);" in ui, ui
+assert "activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;" in ui, ui
+assert "header.append(head, quickNav, ...sections);" in ui, ui
 assert "const createResourceQuickNav = (detail, resource, sectionLinks = []) => {" in ui, ui
 assert "createElement('div', 'quick-nav-title', 'Quick navigation')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Current resource')" in ui, ui

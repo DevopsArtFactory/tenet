@@ -1152,7 +1152,7 @@
       };
       if (typeof window.addEventListener === 'function') {
         window.addEventListener('hashchange', () => {
-          if (currentPageState.page !== 'application' && currentPageState.page !== 'resource') return;
+          if (currentPageState.page !== 'application' && currentPageState.page !== 'resource' && currentPageState.page !== 'drift') return;
           syncActiveResourceQuickNav();
           scrollToCurrentHashTarget();
         });
@@ -1491,7 +1491,7 @@
           description: bookmarkedResource.description || 'No linked resource metadata is available for this selection.',
         };
       };
-      const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = []) => {
+      const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = [], currentSectionEmptyLabel = '') => {
         if (!deploymentName) return null;
         const strip = createElement('section', 'quick-nav-strip');
         const workspaceLinks = createElement('div', 'quick-nav-links');
@@ -1515,16 +1515,46 @@
         );
         groups.append(workspaceGroup);
         if (Array.isArray(sectionLinks) && sectionLinks.length) {
+          const trackCurrentSection = Boolean(currentSectionEmptyLabel) && sectionLinks.some((sectionLink) => sectionLink?.sectionID);
+          const currentSectionGroup = createElement('div', 'quick-nav-group');
           const sectionGroup = createElement('div', 'quick-nav-group');
-          const sectionNavLinks = createElement('div', 'quick-nav-links');
-          sectionLinks.forEach((sectionLink) => {
-            sectionNavLinks.append(createNavLink(sectionLink.href, sectionLink.label, '_self'));
-          });
-          sectionGroup.append(
-            createElement('div', 'quick-nav-label', 'On this page'),
-            sectionNavLinks,
-          );
-          groups.append(sectionGroup);
+          const syncCurrentSection = () => {
+            const activeSectionID = trackCurrentSection ? currentHashTargetID() : '';
+            const currentSectionLink = trackCurrentSection
+              ? sectionLinks.find((sectionLink) => sectionLink?.sectionID === activeSectionID)
+              : null;
+            if (trackCurrentSection) {
+              currentSectionGroup.replaceChildren(createElement('div', 'quick-nav-label', 'Current section'));
+              if (currentSectionLink) {
+                currentSectionGroup.append(createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`));
+              } else {
+                currentSectionGroup.append(createElement('div', 'quick-nav-empty', currentSectionEmptyLabel));
+              }
+            }
+            sectionGroup.replaceChildren(createElement('div', 'quick-nav-label', 'On this page'));
+            const remainingSectionLinks = trackCurrentSection
+              ? sectionLinks.filter((sectionLink) => sectionLink?.sectionID !== currentSectionLink?.sectionID)
+              : sectionLinks;
+            if (remainingSectionLinks.length) {
+              const sectionNavLinks = createElement('div', 'quick-nav-links');
+              remainingSectionLinks.forEach((sectionLink) => {
+                sectionNavLinks.append(createNavLink(sectionLink.href, sectionLink.label, '_self'));
+              });
+              sectionGroup.append(sectionNavLinks);
+            }
+          };
+          if (trackCurrentSection) {
+            syncCurrentSection();
+            groups.append(currentSectionGroup, sectionGroup);
+            strip.syncCurrentSection = syncCurrentSection;
+          } else {
+            const sectionNavLinks = createElement('div', 'quick-nav-links');
+            sectionLinks.forEach((sectionLink) => {
+              sectionNavLinks.append(createNavLink(sectionLink.href, sectionLink.label, '_self'));
+            });
+            sectionGroup.append(sectionNavLinks);
+            groups.append(sectionGroup);
+          }
         }
         if (Array.isArray(linkedResources)) {
           const resourceGroup = createElement('div', 'quick-nav-group');
@@ -1559,13 +1589,19 @@
         const linkedResources = mode === 'drift' ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;
         const resolvedSectionLinks = mode === 'drift'
           ? [
-            { label: 'Runtime signals', href: buildPageSectionURL('drift', 'drift-runtime-signals', { deployment: deploymentName }) },
-            { label: 'Rollout execution', href: buildPageSectionURL('drift', 'drift-rollout-execution', { deployment: deploymentName }) },
-            { label: 'Field-level drift', href: buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName }) },
-            { label: 'Status conditions', href: buildPageSectionURL('drift', 'drift-status-conditions', { deployment: deploymentName }) },
+            { sectionID: 'drift-runtime-signals', label: 'Runtime signals', href: buildPageSectionURL('drift', 'drift-runtime-signals', { deployment: deploymentName }) },
+            { sectionID: 'drift-rollout-execution', label: 'Rollout execution', href: buildPageSectionURL('drift', 'drift-rollout-execution', { deployment: deploymentName }) },
+            { sectionID: 'drift-field-level', label: 'Field-level drift', href: buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName }) },
+            { sectionID: 'drift-status-conditions', label: 'Status conditions', href: buildPageSectionURL('drift', 'drift-status-conditions', { deployment: deploymentName }) },
           ]
           : Array.isArray(sectionLinks) ? sectionLinks : [];
-        return createDeploymentQuickNav(deploymentName, currentWorkspace, linkedResources, resolvedSectionLinks);
+        return createDeploymentQuickNav(
+          deploymentName,
+          currentWorkspace,
+          linkedResources,
+          resolvedSectionLinks,
+          mode === 'drift' ? 'No section is currently targeted.' : '',
+        );
       };
       const createApplicationQuickNav = (detail, sectionLinks = []) => {
         const deploymentName = detail.name || currentPageState.deployment || '';
@@ -4327,10 +4363,12 @@
           pushPlanSection(planOperationsSection, 'plan-operations', 'Plan operations');
         }
 
+        const quickNav = createWorkspaceQuickNav(detail, mode, planSectionLinks);
+        activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;
         if (breadcrumb) {
           header.append(breadcrumb);
         }
-        header.append(head, createWorkspaceQuickNav(detail, mode, planSectionLinks), ...sections);
+        header.append(head, quickNav, ...sections);
         root.replaceChildren(header);
         scrollToCurrentHashTarget();
       };

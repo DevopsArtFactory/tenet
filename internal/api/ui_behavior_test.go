@@ -5061,11 +5061,14 @@ async function render(detail) {
   if (!breadcrumbChips.find((node) => node.textContent === 'Drift view')) throw new Error('expected drift workspace current breadcrumb chip');
   if (!text.includes('Quick navigation')) throw new Error('expected workspace quick navigation strip');
   if (!text.includes('Deployment workspaces')) throw new Error('expected workspace quick navigation group label');
+  if (!text.includes('Current section')) throw new Error('expected drift workspace current-section group label');
+  if (!text.includes('No section is currently targeted.')) throw new Error('expected drift workspace empty current-section copy without hash');
   if (!text.includes('Linked resources')) throw new Error('expected drift workspace linked-resources group label');
   if (!text.includes('api-prod · Drift view')) throw new Error('expected workspace quick navigation current-state label');
   if (!workspaceBackLink || workspaceBackLink.rel) throw new Error('expected drift workspace quick navigation back link');
   if (workspaceDriftLink) throw new Error('expected drift workspace quick navigation to render active workspace as a chip');
   if (!workspaceChips.find((node) => node.textContent === 'Drift view')) throw new Error('expected drift workspace quick navigation chip');
+  if (workspaceChips.find((node) => String(node.getAttribute('aria-label') || '').startsWith('Current section: '))) throw new Error('expected drift workspace without hash not to render a current-section chip');
   if (!workspacePlanLink || workspacePlanLink.rel) throw new Error('expected drift workspace quick navigation plan link');
   if (!workspaceAuditLink || workspaceAuditLink.rel) throw new Error('expected drift workspace quick navigation audit link');
   if (!workspaceResourceLink || workspaceResourceLink.rel) throw new Error('expected drift workspace quick navigation resource link');
@@ -5336,6 +5339,23 @@ class Document {
     return null;
   }
 }
+const createWindow = (initialSearch, hash) => {
+  const listeners = {};
+  return {
+    location: { pathname: '/console', search: initialSearch, hash },
+    addEventListener(type, handler) {
+      listeners[type] = listeners[type] || [];
+      listeners[type].push(handler);
+    },
+    dispatchEvent(event) {
+      const handlers = listeners[event?.type] || [];
+      handlers.forEach((handler) => handler.call(this, event));
+    },
+    dispatchHashChange() {
+      this.dispatchEvent({ type: 'hashchange', target: this });
+    },
+  };
+};
 const collectNodes = (root, predicate) => {
   const matches = [];
   const visit = (node) => {
@@ -5352,7 +5372,7 @@ document.byID.set('toolbar', document.createElement('section'));
 document.byID.set('summary', document.createElement('section'));
 document.byID.set('accounts', document.createElement('section'));
 const initialSearch = '?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod';
-const window = { location: { pathname: '/console', search: initialSearch, hash: '#drift-status-conditions' } };
+const window = createWindow(initialSearch, '#drift-status-conditions');
 const history = { replaceState(_state, _title, url) {
   const [pathAndQuery, hash = ''] = String(url).split('#');
   const [pathname, query = ''] = pathAndQuery.split('?');
@@ -5377,23 +5397,37 @@ const fetch = (url) => {
   if (window.location.search !== initialSearch) throw new Error('expected drift workspace query to stay stable, got ' + window.location.search);
   if (window.location.hash !== '#drift-status-conditions') throw new Error('expected initial drift workspace hash to stay stable, got ' + window.location.hash);
   const accounts = document.getElementById('accounts');
+  const quickNavChips = collectNodes(accounts, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
+  const currentSectionChip = quickNavChips.find((node) => node.getAttribute('aria-label') === 'Current section: Status conditions');
+  if (!currentSectionChip) throw new Error('expected drift hash to render the current-section chip');
   const sectionLinks = collectNodes(accounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#drift-'));
   const expectedLinks = [
     ['/console?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod#drift-runtime-signals', 'Runtime signals'],
     ['/console?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod#drift-rollout-execution', 'Rollout execution'],
     ['/console?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod#drift-field-level', 'Field-level drift'],
-    ['/console?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod#drift-status-conditions', 'Status conditions'],
   ];
-  if (sectionLinks.length !== expectedLinks.length) throw new Error('expected four drift section links, got ' + sectionLinks.length);
+  if (sectionLinks.length !== expectedLinks.length) throw new Error('expected three remaining drift section links, got ' + sectionLinks.length);
   expectedLinks.forEach(([href, text]) => {
     const link = sectionLinks.find((node) => node.href === href && node.textContent === text);
     if (!link) throw new Error('missing drift section link ' + text + ' -> ' + href);
     if (link.target !== '_self' || link.rel) throw new Error('expected drift section link to stay in-shell for ' + text);
   });
+  if (sectionLinks.find((node) => node.textContent === 'Status conditions')) throw new Error('expected active drift section to be removed from On this page links');
   const sectionIDs = collectNodes(accounts, (node) => typeof node.id === 'string' && node.id.startsWith('drift-')).map((node) => node.id).sort();
   const expectedSectionIDs = ['drift-field-level', 'drift-rollout-execution', 'drift-runtime-signals', 'drift-status-conditions'];
   if (JSON.stringify(sectionIDs) !== JSON.stringify(expectedSectionIDs)) throw new Error('unexpected drift section ids: ' + JSON.stringify(sectionIDs));
   if (!document.lastScrolledTarget || document.lastScrolledTarget.id !== 'drift-status-conditions') throw new Error('expected initial drift workspace hash to scroll the matching section into view');
+  window.location.hash = '#drift-field-level';
+  window.dispatchHashChange();
+  await settle();
+  const updatedAccounts = document.getElementById('accounts');
+  const updatedChips = collectNodes(updatedAccounts, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
+  const fieldLevelChip = updatedChips.find((node) => node.getAttribute('aria-label') === 'Current section: Field-level drift');
+  if (!fieldLevelChip) throw new Error('expected drift hashchange to update the current-section chip');
+  const updatedSectionLinks = collectNodes(updatedAccounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#drift-'));
+  if (updatedSectionLinks.find((node) => node.textContent === 'Field-level drift')) throw new Error('expected updated drift current section to be removed from On this page links');
+  if (!updatedSectionLinks.find((node) => node.textContent === 'Status conditions')) throw new Error('expected previous drift current section to return to On this page links after hashchange');
+  if (!document.lastScrolledTarget || document.lastScrolledTarget.id !== 'drift-field-level') throw new Error('expected drift hashchange to scroll the new current section into view');
 })();
 `
 
