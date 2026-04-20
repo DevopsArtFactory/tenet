@@ -3,7 +3,9 @@ package resourceinspection
 import (
 	"container/list"
 	"context"
+	"encoding/base64"
 	"errors"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -12,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
 	asgtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 
@@ -26,6 +29,12 @@ const (
 	ecsServiceHintCacheCap  = 256
 	trafficRoutingCacheCap  = 128
 )
+
+var launchTemplateBootstrapSourcePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?im)^\s*(?:export\s+)?(?:TENET_)?(?:USERDATA|BOOTSTRAP)_SOURCE\s*=\s*['"]?([^'"#\s]+)['"]?`),
+	regexp.MustCompile(`(?im)^\s*(?:#\s*)?(?:tenet[-_\s]*)?(?:userdata|bootstrap)[-_\s]*source\s*[:=]\s*['"]?([^'"#\s]+)['"]?`),
+	regexp.MustCompile(`(?im)(?:--userdata-source|--bootstrap-source)\s+['"]?([^'"\s]+)`),
+}
 
 var ErrNotImplemented = errors.New("resource inspection service not implemented")
 
@@ -141,18 +150,19 @@ type ECSServiceEvent struct {
 }
 
 type AutoScalingInspection struct {
-	AutoScalingGroupARN    string                            `json:"autoScalingGroupArn"`
-	AutoScalingGroupName   string                            `json:"autoScalingGroupName"`
-	MinSize                int32                             `json:"minSize"`
-	MaxSize                int32                             `json:"maxSize"`
-	DesiredCapacity        int32                             `json:"desiredCapacity"`
-	DefaultCooldown        int32                             `json:"defaultCooldown"`
-	HealthCheckType        string                            `json:"healthCheckType,omitempty"`
-	HealthCheckGracePeriod int32                             `json:"healthCheckGracePeriod"`
-	LaunchTemplate         *AutoScalingLaunchTemplateSummary `json:"launchTemplate,omitempty"`
-	MixedInstancesPolicy   *AutoScalingMixedInstancesPolicy  `json:"mixedInstancesPolicy,omitempty"`
-	TargetGroupARNs        []string                          `json:"targetGroupArns,omitempty"`
-	Instances              []AutoScalingGroupInstanceSummary `json:"instances"`
+	AutoScalingGroupARN           string                            `json:"autoScalingGroupArn"`
+	AutoScalingGroupName          string                            `json:"autoScalingGroupName"`
+	MinSize                       int32                             `json:"minSize"`
+	MaxSize                       int32                             `json:"maxSize"`
+	DesiredCapacity               int32                             `json:"desiredCapacity"`
+	DefaultCooldown               int32                             `json:"defaultCooldown"`
+	HealthCheckType               string                            `json:"healthCheckType,omitempty"`
+	HealthCheckGracePeriod        int32                             `json:"healthCheckGracePeriod"`
+	LaunchTemplate                *AutoScalingLaunchTemplateSummary `json:"launchTemplate,omitempty"`
+	LaunchTemplateBootstrapSource string                            `json:"launchTemplateBootstrapSource,omitempty"`
+	MixedInstancesPolicy          *AutoScalingMixedInstancesPolicy  `json:"mixedInstancesPolicy,omitempty"`
+	TargetGroupARNs               []string                          `json:"targetGroupArns,omitempty"`
+	Instances                     []AutoScalingGroupInstanceSummary `json:"instances"`
 }
 
 type AutoScalingLaunchTemplateSummary struct {
@@ -207,6 +217,10 @@ func NewService(options Options) Service {
 type ecsServiceAPI interface {
 	ListClusters(context.Context, *ecs.ListClustersInput, ...func(*ecs.Options)) (*ecs.ListClustersOutput, error)
 	DescribeServices(context.Context, *ecs.DescribeServicesInput, ...func(*ecs.Options)) (*ecs.DescribeServicesOutput, error)
+}
+
+type ec2LaunchTemplateAPI interface {
+	DescribeLaunchTemplateVersions(context.Context, *ec2.DescribeLaunchTemplateVersionsInput, ...func(*ec2.Options)) (*ec2.DescribeLaunchTemplateVersionsOutput, error)
 }
 
 type ecsServiceClusterHintKey struct {
@@ -706,7 +720,11 @@ func (s Service) inspectAutoScalingGroupFromAWS(ctx context.Context, req AutoSca
 	if len(out.AutoScalingGroups) == 0 {
 		return AutoScalingInspection{}, resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
 	}
-	return autoScalingInspectionFromGroup(out.AutoScalingGroups[0]), nil
+	inspection := autoScalingInspectionFromGroup(out.AutoScalingGroups[0])
+	if bootstrapSource, err := autoScalingLaunchTemplateBootstrapSourceFromGroup(ctx, clients.EC2, out.AutoScalingGroups[0]); err == nil {
+		inspection.LaunchTemplateBootstrapSource = bootstrapSource
+	}
+	return inspection, nil
 }
 
 func ecsInspectionFromService(service ecstypes.Service, clusterARN string, taskDefinitionImage string) ECSServiceInspection {
@@ -849,6 +867,72 @@ func autoScalingInspectionFromGroup(group asgtypes.AutoScalingGroup) AutoScaling
 		TargetGroupARNs:        targetGroupARNs,
 		Instances:              instanceSummaries,
 	}
+}
+
+func autoScalingLaunchTemplateBootstrapSourceFromGroup(ctx context.Context, client ec2LaunchTemplateAPI, group asgtypes.AutoScalingGroup) (string, error) {
+	spec := group.LaunchTemplate
+	if spec == nil && group.MixedInstancesPolicy != nil && group.MixedInstancesPolicy.LaunchTemplate != nil {
+		spec = group.MixedInstancesPolicy.LaunchTemplate.LaunchTemplateSpecification
+	}
+	return autoScalingLaunchTemplateBootstrapSource(ctx, client, spec)
+}
+
+func autoScalingLaunchTemplateBootstrapSource(ctx context.Context, client ec2LaunchTemplateAPI, spec *asgtypes.LaunchTemplateSpecification) (string, error) {
+	if client == nil || spec == nil {
+		return "", nil
+	}
+	input := &ec2.DescribeLaunchTemplateVersionsInput{}
+	if launchTemplateID := strings.TrimSpace(aws.ToString(spec.LaunchTemplateId)); launchTemplateID != "" {
+		input.LaunchTemplateId = aws.String(launchTemplateID)
+	} else if launchTemplateName := strings.TrimSpace(aws.ToString(spec.LaunchTemplateName)); launchTemplateName != "" {
+		input.LaunchTemplateName = aws.String(launchTemplateName)
+	} else {
+		return "", nil
+	}
+	if version := strings.TrimSpace(aws.ToString(spec.Version)); version != "" {
+		input.Versions = []string{version}
+	}
+	out, err := client.DescribeLaunchTemplateVersions(ctx, input)
+	if err != nil {
+		return "", err
+	}
+	for _, version := range out.LaunchTemplateVersions {
+		if version.LaunchTemplateData == nil {
+			continue
+		}
+		if source := extractLaunchTemplateBootstrapSource(aws.ToString(version.LaunchTemplateData.UserData)); source != "" {
+			return source, nil
+		}
+	}
+	return "", nil
+}
+
+func extractLaunchTemplateBootstrapSource(encodedUserData string) string {
+	encodedUserData = strings.TrimSpace(encodedUserData)
+	if encodedUserData == "" {
+		return ""
+	}
+	decoded, err := base64.StdEncoding.DecodeString(encodedUserData)
+	if err != nil {
+		return ""
+	}
+	body := strings.TrimSpace(string(decoded))
+	if body == "" {
+		return ""
+	}
+	for _, pattern := range launchTemplateBootstrapSourcePatterns {
+		matches := pattern.FindStringSubmatch(body)
+		if len(matches) < 2 {
+			continue
+		}
+		if source := strings.TrimSpace(matches[1]); source != "" {
+			return source
+		}
+	}
+	if !strings.ContainsAny(body, "\r\n\t ") && strings.Contains(body, ":") {
+		return body
+	}
+	return ""
 }
 
 func autoScalingLaunchTemplateSummary(spec *asgtypes.LaunchTemplateSpecification) *AutoScalingLaunchTemplateSummary {
