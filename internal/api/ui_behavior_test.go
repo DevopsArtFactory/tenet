@@ -1039,6 +1039,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!toolbarText.includes('Back to applications')) throw new Error('expected application route back link');
   const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
   const accountLinks = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
+  const quickNavChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
   const breadcrumbChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className.includes('breadcrumb-current'));
   const backLink = toolbarLinks.find((node) => node.href === '/?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.target === '_self');
   if (!backLink) throw new Error('expected application route self-navigation back link');
@@ -1053,8 +1054,12 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('Application resources')) throw new Error('expected application route resources body');
   if (!accountsText.includes('Quick navigation')) throw new Error('expected application route quick navigation');
   if (!accountsText.includes('Deployment workspaces')) throw new Error('expected application route deployment-workspaces quick-nav group');
+  if (!accountsText.includes('Current section')) throw new Error('expected application route current-section quick-nav group');
+  if (!accountsText.includes('No section is currently targeted.')) throw new Error('expected application route empty current-section message without hash');
   if (!accountsText.includes('On this page')) throw new Error('expected application route section quick-nav group');
   if (!accountsText.includes('payments-api-staging · Application detail')) throw new Error('expected application route quick-nav current label');
+  const currentSectionChip = quickNavChips.find((node) => String(node.getAttribute('aria-label') || '').startsWith('Current section: '));
+  if (currentSectionChip) throw new Error('expected application route without hash not to render a current-section chip');
   if (!accountsText.includes('Drift view')) throw new Error('expected application route drift workspace entry');
   if (!accountsText.includes('Plan/apply')) throw new Error('expected application route plan workspace entry');
   if (!accountsText.includes('Workloads')) throw new Error('expected application route workloads group');
@@ -1173,6 +1178,23 @@ class Document {
     return null;
   }
 }
+const createWindow = (initialSearch, hash) => {
+  const listeners = {};
+  return {
+    location: { pathname: '/console', search: initialSearch, hash },
+    addEventListener(type, handler) {
+      listeners[type] = listeners[type] || [];
+      listeners[type].push(handler);
+    },
+    dispatchEvent(event) {
+      const handlers = listeners[event?.type] || [];
+      handlers.forEach((handler) => handler.call(this, event));
+    },
+    dispatchHashChange() {
+      this.dispatchEvent({ type: 'hashchange', target: this });
+    },
+  };
+};
 const collectNodes = (root, predicate) => {
   const matches = [];
   const visit = (node) => {
@@ -1189,7 +1211,7 @@ document.byID.set('toolbar', document.createElement('section'));
 document.byID.set('summary', document.createElement('section'));
 document.byID.set('accounts', document.createElement('section'));
 const initialSearch = '?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging';
-const window = { location: { pathname: '/console', search: initialSearch, hash: '#application-runtime-events' } };
+const window = createWindow(initialSearch, '#application-runtime-events');
 const history = { replaceState(_state, _title, url) {
   const [pathAndQuery, hash = ''] = String(url).split('#');
   const [pathname, query = ''] = pathAndQuery.split('?');
@@ -1214,19 +1236,33 @@ const fetch = (url) => {
   if (window.location.hash !== '#application-runtime-events') throw new Error('expected application hash to stay stable, got ' + window.location.hash);
   if (!document.lastScrolledTarget || document.lastScrolledTarget.id !== 'application-runtime-events') throw new Error('expected application hash to scroll the matching section into view');
   const accounts = document.getElementById('accounts');
+  const quickNavChips = collectNodes(accounts, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
+  const currentSectionChip = quickNavChips.find((node) => node.getAttribute('aria-label') === 'Current section: Controller runtime events');
+  if (!currentSectionChip) throw new Error('expected application hash to render the current-section chip');
   const sectionLinks = collectNodes(accounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#application-'));
   const expectedLinks = [
     ['/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-workloads', 'Workloads'],
     ['/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-traffic-routing', 'Traffic routing'],
     ['/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-config-access', 'Config and access'],
-    ['/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-runtime-events', 'Controller runtime events'],
   ];
-  if (sectionLinks.length !== expectedLinks.length) throw new Error('expected four application section links, got ' + sectionLinks.length);
+  if (sectionLinks.length !== expectedLinks.length) throw new Error('expected three remaining application section links, got ' + sectionLinks.length);
   expectedLinks.forEach(([href, text]) => {
     const link = sectionLinks.find((node) => node.href === href && node.textContent === text);
     if (!link) throw new Error('missing application hash link ' + text + ' -> ' + href);
     if (link.target !== '_self' || link.rel) throw new Error('expected application hash link to stay in-shell for ' + text);
   });
+  if (sectionLinks.find((node) => node.textContent === 'Controller runtime events')) throw new Error('expected active application section to be removed from On this page links');
+  window.location.hash = '#application-config-access';
+  window.dispatchHashChange();
+  await settle();
+  const updatedAccounts = document.getElementById('accounts');
+  const updatedChips = collectNodes(updatedAccounts, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
+  const configChip = updatedChips.find((node) => node.getAttribute('aria-label') === 'Current section: Config and access');
+  if (!configChip) throw new Error('expected application hashchange to update the current-section chip');
+  const updatedSectionLinks = collectNodes(updatedAccounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#application-'));
+  if (updatedSectionLinks.find((node) => node.textContent === 'Config and access')) throw new Error('expected updated application current section to be removed from On this page links');
+  if (!updatedSectionLinks.find((node) => node.textContent === 'Controller runtime events')) throw new Error('expected previous application current section to return to On this page links after hashchange');
+  if (!document.lastScrolledTarget || document.lastScrolledTarget.id !== 'application-config-access') throw new Error('expected application hashchange to scroll the new current section into view');
 })();
 `
 
