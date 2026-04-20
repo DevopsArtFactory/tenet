@@ -914,6 +914,10 @@ assert "const renderApplicationDetailPage = (detail) => {" in application_ui, ap
 assert "const breadcrumb = createDeploymentBreadcrumb({" in application_ui, application_ui
 assert "createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')" in application_ui, application_ui
 assert 'Application resources' in application_ui, application_ui
+assert 'Quick navigation' in application_ui, application_ui
+assert 'On this page' in application_ui, application_ui
+assert "const createApplicationQuickNav = (detail, sectionLinks = []) => {" in application_ui, application_ui
+assert "eventsSection.id = 'application-runtime-events';" in application_ui, application_ui
 for body in (resource_ui, ecs_resource_ui):
     assert "const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);" in body, body
     assert "const renderResourceDetailPage = (detail) => {" in body, body

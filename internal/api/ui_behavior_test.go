@@ -1051,14 +1051,182 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!summaryText.includes('payments-api-staging')) throw new Error('expected application route summary title');
   if (!summaryText.includes('Application detail page: show only application-linked resources before the final resource-detail page.')) throw new Error('expected application route drill-down guidance');
   if (!accountsText.includes('Application resources')) throw new Error('expected application route resources body');
+  if (!accountsText.includes('Quick navigation')) throw new Error('expected application route quick navigation');
+  if (!accountsText.includes('Deployment workspaces')) throw new Error('expected application route deployment-workspaces quick-nav group');
+  if (!accountsText.includes('On this page')) throw new Error('expected application route section quick-nav group');
+  if (!accountsText.includes('payments-api-staging · Application detail')) throw new Error('expected application route quick-nav current label');
   if (!accountsText.includes('Drift view')) throw new Error('expected application route drift workspace entry');
   if (!accountsText.includes('Plan/apply')) throw new Error('expected application route plan workspace entry');
   if (!accountsText.includes('Workloads')) throw new Error('expected application route workloads group');
   if (!accountsText.includes('Traffic routing')) throw new Error('expected application route traffic routing group');
+  if (!accountsText.includes('Config and access')) throw new Error('expected application route config group');
+  if (!accountsText.includes('Controller runtime events')) throw new Error('expected application route runtime-events section');
   if (!accountsText.includes('payments-api-staging-service')) throw new Error('expected application route synthesized workload resource');
   if (!accountsText.includes('payments-api-staging-codedeploy-group')) throw new Error('expected application route synthesized deployment-group resource');
+  const sectionLinks = accountLinks.filter((node) => typeof node.href === 'string' && node.href.includes('#application-'));
+  const expectedSectionLinks = [
+    ['/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-workloads', 'Workloads'],
+    ['/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-traffic-routing', 'Traffic routing'],
+    ['/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-config-access', 'Config and access'],
+    ['/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-runtime-events', 'Controller runtime events'],
+  ];
+  if (sectionLinks.length !== expectedSectionLinks.length) throw new Error('expected four application section links, got ' + sectionLinks.length);
+  expectedSectionLinks.forEach(([href, text]) => {
+    const link = sectionLinks.find((node) => node.href === href && node.textContent === text);
+    if (!link) throw new Error('missing application section link ' + text + ' -> ' + href);
+    if (link.target !== '_self' || link.rel) throw new Error('expected application section link to stay in-shell for ' + text);
+  });
+  const sectionIDs = collectNodes(document.getElementById('accounts'), (node) => typeof node.id === 'string' && node.id.startsWith('application-')).map((node) => node.id).sort();
+  const expectedSectionIDs = ['application-config-access', 'application-runtime-events', 'application-traffic-routing', 'application-workloads'];
+  if (JSON.stringify(sectionIDs) !== JSON.stringify(expectedSectionIDs)) throw new Error('unexpected application section ids: ' + JSON.stringify(sectionIDs));
   if (accountsText.includes('Create Plan')) throw new Error('application route should not render plan workspace actions');
   if (accountsText.includes('Field-level drift')) throw new Error('application route should not render drift workspace sections');
+})();
+`
+
+		runNodeHarness(t, nodeProgram)
+	})
+
+	t.Run("bookmarked application hash deep links restore section targets after render", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(applicationDetailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.id = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = {
+      add: (...names) => {
+        const current = new Set(this.className.split(/\s+/).filter(Boolean));
+        names.forEach((name) => current.add(name));
+        this.className = Array.from(current).join(' ');
+      },
+      toggle: (name, force) => {
+        const current = new Set(this.className.split(/\s+/).filter(Boolean));
+        const shouldAdd = force === undefined ? !current.has(name) : Boolean(force);
+        if (shouldAdd) current.add(name); else current.delete(name);
+        this.className = Array.from(current).join(' ');
+      },
+    };
+  }
+  append(...nodes) {
+    nodes.forEach((node) => {
+      if (node == null) return;
+      if (typeof node === 'string') {
+        const textNode = new Element('#text', this.ownerDocument);
+        textNode.textContent = node;
+        node = textNode;
+      }
+      node.parentNode = this;
+      this.children.push(node);
+      if (this.tagName === 'SELECT' && node.tagName === 'OPTION' && (node.selected || this.value === '')) {
+        this.value = node.value;
+      }
+    });
+  }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  scrollIntoView(options) { this.ownerDocument.lastScrolledTarget = { id: this.id || '', options }; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); this.lastScrolledTarget = null; }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) {
+    if (this.byID.has(id)) return this.byID.get(id) || null;
+    const stack = Array.from(this.byID.values());
+    while (stack.length) {
+      const node = stack.shift();
+      if (node?.id === id) return node;
+      stack.push(...(node.children || []));
+    }
+    return null;
+  }
+  querySelector(selector) {
+    const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/);
+    if (!dataMatch) return null;
+    const target = dataMatch[1];
+    const stack = Array.from(this.byID.values());
+    while (stack.length) {
+      const node = stack.shift();
+      if (node?.dataset?.toolbarField === target) return node;
+      stack.push(...(node.children || []));
+    }
+    return null;
+  }
+}
+const collectNodes = (root, predicate) => {
+  const matches = [];
+  const visit = (node) => {
+    if (!node) return;
+    if (predicate(node)) matches.push(node);
+    (node.children || []).forEach(visit);
+  };
+  visit(root);
+  return matches;
+};
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const initialSearch = '?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging';
+const window = { location: { pathname: '/console', search: initialSearch, hash: '#application-runtime-events' } };
+const history = { replaceState(_state, _title, url) {
+  const [pathAndQuery, hash = ''] = String(url).split('#');
+  const [pathname, query = ''] = pathAndQuery.split('?');
+  window.location.pathname = pathname || '/console';
+  window.location.search = query ? '?' + query : '';
+  window.location.hash = hash ? '#' + hash : '';
+} };
+const fetchCalls = [];
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (String(url) === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (String(url) === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+(async () => {
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle();
+  await settle();
+  if (fetchCalls.join(', ') !== '/v1/overview/applications/payments-api-staging, /v1/overview/deployments/payments-api-staging/events') throw new Error('expected application hash route to load application detail plus deployment events');
+  if (window.location.pathname !== '/console') throw new Error('expected application pathname to stay stable, got ' + window.location.pathname);
+  if (window.location.search !== initialSearch) throw new Error('expected application query to stay stable, got ' + window.location.search);
+  if (window.location.hash !== '#application-runtime-events') throw new Error('expected application hash to stay stable, got ' + window.location.hash);
+  if (!document.lastScrolledTarget || document.lastScrolledTarget.id !== 'application-runtime-events') throw new Error('expected application hash to scroll the matching section into view');
+  const accounts = document.getElementById('accounts');
+  const sectionLinks = collectNodes(accounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#application-'));
+  const expectedLinks = [
+    ['/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-workloads', 'Workloads'],
+    ['/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-traffic-routing', 'Traffic routing'],
+    ['/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-config-access', 'Config and access'],
+    ['/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-runtime-events', 'Controller runtime events'],
+  ];
+  if (sectionLinks.length !== expectedLinks.length) throw new Error('expected four application section links, got ' + sectionLinks.length);
+  expectedLinks.forEach(([href, text]) => {
+    const link = sectionLinks.find((node) => node.href === href && node.textContent === text);
+    if (!link) throw new Error('missing application hash link ' + text + ' -> ' + href);
+    if (link.target !== '_self' || link.rel) throw new Error('expected application hash link to stay in-shell for ' + text);
+  });
 })();
 `
 
