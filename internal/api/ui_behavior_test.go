@@ -2824,6 +2824,239 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 	runNodeHarness(t, nodeProgram)
 }
 
+func TestResourceDetailPageHashNavigationWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	detailJSON, err := json.Marshal(map[string]any{
+		"name":         "payments-api-staging",
+		"accountName":  "staging-core",
+		"awsAccountId": "210987654321",
+		"region":       "ap-northeast-2",
+		"rollout": map[string]any{
+			"phase":       "Progressing",
+			"currentStep": "ShiftTrafficLinear",
+			"execution": []map[string]any{
+				{"name": "payments-api-staging-service", "resource": "ecsService", "description": "Primary ECS service"},
+				{"name": "payments-api-staging Deployment Group", "resource": "codeDeployDeploymentGroup", "description": "Linear traffic shifting deployment group"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal detail body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = {
+      add: (...names) => {
+        const current = new Set(this.className.split(/\s+/).filter(Boolean));
+        names.forEach((name) => current.add(name));
+        this.className = Array.from(current).join(' ');
+      },
+      toggle: (name, force) => {
+        const current = new Set(this.className.split(/\s+/).filter(Boolean));
+        const shouldAdd = force === undefined ? !current.has(name) : Boolean(force);
+        if (shouldAdd) current.add(name); else current.delete(name);
+        this.className = Array.from(current).join(' ');
+      },
+    };
+  }
+  append(...nodes) {
+    nodes.forEach((node) => {
+      if (node == null) return;
+      if (typeof node === 'string') {
+        const textNode = new Element('#text', this.ownerDocument);
+        textNode.textContent = node;
+        node = textNode;
+      }
+      node.parentNode = this;
+      this.children.push(node);
+      if (this.tagName === 'SELECT' && node.tagName === 'OPTION' && (node.selected || this.value === '')) {
+        this.value = node.value;
+      }
+    });
+  }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+  scrollIntoView(options) {
+    const entry = { id: this.id || '', options };
+    this.ownerDocument.lastScrolledTarget = entry;
+    this.ownerDocument.scrollEvents.push(entry);
+  }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() {
+    this.activeElement = null;
+    this.byID = new Map();
+    this.lastScrolledTarget = null;
+    this.scrollEvents = [];
+  }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) {
+    if (this.byID.has(id)) return this.byID.get(id) || null;
+    const stack = Array.from(this.byID.values());
+    while (stack.length) {
+      const node = stack.shift();
+      if (node?.id === id) return node;
+      stack.push(...(node.children || []));
+    }
+    return null;
+  }
+  querySelector(selector) {
+    const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/);
+    if (!dataMatch) return null;
+    const target = dataMatch[1];
+    const stack = Array.from(this.byID.values());
+    while (stack.length) {
+      const node = stack.shift();
+      if (node?.dataset?.toolbarField === target) return node;
+      stack.push(...(node.children || []));
+    }
+    return null;
+  }
+}
+const createDocument = () => {
+  const document = new Document();
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  return document;
+};
+const collectNodes = (node, predicate) => {
+  if (!node) return [];
+  const matches = [];
+  const visit = (current) => {
+    if (!current) return;
+    if (predicate(current)) matches.push(current);
+    (current.children || []).forEach(visit);
+  };
+  visit(node);
+  return matches;
+};
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const resourceID = 'ecsService::payments-api-staging-service::Primary ECS service';
+const deploymentURL = '/v1/overview/deployments/payments-api-staging';
+const logsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service';
+const inspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service';
+async function renderScenario(hash, fetchImpl) {
+  const document = createDocument();
+  const initialSearch = '?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(resourceID) + '&q=payments&sync=OutOfSync&account=210987654321';
+  const window = { location: { pathname: '/console', search: initialSearch, hash } };
+  const history = { replaceState(_state, _title, url) {
+    const [pathAndQuery, nextHash = ''] = String(url).split('#');
+    const [pathname, query = ''] = pathAndQuery.split('?');
+    window.location.pathname = pathname || '/console';
+    window.location.search = query ? '?' + query : '';
+    window.location.hash = nextHash ? '#' + nextHash : '';
+  } };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetchImpl, history, Element, InputElement);
+  await settle();
+  await settle();
+  return { document, window, initialSearch };
+}
+
+(async () => {
+  let resolveLogs;
+  const recentLogsRun = await renderScenario('#resource-recent-logs', (url) => {
+    if (url === deploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === logsURL) return new Promise((resolve) => { resolveLogs = resolve; });
+    if (url === inspectionURL) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'ecs_service', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn: 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-staging', serviceArn: 'arn:aws:ecs:ap-northeast-2:210987654321:service/payments-staging/payments-api-staging-service', serviceName: 'payments-api-staging-service', status: 'ACTIVE', launchType: 'FARGATE', desiredCount: 2, runningCount: 2, pendingCount: 0, minimumHealthyPercent: 100, maximumPercent: 200, healthCheckGracePeriodSeconds: 45, taskDefinition: 'payments-api:42', deployments: [], events: [] } }) });
+    }
+    throw new Error('unexpected recent-logs fetch url: ' + url);
+  });
+  if (recentLogsRun.window.location.pathname !== '/console') throw new Error('expected resource hash pathname to stay stable, got ' + recentLogsRun.window.location.pathname);
+  if (recentLogsRun.window.location.search !== recentLogsRun.initialSearch) throw new Error('expected resource hash query to stay stable, got ' + recentLogsRun.window.location.search);
+  if (recentLogsRun.window.location.hash !== '#resource-recent-logs') throw new Error('expected recent logs hash to stay stable, got ' + recentLogsRun.window.location.hash);
+  const recentLogsRoot = recentLogsRun.document.getElementById('accounts');
+  const sectionIDs = collectNodes(recentLogsRoot, (node) => typeof node.id === 'string' && node.id.startsWith('resource-')).map((node) => node.id).sort();
+  const expectedSectionIDs = ['resource-live-inspection', 'resource-recent-logs', 'resource-rollout-execution', 'resource-runtime-history', 'resource-status-conditions'];
+  if (JSON.stringify(sectionIDs) !== JSON.stringify(expectedSectionIDs)) throw new Error('unexpected resource section ids: ' + JSON.stringify(sectionIDs));
+  const sectionLinks = collectNodes(recentLogsRoot, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#resource-'));
+  const encodedResourceID = encodeURIComponent(resourceID);
+  const expectedLinks = [
+    ['#resource-runtime-history', 'Runtime history'],
+    ['#resource-rollout-execution', 'Rollout execution'],
+    ['#resource-status-conditions', 'Conditions'],
+    ['#resource-live-inspection', 'Live inspection'],
+    ['#resource-recent-logs', 'Recent logs'],
+  ];
+  if (sectionLinks.length !== expectedLinks.length) throw new Error('expected five resource section links, got ' + sectionLinks.length);
+  expectedLinks.forEach(([hashSuffix, text]) => {
+    const link = sectionLinks.find((node) => node.textContent === text);
+    if (!link) throw new Error('missing resource section link ' + text);
+    if (!link.href.startsWith('/console?page=resource')) throw new Error('expected resource section link to stay on the resource page for ' + text + ', got ' + link.href);
+    const decodedHref = decodeURIComponent(link.href.replace(/\+/g, '%20'));
+    ['q=payments', 'sync=OutOfSync', 'account=210987654321', 'deployment=payments-api-staging', 'resourceType=ecsService', 'resourceId=' + resourceID].forEach((fragment) => {
+      const source = fragment.startsWith('resourceId=') ? decodedHref : link.href;
+      if (!source.includes(fragment)) throw new Error('expected resource section link to preserve ' + fragment + ' for ' + text + ', got ' + link.href);
+    });
+    if (!link.href.endsWith(hashSuffix)) throw new Error('expected resource section link to end with ' + hashSuffix + ' for ' + text + ', got ' + link.href);
+    if (link.target !== '_self' || link.rel) throw new Error('expected resource section link to stay in-shell for ' + text);
+  });
+  const recentLogsScrollsBefore = recentLogsRun.document.scrollEvents.filter((event) => event.id === 'resource-recent-logs').length;
+  if (recentLogsScrollsBefore < 1) throw new Error('expected initial recent logs hash to scroll the matching section into view');
+  resolveLogs({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, entries: [] }) });
+  await settle();
+  await settle();
+  const recentLogsScrollsAfter = recentLogsRun.document.scrollEvents.filter((event) => event.id === 'resource-recent-logs').length;
+  if (recentLogsScrollsAfter <= recentLogsScrollsBefore) throw new Error('expected recent logs hash to re-scroll after lazy panel load');
+  if (!recentLogsRun.document.lastScrolledTarget || recentLogsRun.document.lastScrolledTarget.id !== 'resource-recent-logs') throw new Error('expected recent logs hash to remain the active scroll target after lazy panel load');
+
+  let resolveInspection;
+  const inspectionRun = await renderScenario('#resource-live-inspection', (url) => {
+    if (url === deploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === inspectionURL) return new Promise((resolve) => { resolveInspection = resolve; });
+    throw new Error('unexpected live-inspection fetch url: ' + url);
+  });
+  if (inspectionRun.window.location.hash !== '#resource-live-inspection') throw new Error('expected live inspection hash to stay stable, got ' + inspectionRun.window.location.hash);
+  const inspectionScrollsBefore = inspectionRun.document.scrollEvents.filter((event) => event.id === 'resource-live-inspection').length;
+  if (inspectionScrollsBefore < 1) throw new Error('expected initial live inspection hash to scroll the matching section into view');
+  resolveInspection({ ok: true, json: () => Promise.resolve({ available: true, source: 'ecs_service', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn: 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-staging', serviceArn: 'arn:aws:ecs:ap-northeast-2:210987654321:service/payments-staging/payments-api-staging-service', serviceName: 'payments-api-staging-service', status: 'ACTIVE', launchType: 'FARGATE', desiredCount: 2, runningCount: 2, pendingCount: 0, minimumHealthyPercent: 100, maximumPercent: 200, healthCheckGracePeriodSeconds: 45, taskDefinition: 'payments-api:42', deployments: [], events: [] } }) });
+  await settle();
+  await settle();
+  const inspectionScrollsAfter = inspectionRun.document.scrollEvents.filter((event) => event.id === 'resource-live-inspection').length;
+  if (inspectionScrollsAfter <= inspectionScrollsBefore) throw new Error('expected live inspection hash to re-scroll after lazy panel load');
+  if (!inspectionRun.document.lastScrolledTarget || inspectionRun.document.lastScrolledTarget.id !== 'resource-live-inspection') throw new Error('expected live inspection hash to remain the active scroll target after lazy panel load');
+})();
+`
+
+	runNodeHarness(t, nodeProgram)
+}
+
 func TestResourceDetailPageRecentLogsWithNodeHarness(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not installed")

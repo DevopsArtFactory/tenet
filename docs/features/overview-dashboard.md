@@ -144,7 +144,7 @@ The bookmarkable `/?page=resource&deployment={name}...` and `/?page=drift&deploy
 
 ### Resource detail quick navigation
 
-The embedded `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}` page now includes explicit breadcrumb chrome plus the existing compact quick-navigation strip above the deeper runtime/log/inspection sections.
+The embedded `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}` page now includes explicit breadcrumb chrome plus the compact quick-navigation strip above the deeper runtime/log/inspection sections.
 
 Current behavior:
 - renders breadcrumb chrome with `_self` links for prior drill-down levels, including the account step when the loaded deployment detail exposes `awsAccountId`
@@ -152,7 +152,9 @@ Current behavior:
 - keeps all links bookmarkable and `_self` inside the embedded shell
 - includes `Back to application`, `Drift view`, `Plan/apply`, and deployment-scoped `Audit log` links
 - renders the current resource as an explicit non-click chip so the strip does not present the active destination as a lateral link
+- adds an `On this page` group with `_self` fragment links for the rendered resource sections, using stable ids such as `resource-runtime-history`, `resource-rollout-execution`, `resource-status-conditions`, `resource-live-inspection`, and `resource-recent-logs` while preserving the current bookmarkable pathname/query
 - derives sibling resource links only from the already loaded deployment-detail payload, so the strip does not introduce another fetch path
+- re-applies hash scrolling after the lazy `Recent logs` and `Live inspection` panels repaint so shared deep links such as `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}#resource-live-inspection` reopen the intended section after async render
 - keeps the anchors outside toggle buttons and other nested interactive controls
 
 ### Audit timeline page

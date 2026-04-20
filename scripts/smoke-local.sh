@@ -861,11 +861,19 @@ assert "pushPlanSection(actionsSection, 'plan-preview-actions', 'Plan preview ac
 assert "pushPlanSection(applySection, 'plan-apply-actions', 'Apply request actions');" in ui, ui
 assert "pushPlanSection(planOperationsSection, 'plan-operations', 'Plan operations');" in ui, ui
 assert "header.append(head, createWorkspaceQuickNav(detail, mode, planSectionLinks), ...sections);" in ui, ui
-assert "const createResourceQuickNav = (detail, resource) => {" in ui, ui
+assert "const createResourceQuickNav = (detail, resource, sectionLinks = []) => {" in ui, ui
 assert "createElement('div', 'quick-nav-title', 'Quick navigation')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Current resource')" in ui, ui
+assert "createElement('div', 'quick-nav-label', 'On this page')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Sibling resources')" in ui, ui
 assert "createQuickNavChip(resource.name, `Current resource: ${resource.name}`)" in ui, ui
+assert "const pushResourceSection = (section, sectionID, label) => {" in ui, ui
+assert "href: buildPageSectionURL('resource', sectionID, {" in ui, ui
+assert "pushResourceSection(historySection, 'resource-runtime-history', 'Runtime history');" in ui, ui
+assert "pushResourceSection(executionSection, 'resource-rollout-execution', 'Rollout execution');" in ui, ui
+assert "pushResourceSection(conditionsSection, 'resource-status-conditions', 'Conditions');" in ui, ui
+assert "pushResourceSection(inspectionSection, 'resource-live-inspection', 'Live inspection');" in ui, ui
+assert "pushResourceSection(logsSection, 'resource-recent-logs', 'Recent logs');" in ui, ui
 assert "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')" in ui, ui
 assert "createNavLink(buildPageURL('resource', {" in ui, ui
 assert "No sibling linked resources are available for this application." in ui, ui
@@ -922,13 +930,20 @@ for body in (resource_ui, ecs_resource_ui):
     assert "const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);" in body, body
     assert "const renderResourceDetailPage = (detail) => {" in body, body
     assert "currentLabel: resource.name," in body, body
-    assert "const createResourceQuickNav = (detail, resource) => {" in body, body
+    assert "const createResourceQuickNav = (detail, resource, sectionLinks = []) => {" in body, body
+    assert "const pushResourceSection = (section, sectionID, label) => {" in body, body
+    assert "pushResourceSection(historySection, 'resource-runtime-history', 'Runtime history');" in body, body
+    assert "pushResourceSection(executionSection, 'resource-rollout-execution', 'Rollout execution');" in body, body
+    assert "pushResourceSection(conditionsSection, 'resource-status-conditions', 'Conditions');" in body, body
+    assert "pushResourceSection(inspectionSection, 'resource-live-inspection', 'Live inspection');" in body, body
+    assert "pushResourceSection(logsSection, 'resource-recent-logs', 'Recent logs');" in body, body
     assert "const renderOperatorReadFailurePanel = (container, title, actions, route, error) => {" in body, body
     assert "const resourceLogsReadRoute = (deploymentName, resource) => `GET ${buildResourceLogsRoute(deploymentName, resource)}`;" in body, body
     assert "const resourceInspectionReadRoute = (deploymentName, resource) => `GET ${buildResourceInspectionRoute(deploymentName, resource)}`;" in body, body
     assert "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')" in body, body
     assert "createNavLink(buildPageURL('resource', {" in body, body
     assert 'Quick navigation' in body, body
+    assert 'On this page' in body, body
 assert 'Linked resources' in ui, ui
 assert 'No linked resources are available in this drift workspace yet.' in ui, ui
 assert 'Audit timeline' in audit_ui, audit_ui
