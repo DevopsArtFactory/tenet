@@ -45,6 +45,8 @@ type Request struct {
 	ResourceType        string
 	ResourceName        string
 	ResourceDescription string
+	BackingResourceType string
+	BackingResourceName string
 	ControlAccountID    string
 	TargetAccountID     string
 	Region              string
@@ -52,16 +54,25 @@ type Request struct {
 }
 
 type Result struct {
-	DeploymentName         string                    `json:"deploymentName"`
-	ResourceType           string                    `json:"resourceType"`
-	ResourceName           string                    `json:"resourceName"`
-	LookupContext          LookupContext             `json:"lookupContext"`
-	Available              bool                      `json:"available"`
-	Source                 string                    `json:"source"`
-	ECSService             *ECSServiceInspection     `json:"ecsService,omitempty"`
-	AutoScalingGroup       *AutoScalingInspection    `json:"autoScalingGroup,omitempty"`
-	TrafficRoutingResource *TrafficRoutingInspection `json:"trafficRoutingResource,omitempty"`
-	UnavailableReason      string                    `json:"unavailableReason"`
+	DeploymentName          string                             `json:"deploymentName"`
+	ResourceType            string                             `json:"resourceType"`
+	ResourceName            string                             `json:"resourceName"`
+	LookupContext           LookupContext                      `json:"lookupContext"`
+	Available               bool                               `json:"available"`
+	Source                  string                             `json:"source"`
+	ECSService              *ECSServiceInspection              `json:"ecsService,omitempty"`
+	AutoScalingGroup        *AutoScalingInspection             `json:"autoScalingGroup,omitempty"`
+	UserDataBootstrapSource *UserDataBootstrapSourceInspection `json:"userDataBootstrapSource,omitempty"`
+	TrafficRoutingResource  *TrafficRoutingInspection          `json:"trafficRoutingResource,omitempty"`
+	UnavailableReason       string                             `json:"unavailableReason"`
+}
+
+type UserDataBootstrapSourceInspection struct {
+	DesiredBootstrapSource  string                            `json:"desiredBootstrapSource"`
+	ObservedBootstrapSource string                            `json:"observedBootstrapSource,omitempty"`
+	BackingResourceType     string                            `json:"backingResourceType,omitempty"`
+	BackingResourceName     string                            `json:"backingResourceName,omitempty"`
+	LaunchTemplate          *AutoScalingLaunchTemplateSummary `json:"launchTemplate,omitempty"`
 }
 
 type TrafficRoutingInspection struct {
@@ -521,6 +532,34 @@ func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
 			return Result{}, err
 		}
 		return availableAutoScalingResult(req, detail), nil
+	case "userDataBootstrapSource":
+		if crossAccountWithoutObserverRole(req) {
+			return unavailableResult(req, resourceaws.UnavailableReasonCrossAccountNotConfigured), nil
+		}
+		if strings.TrimSpace(req.BackingResourceName) == "" {
+			return unavailableResult(req, resourceaws.UnavailableReasonNoLogSource), nil
+		}
+		inspect := s.options.InspectAutoScalingGroup
+		if inspect == nil {
+			if !s.options.EnableAWS {
+				return Result{}, ErrNotImplemented
+			}
+			inspect = s.inspectAutoScalingGroupFromAWS
+		}
+		detail, err := inspect(ctx, AutoScalingGroupRequest{
+			DeploymentName:  req.DeploymentName,
+			ResourceName:    req.BackingResourceName,
+			Region:          req.Region,
+			TargetAccountID: req.TargetAccountID,
+			ObserverRoleARN: req.ObserverRoleARN,
+		})
+		if err != nil {
+			if reason, ok := resourceaws.UnavailableReasonForError(err); ok {
+				return unavailableResult(req, reason), nil
+			}
+			return Result{}, err
+		}
+		return availableUserDataBootstrapSourceResult(req, detail), nil
 	default:
 		return unavailableResult(req, resourceaws.UnavailableReasonUnsupportedResourceType), nil
 	}
@@ -575,6 +614,25 @@ func availableAutoScalingResult(req Request, detail AutoScalingInspection) Resul
 	}
 }
 
+func availableUserDataBootstrapSourceResult(req Request, detail AutoScalingInspection) Result {
+	return Result{
+		DeploymentName: req.DeploymentName,
+		ResourceType:   req.ResourceType,
+		ResourceName:   req.ResourceName,
+		LookupContext:  lookupContext(req),
+		Available:      true,
+		Source:         SourceAutoScalingGroup,
+		UserDataBootstrapSource: &UserDataBootstrapSourceInspection{
+			DesiredBootstrapSource:  req.ResourceName,
+			ObservedBootstrapSource: strings.TrimSpace(detail.LaunchTemplateBootstrapSource),
+			BackingResourceType:     strings.TrimSpace(req.BackingResourceType),
+			BackingResourceName:     strings.TrimSpace(req.BackingResourceName),
+			LaunchTemplate:          autoScalingInspectionObservedLaunchTemplate(detail),
+		},
+		UnavailableReason: "",
+	}
+}
+
 func availableTrafficRoutingResult(req Request, detail TrafficRoutingInspection) Result {
 	source := SourceTrafficRoutingAWS
 	if detail.InspectionMode == "summary_only" {
@@ -590,6 +648,24 @@ func availableTrafficRoutingResult(req Request, detail TrafficRoutingInspection)
 		TrafficRoutingResource: &detail,
 		UnavailableReason:      "",
 	}
+}
+
+func autoScalingInspectionObservedLaunchTemplate(detail AutoScalingInspection) *AutoScalingLaunchTemplateSummary {
+	if detail.LaunchTemplate != nil {
+		return cloneAutoScalingLaunchTemplateSummary(detail.LaunchTemplate)
+	}
+	if detail.MixedInstancesPolicy != nil && detail.MixedInstancesPolicy.LaunchTemplate != nil {
+		return cloneAutoScalingLaunchTemplateSummary(detail.MixedInstancesPolicy.LaunchTemplate)
+	}
+	return nil
+}
+
+func cloneAutoScalingLaunchTemplateSummary(template *AutoScalingLaunchTemplateSummary) *AutoScalingLaunchTemplateSummary {
+	if template == nil {
+		return nil
+	}
+	cloned := *template
+	return &cloned
 }
 
 func trafficRoutingInspection(req Request) TrafficRoutingInspection {

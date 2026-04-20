@@ -3428,6 +3428,7 @@ const ecsResourceID = 'ecsService::payments-api-staging-service::Primary ECS ser
 const summaryResourceID = 'codeDeployDeploymentGroup::payments-api-staging Deployment Group::Linear traffic shifting deployment group';
 const unsupportedResourceID = 'productionListenerRule::payments-api-staging-prod-listener::Weighted listener rule';
 const asgResourceID = 'candidateAutoScalingGroup::payments-api-prod-candidate::Candidate capacity';
+const bootstrapResourceID = 'userDataBootstrapSource::file:userdata/payments-api-prod.sh::Normalized userdata bootstrap source for candidate EC2 capacity';
 const trafficShiftPlanResourceID = 'trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan';
 
 async function renderWithFetch(search, fetchImpl, settleCount = 2) {
@@ -3607,6 +3608,41 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!asgSupportedText.includes('Lifecycle state · InService')) throw new Error('expected ASG inspection to render lifecycle state');
   if (!asgSupportedText.includes('Protected from scale-in · True')) throw new Error('expected ASG inspection to render protected-from-scale-in');
   if (!asgSupportedText.includes('Weighted capacity · 1')) throw new Error('expected ASG inspection to render weighted capacity');
+
+  const bootstrapLogsURL = '/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=userDataBootstrapSource&resourceName=file%3Auserdata%2Fpayments-api-prod.sh';
+  const bootstrapInspectionURL = '/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=userDataBootstrapSource&resourceName=file%3Auserdata%2Fpayments-api-prod.sh';
+  const bootstrapSupportedRun = await renderWithFetch('?page=resource&deployment=payments-api-prod&resourceType=userDataBootstrapSource&resourceId=' + encodeURIComponent(bootstrapResourceID), (url) => {
+    if (url === asgDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(asgDetailBody) });
+    if (url === bootstrapLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === bootstrapInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({
+      available: true,
+      source: 'auto_scaling_group',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true },
+      userDataBootstrapSource: {
+        desiredBootstrapSource: 'file:userdata/payments-api-prod.sh',
+        observedBootstrapSource: 'file:userdata/payments-api-prod-legacy.sh',
+        backingResourceType: 'candidateAutoScalingGroup',
+        backingResourceName: 'payments-api-prod-candidate',
+        launchTemplate: {
+          id: 'lt-abc123',
+          name: 'payments-api-prod-candidate',
+          version: '$Default',
+        },
+      },
+    }) });
+    throw new Error('unexpected bootstrap-source fetch url: ' + url);
+  });
+  const bootstrapSupportedText = collectText(bootstrapSupportedRun.document.getElementById('accounts')).join(' | ');
+  if (!bootstrapSupportedText.includes('Desired bootstrap source')) throw new Error('expected bootstrap-source inspection to render desired source label');
+  if (!bootstrapSupportedText.includes('file:userdata/payments-api-prod.sh')) throw new Error('expected bootstrap-source inspection to render desired source value');
+  if (!bootstrapSupportedText.includes('Observed bootstrap source')) throw new Error('expected bootstrap-source inspection to render observed source label');
+  if (!bootstrapSupportedText.includes('file:userdata/payments-api-prod-legacy.sh')) throw new Error('expected bootstrap-source inspection to render observed source value');
+  if (!bootstrapSupportedText.includes('Backing resource type')) throw new Error('expected bootstrap-source inspection to render backing resource type label');
+  if (!bootstrapSupportedText.includes('candidateAutoScalingGroup')) throw new Error('expected bootstrap-source inspection to render backing resource type value');
+  if (!bootstrapSupportedText.includes('Observed launch template')) throw new Error('expected bootstrap-source inspection to render observed launch template label');
+  if (!bootstrapSupportedText.includes('payments-api-prod-candidate · version $Default · id lt-abc123')) throw new Error('expected bootstrap-source inspection to render observed launch template value');
+  if (!bootstrapSupportedText.includes('Bootstrap source observation')) throw new Error('expected bootstrap-source inspection to render observation summary heading');
+  if (!bootstrapSupportedText.includes('Observed launch template bootstrap source differs from the normalized desired bootstrap source.')) throw new Error('expected bootstrap-source inspection to render mismatch summary');
 
   const trafficShiftPlanLogsURL = '/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing';
   const trafficShiftPlanInspectionURL = '/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing';

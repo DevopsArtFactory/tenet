@@ -1416,6 +1416,11 @@ func TestAPIOptionsOverviewDeploymentResourceInspectionUsesFallbackWhenExecution
 			resourceName:        "api-prod-weighted-routing",
 			resourceDescription: "Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s",
 		},
+		{
+			resourceType:        "userDataBootstrapSource",
+			resourceName:        "file:userdata/api-prod.sh",
+			resourceDescription: "Normalized userdata bootstrap source for candidate EC2 capacity",
+		},
 	} {
 		provider.calls = 0
 		provider.lastRequest = resourceinspection.Request{}
@@ -1429,6 +1434,55 @@ func TestAPIOptionsOverviewDeploymentResourceInspectionUsesFallbackWhenExecution
 		}
 		if provider.lastRequest.ResourceType != resource.resourceType || provider.lastRequest.ResourceName != resource.resourceName || provider.lastRequest.ResourceDescription != resource.resourceDescription {
 			t.Fatalf("unexpected resource inspection request for %s/%s: %+v", resource.resourceType, resource.resourceName, provider.lastRequest)
+		}
+		if resource.resourceType == "userDataBootstrapSource" {
+			if provider.lastRequest.BackingResourceType != "candidateAutoScalingGroup" || provider.lastRequest.BackingResourceName != "api-prod-candidate" {
+				t.Fatalf("expected bootstrap-source fallback to target candidate ASG, got %+v", provider.lastRequest)
+			}
+		}
+	}
+}
+
+func TestAPIOptionsOverviewDeploymentResourceInspectionUsesASGInstanceRefreshFallbackWhenExecutionIsMissing(t *testing.T) {
+	repoRoot := writeRollingEC2RepositoryFixture(t)
+	provider := &fakeResourceInspectionProvider{result: resourceinspection.Result{Available: true}}
+	restore := stubResourceInspectionProviderFactory(provider)
+	defer restore()
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
+	for _, resource := range []struct {
+		resourceType        string
+		resourceName        string
+		resourceDescription string
+	}{
+		{
+			resourceType:        "serviceAutoScalingGroup",
+			resourceName:        "api-prod-service",
+			resourceDescription: "Service Auto Scaling Group Tenet refreshes in place",
+		},
+		{
+			resourceType:        "userDataBootstrapSource",
+			resourceName:        "file:userdata/api-prod-refresh.sh",
+			resourceDescription: "Normalized userdata bootstrap source for refreshed EC2 instances",
+		},
+	} {
+		provider.calls = 0
+		provider.lastRequest = resourceinspection.Request{}
+
+		_, err := options.OverviewDeploymentResourceInspection(context.Background(), "api-prod", resource.resourceType, resource.resourceName)
+		if err != nil {
+			t.Fatalf("expected instance-refresh fallback resource binding to work for %s/%s, got %v", resource.resourceType, resource.resourceName, err)
+		}
+		if provider.calls != 1 {
+			t.Fatalf("expected provider to run once for %s/%s, got %d calls", resource.resourceType, resource.resourceName, provider.calls)
+		}
+		if provider.lastRequest.ResourceType != resource.resourceType || provider.lastRequest.ResourceName != resource.resourceName || provider.lastRequest.ResourceDescription != resource.resourceDescription {
+			t.Fatalf("unexpected resource inspection request for %s/%s: %+v", resource.resourceType, resource.resourceName, provider.lastRequest)
+		}
+		if resource.resourceType == "userDataBootstrapSource" {
+			if provider.lastRequest.BackingResourceType != "serviceAutoScalingGroup" || provider.lastRequest.BackingResourceName != "api-prod-service" {
+				t.Fatalf("expected refresh bootstrap-source fallback to target service ASG, got %+v", provider.lastRequest)
+			}
 		}
 	}
 }
