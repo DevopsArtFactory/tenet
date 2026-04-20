@@ -239,6 +239,7 @@ func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
 		"createElement('div', 'quick-nav-current', `${deploymentName || 'Application'} · ${resource.name}`)",
 		"createElement('div', 'quick-nav-label', 'Application')",
 		"createElement('div', 'quick-nav-label', 'Current resource')",
+		"createElement('div', 'quick-nav-label', 'Current section')",
 		"createElement('div', 'quick-nav-label', 'On this page')",
 		"createElement('div', 'quick-nav-label', 'Sibling resources')",
 		"createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')",
@@ -246,7 +247,13 @@ func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
 		"createNavLink(buildPageURL('plan', { deployment: deploymentName }), 'Plan/apply', '_self')",
 		"createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self')",
 		"createQuickNavChip(resource.name, `Current resource: ${resource.name}`)",
+		"const activeSectionID = currentHashTargetID();",
+		"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)",
+		"createElement('div', 'quick-nav-empty', 'No section is currently targeted.')",
+		"sectionLink?.sectionID !== currentSectionLink?.sectionID",
+		"createElement('div', 'quick-nav-empty', 'No additional section links are available for this resource.')",
 		"const pushResourceSection = (section, sectionID, label) => {",
+		"sectionID,",
 		"href: buildPageSectionURL('resource', sectionID, {",
 		"pushResourceSection(historySection, 'resource-runtime-history', 'Runtime history');",
 		"pushResourceSection(executionSection, 'resource-rollout-execution', 'Rollout execution');",
@@ -259,7 +266,10 @@ func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
 		"resourceId: sibling.id,",
 		"}), sibling.name, '_self')",
 		"'No sibling linked resources are available for this application.'",
-		"page.append(createResourceQuickNav(detail, resource, resourceSectionLinks), shell, historySection, executionSection, conditionsSection, inspectionSection, logsSection);",
+		"const quickNav = createResourceQuickNav(detail, resource, resourceSectionLinks);",
+		"page.append(quickNav, shell, historySection, executionSection, conditionsSection, inspectionSection, logsSection);",
+		"activeResourceQuickNavSync = typeof quickNav.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;",
+		"syncActiveResourceQuickNav();",
 		"scrollToCurrentHashTarget();",
 	} {
 		if !strings.Contains(body, fragment) {
@@ -274,8 +284,13 @@ func TestEmbeddedUIIncludesDriftSectionNavigation(t *testing.T) {
 	for _, fragment := range []string{
 		"const buildPageSectionURL = (page, sectionID, extras = {}) => {",
 		"return sectionID ? `${baseURL}#${sectionID}` : baseURL;",
+		"const currentHashTargetID = () => {",
+		"let activeResourceQuickNavSync = null;",
+		"const syncActiveResourceQuickNav = () => {",
 		"const scrollToCurrentHashTarget = () => {",
 		"target.scrollIntoView({ block: 'start', behavior: 'auto' });",
+		"window.addEventListener('hashchange', () => {",
+		"syncActiveResourceQuickNav();",
 		"const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = []) => {",
 		"createElement('div', 'quick-nav-label', 'On this page')",
 		"buildPageSectionURL('drift', 'drift-runtime-signals', { deployment: deploymentName })",
@@ -1546,6 +1561,12 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')\" in body, body") {
 		t.Fatalf("expected smoke-local.sh to assert resource page back-link contract for both resource pages")
 	}
+	if !strings.Contains(text, "assert 'Current section' in body, body") {
+		t.Fatalf("expected smoke-local.sh to assert resource page current-section copy")
+	}
+	if !strings.Contains(text, "assert \"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)\" in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert resource page current-section chip contract")
+	}
 	if !strings.Contains(text, "assert 'Audit timeline' in audit_ui, audit_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains audit timeline copy")
 	}
@@ -2013,6 +2034,34 @@ func TestOverviewDocsDescribeApplicationPageSectionNavigation(t *testing.T) {
 			"`On this page` group",
 			"`Workloads`, `Traffic routing`, `Config and access`, and `Controller runtime events`",
 			"`/?page=application&deployment={name}#application-runtime-events`",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
+	}
+}
+
+func TestOverviewDocsDescribeResourcePageCurrentSectionNavigation(t *testing.T) {
+	files := map[string][]string{
+		"../../README.md": {
+			"`Current section` chip",
+			"`On this page` group for the remaining stable section hashes",
+			"`/?page=resource...#resource-recent-logs`",
+		},
+		"../../docs/features/overview-dashboard.md": {
+			"`Current section` group",
+			"`On this page` group as `_self` fragment links for the remaining rendered resource sections",
+			"`window.location.hash`",
 		},
 	}
 

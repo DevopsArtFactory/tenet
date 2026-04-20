@@ -152,8 +152,10 @@ Current behavior:
 - keeps all links bookmarkable and `_self` inside the embedded shell
 - includes `Back to application`, `Drift view`, `Plan/apply`, and deployment-scoped `Audit log` links
 - renders the current resource as an explicit non-click chip so the strip does not present the active destination as a lateral link
-- adds an `On this page` group with `_self` fragment links for the rendered resource sections, using stable ids such as `resource-runtime-history`, `resource-rollout-execution`, `resource-status-conditions`, `resource-live-inspection`, and `resource-recent-logs` while preserving the current bookmarkable pathname/query
+- adds a `Current section` group that derives a non-click chip from `window.location.hash` when the bookmarkable route targets one of the rendered resource sections
+- keeps the `On this page` group as `_self` fragment links for the remaining rendered resource sections, using stable ids such as `resource-runtime-history`, `resource-rollout-execution`, `resource-status-conditions`, `resource-live-inspection`, and `resource-recent-logs` while preserving the current bookmarkable pathname/query
 - derives sibling resource links only from the already loaded deployment-detail payload, so the strip does not introduce another fetch path
+- updates the `Current section` chip for initial deep links, later in-page hash changes, and lazy `Recent logs` / `Live inspection` repaints that preserve the same bookmarkable route
 - re-applies hash scrolling after the lazy `Recent logs` and `Live inspection` panels repaint so shared deep links such as `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}#resource-live-inspection` reopen the intended section after async render
 - keeps the anchors outside toggle buttons and other nested interactive controls
 

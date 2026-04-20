@@ -2774,6 +2774,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!breadcrumbChips.find((node) => node.textContent === 'payments-api-staging Deployment Group')) throw new Error('expected resource page current breadcrumb chip');
   if (!accountsText.includes('Quick navigation')) throw new Error('expected resource page quick navigation strip');
   if (!accountsText.includes('Current resource')) throw new Error('expected resource page current-resource label');
+  if (!accountsText.includes('Current section')) throw new Error('expected resource page current-section label');
   const quickBackLink = pageLinks.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Back to application' && node.target === '_self');
   if (!quickBackLink || quickBackLink.rel) throw new Error('expected resource page quick navigation back link');
   const driftLink = pageLinks.find((node) => node.href === '/?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Drift view' && node.target === '_self');
@@ -2784,6 +2785,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!auditLink || auditLink.rel) throw new Error('expected resource page quick navigation audit link');
   const currentResourceChip = quickNavChips.find((node) => node.textContent === 'payments-api-staging Deployment Group');
   if (!currentResourceChip) throw new Error('expected resource page current-resource chip');
+  const currentSectionChip = quickNavChips.find((node) => String(node.getAttribute('aria-label') || '').startsWith('Current section: '));
+  if (currentSectionChip) throw new Error('expected resource page without hash not to render a current-section chip');
   const siblingLink = pageLinks.find((node) => node.textContent === 'payments-api-staging ECS Service'
     && node.target === '_self'
     && node.href.includes('/?page=resource')
@@ -2954,6 +2957,23 @@ const createDocument = () => {
   document.byID.set('accounts', document.createElement('section'));
   return document;
 };
+const createWindow = (initialSearch, hash) => {
+  const listeners = {};
+  return {
+    location: { pathname: '/console', search: initialSearch, hash },
+    addEventListener(type, handler) {
+      listeners[type] = listeners[type] || [];
+      listeners[type].push(handler);
+    },
+    dispatchEvent(event) {
+      const handlers = listeners[event?.type] || [];
+      handlers.forEach((handler) => handler.call(this, event));
+    },
+    dispatchHashChange() {
+      this.dispatchEvent({ type: 'hashchange', target: this });
+    },
+  };
+};
 const collectNodes = (node, predicate) => {
   if (!node) return [];
   const matches = [];
@@ -2973,7 +2993,7 @@ const inspectionURL = '/v1/overview/deployments/payments-api-staging/resource-in
 async function renderScenario(hash, fetchImpl) {
   const document = createDocument();
   const initialSearch = '?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(resourceID) + '&q=payments&sync=OutOfSync&account=210987654321';
-  const window = { location: { pathname: '/console', search: initialSearch, hash } };
+  const window = createWindow(initialSearch, hash);
   const history = { replaceState(_state, _title, url) {
     const [pathAndQuery, nextHash = ''] = String(url).split('#');
     const [pathname, query = ''] = pathAndQuery.split('?');
@@ -3004,16 +3024,16 @@ async function renderScenario(hash, fetchImpl) {
   const sectionIDs = collectNodes(recentLogsRoot, (node) => typeof node.id === 'string' && node.id.startsWith('resource-')).map((node) => node.id).sort();
   const expectedSectionIDs = ['resource-live-inspection', 'resource-recent-logs', 'resource-rollout-execution', 'resource-runtime-history', 'resource-status-conditions'];
   if (JSON.stringify(sectionIDs) !== JSON.stringify(expectedSectionIDs)) throw new Error('unexpected resource section ids: ' + JSON.stringify(sectionIDs));
+  const recentLogsChip = collectNodes(recentLogsRoot, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip').find((node) => node.getAttribute('aria-label') === 'Current section: Recent logs');
+  if (!recentLogsChip) throw new Error('expected recent logs hash to render the current-section chip');
   const sectionLinks = collectNodes(recentLogsRoot, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#resource-'));
-  const encodedResourceID = encodeURIComponent(resourceID);
   const expectedLinks = [
     ['#resource-runtime-history', 'Runtime history'],
     ['#resource-rollout-execution', 'Rollout execution'],
     ['#resource-status-conditions', 'Conditions'],
     ['#resource-live-inspection', 'Live inspection'],
-    ['#resource-recent-logs', 'Recent logs'],
   ];
-  if (sectionLinks.length !== expectedLinks.length) throw new Error('expected five resource section links, got ' + sectionLinks.length);
+  if (sectionLinks.length !== expectedLinks.length) throw new Error('expected four remaining resource section links, got ' + sectionLinks.length);
   expectedLinks.forEach(([hashSuffix, text]) => {
     const link = sectionLinks.find((node) => node.textContent === text);
     if (!link) throw new Error('missing resource section link ' + text);
@@ -3026,6 +3046,7 @@ async function renderScenario(hash, fetchImpl) {
     if (!link.href.endsWith(hashSuffix)) throw new Error('expected resource section link to end with ' + hashSuffix + ' for ' + text + ', got ' + link.href);
     if (link.target !== '_self' || link.rel) throw new Error('expected resource section link to stay in-shell for ' + text);
   });
+  if (sectionLinks.find((node) => node.textContent === 'Recent logs')) throw new Error('expected active current section to be removed from On this page links');
   const recentLogsScrollsBefore = recentLogsRun.document.scrollEvents.filter((event) => event.id === 'resource-recent-logs').length;
   if (recentLogsScrollsBefore < 1) throw new Error('expected initial recent logs hash to scroll the matching section into view');
   resolveLogs({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, entries: [] }) });
@@ -3034,6 +3055,16 @@ async function renderScenario(hash, fetchImpl) {
   const recentLogsScrollsAfter = recentLogsRun.document.scrollEvents.filter((event) => event.id === 'resource-recent-logs').length;
   if (recentLogsScrollsAfter <= recentLogsScrollsBefore) throw new Error('expected recent logs hash to re-scroll after lazy panel load');
   if (!recentLogsRun.document.lastScrolledTarget || recentLogsRun.document.lastScrolledTarget.id !== 'resource-recent-logs') throw new Error('expected recent logs hash to remain the active scroll target after lazy panel load');
+  recentLogsRun.window.location.hash = '#resource-status-conditions';
+  recentLogsRun.window.dispatchHashChange();
+  await settle();
+  const updatedRecentLogsRoot = recentLogsRun.document.getElementById('accounts');
+  const statusConditionsChip = collectNodes(updatedRecentLogsRoot, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip').find((node) => node.getAttribute('aria-label') === 'Current section: Conditions');
+  if (!statusConditionsChip) throw new Error('expected hashchange to update the current-section chip');
+  const updatedSectionLinks = collectNodes(updatedRecentLogsRoot, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#resource-'));
+  if (updatedSectionLinks.find((node) => node.textContent === 'Conditions')) throw new Error('expected updated current section to be removed from On this page links after hashchange');
+  if (!updatedSectionLinks.find((node) => node.textContent === 'Recent logs')) throw new Error('expected previous current section to return to On this page links after hashchange');
+  if (!recentLogsRun.document.lastScrolledTarget || recentLogsRun.document.lastScrolledTarget.id !== 'resource-status-conditions') throw new Error('expected hashchange to scroll the new current section into view');
 
   let resolveInspection;
   const inspectionRun = await renderScenario('#resource-live-inspection', (url) => {
@@ -3043,6 +3074,8 @@ async function renderScenario(hash, fetchImpl) {
     throw new Error('unexpected live-inspection fetch url: ' + url);
   });
   if (inspectionRun.window.location.hash !== '#resource-live-inspection') throw new Error('expected live inspection hash to stay stable, got ' + inspectionRun.window.location.hash);
+  const inspectionChip = collectNodes(inspectionRun.document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip').find((node) => node.getAttribute('aria-label') === 'Current section: Live inspection');
+  if (!inspectionChip) throw new Error('expected live inspection hash to render the current-section chip');
   const inspectionScrollsBefore = inspectionRun.document.scrollEvents.filter((event) => event.id === 'resource-live-inspection').length;
   if (inspectionScrollsBefore < 1) throw new Error('expected initial live inspection hash to scroll the matching section into view');
   resolveInspection({ ok: true, json: () => Promise.resolve({ available: true, source: 'ecs_service', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn: 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-staging', serviceArn: 'arn:aws:ecs:ap-northeast-2:210987654321:service/payments-staging/payments-api-staging-service', serviceName: 'payments-api-staging-service', status: 'ACTIVE', launchType: 'FARGATE', desiredCount: 2, runningCount: 2, pendingCount: 0, minimumHealthyPercent: 100, maximumPercent: 200, healthCheckGracePeriodSeconds: 45, taskDefinition: 'payments-api:42', deployments: [], events: [] } }) });

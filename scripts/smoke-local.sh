@@ -864,10 +864,15 @@ assert "header.append(head, createWorkspaceQuickNav(detail, mode, planSectionLin
 assert "const createResourceQuickNav = (detail, resource, sectionLinks = []) => {" in ui, ui
 assert "createElement('div', 'quick-nav-title', 'Quick navigation')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Current resource')" in ui, ui
+assert "createElement('div', 'quick-nav-label', 'Current section')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'On this page')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Sibling resources')" in ui, ui
 assert "createQuickNavChip(resource.name, `Current resource: ${resource.name}`)" in ui, ui
+assert "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)" in ui, ui
+assert "createElement('div', 'quick-nav-empty', 'No section is currently targeted.')" in ui, ui
+assert "sectionLink?.sectionID !== currentSectionLink?.sectionID" in ui, ui
 assert "const pushResourceSection = (section, sectionID, label) => {" in ui, ui
+assert "sectionID," in ui, ui
 assert "href: buildPageSectionURL('resource', sectionID, {" in ui, ui
 assert "pushResourceSection(historySection, 'resource-runtime-history', 'Runtime history');" in ui, ui
 assert "pushResourceSection(executionSection, 'resource-rollout-execution', 'Rollout execution');" in ui, ui
@@ -943,6 +948,7 @@ for body in (resource_ui, ecs_resource_ui):
     assert "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')" in body, body
     assert "createNavLink(buildPageURL('resource', {" in body, body
     assert 'Quick navigation' in body, body
+    assert 'Current section' in body, body
     assert 'On this page' in body, body
 assert 'Linked resources' in ui, ui
 assert 'No linked resources are available in this drift workspace yet.' in ui, ui
