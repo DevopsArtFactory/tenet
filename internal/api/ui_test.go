@@ -2514,7 +2514,7 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
 			"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
 			"`X-Tenet-Authenticated-Id`",
-			"only enable either setting when every request reaches Tenet through a front door that authenticates the caller and strips any client-supplied `X-Tenet-Authenticated-*` headers",
+			"Only enable either setting when every request reaches Tenet through a front door that authenticates the caller and strips any client-supplied `X-Tenet-Authenticated-*` headers",
 			"Do not expose a header-trusting `tenet-api` instance directly to untrusted clients",
 			"Use `make smoke-docker` when you need to validate `compose.yaml`, confirm the `api`/`controller`/`redis` service contract",
 			"additive `X-User-*` alias support plus explicit `X-Tenet-Actor-*` precedence through immutable plan/apply/audit records",

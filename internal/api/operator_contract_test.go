@@ -716,7 +716,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`X-Tenet-Actor-*` values still win over `X-User-*` aliases for that local actor path",
 		"the trusted authenticated identity path resolves from `X-Tenet-Authenticated-*` headers or additive `X-User-*` aliases, and when explicit actor headers are absent Tenet now projects that authenticated identity into the persisted actor fields",
 		"restarting `tenet-api`",
-		"restarts the Compose `api` service with `TENET_API_TRUST_AUTHENTICATED_HEADERS=*** plus `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=*** to prove unauthenticated `GET /v1/overview/applications`, unauthenticated `GET /v1/status/deployments`, and unauthenticated `GET /v1/overview/accounts` fail with `401`",
+		"restarts the Compose `api` service with `TENET_API_TRUST_AUTHENTICATED_HEADERS=***` plus `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***` to prove unauthenticated `GET /v1/overview/applications`, unauthenticated `GET /v1/status/deployments`, and unauthenticated `GET /v1/overview/accounts` fail with `401`",
 		"unauthenticated `GET /v1/status/deployments`",
 		"trusted `X-Tenet-Authorized-Deployments` filters the returned application rows, raw status snapshots, and account aggregates",
 		"when both `payments-api-prod` and `worker-prod` are allowlisted, the Compose smoke proves the controller-populated raw status collection returns both rows",
