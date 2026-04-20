@@ -958,6 +958,9 @@ for body in (resource_ui, ecs_resource_ui):
     assert "const resourceInspectionReadRoute = (deploymentName, resource) => `GET ${buildResourceInspectionRoute(deploymentName, resource)}`;" in body, body
     assert "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')" in body, body
     assert "createNavLink(buildPageURL('resource', {" in body, body
+    assert "const resolveBackingResourceDrillDown = (detail, inspectionDetail) => {" in body, body
+    assert "const createBackingResourceHandoffSection = (detail, inspectionDetail) => {" in body, body
+    assert 'Resolved backing resource' in body, body
     assert 'Quick navigation' in body, body
     assert 'Current section' in body, body
     assert 'On this page' in body, body

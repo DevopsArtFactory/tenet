@@ -1898,7 +1898,7 @@
 
         const inspectionSection = createDetailSection('Live inspection');
         pushResourceSection(inspectionSection, 'resource-live-inspection', 'Live inspection');
-        renderResourceInspectionSection(inspectionSection, detail.name || currentPageState.deployment || '', resource).catch(() => {});
+        renderResourceInspectionSection(inspectionSection, detail, resource).catch(() => {});
 
         const logsSection = createDetailSection('Recent logs');
         pushResourceSection(logsSection, 'resource-recent-logs', 'Recent logs');
@@ -2204,13 +2204,16 @@
       const fetchResourceInspection = (deploymentName, resource) => {
         return fetchResourcePanelJSON(buildResourceInspectionRoute(deploymentName, resource), 'resource inspection request failed');
       };
-      const createResourceInspectionActions = (section, deploymentName, resource, isLoading = false) => [
-        createRefreshButton(
-          'Refresh live inspection',
-          isLoading || !deploymentName || !resource?.type || !resource?.name,
-          () => renderResourceInspectionSection(section, deploymentName, resource, { force: true }).catch(() => {}),
-        ),
-      ];
+      const createResourceInspectionActions = (section, detail, resource, isLoading = false) => {
+        const deploymentName = detail?.name || currentPageState.deployment || '';
+        return [
+          createRefreshButton(
+            'Refresh live inspection',
+            isLoading || !deploymentName || !resource?.type || !resource?.name,
+            () => renderResourceInspectionSection(section, detail, resource, { force: true }).catch(() => {}),
+          ),
+        ];
+      };
       const renderResourceInspectionState = (container, text, className = '', beforeNodes = [], afterNodes = [], actions = []) => {
         const heading = createDetailSectionHeader('Live inspection', actions);
         const stateNode = createElement('div', 'detail-state', text);
@@ -2408,26 +2411,59 @@
         }
         return 'Observed launch template bootstrap source differs from the normalized desired bootstrap source.';
       };
-      const renderUserDataBootstrapSourceInspection = (section, deploymentName, resource, result) => {
-        const detail = result?.userDataBootstrapSource;
-        const actions = createResourceInspectionActions(section, deploymentName, resource);
+      const resolveBackingResourceDrillDown = (detail, inspectionDetail) => {
+        const deploymentName = detail?.name || currentPageState.deployment || '';
+        const backingResourceType = typeof inspectionDetail?.backingResourceType === 'string' ? inspectionDetail.backingResourceType : '';
+        const backingResourceName = typeof inspectionDetail?.backingResourceName === 'string' ? inspectionDetail.backingResourceName : '';
+        if (!deploymentName || !backingResourceType || !backingResourceName) return null;
+        const backingResource = rolloutExecutionResources(detail)
+          .map((resource) => normalizeResource(resource))
+          .find((candidate) => candidate.type === backingResourceType && candidate.name === backingResourceName);
+        if (!backingResource) return null;
+        return {
+          resource: backingResource,
+          href: buildPageURL('resource', {
+            deployment: deploymentName,
+            resourceType: backingResource.type,
+            resourceId: backingResource.id,
+          }),
+        };
+      };
+      const createBackingResourceHandoffSection = (detail, inspectionDetail) => {
+        const handoff = resolveBackingResourceDrillDown(detail, inspectionDetail);
+        if (!handoff) return null;
+        const handoffSection = createElement('section', 'detail-section');
+        const handoffLinks = createElement('div', 'row-links');
+        handoffLinks.append(createNavLink(handoff.href, `Open ${handoff.resource.name} drill-down`, '_self'));
+        handoffSection.append(
+          createElement('h4', '', 'Resolved backing resource'),
+          createElement('p', 'detail-section-copy', `Open the resolved ${handoff.resource.type} drill-down Tenet used for this bootstrap-source inspection.`),
+          handoffLinks,
+        );
+        return handoffSection;
+      };
+      const renderUserDataBootstrapSourceInspection = (section, detail, resource, result) => {
+        const inspectionDetail = result?.userDataBootstrapSource;
+        const actions = createResourceInspectionActions(section, detail, resource);
         const metadata = createLookupContextGrid(result?.lookupContext, [
           ['Inspection source', metricValue(result?.source)],
-          ['Desired bootstrap source', textOrDash(detail?.desiredBootstrapSource)],
-          ['Observed bootstrap source', textOrDash(detail?.observedBootstrapSource)],
-          ['Backing resource type', textOrDash(detail?.backingResourceType)],
-          ['Backing resource name', textOrDash(detail?.backingResourceName)],
-          ['Observed launch template', autoScalingLaunchTemplateText(detail?.launchTemplate)],
+          ['Desired bootstrap source', textOrDash(inspectionDetail?.desiredBootstrapSource)],
+          ['Observed bootstrap source', textOrDash(inspectionDetail?.observedBootstrapSource)],
+          ['Backing resource type', textOrDash(inspectionDetail?.backingResourceType)],
+          ['Backing resource name', textOrDash(inspectionDetail?.backingResourceName)],
+          ['Observed launch template', autoScalingLaunchTemplateText(inspectionDetail?.launchTemplate)],
         ]);
+        const handoffSection = createBackingResourceHandoffSection(detail, inspectionDetail);
         const summarySection = createElement('section', 'detail-section');
         summarySection.append(
           createElement('h4', '', 'Bootstrap source observation'),
-          createElement('p', 'detail-section-copy', bootstrapSourceObservationText(detail)),
+          createElement('p', 'detail-section-copy', bootstrapSourceObservationText(inspectionDetail)),
         );
         section.replaceChildren(
           createDetailSectionHeader('Live inspection', actions),
           createElement('p', 'detail-section-copy', 'Live bootstrap-source inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
           metadata,
+          ...(handoffSection ? [handoffSection] : []),
           summarySection,
         );
       };
@@ -2460,8 +2496,9 @@
           summarySection,
         );
       };
-      const renderResourceInspectionPayload = (section, deploymentName, resource, result) => {
-        const actions = createResourceInspectionActions(section, deploymentName, resource);
+      const renderResourceInspectionPayload = (section, detail, resource, result) => {
+        const deploymentName = detail?.name || currentPageState.deployment || '';
+        const actions = createResourceInspectionActions(section, detail, resource);
         const metadata = createLookupContextGrid(result?.lookupContext, [
           ['Inspection source', metricValue(result?.source)],
         ]);
@@ -2482,7 +2519,7 @@
           return;
         }
         if (result?.userDataBootstrapSource) {
-          renderUserDataBootstrapSourceInspection(section, deploymentName, resource, result);
+          renderUserDataBootstrapSourceInspection(section, detail, resource, result);
           return;
         }
         if (result?.trafficRoutingResource) {
@@ -2491,18 +2528,19 @@
         }
         renderResourceInspectionState(section, 'No live inspection details are available for this resource yet.', '', [metadata], [], actions);
       };
-      const renderResourceInspectionSection = (section, deploymentName, resource, options = {}) => {
+      const renderResourceInspectionSection = (section, detail, resource, options = {}) => {
+        const deploymentName = detail?.name || currentPageState.deployment || '';
         const force = Boolean(options?.force);
         const inspectionKey = resourceInspectionCacheKey(deploymentName, resource);
         const cached = resourceInspectionStateByKey.get(inspectionKey);
-        const loadingActions = createResourceInspectionActions(section, deploymentName, resource, true);
+        const loadingActions = createResourceInspectionActions(section, detail, resource, true);
 
         if (!deploymentName || !resource?.type || !resource?.name) {
-          renderResourceInspectionState(section, 'Live inspection is unavailable for this resource.', '', [], [], createResourceInspectionActions(section, deploymentName, resource));
+          renderResourceInspectionState(section, 'Live inspection is unavailable for this resource.', '', [], [], createResourceInspectionActions(section, detail, resource));
           return Promise.resolve(null);
         }
         if (!force && cached?.status === 'ready') {
-          renderResourceInspectionPayload(section, deploymentName, resource, cached.result);
+          renderResourceInspectionPayload(section, detail, resource, cached.result);
           return Promise.resolve(cached.result);
         }
         if (cached?.status === 'loading') {
@@ -2516,7 +2554,7 @@
           .then((result) => {
             const current = resourceInspectionStateByKey.get(inspectionKey);
             resourceInspectionStateByKey.set(inspectionKey, { status: 'ready', result });
-            (current?.sections || []).forEach((container) => renderResourceInspectionPayload(container, deploymentName, resource, result));
+            (current?.sections || []).forEach((container) => renderResourceInspectionPayload(container, detail, resource, result));
             scrollToCurrentHashTarget();
             return result;
           })
@@ -2527,7 +2565,7 @@
               if (renderOperatorReadFailurePanel(
                 container,
                 'Live inspection',
-                createResourceInspectionActions(container, deploymentName, resource),
+                createResourceInspectionActions(container, detail, resource),
                 resourceInspectionReadRoute(deploymentName, resource),
                 error,
               )) {
@@ -2539,7 +2577,7 @@
                 'error',
                 [],
                 [],
-                createResourceInspectionActions(container, deploymentName, resource),
+                createResourceInspectionActions(container, detail, resource),
               );
             });
             scrollToCurrentHashTarget();

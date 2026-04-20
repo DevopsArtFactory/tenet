@@ -1370,9 +1370,9 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"const resourceInspectionReadRoute = (deploymentName, resource) => `GET ${buildResourceInspectionRoute(deploymentName, resource)}`;",
 		"const fetchResourceInspection = (deploymentName, resource) => {",
 		"return fetchResourcePanelJSON(buildResourceInspectionRoute(deploymentName, resource), 'resource inspection request failed');",
-		"const createResourceInspectionActions = (section, deploymentName, resource, isLoading = false) => [",
+		"const createResourceInspectionActions = (section, detail, resource, isLoading = false) => {",
 		"'Refresh live inspection'",
-		"renderResourceInspectionSection(section, deploymentName, resource, { force: true }).catch(() => {})",
+		"renderResourceInspectionSection(section, detail, resource, { force: true }).catch(() => {})",
 		"const renderResourceInspectionState = (container, text, className = '', beforeNodes = [], afterNodes = [], actions = []) => {",
 		"const resourceInspectionUnavailableReasonText = (reason) => {",
 		"return 'Live inspection is not supported for this resource type.';",
@@ -1432,13 +1432,23 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"const bootstrapSourceObservationText = (detail) => {",
 		"No explicit bootstrap-source marker was found in the observed launch template user data.",
 		"Observed launch template bootstrap source differs from the normalized desired bootstrap source.",
-		"const renderUserDataBootstrapSourceInspection = (section, deploymentName, resource, result) => {",
+		"const resolveBackingResourceDrillDown = (detail, inspectionDetail) => {",
+		"const backingResource = rolloutExecutionResources(detail)",
+		".map((resource) => normalizeResource(resource))",
+		".find((candidate) => candidate.type === backingResourceType && candidate.name === backingResourceName);",
+		"resourceId: backingResource.id,",
+		"const createBackingResourceHandoffSection = (detail, inspectionDetail) => {",
+		"Open ${handoff.resource.name} drill-down",
+		"Resolved backing resource",
+		"Open the resolved ${handoff.resource.type} drill-down Tenet used for this bootstrap-source inspection.",
+		"const renderUserDataBootstrapSourceInspection = (section, detail, resource, result) => {",
 		"Live bootstrap-source inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.",
 		"Desired bootstrap source",
 		"Observed bootstrap source",
 		"Backing resource type",
 		"Backing resource name",
 		"Observed launch template",
+		"...(handoffSection ? [handoffSection] : []),",
 		"Bootstrap source observation",
 		"const trafficRoutingInspectionModeText = (value) => {",
 		"return 'Rollout summary only';",
@@ -1448,10 +1458,10 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"Display name",
 		"Inspection mode",
 		"Rollout summary",
-		"const renderResourceInspectionPayload = (section, deploymentName, resource, result) => {",
+		"const renderResourceInspectionPayload = (section, detail, resource, result) => {",
 		"renderResourceInspectionState(section, 'Live inspection is unavailable for this resource.', '', [metadata], details, actions);",
 		"renderResourceInspectionState(section, 'No live inspection details are available for this resource yet.', '', [metadata], [], actions);",
-		"const renderResourceInspectionSection = (section, deploymentName, resource, options = {}) => {",
+		"const renderResourceInspectionSection = (section, detail, resource, options = {}) => {",
 		"const force = Boolean(options?.force);",
 		"const inspectionKey = resourceInspectionCacheKey(deploymentName, resource);",
 		"if (!force && cached?.status === 'ready') {",
@@ -1459,9 +1469,9 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"resourceInspectionReadRoute(deploymentName, resource),",
 		"renderResourceInspectionState(",
 		"`Failed to load live inspection: ${error.message}`",
-		"createResourceInspectionActions(container, deploymentName, resource),",
+		"createResourceInspectionActions(container, detail, resource),",
 		"createDetailSection('Live inspection');",
-		"renderResourceInspectionSection(inspectionSection, detail.name || currentPageState.deployment || '', resource).catch(() => {});",
+		"renderResourceInspectionSection(inspectionSection, detail, resource).catch(() => {});",
 		"Live inspection",
 		"Refresh live inspection",
 	} {
@@ -1603,6 +1613,15 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert \"createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')\" in body, body") {
 		t.Fatalf("expected smoke-local.sh to assert resource page back-link contract for both resource pages")
+	}
+	if !strings.Contains(text, "assert \"const resolveBackingResourceDrillDown = (detail, inspectionDetail) => {\" in body, body") {
+		t.Fatalf("expected smoke-local.sh to assert resource page backing-resource resolver contract")
+	}
+	if !strings.Contains(text, "assert \"const createBackingResourceHandoffSection = (detail, inspectionDetail) => {\" in body, body") {
+		t.Fatalf("expected smoke-local.sh to assert resource page backing-resource handoff contract")
+	}
+	if !strings.Contains(text, "assert 'Resolved backing resource' in body, body") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains backing-resource handoff copy")
 	}
 	if !strings.Contains(text, "assert 'Current section' in body, body") {
 		t.Fatalf("expected smoke-local.sh to assert resource page current-section copy")
