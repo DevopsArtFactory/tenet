@@ -133,6 +133,8 @@ That same fallback identity keeps both resource-log and resource-inspection dril
 - `GET /v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service`
 - `GET /v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service`
 
+The compose-backed smoke now extends that same bookmarkable surface to one representative bootstrap-source resource drill-down: it fetches the bookmarkable `/?page=resource&deployment=payments-api-prod&resourceType=userDataBootstrapSource&resourceId=userDataBootstrapSource::file:userdata/payments-api-prod.sh::Normalized userdata bootstrap source for candidate EC2 capacity` page plus the paired `GET /v1/overview/deployments/payments-api-prod/resource-logs?resourceType=userDataBootstrapSource&resourceName=file:userdata/payments-api-prod.sh` and `GET /v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=userDataBootstrapSource&resourceName=file:userdata/payments-api-prod.sh` reads, while treating explicit unavailable reasons such as `aws_unavailable` and `no_log_source` as expected local no-AWS outcomes.
+
 The additive inspection route stays read-only and local-friendly:
 - supported always-live summaries currently start with `ecsService`, `candidateAutoScalingGroup`, and `serviceAutoScalingGroup`
 - supported traffic-routing resources are `codeDeployDeploymentGroup`, `productionListener`, `testListener`, and `trafficShiftPlan`; `trafficShiftPlan` stays `summary_only`, while the CodeDeploy deployment-group/listener resources upgrade to `inspectionMode=live` when AWS inspection succeeds and fall back to the existing summary payload when it does not
