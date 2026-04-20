@@ -518,7 +518,44 @@ func deploymentExecutionResource(detail catalog.DeploymentOverviewDetail, resour
 			return resource, true
 		}
 	}
+	if resourceType == "userDataBootstrapSource" {
+		return filesystemUserDataBootstrapExecutionResource(detail, resourceName)
+	}
 	return domain.RolloutExecutionDetail{}, false
+}
+
+func filesystemUserDataBootstrapExecutionResource(detail catalog.DeploymentOverviewDetail, resourceName string) (domain.RolloutExecutionDetail, bool) {
+	requestedType, requestedPath, ok := splitUserDataBootstrapSource(resourceName)
+	if !ok || requestedType != "file" || requestedPath == "" || strings.TrimSpace(detail.UserData.Path) != requestedPath {
+		return domain.RolloutExecutionDetail{}, false
+	}
+	for _, resource := range rolloutExecutionResources(detail) {
+		if resource.Resource != "userDataBootstrapSource" {
+			continue
+		}
+		_, resourcePath, ok := splitUserDataBootstrapSource(resource.Name)
+		if ok && resourcePath == requestedPath {
+			return resource, true
+		}
+	}
+	return domain.RolloutExecutionDetail{}, false
+}
+
+func splitUserDataBootstrapSource(resourceName string) (string, string, bool) {
+	resourceName = strings.TrimSpace(resourceName)
+	if resourceName == "" {
+		return "", "", false
+	}
+	parts := strings.SplitN(resourceName, ":", 2)
+	if len(parts) == 1 {
+		return "", parts[0], true
+	}
+	resourceType := strings.TrimSpace(parts[0])
+	resourcePath := strings.TrimSpace(parts[1])
+	if resourcePath == "" {
+		return "", "", false
+	}
+	return resourceType, resourcePath, true
 }
 
 func resourceInspectionBackingResource(detail catalog.DeploymentOverviewDetail, resourceType string) (string, string) {
