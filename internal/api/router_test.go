@@ -3936,6 +3936,95 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		}
 	})
 
+	t.Run("returns bootstrap-source log payloads without changing the route contract", func(t *testing.T) {
+		expected := resourcelogs.Result{
+			DeploymentName: "api-prod",
+			ResourceType:   "userDataBootstrapSource",
+			ResourceName:   "file:userdata/api-prod.sh",
+			LookupContext: resourcelogs.LookupContext{
+				Region:                 "ap-northeast-2",
+				ControlAccountID:       "123456789012",
+				TargetAccountID:        "123456789012",
+				CrossAccount:           false,
+				ObserverRoleConfigured: true,
+			},
+			Available: true,
+			Source:    resourcelogs.SourceEC2Console,
+			Entries: []resourcelogs.Entry{{
+				Timestamp: "2026-04-16T07:11:30Z",
+				Message:   "bootstrap start",
+			}, {
+				Timestamp: "2026-04-16T07:11:45Z",
+				Message:   "bootstrap complete",
+			}},
+		}
+
+		var gotRequest struct {
+			deploymentName string
+			resourceType   string
+			resourceName   string
+			requestID      string
+		}
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "api-prod" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+				gotRequest.deploymentName = deploymentName
+				gotRequest.resourceType = resourceType
+				gotRequest.resourceName = resourceName
+				gotRequest.requestID = RequestIDFromContext(ctx)
+				return expected, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?resourceType=userDataBootstrapSource&resourceName=file:userdata/api-prod.sh", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		responseRequestID := assertResponseRequestID(t, resp)
+		if !reflect.DeepEqual(gotRequest, struct {
+			deploymentName string
+			resourceType   string
+			resourceName   string
+			requestID      string
+		}{deploymentName: "api-prod", resourceType: "userDataBootstrapSource", resourceName: "file:userdata/api-prod.sh", requestID: responseRequestID}) {
+			t.Fatalf("unexpected provider request: %+v", gotRequest)
+		}
+
+		var got resourcelogs.Result
+		if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+			t.Fatalf("failed to decode bootstrap-source resource logs payload: %v", err)
+		}
+		if !reflect.DeepEqual(got, expected) {
+			t.Fatalf("unexpected bootstrap-source resource logs payload: %+v", got)
+		}
+
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw bootstrap-source resource logs payload: %v", err)
+		}
+		if raw["resourceType"] != "userDataBootstrapSource" || raw["source"] != string(resourcelogs.SourceEC2Console) {
+			t.Fatalf("expected bootstrap-source route to preserve resource type/source, got %#v", raw)
+		}
+		entries, ok := raw["entries"].([]any)
+		if !ok || len(entries) != 2 {
+			t.Fatalf("expected bootstrap-source entries array, got %#v", raw["entries"])
+		}
+		first, ok := entries[0].(map[string]any)
+		if !ok || first["timestamp"] != "2026-04-16T07:11:30Z" || first["message"] != "bootstrap start" {
+			t.Fatalf("expected first bootstrap-source entry shape, got %#v", entries[0])
+		}
+	})
+
 	t.Run("honors inbound request-id header", func(t *testing.T) {
 		const inboundRequestID = "operator-correlation-123"
 

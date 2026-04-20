@@ -352,6 +352,93 @@ func TestServiceRecent(t *testing.T) {
 		}
 	})
 
+	t.Run("bootstrap source reuses backing asg console lookup while preserving bootstrap resource identity", func(t *testing.T) {
+		var gotLookup ASGRequest
+		service := NewService(Options{
+			MaxEntries: 2,
+			ListASGInstanceConsoles: func(ctx context.Context, req ASGRequest) ([]InstanceConsole, error) {
+				gotLookup = req
+				return []InstanceConsole{{
+					InstanceID:  "i-refresh",
+					GeneratedAt: time.Date(2026, 4, 16, 7, 12, 0, 0, time.UTC),
+					Lines: []ConsoleLine{
+						{Timestamp: time.Date(2026, 4, 16, 7, 11, 30, 0, time.UTC), Message: "refresh start"},
+						{Timestamp: time.Date(2026, 4, 16, 7, 11, 45, 0, time.UTC), Message: "refresh complete"},
+					},
+				}}, nil
+			},
+		})
+
+		result, err := service.Recent(context.Background(), Request{
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "userDataBootstrapSource",
+			ResourceName:        "file:userdata/payments-api-prod.sh",
+			BackingResourceType: "candidateAutoScalingGroup",
+			BackingResourceName: "payments-api-prod-candidate",
+			ControlAccountID:    "123456789012",
+			TargetAccountID:     "123456789012",
+			Region:              "ap-northeast-2",
+		})
+		if err != nil {
+			t.Fatalf("Recent returned error: %v", err)
+		}
+		if !reflect.DeepEqual(gotLookup, ASGRequest{
+			DeploymentName:  "payments-api-prod",
+			ResourceName:    "payments-api-prod-candidate",
+			Region:          "ap-northeast-2",
+			TargetAccountID: "123456789012",
+		}) {
+			t.Fatalf("unexpected bootstrap-source ASG lookup request: %+v", gotLookup)
+		}
+		want := Result{
+			DeploymentName: "payments-api-prod",
+			ResourceType:   "userDataBootstrapSource",
+			ResourceName:   "file:userdata/payments-api-prod.sh",
+			LookupContext:  expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
+			Available:      true,
+			Source:         SourceEC2Console,
+			Entries: []Entry{
+				{Timestamp: "2026-04-16T07:11:30Z", Message: "refresh start"},
+				{Timestamp: "2026-04-16T07:11:45Z", Message: "refresh complete"},
+			},
+		}
+		if !reflect.DeepEqual(result, want) {
+			t.Fatalf("unexpected bootstrap-source result: %+v", result)
+		}
+	})
+
+	t.Run("bootstrap source without backing resource returns no log source unavailable payload", func(t *testing.T) {
+		service := NewService(Options{
+			ListASGInstanceConsoles: func(ctx context.Context, req ASGRequest) ([]InstanceConsole, error) {
+				t.Fatalf("bootstrap-source request should not call ASG provider without backing resource")
+				return nil, nil
+			},
+		})
+
+		result, err := service.Recent(context.Background(), Request{
+			DeploymentName:   "payments-api-prod",
+			ResourceType:     "userDataBootstrapSource",
+			ResourceName:     "file:userdata/payments-api-prod.sh",
+			ControlAccountID: "123456789012",
+			TargetAccountID:  "123456789012",
+			Region:           "ap-northeast-2",
+		})
+		if err != nil {
+			t.Fatalf("Recent returned error: %v", err)
+		}
+		want := Result{
+			DeploymentName:    "payments-api-prod",
+			ResourceType:      "userDataBootstrapSource",
+			ResourceName:      "file:userdata/payments-api-prod.sh",
+			LookupContext:     expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
+			Available:         false,
+			UnavailableReason: UnavailableReasonNoLogSource,
+		}
+		if !reflect.DeepEqual(result, want) {
+			t.Fatalf("unexpected bootstrap-source unavailable result: %+v", result)
+		}
+	})
+
 	t.Run("unsupported resource type returns unavailable payload", func(t *testing.T) {
 		service := NewService(Options{})
 
@@ -492,6 +579,49 @@ func TestServiceRecent(t *testing.T) {
 		}
 		if !reflect.DeepEqual(result, want) {
 			t.Fatalf("unexpected AWS unavailable result: %+v", result)
+		}
+	})
+
+	t.Run("bootstrap source degrades to unavailable when backing asg aws access is denied", func(t *testing.T) {
+		service := NewService(Options{
+			ListASGInstanceConsoles: func(ctx context.Context, req ASGRequest) ([]InstanceConsole, error) {
+				if req.ResourceName != "payments-api-prod-candidate" {
+					t.Fatalf("unexpected ASG request: %+v", req)
+				}
+				return nil, &smithy.OperationError{
+					ServiceID:     "AutoScaling",
+					OperationName: "DescribeAutoScalingGroups",
+					Err: &smithy.GenericAPIError{
+						Code:    "AccessDeniedException",
+						Message: "User is not authorized to perform autoscaling:DescribeAutoScalingGroups",
+					},
+				}
+			},
+		})
+
+		result, err := service.Recent(context.Background(), Request{
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "userDataBootstrapSource",
+			ResourceName:        "file:userdata/payments-api-prod.sh",
+			BackingResourceType: "candidateAutoScalingGroup",
+			BackingResourceName: "payments-api-prod-candidate",
+			ControlAccountID:    "123456789012",
+			TargetAccountID:     "123456789012",
+			Region:              "ap-northeast-2",
+		})
+		if err != nil {
+			t.Fatalf("Recent returned error: %v", err)
+		}
+		want := Result{
+			DeploymentName:    "payments-api-prod",
+			ResourceType:      "userDataBootstrapSource",
+			ResourceName:      "file:userdata/payments-api-prod.sh",
+			LookupContext:     expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
+			Available:         false,
+			UnavailableReason: UnavailableReasonAWSUnavailable,
+		}
+		if !reflect.DeepEqual(result, want) {
+			t.Fatalf("unexpected bootstrap-source AWS unavailable result: %+v", result)
 		}
 	})
 

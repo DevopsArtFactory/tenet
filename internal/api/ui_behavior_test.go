@@ -3613,7 +3613,15 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   const bootstrapInspectionURL = '/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=userDataBootstrapSource&resourceName=file%3Auserdata%2Fpayments-api-prod.sh';
   const bootstrapSupportedRun = await renderWithFetch('?page=resource&deployment=payments-api-prod&resourceType=userDataBootstrapSource&resourceId=' + encodeURIComponent(bootstrapResourceID), (url) => {
     if (url === asgDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(asgDetailBody) });
-    if (url === bootstrapLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === bootstrapLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({
+      available: true,
+      source: 'ec2_console',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true },
+      entries: [
+        { timestamp: '2026-04-16T07:11:30Z', message: 'bootstrap start' },
+        { timestamp: '2026-04-16T07:11:45Z', message: 'bootstrap complete' },
+      ],
+    }) });
     if (url === bootstrapInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({
       available: true,
       source: 'auto_scaling_group',
@@ -3634,6 +3642,10 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   });
   const bootstrapSupportedText = collectText(bootstrapSupportedRun.document.getElementById('accounts')).join(' | ');
   if (!bootstrapSupportedText.includes('Desired bootstrap source')) throw new Error('expected bootstrap-source inspection to render desired source label');
+  if (!bootstrapSupportedText.includes('Logs source')) throw new Error('expected bootstrap-source recent logs to render logs source label');
+  if (!bootstrapSupportedText.includes('ec2_console')) throw new Error('expected bootstrap-source recent logs to render logs source value');
+  if (!bootstrapSupportedText.includes('bootstrap start')) throw new Error('expected bootstrap-source recent logs to render first console line');
+  if (!bootstrapSupportedText.includes('bootstrap complete')) throw new Error('expected bootstrap-source recent logs to render second console line');
   if (!bootstrapSupportedText.includes('file:userdata/payments-api-prod.sh')) throw new Error('expected bootstrap-source inspection to render desired source value');
   if (!bootstrapSupportedText.includes('Observed bootstrap source')) throw new Error('expected bootstrap-source inspection to render observed source label');
   if (!bootstrapSupportedText.includes('file:userdata/payments-api-prod-legacy.sh')) throw new Error('expected bootstrap-source inspection to render observed source value');

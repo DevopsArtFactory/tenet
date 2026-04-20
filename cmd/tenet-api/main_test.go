@@ -1091,6 +1091,37 @@ func TestAPIOptionsOverviewDeploymentResourceLogsWiresObserverRoleAndPlacement(t
 	}
 }
 
+func TestAPIOptionsOverviewDeploymentResourceLogsPassesBootstrapSourceBackingResourceContext(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	store := &stubStatusStore{
+		getSnapshot: statusstore.Snapshot{
+			DeploymentName: "api-prod",
+			Status: domain.DeploymentStatus{
+				Rollout: &domain.RolloutSummary{Execution: []domain.RolloutExecutionDetail{
+					{Resource: "candidateAutoScalingGroup", Name: "api-prod-candidate", Description: "candidate ASG"},
+					{Resource: "userDataBootstrapSource", Name: "file:userdata/api-prod.sh", Description: "bootstrap source"},
+				}},
+			},
+		},
+	}
+	provider := &fakeResourceLogProvider{result: resourcelogs.Result{Available: true}}
+	restore := stubResourceLogProviderFactory(provider)
+	defer restore()
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, store)
+	if options.OverviewDeploymentResourceLogs == nil {
+		t.Fatalf("expected overview deployment resource logs provider")
+	}
+
+	_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", "userDataBootstrapSource", "file:userdata/api-prod.sh")
+	if err != nil {
+		t.Fatalf("OverviewDeploymentResourceLogs returned error: %v", err)
+	}
+	if provider.lastRequest.BackingResourceType != "candidateAutoScalingGroup" || provider.lastRequest.BackingResourceName != "api-prod-candidate" {
+		t.Fatalf("expected bootstrap-source logs request to carry backing ASG context, got %+v", provider.lastRequest)
+	}
+}
+
 func TestAPIOptionsOverviewDeploymentResourceLogsRejectsResourcesOutsideDeploymentExecution(t *testing.T) {
 	repoRoot := writeRepositoryFixture(t)
 	store := &stubStatusStore{
@@ -1177,6 +1208,11 @@ func TestAPIOptionsOverviewDeploymentResourceLogsUsesWeightedTargetGroupFallback
 		}
 		if provider.lastRequest.ResourceType != resource.resourceType || provider.lastRequest.ResourceName != resource.resourceName {
 			t.Fatalf("unexpected resource log request for %s/%s: %+v", resource.resourceType, resource.resourceName, provider.lastRequest)
+		}
+		if resource.resourceType == "userDataBootstrapSource" {
+			if provider.lastRequest.BackingResourceType != "candidateAutoScalingGroup" || provider.lastRequest.BackingResourceName != "api-prod-candidate" {
+				t.Fatalf("expected bootstrap-source fallback to target candidate ASG, got %+v", provider.lastRequest)
+			}
 		}
 	}
 }
@@ -1325,6 +1361,11 @@ func TestAPIOptionsOverviewDeploymentResourceLogsUsesASGInstanceRefreshFallbackW
 		}
 		if provider.lastRequest.ResourceType != resource.resourceType || provider.lastRequest.ResourceName != resource.resourceName {
 			t.Fatalf("unexpected resource log request for %s/%s: %+v", resource.resourceType, resource.resourceName, provider.lastRequest)
+		}
+		if resource.resourceType == "userDataBootstrapSource" {
+			if provider.lastRequest.BackingResourceType != "serviceAutoScalingGroup" || provider.lastRequest.BackingResourceName != "api-prod-service" {
+				t.Fatalf("expected refresh bootstrap-source fallback to target service ASG, got %+v", provider.lastRequest)
+			}
 		}
 	}
 }
