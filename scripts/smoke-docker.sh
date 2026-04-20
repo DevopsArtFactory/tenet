@@ -836,10 +836,14 @@ for body in (resource_ui, ecs_resource_ui):
     for fragment in (
         "const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);",
         "const renderResourceDetailPage = (detail) => {",
-        "const createResourceQuickNav = (detail, resource) => {",
+        "const createResourceQuickNav = (detail, resource, sectionLinks = []) => {",
         "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')",
         "createNavLink(buildPageURL('resource', {",
         "Quick navigation",
+        "Current section",
+        "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)",
+        "No section is currently targeted.",
+        "No additional section links are available for this resource.",
     ):
         assert fragment in body, fragment
 
