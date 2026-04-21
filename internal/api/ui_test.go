@@ -1326,16 +1326,23 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 		"['Target account ID', lookupContextText(lookupContext?.targetAccountId)]",
 		"['Cross-account lookup', lookupContextBoolText(lookupContext?.crossAccount)]",
 		"['Observer role configured', lookupContextBoolText(lookupContext?.observerRoleConfigured)]",
+		"const resourceLogsBackingResourceFields = (result) => {",
+		"if (result?.backingResourceType) {",
+		"fields.push(['Backing resource type', lookupContextText(result.backingResourceType)]);",
+		"if (result?.backingResourceName) {",
+		"fields.push(['Backing resource name', lookupContextText(result.backingResourceName)]);",
+		"const backingResourceFields = resourceLogsBackingResourceFields(result);",
 		"const createResourceLogsLookupContextGrid = (lookupContext, extraFields = []) => {",
 		"const createResourceLogsActions = (section, deploymentName, resource, isLoading = false) => [",
 		"'Refresh recent logs'",
 		"renderResourceLogsSection(section, deploymentName, resource, { force: true }).catch(() => {})",
 		"[...extraFields, ...resourceLogsLookupContextFields(lookupContext)].forEach(([label, value]) => {",
 		"const unavailableReason = resourceLogsUnavailableReasonText(result?.unavailableReason);",
-		"const metadata = createResourceLogsLookupContextGrid(result?.lookupContext);",
+		"const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, backingResourceFields);",
 		"const details = unavailableReason",
 		"renderResourceLogsState(section, 'Recent logs are unavailable for this resource.', '', [metadata], details, actions);",
 		"renderResourceLogsState(section, 'No recent logs are available for this resource.', '', [metadata], [], actions);",
+		"...backingResourceFields,",
 		"const renderResourceLogsSection = (section, deploymentName, resource, options = {}) => {",
 		"const force = Boolean(options?.force);",
 		"const logsKey = resourceLogCacheKey(deploymentName, resource);",
@@ -1349,6 +1356,8 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 		"Recent logs",
 		"Refresh recent logs",
 		"Logs source",
+		"Backing resource type",
+		"Backing resource name",
 		"Lookup region",
 		"Control account ID",
 		"Target account ID",
@@ -1541,6 +1550,12 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Refresh recent logs' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh recent logs")
 	}
+	if !strings.Contains(text, "assert 'Backing resource type' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains Backing resource type")
+	}
+	if !strings.Contains(text, "assert 'Backing resource name' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains Backing resource name")
+	}
 	if !strings.Contains(text, "assert 'Live inspection' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Live inspection")
 	}
@@ -1589,6 +1604,15 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "ecs_resource_ui=$(curl -fsS \"http://$HOST:$PORT/?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=ecsService%3A%3Aworker-prod-service%3A%3AECS+service+Tenet+updates+with+native+rolling+deployment\")") {
 		t.Fatalf("expected smoke-local.sh to fetch bookmarkable ecs resource page")
 	}
+	if !strings.Contains(text, "bootstrap_resource_ui=$(curl -fsS \"http://$HOST:$PORT/?page=resource&deployment=payments-api-prod&resourceType=userDataBootstrapSource&resourceId=userDataBootstrapSource%3A%3Afile%3Auserdata%2Fpayments-api-prod.sh%3A%3ANormalized+userdata+bootstrap+source+for+candidate+EC2+capacity\")") {
+		t.Fatalf("expected smoke-local.sh to fetch bookmarkable bootstrap resource page")
+	}
+	if !strings.Contains(text, "bootstrap_resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=userDataBootstrapSource&resourceName=git%3Auserdata%2Fpayments-api-prod.sh\")") {
+		t.Fatalf("expected smoke-local.sh to fetch bootstrap-source recent logs payload")
+	}
+	if !strings.Contains(text, "bootstrap_resource_inspection=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=userDataBootstrapSource&resourceName=git%3Auserdata%2Fpayments-api-prod.sh\")") {
+		t.Fatalf("expected smoke-local.sh to fetch bootstrap-source inspection payload")
+	}
 	if !strings.Contains(text, "assert \"const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page fetch route contract")
 	}
@@ -1604,8 +1628,8 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"fetchAccountDetail(currentPageState.accountId)\" in account_ui, account_ui") {
 		t.Fatalf("expected smoke-local.sh to assert account-page boot loader uses fetchAccountDetail")
 	}
-	if !strings.Contains(text, "for label, body in ((\"resource_ui\", resource_ui), (\"ecs_resource_ui\", ecs_resource_ui)):") {
-		t.Fatalf("expected smoke-local.sh to assert both bookmarkable resource pages")
+	if !strings.Contains(text, "for label, body in ((\"resource_ui\", resource_ui), (\"ecs_resource_ui\", ecs_resource_ui), (\"bootstrap_resource_ui\", bootstrap_resource_ui)):") {
+		t.Fatalf("expected smoke-local.sh to assert all bookmarkable resource pages")
 	}
 	if !strings.Contains(text, "\"return 'Account detail';\",") || !strings.Contains(text, "\"return `GET /v1/overview/accounts/${accountID}`;\",") {
 		t.Fatalf("expected smoke-local.sh to assert account-page operator read auth labels")
@@ -1628,8 +1652,8 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"eventsSection.id = 'application-runtime-events';\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page runtime-events anchor contract")
 	}
-	if !strings.Contains(text, "for body in (resource_ui, ecs_resource_ui):") {
-		t.Fatalf("expected smoke-local.sh to iterate over both resource page payloads")
+	if !strings.Contains(text, "for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui):") {
+		t.Fatalf("expected smoke-local.sh to iterate over all resource page payloads")
 	}
 	if !strings.Contains(text, "assert \"const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);\" in body, body") {
 		t.Fatalf("expected smoke-local.sh to assert bookmarkable resource page contracts for both resource pages")
@@ -2462,8 +2486,8 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"assert actor_audit_logs[\"entries\"][0][\"actor\"][\"name\"] == \"Alex Explicit\", actor_audit_logs",
 			"curl -fsS \"$API_BASE_URL/v1/overview/deployments/payments-api-prod/events\"",
 			"curl -fsS \"$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service\"",
-			"bootstrap_resource_logs=$(curl -fsS \"$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=userDataBootstrapSource&resourceName=file%3Auserdata%2Fpayments-api-prod.sh\")",
-			"bootstrap_resource_inspection=$(curl -fsS \"$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=userDataBootstrapSource&resourceName=file%3Auserdata%2Fpayments-api-prod.sh\")",
+			"bootstrap_resource_logs=$(curl -fsS \"$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=userDataBootstrapSource&resourceName=git%3Auserdata%2Fpayments-api-prod.sh\")",
+			"bootstrap_resource_inspection=$(curl -fsS \"$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=userDataBootstrapSource&resourceName=git%3Auserdata%2Fpayments-api-prod.sh\")",
 			"bootstrap_resource_logs_path=$(write_payload bootstrap-resource-logs.json \"$bootstrap_resource_logs\")",
 			"bootstrap_resource_inspection_path=$(write_payload bootstrap-resource-inspection.json \"$bootstrap_resource_inspection\")",
 			"BOOTSTRAP_RESOURCE_LOGS_PATH=\"$bootstrap_resource_logs_path\"",
@@ -2477,10 +2501,10 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"assert isinstance(worker_resource_logs[\"available\"], bool), worker_resource_logs",
 			"assert worker_resource_logs.get(\"entries\") is None or isinstance(worker_resource_logs.get(\"entries\"), list), worker_resource_logs",
 			"assert bootstrap_resource_logs[\"resourceType\"] == \"userDataBootstrapSource\", bootstrap_resource_logs",
-			"assert bootstrap_resource_logs[\"resourceName\"] == \"file:userdata/payments-api-prod.sh\", bootstrap_resource_logs",
+			"assert bootstrap_resource_logs[\"resourceName\"] == \"git:userdata/payments-api-prod.sh\", bootstrap_resource_logs",
 			"assert bootstrap_resource_logs.get(\"unavailableReason\") in {\"aws_unavailable\", \"no_log_source\"}, bootstrap_resource_logs",
 			"assert bootstrap_resource_inspection[\"resourceType\"] == \"userDataBootstrapSource\", bootstrap_resource_inspection",
-			"assert bootstrap_resource_inspection[\"resourceName\"] == \"file:userdata/payments-api-prod.sh\", bootstrap_resource_inspection",
+			"assert bootstrap_resource_inspection[\"resourceName\"] == \"git:userdata/payments-api-prod.sh\", bootstrap_resource_inspection",
 			"assert bootstrap_resource_inspection.get(\"unavailableReason\") == \"aws_unavailable\", bootstrap_resource_inspection",
 			"audit_ui=$(curl -fsS \"$API_BASE_URL/?page=audit&deployment=payments-api-prod&action=apply.requested&limit=2\")",
 			"drift_ui=$(curl -fsS \"$API_BASE_URL/?page=drift&deployment=payments-api-prod\")",

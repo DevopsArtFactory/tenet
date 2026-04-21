@@ -2079,6 +2079,16 @@
         ['Cross-account lookup', lookupContextBoolText(lookupContext?.crossAccount)],
         ['Observer role configured', lookupContextBoolText(lookupContext?.observerRoleConfigured)],
       ];
+      const resourceLogsBackingResourceFields = (result) => {
+        const fields = [];
+        if (result?.backingResourceType) {
+          fields.push(['Backing resource type', lookupContextText(result.backingResourceType)]);
+        }
+        if (result?.backingResourceName) {
+          fields.push(['Backing resource name', lookupContextText(result.backingResourceName)]);
+        }
+        return fields;
+      };
       const createResourceLogsLookupContextGrid = (lookupContext, extraFields = []) => {
         const metadata = createElement('div', 'detail-grid');
         [...extraFields, ...resourceLogsLookupContextFields(lookupContext)].forEach(([label, value]) => {
@@ -2126,8 +2136,9 @@
       };
       const renderResourceLogsPayload = (section, deploymentName, resource, result) => {
         const actions = createResourceLogsActions(section, deploymentName, resource);
+        const backingResourceFields = resourceLogsBackingResourceFields(result);
         if (!result?.available) {
-          const metadata = createResourceLogsLookupContextGrid(result?.lookupContext);
+          const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, backingResourceFields);
           const unavailableReason = resourceLogsUnavailableReasonText(result?.unavailableReason);
           const details = unavailableReason
             ? [createElement('div', 'detail-condition-meta', unavailableReason)]
@@ -2138,7 +2149,7 @@
 
         const entries = result.entries || [];
         if (!entries.length) {
-          const metadata = createResourceLogsLookupContextGrid(result?.lookupContext);
+          const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, backingResourceFields);
           renderResourceLogsState(section, 'No recent logs are available for this resource.', '', [metadata], [], actions);
           return;
         }
@@ -2146,6 +2157,7 @@
         const fragment = [];
         const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, [
           ['Logs source', metricValue(result.source)],
+          ...backingResourceFields,
         ]);
         fragment.push(metadata);
 
