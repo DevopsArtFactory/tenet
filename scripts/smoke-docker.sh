@@ -896,6 +896,14 @@ for fragment in (
 ):
     assert fragment in application_ui, fragment
 
+assert_fragments("application_ui", application_ui, (
+    "Quick navigation",
+    "Applications overview",
+    "Current destination",
+    "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')",
+    "createQuickNavChip('Application detail', 'Current destination: Application detail')",
+))
+
 for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui):
     for fragment in (
         "const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);",

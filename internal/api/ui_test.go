@@ -2117,6 +2117,18 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			t.Fatalf("expected smoke-docker.sh to avoid stale or env-blob fragment %q", fragment)
 		}
 	}
+	for _, fragment := range []string{
+		"assert_fragments(\"application_ui\", application_ui, (",
+		"\"Quick navigation\",",
+		"\"Applications overview\",",
+		"\"Current destination\",",
+		"\"createNavLink(buildPageURL('applications'), 'Applications overview', '_self')\",",
+		"\"createQuickNavChip('Application detail', 'Current destination: Application detail')\",",
+	} {
+		if !strings.Contains(dockerSmoke, fragment) {
+			t.Fatalf("expected smoke-docker.sh to lock bookmarkable application quick-nav fragment %q", fragment)
+		}
+	}
 }
 
 func TestOverviewDocsDescribeAuditFilterReset(t *testing.T) {
@@ -2184,11 +2196,13 @@ func TestDockerSmokeDocsDescribeEmbeddedReadAuthGuidanceCoverage(t *testing.T) {
 	files := map[string][]string{
 		"../../README.md": {
 			"The same bookmarkable application, account, traffic-shift resource, ECS resource, drift, audit, and plan routes locked by direct-process smoke",
+			"the bookmarkable application shell still exposes the `_self` `Applications overview` return path plus the non-click `Application detail` destination chip",
 			"raw embedded application/account/resource/drift/audit/plan shell HTML/script fragments instead of runtime DOM text",
 			"the shipped operator read-auth guidance hooks for initial `401` / `403` failures remain present",
 		},
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
 			"Bookmarkable application, account, drift, audit, and plan workspace URLs, checking raw embedded application/account/resource/drift/audit/plan shell HTML/script fragments instead of runtime DOM text",
+			"the bookmarkable application shell still exposes the `_self` `Applications overview` return path plus the non-click `Application detail` destination chip",
 			"the shipped operator read-auth guidance hooks for initial `401` / `403` failures remain present",
 		},
 	}
