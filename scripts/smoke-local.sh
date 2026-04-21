@@ -971,6 +971,12 @@ assert "fetchApplicationsOverview()" in ui, ui
 assert "const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {" in application_ui, application_ui
 assert "const fetchAccountDetail = (accountID) => fetchEmbeddedReadRouteJSON(`/v1/overview/accounts/${encodeURIComponent(accountID)}`, {" in ui, ui
 assert "fetchAccountDetail(currentPageState.accountId)" in account_ui, account_ui
+assert 'Quick navigation' in account_ui, account_ui
+assert 'Applications overview' in account_ui, account_ui
+assert 'Current destination' in account_ui, account_ui
+assert "const createAccountQuickNav = (account) => {" in account_ui, account_ui
+assert "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')" in account_ui, account_ui
+assert "createQuickNavChip('Account detail', 'Current destination: Account detail')" in account_ui, account_ui
 assert "failure: 'account detail request failed'," in ui, ui
 assert "const applicationDetail = currentPageState.page === 'application' ? fetchApplicationDetail(currentPageState.deployment) : fetchDeploymentDetail(currentPageState.deployment);" in application_ui, application_ui
 assert "const renderApplicationDetailPage = (detail) => {" in application_ui, application_ui

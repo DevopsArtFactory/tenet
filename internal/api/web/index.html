@@ -1647,6 +1647,39 @@
           (mode === 'drift' || mode === 'plan') ? 'No section is currently targeted.' : '',
         );
       };
+      const createAccountQuickNav = (account) => {
+        const accountLabel = account?.name || currentPageState.accountId || 'Account';
+        const strip = createElement('section', 'quick-nav-strip');
+        const hierarchyLinks = createElement('div', 'quick-nav-links');
+        hierarchyLinks.append(
+          createNavLink(buildPageURL('applications'), 'Applications overview', '_self'),
+        );
+        const currentDestinationLinks = createElement('div', 'quick-nav-links');
+        currentDestinationLinks.append(
+          createQuickNavChip('Account detail', 'Current destination: Account detail'),
+        );
+
+        const groups = createElement('div', 'quick-nav-groups');
+        const hierarchyGroup = createElement('div', 'quick-nav-group');
+        hierarchyGroup.append(
+          createElement('div', 'quick-nav-label', 'Hierarchy'),
+          hierarchyLinks,
+        );
+        const currentDestinationGroup = createElement('div', 'quick-nav-group');
+        currentDestinationGroup.append(
+          createElement('div', 'quick-nav-label', 'Current destination'),
+          currentDestinationLinks,
+        );
+        groups.append(hierarchyGroup, currentDestinationGroup);
+
+        const head = createElement('div', 'quick-nav-head');
+        head.append(
+          createElement('div', 'quick-nav-title', 'Quick navigation'),
+          createElement('div', 'quick-nav-current', `${accountLabel} · Account detail`),
+        );
+        strip.append(head, groups);
+        return strip;
+      };
       const createApplicationQuickNav = (detail, sectionLinks = []) => {
         const deploymentName = detail.name || currentPageState.deployment || '';
         if (!deploymentName) return null;
@@ -4749,7 +4782,9 @@
           createElement('div', 'account-topology', `${account.projectCount ?? deriveProjectEnvironmentGroups(account).projectCount} projects · ${account.environmentCount ?? deriveProjectEnvironmentGroups(account).environmentCount} environments`),
         );
         summary.replaceChildren(detailSummary);
-        root.replaceChildren(createAccountOverviewArticle(account));
+        const quickNav = createAccountQuickNav(account);
+        const overviewArticle = createAccountOverviewArticle(account);
+        root.replaceChildren(...[quickNav, overviewArticle].filter(Boolean));
       };
 
       const renderAccounts = (accounts) => {
