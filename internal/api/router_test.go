@@ -1179,11 +1179,29 @@ func TestRouterDeploymentReadAuthorization(t *testing.T) {
 			},
 			AuditLogs: func(_ context.Context, query auditlog.Query) (auditlog.Result, error) {
 				providerCalls++
+				if query.DeploymentName != "" {
+					return auditlog.Result{
+						Entries: []auditlog.Entry{{
+							Action:         string(auditlog.ActionApplyRequested),
+							DeploymentName: query.DeploymentName,
+						}},
+					}, nil
+				}
 				return auditlog.Result{
-					Entries: []auditlog.Entry{{
-						Action:         string(auditlog.ActionApplyRequested),
-						DeploymentName: query.DeploymentName,
-					}},
+					Entries: []auditlog.Entry{
+						{
+							Action:         string(auditlog.ActionApplyRequested),
+							DeploymentName: "api-prod",
+						},
+						{
+							Action:         string(auditlog.ActionApplyRequested),
+							DeploymentName: "worker-prod",
+						},
+						{
+							Action:         string(auditlog.ActionApplyRequested),
+							DeploymentName: "payments-api-staging",
+						},
+					},
 				}, nil
 			},
 			DeploymentStatuses: func(context.Context) ([]statusstore.Snapshot, error) {
@@ -1280,9 +1298,27 @@ func TestRouterDeploymentReadAuthorization(t *testing.T) {
 		})
 	}
 
-	t.Run("unscoped audit logs remain unchanged", func(t *testing.T) {
+	t.Run("unscoped audit logs unauthenticated", func(t *testing.T) {
 		router, providerCalls := newGuardedRouter(t)
 		req := httptest.NewRequest(http.MethodGet, "/v1/audit-logs?action=apply.requested&limit=1", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != "unauthenticated: authenticated identity is required for this operator read route\n" {
+			t.Fatalf("unexpected 401 response body: %q", body)
+		}
+		if *providerCalls != 0 {
+			t.Fatalf("expected auth guard to short-circuit before providers, got %d calls", *providerCalls)
+		}
+	})
+
+	t.Run("unscoped audit logs filter authorized deployments", func(t *testing.T) {
+		router, providerCalls := newGuardedRouter(t)
+		req := newAuthenticatedRequest("/v1/audit-logs?action=apply.requested", "api-prod, worker-prod")
 		resp := httptest.NewRecorder()
 
 		router.ServeHTTP(resp, req)
@@ -1292,6 +1328,42 @@ func TestRouterDeploymentReadAuthorization(t *testing.T) {
 		}
 		if *providerCalls != 1 {
 			t.Fatalf("expected unscoped audit logs provider call, got %d", *providerCalls)
+		}
+
+		var result auditlog.Result
+		if err := json.Unmarshal(resp.Body.Bytes(), &result); err != nil {
+			t.Fatalf("decode audit logs: %v", err)
+		}
+		got := make([]string, 0, len(result.Entries))
+		for _, entry := range result.Entries {
+			got = append(got, entry.DeploymentName)
+		}
+		want := []string{"api-prod", "worker-prod"}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("unexpected filtered unscoped audit deployments: got %+v want %+v", got, want)
+		}
+	})
+
+	t.Run("unscoped audit logs return empty entries when allowlist has no visible rows", func(t *testing.T) {
+		router, providerCalls := newGuardedRouter(t)
+		req := newAuthenticatedRequest("/v1/audit-logs?action=apply.requested", "")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if *providerCalls != 1 {
+			t.Fatalf("expected unscoped audit logs provider call, got %d", *providerCalls)
+		}
+
+		var result auditlog.Result
+		if err := json.Unmarshal(resp.Body.Bytes(), &result); err != nil {
+			t.Fatalf("decode audit logs: %v", err)
+		}
+		if len(result.Entries) != 0 {
+			t.Fatalf("expected empty filtered unscoped audit entries, got %+v", result.Entries)
 		}
 	})
 

@@ -13,6 +13,7 @@ UNKNOWN_APPLY_TRANSITION_BODY=$(mktemp)
 TERMINAL_APPLY_TRANSITION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_COLLECTION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY=$(mktemp)
+AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_TRANSITION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_EVENTS_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY=$(mktemp)
@@ -138,7 +139,7 @@ cleanup() {
   fi
 
   "${COMPOSE[@]}" down --remove-orphans >/dev/null 2>&1 || true
-  rm -f "$INVALID_AUDIT_ACTION_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_STATUS_READ_BODY" "$AUTH_FORBIDDEN_TRANSITION_BODY" "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" "$WEBHOOK_PUSH_BODY_FILE" "$WEBHOOK_PING_BODY_FILE" "$INVALID_WEBHOOK_BODY"
+  rm -f "$INVALID_AUDIT_ACTION_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_STATUS_READ_BODY" "$AUTH_FORBIDDEN_TRANSITION_BODY" "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" "$WEBHOOK_PUSH_BODY_FILE" "$WEBHOOK_PING_BODY_FILE" "$INVALID_WEBHOOK_BODY"
   rm -rf "$PAYLOAD_DIR"
 }
 
@@ -985,6 +986,8 @@ auth_unauthenticated_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_COLL
   "$API_BASE_URL/v1/overview/applications")
 auth_unauthenticated_status_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" -w "%{http_code}" \
   "$API_BASE_URL/v1/status/deployments")
+auth_unauthenticated_audit_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY" -w "%{http_code}" \
+  "$API_BASE_URL/v1/audit-logs?action=apply.requested")
 auth_unauthenticated_transition_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" -w "%{http_code}" \
   -X POST \
   -H "Content-Type: application/json" \
@@ -1065,6 +1068,12 @@ filtered_status_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authorized-Deployments: payments-api-prod, worker-prod" \
   "$API_BASE_URL/v1/status/deployments")
+filtered_audit_collection=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-prod, payments-api-staging" \
+  "$API_BASE_URL/v1/audit-logs")
 empty_applications_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
@@ -1075,6 +1084,11 @@ empty_status_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   "$API_BASE_URL/v1/status/deployments")
+empty_audit_collection=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  "$API_BASE_URL/v1/audit-logs?action=apply.requested")
 restarted_plan_preview_path=$(write_payload restarted-plan-preview.json "$restarted_plan_preview")
 restarted_apply_record_path=$(write_payload restarted-apply-record.json "$restarted_apply_record")
 allowed_status_read_path=$(write_payload allowed-status-read.json "$allowed_status_read")
@@ -1083,8 +1097,10 @@ allowed_resource_logs_path=$(write_payload allowed-resource-logs.json "$allowed_
 allowed_resource_inspection_path=$(write_payload allowed-resource-inspection.json "$allowed_resource_inspection")
 filtered_applications_collection_path=$(write_payload filtered-applications-collection.json "$filtered_applications_collection")
 filtered_status_collection_path=$(write_payload filtered-status-collection.json "$filtered_status_collection")
+filtered_audit_collection_path=$(write_payload filtered-audit-collection.json "$filtered_audit_collection")
 empty_applications_collection_path=$(write_payload empty-applications-collection.json "$empty_applications_collection")
 empty_status_collection_path=$(write_payload empty-status-collection.json "$empty_status_collection")
+empty_audit_collection_path=$(write_payload empty-audit-collection.json "$empty_audit_collection")
 
 PLAN_ID="$plan_id" \
 APPLY_ID="$apply_id" \
@@ -1094,6 +1110,8 @@ AUTH_UNAUTHENTICATED_COLLECTION_STATUS="$auth_unauthenticated_collection_status"
 AUTH_UNAUTHENTICATED_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_COLLECTION_BODY" \
 AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS="$auth_unauthenticated_status_collection_status" \
 AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" \
+AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_STATUS="$auth_unauthenticated_audit_collection_status" \
+AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY" \
 AUTH_UNAUTHENTICATED_TRANSITION_STATUS="$auth_unauthenticated_transition_status" \
 AUTH_UNAUTHENTICATED_TRANSITION_BODY_PATH="$AUTH_UNAUTHENTICATED_TRANSITION_BODY" \
 AUTH_UNAUTHENTICATED_EVENTS_STATUS="$auth_unauthenticated_events_status" \
@@ -1118,8 +1136,10 @@ ALLOWED_RESOURCE_LOGS_PATH="$allowed_resource_logs_path" \
 ALLOWED_RESOURCE_INSPECTION_PATH="$allowed_resource_inspection_path" \
 FILTERED_APPLICATIONS_COLLECTION_PATH="$filtered_applications_collection_path" \
 FILTERED_STATUS_COLLECTION_PATH="$filtered_status_collection_path" \
+FILTERED_AUDIT_COLLECTION_PATH="$filtered_audit_collection_path" \
 EMPTY_APPLICATIONS_COLLECTION_PATH="$empty_applications_collection_path" \
 EMPTY_STATUS_COLLECTION_PATH="$empty_status_collection_path" \
+EMPTY_AUDIT_COLLECTION_PATH="$empty_audit_collection_path" \
 python3 - <<'PY'
 import json
 import os
@@ -1128,6 +1148,8 @@ with open(os.environ["AUTH_UNAUTHENTICATED_COLLECTION_BODY_PATH"], encoding="utf
     unauthenticated_collection_body = fh.read()
 with open(os.environ["AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY_PATH"], encoding="utf-8") as fh:
     unauthenticated_status_collection_body = fh.read()
+with open(os.environ["AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY_PATH"], encoding="utf-8") as fh:
+    unauthenticated_audit_collection_body = fh.read()
 with open(os.environ["AUTH_UNAUTHENTICATED_TRANSITION_BODY_PATH"], encoding="utf-8") as fh:
     unauthenticated_transition_body = fh.read()
 with open(os.environ["AUTH_UNAUTHENTICATED_EVENTS_BODY_PATH"], encoding="utf-8") as fh:
@@ -1162,10 +1184,14 @@ with open(os.environ["FILTERED_APPLICATIONS_COLLECTION_PATH"], encoding="utf-8")
     filtered_applications_collection = json.load(fh)
 with open(os.environ["FILTERED_STATUS_COLLECTION_PATH"], encoding="utf-8") as fh:
     filtered_status_collection = json.load(fh)
+with open(os.environ["FILTERED_AUDIT_COLLECTION_PATH"], encoding="utf-8") as fh:
+    filtered_audit_collection = json.load(fh)
 with open(os.environ["EMPTY_APPLICATIONS_COLLECTION_PATH"], encoding="utf-8") as fh:
     empty_applications_collection = json.load(fh)
 with open(os.environ["EMPTY_STATUS_COLLECTION_PATH"], encoding="utf-8") as fh:
     empty_status_collection = json.load(fh)
+with open(os.environ["EMPTY_AUDIT_COLLECTION_PATH"], encoding="utf-8") as fh:
+    empty_audit_collection = json.load(fh)
 
 assert restarted_plan_preview["id"] == os.environ["PLAN_ID"], restarted_plan_preview
 assert restarted_plan_preview["deploymentName"] == "payments-api-prod", restarted_plan_preview
@@ -1176,6 +1202,8 @@ assert os.environ["AUTH_UNAUTHENTICATED_COLLECTION_STATUS"] == "401", os.environ
 assert unauthenticated_collection_body.strip() == "unauthenticated: authenticated identity is required for this operator read route", unauthenticated_collection_body
 assert os.environ["AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS"]
 assert unauthenticated_status_collection_body.strip() == "unauthenticated: authenticated identity is required for this operator read route", unauthenticated_status_collection_body
+assert os.environ["AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_STATUS"]
+assert unauthenticated_audit_collection_body.strip() == "unauthenticated: authenticated identity is required for this operator read route", unauthenticated_audit_collection_body
 assert os.environ["AUTH_UNAUTHENTICATED_TRANSITION_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_TRANSITION_STATUS"]
 assert unauthenticated_transition_body.strip() == "unauthenticated: authenticated identity is required for this operator write route", unauthenticated_transition_body
 assert os.environ["AUTH_UNAUTHENTICATED_EVENTS_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_EVENTS_STATUS"]
@@ -1218,8 +1246,13 @@ assert "worker-prod" in filtered_application_names, filtered_applications_collec
 assert filtered_application_names == {"payments-api-prod", "worker-prod"}, filtered_applications_collection
 filtered_status_deployment_names = {row["deploymentName"] for row in filtered_status_collection}
 assert filtered_status_deployment_names == {"payments-api-prod", "worker-prod"}, filtered_status_collection
+filtered_audit_deployment_names = {row["deploymentName"] for row in filtered_audit_collection["entries"]}
+assert filtered_audit_deployment_names, filtered_audit_collection
+assert filtered_audit_deployment_names <= {"payments-api-prod", "payments-api-staging"}, filtered_audit_collection
+assert "payments-api-staging" in filtered_audit_deployment_names, filtered_audit_collection
 assert empty_applications_collection == [], empty_applications_collection
 assert empty_status_collection == [], empty_status_collection
+assert empty_audit_collection == {"entries": []}, empty_audit_collection
 PY
 
 restart_api_with_apply_mode true
