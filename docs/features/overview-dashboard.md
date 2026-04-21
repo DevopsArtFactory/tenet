@@ -99,7 +99,7 @@ Current behavior:
 - `_self` `Drift view` and `_self` `Plan/apply` links so operators enter the deployment workspaces from the application detail page instead of the account rows
 - when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`, this route also requires trusted `X-Tenet-Authenticated-*` identity plus `X-Tenet-Authorized-Deployments` to include the exact deployment name
 - initial `GET /v1/overview/applications/{deploymentName}` auth failures are status-aware: `401` tells operators to retry the same bookmarkable page through the trusted front door so authenticated identity can be provided, while `403` explains that identity was recognized but the current operator is not authorized for that route/deployment
-- the page now renders the same compact `Quick navigation` chrome used by the deeper workspaces, including a hash-aware `Current section` group plus an `On this page` group for `Workloads`, `Traffic routing`, `Config and access`, and `Controller runtime events`, with bookmarkable anchors such as `/?page=application&deployment={name}#application-runtime-events`
+- the page now renders the same compact `Quick navigation` chrome used by the deeper workspaces, including a hash-aware `Current section` group plus an `On this page` group for only the currently rendered non-empty linked-resource sections plus `Controller runtime events`, with bookmarkable anchors such as `/?page=application&deployment={name}#application-runtime-events`
 - when one of those application section hashes is active, the current section becomes a non-click chip, disappears from the remaining `On this page` links, and otherwise falls back to the friendly empty state `No section is currently targeted.`
 - `Controller runtime events` section backed by `GET /v1/overview/deployments/{deploymentName}/events`
 - explicit `Loading controller runtime events…`, empty, unavailable, and generic fetch-error states for non-auth failures on that section
@@ -111,6 +111,7 @@ Current behavior:
   - `Workloads`
   - `Traffic routing`
   - `Config and access`
+- empty zero-resource groups are intentionally suppressed on the page and in quick navigation so the application detail stays focused on actionable resource groups; if an application truly has no linked resources yet, the page shows `No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.` while still keeping the runtime-events section available
 - `_self` `Open resource` links targeting `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}`
 - keeps the deeper artifact/history/generation/log drill-down on the final resource page
 - the recent-log card on that final resource page now surfaces the backend lookup path directly as `Lookup region`, `Control account ID`, `Target account ID`, `Cross-account lookup`, and `Observer role configured`, even when the log lookup is empty or unavailable

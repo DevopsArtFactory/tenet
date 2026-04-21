@@ -1386,12 +1386,14 @@
         });
         return groups;
       };
+      const nonEmptyResourceSections = (detail) => groupResourceSections(detail).filter((group) => Array.isArray(group?.resources) && group.resources.length > 0);
       const renderApplicationDetailPage = (detail) => {
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
         const root = document.getElementById('accounts');
         const deploymentName = detail.name || currentPageState.deployment || '';
         const eventsDeploymentName = deploymentName;
+        const resourceGroups = nonEmptyResourceSections(detail);
         const applicationSectionIDs = {
           'Workloads': 'application-workloads',
           'Traffic routing': 'application-traffic-routing',
@@ -1441,7 +1443,7 @@
         }
         page.append(workspaceLinks);
         const rows = createElement('div', 'rows');
-        groupResourceSections(detail).forEach((group) => {
+        resourceGroups.forEach((group) => {
           const groupSection = createElement('section', 'deployment-group');
           groupSection.id = applicationSectionIDs[group.title] || '';
           const groupHead = createElement('div', 'deployment-group-head');
@@ -1472,6 +1474,9 @@
           rows.append(groupSection);
           pushApplicationSectionLink(groupSection.id, group.title);
         });
+        if (!resourceGroups.length) {
+          rows.append(createElement('div', 'detail-state', 'No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.'));
+        }
         const eventsSection = createDetailSection('Controller runtime events');
         eventsSection.id = 'application-runtime-events';
         pushApplicationSectionLink(eventsSection.id, 'Controller runtime events');
