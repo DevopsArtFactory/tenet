@@ -1651,6 +1651,14 @@
         const deploymentName = detail.name || currentPageState.deployment || '';
         if (!deploymentName) return null;
         const strip = createElement('section', 'quick-nav-strip');
+        const hierarchyLinks = createElement('div', 'quick-nav-links');
+        hierarchyLinks.append(
+          createNavLink(buildPageURL('applications'), 'Applications overview', '_self'),
+        );
+        const currentDestinationLinks = createElement('div', 'quick-nav-links');
+        currentDestinationLinks.append(
+          createQuickNavChip('Application detail', 'Current destination: Application detail'),
+        );
         const workspaceLinks = createElement('div', 'quick-nav-links');
         workspaceLinks.append(
           createNavLink(buildPageURL('drift', { deployment: deploymentName }), 'Drift view', '_self'),
@@ -1659,12 +1667,22 @@
         );
 
         const groups = createElement('div', 'quick-nav-groups');
+        const hierarchyGroup = createElement('div', 'quick-nav-group');
+        hierarchyGroup.append(
+          createElement('div', 'quick-nav-label', 'Hierarchy'),
+          hierarchyLinks,
+        );
+        const currentDestinationGroup = createElement('div', 'quick-nav-group');
+        currentDestinationGroup.append(
+          createElement('div', 'quick-nav-label', 'Current destination'),
+          currentDestinationLinks,
+        );
         const workspaceGroup = createElement('div', 'quick-nav-group');
         workspaceGroup.append(
           createElement('div', 'quick-nav-label', 'Deployment workspaces'),
           workspaceLinks,
         );
-        groups.append(workspaceGroup);
+        groups.append(hierarchyGroup, currentDestinationGroup, workspaceGroup);
         const currentSectionGroup = createElement('div', 'quick-nav-group');
         const sectionGroup = createElement('div', 'quick-nav-group');
         const syncCurrentSection = () => {

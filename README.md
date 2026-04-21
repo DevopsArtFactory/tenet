@@ -20,7 +20,7 @@ The current UI flow is:
 - Application detail
 - Resource detail
 
-This keeps the first page simple and pushes deeper operational detail into drill-down pages where it is easier to understand. The embedded application/resource/drift/plan/audit pages now also keep explicit breadcrumb chrome in the same shell so prior drill-down levels stay bookmarkable `_self` links, the current destination stays visible as a non-click chip, and the account step appears when Tenet already knows the deployment's `awsAccountId`. The application, resource, drift, and plan pages now all expose compact quick-navigation with bookmarkable `On this page` fragment links, while the resource/drift/audit shells still preserve the existing lateral `_self` jumps to sibling workspaces or resources without backing out first.
+This keeps the first page simple and pushes deeper operational detail into drill-down pages where it is easier to understand. The embedded application/resource/drift/plan/audit pages now also keep explicit breadcrumb chrome in the same shell so prior drill-down levels stay bookmarkable `_self` links, the current destination stays visible as a non-click chip, and the account step appears when Tenet already knows the deployment's `awsAccountId`. The application page quick-nav now makes the overview-to-detail hierarchy explicit with an `_self` `Applications overview` return link plus a non-click `Application detail` chip, while the application, resource, drift, and plan pages continue to expose compact bookmarkable `On this page` fragment links and the resource/drift/audit shells preserve the existing lateral `_self` jumps to sibling workspaces or resources without backing out first.
 
 ## Architecture
 
