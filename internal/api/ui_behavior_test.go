@@ -3517,6 +3517,8 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   if (!populatedText.includes('Target account ID')) throw new Error('expected populated recent logs section to label target account');
   if (!populatedText.includes('Cross-account lookup')) throw new Error('expected populated recent logs section to label cross-account lookup');
   if (!populatedText.includes('Observer role configured')) throw new Error('expected populated recent logs section to label observer role configuration');
+  if (populatedText.includes('Backing resource type')) throw new Error('expected direct recent-log sources to avoid backing resource metadata labels');
+  if (populatedText.includes('Backing resource name')) throw new Error('expected direct recent-log sources to avoid backing resource metadata values');
   if (!populatedText.includes('Log stream · codedeploy/bluegreen/1')) throw new Error('expected populated recent logs section to show stream');
   if (!populatedText.includes('Log timestamp · 2026-04-16T07:11:00Z')) throw new Error('expected populated recent logs section to show timestamp');
   if (!populatedText.includes('<img src=x onerror=1> rollback check passed')) throw new Error('expected populated recent logs section to render raw log message text safely');
@@ -3828,6 +3830,8 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
       available: true,
       source: 'ec2_console',
       lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true },
+      backingResourceType: 'candidateAutoScalingGroup',
+      backingResourceName: 'payments-api-prod-candidate',
       entries: [
         { timestamp: '2026-04-16T07:11:30Z', message: 'bootstrap start' },
         { timestamp: '2026-04-16T07:11:45Z', message: 'bootstrap complete' },
@@ -3852,11 +3856,18 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
     throw new Error('unexpected bootstrap-source fetch url: ' + url);
   });
   const bootstrapSupportedText = collectText(bootstrapSupportedRun.document.getElementById('accounts')).join(' | ');
+  const bootstrapRecentLogsSection = collectNodes(bootstrapSupportedRun.document.getElementById('accounts'), (node) => node?.id === 'resource-recent-logs')[0];
+  if (!bootstrapRecentLogsSection) throw new Error('expected bootstrap-source resource page to render recent logs section');
+  const bootstrapRecentLogsText = collectText(bootstrapRecentLogsSection).join(' | ');
   if (!bootstrapSupportedText.includes('Desired bootstrap source')) throw new Error('expected bootstrap-source inspection to render desired source label');
   if (!bootstrapSupportedText.includes('Logs source')) throw new Error('expected bootstrap-source recent logs to render logs source label');
   if (!bootstrapSupportedText.includes('ec2_console')) throw new Error('expected bootstrap-source recent logs to render logs source value');
   if (!bootstrapSupportedText.includes('bootstrap start')) throw new Error('expected bootstrap-source recent logs to render first console line');
   if (!bootstrapSupportedText.includes('bootstrap complete')) throw new Error('expected bootstrap-source recent logs to render second console line');
+  if (!bootstrapRecentLogsText.includes('Backing resource type')) throw new Error('expected bootstrap-source recent logs to render backing resource type label');
+  if (!bootstrapRecentLogsText.includes('candidateAutoScalingGroup')) throw new Error('expected bootstrap-source recent logs to render backing resource type value');
+  if (!bootstrapRecentLogsText.includes('Backing resource name')) throw new Error('expected bootstrap-source recent logs to render backing resource name label');
+  if (!bootstrapRecentLogsText.includes('payments-api-prod-candidate')) throw new Error('expected bootstrap-source recent logs to render backing resource name value');
   if (!bootstrapSupportedText.includes('file:userdata/payments-api-prod.sh')) throw new Error('expected bootstrap-source inspection to render desired source value');
   if (!bootstrapSupportedText.includes('Observed bootstrap source')) throw new Error('expected bootstrap-source inspection to render observed source label');
   if (!bootstrapSupportedText.includes('file:userdata/payments-api-prod-legacy.sh')) throw new Error('expected bootstrap-source inspection to render observed source value');

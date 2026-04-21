@@ -339,8 +339,8 @@ actor_apply_record_get=$(curl -fsS "$API_BASE_URL/v1/applies/$actor_apply_id")
 deployment_events=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/events")
 worker_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 worker_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service")
-bootstrap_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=userDataBootstrapSource&resourceName=file%3Auserdata%2Fpayments-api-prod.sh")
-bootstrap_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=userDataBootstrapSource&resourceName=file%3Auserdata%2Fpayments-api-prod.sh")
+bootstrap_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=userDataBootstrapSource&resourceName=git%3Auserdata%2Fpayments-api-prod.sh")
+bootstrap_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=userDataBootstrapSource&resourceName=git%3Auserdata%2Fpayments-api-prod.sh")
 candidate_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate")
 codedeploy_group_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging-codedeploy-group")
 production_listener_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=productionListener&resourceName=payments-api-staging-prod-listener")
@@ -689,7 +689,7 @@ else:
 
 assert bootstrap_resource_logs["deploymentName"] == "payments-api-prod", bootstrap_resource_logs
 assert bootstrap_resource_logs["resourceType"] == "userDataBootstrapSource", bootstrap_resource_logs
-assert bootstrap_resource_logs["resourceName"] == "file:userdata/payments-api-prod.sh", bootstrap_resource_logs
+assert bootstrap_resource_logs["resourceName"] == "git:userdata/payments-api-prod.sh", bootstrap_resource_logs
 assert isinstance(bootstrap_resource_logs.get("lookupContext"), dict), bootstrap_resource_logs
 assert isinstance(bootstrap_resource_logs["available"], bool), bootstrap_resource_logs
 assert bootstrap_resource_logs.get("entries") is None or isinstance(bootstrap_resource_logs.get("entries"), list), bootstrap_resource_logs
@@ -703,14 +703,14 @@ else:
 
 assert bootstrap_resource_inspection["deploymentName"] == "payments-api-prod", bootstrap_resource_inspection
 assert bootstrap_resource_inspection["resourceType"] == "userDataBootstrapSource", bootstrap_resource_inspection
-assert bootstrap_resource_inspection["resourceName"] == "file:userdata/payments-api-prod.sh", bootstrap_resource_inspection
+assert bootstrap_resource_inspection["resourceName"] == "git:userdata/payments-api-prod.sh", bootstrap_resource_inspection
 assert isinstance(bootstrap_resource_inspection.get("lookupContext"), dict), bootstrap_resource_inspection
 assert isinstance(bootstrap_resource_inspection["available"], bool), bootstrap_resource_inspection
 if bootstrap_resource_inspection["available"]:
     assert bootstrap_resource_inspection.get("source") == "auto_scaling_group", bootstrap_resource_inspection
     assert isinstance(bootstrap_resource_inspection.get("userDataBootstrapSource"), dict), bootstrap_resource_inspection
     payload = bootstrap_resource_inspection["userDataBootstrapSource"]
-    assert payload.get("desiredBootstrapSource") == "file:userdata/payments-api-prod.sh", bootstrap_resource_inspection
+    assert payload.get("desiredBootstrapSource") == "git:userdata/payments-api-prod.sh", bootstrap_resource_inspection
     assert payload.get("backingResourceType") == "candidateAutoScalingGroup", bootstrap_resource_inspection
     assert payload.get("backingResourceName") == "payments-api-prod-candidate", bootstrap_resource_inspection
     launch_template = payload.get("launchTemplate")
