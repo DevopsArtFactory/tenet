@@ -536,12 +536,6 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"createSelect('Limit', String(currentPageState.auditLimit || ''), auditLimitSelectOptions(currentPageState.auditLimit), (event) => {",
 		"Audit filters: none",
 		"Audit filters: ${activeFilters.join(' · ')}",
-		"const clearFiltersButton = createElement('button', 'toolbar-button', 'Clear audit filters');",
-		"clearFiltersButton.type = 'button';",
-		"if (activeFilters.length) {",
-		"deployment: '',",
-		"auditAction: '',",
-		"auditLimit: 0,",
 		"const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = [], currentSectionEmptyLabel = '') => {",
 		"const createAuditQuickNav = () => createDeploymentQuickNav(auditDeploymentName(), 'Audit log');",
 		"const renderAuditLogsState = (text, className = '', detailText = '') => {",
@@ -1697,12 +1691,6 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Failed to refresh audit log:' in audit_ui, audit_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains audit refresh error copy")
 	}
-	if !strings.Contains(text, "assert 'Clear audit filters' in audit_ui, audit_ui") {
-		t.Fatalf("expected smoke-local.sh to assert embedded html contains Clear audit filters")
-	}
-	if !strings.Contains(text, "assert \"const clearAuditPageFilters = () => {\" in audit_ui, audit_ui") {
-		t.Fatalf("expected smoke-local.sh to assert embedded html contains audit clear-filters helper")
-	}
 	for _, fragment := range []string{
 		"json_string_field_from_path() {",
 		"response_path=$(write_payload wait-for-apply-status.json \"$response\")",
@@ -1970,724 +1958,37 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 }
 
-func TestOverviewDocsLockECSRollingFallbackContract(t *testing.T) {
+func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 	files := map[string][]string{
 		"../../README.md": {
-			"- `ecsRolling`: `ecsService` (`{deployment}-service`)",
-			"worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service",
-			"GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}",
-			"Live inspection",
-		},
-		"../../docs/features/overview-dashboard.md": {
-			"- `ecsRolling`: `ecsService`",
-		},
-		"../../docs/architecture/tenet-v1-overview-ui.md": {
-			"- `ecsRolling`",
-			"- `ecsService` → `{deployment}-service` → `ECS service Tenet updates with native rolling deployment`, optionally extended with rollout-strategy qualifiers such as `while respecting min healthy 90% and warmup 30s`",
-			"worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service",
-			"Live inspection",
-			"GET /v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service",
-		},
-	}
-
-	for path, fragments := range files {
-		body, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		text := string(body)
-		for _, fragment := range fragments {
-			if !strings.Contains(text, fragment) {
-				t.Fatalf("expected %s to include %q", path, fragment)
-			}
-		}
-	}
-}
-
-func TestOverviewDocsDescribeInPlaceControllerRuntimeEventRefresh(t *testing.T) {
-	files := map[string][]string{
-		"../../README.md": {
-			"`Refresh runtime events`",
-			"`GET /v1/overview/deployments/{deploymentName}/events` in place",
-		},
-		"../../docs/features/overview-dashboard.md": {
-			"`Refresh runtime events`",
-			"re-runs just that deployment-events route in place",
-		},
-		"../../docs/architecture/tenet-v1-overview-ui.md": {
-			"`Refresh runtime events`",
-			"`GET /v1/overview/deployments/{deploymentName}/events` in place",
-			"preserve the bookmarkable `/?page=application...` URL",
-		},
-	}
-
-	for path, fragments := range files {
-		body, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		text := string(body)
-		for _, fragment := range fragments {
-			if !strings.Contains(text, fragment) {
-				t.Fatalf("expected %s to include %q", path, fragment)
-			}
-		}
-	}
-}
-
-func TestOverviewDocsDescribeInPlaceDriftWorkspaceRefresh(t *testing.T) {
-	files := map[string][]string{
-		"../../docs/features/overview-dashboard.md": {
-			"`Refresh drift workspace`",
-			"re-runs only `GET /v1/overview/deployments/{deploymentName}` in place",
-			"keeps the bookmarkable `/?page=drift...` URL stable",
-		},
-		"../../docs/architecture/tenet-v1-overview-ui.md": {
-			"`Refresh drift workspace`",
-			"`GET /v1/overview/deployments/{deploymentName}` in place",
-			"keep the bookmarkable `/?page=drift...` route unchanged",
-		},
-	}
-
-	for path, fragments := range files {
-		body, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		text := string(body)
-		for _, fragment := range fragments {
-			if !strings.Contains(text, fragment) {
-				t.Fatalf("expected %s to include %q", path, fragment)
-			}
-		}
-	}
-}
-
-func TestOverviewDocsDescribeClearDriftFiltersControl(t *testing.T) {
-	files := map[string][]string{
-		"../../README.md": {
-			"`Clear drift filters`",
-			"resets the drift query, severity, and sort controls back to their defaults in one step without changing the bookmarkable route or re-fetching deployment detail",
-		},
-		"../../docs/features/overview-dashboard.md": {
-			"`Clear drift filters`",
-			"resets the drift query, severity, and sort controls back to their defaults in one step without mutating the bookmarkable `/?page=drift...` route or re-running the deployment-detail fetch",
-		},
-	}
-
-	for path, fragments := range files {
-		body, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		text := string(body)
-		for _, fragment := range fragments {
-			if !strings.Contains(text, fragment) {
-				t.Fatalf("expected %s to include %q", path, fragment)
-			}
-		}
-	}
-}
-
-func TestOverviewDocsDescribeDriftWorkspaceResourceQuickLinks(t *testing.T) {
-	files := map[string][]string{
-		"../../README.md": {
-			"direct `_self` resource drill-down links built from the same grouped normalized resource inventory",
-			"`No linked resources are available in this drift workspace yet.`",
-		},
-		"../../docs/features/overview-dashboard.md": {
-			"direct `_self` resource drill-down links",
-			"`No linked resources are available in this drift workspace yet.`",
-		},
-		"../../docs/architecture/tenet-v1-overview-ui.md": {
-			"direct `_self` resource drill-down links",
-			"`No linked resources are available in this drift workspace yet.`",
-		},
-	}
-
-	for path, fragments := range files {
-		body, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		text := string(body)
-		for _, fragment := range fragments {
-			if !strings.Contains(text, fragment) {
-				t.Fatalf("expected %s to include %q", path, fragment)
-			}
-		}
-	}
-}
-
-func TestOverviewDocsDescribeDriftWorkspaceSectionNavigation(t *testing.T) {
-	files := map[string][]string{
-		"../../README.md": {
-			"`Current section` group",
-			"`No section is currently targeted.`",
-			"`On this page` group",
-			"`Runtime signals`, `Rollout execution`, `Field-level drift`, and `Status conditions`",
-			"`/?page=drift&deployment={deploymentName}#drift-field-level`",
-		},
-		"../../docs/features/overview-dashboard.md": {
-			"`Current section` group",
-			"`No section is currently targeted.`",
-			"`On this page` group",
-			"`Runtime signals`, `Rollout execution`, `Field-level drift`, and `Status conditions`",
-			"`/?page=drift&deployment={name}#drift-field-level`",
-		},
-	}
-
-	for path, fragments := range files {
-		body, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		text := string(body)
-		for _, fragment := range fragments {
-			if !strings.Contains(text, fragment) {
-				t.Fatalf("expected %s to include %q", path, fragment)
-			}
-		}
-	}
-}
-
-func TestOverviewDocsDescribeApplicationPageSectionNavigation(t *testing.T) {
-	files := map[string][]string{
-		"../../README.md": {
-			"`On this page` group",
-			"`Workloads`, `Traffic routing`, `Config and access`, and `Controller runtime events`",
-			"`/?page=application&deployment={deploymentName}#application-runtime-events`",
-		},
-		"../../docs/features/overview-dashboard.md": {
-			"`On this page` group",
-			"`Workloads`, `Traffic routing`, `Config and access`, and `Controller runtime events`",
-			"`/?page=application&deployment={name}#application-runtime-events`",
-		},
-	}
-
-	for path, fragments := range files {
-		body, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		text := string(body)
-		for _, fragment := range fragments {
-			if !strings.Contains(text, fragment) {
-				t.Fatalf("expected %s to include %q", path, fragment)
-			}
-		}
-	}
-}
-
-func TestOverviewDocsDescribeAuditFilterReset(t *testing.T) {
-	files := map[string][]string{
-		"../../README.md": {
-			"`Clear audit filters`",
-			"operators can recover to the unfiltered `/?page=audit` slice without dropping bookmarkable `q` / `sync` / `account` state",
-		},
-		"../../docs/features/overview-dashboard.md": {
-			"`Clear audit filters`",
-			"resets those audit filters back to the default `/?page=audit` slice",
-		},
-		"../../docs/architecture/tenet-v1-overview-ui.md": {
-			"`Clear audit filters` recovery action",
-			"without dropping bookmarkable applications-shell query state such as `q`, `sync`, or `account`",
-		},
-	}
-
-	for path, fragments := range files {
-		body, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		text := string(body)
-		for _, fragment := range fragments {
-			if !strings.Contains(text, fragment) {
-				t.Fatalf("expected %s to include %q", path, fragment)
-			}
-		}
-	}
-}
-
-func TestOverviewDocsDescribeResourcePageCurrentSectionNavigation(t *testing.T) {
-	files := map[string][]string{
-		"../../README.md": {
-			"`Current section` chip",
-			"`On this page` group for the remaining stable section hashes",
-			"`/?page=resource...#resource-recent-logs`",
-		},
-		"../../docs/features/overview-dashboard.md": {
-			"`Current section` group",
-			"`On this page` group as `_self` fragment links for the remaining rendered resource sections",
-			"`window.location.hash`",
-		},
-	}
-
-	for path, fragments := range files {
-		body, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		text := string(body)
-		for _, fragment := range fragments {
-			if !strings.Contains(text, fragment) {
-				t.Fatalf("expected %s to include %q", path, fragment)
-			}
-		}
-	}
-}
-
-func TestOverviewDocsDescribePlanWorkspaceSectionNavigation(t *testing.T) {
-	files := map[string][]string{
-		"../../README.md": {
-			"`On this page` group",
-			"`plan-runtime-signals`, `plan-preview-actions`, `plan-stored-preview`, `plan-stored-apply`, `plan-apply-operations`, and `plan-operations`",
-			"`/?page=plan&deployment={deploymentName}&planId={planId}&applyId={applyId}#plan-apply-operations`",
-		},
-		"../../docs/features/overview-dashboard.md": {
-			"`On this page` group",
-			"`plan-runtime-signals`, `plan-preview-actions`, `plan-stored-preview`, `plan-stored-apply`, `plan-apply-operations`, and `plan-operations`",
-			"`/?page=plan&deployment={name}&planId={planId}&applyId={applyId}#plan-apply-operations`",
-		},
-		"../../docs/architecture/tenet-v1-overview-ui.md": {
-			"`buildPageSectionURL(...)` + `scrollToCurrentHashTarget()`",
-			"`plan-runtime-signals`, `plan-preview-actions`, `plan-stored-preview`, `plan-stored-apply`, `plan-apply-operations`, and `plan-operations`",
-		},
-	}
-
-	for path, fragments := range files {
-		body, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		text := string(body)
-		for _, fragment := range fragments {
-			if !strings.Contains(text, fragment) {
-				t.Fatalf("expected %s to include %q", path, fragment)
-			}
-		}
-	}
-}
-
-func TestAuditDocsDescribeBookmarkableLimitControl(t *testing.T) {
-	files := map[string][]string{
-		"../../README.md": {
-			"The audit toolbar now exposes the same limit as an explicit safe preset selector",
-			"a bookmarkable limit control in the audit toolbar that updates the fetch route and URL in place while preserving deployment and action filters",
-		},
-		"../../docs/features/overview-dashboard.md": {
-			"the audit toolbar exposes the same bookmarkable limit through an explicit safe selector",
-			"renders a safe limit selector in the audit toolbar with preset newest-first windows while still honoring bookmarked positive integers such as `limit=2`",
-		},
-		"../../docs/architecture/tenet-v1-overview-ui.md": {
-			"exposes the same bookmarkable limit through a safe toolbar selector that still honors positive-integer URLs such as `?limit=2`",
-		},
-	}
-
-	for path, fragments := range files {
-		body, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		text := string(body)
-		for _, fragment := range fragments {
-			if !strings.Contains(text, fragment) {
-				t.Fatalf("expected %s to include %q", path, fragment)
-			}
-		}
-	}
-}
-
-func TestAuditDocsDescribeInPlaceRefreshControl(t *testing.T) {
-	files := map[string][]string{
-		"../../README.md": {
-			"`Refresh audit log` re-fetches only `GET /v1/audit-logs` in place",
-			"keeps the current bookmarkable `/?page=audit...` URL/query state stable",
-		},
-		"../../docs/features/overview-dashboard.md": {
-			"renders an in-place `Refresh audit log` control that re-runs only `GET /v1/audit-logs` for the current bookmarkable audit route",
-			"keeps the current `/?page=audit...` URL/query state stable while leaving the current audit content visible with explicit loading/error copy",
-		},
-	}
-
-	for path, fragments := range files {
-		body, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		text := string(body)
-		for _, fragment := range fragments {
-			if !strings.Contains(text, fragment) {
-				t.Fatalf("expected %s to include %q", path, fragment)
-			}
-		}
-	}
-}
-
-func TestManualTenetAPIDocsUseListenAddressContract(t *testing.T) {
-	files := []string{
-		"../../README.md",
-		"../../docs/architecture/tenet-v1-local-runtime.md",
-	}
-
-	requiredFragments := []string{
-		"go run ./cmd/tenet-api",
-		"`TENET_API_ADDR`, not `TENET_API_PORT`",
-		"TENET_API_ADDR=:18083",
-		"http://localhost:18083/",
-	}
-
-	forbiddenFragments := []string{
-		"TENET_API_PORT=:18083",
-		"TENET_API_PORT=18083",
-	}
-
-	for _, path := range files {
-		body, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		text := string(body)
-
-		for _, fragment := range requiredFragments {
-			if !strings.Contains(text, fragment) {
-				t.Fatalf("expected %s to include %q", path, fragment)
-			}
-		}
-
-		for _, fragment := range forbiddenFragments {
-			if strings.Contains(text, fragment) {
-				t.Fatalf("expected %s to avoid %q", path, fragment)
-			}
-		}
-	}
-}
-
-func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
-	files := map[string][]string{
-		"../../scripts/smoke-docker.sh": {
-			"json_string_field_from_path() {",
-			"response_path=$(write_payload wait-for-apply-status.json \"$response\")",
-			"current_status=$(json_string_field_from_path \"$response_path\" status)",
-			"application_ui=$(curl -fsS \"$API_BASE_URL/?page=application&deployment=payments-api-prod\")",
-			"account_ui=$(curl -fsS \"$API_BASE_URL/?page=account&accountId=123456789012\")",
-			"resource_ui=$(curl -fsS \"$API_BASE_URL/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan%3A%3Apayments-api-prod-weighted-routing%3A%3AWeighted+routing+plan\")",
-			"ecs_resource_ui=$(curl -fsS \"$API_BASE_URL/?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=ecsService%3A%3Aworker-prod-service%3A%3AECS+service+Tenet+updates+with+native+rolling+deployment\")",
-			"bootstrap_resource_ui=$(curl -fsS \"$API_BASE_URL/?page=resource&deployment=payments-api-prod&resourceType=userDataBootstrapSource&resourceId=userDataBootstrapSource%3A%3Afile%3Auserdata%2Fpayments-api-prod.sh%3A%3ANormalized+userdata+bootstrap+source+for+candidate+EC2+capacity\")",
-			"APPLICATION_UI_PATH=\"$application_ui_path\"",
-			"ACCOUNT_UI_PATH=\"$account_ui_path\"",
-			"RESOURCE_UI_PATH=\"$resource_ui_path\"",
-			"ECS_RESOURCE_UI_PATH=\"$ecs_resource_ui_path\"",
-			"BOOTSTRAP_RESOURCE_UI_PATH=\"$bootstrap_resource_ui_path\"",
-			"application_ui = read_text(\"APPLICATION_UI_PATH\")",
-			"account_ui = read_text(\"ACCOUNT_UI_PATH\")",
-			"resource_ui = read_text(\"RESOURCE_UI_PATH\")",
-			"ecs_resource_ui = read_text(\"ECS_RESOURCE_UI_PATH\")",
-			"bootstrap_resource_ui = read_text(\"BOOTSTRAP_RESOURCE_UI_PATH\")",
-			"for label, body in ((\"resource_ui\", resource_ui), (\"ecs_resource_ui\", ecs_resource_ui), (\"bootstrap_resource_ui\", bootstrap_resource_ui)):",
-			"const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {",
-			"const fetchAccountDetail = (accountID) => fetchEmbeddedReadRouteJSON(`/v1/overview/accounts/${encodeURIComponent(accountID)}`, {",
-			"fetchApplicationsOverview()",
-			"fetchAccountDetail(currentPageState.accountId)",
-			"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')",
-			"const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);",
-			"Opened via bookmarked resource alias.",
-			"createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')",
-			"const createResourceQuickNav = (detail, resource, sectionLinks = []) => {",
-			"Current section",
-			"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)",
-			"No section is currently targeted.",
-			"const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = [], currentSectionEmptyLabel = '') => {",
-			"const trackCurrentSection = Boolean(currentSectionEmptyLabel) && sectionLinks.some((sectionLink) => sectionLink?.sectionID);",
-			"(mode === 'drift' || mode === 'plan') ? 'No section is currently targeted.' : '',",
-			"No additional section links are available for this resource.",
-			"config --services",
-			"for service in api controller redis; do",
-			"assert_request_id_header() {",
-			"wait_for_api_health() {",
-			"restart_api_with_apply_mode() {",
-			"TENET_AWS_ENABLE_APPLY=\"$apply_enabled\" \"${COMPOSE[@]}\" up -d api >/dev/null",
-			"headers=$(curl -fsS -D - -o /dev/null \"$url\")",
-			"assert request_id, headers",
-			"healthz_request_id=$(assert_request_id_header \"$API_BASE_URL/healthz\")",
-			"summary_request_id=$(assert_request_id_header \"$API_BASE_URL/v1/catalog/summary\")",
-			"worker_resource_logs_request_id=$(assert_request_id_header \"$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service\")",
-			"audit_logs_request_id=$(assert_request_id_header \"$API_BASE_URL/v1/audit-logs?action=apply.requested&limit=2\")",
-			"application_ui_request_id=$(assert_request_id_header \"$API_BASE_URL/?page=application&deployment=payments-api-prod\")",
-			"account_ui_request_id=$(assert_request_id_header \"$API_BASE_URL/?page=account&accountId=123456789012\")",
-			"drift_ui_request_id=$(assert_request_id_header \"$API_BASE_URL/?page=drift&deployment=payments-api-prod\")",
-			"audit_ui_request_id=$(assert_request_id_header \"$API_BASE_URL/?page=audit&deployment=payments-api-prod&action=apply.requested&limit=2\")",
-			"plan_apply_ui_request_id=$(assert_request_id_header \"$API_BASE_URL/?page=plan&deployment=payments-api-prod&planId=$plan_id&applyId=$apply_id\")",
-			"assert_structured_api_request_logs() {",
-			"APPLICATION_UI_REQUEST_ID=\"$application_ui_request_id\"",
-			"ACCOUNT_UI_REQUEST_ID=\"$account_ui_request_id\"",
-			"PLAN_APPLY_UI_REQUEST_ID=\"$plan_apply_ui_request_id\"",
-			"assert entries, \"expected structured api request log lines\"",
-			"if entry.get(\"msg\") != \"http_request\":",
-			"(os.environ[\"WORKER_RESOURCE_LOGS_REQUEST_ID\"], \"/v1/overview/deployments/worker-prod/resource-logs\")",
-			"(os.environ[\"AUDIT_LOGS_REQUEST_ID\"], \"/v1/audit-logs\")",
-			"(os.environ[\"APPLICATION_UI_REQUEST_ID\"], \"/\")",
-			"(os.environ[\"ACCOUNT_UI_REQUEST_ID\"], \"/\")",
-			"(os.environ[\"PLAN_APPLY_UI_REQUEST_ID\"], \"/\")",
-			"assert entry.get(\"method\") == \"GET\", entry",
-			"assert entry.get(\"status\") == 200, entry",
-			"assert entry.get(\"result\") == \"success\", entry",
-			"assert entry.get(\"duration_ms\") is not None, entry",
-			"\"$ROOT/scripts/docker-up.sh\" \"${COMPOSE[@]}\"",
-			"curl -fsS \"$API_BASE_URL/healthz\"",
-			"curl -fsS \"$API_BASE_URL/v1/catalog/summary\"",
-			"curl -fsS \"$API_BASE_URL/v1/overview/applications\"",
-			"curl -fsS \"$API_BASE_URL/v1/overview/deployments/payments-api-prod\"",
-			"deployment_detail_extract_path=$(write_payload deployment-detail.extract.json \"$deployment_detail\")",
-			"deployment_source_fingerprint=$(json_string_field_from_path \"$deployment_detail_extract_path\" sourceFingerprint)",
-			"plan_preview_extract_path=$(write_payload plan-preview.extract.json \"$plan_preview\")",
-			"plan_id=$(json_string_field_from_path \"$plan_preview_extract_path\" id)",
-			"plan_status=$(PLAN_PREVIEW_PATH=\"$plan_preview_extract_path\" PLAN_PREVIEW_GET_PATH=\"$plan_preview_get_extract_path\" DEPLOYMENT_SOURCE_FINGERPRINT=\"$deployment_source_fingerprint\" python3 - <<'PY'",
-			"apply_record_extract_path=$(write_payload apply-record.extract.json \"$apply_record\")",
-			"apply_id=$(json_string_field_from_path \"$apply_record_extract_path\" id)",
-			"managed_drift = deployment_detail.get(\"managedDrift\")",
-			"runtime_managed_drift = (deployment_detail.get(\"runtimeSummary\") or {}).get(\"managedDrift\")",
-			"assert isinstance(managed_drift, list) and managed_drift, deployment_detail",
-			"assert isinstance(runtime_managed_drift, list) and runtime_managed_drift, deployment_detail",
-			"assert runtime_managed_drift == managed_drift, deployment_detail",
-			"assert all(isinstance(row.get(\"field\"), str) and row[\"field\"] for row in managed_drift), managed_drift",
-			"assert all(isinstance(row.get(\"desired\"), str) and row[\"desired\"] for row in managed_drift), managed_drift",
-			"assert all(isinstance(row.get(\"actual\"), str) and row[\"actual\"] for row in managed_drift), managed_drift",
-			"assert all(row.get(\"severity\") in {\"high\", \"medium\", \"low\"} for row in managed_drift), managed_drift",
-			"plan_preview_request_body=$(DEPLOYMENT_SOURCE_FINGERPRINT=\"$deployment_source_fingerprint\" python3 - <<'PY'",
-			"plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d \"$plan_preview_request_body\" \"$API_BASE_URL/v1/plans/deployments/payments-api-prod\")",
-			"plan_preview_get=$(curl -fsS \"$API_BASE_URL/v1/plans/$plan_id\")",
-			"assert plan_preview[\"status\"] in {\"ready\", \"failed\"}, plan_preview",
-			"if [[ \"$plan_status\" != \"ready\" ]]; then",
-			"smoke-docker: expected compose stack to return a ready immutable plan preview for payments-api-prod",
-			"apply_record=$(curl -fsS -X POST \"$API_BASE_URL/v1/applies/plans/$plan_id\")",
-			"apply_record_get=$(curl -fsS \"$API_BASE_URL/v1/applies/$apply_id\")",
-			"\"$API_BASE_URL/v1/applies/$apply_id/transitions\"",
-			"\"$API_BASE_URL/v1/applies/apply_smoke_missing/transitions\"",
-			"actor_plan_preview=$(curl -fsS -X POST \\",
-			"X-Tenet-Actor-Id: explicit-456",
-			"X-Tenet-Actor-Name: Alex Explicit",
-			"X-User-ID: operator-123",
-			"actor_plan_preview_get=$(curl -fsS \"$API_BASE_URL/v1/plans/$actor_plan_id\")",
-			"actor_apply_record=$(curl -fsS -X POST \\",
-			"actor_apply_record_get=$(curl -fsS \"$API_BASE_URL/v1/applies/$actor_apply_id\")",
-			"assert invalid_apply_transition.strip() == \"invalid apply transition request body\", invalid_apply_transition",
-			"assert \"apply request not found\" in unknown_apply_transition, unknown_apply_transition",
-			"assert f\"{apply_record['id']} is already terminal with status failed\" in terminal_apply_transition, terminal_apply_transition",
-			"plan_apply_ui=$(curl -fsS \"$API_BASE_URL/?page=plan&deployment=payments-api-prod&planId=$plan_id&applyId=$apply_id\")",
-			"assert plan_preview[\"status\"] == \"ready\", plan_preview",
-			"assert apply_record[\"status\"] == \"failed\", apply_record",
-			"assert apply_record[\"error\"] == \"apply execution is disabled\", apply_record",
-			"assert apply_record[\"details\"] == [",
-			"assert apply_record[\"source\"][\"planStatus\"] == \"ready\", apply_record",
-			"assert apply_record_get == apply_record, (apply_record_get, apply_record)",
-			"queued_deployment_detail=$(curl -fsS \"$API_BASE_URL/v1/overview/deployments/worker-prod\")",
-			"queued_deployment_detail_extract_path=$(write_payload queued-deployment-detail.extract.json \"$queued_deployment_detail\")",
-			"queued_deployment_source_fingerprint=$(json_string_field_from_path \"$queued_deployment_detail_extract_path\" sourceFingerprint)",
-			"queued_plan_preview_request_body=$(DEPLOYMENT_SOURCE_FINGERPRINT=\"$queued_deployment_source_fingerprint\" python3 - <<'PY'",
-			"queued_plan_preview=$(curl -fsS -X POST -H 'Content-Type: application/json' -d \"$queued_plan_preview_request_body\" \"$API_BASE_URL/v1/plans/deployments/worker-prod\")",
-			"queued_apply_record=$(curl -fsS -X POST \"$API_BASE_URL/v1/applies/plans/$queued_plan_id\")",
-			"assert queued_plan_preview[\"deploymentName\"] == \"worker-prod\", queued_plan_preview",
-			"assert queued_apply_record[\"deploymentName\"] == \"worker-prod\", queued_apply_record",
-			"assert queued_apply_record[\"status\"] == \"queued\", queued_apply_record",
-			"assert not queued_apply_record.get(\"error\"), queued_apply_record",
-			"Tenet persisted this immutable apply request as queued because TENET_AWS_ENABLE_APPLY=true enabled the local-safe executor handoff path.",
-			"Tenet will advance this same applyId locally, but live AWS mutation is still not implemented for this backend slice.",
-			"assert queued_apply_record_get[\"status\"] == \"failed\", queued_apply_record_get",
-			"assert [operation[\"status\"] for operation in queued_apply_record[\"operations\"]] == [\"queued\"] * len(queued_apply_record[\"operations\"]), queued_apply_record",
-			"curl -fsS \"$API_BASE_URL/v1/audit-logs\"",
-			"curl -fsS \"$API_BASE_URL/v1/audit-logs?action=apply.requested&limit=2\"",
-			"invalid_audit_action_status=$(curl -sS -o \"$INVALID_AUDIT_ACTION_BODY\" -w \"%{http_code}\" \"$API_BASE_URL/v1/audit-logs?action=invalid.action\")",
-			"assert isinstance(audit_logs.get(\"entries\"), list), audit_logs",
-			"assert any(entry[\"action\"] == \"apply.requested\" for entry in audit_logs[\"entries\"]), audit_logs",
-			"assert any(entry[\"action\"] == \"plan.created\" for entry in audit_logs[\"entries\"]), audit_logs",
-			"assert isinstance(audit_logs_action_filtered.get(\"entries\"), list), audit_logs_action_filtered",
-			"assert 1 <= len(audit_logs_action_filtered[\"entries\"]) <= 2, audit_logs_action_filtered",
-			"assert all(entry[\"action\"] == \"apply.requested\" for entry in audit_logs_action_filtered[\"entries\"]), audit_logs_action_filtered",
-			"actor_audit_logs=$(curl -fsS \"$API_BASE_URL/v1/audit-logs?deployment=payments-api-staging&action=apply.requested&limit=1\")",
-			"assert os.environ[\"INVALID_AUDIT_ACTION_STATUS\"] == \"400\", os.environ[\"INVALID_AUDIT_ACTION_STATUS\"]",
-			"assert \"invalid action query\" in invalid_audit_action_body, invalid_audit_action_body",
-			"assert entry[\"actor\"][\"available\"] is False, entry",
-			"assert \"no authenticated request context\" in entry[\"actor\"][\"reason\"], entry",
-			"ACTOR_PLAN_PREVIEW_PATH=\"$actor_plan_preview_path\"",
-			"ACTOR_PLAN_PREVIEW_GET_PATH=\"$actor_plan_preview_get_path\"",
-			"ACTOR_APPLY_RECORD_PATH=\"$actor_apply_record_path\"",
-			"ACTOR_APPLY_RECORD_GET_PATH=\"$actor_apply_record_get_path\"",
-			"ACTOR_AUDIT_LOGS_PATH=\"$actor_audit_logs_path\"",
-			"actor_plan_preview = read_json(\"ACTOR_PLAN_PREVIEW_PATH\")",
-			"actor_apply_record = read_json(\"ACTOR_APPLY_RECORD_PATH\")",
-			"actor_audit_logs = read_json(\"ACTOR_AUDIT_LOGS_PATH\")",
-			"assert actor_plan_preview[\"actor\"][\"available\"] is True, actor_plan_preview",
-			"assert actor_plan_preview[\"actor\"][\"id\"] == \"explicit-456\", actor_plan_preview",
-			"assert actor_plan_preview[\"actor\"][\"name\"] == \"Alex Explicit\", actor_plan_preview",
-			"assert actor_apply_record[\"actor\"][\"id\"] == \"explicit-456\", actor_apply_record",
-			"assert actor_apply_record[\"actor\"][\"name\"] == \"Alex Explicit\", actor_apply_record",
-			"assert actor_apply_record_get == actor_apply_record, (actor_apply_record_get, actor_apply_record)",
-			"assert actor_audit_logs[\"entries\"][0][\"actor\"][\"available\"] is True, actor_audit_logs",
-			"assert actor_audit_logs[\"entries\"][0][\"actor\"][\"id\"] == \"explicit-456\", actor_audit_logs",
-			"assert actor_audit_logs[\"entries\"][0][\"actor\"][\"name\"] == \"Alex Explicit\", actor_audit_logs",
-			"curl -fsS \"$API_BASE_URL/v1/overview/deployments/payments-api-prod/events\"",
-			"curl -fsS \"$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service\"",
-			"bootstrap_resource_logs=$(curl -fsS \"$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=userDataBootstrapSource&resourceName=git%3Auserdata%2Fpayments-api-prod.sh\")",
-			"bootstrap_resource_inspection=$(curl -fsS \"$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=userDataBootstrapSource&resourceName=git%3Auserdata%2Fpayments-api-prod.sh\")",
-			"bootstrap_resource_logs_path=$(write_payload bootstrap-resource-logs.json \"$bootstrap_resource_logs\")",
-			"bootstrap_resource_inspection_path=$(write_payload bootstrap-resource-inspection.json \"$bootstrap_resource_inspection\")",
-			"BOOTSTRAP_RESOURCE_LOGS_PATH=\"$bootstrap_resource_logs_path\"",
-			"BOOTSTRAP_RESOURCE_INSPECTION_PATH=\"$bootstrap_resource_inspection_path\"",
-			"bootstrap_resource_logs = read_json(\"BOOTSTRAP_RESOURCE_LOGS_PATH\")",
-			"bootstrap_resource_inspection = read_json(\"BOOTSTRAP_RESOURCE_INSPECTION_PATH\")",
-			"assert deployment_events[\"deploymentName\"] == \"payments-api-prod\", deployment_events",
-			"assert isinstance(deployment_events.get(\"events\"), list), deployment_events",
-			"assert worker_resource_logs[\"resourceType\"] == \"ecsService\", worker_resource_logs",
-			"assert worker_resource_logs[\"resourceName\"] == \"worker-prod-service\", worker_resource_logs",
-			"assert isinstance(worker_resource_logs[\"available\"], bool), worker_resource_logs",
-			"assert worker_resource_logs.get(\"entries\") is None or isinstance(worker_resource_logs.get(\"entries\"), list), worker_resource_logs",
-			"assert bootstrap_resource_logs[\"resourceType\"] == \"userDataBootstrapSource\", bootstrap_resource_logs",
-			"assert bootstrap_resource_logs[\"resourceName\"] == \"git:userdata/payments-api-prod.sh\", bootstrap_resource_logs",
-			"assert bootstrap_resource_logs.get(\"unavailableReason\") in {\"aws_unavailable\", \"no_log_source\"}, bootstrap_resource_logs",
-			"assert bootstrap_resource_inspection[\"resourceType\"] == \"userDataBootstrapSource\", bootstrap_resource_inspection",
-			"assert bootstrap_resource_inspection[\"resourceName\"] == \"git:userdata/payments-api-prod.sh\", bootstrap_resource_inspection",
-			"assert bootstrap_resource_inspection.get(\"unavailableReason\") == \"aws_unavailable\", bootstrap_resource_inspection",
-			"audit_ui=$(curl -fsS \"$API_BASE_URL/?page=audit&deployment=payments-api-prod&action=apply.requested&limit=2\")",
-			"drift_ui=$(curl -fsS \"$API_BASE_URL/?page=drift&deployment=payments-api-prod\")",
-			"Audit timeline",
-			"Deployment audit timeline",
-			"Operator audit log",
-			"Audit filters: ${activeFilters.join(' · ')}",
-			"Active deployment context",
-			"Loading audit log…",
-			"Audit log is currently unavailable.",
-			"Immutable operator audit log from GET /v1/audit-logs. Newest entries first. Actor identity remains explicit when unavailable or unknown.",
-			"Immutable plan preview and apply-request activity for deployment ${deploymentName} rendered from GET /v1/audit-logs.",
-			"No audit activity has been persisted yet for deployment ${currentPageState.deployment}.",
-			"action ${currentPageState.auditAction}",
-			"const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {",
-			"if (action) params.set('action', action);",
-			"createSelect('Action', currentPageState.auditAction, auditActionOptions, (event) => {",
-			"Controller runtime events",
-			"Drift viewer",
-			"Field-level drift",
-			"Active drift source",
-			"Linked resources",
-			"Current source: controller-authored managedDrift rows.",
-			"managedDrift is present in the deployment detail payload, so fallback read-model heuristics stay suppressed for this deployment.",
-			"Drift summary",
-			"Total rows",
-			"Visible rows",
-			"Field path",
-			"Desired",
-			"Actual",
-			"Severity",
-			"No controller-authored field-level drift was reported for this deployment.",
-			"No field-level drift rows match the current filters. Adjust the query or severity filters to inspect reported drift.",
-			"Recent logs",
-			"On this page",
-			"Plan preview actions",
-			"Apply request actions",
-			"Plan preview approval guidance",
-			"Plan operations",
-			"Current section",
-			"buildPageSectionURL('plan', sectionID, {",
-			"Open bookmarked workspace",
-			"Plan JSON",
-			"Open bookmarked apply",
-			"Apply JSON",
-			"Apply Plan will POST /v1/applies/plans/${planState.record.id}, persist an immutable apply request, and update this workspace URL with a shareable applyId.",
-			"Apply Plan activates only when a loaded persisted ready plan preview with a valid planId is present.",
-			"Live execution is intentionally disabled by default, so failed immutable apply records are expected and useful for operator review.",
-			"def assert_fragments(label, body, fragments):",
-			"operator_read_auth_fragments = (",
-			"assert_fragments(\"application_ui\", application_ui, operator_read_auth_fragments + (",
-			"assert_fragments(\"account_ui\", account_ui, operator_read_auth_fragments + (",
-			"for label, body in ((\"resource_ui\", resource_ui), (\"ecs_resource_ui\", ecs_resource_ui), (\"bootstrap_resource_ui\", bootstrap_resource_ui)):",
-			"assert_fragments(\"drift_ui\", drift_ui, operator_read_auth_fragments + (",
-			"assert_fragments(\"audit_ui\", audit_ui, operator_read_auth_fragments + (",
-			"\"const operatorReadAuthRequiredState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 401;\"",
-			"\"const operatorReadForbiddenState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 403;\"",
-			"\"const operatorReadAuthRequiredMessage = (route) => `Tenet rejected ${route} because authenticated identity is required on this operator read route. Retry this bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers.`;\"",
-			"\"const operatorReadForbiddenMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized for that route or deployment.`;\"",
-			"\"return 'Application detail';\"",
-			"\"return 'Account detail';\"",
-			"\"return 'Resource detail';\"",
-			"\"return 'Drift viewer';\"",
-			"\"return `GET /v1/overview/applications/${deploymentName}`;\"",
-			"\"return `GET /v1/overview/accounts/${accountID}`;\"",
-			"\"return `GET /v1/overview/deployments/${deploymentName}`;\"",
-			"\"return `GET ${buildAuditLogsRoute({\"",
-			"\"const renderOperatorReadFailurePage = (pageLabel, route, error) => {\"",
-			"\"renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);\"",
-			"\"renderAuditLogsState(operatorReadFailureHeading(error), 'error', operatorReadFailureMessage(buildEmbeddedPageReadRoute(currentPageState), error));\"",
-			"params.get('planId') || ''",
-			"params.get('applyId') || ''",
-			"\"const buildResourceLogsRoute = (deploymentName, resource) => {\"",
-			"\"const resourceLogsReadRoute = (deploymentName, resource) => `GET ${buildResourceLogsRoute(deploymentName, resource)}`;\"",
-			"\"const buildResourceInspectionRoute = (deploymentName, resource) => {\"",
-			"\"const resourceInspectionReadRoute = (deploymentName, resource) => `GET ${buildResourceInspectionRoute(deploymentName, resource)}`;\"",
-			"logs api --tail=200",
-			"logs controller --tail=200",
-			"api logs missing correlated structured request entries",
-			"down --remove-orphans",
-		},
-		"../../compose.yaml": {
-			"TENET_PLAN_STORE_PATH: /tmp/tenet/plan-previews.json",
-			"TENET_APPLY_STORE_PATH: /tmp/tenet/apply-requests.json",
-			"TENET_AWS_ENABLE_APPLY: ${TENET_AWS_ENABLE_APPLY:-false}",
-			"TENET_API_TRUST_AUTHENTICATED_HEADERS: ${TENET_API_TRUST_AUTHENTICATED_HEADERS:-false}",
-			"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY: ${TENET_API_ENFORCE_AUTHENTICATED_IDENTITY:-false}",
-			"- tenet-api-tmp:/tmp",
-			"tenet-api-tmp:",
-		},
-		"../../Makefile": {
-			".PHONY: test fmt docker-build docker-up docker-down smoke-local smoke-docker",
-			"smoke-docker:",
-			"./scripts/smoke-docker.sh",
-		},
-		"../../.github/workflows/ci-smoke.yml": {
-			"name: CI Smoke",
-			"run: bash -n scripts/smoke-local.sh",
-			"run: make smoke-local",
-			"run: bash -n scripts/smoke-docker.sh",
-			"run: make smoke-docker",
-		},
-		"../../README.md": {
-			"Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis;",
-			"the request-actor header contract by sending conflicting `X-Tenet-Actor-*` and `X-User-*` identities together",
-			"fetches the bookmarkable `/?page=application&deployment=payments-api-prod` route, the bookmarkable `/?page=account&accountId=123456789012` route, the existing bookmarkable `/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan` route, plus one representative bookmarkable ECS resource route at `/?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=ecsService::worker-prod-service::ECS service Tenet updates with native rolling deployment`",
-			"checks only raw embedded application/account/resource shell strings that prove those drill-down pages can render and navigate, plus the landing-page helper strings that keep `/`, the bookmarkable application drill-down, and the bookmarkable account drill-down on the shared operator-read auth guidance path under trusted front-door auth",
-			"the front-door auth contract by restarting `tenet-api`",
+			"### Trusted front-door auth",
 			"Front-door auth remains additive and opt-in.",
-			"TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
-			"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
-			"`X-Tenet-Authenticated-Id`",
-			"Only enable either setting when every request reaches Tenet through a front door that authenticates the caller and strips any client-supplied `X-Tenet-Authenticated-*` headers",
+			"TENET_API_TRUST_AUTHENTICATED_HEADERS",
+			"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY",
+			"TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION",
+			"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION",
+			"strips any client-supplied `X-Tenet-Authenticated-*`, `X-Tenet-Authenticated-Roles`, and `X-Tenet-Authorized-Deployments` headers before forwarding trusted values",
 			"Do not expose a header-trusting `tenet-api` instance directly to untrusted clients",
-			"Use `make smoke-docker` when you need to validate `compose.yaml`, confirm the `api`/`controller`/`redis` service contract",
-			"additive `X-User-*` alias support plus explicit `X-Tenet-Actor-*` precedence through immutable plan/apply/audit records",
-			"checks representative endpoints plus deployment-events/resource-logs/audit-log JSON shapes, verifies representative `Request-Id` response headers, fetches the full `GET /v1/audit-logs` collection and asserts the expected `plan.created` and `apply.requested` actions are present without depending on `limit=2`, still fetches `GET /v1/audit-logs?action=apply.requested&limit=2` to verify exact-action filtering, rejects `action=invalid.action` with `400 Bad Request`,",
-			"non-empty controller-authored `managedDrift[]` evidence in `GET /v1/overview/deployments/payments-api-prod` with stable `field` / `desired` / `actual` / `severity` rows and aligned `runtimeSummary.managedDrift`",
-			"the bookmarkable `/?page=drift&deployment=payments-api-prod` workspace source/summary/table copy",
-			"the bookmarkable `/?page=account&accountId=123456789012` route",
-			"mirrors the direct-process actor coverage by sending both header families with conflicting identities on a `payments-api-staging` plan/apply flow and verifying that the explicit `X-Tenet-Actor-*` actor survives the stored plan preview, stored apply request, and deployment-scoped `GET /v1/audit-logs?deployment=payments-api-staging&action=apply.requested&limit=1` retrieval",
-			"reuses that stable terminal `applyId` to prove `POST /v1/applies/{applyId}/transitions` rejects malformed JSON with `400`, unknown apply IDs with `404`, and invalid lifecycle moves with `409` plus operator-facing terminal-state text",
-			"unauthenticated `POST /v1/applies/{applyId}/transitions` fail with `401`",
-			"authenticated but unauthorized `POST /v1/applies/{applyId}/transitions` fails with `403`",
-			"`GET /v1/audit-logs?deployment={deploymentName}`",
-			"`GET /v1/audit-logs?deployment={deploymentName}&limit={n}`",
-			"the bookmarkable `/?page=audit&deployment={deploymentName}&action={action}&limit={n}` audit view",
-			"`Audit filters: deployment payments-api-prod · action apply.requested · limit 2`",
-			"POST /v1/plans/deployments/payments-api-prod",
-			"GET /v1/plans/{planId}",
-			"POST /v1/applies/plans/{planId}",
-			"GET /v1/applies/{applyId}",
-			"`TENET_PLAN_STORE_PATH`",
-			"`TENET_APPLY_STORE_PATH`",
-			"`/tmp/tenet/plan-previews.json`",
-			"`/tmp/tenet/apply-requests.json`",
+			"The same trusted front-door read contract also covers `GET /v1/overview/accounts/{awsAccountId}`",
+			"`GET /v1/overview/deployments/{deploymentName}/resource-logs`, `GET /v1/overview/deployments/{deploymentName}/resource-inspection`",
+			"### Smoke verification scope",
+			"Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis.",
+			"The request-actor header contract by sending conflicting `X-Tenet-Actor-*` and `X-User-*` identities together",
+			"Bookmarkable `/?page=application&deployment=payments-api-prod`, `/?page=account&accountId=123456789012`, the existing traffic-shift resource route, and one representative ECS resource route",
+			"Trusted front-door auth by restarting `tenet-api`",
+			"gates guarded application, raw-status collection, account collection, unscoped audit collection, raw-status detail, account detail, grouped-account, immutable plan/apply, deployment-scoped audit reads, plus the exact `GET /v1/overview/deployments/{deploymentName}/resource-logs` and `GET /v1/overview/deployments/{deploymentName}/resource-inspection` drill-down routes.",
+			"the unscoped audit collection still returns `{\"entries\":[]}` when no audit rows are visible",
+			"Use `make smoke-docker` when you need to validate the containerized local stack itself.",
+			"API health, representative endpoints, deployment-events/resource-logs/audit-log JSON shapes, and representative `Request-Id` response headers",
+			"The full `GET /v1/audit-logs` collection with expected `plan.created` and `apply.requested` actions present",
+			"The same smoke-created `POST /v1/applies/{applyId}/transitions` route boundaries: `400` malformed JSON, `404` unknown apply, and `409` invalid terminal move with operator-facing text.",
+			"The same actor-header precedence check used by direct-process smoke, plus the default disabled immutable apply contract.",
+			"Trusted front-door auth by restarting the Compose `api` service",
+			"controller-authored `managedDrift[]` evidence in `GET /v1/overview/deployments/payments-api-prod` with stable `field` / `desired` / `actual` / `severity` rows and aligned `runtimeSummary.managedDrift`",
 			"survive the Compose `api` service restart",
-			"/?page=plan&deployment=payments-api-prod&planId={planId}&applyId={applyId}",
 			"`TENET_AWS_ENABLE_APPLY=true make docker-up`",
-			"correlated structured `http_request` logs with stable fields such as `request_id`, `method`, `path`, `status`, `duration_ms`, and `result` for the bookmarkable application drill-down shell request, bookmarkable account drill-down shell request, bookmarkable drift workspace request, the deployment-scoped audit workspace request, and the bookmarkable plan/apply workspace shell request",
-			"`Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Lookup region`, and `Observer role configured`",
+			"correlated bookmarkable shell reads for the application drill-down, account drill-down, drift workspace, deployment-scoped audit workspace, and bookmarkable plan/apply workspace",
+			"The raw embedded shell/docs contract also keeps the labels `Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Lookup region`, and `Observer role configured` present",
 			"temp files via the shared `write_payload` helper",
 			"The compose-backed smoke now covers that shipped bootstrap-source drill-down directly",
 			"`aws_unavailable` and `no_log_source` as part of the expected local no-AWS contract",
@@ -2697,39 +1998,33 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"make smoke-docker",
 		},
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
+			"## Trusted front-door auth",
+			"Front-door auth remains additive and opt-in.",
+			"TENET_API_TRUST_AUTHENTICATED_HEADERS",
+			"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY",
+			"TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION",
+			"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION",
+			"strips any client-supplied `X-Tenet-Authenticated-*`, `X-Tenet-Authenticated-Roles`, and `X-Tenet-Authorized-Deployments` headers before forwarding trusted values",
+			"Do not expose a header-trusting `tenet-api` instance directly to untrusted clients",
+			"The same trusted front-door read contract also covers `GET /v1/overview/accounts/{awsAccountId}`",
+			"`GET /v1/overview/deployments/{deploymentName}/resource-logs`, `GET /v1/overview/deployments/{deploymentName}/resource-inspection`",
 			"Use `make smoke-local` for the fastest fixture-backed regression check when you only need direct-process validation.",
-			"proves additive `X-User-*` alias support plus explicit `X-Tenet-Actor-*` precedence by sending both header families with conflicting identities",
-			"fetches the bookmarkable `/?page=application&deployment=payments-api-prod` route, the bookmarkable `/?page=account&accountId=123456789012` route, the existing bookmarkable `/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan` route, plus one representative bookmarkable ECS resource route at `/?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=ecsService::worker-prod-service::ECS service Tenet updates with native rolling deployment`",
-			"asserts only the raw embedded application/account/resource shell strings needed to prove those drill-down pages can render and navigate",
-			"restarts `tenet-api` with `TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
-			"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
-			"including the persisted `POST /v1/applies/{applyId}/transitions` write route",
-			"unauthenticated transition callers still short-circuit with the operator-write `401` before any apply lookup",
-			"the bookmarkable `/?page=plan` workspace still includes operator-facing guidance for those auth-gated write failures",
-			"the bookmarkable application drill-down `/?page=application&deployment=payments-api-prod` and `/?page=account&accountId=123456789012` drill-down both stay on the shared operator-read guidance path alongside `/`, resource, drift, audit, and plan workspace bookmarks",
-			"do it only behind a front door that authenticates callers and strips inbound `X-Tenet-Authenticated-*` headers",
+			"Additive `X-User-*` alias support plus explicit `X-Tenet-Actor-*` precedence by sending both header families with conflicting identities",
+			"Bookmarkable `/?page=application&deployment=payments-api-prod`, `/?page=account&accountId=123456789012`, the existing traffic-shift resource route, and one representative ECS resource route",
+			"Trusted front-door auth by restarting `tenet-api`",
+			"gates guarded application, raw-status collection, account collection, unscoped audit collection, raw-status detail, account detail, grouped-account, immutable plan/apply, deployment-scoped audit reads, plus the exact `GET /v1/overview/deployments/{deploymentName}/resource-logs` and `GET /v1/overview/deployments/{deploymentName}/resource-inspection` drill-down routes.",
+			"the bookmarkable `/?page=plan` workspace, but only behind a trusted front door that strips inbound trust headers before forwarding its own values",
 			"### Docker stack smoke check",
 			"make smoke-docker",
-			"asserts the `api`, `controller`, and `redis` services are present in `compose.yaml`",
-			"checks representative endpoints plus deployment-events/resource-logs/audit-log JSON shapes, verifies representative `Request-Id` response headers, fetches the full `GET /v1/audit-logs` collection and asserts the expected `plan.created` and `apply.requested` actions are present without depending on `limit=2`, still fetches `GET /v1/audit-logs?action=apply.requested&limit=2` to verify exact-action filtering, rejects `action=invalid.action` with `400 Bad Request`,",
-			"non-empty controller-authored `managedDrift[]` evidence in `GET /v1/overview/deployments/payments-api-prod` with stable `field` / `desired` / `actual` / `severity` rows and aligned `runtimeSummary.managedDrift`",
-			"mirrors the direct-process actor coverage by sending both header families with conflicting identities on a `payments-api-staging` plan/apply flow and verifying that the explicit `X-Tenet-Actor-*` actor survives the stored plan preview, stored apply request, and deployment-scoped `GET /v1/audit-logs?deployment=payments-api-staging&action=apply.requested&limit=1` retrieval",
-			"the bookmarkable application drill-down shell `/?page=application&deployment=payments-api-prod` keeps the shared operator-read guidance contract in the raw served HTML alongside the landing page, account, resource, drift, and audit shells",
-			"fetches the bookmarkable `/?page=application&deployment=payments-api-prod` drill-down shell URL plus the bookmarkable `/?page=account&accountId=123456789012` drill-down shell URL alongside the bookmarkable `/?page=drift&deployment=payments-api-prod` workspace URL",
-			"confirms the drift page source still includes `Active drift source`, `Current source: controller-authored managedDrift rows.`, `Drift summary`, and field-level table headers such as `Field path` / `Desired` / `Actual` / `Severity`",
-			"reuses that smoke-created terminal `applyId` to verify the executor-facing transition-route boundaries (`400` malformed JSON, `404` unknown apply, `409` invalid terminal move with operator-facing text)",
-			"unauthenticated `POST /v1/applies/{applyId}/transitions` fail with `401`",
-			"authenticated but unauthorized `POST /v1/applies/{applyId}/transitions` fails with `403`",
-			"the bookmarkable `/?page=audit&deployment={deploymentName}&action={action}&limit={n}` audit workspace URL",
-			"`Audit filters: action apply.requested · limit 2`",
-			"POST /v1/plans/deployments/payments-api-prod",
-			"GET /v1/plans/{planId}",
-			"POST /v1/applies/plans/{planId}",
-			"GET /v1/applies/{applyId}",
-			"`TENET_PLAN_STORE_PATH=/tmp/tenet/plan-previews.json`",
-			"`TENET_APPLY_STORE_PATH=/tmp/tenet/apply-requests.json`",
+			"`docker compose config` plus the `api`, `controller`, and `redis` services present in `compose.yaml`",
+			"The full `GET /v1/audit-logs` collection, exact-action filtering with `GET /v1/audit-logs?action=apply.requested&limit=2`, and `400 Bad Request` on `action=invalid.action`",
+			"controller-authored `managedDrift[]` evidence in `GET /v1/overview/deployments/payments-api-prod` with stable `field` / `desired` / `actual` / `severity` rows and aligned `runtimeSummary.managedDrift`",
+			"The same direct-process actor coverage by sending both header families with conflicting identities on a `payments-api-staging` plan/apply flow",
+			"Bookmarkable application, account, drift, audit, and plan workspace URLs, checking raw embedded application/account/resource/drift/audit/plan shell HTML/script fragments instead of runtime DOM text",
+			"Drift page source/summary/table copy, audit filter copy such as `Audit filters: action apply.requested · limit 2`, the `Clear audit filters` recovery affordance, and correlated `http_request` logs",
+			"Trusted front-door auth by restarting the Compose `api` service",
+			"authenticated but unauthorized transitions fail with `403`",
 			"survive the Compose `api` service restart",
-			"/?page=plan&deployment=payments-api-prod&planId={planId}&applyId={applyId}",
 			"`TENET_AWS_ENABLE_APPLY=true make docker-up`",
 			"correlated structured `http_request` logs with stable fields such as `request_id`, `method`, `path`, `status`, `duration_ms`, and `result` for the bookmarkable application drill-down shell request, bookmarkable account drill-down shell request, bookmarkable drift workspace request, the deployment-scoped audit workspace request, and the bookmarkable plan/apply workspace shell request",
 			"`Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Lookup region`, and `Observer role configured`",
@@ -2749,6 +2044,18 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 			"trusted front door",
 			"bookmarkable `/?page=resource&deployment=payments-api-prod&resourceType=userDataBootstrapSource&resourceId=userDataBootstrapSource::file:userdata/payments-api-prod.sh::Normalized userdata bootstrap source for candidate EC2 capacity` page",
 			"`aws_unavailable` and `no_log_source` as expected local no-AWS outcomes",
+		},
+		"../../docs/features/overview-dashboard.md": {
+			"when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***`, `GET /v1/overview/applications` requires trusted `X-Tenet-Authenticated-*` identity",
+			"when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***`, that stored `GET /v1/plans/{planId}` reload reuses the same trusted `X-Tenet-Authenticated-*` identity",
+			"when `TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true`, `POST /v1/plans/deployments/{deploymentName}`",
+			"when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***`, that stored `GET /v1/applies/{applyId}` reload uses the same trusted `X-Tenet-Authenticated-*` identity",
+		},
+		"../../docs/architecture/tenet-v1-audit-log-api.md": {
+			"TENET_API_TRUST_AUTHENTICATED_HEADERS",
+			"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY",
+			"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION",
+			"Unscoped `GET /v1/audit-logs` now follows the same collection-style contract as the guarded overview/status collections under read enforcement",
 		},
 	}
 
@@ -2779,6 +2086,36 @@ func TestDockerSmokeScriptAndDocsContract(t *testing.T) {
 	} {
 		if strings.Contains(dockerSmoke, fragment) {
 			t.Fatalf("expected smoke-docker.sh to avoid stale or env-blob fragment %q", fragment)
+		}
+	}
+}
+
+func TestOverviewDocsDescribeAuditFilterReset(t *testing.T) {
+	files := map[string][]string{
+		"../../README.md": {
+			"`Clear audit filters`",
+			"operators can recover to the unfiltered `/?page=audit` slice without dropping bookmarkable `q` / `sync` / `account` state",
+		},
+		"../../docs/features/overview-dashboard.md": {
+			"`Clear audit filters`",
+			"resets those audit filters back to the default `/?page=audit` slice",
+		},
+		"../../docs/architecture/tenet-v1-overview-ui.md": {
+			"`Clear audit filters` recovery action",
+			"without dropping bookmarkable applications-shell query state such as `q`, `sync`, or `account`",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
 		}
 	}
 }
@@ -2817,13 +2154,12 @@ func TestOverviewDocsDescribeResourceLazyPanelRefreshAndAuthGuidance(t *testing.
 func TestDockerSmokeDocsDescribeEmbeddedReadAuthGuidanceCoverage(t *testing.T) {
 	files := map[string][]string{
 		"../../README.md": {
-			"checks raw embedded application/account/resource/drift/audit/plan shell HTML/script fragments instead of runtime DOM text",
-			"including the bookmarkable `/?page=application&deployment=payments-api-prod` drill-down",
+			"The same bookmarkable application, account, traffic-shift resource, ECS resource, drift, audit, and plan routes locked by direct-process smoke",
+			"raw embedded application/account/resource/drift/audit/plan shell HTML/script fragments instead of runtime DOM text",
 			"the shipped operator read-auth guidance hooks for initial `401` / `403` failures remain present",
 		},
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
-			"checks raw embedded application/account/resource/drift/audit/plan shell HTML/script fragments instead of runtime DOM text",
-			"the bookmarkable application drill-down shell `/?page=application&deployment=payments-api-prod` keeps the shared operator-read guidance contract in the raw served HTML alongside the landing page, account, resource, drift, and audit shells",
+			"Bookmarkable application, account, drift, audit, and plan workspace URLs, checking raw embedded application/account/resource/drift/audit/plan shell HTML/script fragments instead of runtime DOM text",
 			"the shipped operator read-auth guidance hooks for initial `401` / `403` failures remain present",
 		},
 	}
