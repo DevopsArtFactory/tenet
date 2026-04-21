@@ -1122,6 +1122,40 @@ func TestAPIOptionsOverviewDeploymentResourceLogsPassesBootstrapSourceBackingRes
 	}
 }
 
+func TestAPIOptionsOverviewDeploymentResourceLogsResolvesFilesystemBootstrapRouteAgainstGitUserData(t *testing.T) {
+	repoRoot := writeGitUserDataCanaryEC2RepositoryFixture(t)
+	store := &stubStatusStore{
+		getSnapshot: statusstore.Snapshot{
+			DeploymentName: "api-prod",
+			Status: domain.DeploymentStatus{
+				Rollout: &domain.RolloutSummary{Execution: []domain.RolloutExecutionDetail{
+					{Resource: "candidateAutoScalingGroup", Name: "api-prod-candidate", Description: "candidate ASG"},
+					{Resource: "userDataBootstrapSource", Name: "git:userdata/api-prod.sh", Description: "bootstrap source"},
+				}},
+			},
+		},
+	}
+	provider := &fakeResourceLogProvider{result: resourcelogs.Result{Available: true}}
+	restore := stubResourceLogProviderFactory(provider)
+	defer restore()
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, store)
+
+	_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", "userDataBootstrapSource", "file:userdata/api-prod.sh")
+	if err != nil {
+		t.Fatalf("expected filesystem bootstrap route to resolve against git userdata metadata, got %v", err)
+	}
+	if provider.calls != 1 {
+		t.Fatalf("expected provider to run once, got %d calls", provider.calls)
+	}
+	if provider.lastRequest.ResourceType != "userDataBootstrapSource" || provider.lastRequest.ResourceName != "file:userdata/api-prod.sh" {
+		t.Fatalf("expected requested bootstrap identity to be preserved, got %+v", provider.lastRequest)
+	}
+	if provider.lastRequest.BackingResourceType != "candidateAutoScalingGroup" || provider.lastRequest.BackingResourceName != "api-prod-candidate" {
+		t.Fatalf("expected filesystem bootstrap route to carry backing ASG context, got %+v", provider.lastRequest)
+	}
+}
+
 func TestAPIOptionsOverviewDeploymentResourceLogsRejectsResourcesOutsideDeploymentExecution(t *testing.T) {
 	repoRoot := writeRepositoryFixture(t)
 	store := &stubStatusStore{
@@ -1660,6 +1694,15 @@ func writeCanaryEC2RepositoryFixture(t *testing.T) string {
 	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","observerRoleArn":"arn:aws:iam::123456789012:role/TenetObserverRole","allowedRegions":["ap-northeast-2"]}`)
 	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
 	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"canary","warmupSeconds":90},"traffic":{"port":443},"capacity":{"desired":4,"min":2,"max":8},"binary":"s3://releases.example.com/payments-api/prod/payments-api-linux-amd64","userdata":{"type":"file","path":"userdata/api-prod.sh"}}`)
+	return root
+}
+
+func writeGitUserDataCanaryEC2RepositoryFixture(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","observerRoleArn":"arn:aws:iam::123456789012:role/TenetObserverRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"canary","warmupSeconds":90},"traffic":{"port":443},"capacity":{"desired":4,"min":2,"max":8},"binary":"s3://releases.example.com/payments-api/prod/payments-api-linux-amd64","userdata":{"type":"git","path":"userdata/api-prod.sh"}}`)
 	return root
 }
 
