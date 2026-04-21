@@ -714,7 +714,8 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`GET /v1/overview/applications` now requires trusted authenticated identity and filters the returned application rows to only deployments present in that allowlist",
 		"`GET /v1/status/deployments` now follows the same collection contract",
 		"`GET /v1/status/deployments/{deploymentName}` now reuses the same scoped deployment-read authorization contract",
-		"`GET /v1/audit-logs` remain unchanged in this slice",
+		"Unscoped `GET /v1/audit-logs` now follows that same collection contract under read enforcement",
+		"returns `200 OK` with `{\"entries\":[]}` when the trusted allowlist is missing or no audit rows are visible",
 		"`200 OK` with an empty JSON array",
 		"trusted allowlist is missing or none of the returned rows match it",
 		"retry through the trusted front door",
@@ -724,9 +725,12 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`X-Tenet-Actor-*` values still win over `X-User-*` aliases for that local actor path",
 		"the trusted authenticated identity path resolves from `X-Tenet-Authenticated-*` headers or additive `X-User-*` aliases, and when explicit actor headers are absent Tenet now projects that authenticated identity into the persisted actor fields",
 		"restarting `tenet-api`",
-		"restarts the Compose `api` service with `TENET_API_TRUST_AUTHENTICATED_HEADERS=***` plus `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***` to prove unauthenticated `GET /v1/overview/applications`, unauthenticated `GET /v1/status/deployments`, and unauthenticated `GET /v1/overview/accounts` fail with `401`",
+		"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***",
+		"unauthenticated `GET /v1/overview/applications`",
 		"unauthenticated `GET /v1/status/deployments`",
-		"trusted `X-Tenet-Authorized-Deployments` filters the returned application rows, raw status snapshots, and account aggregates",
+		"unauthenticated `GET /v1/overview/accounts`",
+		"`GET /v1/audit-logs`",
+		"`401`",
 		"when both `payments-api-prod` and `worker-prod` are allowlisted, the Compose smoke proves the controller-populated raw status collection returns both rows",
 		"omitting that allowlist returns `[]` for those guarded collections",
 		"`GET /v1/status/deployments/{deploymentName}` outside the allowlist fails with `403`",
@@ -783,7 +787,8 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"restarts the Compose `api` service",
 		"unauthenticated `GET /v1/overview/applications`",
 		"unauthenticated `GET /v1/status/deployments`",
-		"unauthenticated `GET /v1/overview/accounts` fail with `401`",
+		"unauthenticated `GET /v1/overview/accounts`",
+		"`GET /v1/audit-logs`",
 		"unauthenticated `POST /v1/applies/{applyId}/transitions` fail with `401`",
 
 		"unauthenticated `GET /v1/status/deployments`",
@@ -848,7 +853,8 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`GET /v1/overview/deployments/{deploymentName}/resource-inspection`",
 		"`GET /v1/overview/applications` requires trusted `X-Tenet-Authenticated-*` identity and filters returned rows through the trusted `X-Tenet-Authorized-Deployments` allowlist",
 		"when the applications allowlist is omitted or matches nothing, the API returns `200 OK` with `[]`",
-		"unscoped audit reads stay unchanged",
+		"`GET /v1/audit-logs` now follows the same collection contract",
+		"`{\"entries\":[]}`",
 	} {
 		if !strings.Contains(overviewFeatureDoc, fragment) {
 			t.Fatalf("expected overview feature doc front-door auth contract to include %q", fragment)
@@ -867,7 +873,8 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"deployment-scoped `GET /v1/audit-logs?deployment={deploymentName}`",
 		"`GET /v1/overview/applications`, which now requires trusted identity and filters returned rows through the trusted `X-Tenet-Authorized-Deployments` allowlist",
 		"returning `200 OK` with `[]` when that allowlist is omitted or has no matching deployments",
-		"unscoped audit routes remain unchanged",
+		"`GET /v1/audit-logs` now follows that same collection contract under read enforcement",
+		"`{\"entries\":[]}`",
 	} {
 		if !strings.Contains(overviewUIDoc, fragment) {
 			t.Fatalf("expected overview UI doc front-door auth contract to include %q", fragment)

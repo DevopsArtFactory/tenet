@@ -223,6 +223,19 @@ func filterAuthorizedStatusSnapshots(snapshots []statusstore.Snapshot, authorize
 	return filtered
 }
 
+func filterAuthorizedAuditEntries(entries []auditlog.Entry, authorized requestactor.AuthorizedDeployments, enabled bool) []auditlog.Entry {
+	if !enabled {
+		return entries
+	}
+	filtered := make([]auditlog.Entry, 0, len(entries))
+	for _, entry := range entries {
+		if authorized.Allows(entry.DeploymentName) {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
+}
+
 func summarizeDeploymentOverviews(deployments []catalog.DeploymentOverview) deploymentOverviewCounts {
 	counts := deploymentOverviewCounts{
 		deploymentCount: len(deployments),
@@ -803,10 +816,20 @@ func NewRouter(options Options) http.Handler {
 			}
 			query.Limit = limit
 		}
+		if query.DeploymentName == "" && !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization) {
+			return
+		}
 		result, err := options.AuditLogs(r.Context(), query)
 		if err != nil {
 			respondInternalError(w)
 			return
+		}
+		if query.DeploymentName == "" {
+			result.Entries = filterAuthorizedAuditEntries(
+				result.Entries,
+				requestactor.AuthorizedDeploymentsFromContext(r.Context()),
+				options.RequireDeploymentReadAuthorization,
+			)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(result)
