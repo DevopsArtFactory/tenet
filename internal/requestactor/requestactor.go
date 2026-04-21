@@ -18,14 +18,19 @@ const (
 	AuthenticatedHeaderID       = "X-Tenet-Authenticated-Id"
 	AuthenticatedHeaderName     = "X-Tenet-Authenticated-Name"
 	AuthenticatedHeaderEmail    = "X-Tenet-Authenticated-Email"
+	AuthenticatedRolesHeader    = "X-Tenet-Authenticated-Roles"
 	AuthorizedDeploymentsHeader = "X-Tenet-Authorized-Deployments"
 
 	UnavailableReason                      = "actor information is unavailable because no authenticated request context was available for this local request"
 	AuthenticatedIdentityUnavailableReason = "authenticated identity is unavailable because no trusted forwarded identity headers were available for this request"
+
+	RoleOperator = "operator"
+	RoleAdmin    = "admin"
 )
 
 type actorContextKey struct{}
 type authenticatedIdentityContextKey struct{}
+type authenticatedRolesContextKey struct{}
 type authorizedDeploymentsContextKey struct{}
 
 // Actor captures request-scoped operator identity without inventing missing auth data.
@@ -47,6 +52,12 @@ type AuthenticatedIdentity struct {
 	Reason        string `json:"reason,omitempty"`
 }
 
+// AuthenticatedRoles captures the front-door-authenticated roles Tenet can trust
+// when the API instance is configured to accept forwarded auth headers.
+type AuthenticatedRoles struct {
+	Names []string `json:"names,omitempty"`
+}
+
 // AuthorizedDeployments captures the trusted front-door deployment allowlist for one request.
 type AuthorizedDeployments struct {
 	Names []string `json:"names,omitempty"`
@@ -66,6 +77,14 @@ func WithAuthenticatedIdentityContext(ctx context.Context, identity Authenticate
 		ctx = context.Background()
 	}
 	return context.WithValue(ctx, authenticatedIdentityContextKey{}, NormalizeAuthenticatedIdentity(identity))
+}
+
+// WithAuthenticatedRolesContext stores one normalized authenticated role set on the context.
+func WithAuthenticatedRolesContext(ctx context.Context, roles AuthenticatedRoles) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, authenticatedRolesContextKey{}, NormalizeAuthenticatedRoles(roles))
 }
 
 // WithAuthorizedDeploymentsContext stores one normalized deployment allowlist on the context.
@@ -100,6 +119,15 @@ func AuthenticatedIdentityFromContext(ctx context.Context) AuthenticatedIdentity
 	}
 	identity, _ := ctx.Value(authenticatedIdentityContextKey{}).(AuthenticatedIdentity)
 	return NormalizeAuthenticatedIdentity(identity)
+}
+
+// AuthenticatedRolesFromContext returns the normalized authenticated roles stored on the context.
+func AuthenticatedRolesFromContext(ctx context.Context) AuthenticatedRoles {
+	if ctx == nil {
+		return NormalizeAuthenticatedRoles(AuthenticatedRoles{})
+	}
+	roles, _ := ctx.Value(authenticatedRolesContextKey{}).(AuthenticatedRoles)
+	return NormalizeAuthenticatedRoles(roles)
 }
 
 // AuthorizedDeploymentsFromContext returns the normalized deployment allowlist stored on the context.
@@ -145,6 +173,22 @@ func AuthenticatedIdentityFromHeaders(header http.Header) AuthenticatedIdentity 
 	return NormalizeAuthenticatedIdentity(identity)
 }
 
+// AuthenticatedRolesFromHeaders derives one normalized trusted role set from forwarded front-door headers.
+func AuthenticatedRolesFromHeaders(header http.Header) AuthenticatedRoles {
+	if header == nil {
+		return NormalizeAuthenticatedRoles(AuthenticatedRoles{})
+	}
+	names := make([]string, 0)
+	for _, raw := range header.Values(AuthenticatedRolesHeader) {
+		for _, candidate := range strings.Split(raw, ",") {
+			if name := strings.TrimSpace(candidate); name != "" {
+				names = append(names, name)
+			}
+		}
+	}
+	return NormalizeAuthenticatedRoles(AuthenticatedRoles{Names: names})
+}
+
 // AuthorizedDeploymentsFromHeaders derives one normalized deployment allowlist from trusted
 // forwarded front-door headers.
 func AuthorizedDeploymentsFromHeaders(header http.Header) AuthorizedDeployments {
@@ -183,6 +227,33 @@ func (deployments AuthorizedDeployments) Allows(deploymentName string) bool {
 		}
 	}
 	return false
+}
+
+// AllowsAny reports whether any requested role matches one trusted forwarded role exactly.
+func (roles AuthenticatedRoles) AllowsAny(names ...string) bool {
+	normalized := NormalizeAuthenticatedRoles(roles)
+	if len(normalized.Names) == 0 || len(names) == 0 {
+		return false
+	}
+	allowed := make(map[string]struct{}, len(normalized.Names))
+	for _, name := range normalized.Names {
+		allowed[name] = struct{}{}
+	}
+	for _, name := range names {
+		candidate := strings.TrimSpace(name)
+		if candidate == "" {
+			continue
+		}
+		if _, ok := allowed[candidate]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// AllowsOperatorWrite reports whether the trusted forwarded roles include one operator-capable role.
+func (roles AuthenticatedRoles) AllowsOperatorWrite() bool {
+	return roles.AllowsAny(RoleOperator, RoleAdmin)
 }
 
 func headerValue(header http.Header, primary string, aliases ...string) string {
@@ -226,6 +297,33 @@ func NormalizeAuthenticatedIdentity(identity AuthenticatedIdentity) Authenticate
 		identity.Reason = AuthenticatedIdentityUnavailableReason
 	}
 	return identity
+}
+
+// NormalizeAuthenticatedRoles trims whitespace, drops empties, and keeps the role set stable.
+func NormalizeAuthenticatedRoles(roles AuthenticatedRoles) AuthenticatedRoles {
+	if len(roles.Names) == 0 {
+		roles.Names = nil
+		return roles
+	}
+	seen := make(map[string]struct{}, len(roles.Names))
+	names := make([]string, 0, len(roles.Names))
+	for _, raw := range roles.Names {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		roles.Names = nil
+		return roles
+	}
+	roles.Names = names
+	return roles
 }
 
 // NormalizeAuthorizedDeployments trims whitespace, drops empties, and keeps the allowlist stable.

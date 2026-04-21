@@ -5194,6 +5194,68 @@ func TestRouterCreateDeploymentPlanPreviewStatusCodes(t *testing.T) {
 		}
 	})
 
+	t.Run("insufficient trusted role short-circuits create", func(t *testing.T) {
+		providerCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                    buildinfo.Info{Version: "dev", Commit: "abc123"},
+			TrustAuthenticatedHeaders:    true,
+			RequireAuthenticatedIdentity: true,
+			RequireOperatorRoleForWrite:  true,
+			CreateDeploymentPlanPreview: func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error) {
+				providerCalls++
+				t.Fatal("create provider should not run without operator-capable role")
+				return planpreview.CreateResult{}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/plans/deployments/api-prod", strings.NewReader(`{}`))
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Viewer")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "viewer@example.com")
+		req.Header.Set(requestactor.AuthenticatedRolesHeader, "viewer")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != "forbidden: authenticated operator role is required for this operator write route\n" {
+			t.Fatalf("unexpected forbidden response body: %q", body)
+		}
+		if providerCalls != 0 {
+			t.Fatalf("expected role guard to short-circuit before create provider, got %d calls", providerCalls)
+		}
+	})
+
+	t.Run("admin trusted role is operator-capable for create", func(t *testing.T) {
+		providerCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                    buildinfo.Info{Version: "dev", Commit: "abc123"},
+			TrustAuthenticatedHeaders:    true,
+			RequireAuthenticatedIdentity: true,
+			RequireOperatorRoleForWrite:  true,
+			CreateDeploymentPlanPreview: func(_ context.Context, deploymentName string, req planpreview.CreateRequest) (planpreview.CreateResult, error) {
+				providerCalls++
+				return planpreview.CreateResult{Created: true, Record: planpreview.Record{ID: "plan_1234abcd", DeploymentName: deploymentName, Status: planpreview.StatusReady, CreatedAt: "2026-04-17T08:00:00Z", Source: planpreview.SourceContext{DeploymentName: deploymentName, Fingerprint: req.IfMatch}}}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/plans/deployments/api-prod", strings.NewReader(`{"ifMatch":"plan_input"}`))
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Admin")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "admin@example.com")
+		req.Header.Set(requestactor.AuthenticatedRolesHeader, "viewer, admin")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if providerCalls != 1 {
+			t.Fatalf("expected create provider to run once, got %d calls", providerCalls)
+		}
+	})
+
 	t.Run("deployment authorization short-circuits unauthorized create", func(t *testing.T) {
 		providerCalls := 0
 		router := NewRouter(Options{
@@ -5656,6 +5718,48 @@ func TestRouterCreateApplyRequestStatusCodes(t *testing.T) {
 		}
 	})
 
+	t.Run("insufficient trusted role short-circuits apply creation", func(t *testing.T) {
+		planLookupCalls := 0
+		createCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                    buildinfo.Info{Version: "dev", Commit: "abc123"},
+			TrustAuthenticatedHeaders:    true,
+			RequireAuthenticatedIdentity: true,
+			RequireOperatorRoleForWrite:  true,
+			PlanPreview: func(context.Context, string) (planpreview.Record, error) {
+				planLookupCalls++
+				t.Fatal("plan lookup should not run without operator-capable role")
+				return planpreview.Record{}, nil
+			},
+			CreateApplyRequest: func(context.Context, string) (applyrequest.CreateResult, error) {
+				createCalls++
+				t.Fatal("create provider should not run without operator-capable role")
+				return applyrequest.CreateResult{}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/plans/plan_1234abcd", nil)
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Viewer")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "viewer@example.com")
+		req.Header.Set(requestactor.AuthenticatedRolesHeader, "viewer")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != "forbidden: authenticated operator role is required for this operator write route\n" {
+			t.Fatalf("unexpected forbidden response body: %q", body)
+		}
+		if planLookupCalls != 0 {
+			t.Fatalf("expected role guard to short-circuit before plan lookup, got %d calls", planLookupCalls)
+		}
+		if createCalls != 0 {
+			t.Fatalf("expected role guard to short-circuit before create provider, got %d calls", createCalls)
+		}
+	})
+
 	t.Run("deployment authorization short-circuits unauthorized create", func(t *testing.T) {
 		planLookupCalls := 0
 		createCalls := 0
@@ -6042,6 +6146,48 @@ func TestRouterTransitionApplyRequest(t *testing.T) {
 		}
 		if body := resp.Body.String(); body != "unauthenticated: authenticated identity is required for this operator write route\n" {
 			t.Fatalf("unexpected unauthenticated response body: %q", body)
+		}
+	})
+
+	t.Run("insufficient trusted role short-circuits transition before apply lookup", func(t *testing.T) {
+		applyLookupCalls := 0
+		transitionCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                    buildinfo.Info{Version: "dev", Commit: "abc123"},
+			TrustAuthenticatedHeaders:    true,
+			RequireAuthenticatedIdentity: true,
+			RequireOperatorRoleForWrite:  true,
+			ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
+				applyLookupCalls++
+				t.Fatal("apply lookup should not run without operator-capable role")
+				return applyrequest.Record{}, nil
+			},
+			TransitionApplyRequest: func(context.Context, string, applyrequest.TransitionRequest) (applyrequest.Record, error) {
+				transitionCalls++
+				t.Fatal("apply transition provider should not run without operator-capable role")
+				return applyrequest.Record{}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/transitions", strings.NewReader(`{"status":"running","step":1}`))
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Viewer")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "viewer@example.com")
+		req.Header.Set(requestactor.AuthenticatedRolesHeader, "viewer")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", resp.Code)
+		}
+		if body := resp.Body.String(); body != "forbidden: authenticated operator role is required for this operator write route\n" {
+			t.Fatalf("unexpected forbidden response body: %q", body)
+		}
+		if applyLookupCalls != 0 {
+			t.Fatalf("expected role guard to short-circuit before apply lookup, got %d calls", applyLookupCalls)
+		}
+		if transitionCalls != 0 {
+			t.Fatalf("expected role guard to short-circuit before transition provider, got %d calls", transitionCalls)
 		}
 	})
 

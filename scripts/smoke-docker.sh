@@ -215,6 +215,7 @@ restart_api_with_frontdoor_read_auth() {
   TENET_AWS_ENABLE_APPLY=false \
   TENET_API_TRUST_AUTHENTICATED_HEADERS=true \
   TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=false \
+  TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=false \
   TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true \
   "${COMPOSE[@]}" up -d api >/dev/null
   wait_for_api_health

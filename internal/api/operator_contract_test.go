@@ -555,6 +555,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		`TENET_API_TRUST_AUTHENTICATED_HEADERS: ${TENET_API_TRUST_AUTHENTICATED_HEADERS:-false}`,
 		`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY: ${TENET_API_ENFORCE_AUTHENTICATED_IDENTITY:-false}`,
+		`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION: ${TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION:-false}`,
 		`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION: ${TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION:-false}`,
 	} {
 		if !strings.Contains(compose, fragment) {
@@ -566,12 +567,14 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		`AUTH_TRUSTED_HEADERS=${TENET_API_TRUST_AUTHENTICATED_HEADERS:-false}`,
 		`AUTH_ENFORCED=${TENET_API_ENFORCE_AUTHENTICATED_IDENTITY:-false}`,
+		`AUTH_ROLE_ENFORCED=${TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION:-false}`,
 		`AUTH_READ_ENFORCED=${TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION:-false}`,
 		`TENET_API_TRUST_AUTHENTICATED_HEADERS="$trust_authenticated_headers"`,
 		`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY="$enforce_authenticated_identity"`,
+		`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION="$enforce_operator_role_authorization"`,
 		`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION="$enforce_deployment_read_authorization"`,
-		`start_api true true false`,
-		`start_api true false true`,
+		`start_api true true false false`,
+		`start_api true false false true`,
 		`"http://$HOST:$PORT/v1/plans/deployments/payments-api-prod"`,
 		`"http://$HOST:$PORT/v1/applies/plans/$plan_id"`,
 		`"http://$HOST:$PORT/v1/plans/$frontdoor_plan_id"`,
@@ -641,6 +644,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		`restart_api_with_frontdoor_read_auth() {`,
 		`TENET_API_TRUST_AUTHENTICATED_HEADERS=true \`,
+		`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=false \`,
 		`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true \`,
 		`auth_unauthenticated_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" -w "%{http_code}" \`,
 		`"$API_BASE_URL/v1/overview/applications")`,
@@ -687,16 +691,20 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		"TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
 		"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
+		"TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=***",
 		"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***",
 		"`X-Tenet-Authenticated-Id`",
 		"`X-Tenet-Authenticated-Name`",
 		"`X-Tenet-Authenticated-Email`",
+		"`X-Tenet-Authenticated-Roles`",
 		"`X-User-ID`, `X-User-Name`, and/or `X-User-Email` aliases",
 		"`X-Tenet-Authenticated-*` values still win over `X-User-*` aliases for that trusted authenticated identity path",
 		"`X-Tenet-Authorized-Deployments`",
 		"`401 Unauthorized`",
 		"`unauthenticated: authenticated identity is required for this operator write route`",
 		"`unauthenticated: authenticated identity is required for this operator read route`",
+		"`forbidden: authenticated operator role is required for this operator write route`",
+		"`operator` / `admin`",
 		"`forbidden: operator does not have access to this deployment`",
 		"authenticated identity is required on operator write routes",
 		"`POST /v1/applies/{applyId}/transitions`",
@@ -759,7 +767,11 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		"TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
 		"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
+		"TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=***",
 		"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***",
+		"`X-Tenet-Authenticated-Roles`",
+		"`forbidden: authenticated operator role is required for this operator write route`",
+		"`operator` / `admin`",
 		"`X-Tenet-Authorized-Deployments`",
 		"`X-Tenet-Authenticated-*` headers project into persisted plan/apply/audit actor fields",
 		"deployment-scoped reads enforce trusted `X-Tenet-Authenticated-*` identity plus `X-Tenet-Authorized-Deployments`",
@@ -821,10 +833,15 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 
 	overviewFeatureDoc := readRepoFile(t, "docs/features/overview-dashboard.md")
 	for _, fragment := range []string{
+		"`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true`",
 		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`",
+		"`X-Tenet-Authenticated-Roles`",
 		"`X-Tenet-Authorized-Deployments`",
 		"`GET /v1/plans/{planId}`",
 		"`GET /v1/applies/{applyId}`",
+		"`POST /v1/applies/{applyId}/transitions`",
+		"`forbidden: authenticated operator role is required for this operator write route`",
+		"`operator` / `admin`",
 		"`POST /v1/plans/deployments/{deploymentName}` and `POST /v1/applies/plans/{planId}` also require the trusted `X-Tenet-Authorized-Deployments` allowlist",
 		"`GET /v1/overview/deployments/{deploymentName}/events`",
 		"`GET /v1/overview/deployments/{deploymentName}/resource-logs`",

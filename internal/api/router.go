@@ -120,6 +120,20 @@ func requireAuthenticatedIdentity(w http.ResponseWriter, r *http.Request) bool {
 	return false
 }
 
+func requireOperatorRoleForWrite(w http.ResponseWriter, r *http.Request, enabled bool) bool {
+	if !enabled {
+		return true
+	}
+	if !requireAuthenticatedIdentity(w, r) {
+		return false
+	}
+	if requestactor.AuthenticatedRolesFromContext(r.Context()).AllowsOperatorWrite() {
+		return true
+	}
+	respondForbiddenError(w, "forbidden: authenticated operator role is required for this operator write route")
+	return false
+}
+
 func requireDeploymentReadIdentity(w http.ResponseWriter, r *http.Request, enabled bool) bool {
 	if !enabled {
 		return true
@@ -317,6 +331,7 @@ type Options struct {
 	GitHubWebhookSecret                  string
 	TrustAuthenticatedHeaders            bool
 	RequireAuthenticatedIdentity         bool
+	RequireOperatorRoleForWrite          bool
 	RequireDeploymentReadAuthorization   bool
 	GitHubWebhookDesiredStateSource      githubwebhook.DesiredStateSourceConfig
 	GitHubWebhookRefreshPublisher        controllerrefresh.Publisher
@@ -803,6 +818,9 @@ func NewRouter(options Options) http.Handler {
 		if options.RequireAuthenticatedIdentity && !requireAuthenticatedIdentity(w, r) {
 			return
 		}
+		if !requireOperatorRoleForWrite(w, r, options.RequireOperatorRoleForWrite) {
+			return
+		}
 		if options.CreateDeploymentPlanPreview == nil {
 			http.Error(w, "deployment plan preview unavailable", http.StatusServiceUnavailable)
 			return
@@ -872,6 +890,9 @@ func NewRouter(options Options) http.Handler {
 		if options.RequireAuthenticatedIdentity && !requireAuthenticatedIdentity(w, r) {
 			return
 		}
+		if !requireOperatorRoleForWrite(w, r, options.RequireOperatorRoleForWrite) {
+			return
+		}
 		if options.CreateApplyRequest == nil {
 			http.Error(w, "apply request unavailable", http.StatusServiceUnavailable)
 			return
@@ -937,6 +958,9 @@ func NewRouter(options Options) http.Handler {
 				return
 			}
 			if (options.RequireAuthenticatedIdentity || options.RequireDeploymentReadAuthorization) && !requireAuthenticatedIdentity(w, r) {
+				return
+			}
+			if !requireOperatorRoleForWrite(w, r, options.RequireOperatorRoleForWrite) {
 				return
 			}
 			if options.RequireDeploymentReadAuthorization {

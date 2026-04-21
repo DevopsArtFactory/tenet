@@ -3576,15 +3576,19 @@
       const operatorApplyRequestReadRoute = (applyId) => `GET /v1/applies/${applyId || 'applyId'}`;
       const operatorWriteAuthRequiredState = (state) => state?.request === 'create' && state?.status === 'fetch-error' && Number(state?.error?.status) === 401;
       const operatorWriteForbiddenState = (state) => state?.request === 'create' && state?.status === 'fetch-error' && Number(state?.error?.status) === 403;
+      const operatorWriteRoleRequiredState = (state) => operatorWriteForbiddenState(state) && String(state?.error?.message || '').includes('authenticated operator role is required for this operator write route');
       const operatorWriteAuthRequiredMessage = (route, action) => `Tenet rejected ${route} because authenticated identity is required on operator write routes. When auth enforcement is enabled, retry ${action} through the trusted front door so it can authenticate you and forward trusted identity headers.`;
+      const operatorWriteRoleRequiredMessage = (route, action) => `Tenet rejected ${route} after recognizing the caller's identity because this operator write route requires a trusted forwarded operator/admin role. Retry ${action} through the trusted front door so it can forward X-Tenet-Authenticated-Roles for an operator-capable session.`;
       const operatorWriteForbiddenMessage = (route, action) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized to ${action.toLowerCase()} for that deployment through this route.`;
       const operatorWriteStateHeading = (state) => {
         if (operatorWriteAuthRequiredState(state)) return 'Authenticated operator required';
+        if (operatorWriteRoleRequiredState(state)) return 'Operator role required';
         if (operatorWriteForbiddenState(state)) return 'Operator access denied';
         return '';
       };
       const operatorFetchErrorPillLabel = (state) => {
         if (operatorReadStateAuthRequired(state) || operatorWriteAuthRequiredState(state)) return 'Auth required';
+        if (operatorWriteRoleRequiredState(state)) return 'Role required';
         if (operatorReadStateForbidden(state) || operatorWriteForbiddenState(state)) return 'Access denied';
         return 'Fetch error';
       };
@@ -3615,6 +3619,8 @@
               const route = `POST /v1/plans/deployments/${deploymentName}`;
               const message = operatorWriteAuthRequiredState(planState)
                 ? operatorWriteAuthRequiredMessage(route, 'Create Plan')
+                : operatorWriteRoleRequiredState(planState)
+                  ? operatorWriteRoleRequiredMessage(route, 'Create Plan')
                 : operatorWriteForbiddenMessage(route, 'Create Plan');
               return `${message} Deployment-derived context is still shown below and Apply Plan stays disabled until a persisted ready preview is available.`;
             }
@@ -3704,6 +3710,8 @@
               const route = `POST /v1/applies/plans/${activePlanID || 'planId'}`;
               const message = operatorWriteAuthRequiredState(applyState)
                 ? operatorWriteAuthRequiredMessage(route, 'Apply Plan')
+                : operatorWriteRoleRequiredState(applyState)
+                  ? operatorWriteRoleRequiredMessage(route, 'Apply Plan')
                 : operatorWriteForbiddenMessage(route, 'Apply Plan');
               return `${message} Deployment and plan-derived context are still shown below.`;
             }
