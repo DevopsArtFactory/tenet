@@ -1054,11 +1054,19 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!summaryText.includes('Application detail page: show only application-linked resources before the final resource-detail page.')) throw new Error('expected application route drill-down guidance');
   if (!accountsText.includes('Application resources')) throw new Error('expected application route resources body');
   if (!accountsText.includes('Quick navigation')) throw new Error('expected application route quick navigation');
+  if (!accountsText.includes('Hierarchy')) throw new Error('expected application route hierarchy quick-nav group');
+  if (!accountsText.includes('Applications overview')) throw new Error('expected application route overview quick-nav entry');
+  if (!accountsText.includes('Current destination')) throw new Error('expected application route current-destination quick-nav group');
   if (!accountsText.includes('Deployment workspaces')) throw new Error('expected application route deployment-workspaces quick-nav group');
   if (!accountsText.includes('Current section')) throw new Error('expected application route current-section quick-nav group');
   if (!accountsText.includes('No section is currently targeted.')) throw new Error('expected application route empty current-section message without hash');
   if (!accountsText.includes('On this page')) throw new Error('expected application route section quick-nav group');
   if (!accountsText.includes('payments-api-staging · Application detail')) throw new Error('expected application route quick-nav current label');
+  const applicationsOverviewLink = accountLinks.find((node) => node.href === '/?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.textContent === 'Applications overview' && node.target === '_self');
+  if (!applicationsOverviewLink || applicationsOverviewLink.rel) throw new Error('expected application route overview quick-nav self link');
+  const applicationDetailChip = quickNavChips.find((node) => node.getAttribute('aria-label') === 'Current destination: Application detail');
+  if (!applicationDetailChip) throw new Error('expected application route current-destination chip');
+  if (accountLinks.find((node) => node.textContent === 'Application detail')) throw new Error('expected application route current destination to stay non-click');
   const currentSectionChip = quickNavChips.find((node) => String(node.getAttribute('aria-label') || '').startsWith('Current section: '));
   if (currentSectionChip) throw new Error('expected application route without hash not to render a current-section chip');
   if (!accountsText.includes('Drift view')) throw new Error('expected application route drift workspace entry');
@@ -1236,6 +1244,8 @@ const fetch = (url) => {
   if (!document.lastScrolledTarget || document.lastScrolledTarget.id !== 'application-runtime-events') throw new Error('expected application hash to scroll the matching section into view');
   const accounts = document.getElementById('accounts');
   const quickNavChips = collectNodes(accounts, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
+  const currentDestinationChip = quickNavChips.find((node) => node.getAttribute('aria-label') === 'Current destination: Application detail');
+  if (!currentDestinationChip) throw new Error('expected application hash route to keep current-destination chip');
   const currentSectionChip = quickNavChips.find((node) => node.getAttribute('aria-label') === 'Current section: Controller runtime events');
   if (!currentSectionChip) throw new Error('expected application hash to render the current-section chip');
   const sectionLinks = collectNodes(accounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#application-'));

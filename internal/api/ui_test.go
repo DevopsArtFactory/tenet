@@ -328,6 +328,10 @@ func TestEmbeddedUIIncludesApplicationSectionNavigation(t *testing.T) {
 
 	for _, fragment := range []string{
 		"const createApplicationQuickNav = (detail, sectionLinks = []) => {",
+		"createElement('div', 'quick-nav-label', 'Hierarchy')",
+		"createNavLink(buildPageURL('applications'), 'Applications overview', '_self')",
+		"createElement('div', 'quick-nav-label', 'Current destination')",
+		"createQuickNavChip('Application detail', 'Current destination: Application detail')",
 		"createElement('div', 'quick-nav-current', `${deploymentName || 'Deployment'} · Application detail`),",
 		"createElement('div', 'quick-nav-label', 'Current section')",
 		"const activeSectionID = currentHashTargetID();",
@@ -1655,11 +1659,23 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Quick navigation' in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page quick navigation copy")
 	}
+	if !strings.Contains(text, "assert 'Applications overview' in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert application page overview quick-nav copy")
+	}
+	if !strings.Contains(text, "assert 'Current destination' in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert application page current-destination quick-nav copy")
+	}
 	if !strings.Contains(text, "assert 'On this page' in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page section navigation copy")
 	}
 	if !strings.Contains(text, "assert \"const createApplicationQuickNav = (detail, sectionLinks = []) => {\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page quick-nav helper contract")
+	}
+	if !strings.Contains(text, "assert \"createNavLink(buildPageURL('applications'), 'Applications overview', '_self')\" in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert application page overview return-link contract")
+	}
+	if !strings.Contains(text, "assert \"createQuickNavChip('Application detail', 'Current destination: Application detail')\" in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert application page current-destination chip contract")
 	}
 	if !strings.Contains(text, "assert \"eventsSection.id = 'application-runtime-events';\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page runtime-events anchor contract")

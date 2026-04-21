@@ -981,10 +981,14 @@ assert "createNavLink(buildPageURL('resource', { deployment: detail.name, resour
 assert 'Application resources' in application_ui, application_ui
 assert 'No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.' in application_ui, application_ui
 assert 'Quick navigation' in application_ui, application_ui
+assert 'Applications overview' in application_ui, application_ui
+assert 'Current destination' in application_ui, application_ui
 assert 'Current section' in application_ui, application_ui
 assert 'No section is currently targeted.' in application_ui, application_ui
 assert 'On this page' in application_ui, application_ui
 assert "const createApplicationQuickNav = (detail, sectionLinks = []) => {" in application_ui, application_ui
+assert "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')" in application_ui, application_ui
+assert "createQuickNavChip('Application detail', 'Current destination: Application detail')" in application_ui, application_ui
 assert "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)" in application_ui, application_ui
 assert "createElement('div', 'quick-nav-empty', 'No additional section links are available for this application.')" in application_ui, application_ui
 assert "eventsSection.id = 'application-runtime-events';" in application_ui, application_ui
