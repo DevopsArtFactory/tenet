@@ -682,6 +682,9 @@ async function render(search, fetchImpl) {
     throw new Error('expected account detail back link to preserve /console pathname');
   }
   const accountLinks = collectNodes(accountView.document.getElementById('accounts'), (node) => node.tagName === 'A');
+  if (!accountLinks.find((node) => node.href === '/console?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.textContent === 'Applications overview' && node.target === '_self')) {
+    throw new Error('expected account detail quick-nav overview link to preserve /console pathname');
+  }
   if (!accountLinks.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Open application' && node.target === '_self')) {
     throw new Error('expected account detail drill-down link to preserve /console pathname');
   }
@@ -947,6 +950,11 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!backLink) throw new Error('expected account page back link to preserve filters');
   if (!summaryText.includes('Account deployment overview')) throw new Error('expected account page summary title');
   if (!summaryText.includes('staging-core')) throw new Error('expected account page account name');
+  if (!accountsText.includes('Quick navigation')) throw new Error('expected account page quick navigation');
+  if (!accountsText.includes('Hierarchy')) throw new Error('expected account page hierarchy quick-nav group');
+  if (!accountsText.includes('Applications overview')) throw new Error('expected account page overview quick-nav entry');
+  if (!accountsText.includes('Current destination')) throw new Error('expected account page current-destination quick-nav group');
+  if (!accountsText.includes('staging-core · Account detail')) throw new Error('expected account page quick-nav current label');
   if (!accountsText.includes('payments · staging-apne2')) throw new Error('expected grouped project/environment heading');
   if (!accountsText.includes('payments-api-staging')) throw new Error('expected account page deployment row');
   if (!accountsText.includes('Account JSON')) throw new Error('expected account page account json link');
@@ -955,8 +963,14 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (accountsText.includes('Drift view')) throw new Error('expected account page to stop exposing drift workspace shortcut');
   if (accountsText.includes('Plan/apply')) throw new Error('expected account page to stop exposing plan workspace shortcut');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
+  const quickNavChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
   if (!links.find((node) => node.href === '/v1/overview/accounts/210987654321' && node.textContent === 'Account JSON')) throw new Error('expected account json href');
   if (!links.find((node) => node.href === '/v1/overview/accounts/210987654321/projects/payments/environments/staging-apne2' && node.textContent === 'Group JSON')) throw new Error('expected group json href');
+  const applicationsOverviewLink = links.find((node) => node.href === '/?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.textContent === 'Applications overview' && node.target === '_self');
+  if (!applicationsOverviewLink || applicationsOverviewLink.rel) throw new Error('expected account page overview quick-nav self link');
+  const accountDetailChip = quickNavChips.find((node) => node.getAttribute('aria-label') === 'Current destination: Account detail');
+  if (!accountDetailChip) throw new Error('expected account page current-destination chip');
+  if (links.find((node) => node.textContent === 'Account detail')) throw new Error('expected account page current destination to stay non-click');
   if (!links.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Open application' && node.target === '_self')) throw new Error('expected account page open application self link');
 })();
 `

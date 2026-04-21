@@ -78,6 +78,7 @@ Each row surfaces:
 
 The account drill-down page consumes `GET /v1/overview/accounts/{awsAccountId}` and keeps the denser account-oriented view available without making it the first page again. Current account-page behavior:
 - back-link to the applications overview while preserving current filters
+- the page now renders the same compact `Quick navigation` chrome used by the deeper drill-downs, with an explicit `_self` `Applications overview` return link plus a non-click `Account detail` chip so the current bookmarkable account route stays obvious without dropping current `q`, `sync`, or `account` query state
 - `Account deployment overview` summary/header with account and topology context
 - grouped project/environment sections derived from the account payload
 - sibling `Account JSON`, `Group JSON`, and `_self` `Open application` links outside the expandable row toggle

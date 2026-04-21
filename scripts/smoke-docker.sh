@@ -791,6 +791,13 @@ assert_fragments("account_ui", account_ui, operator_read_auth_fragments + (
 assert "fetchApplicationsOverview()" in ui, ui
 assert "const fetchAccountDetail = (accountID) => fetchEmbeddedReadRouteJSON(`/v1/overview/accounts/${encodeURIComponent(accountID)}`, {" in account_ui, account_ui
 assert "fetchAccountDetail(currentPageState.accountId)" in account_ui, account_ui
+assert_fragments("account_ui", account_ui, (
+    "Quick navigation",
+    "Applications overview",
+    "Current destination",
+    "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')",
+    "createQuickNavChip('Account detail', 'Current destination: Account detail')",
+))
 for label, body in (("resource_ui", resource_ui), ("ecs_resource_ui", ecs_resource_ui), ("bootstrap_resource_ui", bootstrap_resource_ui)):
     assert_fragments(label, body, operator_read_auth_fragments + (
         "return 'Resource detail';",

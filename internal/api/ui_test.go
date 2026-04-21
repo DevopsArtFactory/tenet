@@ -358,6 +358,27 @@ func TestEmbeddedUIIncludesApplicationSectionNavigation(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUIIncludesAccountQuickNavigation(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const createAccountQuickNav = (account) => {",
+		"const accountLabel = account?.name || currentPageState.accountId || 'Account';",
+		"createElement('div', 'quick-nav-label', 'Hierarchy')",
+		"createNavLink(buildPageURL('applications'), 'Applications overview', '_self')",
+		"createElement('div', 'quick-nav-label', 'Current destination')",
+		"createQuickNavChip('Account detail', 'Current destination: Account detail')",
+		"createElement('div', 'quick-nav-current', `${accountLabel} · Account detail`),",
+		"const quickNav = createAccountQuickNav(account);",
+		"const overviewArticle = createAccountOverviewArticle(account);",
+		"root.replaceChildren(...[quickNav, overviewArticle].filter(Boolean));",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+}
+
 func TestEmbeddedUIIncludesPlanSectionNavigation(t *testing.T) {
 	body := string(indexHTML)
 
@@ -1638,6 +1659,24 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"fetchAccountDetail(currentPageState.accountId)\" in account_ui, account_ui") {
 		t.Fatalf("expected smoke-local.sh to assert account-page boot loader uses fetchAccountDetail")
 	}
+	if !strings.Contains(text, "assert 'Quick navigation' in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert account page quick navigation copy")
+	}
+	if !strings.Contains(text, "assert 'Applications overview' in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert account page overview quick-nav copy")
+	}
+	if !strings.Contains(text, "assert 'Current destination' in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert account page current-destination quick-nav copy")
+	}
+	if !strings.Contains(text, "assert \"const createAccountQuickNav = (account) => {\" in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert account page quick-nav helper contract")
+	}
+	if !strings.Contains(text, "assert \"createNavLink(buildPageURL('applications'), 'Applications overview', '_self')\" in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert account page overview return-link contract")
+	}
+	if !strings.Contains(text, "assert \"createQuickNavChip('Account detail', 'Current destination: Account detail')\" in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert account page current-destination chip contract")
+	}
 	if !strings.Contains(text, "for label, body in ((\"resource_ui\", resource_ui), (\"ecs_resource_ui\", ecs_resource_ui), (\"bootstrap_resource_ui\", bootstrap_resource_ui)):") {
 		t.Fatalf("expected smoke-local.sh to assert all bookmarkable resource pages")
 	}
@@ -2127,6 +2166,18 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 	} {
 		if !strings.Contains(dockerSmoke, fragment) {
 			t.Fatalf("expected smoke-docker.sh to lock bookmarkable application quick-nav fragment %q", fragment)
+		}
+	}
+	for _, fragment := range []string{
+		"assert_fragments(\"account_ui\", account_ui, (",
+		"\"Quick navigation\",",
+		"\"Applications overview\",",
+		"\"Current destination\",",
+		"\"createNavLink(buildPageURL('applications'), 'Applications overview', '_self')\",",
+		"\"createQuickNavChip('Account detail', 'Current destination: Account detail')\",",
+	} {
+		if !strings.Contains(dockerSmoke, fragment) {
+			t.Fatalf("expected smoke-docker.sh to lock bookmarkable account quick-nav fragment %q", fragment)
 		}
 	}
 }
