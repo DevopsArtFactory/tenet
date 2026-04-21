@@ -206,6 +206,7 @@ func TestEmbeddedUIIncludesQuickLinksToDeploymentReadModels(t *testing.T) {
 	body := string(indexHTML)
 
 	for _, fragment := range []string{
+		"const nonEmptyResourceSections = (detail) => groupResourceSections(detail).filter((group) => Array.isArray(group?.resources) && group.resources.length > 0);",
 		"const createNavLink = (href, text, target = '_blank') => {",
 		"const createQuickNavChip = (text, ariaLabel) => {",
 		"link.target = target;",
@@ -222,6 +223,9 @@ func TestEmbeddedUIIncludesQuickLinksToDeploymentReadModels(t *testing.T) {
 		"Drift view",
 		"Plan/apply",
 		"Audit log",
+		"const resourceGroups = nonEmptyResourceSections(detail);",
+		"if (!resourceGroups.length) {",
+		"'No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.'",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include %q", fragment)
@@ -1639,6 +1643,12 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert \"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page resource link contract")
+	}
+	if !strings.Contains(text, "assert \"const nonEmptyResourceSections = (detail) => groupResourceSections(detail).filter((group) => Array.isArray(group?.resources) && group.resources.length > 0);\" in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert application page filters empty linked-resource groups")
+	}
+	if !strings.Contains(text, "assert 'No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.' in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert application page empty-state copy")
 	}
 	if !strings.Contains(text, "assert 'Quick navigation' in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page quick navigation copy")

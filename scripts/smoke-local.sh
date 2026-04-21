@@ -975,8 +975,11 @@ assert "failure: 'account detail request failed'," in ui, ui
 assert "const applicationDetail = currentPageState.page === 'application' ? fetchApplicationDetail(currentPageState.deployment) : fetchDeploymentDetail(currentPageState.deployment);" in application_ui, application_ui
 assert "const renderApplicationDetailPage = (detail) => {" in application_ui, application_ui
 assert "const breadcrumb = createDeploymentBreadcrumb({" in application_ui, application_ui
+assert "const nonEmptyResourceSections = (detail) => groupResourceSections(detail).filter((group) => Array.isArray(group?.resources) && group.resources.length > 0);" in application_ui, application_ui
+assert "const resourceGroups = nonEmptyResourceSections(detail);" in application_ui, application_ui
 assert "createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')" in application_ui, application_ui
 assert 'Application resources' in application_ui, application_ui
+assert 'No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.' in application_ui, application_ui
 assert 'Quick navigation' in application_ui, application_ui
 assert 'Current section' in application_ui, application_ui
 assert 'No section is currently targeted.' in application_ui, application_ui

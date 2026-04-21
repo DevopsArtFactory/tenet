@@ -1065,7 +1065,6 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('Plan/apply')) throw new Error('expected application route plan workspace entry');
   if (!accountsText.includes('Workloads')) throw new Error('expected application route workloads group');
   if (!accountsText.includes('Traffic routing')) throw new Error('expected application route traffic routing group');
-  if (!accountsText.includes('Config and access')) throw new Error('expected application route config group');
   if (!accountsText.includes('Controller runtime events')) throw new Error('expected application route runtime-events section');
   if (!accountsText.includes('payments-api-staging-service')) throw new Error('expected application route synthesized workload resource');
   if (!accountsText.includes('payments-api-staging-codedeploy-group')) throw new Error('expected application route synthesized deployment-group resource');
@@ -1073,17 +1072,16 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const expectedSectionLinks = [
     ['/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-workloads', 'Workloads'],
     ['/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-traffic-routing', 'Traffic routing'],
-    ['/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-config-access', 'Config and access'],
     ['/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-runtime-events', 'Controller runtime events'],
   ];
-  if (sectionLinks.length !== expectedSectionLinks.length) throw new Error('expected four application section links, got ' + sectionLinks.length);
+  if (sectionLinks.length !== expectedSectionLinks.length) throw new Error('expected three application section links, got ' + sectionLinks.length);
   expectedSectionLinks.forEach(([href, text]) => {
     const link = sectionLinks.find((node) => node.href === href && node.textContent === text);
     if (!link) throw new Error('missing application section link ' + text + ' -> ' + href);
     if (link.target !== '_self' || link.rel) throw new Error('expected application section link to stay in-shell for ' + text);
   });
   const sectionIDs = collectNodes(document.getElementById('accounts'), (node) => typeof node.id === 'string' && node.id.startsWith('application-')).map((node) => node.id).sort();
-  const expectedSectionIDs = ['application-config-access', 'application-runtime-events', 'application-traffic-routing', 'application-workloads'];
+  const expectedSectionIDs = ['application-runtime-events', 'application-traffic-routing', 'application-workloads'];
   if (JSON.stringify(sectionIDs) !== JSON.stringify(expectedSectionIDs)) throw new Error('unexpected application section ids: ' + JSON.stringify(sectionIDs));
   if (accountsText.includes('Create Plan')) throw new Error('application route should not render plan workspace actions');
   if (accountsText.includes('Field-level drift')) throw new Error('application route should not render drift workspace sections');
@@ -1244,26 +1242,25 @@ const fetch = (url) => {
   const expectedLinks = [
     ['/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-workloads', 'Workloads'],
     ['/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-traffic-routing', 'Traffic routing'],
-    ['/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-config-access', 'Config and access'],
   ];
-  if (sectionLinks.length !== expectedLinks.length) throw new Error('expected three remaining application section links, got ' + sectionLinks.length);
+  if (sectionLinks.length !== expectedLinks.length) throw new Error('expected two remaining application section links, got ' + sectionLinks.length);
   expectedLinks.forEach(([href, text]) => {
     const link = sectionLinks.find((node) => node.href === href && node.textContent === text);
     if (!link) throw new Error('missing application hash link ' + text + ' -> ' + href);
     if (link.target !== '_self' || link.rel) throw new Error('expected application hash link to stay in-shell for ' + text);
   });
   if (sectionLinks.find((node) => node.textContent === 'Controller runtime events')) throw new Error('expected active application section to be removed from On this page links');
-  window.location.hash = '#application-config-access';
+  window.location.hash = '#application-traffic-routing';
   window.dispatchHashChange();
   await settle();
   const updatedAccounts = document.getElementById('accounts');
   const updatedChips = collectNodes(updatedAccounts, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
-  const configChip = updatedChips.find((node) => node.getAttribute('aria-label') === 'Current section: Config and access');
-  if (!configChip) throw new Error('expected application hashchange to update the current-section chip');
+  const trafficChip = updatedChips.find((node) => node.getAttribute('aria-label') === 'Current section: Traffic routing');
+  if (!trafficChip) throw new Error('expected application hashchange to update the current-section chip');
   const updatedSectionLinks = collectNodes(updatedAccounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#application-'));
-  if (updatedSectionLinks.find((node) => node.textContent === 'Config and access')) throw new Error('expected updated application current section to be removed from On this page links');
+  if (updatedSectionLinks.find((node) => node.textContent === 'Traffic routing')) throw new Error('expected updated application current section to be removed from On this page links');
   if (!updatedSectionLinks.find((node) => node.textContent === 'Controller runtime events')) throw new Error('expected previous application current section to return to On this page links after hashchange');
-  if (!document.lastScrolledTarget || document.lastScrolledTarget.id !== 'application-config-access') throw new Error('expected application hashchange to scroll the new current section into view');
+  if (!document.lastScrolledTarget || document.lastScrolledTarget.id !== 'application-traffic-routing') throw new Error('expected application hashchange to scroll the new current section into view');
 })();
 `
 
@@ -2423,6 +2420,112 @@ async function render(fetchImpl) {
   errorText = collectText(errorView.document.getElementById('accounts')).join(' | ');
   if (!errorText.includes('Completed traffic shift for v2')) throw new Error('expected refreshed deployment events payload after error-state refresh');
   if (errorText.includes('Failed to load controller runtime events: deployment events request failed (500): boom')) throw new Error('expected error-state refresh to replace stale error copy');
+})();
+`
+
+	runNodeHarness(t, nodeProgram)
+}
+
+func TestEmbeddedUIApplicationDetailHidesEmptyLinkedResourceGroupsWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	detailJSON, err := json.Marshal(map[string]any{
+		"name":             "payments-api-empty",
+		"accountName":      "staging-core",
+		"awsAccountId":     "210987654321",
+		"region":           "ap-northeast-2",
+		"appRef":           "payments",
+		"environmentRef":   "staging-apne2",
+		"sync":             map[string]any{"state": "Synced", "reason": "latest desired generation applied"},
+		"health":           map[string]any{"overall": "Healthy", "summary": "service steady"},
+		"desiredArtifact":  map[string]any{"image": "ghcr.io/example/payments:v9"},
+		"deployedArtifact": map[string]any{"image": "ghcr.io/example/payments:v9"},
+	})
+	if err != nil {
+		t.Fatalf("marshal empty application detail body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/', search: '?page=application&deployment=payments-api-empty', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/applications/payments-api-empty') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/overview/deployments/payments-api-empty/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-empty', events: [] }) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+(async () => {
+  await settle();
+  await settle();
+  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-empty' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-empty/events') throw new Error('expected empty application page to load application detail plus deployment events');
+  const accounts = document.getElementById('accounts');
+  const accountsText = collectText(accounts).join(' | ');
+  if (!accountsText.includes('No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.')) throw new Error('expected explicit application empty-state copy');
+  if (!accountsText.includes('Controller runtime events')) throw new Error('expected runtime-events section to remain visible without linked resources');
+  if (accountsText.includes('Workloads')) throw new Error('expected empty application page to hide workloads group');
+  if (accountsText.includes('Traffic routing')) throw new Error('expected empty application page to hide traffic routing group');
+  if (accountsText.includes('Config and access')) throw new Error('expected empty application page to hide config and access group');
+  const links = collectNodes(accounts, (node) => node.tagName === 'A');
+  const sectionLinks = links.filter((node) => typeof node.href === 'string' && node.href.includes('#application-'));
+  if (sectionLinks.length !== 1) throw new Error('expected empty application page quick nav to keep only runtime-events section link, got ' + sectionLinks.length);
+  const runtimeEventsLink = sectionLinks.find((node) => node.href === '/?page=application&deployment=payments-api-empty#application-runtime-events' && node.textContent === 'Controller runtime events');
+  if (!runtimeEventsLink || runtimeEventsLink.target !== '_self' || runtimeEventsLink.rel) throw new Error('expected empty application page runtime-events quick-nav link to stay in shell');
+  const sectionIDs = collectNodes(accounts, (node) => typeof node.id === 'string' && node.id.startsWith('application-')).map((node) => node.id).sort();
+  if (JSON.stringify(sectionIDs) !== JSON.stringify(['application-runtime-events'])) throw new Error('expected only runtime-events section id for empty application page, got ' + JSON.stringify(sectionIDs));
 })();
 `
 
