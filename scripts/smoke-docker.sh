@@ -872,6 +872,7 @@ for fragment in (
     "Deployment audit timeline",
     "Operator audit log",
     "Audit filters: ${activeFilters.join(' · ')}",
+    "Clear audit filters",
     "Active deployment context",
     "Loading audit log…",
     "Audit log is currently unavailable.",
@@ -882,6 +883,7 @@ for fragment in (
     "const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {",
     "if (action) params.set('action', action);",
     "createSelect('Action', currentPageState.auditAction, auditActionOptions, (event) => {",
+    "const clearAuditPageFilters = () => {",
 ):
     assert fragment in audit_ui, fragment
 

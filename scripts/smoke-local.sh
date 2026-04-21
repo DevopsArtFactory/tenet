@@ -1025,6 +1025,7 @@ assert 'Audit log is currently unavailable.' in audit_ui, audit_ui
 assert 'Refresh audit log' in audit_ui, audit_ui
 assert 'Refreshing audit log from GET /v1/audit-logs…' in audit_ui, audit_ui
 assert 'Failed to refresh audit log:' in audit_ui, audit_ui
+assert 'Clear audit filters' in audit_ui, audit_ui
 assert "const createAuditLogsActions = (isLoading = false) => [" in audit_ui, audit_ui
 assert "const auditLogsRefreshStateText = (auditState) => {" in audit_ui, audit_ui
 assert "const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {" in audit_ui, audit_ui
@@ -1033,6 +1034,8 @@ assert "const createAuditQuickNav = () => createDeploymentQuickNav(auditDeployme
 assert "const normalizeAuditLimit = (value) => {" in audit_ui, audit_ui
 assert "const auditLimitSelectOptions = (limit) => {" in audit_ui, audit_ui
 assert "const syncAuditQueryParams = (params, pageState) => {" in audit_ui, audit_ui
+assert "const clearAuditPageFilters = () => {" in audit_ui, audit_ui
+assert "createElement('button', 'toolbar-button', 'Clear audit filters')" in audit_ui, audit_ui
 assert "createSelect('Action', currentPageState.auditAction, auditActionOptions, (event) => {" in audit_ui, audit_ui
 assert "createSelect('Limit', String(currentPageState.auditLimit || ''), auditLimitSelectOptions(currentPageState.auditLimit), (event) => {" in audit_ui, audit_ui
 assert 'Open application drill-down' in audit_ui, audit_ui

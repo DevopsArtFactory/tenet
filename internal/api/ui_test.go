@@ -2021,7 +2021,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"controller-authored `managedDrift[]` evidence in `GET /v1/overview/deployments/payments-api-prod` with stable `field` / `desired` / `actual` / `severity` rows and aligned `runtimeSummary.managedDrift`",
 			"The same direct-process actor coverage by sending both header families with conflicting identities on a `payments-api-staging` plan/apply flow",
 			"Bookmarkable application, account, drift, audit, and plan workspace URLs, checking raw embedded application/account/resource/drift/audit/plan shell HTML/script fragments instead of runtime DOM text",
-			"Drift page source/summary/table copy, audit filter copy such as `Audit filters: action apply.requested · limit 2`, and correlated `http_request` logs",
+			"Drift page source/summary/table copy, audit filter copy such as `Audit filters: action apply.requested · limit 2`, the `Clear audit filters` recovery affordance, and correlated `http_request` logs",
 			"Trusted front-door auth by restarting the Compose `api` service",
 			"authenticated but unauthorized transitions fail with `403`",
 			"survive the Compose `api` service restart",
@@ -2086,6 +2086,36 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 	} {
 		if strings.Contains(dockerSmoke, fragment) {
 			t.Fatalf("expected smoke-docker.sh to avoid stale or env-blob fragment %q", fragment)
+		}
+	}
+}
+
+func TestOverviewDocsDescribeAuditFilterReset(t *testing.T) {
+	files := map[string][]string{
+		"../../README.md": {
+			"`Clear audit filters`",
+			"operators can recover to the unfiltered `/?page=audit` slice without dropping bookmarkable `q` / `sync` / `account` state",
+		},
+		"../../docs/features/overview-dashboard.md": {
+			"`Clear audit filters`",
+			"resets those audit filters back to the default `/?page=audit` slice",
+		},
+		"../../docs/architecture/tenet-v1-overview-ui.md": {
+			"`Clear audit filters` recovery action",
+			"without dropping bookmarkable applications-shell query state such as `q`, `sync`, or `account`",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
 		}
 	}
 }
