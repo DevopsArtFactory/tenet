@@ -1042,6 +1042,7 @@ assert "createElement('button', 'toolbar-button', 'Clear audit filters')" in aud
 assert "createSelect('Action', currentPageState.auditAction, auditActionOptions, (event) => {" in audit_ui, audit_ui
 assert "createSelect('Limit', String(currentPageState.auditLimit || ''), auditLimitSelectOptions(currentPageState.auditLimit), (event) => {" in audit_ui, audit_ui
 assert 'Open application drill-down' in audit_ui, audit_ui
+assert 'Open drift view' in audit_ui, audit_ui
 assert 'Open plan/apply workspace' in audit_ui, audit_ui
 assert "const buildDeploymentEventsReadRoute = (deploymentName) => `/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`;" in ui, ui
 assert "const fetchDeploymentEvents = (deploymentName) => fetchEmbeddedReadRouteJSON(buildDeploymentEventsReadRoute(deploymentName), {" in ui, ui
