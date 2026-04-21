@@ -16,6 +16,7 @@ FIXTURE_STATUS_PATH=${TENET_STATUS_PATH:-$ROOT/examples/local-status/deployments
 APPLY_ENABLED=${TENET_AWS_ENABLE_APPLY:-false}
 AUTH_TRUSTED_HEADERS=${TENET_API_TRUST_AUTHENTICATED_HEADERS:-false}
 AUTH_ENFORCED=${TENET_API_ENFORCE_AUTHENTICATED_IDENTITY:-false}
+AUTH_ROLE_ENFORCED=${TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION:-false}
 AUTH_READ_ENFORCED=${TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION:-false}
 WEBHOOK_SECRET=${TENET_GITHUB_WEBHOOK_SECRET:-smoke-webhook-secret}
 STATUS_PATH=$(mktemp)
@@ -159,9 +160,10 @@ stop_api() {
 start_api() {
   local trust_authenticated_headers=$1
   local enforce_authenticated_identity=$2
-  local enforce_deployment_read_authorization=$3
+  local enforce_operator_role_authorization=$3
+  local enforce_deployment_read_authorization=$4
 
-  TENET_API_ADDR=":$PORT" TENET_CATALOG_SOURCE=filesystem TENET_REPO_ROOT="$REPO_ROOT" TENET_STATUS_PATH="$STATUS_PATH" TENET_PLAN_STORE_PATH="$PLAN_STORE_PATH" TENET_APPLY_STORE_PATH="$APPLY_STORE_PATH" TENET_AWS_ENABLE_APPLY="$APPLY_ENABLED" TENET_API_TRUST_AUTHENTICATED_HEADERS="$trust_authenticated_headers" TENET_API_ENFORCE_AUTHENTICATED_IDENTITY="$enforce_authenticated_identity" TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION="$enforce_deployment_read_authorization" TENET_GITHUB_WEBHOOK_SECRET="$WEBHOOK_SECRET" \
+  TENET_API_ADDR=":$PORT" TENET_CATALOG_SOURCE=filesystem TENET_REPO_ROOT="$REPO_ROOT" TENET_STATUS_PATH="$STATUS_PATH" TENET_PLAN_STORE_PATH="$PLAN_STORE_PATH" TENET_APPLY_STORE_PATH="$APPLY_STORE_PATH" TENET_AWS_ENABLE_APPLY="$APPLY_ENABLED" TENET_API_TRUST_AUTHENTICATED_HEADERS="$trust_authenticated_headers" TENET_API_ENFORCE_AUTHENTICATED_IDENTITY="$enforce_authenticated_identity" TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION="$enforce_operator_role_authorization" TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION="$enforce_deployment_read_authorization" TENET_GITHUB_WEBHOOK_SECRET="$WEBHOOK_SECRET" \
     go run ./cmd/tenet-api >"$LOG_FILE" 2>&1 &
   API_PID=$!
 
@@ -177,7 +179,7 @@ start_api() {
   return 1
 }
 
-start_api "$AUTH_TRUSTED_HEADERS" "$AUTH_ENFORCED" "$AUTH_READ_ENFORCED"
+start_api "$AUTH_TRUSTED_HEADERS" "$AUTH_ENFORCED" "$AUTH_ROLE_ENFORCED" "$AUTH_READ_ENFORCED"
 
 curl -fsS "http://$HOST:$PORT/healthz" >/dev/null
 assert_request_id_header "http://$HOST:$PORT/healthz"
@@ -1057,7 +1059,7 @@ PY
 
 stop_api
 rm -f "$PLAN_STORE_PATH" "$APPLY_STORE_PATH"
-start_api true true false
+start_api true true false false
 
 auth_unauthenticated_plan_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_PLAN_BODY" -w "%{http_code}" \
   -X POST \
@@ -1141,7 +1143,7 @@ print('smoke-local: front-door auth path ok')
 PY
 
 stop_api
-start_api true false true
+start_api true false false true
 
 auth_unauthenticated_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" -w "%{http_code}" \
   "http://$HOST:$PORT/v1/overview/applications")
@@ -1560,7 +1562,7 @@ print('smoke-local: deployment read auth path ok')
 PY
 
 stop_api
-start_api "$AUTH_TRUSTED_HEADERS" "$AUTH_ENFORCED" false
+start_api "$AUTH_TRUSTED_HEADERS" "$AUTH_ENFORCED" false false
 
 TENET_REPO_ROOT="$REPO_ROOT" TENET_STATUS_PATH="$STATUS_PATH" TENET_CONTROLLER_REQUEUE_SECONDS=1 TENET_CONTROLLER_WORKERS=1 \
   go run ./cmd/tenet-controller >"$CONTROLLER_LOG_FILE" 2>&1 &

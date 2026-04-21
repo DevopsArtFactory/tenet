@@ -123,6 +123,28 @@ func TestAuthenticatedIdentityFromHeadersPrefersExplicitTrustedHeadersOverAliase
 	}
 }
 
+func TestAuthenticatedRolesFromHeadersReturnsNormalizedRoles(t *testing.T) {
+	header := http.Header{}
+	header.Add(AuthenticatedRolesHeader, "operator, admin ,,operator")
+	header.Add(AuthenticatedRolesHeader, "viewer")
+
+	roles := AuthenticatedRolesFromHeaders(header)
+	want := []string{"operator", "admin", "viewer"}
+	if !reflect.DeepEqual(roles.Names, want) {
+		t.Fatalf("unexpected authenticated roles: got %#v want %#v", roles.Names, want)
+	}
+}
+
+func TestAuthenticatedRolesAllowsAnyRole(t *testing.T) {
+	roles := AuthenticatedRoles{Names: []string{"viewer", "operator"}}
+	if !roles.AllowsAny("admin", "operator") {
+		t.Fatalf("expected roles to allow operator-capable access")
+	}
+	if roles.AllowsAny("admin") {
+		t.Fatalf("expected roles to reject missing role")
+	}
+}
+
 func TestAuthorizedDeploymentsFromHeadersReturnsNormalizedAllowlist(t *testing.T) {
 	header := http.Header{}
 	header.Add(AuthorizedDeploymentsHeader, "payments-api-prod, payments-api-staging ,,worker-prod")
@@ -217,5 +239,17 @@ func TestWithAuthorizedDeploymentsContextRoundTrip(t *testing.T) {
 	want := []string{"payments-api-prod", "worker-prod"}
 	if !reflect.DeepEqual(deployments.Names, want) {
 		t.Fatalf("unexpected context deployment allowlist: got %#v want %#v", deployments.Names, want)
+	}
+}
+
+func TestWithAuthenticatedRolesContextRoundTrip(t *testing.T) {
+	ctx := WithAuthenticatedRolesContext(context.Background(), AuthenticatedRoles{
+		Names: []string{"operator", " admin ", "operator"},
+	})
+
+	roles := AuthenticatedRolesFromContext(ctx)
+	want := []string{"operator", "admin"}
+	if !reflect.DeepEqual(roles.Names, want) {
+		t.Fatalf("unexpected context roles: got %#v want %#v", roles.Names, want)
 	}
 }

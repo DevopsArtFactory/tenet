@@ -6448,6 +6448,54 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
 		runNodeHarness(t, nodeProgram)
 	})
 
+	t.Run("create plan forbidden explains operator role requirement", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url, options = {}) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/plans/deployments/api-prod') {
+    if (options.method !== 'POST') throw new Error('expected create plan POST');
+    return Promise.resolve({
+      ok: false,
+      status: 403,
+      text: () => Promise.resolve('forbidden: authenticated operator role is required for this operator write route'),
+    });
+  }
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  const root = document.getElementById('accounts');
+  const createPlan = collectNodes(root, (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Create Plan');
+  if (!createPlan) throw new Error('expected Create Plan button before role-forbidden create');
+  createPlan.dispatch('click');
+  await settle();
+  await settle();
+  await settle();
+  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/deployments/api-prod') throw new Error('unexpected fetch sequence after role-forbidden create: ' + fetchCalls.join(', '));
+  if (window.location.search !== '?page=plan&deployment=api-prod') throw new Error('expected role-forbidden create to preserve workspace URL, got ' + window.location.search);
+  const text = collectText(root).join(' | ');
+  if (!text.includes('Operator role required')) throw new Error('expected role-required heading for role-forbidden create');
+  if (!text.includes('Tenet rejected POST /v1/plans/deployments/api-prod after recognizing the caller\'s identity because this operator write route requires a trusted forwarded operator/admin role.')) throw new Error('expected operator-role explanation for create');
+  if (!text.includes('forward X-Tenet-Authenticated-Roles for an operator-capable session.')) throw new Error('expected forwarded-role guidance for create');
+  if (text.includes('Failed to create a plan preview')) throw new Error('expected role-forbidden create to avoid generic fetch-error copy');
+})();
+`
+		runNodeHarness(t, nodeProgram)
+	})
+
 	t.Run("apply create unauthorized explains trusted front door auth requirement", func(t *testing.T) {
 		nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;
@@ -6504,6 +6552,57 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!createPlan || !applyPlanAfter || !refreshPlan || !refreshApply) throw new Error('expected plan workspace action buttons after unauthorized apply create');
   if (createPlan.disabled || applyPlanAfter.disabled) throw new Error('expected create/apply actions to stay enabled after unauthorized apply create');
   if (refreshPlan.disabled || !refreshApply.disabled) throw new Error('expected only plan refresh enabled after unauthorized apply create');
+})();
+`
+		runNodeHarness(t, nodeProgram)
+	})
+
+	t.Run("apply create forbidden explains operator role requirement", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+const planPreview = ` + string(planPreviewReadyJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod&planId=plan_ready_123', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url, options = {}) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/plans/plan_ready_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+  if (url === '/v1/applies/plans/plan_ready_123') {
+    if (options.method !== 'POST') throw new Error('expected apply create POST');
+    return Promise.resolve({
+      ok: false,
+      status: 403,
+      text: () => Promise.resolve('forbidden: authenticated operator role is required for this operator write route'),
+    });
+  }
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  await settle();
+  const root = document.getElementById('accounts');
+  const applyPlan = collectNodes(root, (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Apply Plan');
+  if (!applyPlan || applyPlan.disabled) throw new Error('expected Apply Plan enabled before role-forbidden apply create');
+  applyPlan.dispatch('click');
+  await settle();
+  await settle();
+  await settle();
+  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/plan_ready_123, /v1/applies/plans/plan_ready_123') throw new Error('unexpected fetch sequence after role-forbidden apply create: ' + fetchCalls.join(', '));
+  if (window.location.search !== '?page=plan&deployment=api-prod&planId=plan_ready_123') throw new Error('expected role-forbidden apply create to preserve plan workspace URL, got ' + window.location.search);
+  const text = collectText(root).join(' | ');
+  if (!text.includes('Operator role required')) throw new Error('expected role-required heading for role-forbidden apply create');
+  if (!text.includes('Tenet rejected POST /v1/applies/plans/plan_ready_123 after recognizing the caller\'s identity because this operator write route requires a trusted forwarded operator/admin role.')) throw new Error('expected operator-role explanation for apply');
+  if (!text.includes('forward X-Tenet-Authenticated-Roles for an operator-capable session.')) throw new Error('expected forwarded-role guidance for apply');
+  if (text.includes('Failed to create an apply request')) throw new Error('expected role-forbidden apply create to avoid generic fetch-error copy');
 })();
 `
 		runNodeHarness(t, nodeProgram)

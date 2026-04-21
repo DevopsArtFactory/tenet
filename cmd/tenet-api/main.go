@@ -52,8 +52,9 @@ func main() {
 	applyStorePath := envOrDefault("TENET_APPLY_STORE_PATH", defaultApplyRequestStorePath())
 	applyEnabled := awsApplyEnabled()
 	enforceAuthenticatedIdentity := operatorWriteAuthenticationEnforced()
+	enforceOperatorRoleAuthorization := operatorWriteRoleAuthorizationEnforced()
 	enforceDeploymentReadAuthorization := operatorDeploymentReadAuthorizationEnforced()
-	trustAuthenticatedHeaders := trustedAuthenticatedHeadersEnabled() || enforceAuthenticatedIdentity || enforceDeploymentReadAuthorization
+	trustAuthenticatedHeaders := trustedAuthenticatedHeadersEnabled() || enforceAuthenticatedIdentity || enforceOperatorRoleAuthorization || enforceDeploymentReadAuthorization
 	webhookConfigured := strings.TrimSpace(os.Getenv("TENET_GITHUB_WEBHOOK_SECRET")) != ""
 	redisAddr := os.Getenv("TENET_REDIS_ADDR")
 	statusSeedPath := os.Getenv("TENET_STATUS_SEED_PATH")
@@ -72,7 +73,7 @@ func main() {
 
 	info := buildinfo.Current(version, commit)
 	catalogSourceKind, repoRoot, githubRepository, githubRef, githubPath, githubBaseURL := catalogSource.logFields()
-	log.Printf("starting tenet-api version=%s commit=%s addr=%s catalog_source=%s repo_root=%s github_repository=%s github_ref=%s github_path=%s github_base_url=%s status_backend=%s status_path=%s plan_store_path=%s apply_store_path=%s apply_enabled=%t trust_authenticated_headers=%t require_authenticated_identity=%t require_deployment_read_authorization=%t github_webhook_configured=%t redis_addr=%s request_timeout=%s", info.Version, info.Commit, addr, catalogSourceKind, repoRoot, githubRepository, githubRef, githubPath, githubBaseURL, statusBackend, statusPath, planStorePath, applyStorePath, applyEnabled, trustAuthenticatedHeaders, enforceAuthenticatedIdentity, enforceDeploymentReadAuthorization, webhookConfigured, redisAddr, requestTimeout)
+	log.Printf("starting tenet-api version=%s commit=%s addr=%s catalog_source=%s repo_root=%s github_repository=%s github_ref=%s github_path=%s github_base_url=%s status_backend=%s status_path=%s plan_store_path=%s apply_store_path=%s apply_enabled=%t trust_authenticated_headers=%t require_authenticated_identity=%t require_operator_role_for_write=%t require_deployment_read_authorization=%t github_webhook_configured=%t redis_addr=%s request_timeout=%s", info.Version, info.Commit, addr, catalogSourceKind, repoRoot, githubRepository, githubRef, githubPath, githubBaseURL, statusBackend, statusPath, planStorePath, applyStorePath, applyEnabled, trustAuthenticatedHeaders, enforceAuthenticatedIdentity, enforceOperatorRoleAuthorization, enforceDeploymentReadAuthorization, webhookConfigured, redisAddr, requestTimeout)
 
 	store := mustOpenStatusStore(statusBackend, statusPath, redisAddr)
 	if store != nil {
@@ -121,8 +122,9 @@ func newAPIOptionsWithCatalogSource(info buildinfo.Info, source apiCatalogSource
 func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCatalogSource, store statusstore.Store, planStorePath string, applyStorePath string) api.Options {
 	options := api.Options{
 		BuildInfo:                          info,
-		TrustAuthenticatedHeaders:          trustedAuthenticatedHeadersEnabled() || operatorWriteAuthenticationEnforced() || operatorDeploymentReadAuthorizationEnforced(),
-		RequireAuthenticatedIdentity:       operatorWriteAuthenticationEnforced(),
+		TrustAuthenticatedHeaders:          trustedAuthenticatedHeadersEnabled() || operatorWriteAuthenticationEnforced() || operatorWriteRoleAuthorizationEnforced() || operatorDeploymentReadAuthorizationEnforced(),
+		RequireAuthenticatedIdentity:       operatorWriteAuthenticationEnforced() || operatorWriteRoleAuthorizationEnforced(),
+		RequireOperatorRoleForWrite:        operatorWriteRoleAuthorizationEnforced(),
 		RequireDeploymentReadAuthorization: operatorDeploymentReadAuthorizationEnforced(),
 		GitHubWebhookSecret:                strings.TrimSpace(os.Getenv("TENET_GITHUB_WEBHOOK_SECRET")),
 		GitHubWebhookDesiredStateSource:    source.webhookDesiredStateSource(),
@@ -341,6 +343,10 @@ func trustedAuthenticatedHeadersEnabled() bool {
 
 func operatorWriteAuthenticationEnforced() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("TENET_API_ENFORCE_AUTHENTICATED_IDENTITY")), "true")
+}
+
+func operatorWriteRoleAuthorizationEnforced() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION")), "true")
 }
 
 func operatorDeploymentReadAuthorizationEnforced() bool {
