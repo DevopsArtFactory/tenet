@@ -946,6 +946,7 @@
           node.selected = option.value === value;
           select.append(node);
         });
+        select.value = value == null ? '' : String(value);
         select.addEventListener('change', onChange);
         field.append(select);
         return field;
@@ -1073,6 +1074,17 @@
         const hash = window.location.hash || '';
         const nextURL = query ? `${window.location.pathname}?${query}${hash}` : `${window.location.pathname}${hash}`;
         history.replaceState({}, '', nextURL);
+      };
+      const clearAuditPageFilters = () => {
+        currentPageState = {
+          ...currentPageState,
+          page: 'audit',
+          deployment: '',
+          auditAction: '',
+          auditLimit: 0,
+        };
+        syncAuditPageState();
+        loadAuditLogsPage().catch(() => {});
       };
       const normalizeViewState = (applications, state) => {
         const validSyncStates = new Set([
@@ -2931,6 +2943,14 @@
           backLink,
           createElement('div', 'toolbar-active', activeFilters.length ? `Audit filters: ${activeFilters.join(' · ')}` : 'Audit filters: none'),
         );
+        if (activeFilters.length) {
+          const clearFiltersButton = createElement('button', 'toolbar-button', 'Clear audit filters');
+          clearFiltersButton.type = 'button';
+          clearFiltersButton.addEventListener('click', () => {
+            clearAuditPageFilters();
+          });
+          toolbarActions.append(clearFiltersButton);
+        }
         toolbar.replaceChildren(controls, toolbarActions);
 
         const detailSummary = createElement('article', 'account');

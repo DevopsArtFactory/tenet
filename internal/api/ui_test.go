@@ -536,6 +536,12 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"createSelect('Limit', String(currentPageState.auditLimit || ''), auditLimitSelectOptions(currentPageState.auditLimit), (event) => {",
 		"Audit filters: none",
 		"Audit filters: ${activeFilters.join(' · ')}",
+		"const clearFiltersButton = createElement('button', 'toolbar-button', 'Clear audit filters');",
+		"clearFiltersButton.type = 'button';",
+		"if (activeFilters.length) {",
+		"deployment: '',",
+		"auditAction: '',",
+		"auditLimit: 0,",
 		"const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = [], currentSectionEmptyLabel = '') => {",
 		"const createAuditQuickNav = () => createDeploymentQuickNav(auditDeploymentName(), 'Audit log');",
 		"const renderAuditLogsState = (text, className = '', detailText = '') => {",
@@ -1691,6 +1697,12 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Failed to refresh audit log:' in audit_ui, audit_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains audit refresh error copy")
 	}
+	if !strings.Contains(text, "assert 'Clear audit filters' in audit_ui, audit_ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains Clear audit filters")
+	}
+	if !strings.Contains(text, "assert \"const clearAuditPageFilters = () => {\" in audit_ui, audit_ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains audit clear-filters helper")
+	}
 	for _, fragment := range []string{
 		"json_string_field_from_path() {",
 		"response_path=$(write_payload wait-for-apply-status.json \"$response\")",
@@ -2150,6 +2162,36 @@ func TestOverviewDocsDescribeApplicationPageSectionNavigation(t *testing.T) {
 			"`On this page` group",
 			"`Workloads`, `Traffic routing`, `Config and access`, and `Controller runtime events`",
 			"`/?page=application&deployment={name}#application-runtime-events`",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
+	}
+}
+
+func TestOverviewDocsDescribeAuditFilterReset(t *testing.T) {
+	files := map[string][]string{
+		"../../README.md": {
+			"`Clear audit filters`",
+			"operators can recover to the unfiltered `/?page=audit` slice without dropping bookmarkable `q` / `sync` / `account` state",
+		},
+		"../../docs/features/overview-dashboard.md": {
+			"`Clear audit filters`",
+			"resets those audit filters back to the default `/?page=audit` slice",
+		},
+		"../../docs/architecture/tenet-v1-overview-ui.md": {
+			"`Clear audit filters` recovery action",
+			"without dropping bookmarkable applications-shell query state such as `q`, `sync`, or `account`",
 		},
 	}
 
