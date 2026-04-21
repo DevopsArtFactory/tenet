@@ -191,7 +191,7 @@ Current behavior:
 - keeps entries newest-first even if the client receives an unsorted payload
 - shows explicit labels for action, deployment/app/environment context, timestamp, actor availability, and plan/apply identifiers
 - keeps actor identity explicit rather than fabricated by rendering `Unavailable` / `Unknown` plus the server-authored reason text
-- exposes `_self` `Open application drill-down` and `_self` `Open plan/apply workspace` links when `deploymentName`, `planId`, and `applyId` are present
+- exposes `_self` `Open application drill-down` and `_self` `Open drift view` links whenever `deploymentName` is present, plus `_self` `Open plan/apply workspace` when `planId` and `applyId` are present
 
 ### Deployment runtime events API
 
@@ -297,7 +297,7 @@ The dashboard now exposes the following navigation affordances across the curren
 - account detail page: `Account JSON`, `Group JSON`, `_self` `Open application`
 - application detail page: `_self` `Drift view`, `_self` `Plan/apply`, `_self` `Audit log`, `Open resource`
 - application detail `Audit log` now routes to `/?page=audit&deployment={deploymentName}` so the selected deployment stays visible in the bookmarkable audit slice
-- audit page: `_self` `Back to applications`, `_self` `Open application drill-down`, `_self` `Open plan/apply workspace`
+- audit page: `_self` `Back to applications`, `_self` `Open application drill-down`, `_self` `Open drift view`, `_self` `Open plan/apply workspace`
 - resource/workspace drill-down pages: embedded back links that keep operators in the same shell
 - account-oriented JSON surfaces remain available through the API routes (`/v1/overview/accounts/{awsAccountId}`, `/v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}`, `/v1/overview/deployments/{deploymentName}`, `/v1/status/deployments/{deploymentName}`)
 

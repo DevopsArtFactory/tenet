@@ -3096,6 +3096,7 @@
           const links = createElement('div', 'row-links row-links-shell');
           if (entry.deploymentName) {
             links.append(createNavLink(buildPageURL('application', { deployment: entry.deploymentName }), 'Open application drill-down', '_self'));
+            links.append(createNavLink(buildPageURL('drift', { deployment: entry.deploymentName }), 'Open drift view', '_self'));
           }
           if (entry.deploymentName && (entry.planId || entry.applyId)) {
             links.append(createNavLink(buildPageURL('plan', {
