@@ -145,6 +145,25 @@ func TestAuthenticatedRolesAllowsAnyRole(t *testing.T) {
 	}
 }
 
+func TestAuthenticatedRolesAllowsOperatorRead(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		roles AuthenticatedRoles
+		want  bool
+	}{
+		{name: "viewer", roles: AuthenticatedRoles{Names: []string{"viewer"}}, want: true},
+		{name: "operator", roles: AuthenticatedRoles{Names: []string{"operator"}}, want: true},
+		{name: "admin", roles: AuthenticatedRoles{Names: []string{"admin"}}, want: true},
+		{name: "missing", roles: AuthenticatedRoles{Names: []string{"auditor"}}, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.roles.AllowsOperatorRead(); got != tc.want {
+				t.Fatalf("AllowsOperatorRead() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestAuthorizedDeploymentsFromHeadersReturnsNormalizedAllowlist(t *testing.T) {
 	header := http.Header{}
 	header.Add(AuthorizedDeploymentsHeader, "payments-api-prod, payments-api-staging ,,worker-prod")

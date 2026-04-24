@@ -124,6 +124,7 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 		BuildInfo:                          info,
 		TrustAuthenticatedHeaders:          trustedAuthenticatedHeadersEnabled() || operatorWriteAuthenticationEnforced() || operatorWriteRoleAuthorizationEnforced() || operatorDeploymentReadAuthorizationEnforced(),
 		RequireAuthenticatedIdentity:       operatorWriteAuthenticationEnforced() || operatorWriteRoleAuthorizationEnforced(),
+		RequireOperatorRoleForRead:         operatorWriteRoleAuthorizationEnforced() && operatorDeploymentReadAuthorizationEnforced(),
 		RequireOperatorRoleForWrite:        operatorWriteRoleAuthorizationEnforced(),
 		RequireDeploymentReadAuthorization: operatorDeploymentReadAuthorizationEnforced(),
 		GitHubWebhookSecret:                strings.TrimSpace(os.Getenv("TENET_GITHUB_WEBHOOK_SECRET")),

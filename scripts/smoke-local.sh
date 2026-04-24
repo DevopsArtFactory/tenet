@@ -41,6 +41,9 @@ AUTH_UNAUTHENTICATED_COLLECTION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY=$(mktemp)
+AUTH_ROLE_REQUIRED_COLLECTION_BODY=$(mktemp)
+AUTH_ROLE_REQUIRED_STATUS_READ_BODY=$(mktemp)
+AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_READ_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_STATUS_READ_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_EVENTS_BODY=$(mktemp)
@@ -61,6 +64,8 @@ AUTH_FORBIDDEN_TRANSITION_BODY=$(mktemp)
 AUTH_FORBIDDEN_PLAN_READ_BODY=$(mktemp)
 AUTH_FORBIDDEN_APPLY_READ_BODY=$(mktemp)
 AUTH_FORBIDDEN_AUDIT_BODY=$(mktemp)
+AUTH_ROLE_REQUIRED_PLAN_READ_BODY=$(mktemp)
+AUTH_ROLE_REQUIRED_APPLY_READ_BODY=$(mktemp)
 cp -R "$SOURCE_REPO_ROOT/." "$REPO_ROOT/"
 cleanup() {
   if [[ -n "${CONTROLLER_PID:-}" ]] && kill -0 "$CONTROLLER_PID" 2>/dev/null; then
@@ -71,7 +76,7 @@ cleanup() {
     kill "$API_PID" 2>/dev/null || true
     wait "$API_PID" 2>/dev/null || true
   fi
-  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$INVALID_WEBHOOK_BODY" "$AUTH_UNAUTHENTICATED_PLAN_BODY" "$AUTH_UNAUTHENTICATED_APPLY_BODY" "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_READ_BODY" "$AUTH_UNAUTHENTICATED_STATUS_READ_BODY" "$AUTH_UNAUTHENTICATED_EVENTS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY" "$AUTH_FORBIDDEN_GROUP_DETAIL_BODY" "$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" "$AUTH_FORBIDDEN_READ_BODY" "$AUTH_FORBIDDEN_STATUS_READ_BODY" "$AUTH_FORBIDDEN_EVENTS_BODY" "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_PLAN_WRITE_BODY" "$AUTH_FORBIDDEN_APPLY_WRITE_BODY" "$AUTH_FORBIDDEN_TRANSITION_BODY" "$AUTH_FORBIDDEN_PLAN_READ_BODY" "$AUTH_FORBIDDEN_APPLY_READ_BODY" "$AUTH_FORBIDDEN_AUDIT_BODY"
+  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$INVALID_WEBHOOK_BODY" "$AUTH_UNAUTHENTICATED_PLAN_BODY" "$AUTH_UNAUTHENTICATED_APPLY_BODY" "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY" "$AUTH_ROLE_REQUIRED_COLLECTION_BODY" "$AUTH_ROLE_REQUIRED_STATUS_READ_BODY" "$AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_READ_BODY" "$AUTH_UNAUTHENTICATED_STATUS_READ_BODY" "$AUTH_UNAUTHENTICATED_EVENTS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY" "$AUTH_FORBIDDEN_GROUP_DETAIL_BODY" "$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" "$AUTH_FORBIDDEN_READ_BODY" "$AUTH_FORBIDDEN_STATUS_READ_BODY" "$AUTH_FORBIDDEN_EVENTS_BODY" "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_PLAN_WRITE_BODY" "$AUTH_FORBIDDEN_APPLY_WRITE_BODY" "$AUTH_FORBIDDEN_TRANSITION_BODY" "$AUTH_FORBIDDEN_PLAN_READ_BODY" "$AUTH_FORBIDDEN_APPLY_READ_BODY" "$AUTH_FORBIDDEN_AUDIT_BODY" "$AUTH_ROLE_REQUIRED_PLAN_READ_BODY" "$AUTH_ROLE_REQUIRED_APPLY_READ_BODY"
   rm -rf "$PAYLOAD_DIR" "$REPO_ROOT"
 }
 trap cleanup EXIT
@@ -937,7 +942,9 @@ def assert_fragments(label, body, fragments):
 operator_read_auth_fragments = (
     "const operatorReadAuthRequiredState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 401;",
     "const operatorReadForbiddenState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 403;",
+    "const operatorReadRoleRequiredState = (error) => operatorReadForbiddenState(error) && String(error?.message || '').includes('authenticated viewer-capable role is required for this operator read route');",
     "const operatorReadAuthRequiredMessage = (route) => `Tenet rejected ${route} because authenticated identity is required on this operator read route. Retry this bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers.`;",
+    "const operatorReadRoleRequiredMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity because this operator read route requires a trusted forwarded viewer/operator/admin role. Retry this bookmarkable page through the trusted front door so it can forward X-Tenet-Authenticated-Roles for a read-capable session.`;",
     "const operatorReadForbiddenMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized for that route or deployment.`;",
 )
 assert_fragments("application_ui", application_ui, operator_read_auth_fragments + (
@@ -1201,7 +1208,7 @@ print('smoke-local: front-door auth path ok')
 PY
 
 stop_api
-start_api true false false true
+start_api true false true true
 
 auth_unauthenticated_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" -w "%{http_code}" \
   "http://$HOST:$PORT/v1/overview/applications")
@@ -1210,6 +1217,24 @@ auth_unauthenticated_status_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICAT
 auth_unauthenticated_account_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" -w "%{http_code}" \
   "http://$HOST:$PORT/v1/overview/accounts")
 auth_unauthenticated_audit_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY" -w "%{http_code}" \
+  "http://$HOST:$PORT/v1/audit-logs?action=apply.requested")
+auth_role_required_collection_status=$(curl -sS -o "$AUTH_ROLE_REQUIRED_COLLECTION_BODY" -w "%{http_code}" \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
+  "http://$HOST:$PORT/v1/overview/applications")
+auth_role_required_status_read_status=$(curl -sS -o "$AUTH_ROLE_REQUIRED_STATUS_READ_BODY" -w "%{http_code}" \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
+  "http://$HOST:$PORT/v1/status/deployments/payments-api-staging")
+auth_role_required_audit_collection_status=$(curl -sS -o "$AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY" -w "%{http_code}" \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
   "http://$HOST:$PORT/v1/audit-logs?action=apply.requested")
 auth_unauthenticated_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_READ_BODY" -w "%{http_code}" \
   "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging")
@@ -1225,6 +1250,18 @@ auth_unauthenticated_plan_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_PLAN_
   "http://$HOST:$PORT/v1/plans/$frontdoor_plan_id")
 auth_unauthenticated_apply_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" -w "%{http_code}" \
   "http://$HOST:$PORT/v1/applies/$frontdoor_apply_id")
+auth_role_required_plan_read_status=$(curl -sS -o "$AUTH_ROLE_REQUIRED_PLAN_READ_BODY" -w "%{http_code}" \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
+  "http://$HOST:$PORT/v1/plans/$frontdoor_plan_id")
+auth_role_required_apply_read_status=$(curl -sS -o "$AUTH_ROLE_REQUIRED_APPLY_READ_BODY" -w "%{http_code}" \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
+  "http://$HOST:$PORT/v1/applies/$frontdoor_apply_id")
 auth_unauthenticated_transition_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" -w "%{http_code}" \
   -X POST \
   -H 'Content-Type: application/json' \
@@ -1236,6 +1273,7 @@ auth_forbidden_plan_write_status=$(curl -sS -o "$AUTH_FORBIDDEN_PLAN_WRITE_BODY"
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: operator" \
   -H "X-Tenet-Authorized-Deployments: worker-prod" \
   -d '{}' \
   "http://$HOST:$PORT/v1/plans/deployments/payments-api-staging")
@@ -1244,6 +1282,7 @@ auth_forbidden_apply_write_status=$(curl -sS -o "$AUTH_FORBIDDEN_APPLY_WRITE_BOD
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: operator" \
   -H "X-Tenet-Authorized-Deployments: worker-prod" \
   "http://$HOST:$PORT/v1/applies/plans/$frontdoor_plan_id")
 auth_forbidden_transition_status=$(curl -sS -o "$AUTH_FORBIDDEN_TRANSITION_BODY" -w "%{http_code}" \
@@ -1252,6 +1291,7 @@ auth_forbidden_transition_status=$(curl -sS -o "$AUTH_FORBIDDEN_TRANSITION_BODY"
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: operator" \
   -H "X-Tenet-Authorized-Deployments: worker-prod" \
   --data '{"status":"running","step":1}' \
   "http://$HOST:$PORT/v1/applies/$frontdoor_apply_id/transitions")
@@ -1259,164 +1299,192 @@ auth_forbidden_read_status=$(curl -sS -o "$AUTH_FORBIDDEN_READ_BODY" -w "%{http_
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: worker-prod" \
   "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging")
 auth_forbidden_status_read_status=$(curl -sS -o "$AUTH_FORBIDDEN_STATUS_READ_BODY" -w "%{http_code}" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: worker-prod" \
   "http://$HOST:$PORT/v1/status/deployments/payments-api-staging")
 auth_forbidden_events_status=$(curl -sS -o "$AUTH_FORBIDDEN_EVENTS_BODY" -w "%{http_code}" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: worker-prod" \
   "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/events")
 auth_forbidden_resource_logs_status=$(curl -sS -o "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" -w "%{http_code}" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-staging" \
   "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 auth_forbidden_resource_inspection_status=$(curl -sS -o "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" -w "%{http_code}" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-staging" \
   "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service")
 auth_forbidden_account_detail_status=$(curl -sS -o "$AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY" -w "%{http_code}" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-staging" \
   "http://$HOST:$PORT/v1/overview/accounts/123456789012")
 auth_forbidden_group_detail_status=$(curl -sS -o "$AUTH_FORBIDDEN_GROUP_DETAIL_BODY" -w "%{http_code}" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: worker-prod" \
   "http://$HOST:$PORT/v1/overview/accounts/123456789012/projects/payments-api/environments/prod-apne2")
 auth_forbidden_plan_read_status=$(curl -sS -o "$AUTH_FORBIDDEN_PLAN_READ_BODY" -w "%{http_code}" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: worker-prod" \
   "http://$HOST:$PORT/v1/plans/$frontdoor_plan_id")
 auth_forbidden_apply_read_status=$(curl -sS -o "$AUTH_FORBIDDEN_APPLY_READ_BODY" -w "%{http_code}" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: worker-prod" \
   "http://$HOST:$PORT/v1/applies/$frontdoor_apply_id")
 allowed_guarded_read=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
   "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging")
 allowed_status_read=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
   "http://$HOST:$PORT/v1/status/deployments/payments-api-staging")
 allowed_events_read=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
   "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/events")
 allowed_resource_logs=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: worker-prod, payments-api-staging" \
   "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 allowed_resource_inspection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: worker-prod, payments-api-staging" \
   "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service")
 allowed_plan_read=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
   "http://$HOST:$PORT/v1/plans/$frontdoor_plan_id")
 allowed_apply_read=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
   "http://$HOST:$PORT/v1/applies/$frontdoor_apply_id")
 filtered_applications_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-prod, worker-prod" \
   "http://$HOST:$PORT/v1/overview/applications")
 filtered_status_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-prod, worker-prod" \
   "http://$HOST:$PORT/v1/status/deployments")
 filtered_accounts_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-prod, worker-prod" \
   "http://$HOST:$PORT/v1/overview/accounts")
 filtered_account_detail=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-prod" \
   "http://$HOST:$PORT/v1/overview/accounts/123456789012")
 filtered_group_detail=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-prod" \
   "http://$HOST:$PORT/v1/overview/accounts/123456789012/projects/payments-api/environments/prod-apne2")
 empty_applications_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   "http://$HOST:$PORT/v1/overview/applications")
 empty_status_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   "http://$HOST:$PORT/v1/status/deployments")
 empty_accounts_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   "http://$HOST:$PORT/v1/overview/accounts")
 filtered_audit_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-prod, payments-api-staging" \
   "http://$HOST:$PORT/v1/audit-logs")
 empty_audit_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   "http://$HOST:$PORT/v1/audit-logs?action=apply.requested")
 auth_forbidden_audit_status=$(curl -sS -o "$AUTH_FORBIDDEN_AUDIT_BODY" -w "%{http_code}" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: worker-prod" \
   "http://$HOST:$PORT/v1/audit-logs?deployment=payments-api-staging&action=apply.requested&limit=1")
 allowed_scoped_audit=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
   "http://$HOST:$PORT/v1/audit-logs?deployment=payments-api-staging&action=apply.requested&limit=1")
 allowed_guarded_read_path=$(write_payload allowed-guarded-read.json "$allowed_guarded_read")
@@ -1446,6 +1514,12 @@ AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_STATUS="$auth_unauthenticated_account_co
 AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" \
 AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_STATUS="$auth_unauthenticated_audit_collection_status" \
 AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY" \
+AUTH_ROLE_REQUIRED_COLLECTION_STATUS="$auth_role_required_collection_status" \
+AUTH_ROLE_REQUIRED_COLLECTION_BODY_PATH="$AUTH_ROLE_REQUIRED_COLLECTION_BODY" \
+AUTH_ROLE_REQUIRED_STATUS_READ_STATUS="$auth_role_required_status_read_status" \
+AUTH_ROLE_REQUIRED_STATUS_READ_BODY_PATH="$AUTH_ROLE_REQUIRED_STATUS_READ_BODY" \
+AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_STATUS="$auth_role_required_audit_collection_status" \
+AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY_PATH="$AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY" \
 AUTH_UNAUTHENTICATED_READ_STATUS="$auth_unauthenticated_read_status" \
 AUTH_UNAUTHENTICATED_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_READ_BODY" \
 AUTH_UNAUTHENTICATED_STATUS_READ_STATUS="$auth_unauthenticated_status_read_status" \
@@ -1464,6 +1538,10 @@ AUTH_UNAUTHENTICATED_PLAN_READ_STATUS="$auth_unauthenticated_plan_read_status" \
 AUTH_UNAUTHENTICATED_PLAN_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" \
 AUTH_UNAUTHENTICATED_APPLY_READ_STATUS="$auth_unauthenticated_apply_read_status" \
 AUTH_UNAUTHENTICATED_APPLY_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" \
+AUTH_ROLE_REQUIRED_PLAN_READ_STATUS="$auth_role_required_plan_read_status" \
+AUTH_ROLE_REQUIRED_PLAN_READ_BODY_PATH="$AUTH_ROLE_REQUIRED_PLAN_READ_BODY" \
+AUTH_ROLE_REQUIRED_APPLY_READ_STATUS="$auth_role_required_apply_read_status" \
+AUTH_ROLE_REQUIRED_APPLY_READ_BODY_PATH="$AUTH_ROLE_REQUIRED_APPLY_READ_BODY" \
 AUTH_UNAUTHENTICATED_TRANSITION_STATUS="$auth_unauthenticated_transition_status" \
 AUTH_UNAUTHENTICATED_TRANSITION_BODY_PATH="$AUTH_UNAUTHENTICATED_TRANSITION_BODY" \
 AUTH_FORBIDDEN_PLAN_WRITE_STATUS="$auth_forbidden_plan_write_status" \
@@ -1519,6 +1597,12 @@ with open(os.environ['AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY_PATH'], encod
     unauthenticated_account_collection_body = fh.read()
 with open(os.environ['AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY_PATH'], encoding='utf-8') as fh:
     unauthenticated_audit_collection_body = fh.read()
+with open(os.environ['AUTH_ROLE_REQUIRED_COLLECTION_BODY_PATH'], encoding='utf-8') as fh:
+    role_required_collection_body = fh.read()
+with open(os.environ['AUTH_ROLE_REQUIRED_STATUS_READ_BODY_PATH'], encoding='utf-8') as fh:
+    role_required_status_read_body = fh.read()
+with open(os.environ['AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY_PATH'], encoding='utf-8') as fh:
+    role_required_audit_collection_body = fh.read()
 with open(os.environ['AUTH_UNAUTHENTICATED_READ_BODY_PATH'], encoding='utf-8') as fh:
     unauthenticated_read_body = fh.read()
 with open(os.environ['AUTH_UNAUTHENTICATED_STATUS_READ_BODY_PATH'], encoding='utf-8') as fh:
@@ -1537,6 +1621,10 @@ with open(os.environ['AUTH_UNAUTHENTICATED_PLAN_READ_BODY_PATH'], encoding='utf-
     unauthenticated_plan_read_body = fh.read()
 with open(os.environ['AUTH_UNAUTHENTICATED_APPLY_READ_BODY_PATH'], encoding='utf-8') as fh:
     unauthenticated_apply_read_body = fh.read()
+with open(os.environ['AUTH_ROLE_REQUIRED_PLAN_READ_BODY_PATH'], encoding='utf-8') as fh:
+    role_required_plan_read_body = fh.read()
+with open(os.environ['AUTH_ROLE_REQUIRED_APPLY_READ_BODY_PATH'], encoding='utf-8') as fh:
+    role_required_apply_read_body = fh.read()
 with open(os.environ['AUTH_UNAUTHENTICATED_TRANSITION_BODY_PATH'], encoding='utf-8') as fh:
     unauthenticated_transition_body = fh.read()
 with open(os.environ['AUTH_FORBIDDEN_PLAN_WRITE_BODY_PATH'], encoding='utf-8') as fh:
@@ -1606,6 +1694,12 @@ assert os.environ['AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_STATUS'] == '401', os
 assert unauthenticated_account_collection_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_account_collection_body
 assert os.environ['AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_STATUS']
 assert unauthenticated_audit_collection_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_audit_collection_body
+assert os.environ['AUTH_ROLE_REQUIRED_COLLECTION_STATUS'] == '403', os.environ['AUTH_ROLE_REQUIRED_COLLECTION_STATUS']
+assert role_required_collection_body.strip() == 'forbidden: authenticated viewer-capable role is required for this operator read route', role_required_collection_body
+assert os.environ['AUTH_ROLE_REQUIRED_STATUS_READ_STATUS'] == '403', os.environ['AUTH_ROLE_REQUIRED_STATUS_READ_STATUS']
+assert role_required_status_read_body.strip() == 'forbidden: authenticated viewer-capable role is required for this operator read route', role_required_status_read_body
+assert os.environ['AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_STATUS'] == '403', os.environ['AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_STATUS']
+assert role_required_audit_collection_body.strip() == 'forbidden: authenticated viewer-capable role is required for this operator read route', role_required_audit_collection_body
 assert os.environ['AUTH_UNAUTHENTICATED_READ_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_READ_STATUS']
 assert unauthenticated_read_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_read_body
 assert os.environ['AUTH_UNAUTHENTICATED_STATUS_READ_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_STATUS_READ_STATUS']
@@ -1624,6 +1718,10 @@ assert os.environ['AUTH_UNAUTHENTICATED_PLAN_READ_STATUS'] == '401', os.environ[
 assert unauthenticated_plan_read_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_plan_read_body
 assert os.environ['AUTH_UNAUTHENTICATED_APPLY_READ_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_APPLY_READ_STATUS']
 assert unauthenticated_apply_read_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_apply_read_body
+assert os.environ['AUTH_ROLE_REQUIRED_PLAN_READ_STATUS'] == '403', os.environ['AUTH_ROLE_REQUIRED_PLAN_READ_STATUS']
+assert role_required_plan_read_body.strip() == 'forbidden: authenticated viewer-capable role is required for this operator read route', role_required_plan_read_body
+assert os.environ['AUTH_ROLE_REQUIRED_APPLY_READ_STATUS'] == '403', os.environ['AUTH_ROLE_REQUIRED_APPLY_READ_STATUS']
+assert role_required_apply_read_body.strip() == 'forbidden: authenticated viewer-capable role is required for this operator read route', role_required_apply_read_body
 assert os.environ['AUTH_UNAUTHENTICATED_TRANSITION_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_TRANSITION_STATUS']
 assert unauthenticated_transition_body.strip() == 'unauthenticated: authenticated identity is required for this operator write route', unauthenticated_transition_body
 assert os.environ['AUTH_FORBIDDEN_PLAN_WRITE_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_PLAN_WRITE_STATUS']

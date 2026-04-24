@@ -1664,6 +1664,163 @@ func TestRouterDeploymentReadAuthorization(t *testing.T) {
 	})
 }
 
+func TestRouterOperatorReadRoleAuthorization(t *testing.T) {
+	newGuardedRouter := func() (http.Handler, *int) {
+		providerCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                        buildinfo.Info{Version: "dev", Commit: "abc123"},
+			TrustAuthenticatedHeaders:        true,
+			RequireOperatorRoleForRead:       true,
+			RequireDeploymentReadAuthorization: true,
+			OverviewApplications: func(context.Context) ([]catalog.ApplicationOverview, error) {
+				providerCalls++
+				return []catalog.ApplicationOverview{{Name: "api-prod"}}, nil
+			},
+			OverviewApplication: func(_ context.Context, name string) (catalog.ApplicationOverviewDetail, error) {
+				providerCalls++
+				return catalog.ApplicationOverviewDetail{Name: name}, nil
+			},
+			OverviewAccounts: func(context.Context) ([]catalog.AccountOverview, error) {
+				providerCalls++
+				return []catalog.AccountOverview{{
+					Name:         "prod-core",
+					AWSAccountID: "123456789012",
+					Deployments:  []catalog.DeploymentOverview{{Name: "api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
+				}}, nil
+			},
+			OverviewAccount: func(_ context.Context, awsAccountID string) (catalog.AccountOverviewDetail, error) {
+				providerCalls++
+				return catalog.AccountOverviewDetail{
+					Name:         "prod-core",
+					AWSAccountID: awsAccountID,
+					Deployments:  []catalog.DeploymentOverview{{Name: "api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}},
+				}, nil
+			},
+			OverviewProjectEnvironment: func(_ context.Context, accountID, appRef, environmentRef string) (catalog.ProjectEnvironmentOverviewDetail, error) {
+				providerCalls++
+				return catalog.ProjectEnvironmentOverviewDetail{
+					AccountName:    "prod-core",
+					AWSAccountID:   accountID,
+					AppRef:         appRef,
+					EnvironmentRef: environmentRef,
+					Deployments:    []catalog.DeploymentOverview{{Name: "api-prod", AppRef: appRef, EnvironmentRef: environmentRef}},
+				}, nil
+			},
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				providerCalls++
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentEvents: func(_ context.Context, name string) (catalog.DeploymentOverviewEvents, error) {
+				providerCalls++
+				return catalog.DeploymentOverviewEvents{DeploymentName: name}, nil
+			},
+			OverviewDeploymentResourceLogs: func(_ context.Context, name, resourceType, resourceName string) (resourcelogs.Result, error) {
+				providerCalls++
+				return resourcelogs.Result{DeploymentName: name, ResourceType: resourceType, ResourceName: resourceName, Available: true}, nil
+			},
+			OverviewDeploymentResourceInspection: func(_ context.Context, name, resourceType, resourceName string) (resourceinspection.Result, error) {
+				providerCalls++
+				return resourceinspection.Result{DeploymentName: name, ResourceType: resourceType, ResourceName: resourceName, Available: true}, nil
+			},
+			AuditLogs: func(_ context.Context, query auditlog.Query) (auditlog.Result, error) {
+				providerCalls++
+				if query.DeploymentName != "" {
+					return auditlog.Result{Entries: []auditlog.Entry{{DeploymentName: query.DeploymentName}}}, nil
+				}
+				return auditlog.Result{Entries: []auditlog.Entry{{DeploymentName: "api-prod"}}}, nil
+			},
+			PlanPreview: func(_ context.Context, id string) (planpreview.Record, error) {
+				providerCalls++
+				return planpreview.Record{ID: id, DeploymentName: "api-prod", Status: planpreview.StatusReady, CreatedAt: "2026-04-17T08:05:00Z"}, nil
+			},
+			ApplyRequest: func(_ context.Context, id string) (applyrequest.Record, error) {
+				providerCalls++
+				return applyrequest.Record{ID: id, DeploymentName: "api-prod", Status: applyrequest.StatusQueued, CreatedAt: "2026-04-18T08:05:00Z"}, nil
+			},
+			DeploymentStatuses: func(context.Context) ([]statusstore.Snapshot, error) {
+				providerCalls++
+				return []statusstore.Snapshot{{DeploymentName: "api-prod"}}, nil
+			},
+			DeploymentStatus: func(_ context.Context, name string) (statusstore.Snapshot, error) {
+				providerCalls++
+				return statusstore.Snapshot{DeploymentName: name}, nil
+			},
+		})
+		return router, &providerCalls
+	}
+
+	newAuthenticatedRequest := func(path string, roles string, authorizedDeployments string) *http.Request {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+		if roles != "" {
+			req.Header.Set(requestactor.AuthenticatedRolesHeader, roles)
+		}
+		if authorizedDeployments != "" {
+			req.Header.Set(requestactor.AuthorizedDeploymentsHeader, authorizedDeployments)
+		}
+		return req
+	}
+
+	routes := []struct {
+		name                  string
+		path                  string
+		authorizedDeployments string
+	}{
+		{name: "overview applications collection", path: "/v1/overview/applications", authorizedDeployments: "api-prod"},
+		{name: "overview application detail", path: "/v1/overview/applications/api-prod", authorizedDeployments: "api-prod"},
+		{name: "overview accounts collection", path: "/v1/overview/accounts", authorizedDeployments: "api-prod"},
+		{name: "overview account detail", path: "/v1/overview/accounts/123456789012", authorizedDeployments: "api-prod"},
+		{name: "overview project environment detail", path: "/v1/overview/accounts/123456789012/projects/payments-api/environments/prod-apne2", authorizedDeployments: "api-prod"},
+		{name: "overview deployment detail", path: "/v1/overview/deployments/api-prod", authorizedDeployments: "api-prod"},
+		{name: "overview deployment events", path: "/v1/overview/deployments/api-prod/events", authorizedDeployments: "api-prod"},
+		{name: "overview deployment resource logs", path: "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=api-prod-service", authorizedDeployments: "api-prod"},
+		{name: "overview deployment resource inspection", path: "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=api-prod-service", authorizedDeployments: "api-prod"},
+		{name: "audit logs collection", path: "/v1/audit-logs?action=apply.requested", authorizedDeployments: "api-prod"},
+		{name: "deployment-scoped audit logs", path: "/v1/audit-logs?deployment=api-prod&action=apply.requested", authorizedDeployments: "api-prod"},
+		{name: "deployment status collection", path: "/v1/status/deployments", authorizedDeployments: "api-prod"},
+		{name: "deployment status detail", path: "/v1/status/deployments/api-prod", authorizedDeployments: "api-prod"},
+		{name: "immutable plan preview read", path: "/v1/plans/plan_1234abcd", authorizedDeployments: "api-prod"},
+		{name: "immutable apply request read", path: "/v1/applies/apply_1234abcd", authorizedDeployments: "api-prod"},
+	}
+
+	for _, tc := range routes {
+		t.Run(tc.name+" requires viewer-capable role", func(t *testing.T) {
+			router, providerCalls := newGuardedRouter()
+			req := newAuthenticatedRequest(tc.path, "", tc.authorizedDeployments)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusForbidden {
+				t.Fatalf("expected 403, got %d", resp.Code)
+			}
+			if body := resp.Body.String(); body != "forbidden: authenticated viewer-capable role is required for this operator read route\n" {
+				t.Fatalf("unexpected 403 response body: %q", body)
+			}
+			if *providerCalls != 0 {
+				t.Fatalf("expected role guard to short-circuit before providers, got %d calls", *providerCalls)
+			}
+		})
+
+		t.Run(tc.name+" allows viewer role", func(t *testing.T) {
+			router, providerCalls := newGuardedRouter()
+			req := newAuthenticatedRequest(tc.path, "viewer", tc.authorizedDeployments)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+			}
+			if *providerCalls == 0 {
+				t.Fatal("expected read provider to run for viewer-capable role")
+			}
+		})
+	}
+}
+
 func TestRouterDeploymentStatuses(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},

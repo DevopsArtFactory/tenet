@@ -29,12 +29,13 @@ These payloads are still deterministic persisted read models, but they now docum
 
 ## Front-door auth
 
-`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***` now covers this raw status family too.
+`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION` now covers this raw status family too.
 
 - `GET /v1/status/deployments` requires trusted `X-Tenet-Authenticated-*` identity and filters returned snapshots through the trusted `X-Tenet-Authorized-Deployments` allowlist.
 - `GET /v1/status/deployments` returns `200 OK` with `[]` when the trusted allowlist is omitted or none of the returned snapshots match it.
 - `GET /v1/status/deployments/{deploymentName}` requires exact deployment membership in that same allowlist.
 - when enabled, missing trusted authenticated identity returns `401 Unauthorized` plus `unauthenticated: authenticated identity is required for this operator read route`.
+- when `TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION` is also enabled, recognized identity without a trusted read-capable `X-Tenet-Authenticated-Roles` value from `viewer` / `operator` / `admin` returns `403 Forbidden` plus `forbidden: authenticated viewer-capable role is required for this operator read route`.
 - when enabled, recognized identity without access to the requested deployment returns `403 Forbidden` plus `forbidden: operator does not have access to this deployment`.
 - when disabled, both status routes keep their previous unauthenticated local-runtime behavior unchanged.
 - `make smoke-docker` restarts the Compose `api` service with trusted-header auth enabled and proves this exact route contract: unauthenticated `GET /v1/status/deployments` returns `401`, allowlisted collection reads return only authorized rows, and when both `payments-api-prod` and `worker-prod` are allowlisted, the Compose smoke proves the controller-populated raw status collection returns both rows; omitting `X-Tenet-Authorized-Deployments` returns `[]`, out-of-scope `GET /v1/status/deployments/{deploymentName}` returns `403`, and one in-scope detail read succeeds.
