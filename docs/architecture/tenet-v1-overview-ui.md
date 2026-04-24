@@ -152,7 +152,7 @@ The additive inspection route stays read-only and local-friendly:
 
 In the embedded UI, the supported inspection payloads should stay intentionally operator-facing:
 - `ecsService`: service status, desired/running/pending counts, deployment-configuration evidence (`minimumHealthyPercent`, `maximumPercent`, `healthCheckGracePeriodSeconds`) when available, task definition, deployments, and recent ECS service events
-- `autoScalingGroup`: sizing and health-check settings, additive launch-template metadata, target group ARNs, and current instances
+- `autoScalingGroup`: sizing and health-check settings, additive live launch-template inspection fields `launchTemplate.imageId` and `launchTemplate.instanceType`, target group ARNs, and current instances
 - `trafficRoutingResource`: summary-only or live traffic-routing context with explicit resource kind, display name, inspection mode, rollout summary text, and additive CodeDeploy deployment-group or listener details
 
 ### Additional operator views
