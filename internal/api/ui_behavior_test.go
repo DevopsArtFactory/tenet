@@ -5339,6 +5339,18 @@ func TestDeploymentWorkspaceDriftViewWithNodeHarness(t *testing.T) {
 				"actual":   "<script>alert('capacity')</script> 4",
 				"severity": "low",
 			},
+			{
+				"field":    "runtimeContext.launchTemplate.imageId",
+				"desired":  "ami-1234567890abcdef0",
+				"actual":   "<script>alert('ami')</script> ami-fffffffffffffffff",
+				"severity": "high",
+			},
+			{
+				"field":    "runtimeContext.launchTemplate.instanceType",
+				"desired":  "t3.medium",
+				"actual":   "<script>alert('instance-type')</script> m6i.large",
+				"severity": "medium",
+			},
 		},
 		"runtimeSummary": map[string]any{
 			"source":             "deployment-controller",
@@ -5625,14 +5637,16 @@ async function render(detail) {
   if (!managedRows.some((row) => row.includes('listener.weight'))) throw new Error('expected backend-authored managed drift row');
   if (!managedRows.some((row) => row.includes('service.taskDefinition'))) throw new Error('expected second backend-authored managed drift row');
   if (!managedRows.some((row) => row.includes('runtimeContext.capacity.desired') && row.includes("<script>alert('capacity')</script> 4"))) throw new Error('expected managed drift capacity row to render as safe text');
+  if (!managedRows.some((row) => row.includes('runtimeContext.launchTemplate.imageId') && row.includes("<script>alert('ami')</script> ami-fffffffffffffffff"))) throw new Error('expected managed drift launch-template imageId row to render as safe text');
+  if (!managedRows.some((row) => row.includes('runtimeContext.launchTemplate.instanceType') && row.includes("<script>alert('instance-type')</script> m6i.large"))) throw new Error('expected managed drift launch-template instanceType row to render as safe text');
   if (managedRows.some((row) => row.includes('artifact'))) throw new Error('expected managed drift rows to suppress fallback artifact derivation');
   if (managedRows.some((row) => row.includes('condition.DriftDetected'))) throw new Error('expected managed drift rows to suppress fallback condition derivation');
   if (!managedText.includes('Drift summary')) throw new Error('expected managed drift summary heading');
   if (!managedText.includes('Total rows')) throw new Error('expected managed drift total-row summary');
   if (!managedText.includes('Visible rows')) throw new Error('expected managed drift visible-row summary');
-  if (!managedText.includes('Showing all 3 drift rows.')) throw new Error('expected managed drift summary copy');
-  if (!/High \| 1(?: \||$)/.test(managedText)) throw new Error('expected managed drift high-severity summary count');
-  if (!/Medium \| 1(?: \||$)/.test(managedText)) throw new Error('expected managed drift medium-severity summary count');
+  if (!managedText.includes('Showing all 5 drift rows.')) throw new Error('expected managed drift summary copy');
+  if (!/High \| 2(?: \||$)/.test(managedText)) throw new Error('expected managed drift high-severity summary count');
+  if (!/Medium \| 2(?: \||$)/.test(managedText)) throw new Error('expected managed drift medium-severity summary count');
   if (!/Low \| 1(?: \||$)/.test(managedText)) throw new Error('expected managed drift low-severity summary count');
   if (!managedText.includes("<script>alert('xss')</script> stable=80 canary=20")) throw new Error('expected managed drift value to render as safe text');
   const managedSeverityField = managedRun.document.querySelector('[data-toolbar-field="Severity"]');
@@ -5642,9 +5656,10 @@ async function render(detail) {
   await settle();
   const managedHighText = collectText(managedRun.document.getElementById('accounts')).join(' | ');
   const managedHighRows = collectNodes(managedRun.document.getElementById('accounts'), (node) => node.tagName === 'TR').slice(1).map((node) => collectText(node).join(' | '));
-  if (managedHighRows.length !== 1) throw new Error('expected managed drift severity filter to narrow to one row, got ' + managedHighRows.length);
+  if (managedHighRows.length !== 2) throw new Error('expected managed drift severity filter to narrow to two rows, got ' + managedHighRows.length);
   if (!managedHighRows[0].includes('listener.weight')) throw new Error('expected managed drift severity filter to retain the high severity row');
-  if (!managedHighText.includes('Showing 1 drift row out of 3 drift rows after filters.')) throw new Error('expected managed drift summary to reflect high filter impact');
+  if (!managedHighRows.some((row) => row.includes('runtimeContext.launchTemplate.imageId'))) throw new Error('expected managed drift severity filter to retain the launch-template imageId row');
+  if (!managedHighText.includes('Showing 2 drift rows out of 5 drift rows after filters.')) throw new Error('expected managed drift summary to reflect high filter impact');
 
   const managedEmptyRun = await render(managedEmptyDetail);
   const managedEmptyText = collectText(managedEmptyRun.document.getElementById('accounts')).join(' | ');
