@@ -177,9 +177,11 @@ type AutoScalingInspection struct {
 }
 
 type AutoScalingLaunchTemplateSummary struct {
-	ID      string `json:"id,omitempty"`
-	Name    string `json:"name,omitempty"`
-	Version string `json:"version,omitempty"`
+	ID           string `json:"id,omitempty"`
+	Name         string `json:"name,omitempty"`
+	Version      string `json:"version,omitempty"`
+	ImageID      string `json:"imageId,omitempty"`
+	InstanceType string `json:"instanceType,omitempty"`
 }
 
 type AutoScalingMixedInstancesPolicy struct {
@@ -797,7 +799,14 @@ func (s Service) inspectAutoScalingGroupFromAWS(ctx context.Context, req AutoSca
 		return AutoScalingInspection{}, resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
 	}
 	inspection := autoScalingInspectionFromGroup(out.AutoScalingGroups[0])
-	if bootstrapSource, err := autoScalingLaunchTemplateBootstrapSourceFromGroup(ctx, clients.EC2, out.AutoScalingGroups[0]); err == nil {
+	if observedLaunchTemplate, bootstrapSource, err := autoScalingObservedLaunchTemplateFromGroup(ctx, clients.EC2, out.AutoScalingGroups[0]); err == nil {
+		if observedLaunchTemplate != nil {
+			if inspection.LaunchTemplate != nil {
+				inspection.LaunchTemplate = observedLaunchTemplate
+			} else if inspection.MixedInstancesPolicy != nil && inspection.MixedInstancesPolicy.LaunchTemplate != nil {
+				inspection.MixedInstancesPolicy.LaunchTemplate = observedLaunchTemplate
+			}
+		}
 		inspection.LaunchTemplateBootstrapSource = bootstrapSource
 	}
 	return inspection, nil
@@ -945,17 +954,22 @@ func autoScalingInspectionFromGroup(group asgtypes.AutoScalingGroup) AutoScaling
 	}
 }
 
-func autoScalingLaunchTemplateBootstrapSourceFromGroup(ctx context.Context, client ec2LaunchTemplateAPI, group asgtypes.AutoScalingGroup) (string, error) {
+func autoScalingPrimaryLaunchTemplateSpecFromGroup(group asgtypes.AutoScalingGroup) *asgtypes.LaunchTemplateSpecification {
 	spec := group.LaunchTemplate
 	if spec == nil && group.MixedInstancesPolicy != nil && group.MixedInstancesPolicy.LaunchTemplate != nil {
 		spec = group.MixedInstancesPolicy.LaunchTemplate.LaunchTemplateSpecification
 	}
-	return autoScalingLaunchTemplateBootstrapSource(ctx, client, spec)
+	return spec
 }
 
-func autoScalingLaunchTemplateBootstrapSource(ctx context.Context, client ec2LaunchTemplateAPI, spec *asgtypes.LaunchTemplateSpecification) (string, error) {
+func autoScalingObservedLaunchTemplateFromGroup(ctx context.Context, client ec2LaunchTemplateAPI, group asgtypes.AutoScalingGroup) (*AutoScalingLaunchTemplateSummary, string, error) {
+	return autoScalingObservedLaunchTemplate(ctx, client, autoScalingPrimaryLaunchTemplateSpecFromGroup(group))
+}
+
+func autoScalingObservedLaunchTemplate(ctx context.Context, client ec2LaunchTemplateAPI, spec *asgtypes.LaunchTemplateSpecification) (*AutoScalingLaunchTemplateSummary, string, error) {
+	summary := autoScalingLaunchTemplateSummary(spec)
 	if client == nil || spec == nil {
-		return "", nil
+		return summary, "", nil
 	}
 	input := &ec2.DescribeLaunchTemplateVersionsInput{}
 	if launchTemplateID := strings.TrimSpace(aws.ToString(spec.LaunchTemplateId)); launchTemplateID != "" {
@@ -963,24 +977,28 @@ func autoScalingLaunchTemplateBootstrapSource(ctx context.Context, client ec2Lau
 	} else if launchTemplateName := strings.TrimSpace(aws.ToString(spec.LaunchTemplateName)); launchTemplateName != "" {
 		input.LaunchTemplateName = aws.String(launchTemplateName)
 	} else {
-		return "", nil
+		return summary, "", nil
 	}
 	if version := strings.TrimSpace(aws.ToString(spec.Version)); version != "" {
 		input.Versions = []string{version}
 	}
 	out, err := client.DescribeLaunchTemplateVersions(ctx, input)
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
+	bootstrapSource := ""
 	for _, version := range out.LaunchTemplateVersions {
 		if version.LaunchTemplateData == nil {
 			continue
 		}
-		if source := extractLaunchTemplateBootstrapSource(aws.ToString(version.LaunchTemplateData.UserData)); source != "" {
-			return source, nil
+		if summary != nil {
+			summary.ImageID = strings.TrimSpace(aws.ToString(version.LaunchTemplateData.ImageId))
+			summary.InstanceType = strings.TrimSpace(string(version.LaunchTemplateData.InstanceType))
 		}
+		bootstrapSource = extractLaunchTemplateBootstrapSource(aws.ToString(version.LaunchTemplateData.UserData))
+		break
 	}
-	return "", nil
+	return summary, bootstrapSource, nil
 }
 
 func extractLaunchTemplateBootstrapSource(encodedUserData string) string {

@@ -3923,6 +3923,8 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
           id: 'lt-abc123',
           name: 'payments-api-prod-candidate',
           version: '$Default',
+          imageId: 'ami-abc123',
+          instanceType: 'm6i.large',
         },
         mixedInstancesPolicy: {
           launchTemplate: {
@@ -3953,6 +3955,10 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!asgSupportedText.includes('payments-api-prod-candidate · version $Default · id lt-abc123')) throw new Error('expected ASG inspection to render launch template summary');
   if (!asgSupportedText.includes('Mixed instances launch template')) throw new Error('expected ASG inspection to render mixed instances launch template label');
   if (!asgSupportedText.includes('payments-api-prod-candidate-base · version 7 · id lt-base123')) throw new Error('expected ASG inspection to render mixed instances launch template summary');
+  if (!asgSupportedText.includes('Observed image ID')) throw new Error('expected ASG inspection to render observed image id label');
+  if (!asgSupportedText.includes('ami-abc123')) throw new Error('expected ASG inspection to render observed image id value');
+  if (!asgSupportedText.includes('Observed instance type')) throw new Error('expected ASG inspection to render observed instance type label');
+  if (!asgSupportedText.includes('m6i.large')) throw new Error('expected ASG inspection to render observed instance type value');
   if (!asgSupportedText.includes('Target group ARNs')) throw new Error('expected ASG inspection to render target groups section');
   if (!asgSupportedText.includes('arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-prod-candidate/abc123')) throw new Error('expected ASG inspection to render target group ARN');
   if (!asgSupportedText.includes('Mixed instances overrides')) throw new Error('expected ASG inspection to render mixed instances overrides section');
@@ -3991,6 +3997,8 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
           id: 'lt-abc123',
           name: 'payments-api-prod-candidate',
           version: '$Default',
+          imageId: 'ami-legacy123',
+          instanceType: 'm6i.large',
         },
       },
     }) });
@@ -4016,6 +4024,10 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!bootstrapSupportedText.includes('candidateAutoScalingGroup')) throw new Error('expected bootstrap-source inspection to render backing resource type value');
   if (!bootstrapSupportedText.includes('Observed launch template')) throw new Error('expected bootstrap-source inspection to render observed launch template label');
   if (!bootstrapSupportedText.includes('payments-api-prod-candidate · version $Default · id lt-abc123')) throw new Error('expected bootstrap-source inspection to render observed launch template value');
+  if (!bootstrapSupportedText.includes('Observed image ID')) throw new Error('expected bootstrap-source inspection to render observed image id label');
+  if (!bootstrapSupportedText.includes('ami-legacy123')) throw new Error('expected bootstrap-source inspection to render observed image id value');
+  if (!bootstrapSupportedText.includes('Observed instance type')) throw new Error('expected bootstrap-source inspection to render observed instance type label');
+  if (!bootstrapSupportedText.includes('m6i.large')) throw new Error('expected bootstrap-source inspection to render observed instance type value');
   if (!bootstrapSupportedText.includes('Resolved backing resource')) throw new Error('expected bootstrap-source inspection to render backing-resource handoff heading');
   if (!bootstrapSupportedText.includes('Bootstrap source observation')) throw new Error('expected bootstrap-source inspection to render observation summary heading');
   if (!bootstrapSupportedText.includes('Observed launch template bootstrap source differs from the normalized desired bootstrap source.')) throw new Error('expected bootstrap-source inspection to render mismatch summary');

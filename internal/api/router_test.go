@@ -1668,9 +1668,9 @@ func TestRouterOperatorReadRoleAuthorization(t *testing.T) {
 	newGuardedRouter := func() (http.Handler, *int) {
 		providerCalls := 0
 		router := NewRouter(Options{
-			BuildInfo:                        buildinfo.Info{Version: "dev", Commit: "abc123"},
-			TrustAuthenticatedHeaders:        true,
-			RequireOperatorRoleForRead:       true,
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			TrustAuthenticatedHeaders:          true,
+			RequireOperatorRoleForRead:         true,
 			RequireDeploymentReadAuthorization: true,
 			OverviewApplications: func(context.Context) ([]catalog.ApplicationOverview, error) {
 				providerCalls++
@@ -4799,9 +4799,11 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				HealthCheckType:        "EC2",
 				HealthCheckGracePeriod: 120,
 				LaunchTemplate: &resourceinspection.AutoScalingLaunchTemplateSummary{
-					ID:      "lt-abc123",
-					Name:    "api-prod-candidate",
-					Version: "$Default",
+					ID:           "lt-abc123",
+					Name:         "api-prod-candidate",
+					Version:      "$Default",
+					ImageID:      "ami-abc123",
+					InstanceType: "m6i.large",
 				},
 				MixedInstancesPolicy: &resourceinspection.AutoScalingMixedInstancesPolicy{
 					LaunchTemplate: &resourceinspection.AutoScalingLaunchTemplateSummary{
@@ -4878,6 +4880,12 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		if got := launchTemplate["name"]; got != "api-prod-candidate" {
 			t.Fatalf("expected launchTemplate name, got %#v", got)
 		}
+		if got := launchTemplate["imageId"]; got != "ami-abc123" {
+			t.Fatalf("expected launchTemplate imageId, got %#v", got)
+		}
+		if got := launchTemplate["instanceType"]; got != "m6i.large" {
+			t.Fatalf("expected launchTemplate instanceType, got %#v", got)
+		}
 		mixedInstancesPolicy, ok := autoScalingGroup["mixedInstancesPolicy"].(map[string]any)
 		if !ok {
 			t.Fatalf("expected mixedInstancesPolicy object in payload, got %#v", autoScalingGroup["mixedInstancesPolicy"])
@@ -4908,9 +4916,11 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				BackingResourceType:     "candidateAutoScalingGroup",
 				BackingResourceName:     "api-prod-candidate",
 				LaunchTemplate: &resourceinspection.AutoScalingLaunchTemplateSummary{
-					ID:      "lt-abc123",
-					Name:    "api-prod-candidate",
-					Version: "$Default",
+					ID:           "lt-abc123",
+					Name:         "api-prod-candidate",
+					Version:      "$Default",
+					ImageID:      "ami-legacy123",
+					InstanceType: "m6i.large",
 				},
 			},
 		}
@@ -4969,6 +4979,12 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 		if got := launchTemplate["name"]; got != "api-prod-candidate" {
 			t.Fatalf("expected launchTemplate name, got %#v", got)
+		}
+		if got := launchTemplate["imageId"]; got != "ami-legacy123" {
+			t.Fatalf("expected launchTemplate imageId, got %#v", got)
+		}
+		if got := launchTemplate["instanceType"]; got != "m6i.large" {
+			t.Fatalf("expected launchTemplate instanceType, got %#v", got)
 		}
 	})
 
