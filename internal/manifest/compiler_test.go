@@ -276,6 +276,42 @@ func TestCompilePreservesNormalizedStackUserDataFallbackWhenTopLevelUserDataIsWh
 	}
 }
 
+func TestCompilePreservesNormalizedEC2LaunchTemplateIntentFromFirstStackRegion(t *testing.T) {
+	catalog, err := Compile(CatalogSpec{
+		Accounts: []spec.AccountSpec{{
+			Name:           "prod-core",
+			AWSAccountID:   "123456789012",
+			RoleARN:        "arn:aws:iam::123456789012:role/TenetDeployerRole",
+			AllowedRegions: []string{"ap-northeast-2"},
+		}},
+		Environments: []spec.EnvironmentSpec{{
+			Name:       "prod-apne2",
+			AccountRef: "prod-core",
+			Region:     "ap-northeast-2",
+		}},
+		Deployments: []spec.DeploymentSpec{{
+			Name:   "payments-api-prod",
+			Binary: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64",
+			Stacks: []spec.StackSpec{{
+				Stack:           "payments-api-prod",
+				Account:         "prod-core",
+				Env:             "prod-apne2",
+				ReplacementType: "blueGreen",
+				UserData:        spec.UserDataSpec{Type: "file", Path: "userdata/payments-api-prod.sh"},
+				Capacity:        spec.CapacitySpec{Desired: 2, Min: 1, Max: 3},
+				Regions:         []spec.RegionSpec{{Region: "ap-northeast-2", AMIID: " ami-1234567890abcdef0 ", InstanceType: " t3.medium "}},
+			}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Compile returned error: %v", err)
+	}
+
+	if got := catalog.Deployments[0].EC2LaunchTemplate; got.ImageID != "ami-1234567890abcdef0" || got.InstanceType != "t3.medium" {
+		t.Fatalf("expected normalized EC2 launch-template intent from first stack region, got %+v", got)
+	}
+}
+
 func TestCompilePreservesNormalizedRolloutConfig(t *testing.T) {
 	catalog, err := Compile(CatalogSpec{
 		Accounts: []spec.AccountSpec{{
@@ -567,6 +603,46 @@ func TestCompileChangesDesiredGenerationWhenRolloutConfigChanges(t *testing.T) {
 
 		if second.Deployments[0].Generation == first.Deployments[0].Generation {
 			t.Fatalf("expected desired generation to change when rolling update instance count changes, got %d", second.Deployments[0].Generation)
+		}
+	})
+}
+
+func TestCompileChangesDesiredGenerationWhenEC2LaunchTemplateIntentChanges(t *testing.T) {
+	t.Run("ami_id", func(t *testing.T) {
+		input := testCompileGenerationCatalogSpec()
+
+		first, err := Compile(input)
+		if err != nil {
+			t.Fatalf("first Compile returned error: %v", err)
+		}
+
+		input.Deployments[0].Stacks[0].Regions[0].AMIID = "ami-fffffffffffffffff"
+		second, err := Compile(input)
+		if err != nil {
+			t.Fatalf("second Compile returned error: %v", err)
+		}
+
+		if second.Deployments[0].Generation == first.Deployments[0].Generation {
+			t.Fatalf("expected desired generation to change when ami_id changes, got %d", second.Deployments[0].Generation)
+		}
+	})
+
+	t.Run("instance_type", func(t *testing.T) {
+		input := testCompileGenerationCatalogSpec()
+
+		first, err := Compile(input)
+		if err != nil {
+			t.Fatalf("first Compile returned error: %v", err)
+		}
+
+		input.Deployments[0].Stacks[0].Regions[0].InstanceType = "m6i.large"
+		second, err := Compile(input)
+		if err != nil {
+			t.Fatalf("second Compile returned error: %v", err)
+		}
+
+		if second.Deployments[0].Generation == first.Deployments[0].Generation {
+			t.Fatalf("expected desired generation to change when instance_type changes, got %d", second.Deployments[0].Generation)
 		}
 	})
 }

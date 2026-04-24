@@ -2011,6 +2011,8 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 					{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh},
 					{Field: "runtimeContext.capacity.min", Desired: "4", Actual: "2", Severity: domain.ManagedDriftSeverityMedium},
 					{Field: "runtimeContext.capacity.max", Desired: "12", Actual: "8", Severity: domain.ManagedDriftSeverityLow},
+					{Field: "runtimeContext.launchTemplate.imageId", Desired: "ami-1234567890abcdef0", Actual: "ami-fffffffffffffffff", Severity: domain.ManagedDriftSeverityHigh},
+					{Field: "runtimeContext.launchTemplate.instanceType", Desired: "t3.medium", Actual: "m6i.large", Severity: domain.ManagedDriftSeverityHigh},
 				},
 				Conditions: []domain.Condition{{Type: "Ready", Status: true, Reason: "Stable", Message: "deployment is healthy"}},
 				Rollout: &domain.RolloutSummary{
@@ -2032,6 +2034,8 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 						{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh},
 						{Field: "runtimeContext.capacity.min", Desired: "4", Actual: "2", Severity: domain.ManagedDriftSeverityMedium},
 						{Field: "runtimeContext.capacity.max", Desired: "12", Actual: "8", Severity: domain.ManagedDriftSeverityLow},
+						{Field: "runtimeContext.launchTemplate.imageId", Desired: "ami-1234567890abcdef0", Actual: "ami-fffffffffffffffff", Severity: domain.ManagedDriftSeverityHigh},
+						{Field: "runtimeContext.launchTemplate.instanceType", Desired: "t3.medium", Actual: "m6i.large", Severity: domain.ManagedDriftSeverityHigh},
 					},
 					RolloutPhase: domain.RolloutPhaseProvisioning,
 					CurrentStep:  "CreateCandidateCapacity",
@@ -2053,6 +2057,8 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 		`"field":"runtimeContext.capacity.desired"`,
 		`"field":"runtimeContext.capacity.min"`,
 		`"field":"runtimeContext.capacity.max"`,
+		`"field":"runtimeContext.launchTemplate.imageId"`,
+		`"field":"runtimeContext.launchTemplate.instanceType"`,
 	} {
 		if !strings.Contains(raw, fragment) {
 			t.Fatalf("expected raw deployment status payload to include %s, got %s", fragment, raw)
@@ -2117,7 +2123,7 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 		t.Fatalf("expected history field names/values, got %#v", historyEntry)
 	}
 	managedDrift, ok := status["managedDrift"].([]any)
-	if !ok || len(managedDrift) != 4 {
+	if !ok || len(managedDrift) != 6 {
 		t.Fatalf("expected managedDrift array in raw payload, got %#v", status["managedDrift"])
 	}
 	driftItem := requireManagedDriftItemByField(t, managedDrift, "artifact")
@@ -2133,8 +2139,14 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 	if maxCapacityDrift := requireManagedDriftItemByField(t, managedDrift, "runtimeContext.capacity.max"); maxCapacityDrift["desired"] != "12" || maxCapacityDrift["actual"] != "8" || maxCapacityDrift["severity"] != string(domain.ManagedDriftSeverityLow) {
 		t.Fatalf("expected managedDrift max-capacity item fields, got %#v", maxCapacityDrift)
 	}
+	if launchTemplateImageDrift := requireManagedDriftItemByField(t, managedDrift, "runtimeContext.launchTemplate.imageId"); launchTemplateImageDrift["desired"] != "ami-1234567890abcdef0" || launchTemplateImageDrift["actual"] != "ami-fffffffffffffffff" || launchTemplateImageDrift["severity"] != string(domain.ManagedDriftSeverityHigh) {
+		t.Fatalf("expected managedDrift launch-template imageId item fields, got %#v", launchTemplateImageDrift)
+	}
+	if launchTemplateInstanceTypeDrift := requireManagedDriftItemByField(t, managedDrift, "runtimeContext.launchTemplate.instanceType"); launchTemplateInstanceTypeDrift["desired"] != "t3.medium" || launchTemplateInstanceTypeDrift["actual"] != "m6i.large" || launchTemplateInstanceTypeDrift["severity"] != string(domain.ManagedDriftSeverityHigh) {
+		t.Fatalf("expected managedDrift launch-template instanceType item fields, got %#v", launchTemplateInstanceTypeDrift)
+	}
 	historyManagedDrift, ok := historyEntry["managedDrift"].([]any)
-	if !ok || len(historyManagedDrift) != 4 {
+	if !ok || len(historyManagedDrift) != 6 {
 		t.Fatalf("expected history managedDrift array, got %#v", historyEntry["managedDrift"])
 	}
 	if historyDesiredCapacityDrift := requireManagedDriftItemByField(t, historyManagedDrift, "runtimeContext.capacity.desired"); historyDesiredCapacityDrift["desired"] != "6" || historyDesiredCapacityDrift["actual"] != "4" {
@@ -3757,6 +3769,8 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 					{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh},
 					{Field: "runtimeContext.capacity.min", Desired: "4", Actual: "2", Severity: domain.ManagedDriftSeverityMedium},
 					{Field: "runtimeContext.capacity.max", Desired: "12", Actual: "8", Severity: domain.ManagedDriftSeverityLow},
+					{Field: "runtimeContext.launchTemplate.imageId", Desired: "ami-1234567890abcdef0", Actual: "ami-fffffffffffffffff", Severity: domain.ManagedDriftSeverityHigh},
+					{Field: "runtimeContext.launchTemplate.instanceType", Desired: "t3.medium", Actual: "m6i.large", Severity: domain.ManagedDriftSeverityHigh},
 					{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh},
 				},
 				RuntimeSummary: &domain.RuntimeSummary{
@@ -3776,6 +3790,8 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 						{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh},
 						{Field: "runtimeContext.capacity.min", Desired: "4", Actual: "2", Severity: domain.ManagedDriftSeverityMedium},
 						{Field: "runtimeContext.capacity.max", Desired: "12", Actual: "8", Severity: domain.ManagedDriftSeverityLow},
+						{Field: "runtimeContext.launchTemplate.imageId", Desired: "ami-1234567890abcdef0", Actual: "ami-fffffffffffffffff", Severity: domain.ManagedDriftSeverityHigh},
+						{Field: "runtimeContext.launchTemplate.instanceType", Desired: "t3.medium", Actual: "m6i.large", Severity: domain.ManagedDriftSeverityHigh},
 						{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh},
 					},
 					DeployedArtifact: domain.DeploymentArtifact{Image: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1"},
@@ -3799,6 +3815,8 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 		`"field":"runtimeContext.capacity.desired"`,
 		`"field":"runtimeContext.capacity.min"`,
 		`"field":"runtimeContext.capacity.max"`,
+		`"field":"runtimeContext.launchTemplate.imageId"`,
+		`"field":"runtimeContext.launchTemplate.instanceType"`,
 		`"field":"runtimeContext.taskDefinition.image"`,
 	} {
 		if !strings.Contains(raw, fragment) {
@@ -3838,7 +3856,7 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 		t.Fatalf("expected runtimeSummary.conditions fields in overview deployment payload, got %#v", conditions)
 	}
 	managedDrift, ok := payload["managedDrift"].([]any)
-	if !ok || len(managedDrift) != 5 {
+	if !ok || len(managedDrift) != 7 {
 		t.Fatalf("expected managedDrift array in overview deployment payload, got %#v", payload["managedDrift"])
 	}
 	driftItem := requireManagedDriftItemByField(t, managedDrift, "artifact")
@@ -3848,8 +3866,14 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 	if taskDefinitionImageDrift := requireManagedDriftItemByField(t, managedDrift, "runtimeContext.taskDefinition.image"); taskDefinitionImageDrift["desired"] != "ghcr.io/devopsartfactory/payments-api:2026-04-16.2" || taskDefinitionImageDrift["actual"] != "ghcr.io/devopsartfactory/payments-api:2026-04-16.1" || taskDefinitionImageDrift["severity"] != string(domain.ManagedDriftSeverityHigh) {
 		t.Fatalf("expected managedDrift task-definition image item fields in overview deployment payload, got %#v", taskDefinitionImageDrift)
 	}
+	if launchTemplateImageDrift := requireManagedDriftItemByField(t, managedDrift, "runtimeContext.launchTemplate.imageId"); launchTemplateImageDrift["desired"] != "ami-1234567890abcdef0" || launchTemplateImageDrift["actual"] != "ami-fffffffffffffffff" || launchTemplateImageDrift["severity"] != string(domain.ManagedDriftSeverityHigh) {
+		t.Fatalf("expected managedDrift launch-template imageId item fields in overview deployment payload, got %#v", launchTemplateImageDrift)
+	}
+	if launchTemplateInstanceTypeDrift := requireManagedDriftItemByField(t, managedDrift, "runtimeContext.launchTemplate.instanceType"); launchTemplateInstanceTypeDrift["desired"] != "t3.medium" || launchTemplateInstanceTypeDrift["actual"] != "m6i.large" || launchTemplateInstanceTypeDrift["severity"] != string(domain.ManagedDriftSeverityHigh) {
+		t.Fatalf("expected managedDrift launch-template instanceType item fields in overview deployment payload, got %#v", launchTemplateInstanceTypeDrift)
+	}
 	runtimeManagedDrift, ok := runtimeSummary["managedDrift"].([]any)
-	if !ok || len(runtimeManagedDrift) != 5 {
+	if !ok || len(runtimeManagedDrift) != 7 {
 		t.Fatalf("expected runtimeSummary.managedDrift array in overview deployment payload, got %#v", runtimeSummary["managedDrift"])
 	}
 	if desiredCapacityDrift := requireManagedDriftItemByField(t, runtimeManagedDrift, "runtimeContext.capacity.desired"); desiredCapacityDrift["desired"] != "6" || desiredCapacityDrift["actual"] != "4" || desiredCapacityDrift["severity"] != string(domain.ManagedDriftSeverityHigh) {
@@ -3860,6 +3884,12 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 	}
 	if maxCapacityDrift := requireManagedDriftItemByField(t, runtimeManagedDrift, "runtimeContext.capacity.max"); maxCapacityDrift["desired"] != "12" || maxCapacityDrift["actual"] != "8" || maxCapacityDrift["severity"] != string(domain.ManagedDriftSeverityLow) {
 		t.Fatalf("expected runtimeSummary max-capacity drift item fields, got %#v", maxCapacityDrift)
+	}
+	if launchTemplateImageDrift := requireManagedDriftItemByField(t, runtimeManagedDrift, "runtimeContext.launchTemplate.imageId"); launchTemplateImageDrift["desired"] != "ami-1234567890abcdef0" || launchTemplateImageDrift["actual"] != "ami-fffffffffffffffff" || launchTemplateImageDrift["severity"] != string(domain.ManagedDriftSeverityHigh) {
+		t.Fatalf("expected runtimeSummary launch-template imageId drift item fields, got %#v", launchTemplateImageDrift)
+	}
+	if launchTemplateInstanceTypeDrift := requireManagedDriftItemByField(t, runtimeManagedDrift, "runtimeContext.launchTemplate.instanceType"); launchTemplateInstanceTypeDrift["desired"] != "t3.medium" || launchTemplateInstanceTypeDrift["actual"] != "m6i.large" || launchTemplateInstanceTypeDrift["severity"] != string(domain.ManagedDriftSeverityHigh) {
+		t.Fatalf("expected runtimeSummary launch-template instanceType drift item fields, got %#v", launchTemplateInstanceTypeDrift)
 	}
 	if taskDefinitionImageDrift := requireManagedDriftItemByField(t, runtimeManagedDrift, "runtimeContext.taskDefinition.image"); taskDefinitionImageDrift["desired"] != "ghcr.io/devopsartfactory/payments-api:2026-04-16.2" || taskDefinitionImageDrift["actual"] != "ghcr.io/devopsartfactory/payments-api:2026-04-16.1" || taskDefinitionImageDrift["severity"] != string(domain.ManagedDriftSeverityHigh) {
 		t.Fatalf("expected runtimeSummary task-definition image drift item fields, got %#v", taskDefinitionImageDrift)

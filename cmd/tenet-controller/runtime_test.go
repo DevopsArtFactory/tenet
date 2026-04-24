@@ -2048,6 +2048,46 @@ func TestDeriveManagedDriftItemsAddsLiveEC2BootstrapSourceEvidence(t *testing.T)
 	}
 }
 
+func TestDeriveManagedDriftItemsAddsLiveEC2LaunchTemplateIntentEvidence(t *testing.T) {
+	for _, executionMode := range []string{"asgWeightedTargetGroups", "asgInstanceRefresh"} {
+		t.Run(executionMode, func(t *testing.T) {
+			deployment := domain.Deployment{
+				Name:              "payments-api-prod",
+				ExecutionMode:     executionMode,
+				EC2LaunchTemplate: domain.DeploymentEC2LaunchTemplate{ImageID: "ami-1234567890abcdef0", InstanceType: "t3.medium"},
+				RolloutConfig: domain.DeploymentRolloutConfig{
+					Capacity: domain.DeploymentRolloutCapacity{Desired: 4, Min: 2, Max: 8},
+				},
+			}
+
+			got := deriveManagedDriftItems(deployment, domain.DeploymentStatus{}, &runtimeLiveCapacityObservation{
+				Desired:                    4,
+				Min:                        2,
+				Max:                        8,
+				LaunchTemplateImageID:      "ami-fffffffffffffffff",
+				LaunchTemplateInstanceType: "m6i.large",
+			})
+			want := []domain.ManagedDriftItem{
+				{
+					Field:    "runtimeContext.launchTemplate.imageId",
+					Desired:  "ami-1234567890abcdef0",
+					Actual:   "ami-fffffffffffffffff",
+					Severity: domain.ManagedDriftSeverityHigh,
+				},
+				{
+					Field:    "runtimeContext.launchTemplate.instanceType",
+					Desired:  "t3.medium",
+					Actual:   "m6i.large",
+					Severity: domain.ManagedDriftSeverityHigh,
+				},
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("expected live EC2 launch-template drift evidence, got %+v", got)
+			}
+		})
+	}
+}
+
 func TestDeriveManagedDriftItemsAddsLiveECSDesiredCapacityEvidence(t *testing.T) {
 	for _, executionMode := range []string{"ecsCodeDeploy", "ecsRolling"} {
 		t.Run(executionMode, func(t *testing.T) {
@@ -2214,6 +2254,7 @@ func TestRuntimeLiveCapacityLookupFromInspectionUsesAutoScalingBootstrapSource(t
 				DesiredCapacity:               4,
 				MinSize:                       2,
 				MaxSize:                       8,
+				LaunchTemplate:                &resourceinspection.AutoScalingLaunchTemplateSummary{ImageID: "ami-1234567890abcdef0", InstanceType: "t3.medium"},
 				LaunchTemplateBootstrapSource: "file:userdata/api-prod.sh",
 			}, nil
 		},
@@ -2227,6 +2268,8 @@ func TestRuntimeLiveCapacityLookupFromInspectionUsesAutoScalingBootstrapSource(t
 		Desired:                       4,
 		Min:                           2,
 		Max:                           8,
+		LaunchTemplateImageID:         "ami-1234567890abcdef0",
+		LaunchTemplateInstanceType:    "t3.medium",
 		LaunchTemplateBootstrapSource: "file:userdata/api-prod.sh",
 	}) {
 		t.Fatalf("expected ASG bootstrap-source observation, got %+v", got)
@@ -2637,6 +2680,92 @@ func TestEmitRuntimePlansPersistsManagedDriftInStatusAndHistory(t *testing.T) {
 	}
 	if _, exists := historyEntry["ManagedDrift"]; exists {
 		t.Fatalf("unexpected Go-style history managed drift field name in %#v", historyEntry)
+	}
+}
+
+func TestEmitRuntimePlansPersistsLiveEC2LaunchTemplateManagedDriftInStatusAndHistory(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","binary":"s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":4,"min":2,"max":8},"userdata":{"type":"file","path":"userdata/api-prod.sh"},"stacks":[{"stack":"api-prod","account":"prod-core","env":"prod-apne2","replacement_type":"blueGreen","capacity":{"desired":4,"min":2,"max":8},"regions":[{"region":"ap-northeast-2","ami_id":"ami-1234567890abcdef0","instance_type":"t3.medium"}]}]}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+
+	oldLookup := runtimeLiveCapacityLookup
+	runtimeLiveCapacityLookup = func(context.Context, resourceinspection.Service, []domain.Account, []domain.Environment, domain.Deployment) (*runtimeLiveCapacityObservation, error) {
+		return &runtimeLiveCapacityObservation{
+			Desired:                    4,
+			Min:                        2,
+			Max:                        8,
+			LaunchTemplateImageID:      "ami-fffffffffffffffff",
+			LaunchTemplateInstanceType: "m6i.large",
+		}, nil
+	}
+	defer func() { runtimeLiveCapacityLookup = oldLookup }()
+
+	oldNow := runtimeHistoryNow
+	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 15, 0, 0, time.UTC) }
+	defer func() { runtimeHistoryNow = oldNow }()
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	if len(snapshots) != 1 {
+		t.Fatalf("expected one snapshot, got %+v", snapshots)
+	}
+	status := snapshots[0].Status
+	want := []domain.ManagedDriftItem{
+		{Field: "runtimeContext.launchTemplate.imageId", Desired: "ami-1234567890abcdef0", Actual: "ami-fffffffffffffffff", Severity: domain.ManagedDriftSeverityHigh},
+		{Field: "runtimeContext.launchTemplate.instanceType", Desired: "t3.medium", Actual: "m6i.large", Severity: domain.ManagedDriftSeverityHigh},
+	}
+	if !reflect.DeepEqual(status.ManagedDrift, want) {
+		t.Fatalf("expected live EC2 launch-template managed drift on status, got %+v", status.ManagedDrift)
+	}
+	if len(status.History) != 1 || !reflect.DeepEqual(status.History[0].ManagedDrift, want) {
+		t.Fatalf("expected bootstrapped history to capture launch-template managed drift, got %+v", status.History)
+	}
+
+	payload, err := json.Marshal(snapshots[0])
+	if err != nil {
+		t.Fatalf("Marshal returned error: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("failed to decode status snapshot JSON: %v", err)
+	}
+	statusPayload, ok := decoded["status"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected status object, got %#v", decoded["status"])
+	}
+	managedDrift, ok := statusPayload["managedDrift"].([]any)
+	if !ok || len(managedDrift) != 2 {
+		t.Fatalf("expected status.managedDrift array, got %#v", statusPayload["managedDrift"])
+	}
+	firstItem, ok := managedDrift[0].(map[string]any)
+	if !ok || firstItem["field"] != "runtimeContext.launchTemplate.imageId" || firstItem["desired"] != "ami-1234567890abcdef0" || firstItem["actual"] != "ami-fffffffffffffffff" || firstItem["severity"] != string(domain.ManagedDriftSeverityHigh) {
+		t.Fatalf("expected launch-template imageId managed drift item fields, got %#v", managedDrift[0])
+	}
+	secondItem, ok := managedDrift[1].(map[string]any)
+	if !ok || secondItem["field"] != "runtimeContext.launchTemplate.instanceType" || secondItem["desired"] != "t3.medium" || secondItem["actual"] != "m6i.large" || secondItem["severity"] != string(domain.ManagedDriftSeverityHigh) {
+		t.Fatalf("expected launch-template instanceType managed drift item fields, got %#v", managedDrift[1])
+	}
+	history, ok := statusPayload["history"].([]any)
+	if !ok || len(history) != 1 {
+		t.Fatalf("expected status.history array, got %#v", statusPayload["history"])
+	}
+	historyEntry, ok := history[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected status.history[0] object, got %#v", history[0])
+	}
+	historyManagedDrift, ok := historyEntry["managedDrift"].([]any)
+	if !ok || len(historyManagedDrift) != 2 {
+		t.Fatalf("expected history managedDrift array, got %#v", historyEntry["managedDrift"])
 	}
 }
 

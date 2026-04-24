@@ -34,6 +34,8 @@ type runtimeLiveCapacityObservation struct {
 	Desired                       int
 	Min                           int
 	Max                           int
+	LaunchTemplateImageID         string
+	LaunchTemplateInstanceType    string
 	LaunchTemplateBootstrapSource string
 	TaskDefinitionImage           string
 	MinimumHealthyPercent         *int32
@@ -283,10 +285,18 @@ func runtimeLiveCapacityLookupFromInspection(ctx context.Context, inspector reso
 		return nil, nil
 	}
 	if result.AutoScalingGroup != nil {
+		launchTemplateImageID := ""
+		launchTemplateInstanceType := ""
+		if result.AutoScalingGroup.LaunchTemplate != nil {
+			launchTemplateImageID = strings.TrimSpace(result.AutoScalingGroup.LaunchTemplate.ImageID)
+			launchTemplateInstanceType = strings.TrimSpace(result.AutoScalingGroup.LaunchTemplate.InstanceType)
+		}
 		return &runtimeLiveCapacityObservation{
 			Desired:                       int(result.AutoScalingGroup.DesiredCapacity),
 			Min:                           int(result.AutoScalingGroup.MinSize),
 			Max:                           int(result.AutoScalingGroup.MaxSize),
+			LaunchTemplateImageID:         launchTemplateImageID,
+			LaunchTemplateInstanceType:    launchTemplateInstanceType,
 			LaunchTemplateBootstrapSource: strings.TrimSpace(result.AutoScalingGroup.LaunchTemplateBootstrapSource),
 		}, nil
 	}
@@ -410,6 +420,22 @@ func deriveManagedDriftItems(deployment domain.Deployment, status domain.Deploym
 		}
 		switch deployment.ExecutionMode {
 		case "asgWeightedTargetGroups", "asgInstanceRefresh":
+			if desiredImageID := strings.TrimSpace(deployment.EC2LaunchTemplate.ImageID); desiredImageID != "" && liveCapacity.LaunchTemplateImageID != "" && desiredImageID != liveCapacity.LaunchTemplateImageID {
+				items = append(items, domain.ManagedDriftItem{
+					Field:    "runtimeContext.launchTemplate.imageId",
+					Desired:  desiredImageID,
+					Actual:   liveCapacity.LaunchTemplateImageID,
+					Severity: domain.ManagedDriftSeverityHigh,
+				})
+			}
+			if desiredInstanceType := strings.TrimSpace(deployment.EC2LaunchTemplate.InstanceType); desiredInstanceType != "" && liveCapacity.LaunchTemplateInstanceType != "" && desiredInstanceType != liveCapacity.LaunchTemplateInstanceType {
+				items = append(items, domain.ManagedDriftItem{
+					Field:    "runtimeContext.launchTemplate.instanceType",
+					Desired:  desiredInstanceType,
+					Actual:   liveCapacity.LaunchTemplateInstanceType,
+					Severity: domain.ManagedDriftSeverityHigh,
+				})
+			}
 			if desiredBootstrapSource := userDataBootstrapSource(deployment.UserData); desiredBootstrapSource != "unspecified" && liveCapacity.LaunchTemplateBootstrapSource != "" && desiredBootstrapSource != liveCapacity.LaunchTemplateBootstrapSource {
 				items = append(items, domain.ManagedDriftItem{
 					Field:    "runtimeContext.launchTemplate.bootstrapSource",

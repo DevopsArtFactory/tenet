@@ -6,6 +6,12 @@ type DeploymentArtifact struct {
 	Image  string `json:"image,omitempty"`
 }
 
+// DeploymentEC2LaunchTemplate captures normalized desired EC2 launch-template intent.
+type DeploymentEC2LaunchTemplate struct {
+	ImageID      string `json:"imageId,omitempty"`
+	InstanceType string `json:"instanceType,omitempty"`
+}
+
 // DeploymentUserData captures normalized EC2 bootstrap source metadata.
 type DeploymentUserData struct {
 	Type string `json:"type,omitempty"`
@@ -40,14 +46,15 @@ type DeploymentRolloutConfig struct {
 
 // Deployment is the desired deployment intent for one application and environment.
 type Deployment struct {
-	Name            string
-	AppRef          string
-	EnvironmentRef  string
-	Generation      int64
-	TargetType      string
-	Strategy        string
-	ExecutionMode   string
-	DesiredArtifact DeploymentArtifact
-	UserData        DeploymentUserData
-	RolloutConfig   DeploymentRolloutConfig
+	Name              string
+	AppRef            string
+	EnvironmentRef    string
+	Generation        int64
+	TargetType        string
+	Strategy          string
+	ExecutionMode     string
+	DesiredArtifact   DeploymentArtifact
+	EC2LaunchTemplate DeploymentEC2LaunchTemplate
+	UserData          DeploymentUserData
+	RolloutConfig     DeploymentRolloutConfig
 }
