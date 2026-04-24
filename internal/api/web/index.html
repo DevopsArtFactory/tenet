@@ -1545,26 +1545,42 @@
       const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = [], currentSectionEmptyLabel = '') => {
         if (!deploymentName) return null;
         const strip = createElement('section', 'quick-nav-strip');
-        const workspaceLinks = createElement('div', 'quick-nav-links');
-        workspaceLinks.append(
+        const hierarchyLinks = createElement('div', 'quick-nav-links');
+        hierarchyLinks.append(
+          createNavLink(buildPageURL('applications'), 'Applications overview', '_self'),
           createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self'),
-          currentWorkspace === 'Drift view'
-            ? createQuickNavChip('Drift view', 'Current workspace: Drift view')
-            : createNavLink(buildPageURL('drift', { deployment: deploymentName }), 'Drift view', '_self'),
-          currentWorkspace === 'Plan/apply'
-            ? createQuickNavChip('Plan/apply', 'Current workspace: Plan/apply')
-            : createNavLink(buildPageURL('plan', { deployment: deploymentName }), 'Plan/apply', '_self'),
-          currentWorkspace === 'Audit log'
-            ? createQuickNavChip('Audit log', 'Current workspace: Audit log')
-            : createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self'),
         );
+        const currentDestinationLinks = createElement('div', 'quick-nav-links');
+        currentDestinationLinks.append(
+          createQuickNavChip(currentWorkspace, `Current destination: ${currentWorkspace}`),
+        );
+        const workspaceLinks = createElement('div', 'quick-nav-links');
+        if (currentWorkspace !== 'Drift view') {
+          workspaceLinks.append(createNavLink(buildPageURL('drift', { deployment: deploymentName }), 'Drift view', '_self'));
+        }
+        if (currentWorkspace !== 'Plan/apply') {
+          workspaceLinks.append(createNavLink(buildPageURL('plan', { deployment: deploymentName }), 'Plan/apply', '_self'));
+        }
+        if (currentWorkspace !== 'Audit log') {
+          workspaceLinks.append(createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self'));
+        }
         const groups = createElement('div', 'quick-nav-groups');
+        const hierarchyGroup = createElement('div', 'quick-nav-group');
+        hierarchyGroup.append(
+          createElement('div', 'quick-nav-label', 'Hierarchy'),
+          hierarchyLinks,
+        );
+        const currentDestinationGroup = createElement('div', 'quick-nav-group');
+        currentDestinationGroup.append(
+          createElement('div', 'quick-nav-label', 'Current destination'),
+          currentDestinationLinks,
+        );
         const workspaceGroup = createElement('div', 'quick-nav-group');
         workspaceGroup.append(
           createElement('div', 'quick-nav-label', 'Deployment workspaces'),
           workspaceLinks,
         );
-        groups.append(workspaceGroup);
+        groups.append(hierarchyGroup, currentDestinationGroup, workspaceGroup);
         if (Array.isArray(sectionLinks) && sectionLinks.length) {
           const trackCurrentSection = Boolean(currentSectionEmptyLabel) && sectionLinks.some((sectionLink) => sectionLink?.sectionID);
           const currentSectionGroup = createElement('div', 'quick-nav-group');

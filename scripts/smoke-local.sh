@@ -873,9 +873,10 @@ assert "head.append(createElement('div', 'breadcrumb-title', 'Breadcrumbs'));" i
 assert "awsAccountId ? { label: accountBreadcrumbLabel(accountName, awsAccountId), href: buildPageURL('account', { accountId: awsAccountId }) } : null," in ui, ui
 assert "trail.append(createBreadcrumbCurrentChip(item.label, item.ariaLabel || `Current destination: ${item.label}`));" in ui, ui
 assert "const createQuickNavChip = (text, ariaLabel) => {" in ui, ui
-assert "createQuickNavChip('Drift view', 'Current workspace: Drift view')" in ui, ui
-assert "createQuickNavChip('Plan/apply', 'Current workspace: Plan/apply')" in ui, ui
-assert "createQuickNavChip('Audit log', 'Current workspace: Audit log')" in ui, ui
+assert "createElement('div', 'quick-nav-label', 'Hierarchy')" in ui, ui
+assert "createElement('div', 'quick-nav-label', 'Current destination')" in ui, ui
+assert "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')" in ui, ui
+assert "createQuickNavChip(currentWorkspace, `Current destination: ${currentWorkspace}`)" in ui, ui
 assert "createNavLink(buildPageURL('audit', { deployment: detail.name || currentPageState.deployment || '' }), 'Audit log', '_self')" in ui, ui
 assert "const createWorkspaceQuickNav = (detail, mode, sectionLinks = null) => {" in ui, ui
 assert "const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';" in ui, ui
