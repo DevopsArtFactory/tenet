@@ -1305,6 +1305,7 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
 	for _, fragment := range []string{
 		"Auto Scaling payloads add `autoScalingGroup`, including optional `launchTemplate` and `mixedInstancesPolicy` metadata",
+		"`launchTemplate.imageId` and `launchTemplate.instanceType`",
 		"`minimumHealthyPercent`",
 		"`maximumPercent`",
 		"`healthCheckGracePeriodSeconds`",
@@ -1339,7 +1340,7 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"`healthCheckGracePeriodSeconds`",
 		"`launchTemplate`",
 		"`mixedInstancesPolicy`",
-		"additive launch-template metadata",
+		"`launchTemplate.imageId` and `launchTemplate.instanceType`",
 	} {
 		if !strings.Contains(uiDoc, fragment) {
 			t.Fatalf("expected overview UI doc to include %q", fragment)
