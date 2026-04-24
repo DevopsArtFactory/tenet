@@ -887,7 +887,7 @@ assert "createQuickNavChip(currentSectionLink.label, `Current section: ${current
 assert "const buildPageSectionURL = (page, sectionID, extras = {}) => {" in ui, ui
 assert "const scrollToCurrentHashTarget = () => {" in ui, ui
 assert "target.scrollIntoView({ block: 'start', behavior: 'auto' });" in ui, ui
-assert "if (currentPageState.page !== 'application' && currentPageState.page !== 'resource' && currentPageState.page !== 'drift' && currentPageState.page !== 'plan') return;" in ui, ui
+assert "if (currentPageState.page !== 'application' && currentPageState.page !== 'account' && currentPageState.page !== 'resource' && currentPageState.page !== 'drift' && currentPageState.page !== 'plan') return;" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Deployment workspaces')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'On this page')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Linked resources')" in ui, ui
@@ -981,9 +981,18 @@ assert "fetchAccountDetail(currentPageState.accountId)" in account_ui, account_u
 assert 'Quick navigation' in account_ui, account_ui
 assert 'Applications overview' in account_ui, account_ui
 assert 'Current destination' in account_ui, account_ui
-assert "const createAccountQuickNav = (account) => {" in account_ui, account_ui
+assert 'Current section' in account_ui, account_ui
+assert 'No section is currently targeted.' in account_ui, account_ui
+assert 'On this page' in account_ui, account_ui
+assert "const createAccountQuickNav = (account, sectionLinks = []) => {" in account_ui, account_ui
 assert "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')" in account_ui, account_ui
 assert "createQuickNavChip('Account detail', 'Current destination: Account detail')" in account_ui, account_ui
+assert "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)" in account_ui, account_ui
+assert "detailSummary.id = 'account-summary';" in account_ui, account_ui
+assert "const accountGroupSectionLabel = (group) => {" in account_ui, account_ui
+assert "return region === '—' ? `${app} · ${environment}` : `${app} · ${environment} · ${region}`;" in account_ui, account_ui
+assert "groupSection.id = accountGroupSectionID(group);" in account_ui, account_ui
+assert "href: buildPageSectionURL('account', sectionID, { accountId: accountID })," in account_ui, account_ui
 assert "failure: 'account detail request failed'," in ui, ui
 assert "const applicationDetail = currentPageState.page === 'application' ? fetchApplicationDetail(currentPageState.deployment) : fetchDeploymentDetail(currentPageState.deployment);" in application_ui, application_ui
 assert "const renderApplicationDetailPage = (detail) => {" in application_ui, application_ui

@@ -294,7 +294,7 @@ func TestEmbeddedUIIncludesDriftSectionNavigation(t *testing.T) {
 		"const scrollToCurrentHashTarget = () => {",
 		"target.scrollIntoView({ block: 'start', behavior: 'auto' });",
 		"window.addEventListener('hashchange', () => {",
-		"if (currentPageState.page !== 'application' && currentPageState.page !== 'resource' && currentPageState.page !== 'drift' && currentPageState.page !== 'plan') return;",
+		"if (currentPageState.page !== 'application' && currentPageState.page !== 'account' && currentPageState.page !== 'resource' && currentPageState.page !== 'drift' && currentPageState.page !== 'plan') return;",
 		"syncActiveResourceQuickNav();",
 		"const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = [], currentSectionEmptyLabel = '') => {",
 		"const trackCurrentSection = Boolean(currentSectionEmptyLabel) && sectionLinks.some((sectionLink) => sectionLink?.sectionID);",
@@ -362,16 +362,36 @@ func TestEmbeddedUIIncludesAccountQuickNavigation(t *testing.T) {
 	body := string(indexHTML)
 
 	for _, fragment := range []string{
-		"const createAccountQuickNav = (account) => {",
+		"const createAccountQuickNav = (account, sectionLinks = []) => {",
 		"const accountLabel = account?.name || currentPageState.accountId || 'Account';",
 		"createElement('div', 'quick-nav-label', 'Hierarchy')",
 		"createNavLink(buildPageURL('applications'), 'Applications overview', '_self')",
 		"createElement('div', 'quick-nav-label', 'Current destination')",
 		"createQuickNavChip('Account detail', 'Current destination: Account detail')",
 		"createElement('div', 'quick-nav-current', `${accountLabel} · Account detail`),",
-		"const quickNav = createAccountQuickNav(account);",
-		"const overviewArticle = createAccountOverviewArticle(account);",
+		"createElement('div', 'quick-nav-label', 'Current section')",
+		"createElement('div', 'quick-nav-label', 'On this page')",
+		"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)",
+		"createElement('div', 'quick-nav-empty', 'No section is currently targeted.')",
+		"createElement('div', 'quick-nav-empty', 'No additional section links are available for this account.')",
+		"const sectionIDSegment = (value, fallback) => {",
+		"const accountGroupSectionID = (group) => {",
+		"return `account-group-${sectionIDSegment(group.appRef, 'project')}-${sectionIDSegment(group.environmentRef, 'environment')}-${sectionIDSegment(group.region, 'region')}`;",
+		"const accountSectionLinks = [];",
+		"detailSummary.id = 'account-summary';",
+		"const pushAccountSectionLink = (sectionID, label) => {",
+		"href: buildPageSectionURL('account', sectionID, { accountId: accountID }),",
+		"pushAccountSectionLink(detailSummary.id, 'Account summary');",
+		"const accountGroupSectionLabel = (group) => {",
+		"return region === '—' ? `${app} · ${environment}` : `${app} · ${environment} · ${region}`;",
+		"groupSection.id = accountGroupSectionID(group);",
+		"pushAccountSectionLink(groupSection.id, accountGroupSectionLabel(group));",
+		"const overviewArticle = createAccountOverviewArticle(account, accountSectionLinks);",
+		"const quickNav = createAccountQuickNav(account, accountSectionLinks);",
+		"activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;",
 		"root.replaceChildren(...[quickNav, overviewArticle].filter(Boolean));",
+		"scrollToCurrentHashTarget();",
+		"currentPageState.page !== 'account'",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include %q", fragment)
@@ -1673,7 +1693,16 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Current destination' in account_ui, account_ui") {
 		t.Fatalf("expected smoke-local.sh to assert account page current-destination quick-nav copy")
 	}
-	if !strings.Contains(text, "assert \"const createAccountQuickNav = (account) => {\" in account_ui, account_ui") {
+	if !strings.Contains(text, "assert 'Current section' in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert account page current-section quick-nav copy")
+	}
+	if !strings.Contains(text, "assert 'No section is currently targeted.' in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert account page empty current-section copy")
+	}
+	if !strings.Contains(text, "assert 'On this page' in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert account page section quick-nav copy")
+	}
+	if !strings.Contains(text, "assert \"const createAccountQuickNav = (account, sectionLinks = []) => {\" in account_ui, account_ui") {
 		t.Fatalf("expected smoke-local.sh to assert account page quick-nav helper contract")
 	}
 	if !strings.Contains(text, "assert \"createNavLink(buildPageURL('applications'), 'Applications overview', '_self')\" in account_ui, account_ui") {
@@ -1681,6 +1710,18 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert \"createQuickNavChip('Account detail', 'Current destination: Account detail')\" in account_ui, account_ui") {
 		t.Fatalf("expected smoke-local.sh to assert account page current-destination chip contract")
+	}
+	if !strings.Contains(text, "assert \"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)\" in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert account page current-section chip contract")
+	}
+	if !strings.Contains(text, "assert \"detailSummary.id = 'account-summary';\" in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert account summary anchor contract")
+	}
+	if !strings.Contains(text, "assert \"groupSection.id = accountGroupSectionID(group);\" in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert account group anchor contract")
+	}
+	if !strings.Contains(text, "assert \"href: buildPageSectionURL('account', sectionID, { accountId: accountID }),\" in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert account section link builder contract")
 	}
 	if !strings.Contains(text, "for label, body in ((\"resource_ui\", resource_ui), (\"ecs_resource_ui\", ecs_resource_ui), (\"bootstrap_resource_ui\", bootstrap_resource_ui)):") {
 		t.Fatalf("expected smoke-local.sh to assert all bookmarkable resource pages")
@@ -2178,11 +2219,50 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		"\"Quick navigation\",",
 		"\"Applications overview\",",
 		"\"Current destination\",",
+		"\"Current section\",",
+		"\"No section is currently targeted.\",",
+		"\"On this page\",",
 		"\"createNavLink(buildPageURL('applications'), 'Applications overview', '_self')\",",
 		"\"createQuickNavChip('Account detail', 'Current destination: Account detail')\",",
+		"\"createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)\",",
+		"\"detailSummary.id = 'account-summary';\",",
+		"\"const accountGroupSectionLabel = (group) => {\",",
+		"\"return region === '—' ? `${app} · ${environment}` : `${app} · ${environment} · ${region}`;\",",
+		"\"groupSection.id = accountGroupSectionID(group);\",",
+		"\"href: buildPageSectionURL('account', sectionID, { accountId: accountID }),\",",
 	} {
 		if !strings.Contains(dockerSmoke, fragment) {
 			t.Fatalf("expected smoke-docker.sh to lock bookmarkable account quick-nav fragment %q", fragment)
+		}
+	}
+}
+
+func TestOverviewDocsDescribeAccountSectionNavigation(t *testing.T) {
+	files := map[string][]string{
+		"../../README.md": {
+			"`Current section`",
+			"`On this page`",
+			"`No section is currently targeted.`",
+			"`Account summary`",
+		},
+		"../../docs/features/overview-dashboard.md": {
+			"`Current section`",
+			"`On this page`",
+			"`No section is currently targeted.`",
+			"`Account summary`",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
 		}
 	}
 }

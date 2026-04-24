@@ -1163,6 +1163,13 @@
         if (!hash || hash === '#') return '';
         return hash.startsWith('#') ? hash.slice(1) : hash;
       };
+      const sectionIDSegment = (value, fallback) => {
+        const normalized = String(value || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '');
+        return normalized || fallback;
+      };
       let activeResourceQuickNavSync = null;
       const syncActiveResourceQuickNav = () => {
         if (typeof activeResourceQuickNavSync === 'function') {
@@ -1180,7 +1187,7 @@
       };
       if (typeof window.addEventListener === 'function') {
         window.addEventListener('hashchange', () => {
-          if (currentPageState.page !== 'application' && currentPageState.page !== 'resource' && currentPageState.page !== 'drift' && currentPageState.page !== 'plan') return;
+          if (currentPageState.page !== 'application' && currentPageState.page !== 'account' && currentPageState.page !== 'resource' && currentPageState.page !== 'drift' && currentPageState.page !== 'plan') return;
           syncActiveResourceQuickNav();
           scrollToCurrentHashTarget();
         });
@@ -1647,7 +1654,16 @@
           (mode === 'drift' || mode === 'plan') ? 'No section is currently targeted.' : '',
         );
       };
-      const createAccountQuickNav = (account) => {
+      const accountGroupSectionID = (group) => {
+        return `account-group-${sectionIDSegment(group.appRef, 'project')}-${sectionIDSegment(group.environmentRef, 'environment')}-${sectionIDSegment(group.region, 'region')}`;
+      };
+      const accountGroupSectionLabel = (group) => {
+        const app = metricValue(group?.appRef);
+        const environment = metricValue(group?.environmentRef);
+        const region = metricValue(group?.region);
+        return region === '—' ? `${app} · ${environment}` : `${app} · ${environment} · ${region}`;
+      };
+      const createAccountQuickNav = (account, sectionLinks = []) => {
         const accountLabel = account?.name || currentPageState.accountId || 'Account';
         const strip = createElement('section', 'quick-nav-strip');
         const hierarchyLinks = createElement('div', 'quick-nav-links');
@@ -1671,12 +1687,42 @@
           currentDestinationLinks,
         );
         groups.append(hierarchyGroup, currentDestinationGroup);
+        const currentSectionGroup = createElement('div', 'quick-nav-group');
+        const sectionGroup = createElement('div', 'quick-nav-group');
+        const syncCurrentSection = () => {
+          const activeSectionID = currentHashTargetID();
+          const currentSectionLink = Array.isArray(sectionLinks)
+            ? sectionLinks.find((sectionLink) => sectionLink?.sectionID === activeSectionID)
+            : null;
+          currentSectionGroup.replaceChildren(createElement('div', 'quick-nav-label', 'Current section'));
+          if (currentSectionLink) {
+            currentSectionGroup.append(createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`));
+          } else {
+            currentSectionGroup.append(createElement('div', 'quick-nav-empty', 'No section is currently targeted.'));
+          }
+          sectionGroup.replaceChildren(createElement('div', 'quick-nav-label', 'On this page'));
+          const remainingSectionLinks = Array.isArray(sectionLinks)
+            ? sectionLinks.filter((sectionLink) => sectionLink?.sectionID !== currentSectionLink?.sectionID)
+            : [];
+          if (remainingSectionLinks.length) {
+            const sectionNavLinks = createElement('div', 'quick-nav-links');
+            remainingSectionLinks.forEach((sectionLink) => {
+              sectionNavLinks.append(createNavLink(sectionLink.href, sectionLink.label, '_self'));
+            });
+            sectionGroup.append(sectionNavLinks);
+          } else {
+            sectionGroup.append(createElement('div', 'quick-nav-empty', 'No additional section links are available for this account.'));
+          }
+        };
+        syncCurrentSection();
+        groups.append(currentSectionGroup, sectionGroup);
 
         const head = createElement('div', 'quick-nav-head');
         head.append(
           createElement('div', 'quick-nav-title', 'Quick navigation'),
           createElement('div', 'quick-nav-current', `${accountLabel} · Account detail`),
         );
+        strip.syncCurrentSection = syncCurrentSection;
         strip.append(head, groups);
         return strip;
       };
@@ -4630,8 +4676,16 @@
         }));
       };
 
-      const createAccountOverviewArticle = (account) => {
+      const createAccountOverviewArticle = (account, sectionLinks = []) => {
           const article = createElement('article', 'account');
+          const pushAccountSectionLink = (sectionID, label) => {
+            if (!Array.isArray(sectionLinks) || !sectionID) return;
+            sectionLinks.push({
+              sectionID,
+              label,
+              href: buildPageSectionURL('account', sectionID, { accountId: currentPageState.accountId || account.awsAccountId || '' }),
+            });
+          };
           const head = createElement('div', 'account-head');
           const titleWrap = createElement('div');
           const derivedTopology = deriveProjectEnvironmentGroups(account);
@@ -4667,6 +4721,8 @@
           const rows = createElement('div', 'rows');
           topology.groups.forEach((group) => {
             const groupSection = createElement('section', 'deployment-group');
+            groupSection.id = accountGroupSectionID(group);
+            pushAccountSectionLink(groupSection.id, accountGroupSectionLabel(group));
             const groupHead = createElement('div', 'deployment-group-head');
             const groupTitleWrap = createElement('div');
             groupTitleWrap.append(
@@ -4799,6 +4855,7 @@
         toolbar.replaceChildren(backLink);
 
         const detailSummary = createElement('article', 'account');
+        detailSummary.id = 'account-summary';
         detailSummary.append(
           createElement('div', 'label', 'Account deployment overview'),
           createElement('h2', 'account-name', account.name || currentPageState.accountId || 'Account'),
@@ -4806,9 +4863,23 @@
           createElement('div', 'account-topology', `${account.projectCount ?? deriveProjectEnvironmentGroups(account).projectCount} projects · ${account.environmentCount ?? deriveProjectEnvironmentGroups(account).environmentCount} environments`),
         );
         summary.replaceChildren(detailSummary);
-        const quickNav = createAccountQuickNav(account);
-        const overviewArticle = createAccountOverviewArticle(account);
+        const accountID = currentPageState.accountId || account.awsAccountId || '';
+        const accountSectionLinks = [];
+        const pushAccountSectionLink = (sectionID, label) => {
+          if (!sectionID) return;
+          accountSectionLinks.push({
+            sectionID,
+            label,
+            href: buildPageSectionURL('account', sectionID, { accountId: accountID }),
+          });
+        };
+        pushAccountSectionLink(detailSummary.id, 'Account summary');
+        const overviewArticle = createAccountOverviewArticle(account, accountSectionLinks);
+        const quickNav = createAccountQuickNav(account, accountSectionLinks);
         root.replaceChildren(...[quickNav, overviewArticle].filter(Boolean));
+        activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;
+        syncActiveResourceQuickNav();
+        scrollToCurrentHashTarget();
       };
 
       const renderAccounts = (accounts) => {
