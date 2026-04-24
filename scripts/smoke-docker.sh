@@ -11,14 +11,21 @@ INVALID_AUDIT_ACTION_BODY=$(mktemp)
 INVALID_APPLY_TRANSITION_BODY=$(mktemp)
 UNKNOWN_APPLY_TRANSITION_BODY=$(mktemp)
 TERMINAL_APPLY_TRANSITION_BODY=$(mktemp)
-AUTH_UNAUTHENTICATED_COLLECTION_BODY=$(mktemp)
-AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY=$(mktemp)
-AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY=$(mktemp)
-AUTH_UNAUTHENTICATED_TRANSITION_BODY=$(mktemp)
-AUTH_UNAUTHENTICATED_EVENTS_BODY=$(mktemp)
-AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY=$(mktemp)
-AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY=$(mktemp)
-AUTH_FORBIDDEN_STATUS_READ_BODY=$(mktemp)
+AUTH_UNAUTHENTICATED_COLLECTION_BODY=***
+AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY=***
+AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY=***
+AUTH_UNAUTHENTICATED_PLAN_READ_BODY=***
+AUTH_UNAUTHENTICATED_APPLY_READ_BODY=***
+AUTH_ROLE_REQUIRED_COLLECTION_BODY=***
+AUTH_ROLE_REQUIRED_STATUS_READ_BODY=***
+AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY=***
+AUTH_ROLE_REQUIRED_PLAN_READ_BODY=***
+AUTH_ROLE_REQUIRED_APPLY_READ_BODY=***
+AUTH_UNAUTHENTICATED_TRANSITION_BODY=***
+AUTH_UNAUTHENTICATED_EVENTS_BODY=***
+AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY=***
+AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY=***
+AUTH_FORBIDDEN_STATUS_READ_BODY=***
 AUTH_FORBIDDEN_TRANSITION_BODY=$(mktemp)
 AUTH_FORBIDDEN_EVENTS_BODY=$(mktemp)
 AUTH_FORBIDDEN_RESOURCE_LOGS_BODY=$(mktemp)
@@ -773,7 +780,9 @@ assert isinstance(traffic_resource_inspection["trafficRoutingResource"].get("sum
 operator_read_auth_fragments = (
     "const operatorReadAuthRequiredState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 401;",
     "const operatorReadForbiddenState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 403;",
+    "const operatorReadRoleRequiredState = (error) => operatorReadForbiddenState(error) && String(error?.message || '').includes('authenticated viewer-capable role is required for this operator read route');",
     "const operatorReadAuthRequiredMessage = (route) => `Tenet rejected ${route} because authenticated identity is required on this operator read route. Retry this bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers.`;",
+    "const operatorReadRoleRequiredMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity because this operator read route requires a trusted forwarded viewer/operator/admin role. Retry this bookmarkable page through the trusted front door so it can forward X-Tenet-Authenticated-Roles for a read-capable session.`;",
     "const operatorReadForbiddenMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized for that route or deployment.`;",
 )
 assert_fragments("application_ui", application_ui, operator_read_auth_fragments + (
@@ -1005,6 +1014,40 @@ auth_unauthenticated_status_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICAT
   "$API_BASE_URL/v1/status/deployments")
 auth_unauthenticated_audit_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY" -w "%{http_code}" \
   "$API_BASE_URL/v1/audit-logs?action=apply.requested")
+auth_unauthenticated_plan_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" -w "%{http_code}" \
+  "$API_BASE_URL/v1/plans/$plan_id")
+auth_unauthenticated_apply_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" -w "%{http_code}" \
+  "$API_BASE_URL/v1/applies/$apply_id")
+auth_role_required_collection_status=$(curl -sS -o "$AUTH_ROLE_REQUIRED_COLLECTION_BODY" -w "%{http_code}" \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-prod, worker-prod" \
+  "$API_BASE_URL/v1/overview/applications")
+auth_role_required_status_read_status=$(curl -sS -o "$AUTH_ROLE_REQUIRED_STATUS_READ_BODY" -w "%{http_code}" \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
+  "$API_BASE_URL/v1/status/deployments/payments-api-staging")
+auth_role_required_audit_collection_status=$(curl -sS -o "$AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY" -w "%{http_code}" \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
+  "$API_BASE_URL/v1/audit-logs?action=apply.requested")
+auth_role_required_plan_read_status=$(curl -sS -o "$AUTH_ROLE_REQUIRED_PLAN_READ_BODY" -w "%{http_code}" \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-prod" \
+  "$API_BASE_URL/v1/plans/$plan_id")
+auth_role_required_apply_read_status=$(curl -sS -o "$AUTH_ROLE_REQUIRED_APPLY_READ_BODY" -w "%{http_code}" \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-prod" \
+  "$API_BASE_URL/v1/applies/$apply_id")
 auth_unauthenticated_transition_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" -w "%{http_code}" \
   -X POST \
   -H "Content-Type: application/json" \
@@ -1129,6 +1172,20 @@ AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS="$auth_unauthenticated_status_coll
 AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" \
 AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_STATUS="$auth_unauthenticated_audit_collection_status" \
 AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY" \
+AUTH_UNAUTHENTICATED_PLAN_READ_STATUS="$auth_unauthenticated_plan_read_status" \
+AUTH_UNAUTHENTICATED_PLAN_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" \
+AUTH_UNAUTHENTICATED_APPLY_READ_STATUS="$auth_unauthenticated_apply_read_status" \
+AUTH_UNAUTHENTICATED_APPLY_READ_BODY_PATH="$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" \
+AUTH_ROLE_REQUIRED_COLLECTION_STATUS="$auth_role_required_collection_status" \
+AUTH_ROLE_REQUIRED_COLLECTION_BODY_PATH="$AUTH_ROLE_REQUIRED_COLLECTION_BODY" \
+AUTH_ROLE_REQUIRED_STATUS_READ_STATUS="$auth_role_required_status_read_status" \
+AUTH_ROLE_REQUIRED_STATUS_READ_BODY_PATH="$AUTH_ROLE_REQUIRED_STATUS_READ_BODY" \
+AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_STATUS="$auth_role_required_audit_collection_status" \
+AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY_PATH="$AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY" \
+AUTH_ROLE_REQUIRED_PLAN_READ_STATUS="$auth_role_required_plan_read_status" \
+AUTH_ROLE_REQUIRED_PLAN_READ_BODY_PATH="$AUTH_ROLE_REQUIRED_PLAN_READ_BODY" \
+AUTH_ROLE_REQUIRED_APPLY_READ_STATUS="$auth_role_required_apply_read_status" \
+AUTH_ROLE_REQUIRED_APPLY_READ_BODY_PATH="$AUTH_ROLE_REQUIRED_APPLY_READ_BODY" \
 AUTH_UNAUTHENTICATED_TRANSITION_STATUS="$auth_unauthenticated_transition_status" \
 AUTH_UNAUTHENTICATED_TRANSITION_BODY_PATH="$AUTH_UNAUTHENTICATED_TRANSITION_BODY" \
 AUTH_UNAUTHENTICATED_EVENTS_STATUS="$auth_unauthenticated_events_status" \
@@ -1167,6 +1224,20 @@ with open(os.environ["AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY_PATH"], encodi
     unauthenticated_status_collection_body = fh.read()
 with open(os.environ["AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY_PATH"], encoding="utf-8") as fh:
     unauthenticated_audit_collection_body = fh.read()
+with open(os.environ["AUTH_UNAUTHENTICATED_PLAN_READ_BODY_PATH"], encoding="utf-8") as fh:
+    unauthenticated_plan_read_body = fh.read()
+with open(os.environ["AUTH_UNAUTHENTICATED_APPLY_READ_BODY_PATH"], encoding="utf-8") as fh:
+    unauthenticated_apply_read_body = fh.read()
+with open(os.environ["AUTH_ROLE_REQUIRED_COLLECTION_BODY_PATH"], encoding="utf-8") as fh:
+    role_required_collection_body = fh.read()
+with open(os.environ["AUTH_ROLE_REQUIRED_STATUS_READ_BODY_PATH"], encoding="utf-8") as fh:
+    role_required_status_read_body = fh.read()
+with open(os.environ["AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY_PATH"], encoding="utf-8") as fh:
+    role_required_audit_collection_body = fh.read()
+with open(os.environ["AUTH_ROLE_REQUIRED_PLAN_READ_BODY_PATH"], encoding="utf-8") as fh:
+    role_required_plan_read_body = fh.read()
+with open(os.environ["AUTH_ROLE_REQUIRED_APPLY_READ_BODY_PATH"], encoding="utf-8") as fh:
+    role_required_apply_read_body = fh.read()
 with open(os.environ["AUTH_UNAUTHENTICATED_TRANSITION_BODY_PATH"], encoding="utf-8") as fh:
     unauthenticated_transition_body = fh.read()
 with open(os.environ["AUTH_UNAUTHENTICATED_EVENTS_BODY_PATH"], encoding="utf-8") as fh:
@@ -1221,6 +1292,20 @@ assert os.environ["AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS"] == "401", os.
 assert unauthenticated_status_collection_body.strip() == "unauthenticated: authenticated identity is required for this operator read route", unauthenticated_status_collection_body
 assert os.environ["AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_STATUS"]
 assert unauthenticated_audit_collection_body.strip() == "unauthenticated: authenticated identity is required for this operator read route", unauthenticated_audit_collection_body
+assert os.environ["AUTH_UNAUTHENTICATED_PLAN_READ_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_PLAN_READ_STATUS"]
+assert unauthenticated_plan_read_body.strip() == "unauthenticated: authenticated identity is required for this operator read route", unauthenticated_plan_read_body
+assert os.environ["AUTH_UNAUTHENTICATED_APPLY_READ_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_APPLY_READ_STATUS"]
+assert unauthenticated_apply_read_body.strip() == "unauthenticated: authenticated identity is required for this operator read route", unauthenticated_apply_read_body
+assert os.environ["AUTH_ROLE_REQUIRED_COLLECTION_STATUS"] == "403", os.environ["AUTH_ROLE_REQUIRED_COLLECTION_STATUS"]
+assert role_required_collection_body.strip() == "forbidden: authenticated viewer-capable role is required for this operator read route", role_required_collection_body
+assert os.environ["AUTH_ROLE_REQUIRED_STATUS_READ_STATUS"] == "403", os.environ["AUTH_ROLE_REQUIRED_STATUS_READ_STATUS"]
+assert role_required_status_read_body.strip() == "forbidden: authenticated viewer-capable role is required for this operator read route", role_required_status_read_body
+assert os.environ["AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_STATUS"] == "403", os.environ["AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_STATUS"]
+assert role_required_audit_collection_body.strip() == "forbidden: authenticated viewer-capable role is required for this operator read route", role_required_audit_collection_body
+assert os.environ["AUTH_ROLE_REQUIRED_PLAN_READ_STATUS"] == "403", os.environ["AUTH_ROLE_REQUIRED_PLAN_READ_STATUS"]
+assert role_required_plan_read_body.strip() == "forbidden: authenticated viewer-capable role is required for this operator read route", role_required_plan_read_body
+assert os.environ["AUTH_ROLE_REQUIRED_APPLY_READ_STATUS"] == "403", os.environ["AUTH_ROLE_REQUIRED_APPLY_READ_STATUS"]
+assert role_required_apply_read_body.strip() == "forbidden: authenticated viewer-capable role is required for this operator read route", role_required_apply_read_body
 assert os.environ["AUTH_UNAUTHENTICATED_TRANSITION_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_TRANSITION_STATUS"]
 assert unauthenticated_transition_body.strip() == "unauthenticated: authenticated identity is required for this operator write route", unauthenticated_transition_body
 assert os.environ["AUTH_UNAUTHENTICATED_EVENTS_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_EVENTS_STATUS"]

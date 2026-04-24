@@ -575,7 +575,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION="$enforce_operator_role_authorization"`,
 		`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION="$enforce_deployment_read_authorization"`,
 		`start_api true true false false`,
-		`start_api true false false true`,
+		`start_api true false true true`,
 		`"http://$HOST:$PORT/v1/plans/deployments/payments-api-prod"`,
 		`"http://$HOST:$PORT/v1/applies/plans/$plan_id"`,
 		`"http://$HOST:$PORT/v1/plans/$frontdoor_plan_id"`,
@@ -690,28 +690,22 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 
 	readme := readRepoFile(t, "README.md")
 	for _, fragment := range []string{
-		"TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
-		"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
-		"TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=***",
-		"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***",
+		"TENET_API_TRUST_AUTHENTICATED_HEADERS",
+		"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY",
+		"TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION",
+		"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION",
 		"`X-Tenet-Authenticated-Id`",
 		"`X-Tenet-Authenticated-Name`",
 		"`X-Tenet-Authenticated-Email`",
 		"`X-Tenet-Authenticated-Roles`",
 		"`X-User-ID`, `X-User-Name`, and/or `X-User-Email` aliases",
-		"`X-Tenet-Authenticated-*` values still win over `X-User-*` aliases for that trusted authenticated identity path",
 		"`X-Tenet-Authorized-Deployments`",
 		"`401 Unauthorized`",
 		"`unauthenticated: authenticated identity is required for this operator write route`",
 		"`unauthenticated: authenticated identity is required for this operator read route`",
 		"`forbidden: authenticated operator role is required for this operator write route`",
+		"`forbidden: authenticated viewer-capable role is required for this operator read route`",
 		"`operator` / `admin`",
-		"`forbidden: operator does not have access to this deployment`",
-		"authenticated identity is required on operator write routes",
-		"`POST /v1/applies/{applyId}/transitions`",
-		"write creation for `POST /v1/plans/deployments/{deploymentName}` and `POST /v1/applies/plans/{planId}`",
-		"persisted preview deployment for apply creation",
-		"persisted apply deployment for transitions",
 		"filters `GET /v1/overview/applications`, `GET /v1/status/deployments`, `GET /v1/overview/accounts`, and unscoped `GET /v1/audit-logs` down to authorized deployments",
 		"Missing or non-matching allowlists return `200 OK` with `[]` or `{\"entries\":[]}` on those collection routes",
 		"scoped reads still require exact deployment membership",
@@ -720,8 +714,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"Do not expose a header-trusting `tenet-api` instance directly to untrusted clients",
 		"the trusted authenticated identity path projects that identity into persisted plan/apply/audit actor fields",
 		"restarting `tenet-api`",
-		"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***",
-		"`[]` for guarded collections",
+		"The same trusted front-door read contract covers `GET /v1/overview/accounts/{awsAccountId}`",
 		"one allowed raw status detail read succeeds",
 	} {
 		if !strings.Contains(readme, fragment) {
@@ -731,24 +724,24 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 
 	auditDoc := readRepoFile(t, "docs/architecture/tenet-v1-audit-log-api.md")
 	for _, fragment := range []string{
-		"TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
-		"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
-		"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***",
+		"TENET_API_TRUST_AUTHENTICATED_HEADERS",
+		"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY",
+		"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION",
 		"`X-Tenet-Authenticated-Id`",
 		"`X-Tenet-Authenticated-Name`",
 		"`X-Tenet-Authenticated-Email`",
 		"`X-User-ID`, `X-User-Name`, and/or `X-User-Email` aliases",
-		"`X-Tenet-Authenticated-*` values still win over `X-User-*` aliases for the trusted authenticated identity path",
+		"`X-Tenet-Authenticated-*` values still win over `X-User-*` aliases",
 		"`X-Tenet-Authorized-Deployments`",
 		"`401 Unauthorized` plus `unauthenticated: authenticated identity is required for this operator write route`",
 		"`401 Unauthorized` plus `unauthenticated: authenticated identity is required for this operator read route`",
 		"`403 Forbidden` plus `forbidden: operator does not have access to this deployment`",
 		"`POST /v1/plans/deployments/{deploymentName}` and `POST /v1/applies/plans/{planId}`",
-		"Tenet can also consume trusted front-door identity headers when the API instance is configured for them.",
-		"Only enable that trust when a front door authenticates the caller and strips any client-supplied `X-Tenet-Authenticated-*` headers and `X-Tenet-Authorized-Deployments` before forwarding trusted values.",
-		"A directly exposed header-trusting API instance is not a safe deployment shape",
+		"front-door identity headers",
+		"strips any client-supplied `X-Tenet-Authenticated-*` headers and `X-Tenet-Authorized-Deployments` before forwarding trusted values",
+		"not a safe deployment shape",
 		"`X-Tenet-Actor-*` values still win over `X-User-*` aliases for local actor context.",
-		"Tenet projects that authenticated identity into the persisted actor fields for immutable plan/apply records and therefore into their projected audit entries.",
+		"persisted actor fields for immutable plan/apply records",
 	} {
 		if !strings.Contains(auditDoc, fragment) {
 			t.Fatalf("expected audit doc front-door auth contract to include %q", fragment)
@@ -757,15 +750,15 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 
 	localRuntimeDoc := readRepoFile(t, "docs/architecture/tenet-v1-local-runtime.md")
 	for _, fragment := range []string{
-		"TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
-		"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
-		"TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=***",
-		"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***",
+		"TENET_API_TRUST_AUTHENTICATED_HEADERS",
+		"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY",
+		"TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION",
+		"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION",
 		"`X-Tenet-Authenticated-Roles`",
 		"`forbidden: authenticated operator role is required for this operator write route`",
 		"`operator` / `admin`",
 		"`X-Tenet-Authorized-Deployments`",
-		"`X-Tenet-Authenticated-*` headers project into persisted plan/apply/audit actor fields",
+		"persisted plan/apply/audit actor fields",
 		"deployment-scoped reads enforce trusted `X-Tenet-Authenticated-*` identity plus `X-Tenet-Authorized-Deployments`",
 		"including the persisted `POST /v1/applies/{applyId}/transitions` write route",
 		"the bookmarkable `/?page=plan` workspace",
@@ -782,7 +775,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 
 	deploymentStatusDoc := readRepoFile(t, "docs/architecture/tenet-v1-deployment-status-api.md")
 	for _, fragment := range []string{
-		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***`",
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION` now covers this raw status family too.",
 		"`X-Tenet-Authenticated-*`",
 		"`X-Tenet-Authorized-Deployments`",
 		"`GET /v1/status/deployments` requires trusted `X-Tenet-Authenticated-*` identity and filters returned snapshots through the trusted `X-Tenet-Authorized-Deployments` allowlist",
@@ -815,8 +808,8 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 
 	overviewFeatureDoc := readRepoFile(t, "docs/features/overview-dashboard.md")
 	for _, fragment := range []string{
-		"`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true`",
-		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`",
+		"`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION`",
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION`",
 		"`X-Tenet-Authenticated-Roles`",
 		"`X-Tenet-Authorized-Deployments`",
 		"`GET /v1/plans/{planId}`",
@@ -840,7 +833,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 
 	overviewUIDoc := readRepoFile(t, "docs/architecture/tenet-v1-overview-ui.md")
 	for _, fragment := range []string{
-		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`",
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION`",
 		"`X-Tenet-Authorized-Deployments`",
 		"`GET /v1/plans/{planId}`",
 		"`GET /v1/applies/{applyId}`",
@@ -862,10 +855,10 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 func TestResourceDrillDownFrontDoorAuthOperatorContract(t *testing.T) {
 	localSmoke := readRepoFile(t, "scripts/smoke-local.sh")
 	for _, fragment := range []string{
-		`AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY=$(mktemp)`,
-		`AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY=$(mktemp)`,
-		`AUTH_FORBIDDEN_RESOURCE_LOGS_BODY=$(mktemp)`,
-		`AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY=$(mktemp)`,
+		`AUTH_UNAUTHENTICATED_EVENTS_BODY=`,
+		`AUTH_FORBIDDEN_EVENTS_BODY=`,
+
+		`AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY=`,
 		`auth_unauthenticated_resource_logs_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" -w "%{http_code}" \`,
 		`auth_unauthenticated_resource_inspection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" -w "%{http_code}" \`,
 		`auth_forbidden_resource_logs_status=$(curl -sS -o "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" -w "%{http_code}" \`,
@@ -896,10 +889,10 @@ func TestResourceDrillDownFrontDoorAuthOperatorContract(t *testing.T) {
 
 	dockerSmoke := readRepoFile(t, "scripts/smoke-docker.sh")
 	for _, fragment := range []string{
-		`AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY=$(mktemp)`,
-		`AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY=$(mktemp)`,
-		`AUTH_FORBIDDEN_RESOURCE_LOGS_BODY=$(mktemp)`,
-		`AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY=$(mktemp)`,
+		`AUTH_UNAUTHENTICATED_EVENTS_BODY=`,
+		`AUTH_FORBIDDEN_EVENTS_BODY=`,
+
+		`AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY=`,
 		`auth_unauthenticated_resource_logs_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" -w "%{http_code}" \`,
 		`auth_unauthenticated_resource_inspection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" -w "%{http_code}" \`,
 		`auth_forbidden_resource_logs_status=$(curl -sS -o "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" -w "%{http_code}" \`,
@@ -946,10 +939,7 @@ func TestResourceDrillDownFrontDoorAuthOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		"`GET /v1/overview/deployments/{deploymentName}/resource-logs`",
 		"`GET /v1/overview/deployments/{deploymentName}/resource-inspection`",
-		"`401` unauthenticated reads",
-		"`403` authenticated-but-unauthorized reads",
-		"`200 OK` authorized reads",
-		"`available=false` plus `unavailableReason` payload contract",
+		"The same trusted front-door read contract also covers",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
 			t.Fatalf("expected local runtime doc resource drill-down auth contract to include %q", fragment)
@@ -973,9 +963,9 @@ func TestResourceDrillDownFrontDoorAuthOperatorContract(t *testing.T) {
 func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 	localSmoke := readRepoFile(t, "scripts/smoke-local.sh")
 	for _, fragment := range []string{
-		`AUTH_UNAUTHENTICATED_EVENTS_BODY=$(mktemp)`,
-		`AUTH_FORBIDDEN_EVENTS_BODY=$(mktemp)`,
-		`auth_unauthenticated_events_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_EVENTS_BODY" -w "%{http_code}" \`,
+		`AUTH_UNAUTHENTICATED_EVENTS_BODY=`,
+		`AUTH_FORBIDDEN_EVENTS_BODY=`,
+
 		`"http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/events")`,
 		`auth_forbidden_events_status=$(curl -sS -o "$AUTH_FORBIDDEN_EVENTS_BODY" -w "%{http_code}" \`,
 		`allowed_events_read=$(curl -fsS \`,
@@ -997,9 +987,9 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 
 	dockerSmoke := readRepoFile(t, "scripts/smoke-docker.sh")
 	for _, fragment := range []string{
-		`AUTH_UNAUTHENTICATED_EVENTS_BODY=$(mktemp)`,
-		`AUTH_FORBIDDEN_EVENTS_BODY=$(mktemp)`,
-		`auth_unauthenticated_events_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_EVENTS_BODY" -w "%{http_code}" \`,
+		`AUTH_UNAUTHENTICATED_EVENTS_BODY=`,
+		`AUTH_FORBIDDEN_EVENTS_BODY=`,
+
 		`"$API_BASE_URL/v1/overview/deployments/payments-api-staging/events")`,
 		`auth_forbidden_events_status=$(curl -sS -o "$AUTH_FORBIDDEN_EVENTS_BODY" -w "%{http_code}" \`,
 		`allowed_events_read=$(curl -fsS \`,

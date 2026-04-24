@@ -134,8 +134,19 @@ func requireOperatorRoleForWrite(w http.ResponseWriter, r *http.Request, enabled
 	return false
 }
 
-func requireDeploymentReadIdentity(w http.ResponseWriter, r *http.Request, enabled bool) bool {
+func requireOperatorRoleForRead(w http.ResponseWriter, r *http.Request, enabled bool) bool {
 	if !enabled {
+		return true
+	}
+	if requestactor.AuthenticatedRolesFromContext(r.Context()).AllowsOperatorRead() {
+		return true
+	}
+	respondForbiddenError(w, "forbidden: authenticated viewer-capable role is required for this operator read route")
+	return false
+}
+
+func requireDeploymentReadIdentity(w http.ResponseWriter, r *http.Request, identityEnabled bool, roleEnabled bool) bool {
+	if !identityEnabled {
 		return true
 	}
 	identity := requestactor.AuthenticatedIdentityFromContext(r.Context())
@@ -143,7 +154,7 @@ func requireDeploymentReadIdentity(w http.ResponseWriter, r *http.Request, enabl
 		respondUnauthenticatedError(w, "unauthenticated: authenticated identity is required for this operator read route")
 		return false
 	}
-	return true
+	return requireOperatorRoleForRead(w, r, roleEnabled)
 }
 
 func requireDeploymentReadAccess(w http.ResponseWriter, r *http.Request, enabled bool, deploymentName string) bool {
@@ -157,11 +168,11 @@ func requireDeploymentReadAccess(w http.ResponseWriter, r *http.Request, enabled
 	return false
 }
 
-func requireDeploymentReadAuthorization(w http.ResponseWriter, r *http.Request, enabled bool, deploymentName string) bool {
-	if !requireDeploymentReadIdentity(w, r, enabled) {
+func requireDeploymentReadAuthorization(w http.ResponseWriter, r *http.Request, identityEnabled bool, roleEnabled bool, deploymentName string) bool {
+	if !requireDeploymentReadIdentity(w, r, identityEnabled, roleEnabled) {
 		return false
 	}
-	return requireDeploymentReadAccess(w, r, enabled, deploymentName)
+	return requireDeploymentReadAccess(w, r, identityEnabled, deploymentName)
 }
 
 func requireDeploymentWriteAuthorization(w http.ResponseWriter, r *http.Request, enabled bool, deploymentName string) bool {
@@ -344,6 +355,7 @@ type Options struct {
 	GitHubWebhookSecret                  string
 	TrustAuthenticatedHeaders            bool
 	RequireAuthenticatedIdentity         bool
+	RequireOperatorRoleForRead           bool
 	RequireOperatorRoleForWrite          bool
 	RequireDeploymentReadAuthorization   bool
 	GitHubWebhookDesiredStateSource      githubwebhook.DesiredStateSourceConfig
@@ -541,7 +553,7 @@ func NewRouter(options Options) http.Handler {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
-		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization) {
+		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
 			return
 		}
 		if options.OverviewApplications == nil {
@@ -574,7 +586,7 @@ func NewRouter(options Options) http.Handler {
 			http.Error(w, "invalid deployment name", http.StatusBadRequest)
 			return
 		}
-		if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, name) {
+		if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead, name) {
 			return
 		}
 		detail, err := options.OverviewApplication(r.Context(), name)
@@ -589,7 +601,7 @@ func NewRouter(options Options) http.Handler {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
-		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization) {
+		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
 			return
 		}
 		if options.OverviewAccounts == nil {
@@ -621,7 +633,7 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "overview account unavailable", http.StatusServiceUnavailable)
 				return
 			}
-			if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization) {
+			if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
 				return
 			}
 			detail, err := options.OverviewAccount(r.Context(), segments[0])
@@ -645,7 +657,7 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "overview project environment unavailable", http.StatusServiceUnavailable)
 				return
 			}
-			if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization) {
+			if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
 				return
 			}
 			detail, err := options.OverviewProjectEnvironment(r.Context(), segments[0], segments[2], segments[4])
@@ -684,7 +696,7 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "invalid deployment name", http.StatusBadRequest)
 				return
 			}
-			if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, name) {
+			if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead, name) {
 				return
 			}
 			events, err := options.OverviewDeploymentEvents(r.Context(), name)
@@ -708,7 +720,7 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "invalid deployment name", http.StatusBadRequest)
 				return
 			}
-			if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, name) {
+			if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead, name) {
 				return
 			}
 			resourceType, resourceName, ok := parseResourceQuery(w, r)
@@ -740,7 +752,7 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "invalid deployment name", http.StatusBadRequest)
 				return
 			}
-			if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, name) {
+			if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead, name) {
 				return
 			}
 			resourceType, resourceName, ok := parseResourceQuery(w, r)
@@ -768,7 +780,7 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "invalid deployment name", http.StatusBadRequest)
 				return
 			}
-			if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, name) {
+			if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead, name) {
 				return
 			}
 			detail, err := options.OverviewDeployment(r.Context(), name)
@@ -795,7 +807,7 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "invalid deployment query", http.StatusBadRequest)
 				return
 			}
-			if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, deploymentName) {
+			if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead, deploymentName) {
 				return
 			}
 			query.DeploymentName = deploymentName
@@ -816,7 +828,7 @@ func NewRouter(options Options) http.Handler {
 			}
 			query.Limit = limit
 		}
-		if query.DeploymentName == "" && !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization) {
+		if query.DeploymentName == "" && !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
 			return
 		}
 		result, err := options.AuditLogs(r.Context(), query)
@@ -892,7 +904,7 @@ func NewRouter(options Options) http.Handler {
 			http.Error(w, "invalid plan id", http.StatusBadRequest)
 			return
 		}
-		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization) {
+		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
 			return
 		}
 		record, err := options.PlanPreview(r.Context(), id)
@@ -963,7 +975,7 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "apply request unavailable", http.StatusServiceUnavailable)
 				return
 			}
-			if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization) {
+			if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
 				return
 			}
 			record, err := options.ApplyRequest(r.Context(), segments[0])
@@ -1030,7 +1042,7 @@ func NewRouter(options Options) http.Handler {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
-		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization) {
+		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
 			return
 		}
 		if options.DeploymentStatuses == nil {
@@ -1059,7 +1071,7 @@ func NewRouter(options Options) http.Handler {
 			http.Error(w, "invalid deployment name", http.StatusBadRequest)
 			return
 		}
-		if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, name) {
+		if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead, name) {
 			return
 		}
 		snapshot, err := options.DeploymentStatus(r.Context(), name)
@@ -1075,7 +1087,7 @@ func NewRouter(options Options) http.Handler {
 	handler = panicRecoveryMiddleware(logger, handler)
 	handler = requestTimeoutMiddleware(options.RequestTimeout, handler)
 	handler = requestLoggingMiddleware(logger, handler)
-	handler = requestActorMiddleware(options.TrustAuthenticatedHeaders || options.RequireAuthenticatedIdentity || options.RequireDeploymentReadAuthorization, handler)
+	handler = requestActorMiddleware(options.TrustAuthenticatedHeaders || options.RequireAuthenticatedIdentity || options.RequireOperatorRoleForRead || options.RequireDeploymentReadAuthorization, handler)
 	handler = requestIDMiddleware(handler)
 	return handler
 }

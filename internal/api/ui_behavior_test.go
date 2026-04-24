@@ -162,6 +162,20 @@ const scenarios = [
     unexpected: 'Failed to load overview:',
   },
   {
+    name: 'applications overview 403 explains viewer role requirement',
+    search: '?q=payments&sync=OutOfSync',
+    route: '/v1/overview/applications',
+    status: 403,
+    body: 'forbidden: authenticated viewer-capable role is required for this operator read route',
+    expected: [
+      'Applications overview',
+      'Viewer role required',
+      'Tenet rejected GET /v1/overview/applications after recognizing the caller\'s identity because this operator read route requires a trusted forwarded viewer/operator/admin role.',
+      'forward X-Tenet-Authenticated-Roles for a read-capable session.',
+    ],
+    unexpected: 'Failed to load overview:',
+  },
+  {
     name: 'account 401 keeps bookmarked route and explains trusted front door retry',
     search: '?page=account&accountId=210987654321&q=payments&sync=OutOfSync&account=210987654321',
     route: '/v1/overview/accounts/210987654321',
@@ -7118,6 +7132,25 @@ const scenarios = [
     expected: [
       'Operator access denied',
       'Tenet rejected GET /v1/applies/apply_failed_123 after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment.',
+      'Deployment and plan-derived context are still shown below.',
+      'Stored plan preview',
+      'Server-authored approval summary',
+    ],
+    unexpected: 'Failed to load the selected apply request',
+  },
+  {
+    name: 'bookmarked apply request 403 explains viewer role requirement',
+    search: '?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123',
+    expectedCalls: '/v1/overview/deployments/api-prod, /v1/plans/plan_ready_123, /v1/applies/apply_failed_123',
+    fetch(url) {
+      if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+      if (url === '/v1/plans/plan_ready_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+      if (url === '/v1/applies/apply_failed_123') return Promise.resolve({ ok: false, status: 403, text: () => Promise.resolve('forbidden: authenticated viewer-capable role is required for this operator read route') });
+      throw new Error('unexpected fetch url for ' + this.name + ': ' + url);
+    },
+    expected: [
+      'Viewer role required',
+      'Tenet rejected GET /v1/applies/apply_failed_123 after recognizing the caller\'s identity because this operator read route requires a trusted forwarded viewer/operator/admin role.',
       'Deployment and plan-derived context are still shown below.',
       'Stored plan preview',
       'Server-authored approval summary',

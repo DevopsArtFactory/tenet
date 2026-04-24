@@ -24,6 +24,7 @@ const (
 	UnavailableReason                      = "actor information is unavailable because no authenticated request context was available for this local request"
 	AuthenticatedIdentityUnavailableReason = "authenticated identity is unavailable because no trusted forwarded identity headers were available for this request"
 
+	RoleViewer   = "viewer"
 	RoleOperator = "operator"
 	RoleAdmin    = "admin"
 )
@@ -254,6 +255,11 @@ func (roles AuthenticatedRoles) AllowsAny(names ...string) bool {
 // AllowsOperatorWrite reports whether the trusted forwarded roles include one operator-capable role.
 func (roles AuthenticatedRoles) AllowsOperatorWrite() bool {
 	return roles.AllowsAny(RoleOperator, RoleAdmin)
+}
+
+// AllowsOperatorRead reports whether the trusted forwarded roles include one read-capable role.
+func (roles AuthenticatedRoles) AllowsOperatorRead() bool {
+	return roles.AllowsAny(RoleViewer, RoleOperator, RoleAdmin)
 }
 
 func headerValue(header http.Header, primary string, aliases ...string) string {

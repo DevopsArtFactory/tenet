@@ -3634,11 +3634,16 @@
       };
       const operatorReadAuthRequiredState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 401;
       const operatorReadForbiddenState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 403;
+      const operatorReadRoleRequiredState = (error) => operatorReadForbiddenState(error) && String(error?.message || '').includes('authenticated viewer-capable role is required for this operator read route');
       const operatorReadAuthRequiredMessage = (route) => `Tenet rejected ${route} because authenticated identity is required on this operator read route. Retry this bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers.`;
+      const operatorReadRoleRequiredMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity because this operator read route requires a trusted forwarded viewer/operator/admin role. Retry this bookmarkable page through the trusted front door so it can forward X-Tenet-Authenticated-Roles for a read-capable session.`;
       const operatorReadForbiddenMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized for that route or deployment.`;
       const operatorReadFailureHeading = (error) => {
         if (operatorReadAuthRequiredState(error)) {
           return 'Authenticated operator required';
+        }
+        if (operatorReadRoleRequiredState(error)) {
+          return 'Viewer role required';
         }
         if (operatorReadForbiddenState(error)) {
           return 'Operator access denied';
@@ -3649,15 +3654,20 @@
         if (operatorReadAuthRequiredState(error)) {
           return operatorReadAuthRequiredMessage(route);
         }
+        if (operatorReadRoleRequiredState(error)) {
+          return operatorReadRoleRequiredMessage(route);
+        }
         if (operatorReadForbiddenState(error)) {
           return operatorReadForbiddenMessage(route);
         }
         return error?.message || 'unknown error';
       };
       const operatorReadStateAuthRequired = (state) => state?.request === 'load' && state?.status === 'fetch-error' && operatorReadAuthRequiredState(state?.error);
+      const operatorReadStateRoleRequired = (state) => state?.request === 'load' && state?.status === 'fetch-error' && operatorReadRoleRequiredState(state?.error);
       const operatorReadStateForbidden = (state) => state?.request === 'load' && state?.status === 'fetch-error' && operatorReadForbiddenState(state?.error);
       const operatorReadStateHeading = (state) => {
         if (operatorReadStateAuthRequired(state)) return 'Authenticated operator required';
+        if (operatorReadStateRoleRequired(state)) return 'Viewer role required';
         if (operatorReadStateForbidden(state)) return 'Operator access denied';
         return '';
       };
@@ -3677,7 +3687,7 @@
       };
       const operatorFetchErrorPillLabel = (state) => {
         if (operatorReadStateAuthRequired(state) || operatorWriteAuthRequiredState(state)) return 'Auth required';
-        if (operatorWriteRoleRequiredState(state)) return 'Role required';
+        if (operatorReadStateRoleRequired(state) || operatorWriteRoleRequiredState(state)) return 'Role required';
         if (operatorReadStateForbidden(state) || operatorWriteForbiddenState(state)) return 'Access denied';
         return 'Fetch error';
       };
