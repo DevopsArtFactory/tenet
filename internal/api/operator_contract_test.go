@@ -326,7 +326,7 @@ func TestManagedLiveDriftDocsPreferFocusedContractCoverageOverLocalSmoke(t *test
 		"`runtimeContext.deploymentConfig.maximumPercent`",
 		"`runtimeContext.deploymentConfig.healthCheckGracePeriodSeconds`",
 		"`runtimeContext.taskDefinition.image`",
-		"Focused `go test ./internal/api` contract coverage locks that additive JSON/UI detail because local smoke may legitimately lack AWS access and therefore does not claim to prove live-backed EC2 launch-template/capacity or ECS deployment-config/image rows.",
+		"Focused `go test ./internal/api` coverage locks the live-backed EC2 launch-template drift rows for `runtimeContext.launchTemplate.imageId` and `runtimeContext.launchTemplate.instanceType` because local smoke may legitimately lack AWS access and therefore does not claim to prove those rows.",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README managed live drift docs to include %q", fragment)
@@ -343,7 +343,7 @@ func TestManagedLiveDriftDocsPreferFocusedContractCoverageOverLocalSmoke(t *test
 		"`runtimeContext.deploymentConfig.maximumPercent`",
 		"`runtimeContext.deploymentConfig.healthCheckGracePeriodSeconds`",
 		"`runtimeContext.taskDefinition.image`",
-		"focused router/UI contract tests lock that additive live-backed EC2 launch-template/capacity and ECS deployment-config/image detail because local smoke may legitimately lack AWS access and therefore does not claim to prove those rows",
+		"focused `go test ./internal/api` coverage locks the live-backed EC2 launch-template drift rows for `runtimeContext.launchTemplate.imageId` and `runtimeContext.launchTemplate.instanceType` because local smoke may legitimately lack AWS access and therefore does not claim to prove those rows",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
 			t.Fatalf("expected overview dashboard managed live drift doc to include %q", fragment)
