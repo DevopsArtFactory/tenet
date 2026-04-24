@@ -1327,6 +1327,8 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"`launchTemplate`",
 		"`mixedInstancesPolicy`",
 		"`DescribeAutoScalingGroups`",
+		"`launchTemplate.imageId`",
+		"`launchTemplate.instanceType`",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
 			t.Fatalf("expected overview dashboard doc to include %q", fragment)
@@ -1340,7 +1342,8 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"`healthCheckGracePeriodSeconds`",
 		"`launchTemplate`",
 		"`mixedInstancesPolicy`",
-		"`launchTemplate.imageId` and `launchTemplate.instanceType`",
+		"`launchTemplate.imageId`",
+		"`launchTemplate.instanceType`",
 	} {
 		if !strings.Contains(uiDoc, fragment) {
 			t.Fatalf("expected overview UI doc to include %q", fragment)
