@@ -106,8 +106,9 @@ func Compile(input CatalogSpec) (Catalog, error) {
 				Binary: deployment.Binary,
 				Image:  deployment.Image,
 			},
-			UserData:      normalizeUserData(deployment),
-			RolloutConfig: normalizeRolloutConfig(deployment),
+			EC2LaunchTemplate: normalizeEC2LaunchTemplate(deployment),
+			UserData:          normalizeUserData(deployment),
+			RolloutConfig:     normalizeRolloutConfig(deployment),
 		}
 		environment := environmentIndex[environmentRef]
 		account := accountIndex[environment.AccountRef]
@@ -130,19 +131,20 @@ func Compile(input CatalogSpec) (Catalog, error) {
 
 func deploymentGeneration(deployment domain.Deployment, desired spec.DeploymentSpec, environment domain.Environment, account domain.Account) int64 {
 	payload, err := json.Marshal(struct {
-		Name            string                         `json:"name"`
-		AppRef          string                         `json:"appRef"`
-		EnvironmentRef  string                         `json:"environmentRef"`
-		Environment     deploymentEnvironmentHash      `json:"environment"`
-		Account         deploymentAccountHash          `json:"account"`
-		TargetType      string                         `json:"targetType"`
-		Strategy        string                         `json:"strategy"`
-		ExecutionMode   string                         `json:"executionMode"`
-		DesiredArtifact domain.DeploymentArtifact      `json:"desiredArtifact"`
-		Traffic         spec.TrafficSpec               `json:"traffic"`
-		RolloutConfig   domain.DeploymentRolloutConfig `json:"rolloutConfig"`
-		UserData        domain.DeploymentUserData      `json:"userData"`
-		Tags            []string                       `json:"tags"`
+		Name              string                             `json:"name"`
+		AppRef            string                             `json:"appRef"`
+		EnvironmentRef    string                             `json:"environmentRef"`
+		Environment       deploymentEnvironmentHash          `json:"environment"`
+		Account           deploymentAccountHash              `json:"account"`
+		TargetType        string                             `json:"targetType"`
+		Strategy          string                             `json:"strategy"`
+		ExecutionMode     string                             `json:"executionMode"`
+		DesiredArtifact   domain.DeploymentArtifact          `json:"desiredArtifact"`
+		EC2LaunchTemplate domain.DeploymentEC2LaunchTemplate `json:"ec2LaunchTemplate"`
+		Traffic           spec.TrafficSpec                   `json:"traffic"`
+		RolloutConfig     domain.DeploymentRolloutConfig     `json:"rolloutConfig"`
+		UserData          domain.DeploymentUserData          `json:"userData"`
+		Tags              []string                           `json:"tags"`
 	}{
 		Name:           deployment.Name,
 		AppRef:         deployment.AppRef,
@@ -159,14 +161,15 @@ func deploymentGeneration(deployment domain.Deployment, desired spec.DeploymentS
 			AWSAccountID:   account.AWSAccountID,
 			AllowedRegions: append([]string(nil), account.AllowedRegions...),
 		},
-		TargetType:      deployment.TargetType,
-		Strategy:        deployment.Strategy,
-		ExecutionMode:   deployment.ExecutionMode,
-		DesiredArtifact: deployment.DesiredArtifact,
-		Traffic:         desired.Traffic,
-		RolloutConfig:   deployment.RolloutConfig,
-		UserData:        deployment.UserData,
-		Tags:            append([]string(nil), desired.Tags...),
+		TargetType:        deployment.TargetType,
+		Strategy:          deployment.Strategy,
+		ExecutionMode:     deployment.ExecutionMode,
+		DesiredArtifact:   deployment.DesiredArtifact,
+		EC2LaunchTemplate: deployment.EC2LaunchTemplate,
+		Traffic:           desired.Traffic,
+		RolloutConfig:     deployment.RolloutConfig,
+		UserData:          deployment.UserData,
+		Tags:              append([]string(nil), desired.Tags...),
 	})
 	if err != nil {
 		panic(fmt.Sprintf("marshal deployment generation payload: %v", err))
@@ -248,6 +251,17 @@ func normalizeRolloutConfig(deployment spec.DeploymentSpec) domain.DeploymentRol
 		})
 	}
 	return config
+}
+
+func normalizeEC2LaunchTemplate(deployment spec.DeploymentSpec) domain.DeploymentEC2LaunchTemplate {
+	if deployment.NormalizedTargetType() != spec.TargetTypeEC2 || len(deployment.Stacks) == 0 || len(deployment.Stacks[0].Regions) == 0 {
+		return domain.DeploymentEC2LaunchTemplate{}
+	}
+	region := deployment.Stacks[0].Regions[0]
+	return domain.DeploymentEC2LaunchTemplate{
+		ImageID:      strings.TrimSpace(region.AMIID),
+		InstanceType: strings.TrimSpace(region.InstanceType),
+	}
 }
 
 func normalizeUserDataPath(path string) string {

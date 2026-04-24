@@ -69,7 +69,7 @@ spec:
 
 ### Deployment
 
-Represents desired deployment intent for one application in one environment. In the current in-repo model, the compiler also preserves a normalized rollout-config view from this spec so runtime summaries can talk about concrete execution tuning without depending on raw manifest syntax differences. That normalized view currently carries top-level strategy/capacity settings plus stack rollout knobs such as `termination_delay_rate` and `rolling_update_instance_count`.
+Represents desired deployment intent for one application in one environment. In the current in-repo model, the compiler also preserves a normalized rollout-config view from this spec so runtime summaries can talk about concrete execution tuning without depending on raw manifest syntax differences. That normalized view currently carries top-level strategy/capacity settings, first-stack-region EC2 launch-template intent (`ami_id` and `instance_type`), and stack rollout knobs such as `termination_delay_rate` and `rolling_update_instance_count`.
 
 ```yaml
 kind: Deployment
