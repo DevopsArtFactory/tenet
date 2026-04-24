@@ -79,6 +79,9 @@ Each row surfaces:
 The account drill-down page consumes `GET /v1/overview/accounts/{awsAccountId}` and keeps the denser account-oriented view available without making it the first page again. Current account-page behavior:
 - back-link to the applications overview while preserving current filters
 - the page now renders the same compact `Quick navigation` chrome used by the deeper drill-downs, with an explicit `_self` `Applications overview` return link plus a non-click `Account detail` chip so the current bookmarkable account route stays obvious without dropping current `q`, `sync`, or `account` query state
+- the same account quick-nav now adds a hash-aware `Current section` chip and an `On this page` group for `Account summary` plus the currently rendered project/environment groups, with bookmarkable anchors such as `/?page=account&accountId={awsAccountId}#account-summary`
+- when the same project/environment pair appears in multiple regions, those account section links keep the region in the visible label so operators can tell the jump targets apart before leaving the current section
+- when one of those account section hashes is active, the current section becomes a non-click chip, disappears from the remaining `On this page` links, and otherwise falls back to `No section is currently targeted.`
 - `Account deployment overview` summary/header with account and topology context
 - grouped project/environment sections derived from the account payload
 - sibling `Account JSON`, `Group JSON`, and `_self` `Open application` links outside the expandable row toggle

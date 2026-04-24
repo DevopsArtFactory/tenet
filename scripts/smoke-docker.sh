@@ -795,8 +795,17 @@ assert_fragments("account_ui", account_ui, (
     "Quick navigation",
     "Applications overview",
     "Current destination",
+    "Current section",
+    "No section is currently targeted.",
+    "On this page",
     "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')",
     "createQuickNavChip('Account detail', 'Current destination: Account detail')",
+    "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)",
+    "detailSummary.id = 'account-summary';",
+    "const accountGroupSectionLabel = (group) => {",
+    "return region === '—' ? `${app} · ${environment}` : `${app} · ${environment} · ${region}`;",
+    "groupSection.id = accountGroupSectionID(group);",
+    "href: buildPageSectionURL('account', sectionID, { accountId: accountID }),",
 ))
 for label, body in (("resource_ui", resource_ui), ("ecs_resource_ui", ecs_resource_ui), ("bootstrap_resource_ui", bootstrap_resource_ui)):
     assert_fragments(label, body, operator_read_auth_fragments + (

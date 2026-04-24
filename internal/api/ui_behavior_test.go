@@ -954,6 +954,9 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('Hierarchy')) throw new Error('expected account page hierarchy quick-nav group');
   if (!accountsText.includes('Applications overview')) throw new Error('expected account page overview quick-nav entry');
   if (!accountsText.includes('Current destination')) throw new Error('expected account page current-destination quick-nav group');
+  if (!accountsText.includes('Current section')) throw new Error('expected account page current-section quick-nav group');
+  if (!accountsText.includes('No section is currently targeted.')) throw new Error('expected account page empty current-section copy without hash');
+  if (!accountsText.includes('On this page')) throw new Error('expected account page section quick-nav group');
   if (!accountsText.includes('staging-core · Account detail')) throw new Error('expected account page quick-nav current label');
   if (!accountsText.includes('payments · staging-apne2')) throw new Error('expected grouped project/environment heading');
   if (!accountsText.includes('payments-api-staging')) throw new Error('expected account page deployment row');
@@ -970,8 +973,168 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!applicationsOverviewLink || applicationsOverviewLink.rel) throw new Error('expected account page overview quick-nav self link');
   const accountDetailChip = quickNavChips.find((node) => node.getAttribute('aria-label') === 'Current destination: Account detail');
   if (!accountDetailChip) throw new Error('expected account page current-destination chip');
+  if (quickNavChips.find((node) => String(node.getAttribute('aria-label') || '').startsWith('Current section: '))) throw new Error('expected account page without hash not to render a current-section chip');
   if (links.find((node) => node.textContent === 'Account detail')) throw new Error('expected account page current destination to stay non-click');
   if (!links.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Open application' && node.target === '_self')) throw new Error('expected account page open application self link');
+  if (!links.find((node) => node.href === '/?page=account&q=payments&sync=OutOfSync&account=210987654321&accountId=210987654321#account-summary' && node.textContent === 'Account summary' && node.target === '_self')) throw new Error('expected account page summary section link');
+  if (!links.find((node) => node.href === '/?page=account&q=payments&sync=OutOfSync&account=210987654321&accountId=210987654321#account-group-payments-staging-apne2-ap-northeast-2' && node.textContent === 'payments · staging-apne2 · ap-northeast-2' && node.target === '_self')) throw new Error('expected account page ap-northeast-2 group section link');
+  if (!links.find((node) => node.href === '/?page=account&q=payments&sync=OutOfSync&account=210987654321&accountId=210987654321#account-group-payments-staging-apne2-us-west-2' && node.textContent === 'payments · staging-apne2 · us-west-2' && node.target === '_self')) throw new Error('expected account page us-west-2 group section link');
+})();
+`
+
+		runNodeHarness(t, nodeProgram)
+	})
+
+	t.Run("account detail route keeps hash-aware section navigation in shell", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const accountDetail = ` + string(accountDetailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) {
+    nodes.forEach((node) => {
+      if (node == null) return;
+      if (typeof node === 'string') {
+        const textNode = new Element('#text', this.ownerDocument);
+        textNode.textContent = node;
+        node = textNode;
+      }
+      node.parentNode = this;
+      this.children.push(node);
+      if (this.tagName === 'SELECT' && node.tagName === 'OPTION' && (node.selected || this.value === '')) {
+        this.value = node.value;
+      }
+    });
+  }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  scrollIntoView(options) { this.ownerDocument.lastScrolledTarget = { id: this.id || '', options }; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); this.lastScrolledTarget = null; }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) {
+    if (this.byID.has(id)) return this.byID.get(id) || null;
+    const stack = Array.from(this.byID.values());
+    while (stack.length) {
+      const node = stack.shift();
+      if (node?.id === id) return node;
+      stack.push(...(node.children || []));
+    }
+    return null;
+  }
+  querySelector(selector) {
+    const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/);
+    if (!dataMatch) return null;
+    const target = dataMatch[1];
+    const stack = Array.from(this.byID.values());
+    while (stack.length) {
+      const node = stack.shift();
+      if (node?.dataset?.toolbarField === target) return node;
+      stack.push(...(node.children || []));
+    }
+    return null;
+  }
+}
+const createWindow = (initialSearch, hash) => {
+  const listeners = {};
+  return {
+    location: { pathname: '/console', search: initialSearch, hash },
+    addEventListener(type, handler) {
+      listeners[type] = listeners[type] || [];
+      listeners[type].push(handler);
+    },
+    dispatchEvent(event) {
+      const handlers = listeners[event?.type] || [];
+      handlers.forEach((handler) => handler.call(this, event));
+    },
+    dispatchHashChange() {
+      this.dispatchEvent({ type: 'hashchange', target: this });
+    },
+  };
+};
+const collectNodes = (root, predicate) => {
+  const matches = [];
+  const visit = (node) => {
+    if (!node) return;
+    if (predicate(node)) matches.push(node);
+    (node.children || []).forEach(visit);
+  };
+  visit(root);
+  return matches;
+};
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const initialSearch = '?page=account&accountId=210987654321&q=payments&sync=OutOfSync&account=210987654321';
+const window = createWindow(initialSearch, '#account-group-payments-staging-apne2-ap-northeast-2');
+const history = { replaceState(_state, _title, url) {
+  const [pathAndQuery, hash = ''] = String(url).split('#');
+  const [pathname, query = ''] = pathAndQuery.split('?');
+  window.location.pathname = pathname || '/console';
+  window.location.search = query ? '?' + query : '';
+  window.location.hash = hash ? '#' + hash : '';
+} };
+const fetchCalls = [];
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (String(url) === '/v1/overview/accounts/210987654321') return Promise.resolve({ ok: true, json: () => Promise.resolve(accountDetail) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+(async () => {
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle();
+  await settle();
+  if (fetchCalls.join(', ') !== '/v1/overview/accounts/210987654321') throw new Error('expected account hash route to load only account detail');
+  if (window.location.pathname !== '/console') throw new Error('expected account pathname to stay stable, got ' + window.location.pathname);
+  if (window.location.search !== initialSearch) throw new Error('expected account query to stay stable, got ' + window.location.search);
+  if (window.location.hash !== '#account-group-payments-staging-apne2-ap-northeast-2') throw new Error('expected account hash to stay stable, got ' + window.location.hash);
+  if (!document.lastScrolledTarget || document.lastScrolledTarget.id !== 'account-group-payments-staging-apne2-ap-northeast-2') throw new Error('expected account hash to scroll the matching section into view');
+  const accounts = document.getElementById('accounts');
+  const quickNavChips = collectNodes(accounts, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
+  const currentSectionChip = quickNavChips.find((node) => node.getAttribute('aria-label') === 'Current section: payments · staging-apne2 · ap-northeast-2');
+  if (!currentSectionChip) throw new Error('expected account hash to render the current-section chip');
+  const sectionLinks = collectNodes(accounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#account-'));
+  const summaryLink = sectionLinks.find((node) => node.href === '/console?page=account&q=payments&sync=OutOfSync&account=210987654321&accountId=210987654321#account-summary' && node.textContent === 'Account summary');
+  if (!summaryLink) throw new Error('expected account hash route to keep account summary in On this page links');
+  if (summaryLink.target !== '_self' || summaryLink.rel) throw new Error('expected account summary section link to stay in-shell');
+  if (sectionLinks.find((node) => node.textContent === 'payments · staging-apne2 · ap-northeast-2')) throw new Error('expected active account section to be removed from On this page links');
+  if (!sectionLinks.find((node) => node.textContent === 'payments · staging-apne2 · us-west-2')) throw new Error('expected sibling account section to remain visible in On this page links');
+  window.location.hash = '#account-summary';
+  window.dispatchHashChange();
+  await settle();
+  const updatedAccounts = document.getElementById('accounts');
+  const updatedChips = collectNodes(updatedAccounts, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
+  const summaryChip = updatedChips.find((node) => node.getAttribute('aria-label') === 'Current section: Account summary');
+  if (!summaryChip) throw new Error('expected account hashchange to update the current-section chip');
+  const updatedSectionLinks = collectNodes(updatedAccounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#account-'));
+  if (updatedSectionLinks.find((node) => node.textContent === 'Account summary')) throw new Error('expected updated account current section to be removed from On this page links');
+  if (!updatedSectionLinks.find((node) => node.textContent === 'payments · staging-apne2 · ap-northeast-2')) throw new Error('expected previous account current section to return to On this page links after hashchange');
+  if (!document.lastScrolledTarget || document.lastScrolledTarget.id !== 'account-summary') throw new Error('expected account hashchange to scroll the new current section into view');
 })();
 `
 
