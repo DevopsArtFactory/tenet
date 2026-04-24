@@ -325,7 +325,7 @@ For `ecsService`, Tenet now keeps a bounded in-process hint of the last cluster 
 
 The embedded `Live inspection` panel renders operator-friendly summaries from those payloads:
 - `ecsService`: service identity/status, desired-running-pending counts, additive deployment-configuration fields (`minimumHealthyPercent`, `maximumPercent`, `healthCheckGracePeriodSeconds`) when ECS returns them, active deployments, and recent ECS service events
-- `autoScalingGroup`: group sizing/health settings, additive launch-template metadata, attached target groups, and current instances
+- `autoScalingGroup`: group sizing/health settings, attached target groups, current instances, and additive launch-template details including `launchTemplate.imageId` and `launchTemplate.instanceType` when the live EC2 launch-template lookup resolves them
 - `userDataBootstrapSource`: normalized desired bootstrap source, observed launch-template bootstrap-source marker, the backing Auto Scaling resource Tenet inspected, the launch template version Tenet used for that observation, and an additive in-app handoff to the resolved backing resource drill-down when that resource can be matched safely from the loaded deployment metadata
 - `trafficRoutingResource`: summary-only or live traffic-routing context with explicit resource kind, display name, inspection mode, rollout summary text, and additive live fields for CodeDeploy deployment groups or listeners when AWS access is available
 

@@ -1305,6 +1305,7 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
 	for _, fragment := range []string{
 		"Auto Scaling payloads add `autoScalingGroup`, including optional `launchTemplate` and `mixedInstancesPolicy` metadata",
+		"`launchTemplate.imageId` and `launchTemplate.instanceType`",
 		"`minimumHealthyPercent`",
 		"`maximumPercent`",
 		"`healthCheckGracePeriodSeconds`",
