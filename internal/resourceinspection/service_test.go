@@ -145,9 +145,11 @@ func TestServiceInspect(t *testing.T) {
 					HealthCheckType:        "EC2",
 					HealthCheckGracePeriod: 120,
 					LaunchTemplate: &AutoScalingLaunchTemplateSummary{
-						ID:      "lt-abc123",
-						Name:    "payments-api-prod-candidate",
-						Version: "$Default",
+						ID:           "lt-abc123",
+						Name:         "payments-api-prod-candidate",
+						Version:      "$Default",
+						ImageID:      "ami-abc123",
+						InstanceType: "m6i.large",
 					},
 					MixedInstancesPolicy: &AutoScalingMixedInstancesPolicy{
 						LaunchTemplate: &AutoScalingLaunchTemplateSummary{
@@ -218,9 +220,11 @@ func TestServiceInspect(t *testing.T) {
 					AutoScalingGroupName:          "payments-api-prod-candidate",
 					LaunchTemplateBootstrapSource: "file:userdata/payments-api-prod-legacy.sh",
 					LaunchTemplate: &AutoScalingLaunchTemplateSummary{
-						ID:      "lt-abc123",
-						Name:    "payments-api-prod-candidate",
-						Version: "$Default",
+						ID:           "lt-abc123",
+						Name:         "payments-api-prod-candidate",
+						Version:      "$Default",
+						ImageID:      "ami-legacy123",
+						InstanceType: "m6i.large",
 					},
 				}, nil
 			},
@@ -260,9 +264,11 @@ func TestServiceInspect(t *testing.T) {
 				BackingResourceType:     "candidateAutoScalingGroup",
 				BackingResourceName:     "payments-api-prod-candidate",
 				LaunchTemplate: &AutoScalingLaunchTemplateSummary{
-					ID:      "lt-abc123",
-					Name:    "payments-api-prod-candidate",
-					Version: "$Default",
+					ID:           "lt-abc123",
+					Name:         "payments-api-prod-candidate",
+					Version:      "$Default",
+					ImageID:      "ami-legacy123",
+					InstanceType: "m6i.large",
 				},
 			},
 		}
@@ -1023,20 +1029,22 @@ func TestAutoScalingInspectionFromGroupSortsFieldsAndMapsLaunchTemplates(t *test
 	}
 }
 
-func TestAutoScalingLaunchTemplateBootstrapSourceFromGroupUsesPrimaryLaunchTemplate(t *testing.T) {
+func TestAutoScalingObservedLaunchTemplateFromGroupUsesPrimaryLaunchTemplate(t *testing.T) {
 	client := &fakeEC2LaunchTemplateAPI{
 		output: &ec2.DescribeLaunchTemplateVersionsOutput{
 			LaunchTemplateVersions: []ec2types.LaunchTemplateVersion{
 				{
 					LaunchTemplateData: &ec2types.ResponseLaunchTemplateData{
-						UserData: stringPtr(base64.StdEncoding.EncodeToString([]byte("export TENET_BOOTSTRAP_SOURCE=file:userdata/payments-api-prod.sh"))),
+						ImageId:      stringPtr("ami-abc123"),
+						InstanceType: ec2types.InstanceTypeM6iLarge,
+						UserData:     stringPtr(base64.StdEncoding.EncodeToString([]byte("export TENET_BOOTSTRAP_SOURCE=file:userdata/payments-api-prod.sh"))),
 					},
 				},
 			},
 		},
 	}
 
-	got, err := autoScalingLaunchTemplateBootstrapSourceFromGroup(context.Background(), client, asgtypes.AutoScalingGroup{
+	got, bootstrapSource, err := autoScalingObservedLaunchTemplateFromGroup(context.Background(), client, asgtypes.AutoScalingGroup{
 		LaunchTemplate: &asgtypes.LaunchTemplateSpecification{
 			LaunchTemplateId:   stringPtr("lt-abc123"),
 			LaunchTemplateName: stringPtr("payments-api-prod-candidate"),
@@ -1044,10 +1052,19 @@ func TestAutoScalingLaunchTemplateBootstrapSourceFromGroupUsesPrimaryLaunchTempl
 		},
 	})
 	if err != nil {
-		t.Fatalf("autoScalingLaunchTemplateBootstrapSourceFromGroup returned error: %v", err)
+		t.Fatalf("autoScalingObservedLaunchTemplateFromGroup returned error: %v", err)
 	}
-	if got != "file:userdata/payments-api-prod.sh" {
-		t.Fatalf("expected parsed launch template bootstrap source, got %q", got)
+	if !reflect.DeepEqual(got, &AutoScalingLaunchTemplateSummary{
+		ID:           "lt-abc123",
+		Name:         "payments-api-prod-candidate",
+		Version:      "$Default",
+		ImageID:      "ami-abc123",
+		InstanceType: "m6i.large",
+	}) {
+		t.Fatalf("expected observed launch template summary, got %+v", got)
+	}
+	if bootstrapSource != "file:userdata/payments-api-prod.sh" {
+		t.Fatalf("expected parsed launch template bootstrap source, got %q", bootstrapSource)
 	}
 	if client.input == nil || aws.ToString(client.input.LaunchTemplateId) != "lt-abc123" || !reflect.DeepEqual(client.input.Versions, []string{"$Default"}) {
 		t.Fatalf("unexpected launch template lookup input: %+v", client.input)

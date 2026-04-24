@@ -2436,8 +2436,18 @@
         if (template.id) parts.push(`id ${template.id}`);
         return parts.length ? parts.join(' · ') : '—';
       };
+      const autoScalingObservedLaunchTemplate = (group) => {
+        if (group?.launchTemplate && typeof group.launchTemplate === 'object') {
+          return group.launchTemplate;
+        }
+        if (group?.mixedInstancesPolicy?.launchTemplate && typeof group.mixedInstancesPolicy.launchTemplate === 'object') {
+          return group.mixedInstancesPolicy.launchTemplate;
+        }
+        return null;
+      };
       const renderAutoScalingGroupInspection = (section, deploymentName, resource, result) => {
         const group = result?.autoScalingGroup;
+        const observedLaunchTemplate = autoScalingObservedLaunchTemplate(group);
         const actions = createResourceInspectionActions(section, deploymentName, resource);
         const metadata = createLookupContextGrid(result?.lookupContext, [
           ['Inspection source', metricValue(result?.source)],
@@ -2450,6 +2460,8 @@
           ['Health check grace period', countText(group?.healthCheckGracePeriod)],
           ['Launch template', autoScalingLaunchTemplateText(group?.launchTemplate)],
           ['Mixed instances launch template', autoScalingLaunchTemplateText(group?.mixedInstancesPolicy?.launchTemplate)],
+          ['Observed image ID', textOrDash(observedLaunchTemplate?.imageId)],
+          ['Observed instance type', textOrDash(observedLaunchTemplate?.instanceType)],
           ['Auto Scaling Group ARN', textOrDash(group?.autoScalingGroupArn)],
         ]);
         const targetGroupsSection = createInspectionListSection(
@@ -2563,6 +2575,8 @@
           ['Backing resource type', textOrDash(inspectionDetail?.backingResourceType)],
           ['Backing resource name', textOrDash(inspectionDetail?.backingResourceName)],
           ['Observed launch template', autoScalingLaunchTemplateText(inspectionDetail?.launchTemplate)],
+          ['Observed image ID', textOrDash(inspectionDetail?.launchTemplate?.imageId)],
+          ['Observed instance type', textOrDash(inspectionDetail?.launchTemplate?.instanceType)],
         ]);
         const handoffSection = createBackingResourceHandoffSection(detail, inspectionDetail);
         const summarySection = createElement('section', 'detail-section');
