@@ -4559,7 +4559,7 @@ async function settle() { await Promise.resolve(); await new Promise((resolve) =
 
 const ecsResourceID = 'ecsService::payments-api-staging-service::Primary ECS service';
 const summaryResourceID = 'codeDeployDeploymentGroup::payments-api-staging Deployment Group::Linear traffic shifting deployment group';
-const unsupportedResourceID = 'productionListenerRule::payments-api-staging-prod-listener::Weighted listener rule';
+const weightedListenerRuleResourceID = 'productionListenerRule::payments-api-staging-prod-listener::Weighted listener rule';
 const asgResourceID = 'candidateAutoScalingGroup::payments-api-prod-candidate::Candidate capacity';
 const bootstrapResourceID = 'userDataBootstrapSource::file:userdata/payments-api-prod.sh::Normalized userdata bootstrap source for candidate EC2 capacity';
 const trafficShiftPlanResourceID = 'trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan';
@@ -4611,17 +4611,19 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!summaryText.includes('Observer role configured')) throw new Error('expected traffic-routing inspection to label observer role configuration');
   if (!summaryText.includes('False')) throw new Error('expected traffic-routing inspection to show missing observer role configuration');
 
-  const unsupportedLogsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=productionListenerRule&resourceName=payments-api-staging-prod-listener';
-  const unsupportedInspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=productionListenerRule&resourceName=payments-api-staging-prod-listener';
-  const unsupportedRun = await renderWithFetch('?page=resource&deployment=payments-api-staging&resourceType=productionListenerRule&resourceId=' + encodeURIComponent(unsupportedResourceID), (url) => {
+  const weightedListenerRuleLogsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=productionListenerRule&resourceName=payments-api-staging-prod-listener';
+  const weightedListenerRuleInspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=productionListenerRule&resourceName=payments-api-staging-prod-listener';
+  const weightedListenerRuleRun = await renderWithFetch('?page=resource&deployment=payments-api-staging&resourceType=productionListenerRule&resourceId=' + encodeURIComponent(weightedListenerRuleResourceID), (url) => {
     if (url === ecsDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(unsupportedDetailBody) });
-    if (url === unsupportedLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
-    if (url === unsupportedInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: false }, unavailableReason: 'unsupported_resource_type' }) });
-    throw new Error('unexpected unsupported fetch url: ' + url);
+    if (url === weightedListenerRuleLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === weightedListenerRuleInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'rollout_execution_summary', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: false }, trafficRoutingResource: { kind: 'productionListenerRule', displayName: 'Production listener rule', inspectionMode: 'summary_only', summary: 'Weighted listener rule' } }) });
+    throw new Error('unexpected weighted listener rule fetch url: ' + url);
   });
-  const unsupportedText = collectText(unsupportedRun.document.getElementById('accounts')).join(' | ');
-  if (!unsupportedText.includes('Live inspection is unavailable for this resource.')) throw new Error('expected unsupported inspection state');
-  if (!unsupportedText.includes('Live inspection is not supported for this resource type.')) throw new Error('expected unsupported inspection state to show friendly reason');
+  const weightedListenerRuleText = collectText(weightedListenerRuleRun.document.getElementById('accounts')).join(' | ');
+  if (!weightedListenerRuleText.includes('Rollout summary')) throw new Error('expected weighted listener rule inspection to render rollout summary heading');
+  if (!weightedListenerRuleText.includes('Production listener rule')) throw new Error('expected weighted listener rule inspection to render display name');
+  if (!weightedListenerRuleText.includes('Rollout summary only')) throw new Error('expected weighted listener rule inspection to render summary inspection mode');
+  if (!weightedListenerRuleText.includes('Weighted listener rule')) throw new Error('expected weighted listener rule inspection to render controller summary');
 
   const emptyRun = await renderWithFetch('?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(ecsResourceID), (url) => {
     if (url === ecsDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(ecsDetailBody) });

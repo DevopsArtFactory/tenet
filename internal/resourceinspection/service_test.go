@@ -499,30 +499,76 @@ func TestServiceInspect(t *testing.T) {
 		}
 	})
 
-	t.Run("unsupported resource type returns unavailable payload", func(t *testing.T) {
-		service := NewService(Options{})
-
-		result, err := service.Inspect(context.Background(), Request{
-			DeploymentName:   "payments-api-prod",
-			ResourceType:     "productionListenerRule",
-			ResourceName:     "payments-api-prod-prod-listener",
-			ControlAccountID: "123456789012",
-			TargetAccountID:  "123456789012",
-			Region:           "ap-northeast-2",
+	t.Run("weighted target group routing resources return summary-only inspection payloads", func(t *testing.T) {
+		service := NewService(Options{
+			InspectTrafficRoutingResource: func(context.Context, TrafficRoutingRequest) (TrafficRoutingInspection, error) {
+				t.Fatalf("summary-only weighted target group resources should not invoke the live traffic routing provider")
+				return TrafficRoutingInspection{}, nil
+			},
 		})
-		if err != nil {
-			t.Fatalf("Inspect returned error: %v", err)
+
+		testCases := []struct {
+			name         string
+			resourceType string
+			resourceName string
+			displayName  string
+			summary      string
+		}{
+			{
+				name:         "production listener rule",
+				resourceType: "productionListenerRule",
+				resourceName: "payments-api-prod-prod-listener",
+				displayName:  "Production listener rule",
+				summary:      "Production listener rule operators inspect while Tenet updates weighted forwarding during rollout",
+			},
+			{
+				name:         "active target group",
+				resourceType: "activeTargetGroup",
+				resourceName: "payments-api-prod-active",
+				displayName:  "Active target group",
+				summary:      "Currently active target group receiving production traffic",
+			},
+			{
+				name:         "candidate target group",
+				resourceType: "candidateTargetGroup",
+				resourceName: "payments-api-prod-candidate",
+				displayName:  "Candidate target group",
+				summary:      "Candidate target group Tenet will register and warm before traffic shifting",
+			},
 		}
-		want := Result{
-			DeploymentName:    "payments-api-prod",
-			ResourceType:      "productionListenerRule",
-			ResourceName:      "payments-api-prod-prod-listener",
-			LookupContext:     expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
-			Available:         false,
-			UnavailableReason: "unsupported_resource_type",
-		}
-		if !reflect.DeepEqual(result, want) {
-			t.Fatalf("unexpected unsupported inspection result: %+v", result)
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				result, err := service.Inspect(context.Background(), Request{
+					DeploymentName:      "payments-api-prod",
+					ResourceType:        tc.resourceType,
+					ResourceName:        tc.resourceName,
+					ResourceDescription: tc.summary,
+					ControlAccountID:    "123456789012",
+					TargetAccountID:     "123456789012",
+					Region:              "ap-northeast-2",
+				})
+				if err != nil {
+					t.Fatalf("Inspect returned error: %v", err)
+				}
+				want := Result{
+					DeploymentName: "payments-api-prod",
+					ResourceType:   tc.resourceType,
+					ResourceName:   tc.resourceName,
+					LookupContext:  expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
+					Available:      true,
+					Source:         SourceRolloutSummary,
+					TrafficRoutingResource: &TrafficRoutingInspection{
+						Kind:           tc.resourceType,
+						DisplayName:    tc.displayName,
+						InspectionMode: "summary_only",
+						Summary:        tc.summary,
+					},
+				}
+				if !reflect.DeepEqual(result, want) {
+					t.Fatalf("unexpected weighted target group summary inspection result: %+v", result)
+				}
+			})
 		}
 	})
 
