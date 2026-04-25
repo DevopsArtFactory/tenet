@@ -2378,6 +2378,238 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 
 	runNodeHarness(t, nodeProgram)
 
+	t.Run("refreshes application detail in place", func(t *testing.T) {
+		initialDetailJSON, err := json.Marshal(map[string]any{
+			"name":           "payments-api-staging",
+			"accountName":    "staging-core",
+			"awsAccountId":   "210987654321",
+			"region":         "ap-northeast-2",
+			"appRef":         "payments",
+			"environmentRef": "staging-apne2",
+			"targetType":     "ecs",
+			"strategy":       "linear",
+			"executionMode":  "ecsCodeDeploy",
+			"sync":           map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
+			"health":         map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy while rollout continues"},
+			"rollout": map[string]any{
+				"execution": []map[string]any{
+					{"name": "payments-api-staging ECS Service", "resource": "ecsService", "description": "Primary ECS service for the staging environment"},
+					{"name": "payments-api-staging Deployment Group", "resource": "codeDeployDeploymentGroup", "description": "Linear traffic shifting deployment group"},
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("marshal initial application detail: %v", err)
+		}
+
+		refreshedDetailJSON, err := json.Marshal(map[string]any{
+			"name":           "payments-api-staging",
+			"accountName":    "staging-core",
+			"awsAccountId":   "210987654321",
+			"region":         "ap-northeast-2",
+			"appRef":         "payments",
+			"environmentRef": "staging-apne2",
+			"targetType":     "ecs",
+			"strategy":       "linear",
+			"executionMode":  "ecsCodeDeploy",
+			"sync":           map[string]any{"state": "Reconciling", "reason": "replacement task set is warming up"},
+			"health":         map[string]any{"overall": "Progressing", "summary": "Replacement task set is warming up"},
+			"rollout": map[string]any{
+				"execution": []map[string]any{
+					{"name": "payments-api-canary ECS Service", "resource": "ecsService", "description": "Primary ECS service for the refreshed staging environment"},
+					{"name": "payments-api-staging Deployment Group", "resource": "codeDeployDeploymentGroup", "description": "Linear traffic shifting deployment group"},
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("marshal refreshed application detail: %v", err)
+		}
+
+		eventsJSON, err := json.Marshal(map[string]any{
+			"deploymentName": "payments-api-staging",
+			"events":         []any{},
+		})
+		if err != nil {
+			t.Fatalf("marshal application events body: %v", err)
+		}
+
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const initialDetail = ` + string(initialDetailJSON) + `;
+const refreshedDetail = ` + string(refreshedDetailJSON) + `;
+const eventsBody = ` + string(eventsJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) {
+    nodes.forEach((node) => {
+      if (node == null) return;
+      if (typeof node === 'string') {
+        const textNode = new Element('#text', this.ownerDocument);
+        textNode.textContent = node;
+        node = textNode;
+      }
+      node.parentNode = this;
+      this.children.push(node);
+      if (this.tagName === 'SELECT' && node.tagName === 'OPTION' && (node.selected || this.value === '')) {
+        this.value = node.value;
+      }
+    });
+  }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const createDocument = () => {
+  const document = new Document();
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  return document;
+};
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+async function render(fetchImpl) {
+  const document = createDocument();
+  const fetchCalls = [];
+  const window = { location: { pathname: '/', search: '?page=application&deployment=payments-api-staging&q=payments&sync=OutOfSync&account=210987654321', hash: '' } };
+  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  const fetch = (url) => {
+    fetchCalls.push(String(url));
+    return fetchImpl(String(url));
+  };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle();
+  await settle();
+  return { document, fetchCalls, window };
+}
+(async () => {
+  const applicationURL = '/v1/overview/applications/payments-api-staging';
+  const eventsURL = '/v1/overview/deployments/payments-api-staging/events';
+  const initialSearch = '?page=application&deployment=payments-api-staging&q=payments&sync=OutOfSync&account=210987654321';
+
+  let refreshFetchCount = 0;
+  let resolveRefresh;
+  const loadingView = await render((url) => {
+    if (url === eventsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(eventsBody) });
+    if (url !== applicationURL) throw new Error('unexpected fetch url: ' + url);
+    refreshFetchCount += 1;
+    if (refreshFetchCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve(initialDetail) });
+    if (refreshFetchCount === 2) return new Promise((resolve) => { resolveRefresh = resolve; });
+    throw new Error('unexpected application fetch count: ' + refreshFetchCount);
+  });
+  let toolbarButtons = collectNodes(loadingView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+  let refreshButton = toolbarButtons.find((node) => node.textContent === 'Refresh application detail');
+  if (!refreshButton || refreshButton.disabled) throw new Error('expected application refresh button enabled after initial render');
+  let accountsText = collectText(loadingView.document.getElementById('accounts')).join(' | ');
+  if (!accountsText.includes('payments-api-staging ECS Service')) throw new Error('expected initial application resource before refresh');
+  refreshButton.dispatch('click');
+  await settle();
+  toolbarButtons = collectNodes(loadingView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+  refreshButton = toolbarButtons.find((node) => node.textContent === 'Refresh application detail');
+  if (!refreshButton || !refreshButton.disabled) throw new Error('expected application refresh button disabled only while refresh is in flight');
+  accountsText = collectText(loadingView.document.getElementById('accounts')).join(' | ');
+  if (!accountsText.includes('Refreshing application detail from GET /v1/overview/applications/{deploymentName}…')) throw new Error('expected application refresh loading copy');
+  if (!accountsText.includes('payments-api-staging ECS Service')) throw new Error('expected current application content to stay visible during refresh');
+  if (loadingView.fetchCalls.length !== 3 || loadingView.fetchCalls[0] !== applicationURL || loadingView.fetchCalls[1] !== eventsURL || loadingView.fetchCalls[2] !== applicationURL) throw new Error('expected application refresh to re-fetch only the application detail route');
+  if (loadingView.window.location.search !== initialSearch) throw new Error('expected application refresh to preserve bookmarkable route');
+  resolveRefresh({ ok: true, json: () => Promise.resolve(refreshedDetail) });
+  await settle();
+  await settle();
+  accountsText = collectText(loadingView.document.getElementById('accounts')).join(' | ');
+  if (!accountsText.includes('payments-api-canary ECS Service')) throw new Error('expected refreshed application detail to render in place');
+  if (accountsText.includes('payments-api-staging ECS Service')) throw new Error('expected refreshed application detail to replace stale resource content');
+  toolbarButtons = collectNodes(loadingView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+  refreshButton = toolbarButtons.find((node) => node.textContent === 'Refresh application detail');
+  if (!refreshButton || refreshButton.disabled) throw new Error('expected application refresh button re-enabled after refresh completes');
+
+  let authFetchCount = 0;
+  const authView = await render((url) => {
+    if (url === eventsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(eventsBody) });
+    if (url !== applicationURL) throw new Error('unexpected auth-view fetch url: ' + url);
+    authFetchCount += 1;
+    if (authFetchCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve(initialDetail) });
+    if (authFetchCount === 2) return Promise.resolve({ ok: false, status: 401, text: () => Promise.resolve('unauthenticated: authenticated identity is required for this operator read route') });
+    throw new Error('unexpected auth-view application fetch count: ' + authFetchCount);
+  });
+  toolbarButtons = collectNodes(authView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+  refreshButton = toolbarButtons.find((node) => node.textContent === 'Refresh application detail');
+  if (!refreshButton) throw new Error('expected application refresh button in auth error scenario');
+  refreshButton.dispatch('click');
+  await settle();
+  await settle();
+  accountsText = collectText(authView.document.getElementById('accounts')).join(' | ');
+  if (!accountsText.includes('Authenticated operator required')) throw new Error('expected application refresh auth heading');
+  if (!accountsText.includes('Tenet rejected GET /v1/overview/applications/payments-api-staging because authenticated identity is required on this operator read route.')) throw new Error('expected application refresh trusted-front-door guidance');
+  if (!accountsText.includes('Current application detail remains visible below.')) throw new Error('expected application refresh auth guidance to keep stale-content copy');
+  if (!accountsText.includes('payments-api-staging ECS Service')) throw new Error('expected application content to remain visible after auth failure');
+  if (accountsText.includes('Failed to refresh application detail:')) throw new Error('expected application auth refresh to avoid generic refresh failure copy');
+  toolbarButtons = collectNodes(authView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+  refreshButton = toolbarButtons.find((node) => node.textContent === 'Refresh application detail');
+  if (!refreshButton || refreshButton.disabled) throw new Error('expected application refresh button re-enabled after auth failure');
+  if (authFetchCount !== 2) throw new Error('expected application auth refresh to retry exactly once');
+  if (authView.window.location.search !== initialSearch) throw new Error('expected application auth refresh to preserve bookmarkable route');
+  if (authView.fetchCalls.filter((url) => url === eventsURL).length !== 1) throw new Error('expected application auth refresh not to refetch controller runtime events');
+
+  let errorFetchCount = 0;
+  const errorView = await render((url) => {
+    if (url === eventsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(eventsBody) });
+    if (url !== applicationURL) throw new Error('unexpected error-view fetch url: ' + url);
+    errorFetchCount += 1;
+    if (errorFetchCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve(initialDetail) });
+    if (errorFetchCount === 2) return Promise.resolve({ ok: false, status: 500, text: () => Promise.resolve('boom') });
+    throw new Error('unexpected error-view application fetch count: ' + errorFetchCount);
+  });
+  toolbarButtons = collectNodes(errorView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+  refreshButton = toolbarButtons.find((node) => node.textContent === 'Refresh application detail');
+  if (!refreshButton) throw new Error('expected application refresh button in generic error scenario');
+  refreshButton.dispatch('click');
+  await settle();
+  await settle();
+  accountsText = collectText(errorView.document.getElementById('accounts')).join(' | ');
+  if (!accountsText.includes('Failed to refresh application detail: application detail request failed (500): boom')) throw new Error('expected application refresh error copy');
+  if (!accountsText.includes('payments-api-staging ECS Service')) throw new Error('expected current application content to remain visible after refresh error');
+  toolbarButtons = collectNodes(errorView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+  refreshButton = toolbarButtons.find((node) => node.textContent === 'Refresh application detail');
+  if (!refreshButton || refreshButton.disabled) throw new Error('expected application refresh button re-enabled after refresh error');
+  if (errorFetchCount !== 2) throw new Error('expected application refresh error to retry exactly once');
+  if (errorView.window.location.search !== initialSearch) throw new Error('expected application refresh error state to preserve bookmarkable route');
+  if (errorView.fetchCalls.filter((url) => url === eventsURL).length !== 1) throw new Error('expected application refresh error not to refetch controller runtime events');
+})();
+`
+
+		runNodeHarness(t, nodeProgram)
+	})
+
 	t.Run("suppresses broken resource links when detail name missing", func(t *testing.T) {
 		detailWithoutNameJSON, err := json.Marshal(map[string]any{
 			"accountName":    "staging-core",

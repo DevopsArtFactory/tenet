@@ -999,7 +999,12 @@ assert "groupSection.id = accountGroupSectionID(group);" in account_ui, account_
 assert "href: buildPageSectionURL('account', sectionID, { accountId: accountID })," in account_ui, account_ui
 assert "failure: 'account detail request failed'," in ui, ui
 assert "const applicationDetail = currentPageState.page === 'application' ? fetchApplicationDetail(currentPageState.deployment) : fetchDeploymentDetail(currentPageState.deployment);" in application_ui, application_ui
-assert "const renderApplicationDetailPage = (detail) => {" in application_ui, application_ui
+assert "const applicationDetailReadRoute = (deploymentName) => `GET /v1/overview/applications/${deploymentName || '{deploymentName}'}`;" in application_ui, application_ui
+assert "const createApplicationDetailActions = (applicationState = null) => [" in application_ui, application_ui
+assert 'Refresh application detail' in application_ui, application_ui
+assert 'Refreshing application detail from GET /v1/overview/applications/{deploymentName}…' in application_ui, application_ui
+assert 'Failed to refresh application detail:' in application_ui, application_ui
+assert "const renderApplicationDetailPage = (detail, applicationState = null) => {" in application_ui, application_ui
 assert "const breadcrumb = createDeploymentBreadcrumb({" in application_ui, application_ui
 assert "const nonEmptyResourceSections = (detail) => groupResourceSections(detail).filter((group) => Array.isArray(group?.resources) && group.resources.length > 0);" in application_ui, application_ui
 assert "const resourceGroups = nonEmptyResourceSections(detail);" in application_ui, application_ui

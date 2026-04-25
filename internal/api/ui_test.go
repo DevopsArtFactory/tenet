@@ -514,7 +514,7 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"Traffic routing",
 		"Config and access",
 		"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')",
-		"const renderApplicationDetailPage = (detail) => {",
+		"const renderApplicationDetailPage = (detail, applicationState = null) => {",
 		"const applicationSectionIDs = {",
 		"const createApplicationQuickNav = (detail, sectionLinks = []) => {",
 		"const deploymentName = detail.name || currentPageState.deployment || '';",
@@ -576,6 +576,13 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {",
 		"unavailable: 'application detail unavailable',",
 		"failure: 'application detail request failed',",
+		"const applicationDetailReadRoute = (deploymentName) => `GET /v1/overview/applications/${deploymentName || '{deploymentName}'}`;",
+		"const createApplicationDetailActions = (applicationState = null) => [",
+		"'Refresh application detail'",
+		"const applicationDetailRefreshState = (applicationState = null) => {",
+		"'Refreshing application detail from GET /v1/overview/applications/{deploymentName}…'",
+		"Current application detail remains visible below.",
+		"Failed to refresh application detail:",
 		"const buildAuditLogsRoute = ({ deploymentName = '', action = '', limit = 0 } = {}) => {",
 		"const params = new URLSearchParams();",
 		"if (deploymentName) params.set('deployment', deploymentName);",
@@ -659,7 +666,8 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"} else if (currentPageState.page === 'audit') {",
 		"loadAuditLogsPage().catch(() => {});",
 		"if (currentPageState.page === 'application') {",
-		"renderApplicationDetailPage(detail);",
+		"const renderApplicationWorkspace = () => {",
+		"renderApplicationDetailPage(applicationState.detail, applicationState);",
 		"if (currentPageState.page === 'resource') {",
 		"renderResourceDetailPage(detail);",
 		"if (currentPageState.page === 'drift') {",
@@ -1115,7 +1123,8 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"loadPlanPreviewRecord(currentPageState.planId).catch(() => {});",
 		"loadApplyRequestRecord(currentPageState.applyId).catch(() => {});",
 		"if (currentPageState.page === 'application') {",
-		"renderApplicationDetailPage(detail);",
+		"const renderApplicationWorkspace = () => {",
+		"renderApplicationDetailPage(applicationState.detail, applicationState);",
 		"if (currentPageState.page === 'resource') {",
 		"renderResourceDetailPage(detail);",
 		"if (currentPageState.page === 'drift') {",
@@ -1657,6 +1666,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Refresh account detail' in account_ui, account_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh account detail")
 	}
+	if !strings.Contains(text, "assert 'Refresh application detail' in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh application detail")
+	}
 	if !strings.Contains(text, "assert 'Clear drift filters' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Clear drift filters")
 	}
@@ -1675,8 +1687,14 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Refreshing account detail from GET /v1/overview/accounts/{awsAccountId}…' in account_ui, account_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains account refresh loading copy")
 	}
+	if !strings.Contains(text, "assert 'Refreshing application detail from GET /v1/overview/applications/{deploymentName}…' in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains application refresh loading copy")
+	}
 	if !strings.Contains(text, "assert 'Failed to refresh account detail:' in account_ui, account_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains account refresh error copy")
+	}
+	if !strings.Contains(text, "assert 'Failed to refresh application detail:' in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains application refresh error copy")
 	}
 	if !strings.Contains(text, "application_ui=$(curl -fsS \"http://$HOST:$PORT/?page=application&deployment=payments-api-prod\")") {
 		t.Fatalf("expected smoke-local.sh to fetch bookmarkable application page")
