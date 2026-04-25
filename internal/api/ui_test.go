@@ -2314,6 +2314,30 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			t.Fatalf("expected smoke-docker.sh to lock bookmarkable account quick-nav fragment %q", fragment)
 		}
 	}
+	for _, fragment := range []string{
+		"for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui):",
+		"assert_fragments(\"resource_ui\", body, operator_read_auth_fragments + (",
+		"\"const createResourceLogsActions = (section, deploymentName, resource, isLoading = false) => [\",",
+		"\"'Refresh recent logs'\",",
+		"\"const buildResourceLogsRoute = (deploymentName, resource) => {\",",
+		"\"const resourceLogsReadRoute = (deploymentName, resource) => `GET ${buildResourceLogsRoute(deploymentName, resource)}`;\",",
+		"\"renderResourceLogsState(section, 'Loading recent logs…', '', [], [], loadingActions);\",",
+		"\"`Failed to load recent logs: ${error.message}`\",",
+		"\"'Recent logs'\",",
+		"\"resourceLogsReadRoute(deploymentName, resource)\",",
+		"\"const createResourceInspectionActions = (section, detail, resource, isLoading = false) => {\",",
+		"\"'Refresh live inspection'\",",
+		"\"const buildResourceInspectionRoute = (deploymentName, resource) => {\",",
+		"\"const resourceInspectionReadRoute = (deploymentName, resource) => `GET ${buildResourceInspectionRoute(deploymentName, resource)}`;\",",
+		"\"renderResourceInspectionState(section, 'Loading live inspection…', '', [], [], loadingActions);\",",
+		"\"`Failed to load live inspection: ${error.message}`\",",
+		"\"'Live inspection'\",",
+		"\"resourceInspectionReadRoute(deploymentName, resource)\",",
+	} {
+		if !strings.Contains(dockerSmoke, fragment) {
+			t.Fatalf("expected smoke-docker.sh to lock resource lazy-panel refresh fragment %q", fragment)
+		}
+	}
 }
 
 func TestOverviewDocsDescribeAccountSectionNavigation(t *testing.T) {
@@ -2418,6 +2442,31 @@ func TestOverviewDocsDescribeResourceLazyPanelRefreshAndAuthGuidance(t *testing.
 			"re-run only that panel's backend route in place",
 			"leaves the sibling panel and the rest of the resource page visible",
 			"replaces generic fetch-error copy with the same trusted-front-door / access-denied guidance used on other embedded read paths",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
+	}
+}
+
+func TestDockerSmokeDocsDescribeResourceLazyPanelRefreshCoverage(t *testing.T) {
+	files := map[string][]string{
+		"../../README.md": {
+			"compose-backed shell coverage now also locks the bookmarkable resource page's existing `Refresh recent logs` and `Refresh live inspection` lazy-panel route-builder/loading/error/auth-guidance hooks",
+		},
+		"../../docs/features/overview-dashboard.md": {
+			"`make smoke-docker`, including raw shell-contract checks for the root applications overview refresh hooks",
+			"the bookmarkable resource page's lazy-panel refresh hooks (`Refresh recent logs`, `Refresh live inspection`, their route-builder helpers, and the loading/error/auth-guidance copy)",
 		},
 	}
 
