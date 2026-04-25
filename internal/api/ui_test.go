@@ -2350,6 +2350,15 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 	}
 	for _, fragment := range []string{
 		"for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui):",
+		"\"const renderResourceDetailPage = (detail, resourceState = null) => {\",",
+		"\"const resourceDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;\",",
+		"\"const createResourceDetailActions = (resourceState = null) => [\",",
+		"\"Refresh resource detail\",",
+		"\"Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…\",",
+		"\"Current resource detail remains visible below.\",",
+		"\"Failed to refresh resource detail:\",",
+		"\"renderResourceDetailPage(resourceState.detail, resourceState);\",",
+		"\"return fetchDeploymentDetail(deploymentName)\",",
 		"assert_fragments(\"resource_ui\", body, operator_read_auth_fragments + (",
 		"\"const createResourceLogsActions = (section, deploymentName, resource, isLoading = false) => [\",",
 		"\"'Refresh recent logs'\",",
@@ -2369,7 +2378,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		"\"resourceInspectionReadRoute(deploymentName, resource)\",",
 	} {
 		if !strings.Contains(dockerSmoke, fragment) {
-			t.Fatalf("expected smoke-docker.sh to lock resource lazy-panel refresh fragment %q", fragment)
+			t.Fatalf("expected smoke-docker.sh to lock resource refresh fragment %q", fragment)
 		}
 	}
 }
@@ -2493,13 +2502,14 @@ func TestOverviewDocsDescribeResourceLazyPanelRefreshAndAuthGuidance(t *testing.
 	}
 }
 
-func TestDockerSmokeDocsDescribeResourceLazyPanelRefreshCoverage(t *testing.T) {
+func TestDockerSmokeDocsDescribeResourceRefreshCoverage(t *testing.T) {
 	files := map[string][]string{
 		"../../README.md": {
-			"compose-backed shell coverage now also locks the bookmarkable resource page's existing `Refresh recent logs` and `Refresh live inspection` lazy-panel route-builder/loading/error/auth-guidance hooks",
+			"compose-backed shell coverage now also locks the bookmarkable resource page's top-level `Refresh resource detail` shell (`GET /v1/overview/deployments/{deploymentName}` route-builder text plus the preserved-detail loading/error copy) alongside the existing `Refresh recent logs` and `Refresh live inspection` lazy-panel route-builder/loading/error/auth-guidance hooks",
 		},
 		"../../docs/features/overview-dashboard.md": {
 			"`make smoke-docker`, including raw shell-contract checks for the root applications overview refresh hooks",
+			"the bookmarkable resource page's top-level refresh shell (`Refresh resource detail`, the `GET /v1/overview/deployments/{deploymentName}` route-builder text, and the preserved-detail loading/error copy)",
 			"the bookmarkable resource page's lazy-panel refresh hooks (`Refresh recent logs`, `Refresh live inspection`, their route-builder helpers, and the loading/error/auth-guidance copy)",
 		},
 	}
