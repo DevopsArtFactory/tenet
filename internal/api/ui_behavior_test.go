@@ -892,6 +892,9 @@ async function render(search, fetchImpl) {
   if (!overviewLinks.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Open application' && node.target === '_self')) {
     throw new Error('expected applications overview application drill-down link to preserve /console pathname');
   }
+  if (!overviewLinks.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Audit log' && node.target === '_self')) {
+    throw new Error('expected applications overview deployment-scoped audit link to preserve /console pathname');
+  }
 
   const accountView = await render('?page=account&accountId=210987654321&q=payments&sync=OutOfSync&account=210987654321', (url) => {
     if (url === '/v1/overview/accounts/210987654321') return Promise.resolve({ ok: true, json: () => Promise.resolve(accountDetail) });

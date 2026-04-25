@@ -213,6 +213,7 @@ func TestEmbeddedUIIncludesQuickLinksToDeploymentReadModels(t *testing.T) {
 		"link.rel = target === '_blank' ? 'noreferrer noopener' : '';",
 		"link.href = href;",
 		"const detailLinks = createElement('div', 'row-links row-links-shell');",
+		"createNavLink(buildPageURL('audit', { deployment: deployment.name }), 'Audit log', '_self')",
 		"createNavLink(`/v1/overview/deployments/${encodeURIComponent(deployment.name)}`, 'Overview JSON')",
 		"createNavLink(`/v1/status/deployments/${encodeURIComponent(deployment.name)}`, 'Status JSON')",
 		"detailLinks.append(",
