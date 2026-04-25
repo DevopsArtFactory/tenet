@@ -809,7 +809,21 @@ assert_fragments("account_ui", account_ui, operator_read_auth_fragments + (
     "const renderOperatorReadFailurePage = (pageLabel, route, error) => {",
     "renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);",
 ))
-assert "fetchApplicationsOverview()" in ui, ui
+assert_fragments("ui", ui, (
+    "fetchApplicationsOverview()",
+    "const applicationsOverviewReadRoute = () => 'GET /v1/overview/applications';",
+    "const createApplicationsOverviewActions = (overviewState = null) => [",
+    "'Refresh applications overview'",
+    "overviewState?.status === 'loading'",
+    "() => overviewState?.onRefresh?.().catch(() => {})",
+    "const applicationsOverviewRefreshState = (overviewState = null) => {",
+    "'Refreshing applications overview from GET /v1/overview/applications…'",
+    "Current applications overview remains visible below.",
+    "Failed to refresh applications overview:",
+    "createApplicationsOverviewActions(applicationsOverviewState).forEach((action) => {",
+    "const refreshState = applicationsOverviewRefreshState(applicationsOverviewState);",
+    "actions.append(createNavLink(buildPageURL('audit'), 'Open audit log', '_self'));",
+))
 assert "const fetchAccountDetail = (accountID) => fetchEmbeddedReadRouteJSON(`/v1/overview/accounts/${encodeURIComponent(accountID)}`, {" in account_ui, account_ui
 assert "fetchAccountDetail(currentPageState.accountId)" in account_ui, account_ui
 assert_fragments("account_ui", account_ui, (
