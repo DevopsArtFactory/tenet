@@ -1473,6 +1473,39 @@
         }
         return null;
       };
+      const resourceDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;
+      const createResourceDetailActions = (resourceState = null) => [
+        createRefreshButton(
+          'Refresh resource detail',
+          resourceState?.status === 'loading' || !(resourceState?.detail?.name || currentPageState.deployment),
+          () => resourceState?.onRefresh?.().catch(() => {}),
+        ),
+      ];
+      const resourceDetailRefreshState = (resourceState = null) => {
+        if (resourceState?.status === 'loading') {
+          return {
+            heading: '',
+            message: 'Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…',
+            className: '',
+          };
+        }
+        if (resourceState?.status === 'error') {
+          const deploymentName = resourceState?.detail?.name || currentPageState.deployment || '';
+          if (operatorReadFailureHeading(resourceState.error)) {
+            return {
+              heading: operatorReadFailureHeading(resourceState.error),
+              message: `${operatorReadFailureMessage(resourceDetailReadRoute(deploymentName), resourceState.error)} Current resource detail remains visible below.`,
+              className: 'error',
+            };
+          }
+          return {
+            heading: '',
+            message: `Failed to refresh resource detail: ${resourceState.error?.message || 'unknown error'}`,
+            className: 'error',
+          };
+        }
+        return null;
+      };
       const renderApplicationDetailPage = (detail, applicationState = null) => {
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
@@ -1997,7 +2030,7 @@
         strip.append(head, groups);
         return strip;
       };
-      const renderResourceDetailPage = (detail) => {
+      const renderResourceDetailPage = (detail, resourceState = null) => {
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
         const root = document.getElementById('accounts');
@@ -2020,7 +2053,12 @@
         const backLink = createNavLink(buildPageURL('application', { deployment: detail.name || currentPageState.deployment || '' }), 'Back to application');
         backLink.target = '_self';
         backLink.rel = '';
-        toolbar.replaceChildren(backLink);
+        const toolbarActions = createElement('div', 'toolbar-actions');
+        toolbarActions.append(backLink);
+        createResourceDetailActions(resourceState).forEach((action) => {
+          if (action) toolbarActions.append(action);
+        });
+        toolbar.replaceChildren(toolbarActions);
         const detailSummary = createElement('article', 'account');
         detailSummary.append(
           createElement('div', 'label', 'Resource detail'),
@@ -2165,6 +2203,15 @@
         renderResourceLogsSection(logsSection, detail.name || currentPageState.deployment || '', resource).catch(() => {});
 
         const quickNav = createResourceQuickNav(detail, resource, resourceSectionLinks);
+        const refreshState = resourceDetailRefreshState(resourceState);
+        if (refreshState?.heading) {
+          page.append(createElement('div', refreshState.className ? `detail-state ${refreshState.className}` : 'detail-state', refreshState.heading));
+          if (refreshState.message) {
+            page.append(createElement('div', 'detail-condition-meta', refreshState.message));
+          }
+        } else if (refreshState?.message) {
+          page.append(createElement('div', refreshState.className ? `detail-state ${refreshState.className}` : 'detail-state', refreshState.message));
+        }
         page.append(quickNav, shell, historySection, executionSection, conditionsSection, inspectionSection, logsSection);
         root.replaceChildren(page);
         activeResourceQuickNavSync = typeof quickNav.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;
@@ -5257,7 +5304,37 @@
                 return;
               }
               if (currentPageState.page === 'resource') {
-                renderResourceDetailPage(detail);
+                const resourceState = {
+                  status: 'idle',
+                  detail,
+                  error: null,
+                  onRefresh: null,
+                };
+                const renderResourceWorkspace = () => {
+                  renderResourceDetailPage(resourceState.detail, resourceState);
+                };
+                resourceState.onRefresh = () => {
+                  const deploymentName = resourceState.detail?.name || currentPageState.deployment || '';
+                  if (!deploymentName || resourceState.status === 'loading') return Promise.resolve(resourceState.detail);
+                  resourceState.status = 'loading';
+                  resourceState.error = null;
+                  renderResourceWorkspace();
+                  return fetchDeploymentDetail(deploymentName)
+                    .then((nextDetail) => {
+                      resourceState.status = 'idle';
+                      resourceState.detail = nextDetail;
+                      resourceState.error = null;
+                      renderResourceWorkspace();
+                      return nextDetail;
+                    })
+                    .catch((error) => {
+                      resourceState.status = 'error';
+                      resourceState.error = error;
+                      renderResourceWorkspace();
+                      throw error;
+                    });
+                };
+                renderResourceWorkspace();
                 return;
               }
               if (currentPageState.page === 'drift') {
