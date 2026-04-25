@@ -369,6 +369,7 @@ Current coverage includes:
 - Node-backed behavior tests in `internal/api/ui_behavior_test.go`
 - embedded-script syntax validation by extracting the `<script>` block from `internal/api/web/index.html` and running `node --check` on the extracted JavaScript
 - `make smoke-local`
+- `make smoke-docker`, including raw shell-contract checks for the root applications overview refresh hooks (`Refresh applications overview`, the `GET /v1/overview/applications` route-builder text, and the loading/error copy) rather than runtime DOM assertions
 
 When changing the overview UI, preserve all of the following:
 - URL normalization for filters
