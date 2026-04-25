@@ -222,8 +222,8 @@ restart_api_with_apply_mode() {
 restart_api_with_frontdoor_read_auth() {
   TENET_AWS_ENABLE_APPLY=false \
   TENET_API_TRUST_AUTHENTICATED_HEADERS=true \
-  TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=false \
-  TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=false \
+  TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true \
+  TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true \
   TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true \
   "${COMPOSE[@]}" up -d api >/dev/null
   wait_for_api_health
@@ -1008,12 +1008,14 @@ restarted_plan_preview=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-prod" \
   "$API_BASE_URL/v1/plans/$plan_id")
 restarted_apply_record=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-prod" \
   "$API_BASE_URL/v1/applies/$apply_id")
 
@@ -1072,24 +1074,28 @@ auth_forbidden_status_read_status=$(curl -sS -o "$AUTH_FORBIDDEN_STATUS_READ_BOD
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: worker-prod" \
   "$API_BASE_URL/v1/status/deployments/payments-api-staging")
 auth_forbidden_events_status=$(curl -sS -o "$AUTH_FORBIDDEN_EVENTS_BODY" -w "%{http_code}" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: worker-prod" \
   "$API_BASE_URL/v1/overview/deployments/payments-api-staging/events")
 auth_forbidden_resource_logs_status=$(curl -sS -o "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" -w "%{http_code}" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-staging" \
   "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 auth_forbidden_resource_inspection_status=$(curl -sS -o "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" -w "%{http_code}" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-staging" \
   "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service")
 auth_forbidden_transition_status=$(curl -sS -o "$AUTH_FORBIDDEN_TRANSITION_BODY" -w "%{http_code}" \
@@ -1098,6 +1104,7 @@ auth_forbidden_transition_status=$(curl -sS -o "$AUTH_FORBIDDEN_TRANSITION_BODY"
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: operator" \
   -H "X-Tenet-Authorized-Deployments: worker-prod" \
   --data '{"status":"running","step":1}' \
   "$API_BASE_URL/v1/applies/$apply_id/transitions")
@@ -1105,58 +1112,68 @@ allowed_status_read=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
   "$API_BASE_URL/v1/status/deployments/payments-api-staging")
 allowed_events_read=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
   "$API_BASE_URL/v1/overview/deployments/payments-api-staging/events")
 allowed_resource_logs=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: worker-prod, payments-api-staging" \
   "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 allowed_resource_inspection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: worker-prod, payments-api-staging" \
   "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service")
 filtered_applications_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-prod, worker-prod" \
   "$API_BASE_URL/v1/overview/applications")
 filtered_status_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-prod, worker-prod" \
   "$API_BASE_URL/v1/status/deployments")
 filtered_audit_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-prod, payments-api-staging" \
   "$API_BASE_URL/v1/audit-logs")
 empty_applications_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   "$API_BASE_URL/v1/overview/applications")
 empty_status_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   "$API_BASE_URL/v1/status/deployments")
 empty_audit_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
   "$API_BASE_URL/v1/audit-logs?action=apply.requested")
 restarted_plan_preview_path=$(write_payload restarted-plan-preview.json "$restarted_plan_preview")
 restarted_apply_record_path=$(write_payload restarted-apply-record.json "$restarted_apply_record")
