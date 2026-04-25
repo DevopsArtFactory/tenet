@@ -1000,6 +1000,26 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui):
         "No additional section links are available for this resource.",
     ):
         assert fragment in body, fragment
+    assert_fragments("resource_ui", body, operator_read_auth_fragments + (
+        "const createResourceLogsActions = (section, deploymentName, resource, isLoading = false) => [",
+        "'Refresh recent logs'",
+        "const buildResourceLogsRoute = (deploymentName, resource) => {",
+        "const resourceLogsReadRoute = (deploymentName, resource) => `GET ${buildResourceLogsRoute(deploymentName, resource)}`;",
+        "renderResourceLogsState(section, 'Loading recent logs…', '', [], [], loadingActions);",
+        "`Failed to load recent logs: ${error.message}`",
+        "renderOperatorReadFailurePanel(",
+        "'Recent logs'",
+        "resourceLogsReadRoute(deploymentName, resource)",
+        "const createResourceInspectionActions = (section, detail, resource, isLoading = false) => {",
+        "'Refresh live inspection'",
+        "const buildResourceInspectionRoute = (deploymentName, resource) => {",
+        "const resourceInspectionReadRoute = (deploymentName, resource) => `GET ${buildResourceInspectionRoute(deploymentName, resource)}`;",
+        "renderResourceInspectionState(section, 'Loading live inspection…', '', [], [], loadingActions);",
+        "`Failed to load live inspection: ${error.message}`",
+        "renderOperatorReadFailurePanel(",
+        "'Live inspection'",
+        "resourceInspectionReadRoute(deploymentName, resource)",
+    ))
 
 for fragment in (
     "Plan preview actions",
