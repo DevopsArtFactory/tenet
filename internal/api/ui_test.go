@@ -2215,6 +2215,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"survive the Compose `api` service restart",
 			"`TENET_AWS_ENABLE_APPLY=true make docker-up`",
 			"correlated bookmarkable shell reads for the application drill-down, account drill-down, drift workspace, deployment-scoped audit workspace, and bookmarkable plan/apply workspace",
+			"bookmarkable application-detail status summary shell",
 			"The raw embedded shell/docs contract also keeps the labels `Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Lookup region`, and `Observer role configured` present",
 			"temp files via the shared `write_payload` helper",
 			"The compose-backed smoke now covers that shipped bootstrap-source drill-down directly",
@@ -2248,6 +2249,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"controller-authored `managedDrift[]` evidence in `GET /v1/overview/deployments/payments-api-prod` with stable `field` / `desired` / `actual` / `severity` rows and aligned `runtimeSummary.managedDrift`",
 			"The same direct-process actor coverage by sending both header families with conflicting identities on a `payments-api-staging` plan/apply flow",
 			"Bookmarkable application, account, drift, audit, and plan workspace URLs, checking raw embedded application/account/resource/drift/audit/plan shell HTML/script fragments instead of runtime DOM text",
+			"bookmarkable application-detail status summary shell",
 			"Drift page source/summary/table copy, audit filter copy such as `Audit filters: action apply.requested · limit 2`, the `Clear audit filters` recovery affordance, and correlated `http_request` logs",
 			"Trusted front-door auth by restarting the Compose `api` service",
 			"authenticated but unauthorized transitions fail with `403`",
@@ -2317,6 +2319,13 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 	}
 	for _, fragment := range []string{
 		"assert_fragments(\"application_ui\", application_ui, (",
+		"\"const applicationStatusSignal = (detail) => {\",",
+		"\"const applicationRuntimeEventSummary = (detail) => {\",",
+		"\"const createApplicationStatusSummary = (detail, resourceGroups = []) => {\",",
+		"\"Current application status\",",
+		"\"Application rollout context:\",",
+		"\"['Runtime events', applicationRuntimeEventSummary(detail)],\",",
+		"\"page.append(createApplicationStatusSummary(detail, resourceGroups));\",",
 		"\"Quick navigation\",",
 		"\"Applications overview\",",
 		"\"Current destination\",",
@@ -2532,13 +2541,13 @@ func TestDockerSmokeDocsDescribeEmbeddedReadAuthGuidanceCoverage(t *testing.T) {
 	files := map[string][]string{
 		"../../README.md": {
 			"The same bookmarkable application, account, traffic-shift resource, ECS resource, drift, audit, and plan routes locked by direct-process smoke",
-			"the bookmarkable application shell still exposes the `_self` `Applications overview` return path plus the non-click `Application detail` destination chip",
+			"the bookmarkable application shell still exposes the `_self` `Applications overview` return path, the non-click `Application detail` destination chip, and the bookmarkable application-detail status summary shell",
 			"raw embedded application/account/resource/drift/audit/plan shell HTML/script fragments instead of runtime DOM text",
 			"the shipped operator read-auth guidance hooks for initial `401` / `403` failures remain present",
 		},
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
 			"Bookmarkable application, account, drift, audit, and plan workspace URLs, checking raw embedded application/account/resource/drift/audit/plan shell HTML/script fragments instead of runtime DOM text",
-			"the bookmarkable application shell still exposes the `_self` `Applications overview` return path plus the non-click `Application detail` destination chip",
+			"the bookmarkable application shell still exposes the `_self` `Applications overview` return path plus the non-click `Application detail` destination chip, and the same smoke now explicitly locks the bookmarkable application-detail status summary shell",
 			"the shipped operator read-auth guidance hooks for initial `401` / `403` failures remain present",
 		},
 	}
