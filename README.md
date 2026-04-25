@@ -324,6 +324,8 @@ Supported traffic-routing inspection currently covers:
 - `productionListenerRule`
 - `activeTargetGroup`
 - `candidateTargetGroup`
+- `blueTaskSetTargetGroup`
+- `greenTaskSetTargetGroup`
 - `trafficShiftPlan`
 
 Within one running Tenet API process, repeated successful live inspections for `codeDeployDeploymentGroup`, `productionListener`, and `testListener` now reuse a bounded in-process cache keyed by `(region, target account, observer role, resource type, resource name)`. Summary-only fallbacks and unavailable outcomes are still recomputed or returned through the existing non-cached path.
@@ -344,7 +346,7 @@ Resource-inspection responses keep the contract explicit for UI consumers:
 - traffic-routing payloads add `trafficRoutingResource`
 
 Traffic-routing inspection stays local-friendly without changing the route shape:
-- `trafficShiftPlan`, `productionListenerRule`, `activeTargetGroup`, and `candidateTargetGroup` remain `summary_only`
+- `trafficShiftPlan`, `productionListenerRule`, `activeTargetGroup`, `candidateTargetGroup`, `blueTaskSetTargetGroup`, and `greenTaskSetTargetGroup` remain `summary_only`
 - `codeDeployDeploymentGroup`, `productionListener`, and `testListener` stay `summary_only` when AWS inspection is disabled, and switch to `inspectionMode=live` with additive `codeDeployDeploymentGroup` or `listener` details when live AWS access succeeds
 - AWS-side traffic-routing failures still return `available=false` with an explicit `unavailableReason` and `lookupContext`
 

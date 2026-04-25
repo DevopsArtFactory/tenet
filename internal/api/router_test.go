@@ -4930,6 +4930,70 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 	})
 
+	t.Run("returns CodeDeploy task-set target-group summary payload", func(t *testing.T) {
+		expected := resourceinspection.Result{
+			DeploymentName: "payments-api-staging",
+			ResourceType:   "blueTaskSetTargetGroup",
+			ResourceName:   "payments-api-staging-blue",
+			LookupContext: resourceinspection.LookupContext{
+				Region:                 "ap-northeast-2",
+				ControlAccountID:       "123456789012",
+				TargetAccountID:        "210987654321",
+				CrossAccount:           true,
+				ObserverRoleConfigured: false,
+			},
+			Available: true,
+			Source:    resourceinspection.SourceRolloutSummary,
+			TrafficRoutingResource: &resourceinspection.TrafficRoutingInspection{
+				Kind:           "blueTaskSetTargetGroup",
+				DisplayName:    "Blue task set target group",
+				InspectionMode: "summary_only",
+				Summary:        "Blue task set target group CodeDeploy treats as the live ECS traffic destination (style: linear; qualifiers: min healthy 80% and warmup 45s)",
+			},
+		}
+
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "payments-api-staging" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+				return expected, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=blueTaskSetTargetGroup&resourceName=payments-api-staging-blue", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw CodeDeploy task-set target-group inspection payload: %v", err)
+		}
+		trafficRoutingResource, ok := raw["trafficRoutingResource"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected trafficRoutingResource object in payload, got %#v", raw["trafficRoutingResource"])
+		}
+		for key, want := range map[string]any{
+			"kind":           "blueTaskSetTargetGroup",
+			"displayName":    "Blue task set target group",
+			"inspectionMode": "summary_only",
+			"summary":        "Blue task set target group CodeDeploy treats as the live ECS traffic destination (style: linear; qualifiers: min healthy 80% and warmup 45s)",
+		} {
+			if got := trafficRoutingResource[key]; !reflect.DeepEqual(got, want) {
+				t.Fatalf("expected trafficRoutingResource[%q]=%v, got %#v", key, want, got)
+			}
+		}
+	})
+
 	t.Run("returns auto scaling inspection payload with launch template metadata", func(t *testing.T) {
 		expected := resourceinspection.Result{
 			DeploymentName: "api-prod",

@@ -444,7 +444,7 @@ type TrafficRoutingRequest struct {
 
 func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
 	switch req.ResourceType {
-	case "trafficShiftPlan", "productionListenerRule", "activeTargetGroup", "candidateTargetGroup":
+	case "trafficShiftPlan", "productionListenerRule", "activeTargetGroup", "candidateTargetGroup", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup":
 		return availableTrafficRoutingResult(req, trafficRoutingInspection(req)), nil
 	case "codeDeployDeploymentGroup", "productionListener", "testListener":
 		cacheKey := newTrafficRoutingInspectionCacheKey(req.Region, req.TargetAccountID, req.ObserverRoleARN, req.ResourceType, req.ResourceName)
@@ -693,6 +693,10 @@ func trafficRoutingDisplayName(resourceType string) string {
 		return "Active target group"
 	case "candidateTargetGroup":
 		return "Candidate target group"
+	case "blueTaskSetTargetGroup":
+		return "Blue task set target group"
+	case "greenTaskSetTargetGroup":
+		return "Green task set target group"
 	case "trafficShiftPlan":
 		return "Traffic shift plan"
 	default:
@@ -721,6 +725,10 @@ func trafficRoutingSummaryText(resourceType, resourceDescription string) string 
 		return "Active target group currently receiving production traffic."
 	case "candidateTargetGroup":
 		return "Candidate target group Tenet warms before weighted traffic shifting."
+	case "blueTaskSetTargetGroup":
+		return "Blue task set target group CodeDeploy treats as the live ECS traffic destination."
+	case "greenTaskSetTargetGroup":
+		return "Green task set target group CodeDeploy warms before shifting ECS traffic."
 	case "trafficShiftPlan":
 		return "Traffic shift plan Tenet follows while promoting the candidate resource."
 	default:

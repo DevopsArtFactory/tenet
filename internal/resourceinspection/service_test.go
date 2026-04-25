@@ -535,6 +535,20 @@ func TestServiceInspect(t *testing.T) {
 				displayName:  "Candidate target group",
 				summary:      "Candidate target group Tenet will register and warm before traffic shifting",
 			},
+			{
+				name:         "blue task set target group",
+				resourceType: "blueTaskSetTargetGroup",
+				resourceName: "payments-api-staging-blue",
+				displayName:  "Blue task set target group",
+				summary:      "Blue task set target group CodeDeploy treats as the live ECS traffic destination (style: linear; qualifiers: min healthy 80% and warmup 45s)",
+			},
+			{
+				name:         "green task set target group",
+				resourceType: "greenTaskSetTargetGroup",
+				resourceName: "payments-api-staging-green",
+				displayName:  "Green task set target group",
+				summary:      "Green task set target group CodeDeploy warms before shifting ECS traffic (style: linear; qualifiers: min healthy 80% and warmup 45s)",
+			},
 		}
 
 		for _, tc := range testCases {
