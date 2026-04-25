@@ -961,6 +961,9 @@ assert_fragments("application_ui", application_ui, operator_read_auth_fragments 
 for fragment in (
     "const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {",
     "const applicationDetailReadRoute = (deploymentName) => `GET /v1/overview/applications/${deploymentName || '{deploymentName}'}`;",
+    "const applicationStatusSignal = (detail) => {",
+    "const applicationRuntimeEventSummary = (detail) => {",
+    "const createApplicationStatusSummary = (detail, resourceGroups = []) => {",
     "const createApplicationDetailActions = (applicationState = null) => [",
     "'Refresh application detail'",
     "const applicationDetailRefreshState = (applicationState = null) => {",
@@ -970,6 +973,10 @@ for fragment in (
     "const applicationDetail = currentPageState.page === 'application' ? fetchApplicationDetail(currentPageState.deployment) : fetchDeploymentDetail(currentPageState.deployment);",
     "const renderApplicationDetailPage = (detail, applicationState = null) => {",
     "renderApplicationDetailPage(applicationState.detail, applicationState);",
+    "Current application status",
+    "Application rollout context:",
+    "['Runtime events', applicationRuntimeEventSummary(detail)],",
+    "page.append(createApplicationStatusSummary(detail, resourceGroups));",
     "createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')",
     "Application resources",
 ):
