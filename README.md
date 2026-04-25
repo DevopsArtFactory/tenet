@@ -255,7 +255,7 @@ Use the first page to scan:
 - sync and health state
 - last update / current runtime signal
 
-The applications overview also exposes an `_self` `Open audit log` link to the dedicated bookmarkable `/?page=audit` slice.
+The applications overview also exposes an `_self` `Open audit log` link to the dedicated bookmarkable `/?page=audit` slice. The landing page now also includes an in-place `Refresh applications overview` control that re-runs only `GET /v1/overview/applications`, disables only while that overview fetch is active, keeps the current bookmarkable `q` / `sync` / `account` query state stable, and leaves the current application rows visible with explicit loading/error copy while the refresh runs or fails. Refresh-time `401` / `403` responses reuse the same trusted-front-door / access-denied guidance as the deeper bookmarkable drill-downs instead of falling back to generic refresh-error text.
 
 ### Audit timeline
 Use the audit page when you need immutable operator activity instead of controller-derived runtime history.

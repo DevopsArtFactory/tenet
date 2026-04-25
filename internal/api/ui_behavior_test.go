@@ -348,6 +348,40 @@ func TestApplicationsOverviewPageWithNodeHarness(t *testing.T) {
 		t.Fatalf("marshal sample applications: %v", err)
 	}
 
+	refreshedApplicationsJSON, err := json.Marshal([]map[string]any{
+		{
+			"name":           "payments-api-prod",
+			"appRef":         "payments",
+			"environmentRef": "prod-apne2",
+			"accountName":    "prod-core",
+			"awsAccountId":   "123456789012",
+			"region":         "ap-northeast-2",
+			"targetType":     "ec2",
+			"strategy":       "canary",
+			"executionMode":  "asgWeightedTargetGroups",
+			"sync":           map[string]any{"state": "Synced", "reason": "latest desired generation applied"},
+			"health":         map[string]any{"overall": "Healthy", "summary": "3/3 targets healthy"},
+			"runtimeSummary": map[string]any{"timestamp": "2026-04-16T06:40:00Z"},
+		},
+		{
+			"name":           "payments-api-canary",
+			"appRef":         "payments",
+			"environmentRef": "staging-apne2",
+			"accountName":    "staging-core",
+			"awsAccountId":   "210987654321",
+			"region":         "ap-northeast-2",
+			"targetType":     "ecs",
+			"strategy":       "linear",
+			"executionMode":  "ecsCodeDeploy",
+			"sync":           map[string]any{"state": "OutOfSync", "reason": "traffic shifting"},
+			"health":         map[string]any{"overall": "Progressing", "summary": "2/3 tasks healthy"},
+			"runtimeSummary": map[string]any{"timestamp": "2026-04-16T07:20:00Z"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal refreshed sample applications: %v", err)
+	}
+
 	accountsJSON, err := json.Marshal([]map[string]any{
 		{
 			"name":         "prod-core",
@@ -531,6 +565,168 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!appLink) throw new Error('expected applications page link to application detail route');
   if (appLink.target !== '_self') throw new Error('expected applications page link to stay in embedded UI flow');
   if (appLink.rel) throw new Error('expected applications page link to avoid new-tab rel attributes');
+})();
+`
+
+		runNodeHarness(t, nodeProgram)
+	})
+
+	t.Run("applications overview refresh keeps bookmarkable state and shared auth guidance", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const sampleApplications = ` + string(applicationsJSON) + `;
+const refreshedApplications = ` + string(refreshedApplicationsJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const createDocument = () => {
+  const document = new Document();
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  return document;
+};
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+async function render(fetchImpl) {
+  const document = createDocument();
+  const fetchCalls = [];
+  const window = { location: { pathname: '/', search: '?q=payments&sync=OutOfSync&account=210987654321', hash: '' } };
+  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  const fetch = (url) => {
+    fetchCalls.push(String(url));
+    return fetchImpl(String(url));
+  };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle();
+  await settle();
+  return { document, fetchCalls, window };
+}
+(async () => {
+  const overviewURL = '/v1/overview/applications';
+  const initialSearch = '?q=payments&sync=OutOfSync&account=210987654321';
+
+  let refreshFetchCount = 0;
+  let resolveRefresh;
+  const loadingView = await render((url) => {
+    if (url !== overviewURL) throw new Error('unexpected fetch url: ' + url);
+    refreshFetchCount += 1;
+    if (refreshFetchCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleApplications) });
+    if (refreshFetchCount === 2) return new Promise((resolve) => { resolveRefresh = resolve; });
+    throw new Error('unexpected overview fetch count: ' + refreshFetchCount);
+  });
+  let toolbarButtons = collectNodes(loadingView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+  let refreshButton = toolbarButtons.find((node) => node.textContent === 'Refresh applications overview');
+  if (!refreshButton || refreshButton.disabled) throw new Error('expected applications overview refresh button enabled after initial render');
+  let accountsText = collectText(loadingView.document.getElementById('accounts')).join(' | ');
+  let summaryText = collectText(loadingView.document.getElementById('summary')).join(' | ');
+  if (!accountsText.includes('payments-api-staging')) throw new Error('expected initial applications overview content before refresh');
+  if (!summaryText.includes('Application status overview')) throw new Error('expected applications overview summary before refresh');
+  refreshButton.dispatch('click');
+  await settle();
+  toolbarButtons = collectNodes(loadingView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+  refreshButton = toolbarButtons.find((node) => node.textContent === 'Refresh applications overview');
+  if (!refreshButton || !refreshButton.disabled) throw new Error('expected applications overview refresh button disabled only while refresh is in flight');
+  accountsText = collectText(loadingView.document.getElementById('accounts')).join(' | ');
+  summaryText = collectText(loadingView.document.getElementById('summary')).join(' | ');
+  if (!summaryText.includes('Refreshing applications overview from GET /v1/overview/applications…')) throw new Error('expected applications overview refresh loading copy');
+  if (!accountsText.includes('payments-api-staging')) throw new Error('expected current applications overview content to stay visible during refresh');
+  if (loadingView.fetchCalls.length !== 2 || loadingView.fetchCalls[0] !== overviewURL || loadingView.fetchCalls[1] !== overviewURL) throw new Error('expected applications overview refresh to re-fetch only the overview route');
+  if (loadingView.window.location.search !== initialSearch) throw new Error('expected applications overview refresh to preserve bookmarkable query state');
+  resolveRefresh({ ok: true, json: () => Promise.resolve(refreshedApplications) });
+  await settle();
+  await settle();
+  accountsText = collectText(loadingView.document.getElementById('accounts')).join(' | ');
+  toolbarButtons = collectNodes(loadingView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+  refreshButton = toolbarButtons.find((node) => node.textContent === 'Refresh applications overview');
+  if (!accountsText.includes('payments-api-canary')) throw new Error('expected refreshed applications overview to render in place');
+  if (accountsText.includes('payments-api-staging')) throw new Error('expected refreshed applications overview to replace stale row content');
+  if (!refreshButton || refreshButton.disabled) throw new Error('expected applications overview refresh button re-enabled after refresh completes');
+
+  let authFetchCount = 0;
+  const authView = await render((url) => {
+    if (url !== overviewURL) throw new Error('unexpected auth-view fetch url: ' + url);
+    authFetchCount += 1;
+    if (authFetchCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleApplications) });
+    if (authFetchCount === 2) return Promise.resolve({ ok: false, status: 401, text: () => Promise.resolve('unauthenticated: authenticated identity is required for this operator read route') });
+    throw new Error('unexpected auth-view overview fetch count: ' + authFetchCount);
+  });
+  toolbarButtons = collectNodes(authView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+  refreshButton = toolbarButtons.find((node) => node.textContent === 'Refresh applications overview');
+  if (!refreshButton) throw new Error('expected applications overview refresh button in auth error scenario');
+  refreshButton.dispatch('click');
+  await settle();
+  await settle();
+  accountsText = collectText(authView.document.getElementById('accounts')).join(' | ');
+  summaryText = collectText(authView.document.getElementById('summary')).join(' | ');
+  if (!summaryText.includes('Authenticated operator required')) throw new Error('expected applications overview refresh auth heading');
+  if (!summaryText.includes('Tenet rejected GET /v1/overview/applications because authenticated identity is required on this operator read route.')) throw new Error('expected applications overview refresh trusted-front-door guidance');
+  if (!summaryText.includes('Current applications overview remains visible below.')) throw new Error('expected applications overview refresh auth guidance to keep stale-content copy');
+  if (!accountsText.includes('payments-api-staging')) throw new Error('expected applications overview content to remain visible after auth failure');
+  if (summaryText.includes('Failed to refresh applications overview:')) throw new Error('expected applications overview auth refresh to avoid generic refresh failure copy');
+  toolbarButtons = collectNodes(authView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+  refreshButton = toolbarButtons.find((node) => node.textContent === 'Refresh applications overview');
+  if (!refreshButton || refreshButton.disabled) throw new Error('expected applications overview refresh button re-enabled after auth failure');
+  if (authFetchCount !== 2) throw new Error('expected applications overview auth refresh to retry exactly once');
+  if (authView.window.location.search !== initialSearch) throw new Error('expected applications overview auth refresh to preserve bookmarkable query state');
+
+  let errorFetchCount = 0;
+  const errorView = await render((url) => {
+    if (url !== overviewURL) throw new Error('unexpected error-view fetch url: ' + url);
+    errorFetchCount += 1;
+    if (errorFetchCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleApplications) });
+    if (errorFetchCount === 2) return Promise.resolve({ ok: false, status: 500, text: () => Promise.resolve('boom') });
+    throw new Error('unexpected error-view overview fetch count: ' + errorFetchCount);
+  });
+  toolbarButtons = collectNodes(errorView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+  refreshButton = toolbarButtons.find((node) => node.textContent === 'Refresh applications overview');
+  if (!refreshButton) throw new Error('expected applications overview refresh button in generic error scenario');
+  refreshButton.dispatch('click');
+  await settle();
+  await settle();
+  accountsText = collectText(errorView.document.getElementById('accounts')).join(' | ');
+  summaryText = collectText(errorView.document.getElementById('summary')).join(' | ');
+  if (!summaryText.includes('Failed to refresh applications overview: applications overview request failed (500): boom')) throw new Error('expected applications overview refresh error copy');
+  if (!accountsText.includes('payments-api-staging')) throw new Error('expected current applications overview content to remain visible after refresh error');
+  toolbarButtons = collectNodes(errorView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+  refreshButton = toolbarButtons.find((node) => node.textContent === 'Refresh applications overview');
+  if (!refreshButton || refreshButton.disabled) throw new Error('expected applications overview refresh button re-enabled after refresh error');
+  if (errorFetchCount !== 2) throw new Error('expected applications overview refresh error to retry exactly once');
+  if (errorView.window.location.search !== initialSearch) throw new Error('expected applications overview refresh error state to preserve bookmarkable query state');
 })();
 `
 

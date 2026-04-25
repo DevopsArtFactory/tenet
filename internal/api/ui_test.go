@@ -563,6 +563,13 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"const auditLimitSelectOptions = (limit) => {",
 		"const presets = [1, 2, 5, 10, 20, 50];",
 		"const fetchEmbeddedReadRouteJSON = (route, labels) => fetch(route)",
+		"const applicationsOverviewReadRoute = () => 'GET /v1/overview/applications';",
+		"const createApplicationsOverviewActions = (overviewState = null) => [",
+		"'Refresh applications overview'",
+		"const applicationsOverviewRefreshState = (overviewState = null) => {",
+		"'Refreshing applications overview from GET /v1/overview/applications…'",
+		"Current applications overview remains visible below.",
+		"Failed to refresh applications overview:",
 		"const fetchAccountDetail = (accountID) => fetchEmbeddedReadRouteJSON(`/v1/overview/accounts/${encodeURIComponent(accountID)}`, {",
 		"unavailable: 'account detail unavailable',",
 		"failure: 'account detail request failed',",
@@ -1662,6 +1669,15 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert 'Refresh drift workspace' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh drift workspace")
+	}
+	if !strings.Contains(text, "assert 'Refresh applications overview' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh applications overview")
+	}
+	if !strings.Contains(text, "assert 'Refreshing applications overview from GET /v1/overview/applications…' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains applications overview refresh loading copy")
+	}
+	if !strings.Contains(text, "assert 'Failed to refresh applications overview:' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains applications overview refresh error copy")
 	}
 	if !strings.Contains(text, "assert 'Refresh account detail' in account_ui, account_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh account detail")
