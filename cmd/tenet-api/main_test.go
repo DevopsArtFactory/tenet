@@ -1237,6 +1237,73 @@ func TestAPIOptionsOverviewDeploymentResourceLogsUsesCanonicalFallbackWhenExecut
 	}
 }
 
+func TestAPIOptionsOverviewDeploymentResourceLogsUsesCodeDeployFallbackWhenExecutionIsMissing(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	provider := &fakeResourceLogProvider{result: resourcelogs.Result{Available: true}}
+	restore := stubResourceLogProviderFactory(provider)
+	defer restore()
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
+	for _, resource := range []struct {
+		resourceType        string
+		resourceName        string
+		resourceDescription string
+		wantBackingType     string
+		wantBackingName     string
+	}{
+		{
+			resourceType:        "codeDeployDeploymentGroup",
+			resourceName:        "api-prod-codedeploy-group",
+			resourceDescription: "CodeDeploy deployment group Tenet targets for ECS rollout (style: linear)",
+		},
+		{
+			resourceType:        "productionListener",
+			resourceName:        "api-prod-prod-listener",
+			resourceDescription: "Production listener CodeDeploy shifts during ECS traffic shifting (style: linear)",
+			wantBackingType:     "codeDeployDeploymentGroup",
+			wantBackingName:     "api-prod-codedeploy-group",
+		},
+		{
+			resourceType:        "testListener",
+			resourceName:        "api-prod-test-listener",
+			resourceDescription: "Test listener CodeDeploy uses to validate the replacement ECS task set before promotion (style: linear)",
+			wantBackingType:     "codeDeployDeploymentGroup",
+			wantBackingName:     "api-prod-codedeploy-group",
+		},
+		{
+			resourceType:        "blueTaskSetTargetGroup",
+			resourceName:        "api-prod-blue",
+			resourceDescription: "Blue task set target group CodeDeploy treats as the live ECS traffic destination (style: linear)",
+			wantBackingType:     "codeDeployDeploymentGroup",
+			wantBackingName:     "api-prod-codedeploy-group",
+		},
+		{
+			resourceType:        "greenTaskSetTargetGroup",
+			resourceName:        "api-prod-green",
+			resourceDescription: "Green task set target group CodeDeploy warms before shifting ECS traffic (style: linear)",
+			wantBackingType:     "codeDeployDeploymentGroup",
+			wantBackingName:     "api-prod-codedeploy-group",
+		},
+	} {
+		provider.calls = 0
+		provider.lastRequest = resourcelogs.Request{}
+
+		_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", resource.resourceType, resource.resourceName)
+		if err != nil {
+			t.Fatalf("expected CodeDeploy fallback resource binding to work for %s/%s, got %v", resource.resourceType, resource.resourceName, err)
+		}
+		if provider.calls != 1 {
+			t.Fatalf("expected provider to run once for fallback-bound %s/%s, got %d calls", resource.resourceType, resource.resourceName, provider.calls)
+		}
+		if provider.lastRequest.ResourceType != resource.resourceType || provider.lastRequest.ResourceName != resource.resourceName {
+			t.Fatalf("unexpected resource log request for %s/%s: %+v", resource.resourceType, resource.resourceName, provider.lastRequest)
+		}
+		if provider.lastRequest.BackingResourceType != resource.wantBackingType || provider.lastRequest.BackingResourceName != resource.wantBackingName {
+			t.Fatalf("unexpected backing resource context for %s/%s: %+v", resource.resourceType, resource.resourceName, provider.lastRequest)
+		}
+	}
+}
+
 func TestAPIOptionsOverviewDeploymentResourceLogsUsesECSRollingFallbackWhenExecutionIsMissing(t *testing.T) {
 	repoRoot := writeRollingECSRepositoryFixture(t)
 	provider := &fakeResourceLogProvider{result: resourcelogs.Result{Available: true}}

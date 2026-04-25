@@ -177,7 +177,14 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 		}
 		entries := formatConsoleEntries(consoles, s.maxEntries())
 		return availableResult(req, SourceEC2Console, entries), nil
-	case "codeDeployDeploymentGroup":
+	case "codeDeployDeploymentGroup", "productionListener", "testListener", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup":
+		resourceName := req.ResourceName
+		if req.ResourceType != "codeDeployDeploymentGroup" {
+			resourceName = strings.TrimSpace(req.BackingResourceName)
+			if resourceName == "" {
+				return unavailableResult(req, UnavailableReasonNoLogSource), nil
+			}
+		}
 		list := s.options.ListCodeDeployEvents
 		if list == nil {
 			if !s.options.EnableAWS {
@@ -187,7 +194,7 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 		}
 		events, err := list(ctx, CodeDeployRequest{
 			DeploymentName:  req.DeploymentName,
-			ResourceName:    req.ResourceName,
+			ResourceName:    resourceName,
 			Region:          req.Region,
 			TargetAccountID: req.TargetAccountID,
 			ObserverRoleARN: req.ObserverRoleARN,

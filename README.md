@@ -301,7 +301,7 @@ The compose-backed smoke now covers that shipped bootstrap-source drill-down dir
 Canonical resource-log routes stay stable across rollout modes so operators can bookmark or script them:
 - `asgWeightedTargetGroups`: `trafficShiftPlan` (`{deployment}-weighted-routing`)
 - `ecsRolling`: `ecsService` (`{deployment}-service`)
-- `ecsCodeDeploy`: `codeDeployDeploymentGroup` (`{deployment}-codedeploy-group`)
+- `ecsCodeDeploy`: `codeDeployDeploymentGroup` (`{deployment}-codedeploy-group`) plus the sibling `productionListener`, `testListener`, `blueTaskSetTargetGroup`, and `greenTaskSetTargetGroup` routes that reuse that same deployment-group history through additive backing-resource metadata
 
 Behind those routes, the built-in AWS-backed recent-log provider now reuses SDK config/client setup per `(region, target account, observer role)` key inside a running Tenet API process instead of rebuilding ECS / CloudWatch Logs / Auto Scaling / EC2 clients on every fetch, and it reuses that same AWS config for signed CodeDeploy deployment-history lookups.
 
@@ -311,6 +311,7 @@ Current provider-backed recent-log support includes:
 - `serviceAutoScalingGroup`
 - `userDataBootstrapSource` via the resolved backing Auto Scaling Group
 - `codeDeployDeploymentGroup` via newest-first CodeDeploy deployment history for the selected deployment group
+- `productionListener`, `testListener`, `blueTaskSetTargetGroup`, and `greenTaskSetTargetGroup` via the backing CodeDeploy deployment-group history for the same rollout
 
 The same drill-down now has a parallel inspection route family:
 - `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}`
