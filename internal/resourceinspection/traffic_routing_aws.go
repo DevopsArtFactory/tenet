@@ -25,7 +25,15 @@ func (s Service) inspectTrafficRoutingResourceFromAWS(ctx context.Context, req T
 	if err != nil {
 		return TrafficRoutingInspection{}, err
 	}
-	group, err := getCodeDeployDeploymentGroup(ctx, clients.Config, req.Region, codeDeployApplicationName(req.DeploymentName), codeDeployDeploymentGroupName(req))
+	switch req.ResourceType {
+	case "codeDeployApplication":
+		application, err := getCodeDeployApplication(ctx, clients.Config, req.Region, codeDeployApplicationName(req.DeploymentName, req.ResourceName, req.ResourceType))
+		if err != nil {
+			return TrafficRoutingInspection{}, err
+		}
+		return trafficRoutingInspectionFromApplication(req, application), nil
+	}
+	group, err := getCodeDeployDeploymentGroup(ctx, clients.Config, req.Region, codeDeployApplicationName(req.DeploymentName, req.ResourceName, req.ResourceType), codeDeployDeploymentGroupName(req))
 	if err != nil {
 		return TrafficRoutingInspection{}, err
 	}
@@ -54,6 +62,24 @@ func (s Service) inspectTrafficRoutingResourceFromAWS(ctx context.Context, req T
 		return trafficRoutingInspectionFromListener(req, listener), nil
 	default:
 		return TrafficRoutingInspection{}, resourceaws.NewUnavailableError(resourceaws.UnavailableReasonUnsupportedResourceType)
+	}
+}
+
+func trafficRoutingInspectionFromApplication(req TrafficRoutingRequest, application codeDeployApplicationInfoPayload) TrafficRoutingInspection {
+	deploymentGroups := append([]string(nil), codeDeployDeploymentGroups(application)...)
+	sort.Strings(deploymentGroups)
+	return TrafficRoutingInspection{
+		Kind:           req.ResourceType,
+		DisplayName:    trafficRoutingDisplayName(req.ResourceType),
+		InspectionMode: "live",
+		Summary:        trafficRoutingSummaryText(req.ResourceType, req.ResourceDescription),
+		CodeDeployApplication: &CodeDeployApplicationInspection{
+			ApplicationName:  application.ApplicationName,
+			ApplicationID:    application.ApplicationID,
+			ComputePlatform:  application.ComputePlatform,
+			LinkedToGitHub:   application.LinkedToGitHub,
+			DeploymentGroups: deploymentGroups,
+		},
 	}
 }
 
@@ -114,7 +140,10 @@ func trafficRoutingInspectionFromListener(req TrafficRoutingRequest, listener el
 	}
 }
 
-func codeDeployApplicationName(deploymentName string) string {
+func codeDeployApplicationName(deploymentName, resourceName, resourceType string) string {
+	if resourceType == "codeDeployApplication" && strings.TrimSpace(resourceName) != "" {
+		return strings.TrimSpace(resourceName)
+	}
 	return strings.TrimSpace(deploymentName) + "-codedeploy-app"
 }
 
@@ -137,6 +166,18 @@ func codeDeployECSServices(group codeDeployDeploymentGroupInfoPayload) []CodeDep
 		})
 	}
 	return services
+}
+
+func codeDeployDeploymentGroups(application codeDeployApplicationInfoPayload) []string {
+	deploymentGroups := make([]string, 0, len(application.DeploymentGroups))
+	for _, group := range application.DeploymentGroups {
+		group = strings.TrimSpace(group)
+		if group == "" {
+			continue
+		}
+		deploymentGroups = append(deploymentGroups, group)
+	}
+	return deploymentGroups
 }
 
 func codeDeployTargetGroups(group codeDeployDeploymentGroupInfoPayload) []string {
@@ -218,6 +259,37 @@ func listenerActions(listener elbv2ListenerPayload) []ListenerActionInspection {
 		})
 	}
 	return actions
+}
+
+func getCodeDeployApplication(ctx context.Context, cfg aws.Config, region, applicationName string) (codeDeployApplicationInfoPayload, error) {
+	var response codeDeployGetApplicationOutput
+	if err := doSignedAWSJSONRequest(
+		ctx,
+		cfg,
+		"codedeploy",
+		region,
+		"https://codedeploy."+strings.TrimSpace(region)+".amazonaws.com/",
+		"CodeDeploy_20141006.GetApplication",
+		map[string]string{
+			"applicationName": strings.TrimSpace(applicationName),
+		},
+		&response,
+		func(headers http.Header, body []byte) error {
+			code, _ := parseAWSJSONError(headers, body)
+			switch code {
+			case "ApplicationDoesNotExistException":
+				return resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
+			default:
+				return resourceaws.NewUnavailableError(resourceaws.UnavailableReasonAWSUnavailable)
+			}
+		},
+	); err != nil {
+		return codeDeployApplicationInfoPayload{}, err
+	}
+	if strings.TrimSpace(response.Application.ApplicationName) == "" {
+		return codeDeployApplicationInfoPayload{}, resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
+	}
+	return response.Application, nil
 }
 
 func getCodeDeployDeploymentGroup(ctx context.Context, cfg aws.Config, region, applicationName, deploymentGroupName string) (codeDeployDeploymentGroupInfoPayload, error) {
@@ -414,6 +486,18 @@ func parseAWSQueryError(body []byte) string {
 	var errResponse response
 	_ = xml.Unmarshal(body, &errResponse)
 	return strings.TrimSpace(errResponse.Error.Code)
+}
+
+type codeDeployGetApplicationOutput struct {
+	Application codeDeployApplicationInfoPayload `json:"application"`
+}
+
+type codeDeployApplicationInfoPayload struct {
+	ApplicationID    string   `json:"applicationId"`
+	ApplicationName  string   `json:"applicationName"`
+	ComputePlatform  string   `json:"computePlatform"`
+	LinkedToGitHub   bool     `json:"linkedToGitHub"`
+	DeploymentGroups []string `json:"deploymentGroups"`
 }
 
 type codeDeployGetDeploymentGroupOutput struct {

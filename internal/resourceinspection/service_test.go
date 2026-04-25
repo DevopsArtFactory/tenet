@@ -286,6 +286,12 @@ func TestServiceInspect(t *testing.T) {
 			summary      string
 		}{
 			{
+				resourceType: "codeDeployApplication",
+				resourceName: "payments-api-staging-codedeploy-app",
+				displayName:  "CodeDeploy application",
+				summary:      "CodeDeploy application coordinating ECS traffic shifting (style: linear; qualifiers: min healthy 80% and warmup 45s)",
+			},
+			{
 				resourceType: "codeDeployDeploymentGroup",
 				resourceName: "payments-api-staging-codedeploy-group",
 				displayName:  "CodeDeploy deployment group",
@@ -357,6 +363,20 @@ func TestServiceInspect(t *testing.T) {
 			InspectTrafficRoutingResource: func(ctx context.Context, req TrafficRoutingRequest) (TrafficRoutingInspection, error) {
 				calls = append(calls, call(req))
 				switch req.ResourceType {
+				case "codeDeployApplication":
+					return TrafficRoutingInspection{
+						Kind:           req.ResourceType,
+						DisplayName:    "CodeDeploy application",
+						InspectionMode: "live",
+						Summary:        req.ResourceDescription,
+						CodeDeployApplication: &CodeDeployApplicationInspection{
+							ApplicationName:  "payments-api-prod-codedeploy-app",
+							ApplicationID:    "a-1234567890",
+							ComputePlatform:  "ECS",
+							LinkedToGitHub:   true,
+							DeploymentGroups: []string{"payments-api-prod-codedeploy-group", "payments-api-prod-codedeploy-group-canary"},
+						},
+					}, nil
 				case "codeDeployDeploymentGroup":
 					return TrafficRoutingInspection{
 						Kind:           req.ResourceType,
@@ -428,6 +448,11 @@ func TestServiceInspect(t *testing.T) {
 			summary      string
 		}{
 			{
+				resourceType: "codeDeployApplication",
+				resourceName: "payments-api-prod-codedeploy-app",
+				summary:      "CodeDeploy application coordinating ECS traffic shifting (style: linear)",
+			},
+			{
 				resourceType: "codeDeployDeploymentGroup",
 				resourceName: "payments-api-prod-codedeploy-group",
 				summary:      "CodeDeploy deployment group Tenet targets for ECS rollout (style: linear)",
@@ -467,6 +492,15 @@ func TestServiceInspect(t *testing.T) {
 			}
 		}
 		if !reflect.DeepEqual(calls, []call{
+			{
+				DeploymentName:      "payments-api-prod",
+				ResourceType:        "codeDeployApplication",
+				ResourceName:        "payments-api-prod-codedeploy-app",
+				ResourceDescription: "CodeDeploy application coordinating ECS traffic shifting (style: linear)",
+				Region:              "ap-northeast-2",
+				TargetAccountID:     "123456789012",
+				ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
+			},
 			{
 				DeploymentName:      "payments-api-prod",
 				ResourceType:        "codeDeployDeploymentGroup",
