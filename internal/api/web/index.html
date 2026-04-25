@@ -1558,6 +1558,49 @@
         }
         return null;
       };
+      const resourceSupportsLiveInspection = (resource) => {
+        const type = String(resource?.type || '').trim();
+        return new Set([
+          'ecsService',
+          'candidateAutoScalingGroup',
+          'serviceAutoScalingGroup',
+          'userDataBootstrapSource',
+          'codeDeployDeploymentGroup',
+          'productionListener',
+          'testListener',
+          'trafficShiftPlan',
+          'productionListenerRule',
+          'activeTargetGroup',
+          'candidateTargetGroup',
+          'blueTaskSetTargetGroup',
+          'greenTaskSetTargetGroup',
+        ]).has(type);
+      };
+      const resourceSupportsRecentLogs = (resource) => {
+        const type = String(resource?.type || '').trim();
+        return new Set([
+          'ecsService',
+          'candidateAutoScalingGroup',
+          'serviceAutoScalingGroup',
+          'userDataBootstrapSource',
+          'codeDeployDeploymentGroup',
+          'productionListener',
+          'testListener',
+          'blueTaskSetTargetGroup',
+          'greenTaskSetTargetGroup',
+        ]).has(type);
+      };
+      const appendApplicationResourceEvidenceLinks = (container, deploymentName, resource) => {
+        if (!container || !deploymentName || !resource?.type || !resource?.id) {
+          return;
+        }
+        if (resourceSupportsLiveInspection(resource)) {
+          container.append(createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open live inspection', '_self'));
+        }
+        if (resourceSupportsRecentLogs(resource)) {
+          container.append(createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open recent logs', '_self'));
+        }
+      };
       const renderApplicationDetailPage = (detail, applicationState = null) => {
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
@@ -1643,6 +1686,7 @@
             const detailLinks = createElement('div', 'row-links row-links-shell');
             if (detail.name) {
               detailLinks.append(createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self'));
+              appendApplicationResourceEvidenceLinks(detailLinks, detail.name, resource);
             }
             row.append(top, detailLinks);
             groupRows.append(row);

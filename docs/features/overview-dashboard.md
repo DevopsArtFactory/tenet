@@ -132,6 +132,8 @@ Current behavior:
   - `Config and access`
 - empty zero-resource groups are intentionally suppressed on the page and in quick navigation so the application detail stays focused on actionable resource groups; if an application truly has no linked resources yet, the page shows `No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.` while still keeping the runtime-events section available
 - `_self` `Open resource` links targeting `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}`
+- when the selected resource type already supports the final resource page's evidence panels, the same row now also surfaces direct `_self` handoffs to `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}#resource-live-inspection` and `#resource-recent-logs`
+- unsupported resource types intentionally suppress those shortcuts instead of advertising unavailable evidence surfaces on the application page
 - keeps the deeper artifact/history/generation/log drill-down on the final resource page
 - that final resource page now also exposes a top-level `Refresh resource detail` action that re-runs `GET /v1/overview/deployments/{deploymentName}` in place, preserves the bookmarkable `/?page=resource...` URL, re-resolves the selected resource from the refreshed payload, and keeps the last successful resource detail visible while refresh-time loading/error guidance renders above it
 - the recent-log card on that final resource page now surfaces the backend lookup path directly as `Lookup region`, `Control account ID`, `Target account ID`, `Cross-account lookup`, and `Observer role configured`, even when the log lookup is empty or unavailable
@@ -318,7 +320,7 @@ Current plan/apply workspace behavior:
 The dashboard now exposes the following navigation affordances across the current drill-down flow:
 - landing page: `_self` `Open audit log`, `_self` `Open account`, `_self` `Open application`
 - account detail page: `Account JSON`, `Group JSON`, `_self` `Open application`
-- application detail page: `_self` `Drift view`, `_self` `Plan/apply`, `_self` `Audit log`, `Open resource`
+- application detail page: `_self` `Drift view`, `_self` `Plan/apply`, `_self` `Audit log`, `Open resource`, `Open live inspection`, `Open recent logs`
 - application detail `Audit log` now routes to `/?page=audit&deployment={deploymentName}` so the selected deployment stays visible in the bookmarkable audit slice
 - audit page: `_self` `Back to applications`, `_self` `Open application drill-down`, `_self` `Open drift view`, `_self` `Open plan/apply workspace`
 - resource/workspace drill-down pages: embedded back links that keep operators in the same shell

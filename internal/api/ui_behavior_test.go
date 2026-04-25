@@ -2580,10 +2580,14 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (accountsText.includes('Runtime history')) throw new Error('application page should not expose deep runtime history yet');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
   const resourceLink = links.find((node) => node.textContent === 'Open resource');
+  const liveInspectionLink = links.find((node) => node.textContent === 'Open live inspection');
+  const recentLogsLink = links.find((node) => node.textContent === 'Open recent logs');
   const driftLink = links.find((node) => node.textContent === 'Drift view');
   const planLink = links.find((node) => node.textContent === 'Plan/apply');
   const auditLink = links.find((node) => node.textContent === 'Audit log');
   if (!resourceLink) throw new Error('expected resource drill-down link');
+  if (!liveInspectionLink) throw new Error('expected direct live inspection handoff link');
+  if (!recentLogsLink) throw new Error('expected direct recent logs handoff link');
   if (!driftLink || !driftLink.href.includes('/?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging')) throw new Error('expected drift workspace href to include deployment and preserved filters');
   if (!planLink || !planLink.href.includes('/?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging')) throw new Error('expected plan workspace href to include deployment and preserved filters');
   if (!auditLink || !auditLink.href.includes('/?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging')) throw new Error('expected audit workspace href to include deployment and preserved filters');
@@ -2594,6 +2598,11 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (resourceLink.rel) throw new Error('expected resource drill-down link to avoid new-tab rel attributes');
   const resourceIDFragment = new URLSearchParams({ resourceId: 'ecsService::payments-api-staging ECS Service::Primary ECS service for the staging environment' }).toString();
   if (!resourceLink.href.includes(resourceIDFragment)) throw new Error('expected stable unique resource identifier in drill-down href');
+  if (!liveInspectionLink.href.includes('/?page=resource&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging')) throw new Error('expected live inspection href to preserve filters and deployment context');
+  if (!recentLogsLink.href.includes('/?page=resource&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging')) throw new Error('expected recent logs href to preserve filters and deployment context');
+  if (!liveInspectionLink.href.includes(resourceIDFragment) || !liveInspectionLink.href.endsWith('#resource-live-inspection')) throw new Error('expected live inspection handoff to target the existing resource section');
+  if (!recentLogsLink.href.includes(resourceIDFragment) || !recentLogsLink.href.endsWith('#resource-recent-logs')) throw new Error('expected recent logs handoff to target the existing resource section');
+  if (liveInspectionLink.target !== '_self' || recentLogsLink.target !== '_self') throw new Error('expected direct evidence handoffs to stay in embedded UI flow');
 })();
 `
 
@@ -3571,7 +3580,10 @@ const runUI = async (search, detailBody) => {
 (async () => {
   const fallbackRun = await runUI('?page=application&deployment=payments-api-prod', fallbackDetailBody);
   if (fallbackRun.fetchCalls.length !== 2 || fallbackRun.fetchCalls[0] !== '/v1/overview/applications/payments-api-prod' || fallbackRun.fetchCalls[1] !== '/v1/overview/deployments/payments-api-prod/events') throw new Error('expected fallback application page to load application detail plus deployment events');
-  const fallbackLinks = collectNodes(fallbackRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
+  const fallbackLinks = collectNodes(fallbackRun.document.getElementById('accounts'), (node) => node.tagName === 'A');
+  const resourceLinks = fallbackLinks.filter((node) => node.textContent === 'Open resource');
+  const liveInspectionLinks = fallbackLinks.filter((node) => node.textContent === 'Open live inspection');
+  const recentLogsLinks = fallbackLinks.filter((node) => node.textContent === 'Open recent logs');
   const expectedResourceID = 'trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s';
   const resourceHref = '/?' + new URLSearchParams({
     page: 'resource',
@@ -3579,8 +3591,12 @@ const runUI = async (search, detailBody) => {
     resourceType: 'trafficShiftPlan',
     resourceId: expectedResourceID,
   }).toString();
-  const fallbackLink = fallbackLinks.find((node) => node.href === resourceHref);
+  const fallbackLink = resourceLinks.find((node) => node.href === resourceHref);
+  const inspectionHref = resourceHref + '#resource-live-inspection';
+  const inspectionLink = liveInspectionLinks.find((node) => node.href === inspectionHref);
   if (!fallbackLink) throw new Error('expected fallback application page to synthesize canonical trafficShiftPlan resource link');
+  if (!inspectionLink) throw new Error('expected fallback application page to expose direct live inspection handoff for trafficShiftPlan');
+  if (recentLogsLinks.some((node) => node.href === resourceHref + '#resource-recent-logs')) throw new Error('expected fallback application page to suppress unsupported recent logs handoff for trafficShiftPlan');
   const canonicalRun = await runUI(fallbackLink.href.slice(1), canonicalDetailBody);
   if (!canonicalRun.fetchCalls.includes('/v1/overview/deployments/payments-api-prod')) throw new Error('expected canonical resource page to load deployment detail');
   if (!canonicalRun.fetchCalls.includes('/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing')) throw new Error('expected canonical resource page to load recent logs for the selected resource');

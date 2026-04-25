@@ -978,6 +978,10 @@ for fragment in (
     "['Runtime events', applicationRuntimeEventSummary(detail)],",
     "page.append(createApplicationStatusSummary(detail, resourceGroups));",
     "createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')",
+    "const resourceSupportsLiveInspection = (resource) => {",
+    "const resourceSupportsRecentLogs = (resource) => {",
+    "createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open live inspection', '_self')",
+    "createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open recent logs', '_self')",
     "Application resources",
 ):
     assert fragment in application_ui, fragment
