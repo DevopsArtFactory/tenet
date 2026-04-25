@@ -888,7 +888,7 @@ assert "createQuickNavChip(currentSectionLink.label, `Current section: ${current
 assert "const buildPageSectionURL = (page, sectionID, extras = {}) => {" in ui, ui
 assert "const scrollToCurrentHashTarget = () => {" in ui, ui
 assert "target.scrollIntoView({ block: 'start', behavior: 'auto' });" in ui, ui
-assert "if (currentPageState.page !== 'application' && currentPageState.page !== 'account' && currentPageState.page !== 'resource' && currentPageState.page !== 'drift' && currentPageState.page !== 'plan') return;" in ui, ui
+assert "if (currentPageState.page !== 'application' && currentPageState.page !== 'account' && currentPageState.page !== 'resource' && currentPageState.page !== 'drift' && currentPageState.page !== 'plan' && currentPageState.page !== 'audit') return;" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Deployment workspaces')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'On this page')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Linked resources')" in ui, ui
@@ -1046,7 +1046,15 @@ assert 'Active deployment context' in audit_ui, audit_ui
 assert 'Breadcrumbs' in audit_ui, audit_ui
 assert 'Quick navigation' in audit_ui, audit_ui
 assert 'Deployment workspaces' in audit_ui, audit_ui
-assert "const createAuditQuickNav = () => createDeploymentQuickNav(auditDeploymentName(), 'Audit log');" in audit_ui, audit_ui
+assert 'Current section' in audit_ui, audit_ui
+assert 'No section is currently targeted.' in audit_ui, audit_ui
+assert 'On this page' in audit_ui, audit_ui
+assert "const createAuditQuickNav = (sectionLinks = []) => createDeploymentQuickNav(" in audit_ui, audit_ui
+assert "const deploymentContextSectionID = 'audit-deployment-context';" in audit_ui, audit_ui
+assert "deploymentCallout.setAttribute('id', deploymentContextSectionID);" in audit_ui, audit_ui
+assert "const timelineSectionID = 'audit-timeline';" in audit_ui, audit_ui
+assert "timelineSection.setAttribute('id', timelineSectionID);" in audit_ui, audit_ui
+assert "buildPageSectionURL('audit', sectionID, {" in audit_ui, audit_ui
 assert "createElement('div', 'quick-nav-current', `${deploymentName || 'Deployment'} · ${currentWorkspace}`)" in audit_ui, audit_ui
 assert 'Immutable plan preview and apply-request activity for deployment ${deploymentName} rendered from GET /v1/audit-logs.' in audit_ui, audit_ui
 assert 'No audit activity has been persisted yet for deployment ${currentPageState.deployment}.' in audit_ui, audit_ui
@@ -1060,7 +1068,7 @@ assert "const createAuditLogsActions = (isLoading = false) => [" in audit_ui, au
 assert "const auditLogsRefreshStateText = (auditState) => {" in audit_ui, audit_ui
 assert "const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {" in audit_ui, audit_ui
 assert "if (action) params.set('action', action);" in audit_ui, audit_ui
-assert "const createAuditQuickNav = () => createDeploymentQuickNav(auditDeploymentName(), 'Audit log');" in audit_ui, audit_ui
+assert "const createAuditQuickNav = (sectionLinks = []) => createDeploymentQuickNav(" in audit_ui, audit_ui
 assert "const normalizeAuditLimit = (value) => {" in audit_ui, audit_ui
 assert "const auditLimitSelectOptions = (limit) => {" in audit_ui, audit_ui
 assert "const syncAuditQueryParams = (params, pageState) => {" in audit_ui, audit_ui

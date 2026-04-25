@@ -899,6 +899,9 @@ for fragment in (
     "Audit filters: ${activeFilters.join(' · ')}",
     "Clear audit filters",
     "Active deployment context",
+    "Current section",
+    "No section is currently targeted.",
+    "On this page",
     "Loading audit log…",
     "Audit log is currently unavailable.",
     "Immutable operator audit log from GET /v1/audit-logs. Newest entries first. Actor identity remains explicit when unavailable or unknown.",
@@ -909,6 +912,12 @@ for fragment in (
     "if (action) params.set('action', action);",
     "createSelect('Action', currentPageState.auditAction, auditActionOptions, (event) => {",
     "const clearAuditPageFilters = () => {",
+    "const createAuditQuickNav = (sectionLinks = []) => createDeploymentQuickNav(",
+    "const deploymentContextSectionID = 'audit-deployment-context';",
+    "deploymentCallout.setAttribute('id', deploymentContextSectionID);",
+    "const timelineSectionID = 'audit-timeline';",
+    "timelineSection.setAttribute('id', timelineSectionID);",
+    "buildPageSectionURL('audit', sectionID, {",
 ):
     assert fragment in audit_ui, fragment
 

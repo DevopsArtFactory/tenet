@@ -1185,9 +1185,9 @@
           target.scrollIntoView({ block: 'start', behavior: 'auto' });
         }
       };
-      if (typeof window.addEventListener === 'function') {
+      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
         window.addEventListener('hashchange', () => {
-          if (currentPageState.page !== 'application' && currentPageState.page !== 'account' && currentPageState.page !== 'resource' && currentPageState.page !== 'drift' && currentPageState.page !== 'plan') return;
+          if (currentPageState.page !== 'application' && currentPageState.page !== 'account' && currentPageState.page !== 'resource' && currentPageState.page !== 'drift' && currentPageState.page !== 'plan' && currentPageState.page !== 'audit') return;
           syncActiveResourceQuickNav();
           scrollToCurrentHashTarget();
         });
@@ -1817,7 +1817,13 @@
         strip.append(head, groups);
         return strip;
       };
-      const createAuditQuickNav = () => createDeploymentQuickNav(auditDeploymentName(), 'Audit log');
+      const createAuditQuickNav = (sectionLinks = []) => createDeploymentQuickNav(
+        auditDeploymentName(),
+        'Audit log',
+        null,
+        sectionLinks,
+        'No section is currently targeted.',
+      );
       const createResourceQuickNav = (detail, resource, sectionLinks = []) => {
         const deploymentName = detail.name || currentPageState.deployment || '';
         const strip = createElement('section', 'quick-nav-strip');
@@ -3101,6 +3107,18 @@
         renderAuditPageChrome();
         const root = document.getElementById('accounts');
         const page = createElement('article', 'account');
+        const auditSectionLinks = [];
+        const pushAuditSectionLink = (sectionID, label) => {
+          auditSectionLinks.push({
+            sectionID,
+            label,
+            href: buildPageSectionURL('audit', sectionID, {
+              deployment: currentPageState.deployment,
+              action: currentPageState.auditAction,
+              limit: currentPageState.auditLimit,
+            }),
+          });
+        };
         const breadcrumb = createDeploymentBreadcrumb({
           deploymentName: auditDeploymentName(),
           currentLabel: 'Audit log',
@@ -3114,20 +3132,32 @@
         );
         const deploymentCallout = createAuditDeploymentContextCallout();
         if (deploymentCallout) {
+          const deploymentContextSectionID = 'audit-deployment-context';
+          deploymentCallout.setAttribute('id', deploymentContextSectionID);
+          pushAuditSectionLink(deploymentContextSectionID, 'Deployment context');
           page.append(deploymentCallout);
         }
-        const quickNav = createAuditQuickNav();
+        const timelineSection = createElement('section', 'detail-section');
+        const timelineSectionID = 'audit-timeline';
+        timelineSection.setAttribute('id', timelineSectionID);
+        pushAuditSectionLink(timelineSectionID, 'Audit timeline');
+        const quickNav = createAuditQuickNav(auditSectionLinks);
         if (quickNav) {
           page.append(quickNav);
         }
         const stateNode = createElement('div', 'detail-state', text);
         if (className) stateNode.classList.add(className);
         if (detailText) {
-          page.append(stateNode, createElement('div', 'detail-condition-meta', detailText));
+          timelineSection.append(stateNode, createElement('div', 'detail-condition-meta', detailText));
         } else {
-          page.append(stateNode);
+          timelineSection.append(stateNode);
         }
+        page.append(timelineSection);
         root.replaceChildren(page);
+        activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;
+        syncActiveResourceQuickNav();
+        scrollToCurrentHashTarget();
+        Promise.resolve().then(() => scrollToCurrentHashTarget());
       };
       const renderAuditLogsPage = (result, auditState = null) => {
         renderAuditPageChrome();
@@ -3135,6 +3165,18 @@
         const page = createElement('article', 'account');
         const entries = sortAuditEntries(result?.entries || []);
         const refreshStateText = auditLogsRefreshStateText(auditState);
+        const auditSectionLinks = [];
+        const pushAuditSectionLink = (sectionID, label) => {
+          auditSectionLinks.push({
+            sectionID,
+            label,
+            href: buildPageSectionURL('audit', sectionID, {
+              deployment: currentPageState.deployment,
+              action: currentPageState.auditAction,
+              limit: currentPageState.auditLimit,
+            }),
+          });
+        };
         const breadcrumb = createDeploymentBreadcrumb({
           deploymentName: auditDeploymentName(),
           currentLabel: 'Audit log',
@@ -3148,24 +3190,35 @@
         );
         const deploymentCallout = createAuditDeploymentContextCallout();
         if (deploymentCallout) {
+          const deploymentContextSectionID = 'audit-deployment-context';
+          deploymentCallout.setAttribute('id', deploymentContextSectionID);
+          pushAuditSectionLink(deploymentContextSectionID, 'Deployment context');
           page.append(deploymentCallout);
         }
-        const quickNav = createAuditQuickNav();
+        const timelineSection = createElement('section', 'detail-section');
+        const timelineSectionID = 'audit-timeline';
+        timelineSection.setAttribute('id', timelineSectionID);
+        pushAuditSectionLink(timelineSectionID, 'Audit timeline');
+        const quickNav = createAuditQuickNav(auditSectionLinks);
         if (quickNav) {
           page.append(quickNav);
         }
         if (refreshStateText) {
-          page.append(createElement('div', auditState?.status === 'error' ? 'detail-state error' : 'detail-state', refreshStateText));
+          timelineSection.append(createElement('div', auditState?.status === 'error' ? 'detail-state error' : 'detail-state', refreshStateText));
         }
         if (!entries.length) {
-          page.append(createElement('div', 'detail-state', currentPageState.deployment
+          timelineSection.append(createElement('div', 'detail-state', currentPageState.deployment
             ? `No audit activity has been persisted yet for deployment ${currentPageState.deployment}.`
             : 'No audit activity has been persisted yet.'));
+          page.append(timelineSection);
           root.replaceChildren(page);
+          activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;
+          syncActiveResourceQuickNav();
+          scrollToCurrentHashTarget();
           return;
         }
 
-        page.append(createElement('div', 'detail-condition-meta', `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} · newest record first${currentPageState.deployment ? ` · deployment ${currentPageState.deployment}` : ''}${currentPageState.auditAction ? ` · action ${currentPageState.auditAction}` : ''}${currentPageState.auditLimit > 0 ? ` · limit ${currentPageState.auditLimit}` : ''}`));
+        timelineSection.append(createElement('div', 'detail-condition-meta', `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} · newest record first${currentPageState.deployment ? ` · deployment ${currentPageState.deployment}` : ''}${currentPageState.auditAction ? ` · action ${currentPageState.auditAction}` : ''}${currentPageState.auditLimit > 0 ? ` · limit ${currentPageState.auditLimit}` : ''}`));
         const rows = createElement('div', 'rows');
         entries.forEach((entry) => {
           const row = createElement('div', 'row');
@@ -3238,8 +3291,13 @@
           }
           rows.append(row);
         });
-        page.append(rows);
+        timelineSection.append(rows);
+        page.append(timelineSection);
         root.replaceChildren(page);
+        activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;
+        syncActiveResourceQuickNav();
+        scrollToCurrentHashTarget();
+        Promise.resolve().then(() => scrollToCurrentHashTarget());
       };
       const loadAuditLogsPage = (options = {}) => {
         const force = Boolean(options?.force);

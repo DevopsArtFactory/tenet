@@ -8006,7 +8006,10 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const quickNavDriftLink = links.find((node) => node.href === '/console?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Drift view');
   const quickNavPlanLink = links.find((node) => node.href === '/console?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Plan/apply');
   const quickNavAuditLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2' && node.textContent === 'Audit log');
-  const quickNavChip = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip').find((node) => node.textContent === 'Audit log');
+  const quickNavDeploymentContextLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-deployment-context' && node.textContent === 'Deployment context');
+  const quickNavTimelineLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-timeline' && node.textContent === 'Audit timeline');
+  const quickNavChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
+  const quickNavChip = quickNavChips.find((node) => node.textContent === 'Audit log');
   const applicationLink = links.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Open application drill-down');
   if (!applicationLink || applicationLink.target !== '_self' || applicationLink.rel) throw new Error('expected audit application self link');
   const driftLink = links.find((node) => node.href === '/console?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Open drift view');
@@ -8019,14 +8022,79 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!breadcrumbChips.find((node) => node.textContent === 'Audit log')) throw new Error('expected audit current breadcrumb chip');
   if (!accountsText.includes('Quick navigation')) throw new Error('expected deployment-scoped audit quick navigation strip');
   if (!accountsText.includes('Deployment workspaces')) throw new Error('expected deployment-scoped audit quick navigation group label');
+  if (!accountsText.includes('Current section')) throw new Error('expected deployment-scoped audit current-section quick-nav group');
+  if (!accountsText.includes('No section is currently targeted.')) throw new Error('expected deployment-scoped audit empty current-section copy without hash');
+  if (!accountsText.includes('On this page')) throw new Error('expected deployment-scoped audit section quick-nav group');
   if (!accountsText.includes('payments-api-prod · Audit log')) throw new Error('expected deployment-scoped audit quick navigation current-state label');
   if (!quickNavBackLink || quickNavBackLink.target !== '_self' || quickNavBackLink.rel) throw new Error('expected audit quick navigation back link');
   if (!quickNavDriftLink || quickNavDriftLink.target !== '_self' || quickNavDriftLink.rel) throw new Error('expected audit quick navigation drift link');
   if (!quickNavPlanLink || quickNavPlanLink.target !== '_self' || quickNavPlanLink.rel) throw new Error('expected audit quick navigation plan link');
+  if (!quickNavDeploymentContextLink || quickNavDeploymentContextLink.target !== '_self' || quickNavDeploymentContextLink.rel) throw new Error('expected audit quick navigation deployment-context section link');
+  if (!quickNavTimelineLink || quickNavTimelineLink.target !== '_self' || quickNavTimelineLink.rel) throw new Error('expected audit quick navigation timeline section link');
   if (quickNavAuditLink) throw new Error('expected audit quick navigation to render active workspace as a chip');
   if (!quickNavChip) throw new Error('expected audit quick navigation chip');
+  if (quickNavChips.find((node) => String(node.getAttribute('aria-label') || '').startsWith('Current section: '))) throw new Error('expected audit route without hash not to render a current-section chip');
 })();
 `
+		runNodeHarness(t, nodeProgram)
+	})
+
+	t.Run("audit hash route tracks the current section in quick navigation", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const auditLogs = ` + string(auditLogsJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const initialSearch = '?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2';
+const hashListeners = [];
+const window = {
+  location: { pathname: '/console', search: initialSearch, hash: '#audit-timeline' },
+  addEventListener(type, handler) { if (type === 'hashchange') hashListeners.push(handler); },
+  dispatchHashChange() { hashListeners.forEach((handler) => handler({ type: 'hashchange' })); },
+};
+const history = { replaceState(_state, _title, url) { const [pathAndQuery, hash = ''] = String(url).split('#'); const [pathname, query = ''] = pathAndQuery.split('?'); window.location.pathname = pathname || '/console'; window.location.search = query ? '?' + query : ''; window.location.hash = hash ? '#' + hash : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/audit-logs?deployment=payments-api-prod&limit=2') return Promise.resolve({ ok: true, json: () => Promise.resolve(auditLogs) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  await settle();
+  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/audit-logs?deployment=payments-api-prod&limit=2') throw new Error('expected hash-routed audit page to fetch the current deployment route');
+  if (window.location.pathname !== '/console') throw new Error('expected audit pathname to stay stable, got ' + window.location.pathname);
+  if (window.location.search !== initialSearch) throw new Error('expected audit query to stay stable, got ' + window.location.search);
+  if (window.location.hash !== '#audit-timeline') throw new Error('expected audit hash to stay stable, got ' + window.location.hash);
+  const accounts = document.getElementById('accounts');
+  const quickNavChips = collectNodes(accounts, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
+  const currentDestinationChip = quickNavChips.find((node) => node.getAttribute('aria-label') === 'Current destination: Audit log');
+  if (!currentDestinationChip) throw new Error('expected audit hash route to keep current-destination chip');
+  const currentSectionChip = quickNavChips.find((node) => node.getAttribute('aria-label') === 'Current section: Audit timeline');
+  if (!currentSectionChip) throw new Error('expected audit hash to render the current-section chip');
+  const sectionLinks = collectNodes(accounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#audit-'));
+  if (sectionLinks.length !== 1) throw new Error('expected only one remaining audit section link, got ' + sectionLinks.length);
+  const deploymentContextLink = sectionLinks.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-deployment-context' && node.textContent === 'Deployment context');
+  if (!deploymentContextLink || deploymentContextLink.target !== '_self' || deploymentContextLink.rel) throw new Error('expected audit hash route deployment-context link to stay in-shell');
+  if (sectionLinks.find((node) => node.textContent === 'Audit timeline')) throw new Error('expected active audit section to be removed from On this page links');
+  window.location.hash = '#audit-deployment-context';
+  window.dispatchHashChange();
+  await settle();
+  const updatedAccounts = document.getElementById('accounts');
+  const updatedChips = collectNodes(updatedAccounts, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
+  const deploymentContextChip = updatedChips.find((node) => node.getAttribute('aria-label') === 'Current section: Deployment context');
+  if (!deploymentContextChip) throw new Error('expected audit hashchange to update the current-section chip');
+  const updatedSectionLinks = collectNodes(updatedAccounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#audit-'));
+  if (updatedSectionLinks.find((node) => node.textContent === 'Deployment context')) throw new Error('expected updated audit current section to be removed from On this page links');
+  if (!updatedSectionLinks.find((node) => node.textContent === 'Audit timeline')) throw new Error('expected previous audit current section to return to On this page links after hashchange');
+})();
+`
+
 		runNodeHarness(t, nodeProgram)
 	})
 
