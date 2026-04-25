@@ -444,7 +444,7 @@ type TrafficRoutingRequest struct {
 
 func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
 	switch req.ResourceType {
-	case "trafficShiftPlan":
+	case "trafficShiftPlan", "productionListenerRule", "activeTargetGroup", "candidateTargetGroup":
 		return availableTrafficRoutingResult(req, trafficRoutingInspection(req)), nil
 	case "codeDeployDeploymentGroup", "productionListener", "testListener":
 		cacheKey := newTrafficRoutingInspectionCacheKey(req.Region, req.TargetAccountID, req.ObserverRoleARN, req.ResourceType, req.ResourceName)
@@ -687,6 +687,12 @@ func trafficRoutingDisplayName(resourceType string) string {
 		return "Production listener"
 	case "testListener":
 		return "Test listener"
+	case "productionListenerRule":
+		return "Production listener rule"
+	case "activeTargetGroup":
+		return "Active target group"
+	case "candidateTargetGroup":
+		return "Candidate target group"
 	case "trafficShiftPlan":
 		return "Traffic shift plan"
 	default:
@@ -709,6 +715,12 @@ func trafficRoutingSummaryText(resourceType, resourceDescription string) string 
 		return "Production listener Tenet uses while shifting live traffic."
 	case "testListener":
 		return "Test listener Tenet uses to validate replacement capacity before promotion."
+	case "productionListenerRule":
+		return "Production listener rule Tenet updates while shifting weighted production traffic."
+	case "activeTargetGroup":
+		return "Active target group currently receiving production traffic."
+	case "candidateTargetGroup":
+		return "Candidate target group Tenet warms before weighted traffic shifting."
 	case "trafficShiftPlan":
 		return "Traffic shift plan Tenet follows while promoting the candidate resource."
 	default:

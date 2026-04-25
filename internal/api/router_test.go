@@ -4805,6 +4805,70 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 	})
 
+	t.Run("returns weighted target group listener-rule summary payload", func(t *testing.T) {
+		expected := resourceinspection.Result{
+			DeploymentName: "api-prod",
+			ResourceType:   "productionListenerRule",
+			ResourceName:   "api-prod-prod-listener",
+			LookupContext: resourceinspection.LookupContext{
+				Region:                 "ap-northeast-2",
+				ControlAccountID:       "123456789012",
+				TargetAccountID:        "210987654321",
+				CrossAccount:           true,
+				ObserverRoleConfigured: false,
+			},
+			Available: true,
+			Source:    resourceinspection.SourceRolloutSummary,
+			TrafficRoutingResource: &resourceinspection.TrafficRoutingInspection{
+				Kind:           "productionListenerRule",
+				DisplayName:    "Production listener rule",
+				InspectionMode: "summary_only",
+				Summary:        "Production listener rule operators inspect while Tenet updates weighted forwarding during rollout",
+			},
+		}
+
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "api-prod" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+				return expected, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=productionListenerRule&resourceName=api-prod-prod-listener", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw weighted target group inspection payload: %v", err)
+		}
+		trafficRoutingResource, ok := raw["trafficRoutingResource"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected trafficRoutingResource object in payload, got %#v", raw["trafficRoutingResource"])
+		}
+		for key, want := range map[string]any{
+			"kind":           "productionListenerRule",
+			"displayName":    "Production listener rule",
+			"inspectionMode": "summary_only",
+			"summary":        "Production listener rule operators inspect while Tenet updates weighted forwarding during rollout",
+		} {
+			if got := trafficRoutingResource[key]; !reflect.DeepEqual(got, want) {
+				t.Fatalf("expected trafficRoutingResource[%q]=%v, got %#v", key, want, got)
+			}
+		}
+	})
+
 	t.Run("returns auto scaling inspection payload with launch template metadata", func(t *testing.T) {
 		expected := resourceinspection.Result{
 			DeploymentName: "api-prod",
