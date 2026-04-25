@@ -425,17 +425,27 @@ func TestApplicationsOverviewPageWithNodeHarness(t *testing.T) {
 	}
 
 	applicationDetailJSON, err := json.Marshal(map[string]any{
-		"name":           "payments-api-staging",
-		"appRef":         "payments",
-		"environmentRef": "staging-apne2",
-		"region":         "ap-northeast-2",
-		"accountName":    "staging-core",
-		"awsAccountId":   "210987654321",
-		"targetType":     "ecs",
-		"strategy":       "linear",
-		"executionMode":  "ecsCodeDeploy",
-		"sync":           map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
-		"health":         map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy"},
+		"name":             "payments-api-staging",
+		"appRef":           "payments",
+		"environmentRef":   "staging-apne2",
+		"region":           "ap-northeast-2",
+		"accountName":      "staging-core",
+		"awsAccountId":     "210987654321",
+		"targetType":       "ecs",
+		"strategy":         "linear",
+		"executionMode":    "ecsCodeDeploy",
+		"desiredArtifact":  map[string]any{"image": "ghcr.io/devopsartfactory/payments-api:staging-20260415"},
+		"deployedArtifact": map[string]any{"image": "ghcr.io/devopsartfactory/payments-api:staging-20260415"},
+		"sync":             map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
+		"health":           map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy"},
+		"runtimeSummary": map[string]any{
+			"timestamp":          "2026-04-16T07:15:00Z",
+			"historyCount":       2,
+			"observedGeneration": 7,
+			"sync":               map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
+			"health":             map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy"},
+			"deployedArtifact":   map[string]any{"image": "ghcr.io/devopsartfactory/payments-api:staging-20260415"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("marshal application detail: %v", err)
@@ -2453,17 +2463,25 @@ func TestApplicationDetailPageWithNodeHarness(t *testing.T) {
 	}
 
 	detailJSON, err := json.Marshal(map[string]any{
-		"name":           "payments-api-staging",
-		"accountName":    "staging-core",
-		"awsAccountId":   "210987654321",
-		"region":         "ap-northeast-2",
-		"appRef":         "payments",
-		"environmentRef": "staging-apne2",
-		"targetType":     "ecs",
-		"strategy":       "linear",
-		"executionMode":  "ecsCodeDeploy",
-		"sync":           map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
-		"health":         map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy while rollout continues"},
+		"name":             "payments-api-staging",
+		"accountName":      "staging-core",
+		"awsAccountId":     "210987654321",
+		"region":           "ap-northeast-2",
+		"appRef":           "payments",
+		"environmentRef":   "staging-apne2",
+		"targetType":       "ecs",
+		"strategy":         "linear",
+		"executionMode":    "ecsCodeDeploy",
+		"desiredArtifact":  map[string]any{"image": "ghcr.io/devopsartfactory/payments-api:staging-20260415"},
+		"deployedArtifact": map[string]any{"image": "ghcr.io/devopsartfactory/payments-api:staging-20260415"},
+		"sync":             map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
+		"health":           map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy while rollout continues"},
+		"runtimeSummary": map[string]any{
+			"timestamp":    "2026-04-16T07:15:00Z",
+			"historyCount": 2,
+			"sync":         map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
+			"health":       map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy while rollout continues"},
+		},
 		"rollout": map[string]any{
 			"execution": []map[string]any{
 				{"name": "payments-api-staging ECS Service", "resource": "ecsService", "description": "Primary ECS service for the staging environment"},
@@ -2544,6 +2562,11 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!toolbarText.includes('Back to applications')) throw new Error('expected application page back link');
   if (!summaryText.includes('payments-api-staging')) throw new Error('expected application summary title');
   if (!accountsText.includes('Application resources')) throw new Error('expected application resources heading');
+  if (!accountsText.includes('Current application status')) throw new Error('expected compact application status summary');
+  if (!accountsText.includes('Target ecs · Strategy linear · Execution ecsCodeDeploy')) throw new Error('expected application status summary rollout context');
+  if (!accountsText.includes('ghcr.io/devopsartfactory/payments-api:staging-20260415')) throw new Error('expected application status summary artifact');
+  if (!accountsText.includes('2 runtime events')) throw new Error('expected application status summary runtime event count');
+  if (!accountsText.includes('2026-04-16T07:15:00Z')) throw new Error('expected application status summary last update');
   if (!accountsText.includes('Workloads')) throw new Error('expected workloads group');
   if (!accountsText.includes('Traffic routing')) throw new Error('expected traffic routing group');
   if (!accountsText.includes('Config and access')) throw new Error('expected config and access group');
@@ -2576,17 +2599,25 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 
 	t.Run("refreshes application detail in place", func(t *testing.T) {
 		initialDetailJSON, err := json.Marshal(map[string]any{
-			"name":           "payments-api-staging",
-			"accountName":    "staging-core",
-			"awsAccountId":   "210987654321",
-			"region":         "ap-northeast-2",
-			"appRef":         "payments",
-			"environmentRef": "staging-apne2",
-			"targetType":     "ecs",
-			"strategy":       "linear",
-			"executionMode":  "ecsCodeDeploy",
-			"sync":           map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
-			"health":         map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy while rollout continues"},
+			"name":             "payments-api-staging",
+			"accountName":      "staging-core",
+			"awsAccountId":     "210987654321",
+			"region":           "ap-northeast-2",
+			"appRef":           "payments",
+			"environmentRef":   "staging-apne2",
+			"targetType":       "ecs",
+			"strategy":         "linear",
+			"executionMode":    "ecsCodeDeploy",
+			"desiredArtifact":  map[string]any{"image": "ghcr.io/devopsartfactory/payments-api:staging-20260415"},
+			"deployedArtifact": map[string]any{"image": "ghcr.io/devopsartfactory/payments-api:staging-20260415"},
+			"sync":             map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
+			"health":           map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy while rollout continues"},
+			"runtimeSummary": map[string]any{
+				"timestamp":    "2026-04-16T07:15:00Z",
+				"historyCount": 1,
+				"sync":         map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
+				"health":       map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy while rollout continues"},
+			},
 			"rollout": map[string]any{
 				"execution": []map[string]any{
 					{"name": "payments-api-staging ECS Service", "resource": "ecsService", "description": "Primary ECS service for the staging environment"},
@@ -2599,17 +2630,25 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 		}
 
 		refreshedDetailJSON, err := json.Marshal(map[string]any{
-			"name":           "payments-api-staging",
-			"accountName":    "staging-core",
-			"awsAccountId":   "210987654321",
-			"region":         "ap-northeast-2",
-			"appRef":         "payments",
-			"environmentRef": "staging-apne2",
-			"targetType":     "ecs",
-			"strategy":       "linear",
-			"executionMode":  "ecsCodeDeploy",
-			"sync":           map[string]any{"state": "Reconciling", "reason": "replacement task set is warming up"},
-			"health":         map[string]any{"overall": "Progressing", "summary": "Replacement task set is warming up"},
+			"name":             "payments-api-staging",
+			"accountName":      "staging-core",
+			"awsAccountId":     "210987654321",
+			"region":           "ap-northeast-2",
+			"appRef":           "payments",
+			"environmentRef":   "staging-apne2",
+			"targetType":       "ecs",
+			"strategy":         "linear",
+			"executionMode":    "ecsCodeDeploy",
+			"desiredArtifact":  map[string]any{"image": "ghcr.io/devopsartfactory/payments-api:staging-20260416"},
+			"deployedArtifact": map[string]any{"image": "ghcr.io/devopsartfactory/payments-api:staging-20260416"},
+			"sync":             map[string]any{"state": "Reconciling", "reason": "replacement task set is warming up"},
+			"health":           map[string]any{"overall": "Progressing", "summary": "Replacement task set is warming up"},
+			"runtimeSummary": map[string]any{
+				"timestamp":    "2026-04-16T07:20:00Z",
+				"historyCount": 3,
+				"sync":         map[string]any{"state": "Reconciling", "reason": "replacement task set is warming up"},
+				"health":       map[string]any{"overall": "Progressing", "summary": "Replacement task set is warming up"},
+			},
 			"rollout": map[string]any{
 				"execution": []map[string]any{
 					{"name": "payments-api-canary ECS Service", "resource": "ecsService", "description": "Primary ECS service for the refreshed staging environment"},
@@ -2728,6 +2767,8 @@ async function render(fetchImpl) {
   if (!refreshButton || refreshButton.disabled) throw new Error('expected application refresh button enabled after initial render');
   let accountsText = collectText(loadingView.document.getElementById('accounts')).join(' | ');
   if (!accountsText.includes('payments-api-staging ECS Service')) throw new Error('expected initial application resource before refresh');
+  if (!accountsText.includes('Current application status')) throw new Error('expected initial application status summary before refresh');
+  if (!accountsText.includes('1 runtime event')) throw new Error('expected initial application runtime event summary before refresh');
   refreshButton.dispatch('click');
   await settle();
   toolbarButtons = collectNodes(loadingView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
@@ -2744,6 +2785,9 @@ async function render(fetchImpl) {
   accountsText = collectText(loadingView.document.getElementById('accounts')).join(' | ');
   if (!accountsText.includes('payments-api-canary ECS Service')) throw new Error('expected refreshed application detail to render in place');
   if (accountsText.includes('payments-api-staging ECS Service')) throw new Error('expected refreshed application detail to replace stale resource content');
+  if (!accountsText.includes('replacement task set is warming up')) throw new Error('expected refreshed application summary signal');
+  if (!accountsText.includes('3 runtime events')) throw new Error('expected refreshed application runtime event summary');
+  if (!accountsText.includes('ghcr.io/devopsartfactory/payments-api:staging-20260416')) throw new Error('expected refreshed application artifact summary');
   toolbarButtons = collectNodes(loadingView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
   refreshButton = toolbarButtons.find((node) => node.textContent === 'Refresh application detail');
   if (!refreshButton || refreshButton.disabled) throw new Error('expected application refresh button re-enabled after refresh completes');

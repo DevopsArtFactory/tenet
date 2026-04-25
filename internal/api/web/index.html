@@ -1441,6 +1441,58 @@
       };
       const nonEmptyResourceSections = (detail) => groupResourceSections(detail).filter((group) => Array.isArray(group?.resources) && group.resources.length > 0);
       const applicationDetailReadRoute = (deploymentName) => `GET /v1/overview/applications/${deploymentName || '{deploymentName}'}`;
+      const applicationStatusSignal = (detail) => {
+        const signal = detail.sync?.reason || detail.runtimeSummary?.summary || detail.health?.summary || '';
+        if (signal) return signal;
+        const syncState = detail.sync?.state || detail.runtimeSummary?.sync?.state || '';
+        if (syncState) return `${syncState} is the latest reported application signal.`;
+        return 'No controller runtime summary has been reported yet.';
+      };
+      const applicationRuntimeEventSummary = (detail) => {
+        const count = Number(detail.runtimeSummary?.historyCount);
+        if (Number.isFinite(count) && count >= 0) return `${count} runtime event${count === 1 ? '' : 's'}`;
+        return 'No runtime events reported';
+      };
+      const createApplicationStatusSummary = (detail, resourceGroups = []) => {
+        const sync = detail.sync?.state || detail.runtimeSummary?.sync?.state || 'Unknown';
+        const syncReason = detail.sync?.reason || detail.runtimeSummary?.sync?.reason || '';
+        const health = detail.health?.overall ? detail.health : detail.runtimeSummary?.health;
+        const healthText = `${healthLabel(health)}${health?.summary ? ` · ${health.summary}` : ''}`;
+        const rolloutContext = rolloutContextText(effectiveRolloutContext(detail)) || '—';
+        const deployedArtifact = artifact(detail.deployedArtifact);
+        const desiredArtifact = artifact(detail.desiredArtifact);
+        const artifactText = deployedArtifact !== '—' ? deployedArtifact : desiredArtifact;
+        const linkedResources = resourceGroups.reduce((count, group) => count + ((group?.resources || []).length), 0);
+        const section = createElement('section', 'deployment-group');
+        const head = createElement('div', 'deployment-group-head');
+        const titleWrap = createElement('div');
+        titleWrap.append(
+          createElement('h3', 'deployment-group-title', 'Current application status'),
+          createElement('div', 'deployment-group-meta', applicationStatusSignal(detail)),
+        );
+        const pills = createElement('div', 'pills');
+        pills.append(
+          createElement('span', `pill ${statusClass(sync)}`, sync),
+          createElement('span', `pill ${healthClass(health?.overall)}`, healthLabel(health)),
+        );
+        const contextChip = createQuickNavChip(rolloutContext, `Application rollout context: ${rolloutContext}`);
+        contextChip.classList.add('quick-nav-chip-subtle');
+        pills.append(contextChip);
+        head.append(titleWrap, pills);
+        const metrics = createElement('div', 'metrics');
+        [
+          ['Sync', `${sync}${syncReason ? ` · ${syncReason}` : ''}`],
+          ['Health', healthText],
+          ['Artifact', artifactText !== '—' ? artifactText : 'No artifact reported'],
+          ['Linked resources', `${linkedResources} linked resource${linkedResources === 1 ? '' : 's'}`],
+          ['Runtime events', applicationRuntimeEventSummary(detail)],
+          ['Last update', runtimeSummaryTimestamp(detail.runtimeSummary)],
+        ].forEach(([label, value]) => {
+          metrics.append(createMetric(label, value));
+        });
+        section.append(head, metrics);
+        return section;
+      };
       const createApplicationDetailActions = (applicationState = null) => [
         createRefreshButton(
           'Refresh application detail',
@@ -1557,6 +1609,7 @@
           createElement('h2', 'account-name', 'Application resources'),
           createElement('div', 'account-meta', 'Grouped linked resources for the selected application. Open drift or plan/apply from here before the final resource page.'),
         );
+        page.append(createApplicationStatusSummary(detail, resourceGroups));
         const workspaceLinks = createElement('div', 'row-links row-links-shell');
         if (deploymentName) {
           workspaceLinks.append(
