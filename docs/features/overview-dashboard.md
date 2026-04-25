@@ -192,6 +192,8 @@ Current behavior:
 - makes an active deployment filter obvious in both the page chrome and body when `deployment={deploymentName}` is present
 - adds breadcrumb chrome for `Applications -> {deploymentName} -> Audit log` when a deployment filter is present, keeping prior levels as `_self` links and the current audit route as a non-click chip
 - adds the same quick-navigation strip used in the drift/plan workspaces when `deployment={deploymentName}` is present, with a `Hierarchy` group for `_self` `Applications overview` and `Back to application`, a `Current destination` chip for the active deployment-scoped `Audit log` route, and sibling workspace links for `Drift view` / `Plan/apply`
+- adds a hash-aware `Current section` group plus an `On this page` group to that deployment-scoped audit quick-navigation strip, using stable fragment links for `Deployment context` (`#audit-deployment-context`) when the deployment callout is present and `Audit timeline` (`#audit-timeline`) for the immutable entries section while preserving the current bookmarkable pathname/query
+- when one of those audit section hashes is active, the current section becomes a non-click chip, disappears from the remaining `On this page` links, and otherwise falls back to the same explicit empty state `No section is currently targeted.`
 - renders deployment-specific empty-state copy when one deployment is selected and no persisted audit entries match, while keeping the generic unfiltered empty state unchanged
 - keeps the current `/?page=audit...` URL/query state stable while leaving the current audit content visible with explicit loading/error copy during an in-place refresh of the same route
 - keeps entries newest-first even if the client receives an unsorted payload

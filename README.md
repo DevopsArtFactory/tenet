@@ -270,6 +270,8 @@ The page is backed directly by `GET /v1/audit-logs` and currently focuses on:
 - deployment-scoped filter copy such as `Audit filters: deployment payments-api-prod · action apply.requested · limit 2` when you reopen `/?page=audit&deployment=payments-api-prod&action=apply.requested&limit=2`
 - deployment / app / environment context
 - deployment-scoped chrome/body copy plus a deployment-specific empty state when `deployment={deploymentName}` is present and no persisted audit entries match
+- deployment-scoped quick navigation that keeps `Applications overview`, `Back to application`, the current non-click `Audit log` destination, sibling `Drift view` / `Plan/apply` workspace links, and a hash-aware `Current section` / `On this page` pair for `Deployment context` and `Audit timeline` fragments such as `/?page=audit&deployment=payments-api-prod&limit=2#audit-timeline`
+- the current audit section becomes a non-click chip when that hash is active, while the remaining audit sections stay as `_self` fragment links and otherwise fall back to `No section is currently targeted.`
 - initial `GET /v1/audit-logs` auth failures now render operator-specific guidance instead of generic fetch-error copy: `401` tells the operator to retry the same bookmarkable page through the trusted front door so authenticated identity can be provided, while `403` explains that the current authenticated operator is not authorized for that route or deployment
 - keeps the current audit content visible with explicit loading/error copy while that in-place refresh is running or fails for the same bookmarkable route
 - explicit actor-unavailable or actor-unknown labeling instead of fabricated identity
