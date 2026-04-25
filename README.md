@@ -324,6 +324,7 @@ Supported always-live inspection currently starts with:
 - `serviceAutoScalingGroup`
 
 Supported traffic-routing inspection currently covers:
+- `codeDeployApplication`
 - `codeDeployDeploymentGroup`
 - `productionListener`
 - `testListener`
@@ -334,7 +335,7 @@ Supported traffic-routing inspection currently covers:
 - `greenTaskSetTargetGroup`
 - `trafficShiftPlan`
 
-Within one running Tenet API process, repeated successful live inspections for `codeDeployDeploymentGroup`, `productionListener`, and `testListener` now reuse a bounded in-process cache keyed by `(region, target account, observer role, resource type, resource name)`. Summary-only fallbacks and unavailable outcomes are still recomputed or returned through the existing non-cached path.
+Within one running Tenet API process, repeated successful live inspections for `codeDeployApplication`, `codeDeployDeploymentGroup`, `productionListener`, and `testListener` now reuse a bounded in-process cache keyed by `(region, target account, observer role, resource type, resource name)`. Summary-only fallbacks and unavailable outcomes are still recomputed or returned through the existing non-cached path.
 
 For `ecsService`, Tenet now keeps a bounded in-process hint of the last cluster that resolved a given `(region, target account, observer role, service name)` lookup so repeated drill-downs avoid brute-force cluster scans. If that hint is stale or the service moved, the lookup falls back to the full cluster scan path, refreshes the hint, and keeps the existing resource-not-found semantics unchanged.
 
@@ -342,7 +343,7 @@ The embedded `Live inspection` panel renders operator-friendly summaries from th
 - `ecsService`: service identity/status, desired-running-pending counts, additive deployment-configuration fields (`minimumHealthyPercent`, `maximumPercent`, `healthCheckGracePeriodSeconds`) when ECS returns them, active deployments, and recent ECS service events
 - `autoScalingGroup`: group sizing/health settings, attached target groups, current instances, and additive launch-template details including `launchTemplate.imageId` and `launchTemplate.instanceType` when the live EC2 launch-template lookup resolves them
 - `userDataBootstrapSource`: normalized desired bootstrap source, observed launch-template bootstrap-source marker, the backing Auto Scaling resource Tenet inspected, the launch template version Tenet used for that observation, and an additive in-app handoff to the resolved backing resource drill-down when that resource can be matched safely from the loaded deployment metadata
-- `trafficRoutingResource`: summary-only or live traffic-routing context with explicit resource kind, display name, inspection mode, rollout summary text, and additive live fields for CodeDeploy deployment groups or listeners when AWS access is available
+- `trafficRoutingResource`: summary-only or live traffic-routing context with explicit resource kind, display name, inspection mode, rollout summary text, and additive live fields for CodeDeploy applications, deployment groups, or listeners when AWS access is available
 
 Resource-inspection responses keep the contract explicit for UI consumers:
 - common fields: `deploymentName`, `resourceType`, `resourceName`, `lookupContext`, `available`, `source`, `unavailableReason`
@@ -353,7 +354,7 @@ Resource-inspection responses keep the contract explicit for UI consumers:
 
 Traffic-routing inspection stays local-friendly without changing the route shape:
 - `trafficShiftPlan`, `productionListenerRule`, `activeTargetGroup`, `candidateTargetGroup`, `blueTaskSetTargetGroup`, and `greenTaskSetTargetGroup` remain `summary_only`
-- `codeDeployDeploymentGroup`, `productionListener`, and `testListener` stay `summary_only` when AWS inspection is disabled, and switch to `inspectionMode=live` with additive `codeDeployDeploymentGroup` or `listener` details when live AWS access succeeds
+- `codeDeployApplication`, `codeDeployDeploymentGroup`, `productionListener`, and `testListener` stay `summary_only` when AWS inspection is disabled, and switch to `inspectionMode=live` with additive `codeDeployApplication`, `codeDeployDeploymentGroup`, or `listener` details when live AWS access succeeds
 - AWS-side traffic-routing failures still return `available=false` with an explicit `unavailableReason` and `lookupContext`
 
 Like recent logs, `lookupContext` is present for both `available=true` and unavailable inspection responses:

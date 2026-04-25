@@ -80,8 +80,17 @@ type TrafficRoutingInspection struct {
 	DisplayName               string                               `json:"displayName"`
 	InspectionMode            string                               `json:"inspectionMode"`
 	Summary                   string                               `json:"summary"`
+	CodeDeployApplication     *CodeDeployApplicationInspection     `json:"codeDeployApplication,omitempty"`
 	CodeDeployDeploymentGroup *CodeDeployDeploymentGroupInspection `json:"codeDeployDeploymentGroup,omitempty"`
 	Listener                  *ListenerInspection                  `json:"listener,omitempty"`
+}
+
+type CodeDeployApplicationInspection struct {
+	ApplicationName  string   `json:"applicationName"`
+	ApplicationID    string   `json:"applicationId,omitempty"`
+	ComputePlatform  string   `json:"computePlatform,omitempty"`
+	LinkedToGitHub   bool     `json:"linkedToGitHub"`
+	DeploymentGroups []string `json:"deploymentGroups,omitempty"`
 }
 
 type CodeDeployDeploymentGroupInspection struct {
@@ -446,7 +455,7 @@ func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
 	switch req.ResourceType {
 	case "trafficShiftPlan", "productionListenerRule", "activeTargetGroup", "candidateTargetGroup", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup":
 		return availableTrafficRoutingResult(req, trafficRoutingInspection(req)), nil
-	case "codeDeployDeploymentGroup", "productionListener", "testListener":
+	case "codeDeployApplication", "codeDeployDeploymentGroup", "productionListener", "testListener":
 		cacheKey := newTrafficRoutingInspectionCacheKey(req.Region, req.TargetAccountID, req.ObserverRoleARN, req.ResourceType, req.ResourceName)
 		if detail, ok := s.trafficRoutingCache.Get(cacheKey); ok {
 			detail.Summary = trafficRoutingSummary(req)
@@ -681,6 +690,8 @@ func trafficRoutingInspection(req Request) TrafficRoutingInspection {
 
 func trafficRoutingDisplayName(resourceType string) string {
 	switch resourceType {
+	case "codeDeployApplication":
+		return "CodeDeploy application"
 	case "codeDeployDeploymentGroup":
 		return "CodeDeploy deployment group"
 	case "productionListener":
@@ -713,6 +724,8 @@ func trafficRoutingSummaryText(resourceType, resourceDescription string) string 
 		return summary
 	}
 	switch resourceType {
+	case "codeDeployApplication":
+		return "CodeDeploy application Tenet coordinates for ECS traffic shifting."
 	case "codeDeployDeploymentGroup":
 		return "CodeDeploy deployment group Tenet targets for rollout."
 	case "productionListener":
@@ -738,6 +751,11 @@ func trafficRoutingSummaryText(resourceType, resourceDescription string) string 
 
 func cloneTrafficRoutingInspection(detail TrafficRoutingInspection) TrafficRoutingInspection {
 	cloned := detail
+	if detail.CodeDeployApplication != nil {
+		application := *detail.CodeDeployApplication
+		application.DeploymentGroups = append([]string(nil), detail.CodeDeployApplication.DeploymentGroups...)
+		cloned.CodeDeployApplication = &application
+	}
 	if detail.CodeDeployDeploymentGroup != nil {
 		group := *detail.CodeDeployDeploymentGroup
 		group.ECSServices = append([]CodeDeployECSServiceBinding(nil), detail.CodeDeployDeploymentGroup.ECSServices...)

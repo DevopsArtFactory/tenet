@@ -4789,6 +4789,70 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 	})
 
+	t.Run("returns CodeDeploy application summary payload", func(t *testing.T) {
+		expected := resourceinspection.Result{
+			DeploymentName: "payments-api-staging",
+			ResourceType:   "codeDeployApplication",
+			ResourceName:   "payments-api-staging-codedeploy-app",
+			LookupContext: resourceinspection.LookupContext{
+				Region:                 "ap-northeast-2",
+				ControlAccountID:       "123456789012",
+				TargetAccountID:        "210987654321",
+				CrossAccount:           true,
+				ObserverRoleConfigured: false,
+			},
+			Available: true,
+			Source:    resourceinspection.SourceRolloutSummary,
+			TrafficRoutingResource: &resourceinspection.TrafficRoutingInspection{
+				Kind:           "codeDeployApplication",
+				DisplayName:    "CodeDeploy application",
+				InspectionMode: "summary_only",
+				Summary:        "CodeDeploy application coordinating ECS traffic shifting (style: linear; qualifiers: min healthy 80% and warmup 45s)",
+			},
+		}
+
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "payments-api-staging" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+				return expected, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=codeDeployApplication&resourceName=payments-api-staging-codedeploy-app", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw CodeDeploy application inspection payload: %v", err)
+		}
+		trafficRoutingResource, ok := raw["trafficRoutingResource"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected trafficRoutingResource object in payload, got %#v", raw["trafficRoutingResource"])
+		}
+		for key, want := range map[string]any{
+			"kind":           "codeDeployApplication",
+			"displayName":    "CodeDeploy application",
+			"inspectionMode": "summary_only",
+			"summary":        "CodeDeploy application coordinating ECS traffic shifting (style: linear; qualifiers: min healthy 80% and warmup 45s)",
+		} {
+			if got := trafficRoutingResource[key]; !reflect.DeepEqual(got, want) {
+				t.Fatalf("expected trafficRoutingResource[%q]=%v, got %#v", key, want, got)
+			}
+		}
+	})
+
 	t.Run("returns traffic routing summary payload", func(t *testing.T) {
 		expected := resourceinspection.Result{
 			DeploymentName: "api-prod",
@@ -5284,6 +5348,88 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 		if _, ok := trafficRoutingResource["codeDeployDeploymentGroup"].(map[string]any); !ok {
 			t.Fatalf("expected codeDeployDeploymentGroup object in payload, got %#v", trafficRoutingResource["codeDeployDeploymentGroup"])
+		}
+	})
+
+	t.Run("returns live CodeDeploy application payload", func(t *testing.T) {
+		expected := resourceinspection.Result{
+			DeploymentName: "api-prod",
+			ResourceType:   "codeDeployApplication",
+			ResourceName:   "api-prod-codedeploy-app",
+			LookupContext: resourceinspection.LookupContext{
+				Region:                 "ap-northeast-2",
+				ControlAccountID:       "123456789012",
+				TargetAccountID:        "123456789012",
+				CrossAccount:           false,
+				ObserverRoleConfigured: true,
+			},
+			Available: true,
+			Source:    resourceinspection.SourceTrafficRoutingAWS,
+			TrafficRoutingResource: &resourceinspection.TrafficRoutingInspection{
+				Kind:           "codeDeployApplication",
+				DisplayName:    "CodeDeploy application",
+				InspectionMode: "live",
+				Summary:        "CodeDeploy application coordinating ECS traffic shifting (style: linear)",
+				CodeDeployApplication: &resourceinspection.CodeDeployApplicationInspection{
+					ApplicationName:  "api-prod-codedeploy-app",
+					ApplicationID:    "a-1234567890",
+					ComputePlatform:  "ECS",
+					LinkedToGitHub:   true,
+					DeploymentGroups: []string{"api-prod-codedeploy-group", "api-prod-codedeploy-group-canary"},
+				},
+			},
+		}
+
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "api-prod" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+				return expected, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=codeDeployApplication&resourceName=api-prod-codedeploy-app", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw live CodeDeploy application inspection payload: %v", err)
+		}
+		trafficRoutingResource, ok := raw["trafficRoutingResource"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected trafficRoutingResource object in payload, got %#v", raw["trafficRoutingResource"])
+		}
+		if got := trafficRoutingResource["inspectionMode"]; got != "live" {
+			t.Fatalf("expected live inspectionMode, got %#v", got)
+		}
+		codeDeployApplication, ok := trafficRoutingResource["codeDeployApplication"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected codeDeployApplication object in payload, got %#v", trafficRoutingResource["codeDeployApplication"])
+		}
+		for key, want := range map[string]any{
+			"applicationName": "api-prod-codedeploy-app",
+			"applicationId":   "a-1234567890",
+			"computePlatform": "ECS",
+			"linkedToGitHub":  true,
+		} {
+			if got := codeDeployApplication[key]; !reflect.DeepEqual(got, want) {
+				t.Fatalf("expected codeDeployApplication[%q]=%v, got %#v", key, want, got)
+			}
+		}
+		deploymentGroups, ok := codeDeployApplication["deploymentGroups"].([]any)
+		if !ok || len(deploymentGroups) != 2 {
+			t.Fatalf("expected deploymentGroups array in payload, got %#v", codeDeployApplication["deploymentGroups"])
 		}
 	})
 

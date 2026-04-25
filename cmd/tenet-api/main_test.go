@@ -1683,6 +1683,11 @@ func TestAPIOptionsOverviewDeploymentResourceInspectionUsesCodeDeployFallbackWhe
 		resourceDescription string
 	}{
 		{
+			resourceType:        "codeDeployApplication",
+			resourceName:        "api-prod-codedeploy-app",
+			resourceDescription: "CodeDeploy application coordinating ECS traffic shifting (style: linear)",
+		},
+		{
 			resourceType:        "codeDeployDeploymentGroup",
 			resourceName:        "api-prod-codedeploy-group",
 			resourceDescription: "CodeDeploy deployment group Tenet targets for ECS rollout (style: linear)",
