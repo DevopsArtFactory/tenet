@@ -157,6 +157,7 @@
       let auditLogsPageState = { status: 'idle', route: '', result: null, error: null, promise: null, requestId: 0 };
       let allAccounts = [];
       let allApplications = [];
+      let applicationsOverviewState = null;
       let currentViewState = { query: '', syncState: 'all', account: 'all' };
       let currentPageState = {
         page: 'applications',
@@ -1245,6 +1246,38 @@
           return matchesAccount && matchesState && matchesQuery;
         });
       };
+      const applicationsOverviewReadRoute = () => 'GET /v1/overview/applications';
+      const createApplicationsOverviewActions = (overviewState = null) => [
+        createRefreshButton(
+          'Refresh applications overview',
+          overviewState?.status === 'loading',
+          () => overviewState?.onRefresh?.().catch(() => {}),
+        ),
+      ];
+      const applicationsOverviewRefreshState = (overviewState = null) => {
+        if (overviewState?.status === 'loading') {
+          return {
+            heading: '',
+            message: 'Refreshing applications overview from GET /v1/overview/applications…',
+            className: '',
+          };
+        }
+        if (overviewState?.status === 'error') {
+          if (operatorReadFailureHeading(overviewState.error)) {
+            return {
+              heading: operatorReadFailureHeading(overviewState.error),
+              message: `${operatorReadFailureMessage(applicationsOverviewReadRoute(), overviewState.error)} Current applications overview remains visible below.`,
+              className: 'error',
+            };
+          }
+          return {
+            heading: '',
+            message: `Failed to refresh applications overview: ${overviewState.error?.message || 'unknown error'}`,
+            className: 'error',
+          };
+        }
+        return null;
+      };
       const renderToolbar = (applications, state) => {
         const root = document.getElementById('toolbar');
         const accountOptions = [
@@ -1282,6 +1315,9 @@
         const actions = createElement('div', 'toolbar-actions');
         actions.append(createElement('div', 'toolbar-active', active.length ? `Active filters: ${active.join(' · ')}` : 'Active filters: none'));
         actions.append(createNavLink(buildPageURL('audit'), 'Open audit log', '_self'));
+        createApplicationsOverviewActions(applicationsOverviewState).forEach((action) => {
+          if (action) actions.append(action);
+        });
         const clearButton = createElement('button', 'toolbar-button', 'Clear filters');
         clearButton.type = 'button';
         clearButton.disabled = !active.length;
@@ -1314,7 +1350,17 @@
           createElement('div', 'account-meta', `${synced} synced · ${progressing} progressing · ${paused} paused · ${errored} error`),
           createElement('div', 'account-meta', `Last update · ${latestUpdate}`),
         );
-        summary.replaceChildren(header, statusCard);
+        const refreshState = applicationsOverviewRefreshState(applicationsOverviewState);
+        const refreshNodes = [];
+        if (refreshState?.heading) {
+          refreshNodes.push(createElement('div', refreshState.className ? `detail-state ${refreshState.className}` : 'detail-state', refreshState.heading));
+          if (refreshState.message) {
+            refreshNodes.push(createElement('div', 'detail-condition-meta', refreshState.message));
+          }
+        } else if (refreshState?.message) {
+          refreshNodes.push(createElement('div', refreshState.className ? `detail-state ${refreshState.className}` : 'detail-state', refreshState.message));
+        }
+        summary.replaceChildren(...refreshNodes, header, statusCard);
       };
       const renderApplicationsTable = (applications) => {
         const root = document.getElementById('accounts');
@@ -5085,6 +5131,33 @@
             allApplications = applications;
             currentViewState = normalizeViewState(applications, parseViewState());
             syncViewState(currentViewState);
+            applicationsOverviewState = {
+              status: 'idle',
+              error: null,
+              onRefresh: null,
+            };
+            applicationsOverviewState.onRefresh = () => {
+              if (applicationsOverviewState?.status === 'loading') return Promise.resolve(allApplications);
+              applicationsOverviewState.status = 'loading';
+              applicationsOverviewState.error = null;
+              renderApplicationsOverview(allApplications);
+              return fetchApplicationsOverview()
+                .then((nextApplications) => {
+                  allApplications = nextApplications;
+                  currentViewState = normalizeViewState(nextApplications, currentViewState);
+                  syncViewState(currentViewState);
+                  applicationsOverviewState.status = 'idle';
+                  applicationsOverviewState.error = null;
+                  renderApplicationsOverview(nextApplications);
+                  return nextApplications;
+                })
+                .catch((error) => {
+                  applicationsOverviewState.status = 'error';
+                  applicationsOverviewState.error = error;
+                  renderApplicationsOverview(allApplications);
+                  throw error;
+                });
+            };
             renderApplicationsOverview(applications);
           })
           .catch((error) => {

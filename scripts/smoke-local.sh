@@ -827,6 +827,9 @@ assert "return `GET /v1/overview/accounts/${accountID}`;" in ui, ui
 assert 'Open account' in ui, ui
 assert 'Open application' in ui, ui
 assert 'Open audit log' in ui, ui
+assert 'Refresh applications overview' in ui, ui
+assert 'Refreshing applications overview from GET /v1/overview/applications…' in ui, ui
+assert 'Failed to refresh applications overview:' in ui, ui
 assert 'Runtime change details' in ui, ui
 assert 'History change details' in ui, ui
 assert "buildPageURL('account', { accountId: deployment.awsAccountId })" in ui, ui

@@ -65,6 +65,12 @@ Current behavior:
 
 The first page now shows only application-level rows plus search/filter controls, backed by `/v1/overview/applications`.
 
+Current applications-overview behavior:
+- keeps the existing bookmarkable `q` / `sync` / `account` query state as the primary first-page triage surface
+- exposes an in-place `Refresh applications overview` control that re-runs only `GET /v1/overview/applications`, disables only while that overview fetch is active, and keeps the same bookmarkable applications URL/query state stable
+- keeps the current applications summary plus visible rows rendered with explicit loading/error copy while that in-place refresh is running or fails
+- refresh-time `401` / `403` responses reuse the same trusted-front-door / access-denied guidance as the other embedded read paths instead of generic refresh-error copy
+
 Each row surfaces:
 - application name
 - account
