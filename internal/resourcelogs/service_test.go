@@ -441,6 +441,172 @@ func TestServiceRecent(t *testing.T) {
 		}
 	})
 
+	t.Run("codeDeploy deployment group returns newest rollout history entries", func(t *testing.T) {
+		var gotLookup CodeDeployRequest
+		service := NewService(Options{
+			MaxEntries: 2,
+			ListCodeDeployEvents: func(ctx context.Context, req CodeDeployRequest) ([]CodeDeployEvent, error) {
+				gotLookup = req
+				return []CodeDeployEvent{
+					{Timestamp: time.Date(2026, 4, 18, 9, 14, 0, 0, time.UTC), Message: "Status: Failed — deployment did not pass the after-allow-test-traffic hook", DeploymentID: "d-older"},
+					{Timestamp: time.Date(2026, 4, 18, 9, 18, 0, 0, time.UTC), Message: "Status: Succeeded — deployment completed for the latest linear rollout", DeploymentID: "d-newest"},
+					{Timestamp: time.Date(2026, 4, 18, 9, 16, 0, 0, time.UTC), Message: "Status: InProgress — shifting 50 percent of traffic", DeploymentID: "d-middle"},
+				}, nil
+			},
+		})
+
+		result, err := service.Recent(context.Background(), Request{
+			DeploymentName:   "payments-api-staging",
+			ResourceType:     "codeDeployDeploymentGroup",
+			ResourceName:     "payments-api-staging-codedeploy-group",
+			ControlAccountID: "123456789012",
+			TargetAccountID:  "123456789012",
+			Region:           "ap-northeast-2",
+		})
+		if err != nil {
+			t.Fatalf("Recent returned error: %v", err)
+		}
+		if !reflect.DeepEqual(gotLookup, CodeDeployRequest{
+			DeploymentName:  "payments-api-staging",
+			ResourceName:    "payments-api-staging-codedeploy-group",
+			Region:          "ap-northeast-2",
+			TargetAccountID: "123456789012",
+		}) {
+			t.Fatalf("unexpected CodeDeploy lookup request: %+v", gotLookup)
+		}
+		want := Result{
+			DeploymentName: "payments-api-staging",
+			ResourceType:   "codeDeployDeploymentGroup",
+			ResourceName:   "payments-api-staging-codedeploy-group",
+			LookupContext:  expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
+			Available:      true,
+			Source:         SourceCodeDeploy,
+			Entries: []Entry{
+				{Timestamp: "2026-04-18T09:18:00Z", Message: "Status: Succeeded — deployment completed for the latest linear rollout", Stream: "d-newest"},
+				{Timestamp: "2026-04-18T09:16:00Z", Message: "Status: InProgress — shifting 50 percent of traffic", Stream: "d-middle"},
+			},
+		}
+		if !reflect.DeepEqual(result, want) {
+			t.Fatalf("unexpected CodeDeploy resource logs result: %+v", result)
+		}
+	})
+
+	t.Run("codeDeploy deployment group returns empty-but-available payload when no rollout history exists", func(t *testing.T) {
+		service := NewService(Options{
+			ListCodeDeployEvents: func(ctx context.Context, req CodeDeployRequest) ([]CodeDeployEvent, error) {
+				return []CodeDeployEvent{}, nil
+			},
+		})
+
+		result, err := service.Recent(context.Background(), Request{
+			DeploymentName:   "payments-api-staging",
+			ResourceType:     "codeDeployDeploymentGroup",
+			ResourceName:     "payments-api-staging-codedeploy-group",
+			ControlAccountID: "123456789012",
+			TargetAccountID:  "123456789012",
+			Region:           "ap-northeast-2",
+		})
+		if err != nil {
+			t.Fatalf("Recent returned error: %v", err)
+		}
+		want := Result{
+			DeploymentName: "payments-api-staging",
+			ResourceType:   "codeDeployDeploymentGroup",
+			ResourceName:   "payments-api-staging-codedeploy-group",
+			LookupContext:  expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
+			Available:      true,
+			Source:         SourceCodeDeploy,
+			Entries:        []Entry{},
+		}
+		if !reflect.DeepEqual(result, want) {
+			t.Fatalf("unexpected empty CodeDeploy result: %+v", result)
+		}
+	})
+
+	t.Run("codeDeploy deployment group degrades to unavailable when aws access is denied", func(t *testing.T) {
+		service := NewService(Options{
+			ListCodeDeployEvents: func(ctx context.Context, req CodeDeployRequest) ([]CodeDeployEvent, error) {
+				if req.ResourceName != "payments-api-staging-codedeploy-group" {
+					t.Fatalf("unexpected CodeDeploy request: %+v", req)
+				}
+				return nil, &smithy.OperationError{
+					ServiceID:     "CodeDeploy",
+					OperationName: "ListDeployments",
+					Err: &smithy.GenericAPIError{
+						Code:    "AccessDeniedException",
+						Message: "User is not authorized to perform codedeploy:ListDeployments",
+					},
+				}
+			},
+		})
+
+		result, err := service.Recent(context.Background(), Request{
+			DeploymentName:   "payments-api-staging",
+			ResourceType:     "codeDeployDeploymentGroup",
+			ResourceName:     "payments-api-staging-codedeploy-group",
+			ControlAccountID: "123456789012",
+			TargetAccountID:  "123456789012",
+			Region:           "ap-northeast-2",
+		})
+		if err != nil {
+			t.Fatalf("Recent returned error: %v", err)
+		}
+		want := Result{
+			DeploymentName:    "payments-api-staging",
+			ResourceType:      "codeDeployDeploymentGroup",
+			ResourceName:      "payments-api-staging-codedeploy-group",
+			LookupContext:     expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
+			Available:         false,
+			UnavailableReason: UnavailableReasonAWSUnavailable,
+		}
+		if !reflect.DeepEqual(result, want) {
+			t.Fatalf("unexpected CodeDeploy AWS unavailable result: %+v", result)
+		}
+	})
+
+	t.Run("codeDeploy deployment group provider failures are returned", func(t *testing.T) {
+		providerErr := errors.New("boom: codedeploy provider internals")
+		service := NewService(Options{
+			ListCodeDeployEvents: func(ctx context.Context, req CodeDeployRequest) ([]CodeDeployEvent, error) {
+				return nil, providerErr
+			},
+		})
+
+		result, err := service.Recent(context.Background(), Request{
+			DeploymentName:   "payments-api-staging",
+			ResourceType:     "codeDeployDeploymentGroup",
+			ResourceName:     "payments-api-staging-codedeploy-group",
+			ControlAccountID: "123456789012",
+			TargetAccountID:  "123456789012",
+			Region:           "ap-northeast-2",
+		})
+		if !errors.Is(err, providerErr) {
+			t.Fatalf("expected provider error %v, got %v", providerErr, err)
+		}
+		if !reflect.DeepEqual(result, Result{}) {
+			t.Fatalf("expected zero result on CodeDeploy provider failure, got %+v", result)
+		}
+	})
+
+	t.Run("codeDeploy deployment group without provider hook returns not implemented", func(t *testing.T) {
+		service := NewService(Options{})
+
+		result, err := service.Recent(context.Background(), Request{
+			DeploymentName:   "payments-api-staging",
+			ResourceType:     "codeDeployDeploymentGroup",
+			ResourceName:     "payments-api-staging-codedeploy-group",
+			ControlAccountID: "123456789012",
+			TargetAccountID:  "123456789012",
+			Region:           "ap-northeast-2",
+		})
+		if !errors.Is(err, ErrNotImplemented) {
+			t.Fatalf("expected ErrNotImplemented, got %v", err)
+		}
+		if !reflect.DeepEqual(result, Result{}) {
+			t.Fatalf("expected zero result when CodeDeploy provider hook is missing, got %+v", result)
+		}
+	})
+
 	t.Run("unsupported resource type returns unavailable payload", func(t *testing.T) {
 		service := NewService(Options{})
 

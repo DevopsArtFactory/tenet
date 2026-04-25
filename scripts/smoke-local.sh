@@ -190,7 +190,7 @@ start_api "$AUTH_TRUSTED_HEADERS" "$AUTH_ENFORCED" "$AUTH_ROLE_ENFORCED" "$AUTH_
 curl -fsS "http://$HOST:$PORT/healthz" >/dev/null
 assert_request_id_header "http://$HOST:$PORT/healthz"
 assert_request_id_header "http://$HOST:$PORT/v1/catalog/summary"
-assert_request_id_header "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing"
+assert_request_id_header "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging-codedeploy-group"
 assert_request_id_header "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service"
 assert_request_id_header "http://$HOST:$PORT/"
 
@@ -347,7 +347,7 @@ invalid_webhook_status=$(curl -sS -o "$INVALID_WEBHOOK_BODY" -w "%{http_code}" -
   --data "$webhook_push_body" \
   "http://$HOST:$PORT/api/v1/github/webhook")
 invalid_webhook=$(cat "$INVALID_WEBHOOK_BODY")
-resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")
+resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging-codedeploy-group")
 worker_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 bootstrap_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=userDataBootstrapSource&resourceName=git%3Auserdata%2Fpayments-api-prod.sh")
 bootstrap_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=userDataBootstrapSource&resourceName=git%3Auserdata%2Fpayments-api-prod.sh")
@@ -688,12 +688,16 @@ assert 'desiredStateSourceMatch' not in webhook_ping, webhook_ping
 assert os.environ['INVALID_WEBHOOK_STATUS'] == '400', os.environ['INVALID_WEBHOOK_STATUS']
 assert 'github webhook signature mismatch' in invalid_webhook, invalid_webhook
 assert status['status']['sync']['state'] == 'Synced', status
-assert resource_logs['deploymentName'] == 'payments-api-prod', resource_logs
-assert resource_logs['resourceType'] == 'trafficShiftPlan', resource_logs
-assert resource_logs['resourceName'] == 'payments-api-prod-weighted-routing', resource_logs
-assert resource_logs['available'] is False, resource_logs
-assert resource_logs.get('unavailableReason') == 'unsupported_resource_type', resource_logs
+assert resource_logs['deploymentName'] == 'payments-api-staging', resource_logs
+assert resource_logs['resourceType'] == 'codeDeployDeploymentGroup', resource_logs
+assert resource_logs['resourceName'] == 'payments-api-staging-codedeploy-group', resource_logs
+assert isinstance(resource_logs['available'], bool), resource_logs
 assert isinstance(resource_logs.get('lookupContext'), dict), resource_logs
+if resource_logs['available']:
+    assert resource_logs.get('source') == 'codedeploy', resource_logs
+    assert isinstance(resource_logs.get('entries'), list), resource_logs
+else:
+    assert resource_logs.get('unavailableReason') in {'aws_unavailable', 'resource_not_found'}, resource_logs
 
 assert bootstrap_resource_logs['deploymentName'] == 'payments-api-prod', bootstrap_resource_logs
 assert bootstrap_resource_logs['resourceType'] == 'userDataBootstrapSource', bootstrap_resource_logs

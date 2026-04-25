@@ -33,11 +33,13 @@ Current provider-backed resource types:
 - `candidateAutoScalingGroup`
 - `serviceAutoScalingGroup`
 - `userDataBootstrapSource`
+- `codeDeployDeploymentGroup`
 
 Behavior by type:
 - `ecsService` reads recent CloudWatch log events from the newest running task/container streams when the ECS task definition and awslogs configuration can be resolved.
 - `candidateAutoScalingGroup` and `serviceAutoScalingGroup` read recent EC2 instance console/bootstrap output from the newest instance in the Auto Scaling Group.
 - `userDataBootstrapSource` reuses the backing Auto Scaling Group Tenet already resolved for bootstrap-source inspection and returns the newest EC2 instance console/bootstrap output for that backing group.
+- `codeDeployDeploymentGroup` reads the newest deployment records for the selected CodeDeploy deployment group, returns them newest-first, and projects each deployment into one operator-facing recent-log row with the deployment ID in `entries[].stream`.
 - when that bootstrap-source lookup resolves through a backing resource, the response also keeps the original `resourceType`/`resourceName` and adds the resolved `backingResourceType` plus `backingResourceName` so the payload stays self-describing without changing the route shape.
 
 Inside one Tenet API process, the built-in AWS-backed provider now reuses SDK config/client setup per `(region, targetAccountID, observerRoleARN)` key. That keeps repeated operator refreshes on the same deployment/resource from rebuilding ECS, CloudWatch Logs, Auto Scaling, and EC2 clients for every request.
