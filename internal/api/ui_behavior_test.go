@@ -5083,6 +5083,206 @@ const scenarios = [
 	runNodeHarness(t, nodeProgram)
 }
 
+func TestResourceDetailPageRefreshesInPlaceWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	initialDetailJSON, err := json.Marshal(map[string]any{
+		"name":         "payments-api-staging",
+		"accountName":  "staging-core",
+		"awsAccountId": "210987654321",
+		"region":       "ap-northeast-2",
+		"rollout": map[string]any{
+			"execution": []map[string]any{
+				{"name": "payments-api-staging Deployment Group", "resource": "codeDeployDeploymentGroup", "description": "Original deployment group description"},
+				{"name": "payments-api-staging-service", "resource": "ecsService", "description": "Primary ECS service"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal initial detail body: %v", err)
+	}
+
+	refreshedDetailJSON, err := json.Marshal(map[string]any{
+		"name":         "payments-api-staging",
+		"accountName":  "staging-core",
+		"awsAccountId": "210987654321",
+		"region":       "ap-northeast-2",
+		"rollout": map[string]any{
+			"execution": []map[string]any{
+				{"name": "payments-api-staging Deployment Group", "resource": "codeDeployDeploymentGroup", "description": "Updated deployment group description after refresh"},
+				{"name": "payments-api-staging-service", "resource": "ecsService", "description": "Primary ECS service"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal refreshed detail body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const initialDetailBody = ` + string(initialDetailJSON) + `;
+const refreshedDetailBody = ` + string(refreshedDetailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = {
+      add: (...names) => {
+        const current = new Set(this.className.split(/\s+/).filter(Boolean));
+        names.forEach((name) => current.add(name));
+        this.className = Array.from(current).join(' ');
+      },
+      toggle: (name, force) => {
+        const current = new Set(this.className.split(/\s+/).filter(Boolean));
+        const shouldAdd = force === undefined ? !current.has(name) : Boolean(force);
+        if (shouldAdd) current.add(name); else current.delete(name);
+        this.className = Array.from(current).join(' ');
+      },
+    };
+  }
+  append(...nodes) {
+    nodes.forEach((node) => {
+      if (node == null) return;
+      if (typeof node === 'string') {
+        const textNode = new Element('#text', this.ownerDocument);
+        textNode.textContent = node;
+        node = textNode;
+      }
+      node.parentNode = this;
+      this.children.push(node);
+      if (this.tagName === 'SELECT' && node.tagName === 'OPTION') {
+        if (node.selected || this.value === '') this.value = node.value;
+      }
+    });
+  }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) {
+    const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/);
+    if (!dataMatch) return null;
+    const target = dataMatch[1];
+    const stack = Array.from(this.byID.values());
+    while (stack.length) {
+      const node = stack.shift();
+      if (node?.dataset?.toolbarField === target) return node;
+      stack.push(...(node.children || []));
+    }
+    return null;
+  }
+}
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+async function settle(count = 1) { for (let i = 0; i < count; i += 1) { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); } }
+const originalResourceID = 'codeDeployDeploymentGroup::payments-api-staging Deployment Group::Original deployment group description';
+const deploymentURL = '/v1/overview/deployments/payments-api-staging';
+const logsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging+Deployment+Group';
+const inspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging+Deployment+Group';
+const initialSearch = '?page=resource&deployment=payments-api-staging&resourceType=codeDeployDeploymentGroup&resourceId=' + encodeURIComponent(originalResourceID);
+const fetchCalls = [];
+let deploymentFetchCount = 0;
+let resolveRefreshDetail;
+const window = { location: { pathname: '/', search: initialSearch, hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === deploymentURL) {
+    deploymentFetchCount += 1;
+    if (deploymentFetchCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve(initialDetailBody) });
+    if (deploymentFetchCount === 2) return new Promise((resolve) => { resolveRefreshDetail = resolve; });
+    if (deploymentFetchCount === 3) return Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({}) });
+    throw new Error('unexpected deployment fetch count: ' + deploymentFetchCount);
+  }
+  if (url === logsURL) {
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: {}, entries: [] }) });
+  }
+  if (url === inspectionURL) {
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'rollout_execution_summary', lookupContext: {}, trafficRoutingResource: { kind: 'CodeDeploy deployment group', displayName: 'payments-api-staging Deployment Group', inspectionMode: 'summary_only', summary: 'CodeDeploy deployment group summary' } }) });
+  }
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle(4);
+  const root = document.getElementById('accounts');
+  let text = collectText(root).join(' | ');
+  if (!text.includes('Original deployment group description')) throw new Error('expected initial resource detail to render original bookmarked resource');
+  let buttons = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+  let refresh = buttons.find((node) => node.textContent === 'Refresh resource detail');
+  if (!refresh) throw new Error('expected resource detail refresh button in toolbar');
+  if (refresh.disabled) throw new Error('expected resource detail refresh button enabled after initial load');
+
+  refresh.dispatch('click');
+  await settle(1);
+  buttons = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+  refresh = buttons.find((node) => node.textContent === 'Refresh resource detail');
+  if (!refresh) throw new Error('expected resource detail refresh button while refresh is loading');
+  if (!refresh.disabled) throw new Error('expected resource detail refresh button disabled while deployment detail refresh is in flight');
+  text = collectText(root).join(' | ');
+  if (!text.includes('Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…')) throw new Error('expected resource detail loading copy during refresh');
+  if (!text.includes('Original deployment group description')) throw new Error('expected current resource detail to remain visible during refresh');
+  if (window.location.search !== initialSearch) throw new Error('expected resource detail refresh to preserve bookmarkable URL while loading');
+
+  resolveRefreshDetail({ ok: true, json: () => Promise.resolve(refreshedDetailBody) });
+  await settle(4);
+  text = collectText(root).join(' | ');
+  if (!text.includes('Updated deployment group description after refresh')) throw new Error('expected refreshed resource detail to re-resolve bookmarked resource from updated payload');
+  if (text.includes('Original deployment group description')) throw new Error('expected refreshed resource detail to replace stale resource metadata');
+  if (window.location.search !== initialSearch) throw new Error('expected successful resource detail refresh to preserve bookmarkable URL');
+  buttons = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+  refresh = buttons.find((node) => node.textContent === 'Refresh resource detail');
+  if (!refresh || refresh.disabled) throw new Error('expected resource detail refresh button re-enabled after success');
+
+  refresh.dispatch('click');
+  await settle(3);
+  text = collectText(root).join(' | ');
+  if (!text.includes('Operator access denied')) throw new Error('expected operator-read 403 heading after failed resource detail refresh');
+  if (!text.includes('Current resource detail remains visible below.')) throw new Error('expected failed resource detail refresh to keep current detail visible');
+  if (!text.includes('Updated deployment group description after refresh')) throw new Error('expected latest successful resource detail to remain visible after failed refresh');
+  if (!text.includes('Tenet rejected GET /v1/overview/deployments/payments-api-staging after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment.')) throw new Error('expected shared 403 operator-read guidance for resource detail refresh failures');
+  if (window.location.search !== initialSearch) throw new Error('expected failed resource detail refresh to preserve bookmarkable URL');
+  if (fetchCalls.filter((url) => url === deploymentURL).length !== 3) throw new Error('expected exactly three deployment-detail fetches');
+})();
+`
+
+	runNodeHarness(t, nodeProgram)
+}
+
 func TestResourceDetailPageRefreshControlsWithNodeHarness(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not installed")

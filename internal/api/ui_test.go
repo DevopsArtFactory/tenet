@@ -533,7 +533,15 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"syncActiveResourceQuickNav();",
 		"scrollToCurrentHashTarget();",
 		"backLink.target = '_self';",
-		"const renderResourceDetailPage = (detail) => {",
+		"const renderResourceDetailPage = (detail, resourceState = null) => {",
+		"const resourceDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;",
+		"const createResourceDetailActions = (resourceState = null) => [",
+		"Refresh resource detail",
+		"Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…",
+		"Current resource detail remains visible below.",
+		"Failed to refresh resource detail:",
+		"renderResourceDetailPage(resourceState.detail, resourceState);",
+		"return fetchDeploymentDetail(deploymentName)",
 		"Resource detail",
 		"Back to application",
 		"Quick navigation",
@@ -590,6 +598,13 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"'Refreshing application detail from GET /v1/overview/applications/{deploymentName}…'",
 		"Current application detail remains visible below.",
 		"Failed to refresh application detail:",
+		"const resourceDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;",
+		"const createResourceDetailActions = (resourceState = null) => [",
+		"'Refresh resource detail'",
+		"const resourceDetailRefreshState = (resourceState = null) => {",
+		"'Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…'",
+		"Current resource detail remains visible below.",
+		"Failed to refresh resource detail:",
 		"const buildAuditLogsRoute = ({ deploymentName = '', action = '', limit = 0 } = {}) => {",
 		"const params = new URLSearchParams();",
 		"if (deploymentName) params.set('deployment', deploymentName);",
@@ -676,7 +691,7 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"const renderApplicationWorkspace = () => {",
 		"renderApplicationDetailPage(applicationState.detail, applicationState);",
 		"if (currentPageState.page === 'resource') {",
-		"renderResourceDetailPage(detail);",
+		"renderResourceDetailPage(resourceState.detail, resourceState);",
 		"if (currentPageState.page === 'drift') {",
 		"const renderDriftWorkspace = () => {",
 		"renderDeploymentWorkspace(currentPageState.page, workspaceState.detail, null, null, workspaceState);",
@@ -1133,7 +1148,7 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"const renderApplicationWorkspace = () => {",
 		"renderApplicationDetailPage(applicationState.detail, applicationState);",
 		"if (currentPageState.page === 'resource') {",
-		"renderResourceDetailPage(detail);",
+		"renderResourceDetailPage(resourceState.detail, resourceState);",
 		"if (currentPageState.page === 'drift') {",
 		"const renderDriftWorkspace = () => {",
 		"renderDeploymentWorkspace(currentPageState.page, workspaceState.detail, null, null, workspaceState);",
@@ -1684,6 +1699,18 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert 'Refresh application detail' in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh application detail")
+	}
+	if !strings.Contains(text, "assert 'Refresh resource detail' in body, body") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh resource detail")
+	}
+	if !strings.Contains(text, "assert 'Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…' in body, body") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains resource detail refresh loading copy")
+	}
+	if !strings.Contains(text, "assert 'Current resource detail remains visible below.' in body, body") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains resource detail refresh preserved-detail copy")
+	}
+	if !strings.Contains(text, "assert 'Failed to refresh resource detail:' in body, body") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains resource detail refresh error copy")
 	}
 	if !strings.Contains(text, "assert 'Clear drift filters' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Clear drift filters")

@@ -1049,7 +1049,15 @@ assert "eventsSection.id = 'application-runtime-events';" in application_ui, app
 for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui):
     assert "const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);" in body, body
     assert 'Opened via bookmarked resource alias.' in body, body
-    assert "const renderResourceDetailPage = (detail) => {" in body, body
+    assert "const renderResourceDetailPage = (detail, resourceState = null) => {" in body, body
+    assert "const resourceDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;" in body, body
+    assert "const createResourceDetailActions = (resourceState = null) => [" in body, body
+    assert 'Refresh resource detail' in body, body
+    assert 'Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…' in body, body
+    assert 'Current resource detail remains visible below.' in body, body
+    assert 'Failed to refresh resource detail:' in body, body
+    assert "renderResourceDetailPage(resourceState.detail, resourceState);" in body, body
+    assert "return fetchDeploymentDetail(deploymentName)" in body, body
     assert "currentLabel: resource.name," in body, body
     assert "const createResourceQuickNav = (detail, resource, sectionLinks = []) => {" in body, body
     assert "const pushResourceSection = (section, sectionID, label) => {" in body, body
