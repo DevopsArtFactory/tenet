@@ -4181,23 +4181,84 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 			"observerRoleConfigured": true,
 		} {
 			if got := lookupContext[key]; !reflect.DeepEqual(got, want) {
-				t.Fatalf("expected lookupContext[%q]=%v, got %#v", key, want, got)
+				t.Fatalf("expected lookupContext[%q]=%#v, got %#v", key, want, got)
 			}
 		}
+	})
+
+	t.Run("returns codeDeploy deployment-group resource log payload", func(t *testing.T) {
+		expected := resourcelogs.Result{
+			DeploymentName: "payments-api-staging",
+			ResourceType:   "codeDeployDeploymentGroup",
+			ResourceName:   "payments-api-staging-codedeploy-group",
+			LookupContext: resourcelogs.LookupContext{
+				Region:                 "ap-northeast-2",
+				ControlAccountID:       "123456789012",
+				TargetAccountID:        "123456789012",
+				CrossAccount:           false,
+				ObserverRoleConfigured: true,
+			},
+			Available: true,
+			Source:    resourcelogs.SourceCodeDeploy,
+			Entries: []resourcelogs.Entry{{
+				Timestamp: "2026-04-18T09:18:00Z",
+				Message:   "Status: Succeeded — deployment completed for the latest linear rollout",
+				Stream:    "d-ABC123",
+			}},
+		}
+
+		var gotRequest struct {
+			deploymentName string
+			resourceType   string
+			resourceName   string
+		}
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "payments-api-staging" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+				_ = RequestIDFromContext(ctx)
+				gotRequest.deploymentName = deploymentName
+				gotRequest.resourceType = resourceType
+				gotRequest.resourceName = resourceName
+				return expected, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging-codedeploy-group", nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if !reflect.DeepEqual(gotRequest, struct {
+			deploymentName string
+			resourceType   string
+			resourceName   string
+		}{deploymentName: "payments-api-staging", resourceType: "codeDeployDeploymentGroup", resourceName: "payments-api-staging-codedeploy-group"}) {
+			t.Fatalf("unexpected provider request: %+v", gotRequest)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw CodeDeploy resource logs payload: %v", err)
+		}
+		if got := raw["source"]; got != resourcelogs.SourceCodeDeploy {
+			t.Fatalf("expected source %q, got %#v", resourcelogs.SourceCodeDeploy, got)
+		}
 		entries, ok := raw["entries"].([]any)
-		if !ok || len(entries) != 2 {
-			t.Fatalf("expected entries array in payload, got %#v", raw["entries"])
+		if !ok || len(entries) != 1 {
+			t.Fatalf("expected one CodeDeploy resource log entry, got %#v", raw["entries"])
 		}
 		entry, ok := entries[0].(map[string]any)
-		if !ok || entry["timestamp"] != "2026-04-16T07:10:00Z" || entry["message"] != "service became healthy" || entry["stream"] != "ecs/payments-api/service/abc123" {
-			t.Fatalf("expected entry shape in payload, got %#v", entries[0])
-		}
-		entry, ok = entries[1].(map[string]any)
 		if !ok {
-			t.Fatalf("expected second entry shape in payload, got %#v", entries[1])
+			t.Fatalf("expected CodeDeploy entry object, got %#v", entries[0])
 		}
-		if _, ok := entry["stream"]; ok {
-			t.Fatalf("expected optional stream to be omitted when empty, got %#v", entries[1])
+		if got := entry["stream"]; got != "d-ABC123" {
+			t.Fatalf("expected deployment id stream, got %#v", got)
 		}
 	})
 

@@ -1,15 +1,23 @@
 package resourcelogs
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"math"
+	"net/http"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
 	asgtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
@@ -25,6 +33,7 @@ import (
 const (
 	SourceCloudWatch = "cloudwatch"
 	SourceEC2Console = "ec2_console"
+	SourceCodeDeploy = "codedeploy"
 
 	UnavailableReasonUnsupportedResourceType   = resourceaws.UnavailableReasonUnsupportedResourceType
 	UnavailableReasonCrossAccountNotConfigured = resourceaws.UnavailableReasonCrossAccountNotConfigured
@@ -75,6 +84,7 @@ type Options struct {
 	EnableAWS               bool
 	ListECSLogEvents        func(context.Context, ECSRequest) ([]CloudWatchEvent, error)
 	ListASGInstanceConsoles func(context.Context, ASGRequest) ([]InstanceConsole, error)
+	ListCodeDeployEvents    func(context.Context, CodeDeployRequest) ([]CodeDeployEvent, error)
 }
 
 type Service struct {
@@ -167,6 +177,29 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 		}
 		entries := formatConsoleEntries(consoles, s.maxEntries())
 		return availableResult(req, SourceEC2Console, entries), nil
+	case "codeDeployDeploymentGroup":
+		list := s.options.ListCodeDeployEvents
+		if list == nil {
+			if !s.options.EnableAWS {
+				return Result{}, ErrNotImplemented
+			}
+			list = s.listCodeDeployEventsFromAWS
+		}
+		events, err := list(ctx, CodeDeployRequest{
+			DeploymentName:  req.DeploymentName,
+			ResourceName:    req.ResourceName,
+			Region:          req.Region,
+			TargetAccountID: req.TargetAccountID,
+			ObserverRoleARN: req.ObserverRoleARN,
+		})
+		if err != nil {
+			if reason, ok := unavailableReasonForError(err); ok {
+				return unavailableResult(req, reason), nil
+			}
+			return Result{}, err
+		}
+		entries := formatCodeDeployEntries(events, s.maxEntries())
+		return availableResult(req, SourceCodeDeploy, entries), nil
 	default:
 		return unavailableResult(req, UnavailableReasonUnsupportedResourceType), nil
 	}
@@ -192,6 +225,20 @@ type ASGRequest struct {
 	Region          string
 	TargetAccountID string
 	ObserverRoleARN string
+}
+
+type CodeDeployRequest struct {
+	DeploymentName  string
+	ResourceName    string
+	Region          string
+	TargetAccountID string
+	ObserverRoleARN string
+}
+
+type CodeDeployEvent struct {
+	Timestamp    time.Time
+	Message      string
+	DeploymentID string
 }
 
 type InstanceConsole struct {
@@ -304,6 +351,28 @@ func formatConsoleEntries(consoles []InstanceConsole, max int) []Entry {
 	return entries
 }
 
+func formatCodeDeployEntries(events []CodeDeployEvent, max int) []Entry {
+	sort.SliceStable(events, func(i, j int) bool {
+		return events[i].Timestamp.After(events[j].Timestamp)
+	})
+	entries := make([]Entry, 0, min(max, len(events)))
+	for _, event := range events {
+		message := strings.TrimSpace(event.Message)
+		if message == "" {
+			continue
+		}
+		entries = append(entries, Entry{
+			Timestamp: event.Timestamp.UTC().Format(time.RFC3339),
+			Message:   message,
+			Stream:    strings.TrimSpace(event.DeploymentID),
+		})
+		if len(entries) == max {
+			break
+		}
+	}
+	return entries
+}
+
 func (s Service) listECSLogEventsFromAWS(ctx context.Context, req ECSRequest) ([]CloudWatchEvent, error) {
 	clients, err := s.awsClients(ctx, req.Region, req.TargetAccountID, req.ObserverRoleARN)
 	if err != nil {
@@ -393,6 +462,26 @@ func (s Service) listASGInstanceConsolesFromAWS(ctx context.Context, req ASGRequ
 	}
 	lines := parseConsoleLines(decoded, aws.ToTime(consoleOut.Timestamp))
 	return []InstanceConsole{{InstanceID: instanceID, GeneratedAt: aws.ToTime(consoleOut.Timestamp), Lines: lines}}, nil
+}
+
+func (s Service) listCodeDeployEventsFromAWS(ctx context.Context, req CodeDeployRequest) ([]CodeDeployEvent, error) {
+	clients, err := s.awsClients(ctx, req.Region, req.TargetAccountID, req.ObserverRoleARN)
+	if err != nil {
+		return nil, err
+	}
+	infos, err := listCodeDeployDeploymentInfos(ctx, clients.Config, req.Region, codeDeployApplicationName(req.DeploymentName), strings.TrimSpace(req.ResourceName), s.maxEntries())
+	if err != nil {
+		return nil, err
+	}
+	events := make([]CodeDeployEvent, 0, len(infos))
+	for _, info := range infos {
+		events = append(events, CodeDeployEvent{
+			Timestamp:    codeDeployDeploymentTimestamp(info),
+			Message:      codeDeployDeploymentMessage(info),
+			DeploymentID: strings.TrimSpace(info.DeploymentID),
+		})
+	}
+	return events, nil
 }
 
 func findECSService(ctx context.Context, client *ecs.Client, serviceName string) (*ecstypes.Service, *string, error) {
@@ -556,4 +645,223 @@ func parseConsoleLines(output string, fallback time.Time) []ConsoleLine {
 		lines = append(lines, ConsoleLine{Timestamp: fallback.UTC(), Message: message})
 	}
 	return lines
+}
+
+func codeDeployApplicationName(deploymentName string) string {
+	return strings.TrimSpace(deploymentName) + "-codedeploy-app"
+}
+
+func listCodeDeployDeploymentInfos(ctx context.Context, cfg aws.Config, region, applicationName, deploymentGroupName string, limit int) ([]codeDeployDeploymentInfoPayload, error) {
+	ids, err := listCodeDeployDeploymentIDs(ctx, cfg, region, applicationName, deploymentGroupName, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return []codeDeployDeploymentInfoPayload{}, nil
+	}
+	infos := make([]codeDeployDeploymentInfoPayload, 0, len(ids))
+	for start := 0; start < len(ids); start += 25 {
+		end := min(start+25, len(ids))
+		chunk, err := batchGetCodeDeployDeployments(ctx, cfg, region, ids[start:end])
+		if err != nil {
+			return nil, err
+		}
+		infos = append(infos, chunk...)
+	}
+	return infos, nil
+}
+
+func listCodeDeployDeploymentIDs(ctx context.Context, cfg aws.Config, region, applicationName, deploymentGroupName string, limit int) ([]string, error) {
+	ids := make([]string, 0, limit)
+	nextToken := ""
+	for len(ids) < limit {
+		var response codeDeployListDeploymentsOutput
+		payload := map[string]any{
+			"applicationName":     strings.TrimSpace(applicationName),
+			"deploymentGroupName": strings.TrimSpace(deploymentGroupName),
+		}
+		if nextToken != "" {
+			payload["nextToken"] = nextToken
+		}
+		if err := doSignedCodeDeployJSONRequest(ctx, cfg, region, "CodeDeploy_20141006.ListDeployments", payload, &response); err != nil {
+			return nil, err
+		}
+		for _, id := range response.Deployments {
+			id = strings.TrimSpace(id)
+			if id == "" {
+				continue
+			}
+			ids = append(ids, id)
+			if len(ids) == limit {
+				break
+			}
+		}
+		nextToken = strings.TrimSpace(response.NextToken)
+		if nextToken == "" {
+			break
+		}
+	}
+	return ids, nil
+}
+
+func batchGetCodeDeployDeployments(ctx context.Context, cfg aws.Config, region string, deploymentIDs []string) ([]codeDeployDeploymentInfoPayload, error) {
+	var response codeDeployBatchGetDeploymentsOutput
+	if err := doSignedCodeDeployJSONRequest(ctx, cfg, region, "CodeDeploy_20141006.BatchGetDeployments", map[string]any{"deploymentIds": deploymentIDs}, &response); err != nil {
+		return nil, err
+	}
+	return response.DeploymentsInfo, nil
+}
+
+func doSignedCodeDeployJSONRequest(ctx context.Context, cfg aws.Config, region, target string, payload any, out any) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://codedeploy."+strings.TrimSpace(region)+".amazonaws.com/", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", "application/x-amz-json-1.1")
+	request.Header.Set("X-Amz-Target", target)
+	responseBody, responseHeaders, err := doSignedAWSRequest(ctx, cfg, "codedeploy", region, request, body)
+	if err != nil {
+		code := parseAWSJSONError(responseHeaders, responseBody)
+		switch code {
+		case "ApplicationDoesNotExistException", "DeploymentGroupDoesNotExistException", "DeploymentDoesNotExistException":
+			return resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
+		default:
+			return resourceaws.NewUnavailableError(resourceaws.UnavailableReasonAWSUnavailable)
+		}
+	}
+	if err := json.Unmarshal(responseBody, out); err != nil {
+		return err
+	}
+	return nil
+}
+
+func doSignedAWSRequest(ctx context.Context, cfg aws.Config, service string, region string, request *http.Request, body []byte) ([]byte, http.Header, error) {
+	credentials, err := cfg.Credentials.Retrieve(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	hash := sha256.Sum256(body)
+	if err := v4.NewSigner().SignHTTP(ctx, credentials, request, hex.EncodeToString(hash[:]), service, region, time.Now().UTC()); err != nil {
+		return nil, nil, err
+	}
+	httpClient := cfg.HTTPClient
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	response, err := httpClient.Do(request)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer response.Body.Close()
+	responseBody, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, nil, err
+	}
+	if response.StatusCode >= http.StatusBadRequest {
+		return responseBody, response.Header, fmt.Errorf("aws request failed with status %d", response.StatusCode)
+	}
+	return responseBody, response.Header, nil
+}
+
+func parseAWSJSONError(headers http.Header, body []byte) string {
+	type payload struct {
+		Type string `json:"__type"`
+		Code string `json:"code"`
+	}
+	var errPayload payload
+	_ = json.Unmarshal(body, &errPayload)
+	code := strings.TrimSpace(headers.Get("X-Amzn-Errortype"))
+	if code == "" {
+		code = strings.TrimSpace(errPayload.Type)
+	}
+	if code == "" {
+		code = strings.TrimSpace(errPayload.Code)
+	}
+	if index := strings.LastIndex(code, "#"); index >= 0 {
+		code = code[index+1:]
+	}
+	if index := strings.Index(code, ":"); index >= 0 {
+		code = code[:index]
+	}
+	return strings.TrimSpace(code)
+}
+
+func codeDeployDeploymentTimestamp(info codeDeployDeploymentInfoPayload) time.Time {
+	if !info.CompleteTime.IsZero() {
+		return info.CompleteTime.UTC()
+	}
+	if !info.CreateTime.IsZero() {
+		return info.CreateTime.UTC()
+	}
+	return time.Time{}
+}
+
+func codeDeployDeploymentMessage(info codeDeployDeploymentInfoPayload) string {
+	parts := make([]string, 0, 4)
+	if status := strings.TrimSpace(info.Status); status != "" {
+		parts = append(parts, "Status: "+status)
+	}
+	if description := strings.TrimSpace(info.Description); description != "" {
+		parts = append(parts, description)
+	} else if len(info.DeploymentStatusMessages) > 0 {
+		message := strings.TrimSpace(info.DeploymentStatusMessages[0])
+		if message != "" {
+			parts = append(parts, message)
+		}
+	}
+	if message := strings.TrimSpace(info.ErrorInformation.Message); message != "" {
+		parts = append(parts, "Error: "+message)
+	}
+	if len(parts) == 0 {
+		if id := strings.TrimSpace(info.DeploymentID); id != "" {
+			return "CodeDeploy deployment " + id
+		}
+		return "CodeDeploy deployment"
+	}
+	return strings.Join(parts, " — ")
+}
+
+type codeDeployListDeploymentsOutput struct {
+	Deployments []string `json:"deployments"`
+	NextToken   string   `json:"nextToken"`
+}
+
+type codeDeployBatchGetDeploymentsOutput struct {
+	DeploymentsInfo []codeDeployDeploymentInfoPayload `json:"deploymentsInfo"`
+}
+
+type codeDeployDeploymentInfoPayload struct {
+	DeploymentID             string                           `json:"deploymentId"`
+	CreateTime               codeDeployUnixTime               `json:"createTime"`
+	CompleteTime             codeDeployUnixTime               `json:"completeTime"`
+	Status                   string                           `json:"status"`
+	Description              string                           `json:"description"`
+	DeploymentStatusMessages []string                         `json:"deploymentStatusMessages"`
+	ErrorInformation         codeDeployDeploymentErrorPayload `json:"errorInformation"`
+}
+
+type codeDeployDeploymentErrorPayload struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+type codeDeployUnixTime struct{ time.Time }
+
+func (t *codeDeployUnixTime) UnmarshalJSON(data []byte) error {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" {
+		t.Time = time.Time{}
+		return nil
+	}
+	var seconds float64
+	if err := json.Unmarshal(data, &seconds); err != nil {
+		return err
+	}
+	whole, frac := math.Modf(seconds)
+	t.Time = time.Unix(int64(whole), int64(frac*float64(time.Second))).UTC()
+	return nil
 }
