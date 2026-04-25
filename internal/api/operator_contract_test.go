@@ -666,7 +666,8 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		`AUTH_FORBIDDEN_STATUS_READ_BODY=$(mktemp)`,
 		`restart_api_with_frontdoor_read_auth() {`,
 		`TENET_API_TRUST_AUTHENTICATED_HEADERS=true \`,
-		`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=false \`,
+		`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true \`,
+		`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true \`,
 		`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true \`,
 		`auth_unauthenticated_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" -w "%{http_code}" \`,
 		`"$API_BASE_URL/v1/overview/applications")`,
@@ -684,6 +685,8 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		`"X-Tenet-Authenticated-Id: front-door-123"`,
 		`"X-Tenet-Authenticated-Name: Front Door Operator"`,
 		`"X-Tenet-Authenticated-Email: frontdoor@example.com"`,
+		`"X-Tenet-Authenticated-Roles: viewer"`,
+		`"X-Tenet-Authenticated-Roles: operator"`,
 		`"X-Tenet-Authorized-Deployments: payments-api-prod, worker-prod"`,
 		`assert os.environ["AUTH_UNAUTHENTICATED_COLLECTION_STATUS"] == "401", os.environ["AUTH_UNAUTHENTICATED_COLLECTION_STATUS"]`,
 		`assert unauthenticated_collection_body.strip() == "unauthenticated: authenticated identity is required for this operator read route", unauthenticated_collection_body`,
@@ -709,21 +712,10 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		}
 	}
 	for _, forbidden := range []string{
-		`AUTH_UNAUTHENTICATED_COLLECTION_BODY=***`,
-		`AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY=***`,
-		`AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY=***`,
-		`AUTH_UNAUTHENTICATED_PLAN_READ_BODY=***`,
-		`AUTH_UNAUTHENTICATED_APPLY_READ_BODY=***`,
-		`AUTH_ROLE_REQUIRED_COLLECTION_BODY=***`,
-		`AUTH_ROLE_REQUIRED_STATUS_READ_BODY=***`,
-		`AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY=***`,
-		`AUTH_ROLE_REQUIRED_PLAN_READ_BODY=***`,
-		`AUTH_ROLE_REQUIRED_APPLY_READ_BODY=***`,
-		`AUTH_UNAUTHENTICATED_TRANSITION_BODY=***`,
-		`AUTH_UNAUTHENTICATED_EVENTS_BODY=***`,
-		`AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY=***`,
-		`AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY=***`,
-		`AUTH_FORBIDDEN_STATUS_READ_BODY=***`,
+		`TENET_API_TRUST_AUTHENTICATED_HEADERS=*** \`,
+		`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=*** \`,
+		`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=*** \`,
+		`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=*** \`,
 	} {
 		if strings.Contains(dockerSmoke, forbidden) {
 			t.Fatalf("expected smoke-docker front-door auth contract to reject %q", forbidden)
@@ -757,7 +749,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"the trusted authenticated identity path projects that identity into persisted plan/apply/audit actor fields",
 		"restarting `tenet-api`",
 		"The same trusted front-door read contract covers `GET /v1/overview/accounts/{awsAccountId}`",
-		"one allowed raw status detail read succeeds",
+		"one trusted `X-Tenet-Authenticated-Roles: viewer` raw status detail read succeeds",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README front-door auth contract to include %q", fragment)
@@ -812,17 +804,17 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"Trusted front-door auth by restarting the Compose `api` service",
 		"trusted `X-Tenet-Authorized-Deployments` filters returned application rows, raw status snapshots, account aggregates, and unscoped audit entries",
 		"`[]` for guarded collections",
-		"one allowed raw status detail read succeeds",
+		"one trusted `X-Tenet-Authenticated-Roles: viewer` raw status detail read succeeds",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
 			t.Fatalf("expected local runtime doc front-door auth contract to include %q", fragment)
 		}
 	}
 	for _, forbidden := range []string{
-		"`TENET_API_TRUST_AUTHENTICATED_HEADERS=***`",
-		"`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***`",
-		"`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=***`",
-		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***`",
+		"`TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
+		"`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
+		"`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=***",
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***",
 	} {
 		if strings.Contains(localRuntimeDoc, forbidden) {
 			t.Fatalf("expected local runtime doc front-door auth contract to reject %q", forbidden)
