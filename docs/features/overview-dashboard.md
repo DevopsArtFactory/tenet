@@ -82,11 +82,14 @@ The account drill-down page consumes `GET /v1/overview/accounts/{awsAccountId}` 
 - the same account quick-nav now adds a hash-aware `Current section` chip and an `On this page` group for `Account summary` plus the currently rendered project/environment groups, with bookmarkable anchors such as `/?page=account&accountId={awsAccountId}#account-summary`
 - when the same project/environment pair appears in multiple regions, those account section links keep the region in the visible label so operators can tell the jump targets apart before leaving the current section
 - when one of those account section hashes is active, the current section becomes a non-click chip, disappears from the remaining `On this page` links, and otherwise falls back to `No section is currently targeted.`
+- an in-place `Refresh account detail` control that re-runs only `GET /v1/overview/accounts/{awsAccountId}` for the current bookmarkable route, disables only while that refresh is active, and keeps the same query/hash state stable
+- the current account detail remains visible with explicit loading/error copy while that in-place refresh is running or fails
 - `Account deployment overview` summary/header with account and topology context
 - grouped project/environment sections derived from the account payload
 - sibling `Account JSON`, `Group JSON`, and `_self` `Open application` links outside the expandable row toggle
 - expandable deployment rows that still lazy-load `GET /v1/overview/deployments/{deploymentName}` for deep detail
 - initial `GET /v1/overview/accounts/{awsAccountId}` auth failures are status-aware on the bookmarkable `/?page=account&accountId={awsAccountId}` route: `401` tells operators to retry the same page through the trusted front door so authenticated identity can be provided, while `403` explains that identity was recognized but the current operator is not authorized for that route or deployment
+- refresh-time `401` / `403` responses reuse that same trusted-front-door / access-denied guidance instead of generic fetch-error copy
 - when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION` is enabled, `GET /v1/overview/accounts`, `GET /v1/overview/accounts/{awsAccountId}`, and `GET /v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}` require trusted `X-Tenet-Authenticated-*` identity
 - when `TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION` is also enabled, those same guarded account reads additionally require one trusted forwarded read-capable `X-Tenet-Authenticated-Roles` value from `viewer` / `operator` / `admin`
 - the account collection filters returned accounts down to deployments visible through trusted `X-Tenet-Authorized-Deployments` and returns `200 OK` with `[]` when the allowlist is omitted or matches nothing

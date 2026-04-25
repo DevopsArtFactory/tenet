@@ -2825,6 +2825,7 @@
         unavailable: 'account detail unavailable',
         failure: 'account detail request failed',
       });
+      const accountDetailReadRoute = (accountID) => `GET /v1/overview/accounts/${accountID || '{awsAccountId}'}`;
       const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {
         unavailable: 'application detail unavailable',
         failure: 'application detail request failed',
@@ -2854,6 +2855,38 @@
           return `Failed to refresh drift workspace: ${workspaceState.error?.message || 'unknown error'}`;
         }
         return '';
+      };
+      const createAccountDetailActions = (accountState = null) => [
+        createRefreshButton(
+          'Refresh account detail',
+          accountState?.status === 'loading' || !(accountState?.account?.awsAccountId || currentPageState.accountId),
+          () => accountState?.onRefresh?.().catch(() => {}),
+        ),
+      ];
+      const accountDetailRefreshState = (accountState = null) => {
+        if (accountState?.status === 'loading') {
+          return {
+            heading: '',
+            message: 'Refreshing account detail from GET /v1/overview/accounts/{awsAccountId}…',
+            className: '',
+          };
+        }
+        if (accountState?.status === 'error') {
+          const accountID = accountState?.account?.awsAccountId || currentPageState.accountId || '';
+          if (operatorReadFailureHeading(accountState.error)) {
+            return {
+              heading: operatorReadFailureHeading(accountState.error),
+              message: `${operatorReadFailureMessage(accountDetailReadRoute(accountID), accountState.error)} Current account detail remains visible below.`,
+              className: 'error',
+            };
+          }
+          return {
+            heading: '',
+            message: `Failed to refresh account detail: ${accountState.error?.message || 'unknown error'}`,
+            className: 'error',
+          };
+        }
+        return null;
       };
       const createDeploymentEventsIntro = () => createElement('div', 'detail-section-copy', 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.');
       const sortTimelineEvents = (events) => (events || [])
@@ -4919,7 +4952,7 @@
           return article;
       };
 
-      const renderAccountDetailPage = (account) => {
+      const renderAccountDetailPage = (account, accountState = null) => {
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
         const root = document.getElementById('accounts');
@@ -4950,7 +4983,18 @@
         pushAccountSectionLink(detailSummary.id, 'Account summary');
         const overviewArticle = createAccountOverviewArticle(account, accountSectionLinks);
         const quickNav = createAccountQuickNav(account, accountSectionLinks);
-        root.replaceChildren(...[quickNav, overviewArticle].filter(Boolean));
+        const accountDetailSection = createElement('section', 'detail-section');
+        accountDetailSection.append(createDetailSectionHeader('Account detail', createAccountDetailActions(accountState)));
+        const refreshState = accountDetailRefreshState(accountState);
+        if (refreshState?.heading) {
+          accountDetailSection.append(createElement('div', refreshState.className ? `detail-state ${refreshState.className}` : 'detail-state', refreshState.heading));
+          if (refreshState.message) {
+            accountDetailSection.append(createElement('div', 'detail-condition-meta', refreshState.message));
+          }
+        } else if (refreshState?.message) {
+          accountDetailSection.append(createElement('div', refreshState.className ? `detail-state ${refreshState.className}` : 'detail-state', refreshState.message));
+        }
+        root.replaceChildren(...[quickNav, accountDetailSection, overviewArticle].filter(Boolean));
         activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;
         syncActiveResourceQuickNav();
         scrollToCurrentHashTarget();
@@ -5011,7 +5055,37 @@
         } else {
           fetchAccountDetail(currentPageState.accountId)
             .then((account) => {
-              renderAccountDetailPage(account);
+              const accountState = {
+                status: 'idle',
+                account,
+                error: null,
+                onRefresh: null,
+              };
+              const renderAccountWorkspace = () => {
+                renderAccountDetailPage(accountState.account, accountState);
+              };
+              accountState.onRefresh = () => {
+                const accountID = accountState.account?.awsAccountId || currentPageState.accountId || '';
+                if (!accountID || accountState.status === 'loading') return Promise.resolve(accountState.account);
+                accountState.status = 'loading';
+                accountState.error = null;
+                renderAccountWorkspace();
+                return fetchAccountDetail(accountID)
+                  .then((nextAccount) => {
+                    accountState.status = 'idle';
+                    accountState.account = nextAccount;
+                    accountState.error = null;
+                    renderAccountWorkspace();
+                    return nextAccount;
+                  })
+                  .catch((error) => {
+                    accountState.status = 'error';
+                    accountState.error = error;
+                    renderAccountWorkspace();
+                    throw error;
+                  });
+              };
+              renderAccountWorkspace();
             })
             .catch((error) => {
               if (operatorReadFailureHeading(error)) {
