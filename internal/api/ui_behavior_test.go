@@ -2431,7 +2431,7 @@ const resourceId = 'testListener::payments-api-staging-test-listener::Test liste
   const fetch = (url) => {
     fetchCalls.push(String(url));
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'codedeploy', backingResourceType: 'codeDeployDeploymentGroup', backingResourceName: 'payments-api-staging-codedeploy-group', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, entries: [{ timestamp: '2026-04-18T09:18:00Z', stream: 'd-newest', message: 'Status: Succeeded — deployment completed for the latest linear rollout' }] }) });
     throw new Error('unexpected fetch url: ' + url);
   };
   new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -2444,6 +2444,8 @@ const resourceId = 'testListener::payments-api-staging-test-listener::Test liste
   if (!summaryText.includes('payments-api-staging-test-listener')) throw new Error('expected fallback resource page to resolve the synthesized resource name');
   if (!accountsText.includes('Execution resource · testListener')) throw new Error('expected fallback resource page to render synthesized execution resource type');
   if (!accountsText.includes('Execution description · Test listener CodeDeploy uses to validate the replacement ECS task set before promotion')) throw new Error('expected fallback resource page to render synthesized execution description');
+  if (accountsText.includes('Recent logs are unavailable for this resource.')) throw new Error('expected fallback resource page not to render unsupported recent-log state');
+  if (accountsText.includes('No recent logs are available for this resource.')) throw new Error('expected fallback resource page not to render empty recent-log state for populated CodeDeploy fallback logs');
   if (accountsText.includes('No rollout execution resources are currently reported for this selection.')) throw new Error('expected fallback resource page not to render empty execution state');
 })();
 `

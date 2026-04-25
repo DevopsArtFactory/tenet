@@ -491,6 +491,86 @@ func TestServiceRecent(t *testing.T) {
 		}
 	})
 
+	t.Run("codedeploy sibling resources reuse deployment-group history through backing resource context", func(t *testing.T) {
+		var gotLookup CodeDeployRequest
+		service := NewService(Options{
+			MaxEntries: 2,
+			ListCodeDeployEvents: func(ctx context.Context, req CodeDeployRequest) ([]CodeDeployEvent, error) {
+				gotLookup = req
+				return []CodeDeployEvent{
+					{Timestamp: time.Date(2026, 4, 18, 9, 18, 0, 0, time.UTC), Message: "Status: Succeeded — deployment completed for the latest linear rollout", DeploymentID: "d-newest"},
+				}, nil
+			},
+		})
+
+		result, err := service.Recent(context.Background(), Request{
+			DeploymentName:      "payments-api-staging",
+			ResourceType:        "testListener",
+			ResourceName:        "payments-api-staging-test-listener",
+			BackingResourceType: "codeDeployDeploymentGroup",
+			BackingResourceName: "payments-api-staging-codedeploy-group",
+			ControlAccountID:    "123456789012",
+			TargetAccountID:     "123456789012",
+			Region:              "ap-northeast-2",
+		})
+		if err != nil {
+			t.Fatalf("Recent returned error: %v", err)
+		}
+		if !reflect.DeepEqual(gotLookup, CodeDeployRequest{
+			DeploymentName:  "payments-api-staging",
+			ResourceName:    "payments-api-staging-codedeploy-group",
+			Region:          "ap-northeast-2",
+			TargetAccountID: "123456789012",
+		}) {
+			t.Fatalf("unexpected CodeDeploy lookup request for sibling resource: %+v", gotLookup)
+		}
+		want := Result{
+			DeploymentName:      "payments-api-staging",
+			ResourceType:        "testListener",
+			ResourceName:        "payments-api-staging-test-listener",
+			BackingResourceType: "codeDeployDeploymentGroup",
+			BackingResourceName: "payments-api-staging-codedeploy-group",
+			LookupContext:       expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
+			Available:           true,
+			Source:              SourceCodeDeploy,
+			Entries: []Entry{{
+				Timestamp: "2026-04-18T09:18:00Z",
+				Message:   "Status: Succeeded — deployment completed for the latest linear rollout",
+				Stream:    "d-newest",
+			}},
+		}
+		if !reflect.DeepEqual(result, want) {
+			t.Fatalf("unexpected CodeDeploy sibling recent logs result: %+v", result)
+		}
+	})
+
+	t.Run("codedeploy sibling resources without backing deployment group return no log source", func(t *testing.T) {
+		service := NewService(Options{})
+
+		result, err := service.Recent(context.Background(), Request{
+			DeploymentName:   "payments-api-staging",
+			ResourceType:     "greenTaskSetTargetGroup",
+			ResourceName:     "payments-api-staging-green",
+			ControlAccountID: "123456789012",
+			TargetAccountID:  "123456789012",
+			Region:           "ap-northeast-2",
+		})
+		if err != nil {
+			t.Fatalf("Recent returned error: %v", err)
+		}
+		want := Result{
+			DeploymentName:    "payments-api-staging",
+			ResourceType:      "greenTaskSetTargetGroup",
+			ResourceName:      "payments-api-staging-green",
+			LookupContext:     expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
+			Available:         false,
+			UnavailableReason: UnavailableReasonNoLogSource,
+		}
+		if !reflect.DeepEqual(result, want) {
+			t.Fatalf("unexpected missing-backing CodeDeploy sibling result: %+v", result)
+		}
+	})
+
 	t.Run("codeDeploy deployment group returns empty-but-available payload when no rollout history exists", func(t *testing.T) {
 		service := NewService(Options{
 			ListCodeDeployEvents: func(ctx context.Context, req CodeDeployRequest) ([]CodeDeployEvent, error) {

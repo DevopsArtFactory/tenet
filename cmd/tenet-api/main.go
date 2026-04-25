@@ -457,7 +457,7 @@ func loadOverviewDeploymentResourceRequest(
 	if err != nil {
 		return resourceLookupRequest{}, err
 	}
-	backingResourceType, backingResourceName := resourceInspectionBackingResource(detail, resourceType)
+	backingResourceType, backingResourceName := resourceLookupBackingResource(detail, resourceType)
 	return resourceLookupRequest{
 		DeploymentName:      name,
 		ResourceType:        resourceType,
@@ -565,26 +565,32 @@ func splitUserDataBootstrapSource(resourceName string) (string, string, bool) {
 	return resourceType, resourcePath, true
 }
 
-func resourceInspectionBackingResource(detail catalog.DeploymentOverviewDetail, resourceType string) (string, string) {
-	if resourceType != "userDataBootstrapSource" {
-		return "", ""
-	}
-	preferredType := ""
-	switch detail.ExecutionMode {
-	case "asgWeightedTargetGroups":
-		preferredType = "candidateAutoScalingGroup"
-	case "asgInstanceRefresh":
-		preferredType = "serviceAutoScalingGroup"
-	}
-	for _, resource := range rolloutExecutionResources(detail) {
-		if preferredType != "" && resource.Resource == preferredType {
-			return resource.Resource, resource.Name
+func resourceLookupBackingResource(detail catalog.DeploymentOverviewDetail, resourceType string) (string, string) {
+	switch resourceType {
+	case "userDataBootstrapSource":
+		preferredType := ""
+		switch detail.ExecutionMode {
+		case "asgWeightedTargetGroups":
+			preferredType = "candidateAutoScalingGroup"
+		case "asgInstanceRefresh":
+			preferredType = "serviceAutoScalingGroup"
 		}
-	}
-	for _, resource := range rolloutExecutionResources(detail) {
-		switch resource.Resource {
-		case "candidateAutoScalingGroup", "serviceAutoScalingGroup":
-			return resource.Resource, resource.Name
+		for _, resource := range rolloutExecutionResources(detail) {
+			if preferredType != "" && resource.Resource == preferredType {
+				return resource.Resource, resource.Name
+			}
+		}
+		for _, resource := range rolloutExecutionResources(detail) {
+			switch resource.Resource {
+			case "candidateAutoScalingGroup", "serviceAutoScalingGroup":
+				return resource.Resource, resource.Name
+			}
+		}
+	case "productionListener", "testListener", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup":
+		for _, resource := range rolloutExecutionResources(detail) {
+			if resource.Resource == "codeDeployDeploymentGroup" {
+				return resource.Resource, resource.Name
+			}
 		}
 	}
 	return "", ""
