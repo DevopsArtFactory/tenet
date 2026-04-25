@@ -388,8 +388,10 @@ func TestEmbeddedUIIncludesAccountQuickNavigation(t *testing.T) {
 		"pushAccountSectionLink(groupSection.id, accountGroupSectionLabel(group));",
 		"const overviewArticle = createAccountOverviewArticle(account, accountSectionLinks);",
 		"const quickNav = createAccountQuickNav(account, accountSectionLinks);",
+		"const accountDetailSection = createElement('section', 'detail-section');",
+		"createDetailSectionHeader('Account detail', createAccountDetailActions(accountState))",
 		"activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;",
-		"root.replaceChildren(...[quickNav, overviewArticle].filter(Boolean));",
+		"root.replaceChildren(...[quickNav, accountDetailSection, overviewArticle].filter(Boolean));",
 		"scrollToCurrentHashTarget();",
 		"currentPageState.page !== 'account'",
 	} {
@@ -498,7 +500,7 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"createNavLink(buildPageURL('account', { accountId: deployment.awsAccountId }), 'Open account', '_self')",
 		"Open application",
 		"createNavLink(buildPageURL('application', { deployment: deployment.name }), 'Open application', '_self')",
-		"const renderAccountDetailPage = (account) => {",
+		"const renderAccountDetailPage = (account, accountState = null) => {",
 		"Account deployment overview",
 		"Account JSON",
 		"Group JSON",
@@ -564,6 +566,13 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"const fetchAccountDetail = (accountID) => fetchEmbeddedReadRouteJSON(`/v1/overview/accounts/${encodeURIComponent(accountID)}`, {",
 		"unavailable: 'account detail unavailable',",
 		"failure: 'account detail request failed',",
+		"const accountDetailReadRoute = (accountID) => `GET /v1/overview/accounts/${accountID || '{awsAccountId}'}`;",
+		"const createAccountDetailActions = (accountState = null) => [",
+		"'Refresh account detail'",
+		"const accountDetailRefreshState = (accountState = null) => {",
+		"'Refreshing account detail from GET /v1/overview/accounts/{awsAccountId}…'",
+		"Current account detail remains visible below.",
+		"Failed to refresh account detail:",
 		"const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {",
 		"unavailable: 'application detail unavailable',",
 		"failure: 'application detail request failed',",
@@ -1132,6 +1141,9 @@ func TestEmbeddedUIIncludesOverviewStatusInFetchErrors(t *testing.T) {
 		"const fetchAccountDetail = (accountID) => fetchEmbeddedReadRouteJSON(`/v1/overview/accounts/${encodeURIComponent(accountID)}`, {",
 		"unavailable: 'account detail unavailable',",
 		"failure: 'account detail request failed',",
+		"const accountDetailReadRoute = (accountID) => `GET /v1/overview/accounts/${accountID || '{awsAccountId}'}`;",
+		"const createAccountDetailActions = (accountState = null) => [",
+		"const accountDetailRefreshState = (accountState = null) => {",
 		"const labels = changeLabels(runtimeSummary?.changes);",
 		"['Latest runtime', runtimeSummaryText(deployment.runtimeSummary), 'summary']",
 		"['Latest changes', changeLabelsText(deployment.runtimeSummary?.changes)]",
@@ -1642,6 +1654,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Refresh drift workspace' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh drift workspace")
 	}
+	if !strings.Contains(text, "assert 'Refresh account detail' in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh account detail")
+	}
 	if !strings.Contains(text, "assert 'Clear drift filters' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Clear drift filters")
 	}
@@ -1656,6 +1671,12 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert 'Failed to refresh drift workspace:' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains drift refresh error copy")
+	}
+	if !strings.Contains(text, "assert 'Refreshing account detail from GET /v1/overview/accounts/{awsAccountId}…' in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains account refresh loading copy")
+	}
+	if !strings.Contains(text, "assert 'Failed to refresh account detail:' in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains account refresh error copy")
 	}
 	if !strings.Contains(text, "application_ui=$(curl -fsS \"http://$HOST:$PORT/?page=application&deployment=payments-api-prod\")") {
 		t.Fatalf("expected smoke-local.sh to fetch bookmarkable application page")
@@ -2267,6 +2288,34 @@ func TestOverviewDocsDescribeAccountSectionNavigation(t *testing.T) {
 			"`On this page`",
 			"`No section is currently targeted.`",
 			"`Account summary`",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
+	}
+}
+
+func TestOverviewDocsDescribeAccountDetailRefresh(t *testing.T) {
+	files := map[string][]string{
+		"../../README.md": {
+			"`Refresh account detail`",
+			"re-runs only `GET /v1/overview/accounts/{awsAccountId}`",
+			"leaves the stale account content visible with explicit loading/error copy",
+		},
+		"../../docs/features/overview-dashboard.md": {
+			"`Refresh account detail`",
+			"re-runs only `GET /v1/overview/accounts/{awsAccountId}`",
+			"refresh-time `401` / `403` responses reuse that same trusted-front-door / access-denied guidance instead of generic fetch-error copy",
 		},
 	}
 
