@@ -921,10 +921,25 @@ for fragment in (
 ):
     assert fragment in audit_ui, fragment
 
+assert_fragments("application_ui", application_ui, operator_read_auth_fragments + (
+    "return 'Application detail';",
+    "return `GET /v1/overview/applications/${deploymentName}`;",
+    "const renderOperatorReadFailurePage = (pageLabel, route, error) => {",
+    "renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);",
+))
+
 for fragment in (
     "const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {",
+    "const applicationDetailReadRoute = (deploymentName) => `GET /v1/overview/applications/${deploymentName || '{deploymentName}'}`;",
+    "const createApplicationDetailActions = (applicationState = null) => [",
+    "'Refresh application detail'",
+    "const applicationDetailRefreshState = (applicationState = null) => {",
+    "'Refreshing application detail from GET /v1/overview/applications/{deploymentName}…'",
+    "Current application detail remains visible below.",
+    "Failed to refresh application detail:",
     "const applicationDetail = currentPageState.page === 'application' ? fetchApplicationDetail(currentPageState.deployment) : fetchDeploymentDetail(currentPageState.deployment);",
-    "const renderApplicationDetailPage = (detail) => {",
+    "const renderApplicationDetailPage = (detail, applicationState = null) => {",
+    "renderApplicationDetailPage(applicationState.detail, applicationState);",
     "createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')",
     "Application resources",
 ):
@@ -934,6 +949,8 @@ assert_fragments("application_ui", application_ui, (
     "Quick navigation",
     "Applications overview",
     "Current destination",
+    "Current section",
+    "No section is currently targeted.",
     "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')",
     "createQuickNavChip('Application detail', 'Current destination: Application detail')",
 ))
