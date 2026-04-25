@@ -1394,7 +1394,40 @@
         return groups;
       };
       const nonEmptyResourceSections = (detail) => groupResourceSections(detail).filter((group) => Array.isArray(group?.resources) && group.resources.length > 0);
-      const renderApplicationDetailPage = (detail) => {
+      const applicationDetailReadRoute = (deploymentName) => `GET /v1/overview/applications/${deploymentName || '{deploymentName}'}`;
+      const createApplicationDetailActions = (applicationState = null) => [
+        createRefreshButton(
+          'Refresh application detail',
+          applicationState?.status === 'loading' || !(applicationState?.detail?.name || currentPageState.deployment),
+          () => applicationState?.onRefresh?.().catch(() => {}),
+        ),
+      ];
+      const applicationDetailRefreshState = (applicationState = null) => {
+        if (applicationState?.status === 'loading') {
+          return {
+            heading: '',
+            message: 'Refreshing application detail from GET /v1/overview/applications/{deploymentName}…',
+            className: '',
+          };
+        }
+        if (applicationState?.status === 'error') {
+          const deploymentName = applicationState?.detail?.name || currentPageState.deployment || '';
+          if (operatorReadFailureHeading(applicationState.error)) {
+            return {
+              heading: operatorReadFailureHeading(applicationState.error),
+              message: `${operatorReadFailureMessage(applicationDetailReadRoute(deploymentName), applicationState.error)} Current application detail remains visible below.`,
+              className: 'error',
+            };
+          }
+          return {
+            heading: '',
+            message: `Failed to refresh application detail: ${applicationState.error?.message || 'unknown error'}`,
+            className: 'error',
+          };
+        }
+        return null;
+      };
+      const renderApplicationDetailPage = (detail, applicationState = null) => {
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
         const root = document.getElementById('accounts');
@@ -1418,7 +1451,12 @@
         const backLink = createNavLink(buildPageURL('applications'), 'Back to applications');
         backLink.target = '_self';
         backLink.rel = '';
-        toolbar.replaceChildren(backLink);
+        const toolbarActions = createElement('div', 'toolbar-actions');
+        toolbarActions.append(backLink);
+        createApplicationDetailActions(applicationState).forEach((action) => {
+          if (action) toolbarActions.append(action);
+        });
+        toolbar.replaceChildren(toolbarActions);
         const detailSummary = createElement('article', 'account');
         detailSummary.append(
           createElement('h2', 'account-name', detail.name || currentPageState.deployment || 'Application'),
@@ -1490,6 +1528,15 @@
         const quickNav = createApplicationQuickNav(detail, applicationSectionLinks);
         if (quickNav) {
           page.append(quickNav);
+        }
+        const refreshState = applicationDetailRefreshState(applicationState);
+        if (refreshState?.heading) {
+          page.append(createElement('div', refreshState.className ? `detail-state ${refreshState.className}` : 'detail-state', refreshState.heading));
+          if (refreshState.message) {
+            page.append(createElement('div', 'detail-condition-meta', refreshState.message));
+          }
+        } else if (refreshState?.message) {
+          page.append(createElement('div', refreshState.className ? `detail-state ${refreshState.className}` : 'detail-state', refreshState.message));
         }
         renderDeploymentEventsSection(eventsSection, eventsDeploymentName).catch(() => {});
         page.append(rows, eventsSection);
@@ -5103,7 +5150,37 @@
           applicationDetail
             .then((detail) => {
               if (currentPageState.page === 'application') {
-                renderApplicationDetailPage(detail);
+                const applicationState = {
+                  status: 'idle',
+                  detail,
+                  error: null,
+                  onRefresh: null,
+                };
+                const renderApplicationWorkspace = () => {
+                  renderApplicationDetailPage(applicationState.detail, applicationState);
+                };
+                applicationState.onRefresh = () => {
+                  const deploymentName = applicationState.detail?.name || currentPageState.deployment || '';
+                  if (!deploymentName || applicationState.status === 'loading') return Promise.resolve(applicationState.detail);
+                  applicationState.status = 'loading';
+                  applicationState.error = null;
+                  renderApplicationWorkspace();
+                  return fetchApplicationDetail(deploymentName)
+                    .then((nextDetail) => {
+                      applicationState.status = 'idle';
+                      applicationState.detail = nextDetail;
+                      applicationState.error = null;
+                      renderApplicationWorkspace();
+                      return nextDetail;
+                    })
+                    .catch((error) => {
+                      applicationState.status = 'error';
+                      applicationState.error = error;
+                      renderApplicationWorkspace();
+                      throw error;
+                    });
+                };
+                renderApplicationWorkspace();
                 return;
               }
               if (currentPageState.page === 'resource') {
