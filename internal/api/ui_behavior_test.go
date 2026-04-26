@@ -2490,6 +2490,7 @@ func TestApplicationDetailPageWithNodeHarness(t *testing.T) {
 		"rollout": map[string]any{
 			"execution": []map[string]any{
 				{"name": "payments-api-staging ECS Service", "resource": "ecsService", "description": "Primary ECS service for the staging environment"},
+				{"name": "payments-api-staging CodeDeploy App", "resource": "codeDeployApplication", "description": "CodeDeploy application coordinating ECS traffic shifting"},
 				{"name": "payments-api-staging Deployment Group", "resource": "codeDeployDeploymentGroup", "description": "Linear traffic shifting deployment group"},
 				{"name": "prod listener", "resource": "productionListener", "description": "Routes production traffic"},
 				{"name": "green task set target group", "resource": "greenTaskSetTargetGroup", "description": "Candidate task set traffic target"},
@@ -2600,12 +2601,18 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (resourceLink.target !== '_self') throw new Error('expected resource drill-down link to stay in embedded UI flow');
   if (resourceLink.rel) throw new Error('expected resource drill-down link to avoid new-tab rel attributes');
   const resourceIDFragment = new URLSearchParams({ resourceId: 'ecsService::payments-api-staging ECS Service::Primary ECS service for the staging environment' }).toString();
+  const codeDeployApplicationIDFragment = new URLSearchParams({ resourceId: 'codeDeployApplication::payments-api-staging CodeDeploy App::CodeDeploy application coordinating ECS traffic shifting' }).toString();
+  const codeDeployApplicationLiveInspectionLink = links.find((node) => node.textContent === 'Open live inspection' && node.href.includes(codeDeployApplicationIDFragment));
+  const codeDeployApplicationRecentLogsLink = links.find((node) => node.textContent === 'Open recent logs' && node.href.includes(codeDeployApplicationIDFragment));
   if (!resourceLink.href.includes(resourceIDFragment)) throw new Error('expected stable unique resource identifier in drill-down href');
   if (!liveInspectionLink.href.includes('/?page=resource&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging')) throw new Error('expected live inspection href to preserve filters and deployment context');
   if (!recentLogsLink.href.includes('/?page=resource&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging')) throw new Error('expected recent logs href to preserve filters and deployment context');
   if (!liveInspectionLink.href.includes(resourceIDFragment) || !liveInspectionLink.href.endsWith('#resource-live-inspection')) throw new Error('expected live inspection handoff to target the existing resource section');
   if (!recentLogsLink.href.includes(resourceIDFragment) || !recentLogsLink.href.endsWith('#resource-recent-logs')) throw new Error('expected recent logs handoff to target the existing resource section');
-  if (liveInspectionLink.target !== '_self' || recentLogsLink.target !== '_self') throw new Error('expected direct evidence handoffs to stay in embedded UI flow');
+  if (!codeDeployApplicationLiveInspectionLink) throw new Error('expected CodeDeploy application row to link directly to live inspection');
+  if (!codeDeployApplicationLiveInspectionLink.href.includes('/?page=resource&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging') || !codeDeployApplicationLiveInspectionLink.href.endsWith('#resource-live-inspection')) throw new Error('expected CodeDeploy application live inspection link to preserve route state and target the live-inspection panel');
+  if (codeDeployApplicationRecentLogsLink) throw new Error('CodeDeploy application rows should not link to recent logs without backend support');
+  if (liveInspectionLink.target !== '_self' || recentLogsLink.target !== '_self' || codeDeployApplicationLiveInspectionLink.target !== '_self') throw new Error('expected direct evidence handoffs to stay in embedded UI flow');
 })();
 `
 

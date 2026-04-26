@@ -516,6 +516,7 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"Config and access",
 		"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')",
 		"const resourceSupportsLiveInspection = (resource) => {",
+		"'codeDeployApplication',\n          'codeDeployDeploymentGroup'",
 		"const resourceSupportsRecentLogs = (resource) => {",
 		"createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open live inspection', '_self')",
 		"createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open recent logs', '_self')",
