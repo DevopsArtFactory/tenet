@@ -2529,6 +2529,7 @@ document.byID.set('toolbar', document.createElement('section'));
 document.byID.set('summary', document.createElement('section'));
 document.byID.set('accounts', document.createElement('section'));
 const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
 async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
 const resourceId = 'testListener::payments-api-staging-test-listener::Test listener CodeDeploy uses to validate the replacement ECS task set before promotion';
 (async () => {
@@ -2554,6 +2555,17 @@ const resourceId = 'testListener::payments-api-staging-test-listener::Test liste
   if (!accountsText.includes('Execution description · Test listener CodeDeploy uses to validate the replacement ECS task set before promotion')) throw new Error('expected fallback resource page to render synthesized execution description');
   if (accountsText.includes('Recent logs are unavailable for this resource.')) throw new Error('expected fallback resource page not to render unsupported recent-log state');
   if (accountsText.includes('No recent logs are available for this resource.')) throw new Error('expected fallback resource page not to render empty recent-log state for populated CodeDeploy fallback logs');
+  if (!accountsText.includes('Resolved backing resource')) throw new Error('expected recent logs to render resolved backing-resource handoff');
+  if (!accountsText.includes('Open payments-api-staging-codedeploy-group drill-down')) throw new Error('expected recent logs backing-resource handoff label');
+  const backingLinks = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open payments-api-staging-codedeploy-group drill-down');
+  const backingLink = backingLinks.find((node) => node.target === '_self');
+  if (!backingLink) throw new Error('expected recent logs backing-resource handoff to use _self navigation');
+  const backingQuery = new URLSearchParams(String(backingLink.href).split('?')[1] || '');
+  if (backingQuery.get('page') !== 'resource') throw new Error('expected backing-resource handoff to route to resource page');
+  if (backingQuery.get('deployment') !== 'payments-api-staging') throw new Error('expected backing-resource handoff to preserve deployment context');
+  if (backingQuery.get('resourceType') !== 'codeDeployDeploymentGroup') throw new Error('expected backing-resource handoff to target the backing deployment-group type');
+  const backingResourceId = backingQuery.get('resourceId') || '';
+  if (!backingResourceId.startsWith('codeDeployDeploymentGroup::payments-api-staging-codedeploy-group::')) throw new Error('expected backing-resource handoff to use stable backing resource identity');
   if (accountsText.includes('No rollout execution resources are currently reported for this selection.')) throw new Error('expected fallback resource page not to render empty execution state');
 })();
 `

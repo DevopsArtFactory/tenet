@@ -59,7 +59,7 @@ The additive `lookupContext` object is always present, including unavailable res
 
 ## Embedded UI behavior
 
-The resource-detail page at `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}` now renders a `Recent logs` section and lazy-loads this route after the deployment detail payload resolves. That section also renders an explicit `Refresh recent logs` button so operators can re-run only this route in place without changing the bookmarkable URL.
+The resource-detail page at `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}` now renders a `Recent logs` section and lazy-loads this route after the deployment detail payload resolves. That section also renders an explicit `Refresh recent logs` button so operators can re-run only this route in place without changing the bookmarkable URL. When the payload reports `backingResourceType` plus `backingResourceName` and the loaded deployment detail can safely resolve that backing resource, the same section renders a `_self` `Resolved backing resource` handoff to the backing resource drill-down instead of forcing operators to copy IDs into a new URL.
 
 When the payload arrives, the card surfaces the backend `lookupContext` directly with operator-friendly labels:
 - `Lookup region`
