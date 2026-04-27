@@ -1791,6 +1791,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "blue_task_set_target_group_resource_ui=$(curl -fsS \"http://$HOST:$PORT/?page=resource&deployment=payments-api-staging&resourceType=blueTaskSetTargetGroup&resourceId=blueTaskSetTargetGroup%3A%3Apayments-api-staging-blue%3A%3ABlue+task+set+target+group+CodeDeploy+treats+as+the+live+ECS+traffic+destination\")") {
 		t.Fatalf("expected smoke-local.sh to fetch bookmarkable CodeDeploy blue task-set target-group resource page")
 	}
+	if !strings.Contains(text, "codedeploy_application_resource_ui_path=$(write_payload codedeploy-application-resource-ui.html \"$codedeploy_application_resource_ui\")") || !strings.Contains(text, "blue_task_set_target_group_resource_ui_path=$(write_payload blue-task-set-target-group-resource-ui.html \"$blue_task_set_target_group_resource_ui\")") {
+		t.Fatalf("expected smoke-local.sh to keep CodeDeploy resource shells file-backed")
+	}
 	if !strings.Contains(text, "bootstrap_resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=userDataBootstrapSource&resourceName=git%3Auserdata%2Fpayments-api-prod.sh\")") {
 		t.Fatalf("expected smoke-local.sh to fetch bootstrap-source recent logs payload")
 	}
@@ -2246,7 +2249,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"### Smoke verification scope",
 			"Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis.",
 			"The request-actor header contract by sending conflicting `X-Tenet-Actor-*` and `X-User-*` identities together",
-			"Bookmarkable `/?page=application&deployment=payments-api-prod`, `/?page=account&accountId=123456789012`, the existing traffic-shift resource route, and one representative ECS resource route",
+			"Bookmarkable `/?page=application&deployment=payments-api-prod`, `/?page=account&accountId=123456789012`, the existing traffic-shift resource route, one representative ECS resource route, and representative CodeDeploy `codeDeployApplication` / `blueTaskSetTargetGroup` resource routes",
 			"Trusted front-door auth by restarting `tenet-api`",
 			"gates guarded application, raw-status collection, account collection, unscoped audit collection, raw-status detail, account detail, grouped-account, immutable plan/apply, deployment-scoped audit reads, plus the exact `GET /v1/overview/deployments/{deploymentName}/resource-logs` and `GET /v1/overview/deployments/{deploymentName}/resource-inspection` drill-down routes.",
 			"the unscoped audit collection still returns `{\"entries\":[]}` when no audit rows are visible",
@@ -2265,7 +2268,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"The raw embedded shell/docs contract also keeps the labels `Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Lookup region`, and `Observer role configured` present",
 			"temp files via the shared `write_payload` helper",
 			"The compose-backed smoke now covers that shipped bootstrap-source drill-down directly",
-			"The compose-backed smoke now covers the shipped CodeDeploy application and task-set target-group bookmarkable resource shells directly",
+			"Both smoke lanes now cover the shipped CodeDeploy application and task-set target-group bookmarkable resource shells directly",
 			"`aws_unavailable` and `no_log_source` as part of the expected local no-AWS contract",
 			"Linux CI runners",
 			"syntax-checks `scripts/smoke-local.sh` with `bash -n`, then runs `make smoke-local`",
@@ -2285,7 +2288,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"`GET /v1/overview/deployments/{deploymentName}/resource-logs`, `GET /v1/overview/deployments/{deploymentName}/resource-inspection`",
 			"Use `make smoke-local` for the fastest fixture-backed regression check when you only need direct-process validation.",
 			"Additive `X-User-*` alias support plus explicit `X-Tenet-Actor-*` precedence by sending both header families with conflicting identities",
-			"Bookmarkable `/?page=application&deployment=payments-api-prod`, `/?page=account&accountId=123456789012`, the existing traffic-shift resource route, and one representative ECS resource route",
+			"Bookmarkable `/?page=application&deployment=payments-api-prod`, `/?page=account&accountId=123456789012`, the existing traffic-shift resource route, one representative ECS resource route, and representative CodeDeploy `codeDeployApplication` / `blueTaskSetTargetGroup` resource routes",
 			"Trusted front-door auth by restarting `tenet-api`",
 			"gates guarded application, raw-status collection, account collection, unscoped audit collection, raw-status detail, account detail, grouped-account, immutable plan/apply, deployment-scoped audit reads, plus the exact `GET /v1/overview/deployments/{deploymentName}/resource-logs` and `GET /v1/overview/deployments/{deploymentName}/resource-inspection` drill-down routes.",
 			"The bookmarkable `/?page=plan` workspace, but only behind a trusted front door that strips inbound trust headers before forwarding its own values",
@@ -2295,7 +2298,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"The full `GET /v1/audit-logs` collection, exact-action filtering with `GET /v1/audit-logs?action=apply.requested&limit=2`, and `400 Bad Request` on `action=invalid.action`",
 			"controller-authored `managedDrift[]` evidence in `GET /v1/overview/deployments/payments-api-prod` with stable `field` / `desired` / `actual` / `severity` rows and aligned `runtimeSummary.managedDrift`",
 			"The same direct-process actor coverage by sending both header families with conflicting identities on a `payments-api-staging` plan/apply flow",
-			"Bookmarkable application, account, drift, audit, and plan workspace URLs, checking raw embedded application/account/resource/drift/audit/plan shell HTML/script fragments instead of runtime DOM text",
+			"Bookmarkable application, account, drift, audit, plan workspace, and representative resource URLs, checking raw embedded application/account/resource/drift/audit/plan shell HTML/script fragments instead of runtime DOM text",
 			"bookmarkable application-detail status summary shell",
 			"Drift page source/summary/table copy, audit filter copy such as `Audit filters: action apply.requested · limit 2`, the `Clear audit filters` recovery affordance, and correlated `http_request` logs",
 			"Trusted front-door auth by restarting the Compose `api` service",
@@ -2596,7 +2599,7 @@ func TestDockerSmokeDocsDescribeEmbeddedReadAuthGuidanceCoverage(t *testing.T) {
 			"the shipped operator read-auth guidance hooks for initial `401` / `403` failures remain present",
 		},
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
-			"Bookmarkable application, account, drift, audit, and plan workspace URLs, checking raw embedded application/account/resource/drift/audit/plan shell HTML/script fragments instead of runtime DOM text",
+			"Bookmarkable application, account, drift, audit, plan workspace, and representative resource URLs, checking raw embedded application/account/resource/drift/audit/plan shell HTML/script fragments instead of runtime DOM text",
 			"the bookmarkable application shell still exposes the `_self` `Applications overview` return path plus the non-click `Application detail` destination chip, and the same smoke now explicitly locks the bookmarkable application-detail status summary shell",
 			"the shipped operator read-auth guidance hooks for initial `401` / `403` failures remain present",
 		},
