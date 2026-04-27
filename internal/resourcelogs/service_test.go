@@ -10,8 +10,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	cwtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 	"github.com/aws/smithy-go"
 )
 
@@ -468,6 +470,7 @@ func TestServiceRecent(t *testing.T) {
 		}
 		if !reflect.DeepEqual(gotLookup, CodeDeployRequest{
 			DeploymentName:  "payments-api-staging",
+			ResourceType:    "codeDeployDeploymentGroup",
 			ResourceName:    "payments-api-staging-codedeploy-group",
 			Region:          "ap-northeast-2",
 			TargetAccountID: "123456789012",
@@ -488,6 +491,57 @@ func TestServiceRecent(t *testing.T) {
 		}
 		if !reflect.DeepEqual(result, want) {
 			t.Fatalf("unexpected CodeDeploy resource logs result: %+v", result)
+		}
+	})
+
+	t.Run("codeDeploy application returns application-wide rollout history entries", func(t *testing.T) {
+		var gotLookup CodeDeployRequest
+		service := NewService(Options{
+			MaxEntries: 1,
+			ListCodeDeployEvents: func(ctx context.Context, req CodeDeployRequest) ([]CodeDeployEvent, error) {
+				gotLookup = req
+				return []CodeDeployEvent{
+					{Timestamp: time.Date(2026, 4, 18, 9, 20, 0, 0, time.UTC), Message: "Status: Succeeded — application rollout completed", DeploymentID: "d-application"},
+					{Timestamp: time.Date(2026, 4, 18, 9, 18, 0, 0, time.UTC), Message: "Status: InProgress — older deployment group rollout", DeploymentID: "d-older"},
+				}, nil
+			},
+		})
+
+		result, err := service.Recent(context.Background(), Request{
+			DeploymentName:   "payments-api-staging",
+			ResourceType:     "codeDeployApplication",
+			ResourceName:     "payments-api-staging-codedeploy-app",
+			ControlAccountID: "123456789012",
+			TargetAccountID:  "123456789012",
+			Region:           "ap-northeast-2",
+		})
+		if err != nil {
+			t.Fatalf("Recent returned error: %v", err)
+		}
+		if !reflect.DeepEqual(gotLookup, CodeDeployRequest{
+			DeploymentName:  "payments-api-staging",
+			ResourceType:    "codeDeployApplication",
+			ResourceName:    "payments-api-staging-codedeploy-app",
+			Region:          "ap-northeast-2",
+			TargetAccountID: "123456789012",
+		}) {
+			t.Fatalf("unexpected CodeDeploy application lookup request: %+v", gotLookup)
+		}
+		want := Result{
+			DeploymentName: "payments-api-staging",
+			ResourceType:   "codeDeployApplication",
+			ResourceName:   "payments-api-staging-codedeploy-app",
+			LookupContext:  expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
+			Available:      true,
+			Source:         SourceCodeDeploy,
+			Entries: []Entry{{
+				Timestamp: "2026-04-18T09:20:00Z",
+				Message:   "Status: Succeeded — application rollout completed",
+				Stream:    "d-application",
+			}},
+		}
+		if !reflect.DeepEqual(result, want) {
+			t.Fatalf("unexpected CodeDeploy application recent logs result: %+v", result)
 		}
 	})
 
@@ -518,6 +572,7 @@ func TestServiceRecent(t *testing.T) {
 		}
 		if !reflect.DeepEqual(gotLookup, CodeDeployRequest{
 			DeploymentName:  "payments-api-staging",
+			ResourceType:    "testListener",
 			ResourceName:    "payments-api-staging-codedeploy-group",
 			Region:          "ap-northeast-2",
 			TargetAccountID: "123456789012",
@@ -998,6 +1053,182 @@ func TestServiceRecent(t *testing.T) {
 			t.Fatalf("unexpected generic asg unavailable result: %+v", result)
 		}
 	})
+}
+
+func TestFindRecentServiceTasksIncludesStoppedTasks(t *testing.T) {
+	base := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
+	client := &fakeECSTaskClient{
+		listByStatus: map[ecstypes.DesiredStatus][]string{
+			ecstypes.DesiredStatusRunning: {"arn:aws:ecs:region:acct:task/cluster/running-old"},
+			ecstypes.DesiredStatusStopped: {"arn:aws:ecs:region:acct:task/cluster/stopped-new"},
+		},
+		tasksByARN: map[string]ecstypes.Task{
+			"arn:aws:ecs:region:acct:task/cluster/running-old": {
+				TaskArn:           aws.String("arn:aws:ecs:region:acct:task/cluster/running-old"),
+				StartedAt:         aws.Time(base.Add(-10 * time.Minute)),
+				TaskDefinitionArn: aws.String("td:1"),
+			},
+			"arn:aws:ecs:region:acct:task/cluster/stopped-new": {
+				TaskArn:           aws.String("arn:aws:ecs:region:acct:task/cluster/stopped-new"),
+				StartedAt:         aws.Time(base.Add(-7 * time.Minute)),
+				StoppedAt:         aws.Time(base.Add(-1 * time.Minute)),
+				TaskDefinitionArn: aws.String("td:1"),
+			},
+		},
+	}
+
+	tasks, err := findRecentServiceTasks(context.Background(), client, "cluster-a", "payments-api-prod-service")
+	if err != nil {
+		t.Fatalf("findRecentServiceTasks returned error: %v", err)
+	}
+	if got, want := client.listStatuses, []ecstypes.DesiredStatus{ecstypes.DesiredStatusRunning, ecstypes.DesiredStatusStopped}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected running then stopped task lookup, got %+v", got)
+	}
+	if len(tasks) != 2 {
+		t.Fatalf("expected running and stopped tasks, got %+v", tasks)
+	}
+	if got := aws.ToString(tasks[0].TaskArn); got != "arn:aws:ecs:region:acct:task/cluster/stopped-new" {
+		t.Fatalf("expected recently stopped task first, got %q", got)
+	}
+	if got := aws.ToString(tasks[1].TaskArn); got != "arn:aws:ecs:region:acct:task/cluster/running-old" {
+		t.Fatalf("expected running task second, got %q", got)
+	}
+}
+
+func TestFindRecentServiceTasksReturnsNoTasksWhenRunningAndStoppedAreEmpty(t *testing.T) {
+	client := &fakeECSTaskClient{listByStatus: map[ecstypes.DesiredStatus][]string{}}
+
+	tasks, err := findRecentServiceTasks(context.Background(), client, "cluster-a", "payments-api-prod-service")
+	if err != nil {
+		t.Fatalf("findRecentServiceTasks returned error: %v", err)
+	}
+	if len(tasks) != 0 {
+		t.Fatalf("expected no tasks, got %+v", tasks)
+	}
+	if got, want := client.listStatuses, []ecstypes.DesiredStatus{ecstypes.DesiredStatusRunning, ecstypes.DesiredStatusStopped}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected running then stopped task lookup, got %+v", got)
+	}
+}
+
+func TestFetchRecentServiceTaskLogEventsSkipsMissingStoppedTaskStreams(t *testing.T) {
+	base := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
+	ecsClient := &fakeECSTaskDefinitionClient{definitionsByARN: map[string]ecstypes.TaskDefinition{
+		"td:1": awsLogsTaskDefinition(),
+	}}
+	logsClient := &fakeCloudWatchLogEventsClient{
+		missingStreams: map[string]bool{"ecs/payments-api/app/stopped-missing": true},
+		eventsByStream: map[string][]cwtypes.OutputLogEvent{
+			"ecs/payments-api/app/stopped-good": {
+				{Timestamp: aws.Int64(base.Add(-1 * time.Minute).UnixMilli()), Message: aws.String("stopped task failure")},
+			},
+		},
+	}
+	tasks := []ecstypes.Task{
+		{
+			TaskArn:           aws.String("arn:aws:ecs:region:acct:task/cluster/stopped-missing"),
+			TaskDefinitionArn: aws.String("td:1"),
+			Containers:        []ecstypes.Container{{Name: aws.String("app")}},
+			StoppedAt:         aws.Time(base.Add(-2 * time.Minute)),
+		},
+		{
+			TaskArn:           aws.String("arn:aws:ecs:region:acct:task/cluster/stopped-good"),
+			TaskDefinitionArn: aws.String("td:1"),
+			Containers:        []ecstypes.Container{{Name: aws.String("app")}},
+			StoppedAt:         aws.Time(base.Add(-1 * time.Minute)),
+		},
+	}
+
+	events, err := fetchRecentServiceTaskLogEvents(context.Background(), ecsClient, logsClient, tasks, 5)
+	if err != nil {
+		t.Fatalf("fetchRecentServiceTaskLogEvents returned error: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected only the available stopped-task stream, got %+v", events)
+	}
+	if events[0].Message != "stopped task failure" || events[0].Stream != "ecs/payments-api/app/stopped-good" {
+		t.Fatalf("unexpected stopped-task log event: %+v", events[0])
+	}
+}
+
+func awsLogsTaskDefinition() ecstypes.TaskDefinition {
+	return ecstypes.TaskDefinition{ContainerDefinitions: []ecstypes.ContainerDefinition{{
+		Name: aws.String("app"),
+		LogConfiguration: &ecstypes.LogConfiguration{
+			LogDriver: ecstypes.LogDriverAwslogs,
+			Options: map[string]string{
+				"awslogs-group":         "/aws/ecs/payments-api",
+				"awslogs-stream-prefix": "ecs/payments-api",
+			},
+		},
+	}}}
+}
+
+type fakeECSTaskClient struct {
+	listByStatus map[ecstypes.DesiredStatus][]string
+	tasksByARN   map[string]ecstypes.Task
+	listStatuses []ecstypes.DesiredStatus
+}
+
+func (f *fakeECSTaskClient) ListTasks(ctx context.Context, input *ecs.ListTasksInput, opts ...func(*ecs.Options)) (*ecs.ListTasksOutput, error) {
+	f.listStatuses = append(f.listStatuses, input.DesiredStatus)
+	return &ecs.ListTasksOutput{TaskArns: append([]string(nil), f.listByStatus[input.DesiredStatus]...)}, nil
+}
+
+func (f *fakeECSTaskClient) DescribeTasks(ctx context.Context, input *ecs.DescribeTasksInput, opts ...func(*ecs.Options)) (*ecs.DescribeTasksOutput, error) {
+	out := &ecs.DescribeTasksOutput{Tasks: make([]ecstypes.Task, 0, len(input.Tasks))}
+	for _, arn := range input.Tasks {
+		if task, ok := f.tasksByARN[arn]; ok {
+			out.Tasks = append(out.Tasks, task)
+		}
+	}
+	return out, nil
+}
+
+type fakeECSTaskDefinitionClient struct {
+	definitionsByARN map[string]ecstypes.TaskDefinition
+}
+
+func (f *fakeECSTaskDefinitionClient) DescribeTaskDefinition(ctx context.Context, input *ecs.DescribeTaskDefinitionInput, opts ...func(*ecs.Options)) (*ecs.DescribeTaskDefinitionOutput, error) {
+	definition, ok := f.definitionsByARN[aws.ToString(input.TaskDefinition)]
+	if !ok {
+		return &ecs.DescribeTaskDefinitionOutput{}, nil
+	}
+	return &ecs.DescribeTaskDefinitionOutput{TaskDefinition: &definition}, nil
+}
+
+type fakeCloudWatchLogEventsClient struct {
+	eventsByStream map[string][]cwtypes.OutputLogEvent
+	missingStreams map[string]bool
+}
+
+func (f *fakeCloudWatchLogEventsClient) GetLogEvents(ctx context.Context, input *cloudwatchlogs.GetLogEventsInput, opts ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetLogEventsOutput, error) {
+	streamName := aws.ToString(input.LogStreamName)
+	if f.missingStreams[streamName] {
+		return nil, &cwtypes.ResourceNotFoundException{Message: aws.String("stream not found")}
+	}
+	return &cloudwatchlogs.GetLogEventsOutput{Events: append([]cwtypes.OutputLogEvent(nil), f.eventsByStream[streamName]...)}, nil
+}
+
+func TestCodeDeployListDeploymentsPayloadOmitsEmptyDeploymentGroup(t *testing.T) {
+	payload := codeDeployListDeploymentsPayload(" payments-api-staging-codedeploy-app ", " ", "token-1")
+
+	if payload["applicationName"] != "payments-api-staging-codedeploy-app" {
+		t.Fatalf("unexpected applicationName: %#v", payload["applicationName"])
+	}
+	if _, ok := payload["deploymentGroupName"]; ok {
+		t.Fatalf("expected application-wide CodeDeploy lookup to omit deploymentGroupName, got %#v", payload)
+	}
+	if payload["nextToken"] != "token-1" {
+		t.Fatalf("unexpected nextToken: %#v", payload["nextToken"])
+	}
+
+	groupPayload := codeDeployListDeploymentsPayload("payments-api-staging-codedeploy-app", " payments-api-staging-codedeploy-group ", "")
+	if groupPayload["deploymentGroupName"] != "payments-api-staging-codedeploy-group" {
+		t.Fatalf("expected deployment-group scoped lookup to include deploymentGroupName, got %#v", groupPayload)
+	}
+	if _, ok := groupPayload["nextToken"]; ok {
+		t.Fatalf("expected empty nextToken to be omitted, got %#v", groupPayload)
+	}
 }
 
 func TestServiceAWSClientCache(t *testing.T) {

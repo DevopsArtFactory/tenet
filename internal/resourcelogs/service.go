@@ -177,9 +177,9 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 		}
 		entries := formatConsoleEntries(consoles, s.maxEntries())
 		return availableResult(req, SourceEC2Console, entries), nil
-	case "codeDeployDeploymentGroup", "productionListener", "testListener", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup":
+	case "codeDeployApplication", "codeDeployDeploymentGroup", "productionListener", "testListener", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup":
 		resourceName := req.ResourceName
-		if req.ResourceType != "codeDeployDeploymentGroup" {
+		if req.ResourceType != "codeDeployApplication" && req.ResourceType != "codeDeployDeploymentGroup" {
 			resourceName = strings.TrimSpace(req.BackingResourceName)
 			if resourceName == "" {
 				return unavailableResult(req, UnavailableReasonNoLogSource), nil
@@ -194,6 +194,7 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 		}
 		events, err := list(ctx, CodeDeployRequest{
 			DeploymentName:  req.DeploymentName,
+			ResourceType:    req.ResourceType,
 			ResourceName:    resourceName,
 			Region:          req.Region,
 			TargetAccountID: req.TargetAccountID,
@@ -236,6 +237,7 @@ type ASGRequest struct {
 
 type CodeDeployRequest struct {
 	DeploymentName  string
+	ResourceType    string
 	ResourceName    string
 	Region          string
 	TargetAccountID string
@@ -393,7 +395,7 @@ func (s Service) listECSLogEventsFromAWS(ctx context.Context, req ECSRequest) ([
 	if service == nil {
 		return nil, resourceaws.NewUnavailableError(UnavailableReasonResourceNotFound)
 	}
-	tasks, err := findRecentRunningTasks(ctx, clients.ECS, aws.ToString(clusterARN), aws.ToString(service.ServiceName))
+	tasks, err := findRecentServiceTasks(ctx, clients.ECS, aws.ToString(clusterARN), aws.ToString(service.ServiceName))
 	if err != nil {
 		return nil, err
 	}
@@ -401,33 +403,9 @@ func (s Service) listECSLogEventsFromAWS(ctx context.Context, req ECSRequest) ([
 		return nil, resourceaws.NewUnavailableError(UnavailableReasonNoRunningTasks)
 	}
 
-	taskDefinitions := map[string]ecstypes.TaskDefinition{}
-	events := make([]CloudWatchEvent, 0)
-	for _, task := range tasks {
-		taskDefinitionARN := aws.ToString(task.TaskDefinitionArn)
-		if taskDefinitionARN == "" {
-			continue
-		}
-		taskDefinition, ok := taskDefinitions[taskDefinitionARN]
-		if !ok {
-			out, err := clients.ECS.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{TaskDefinition: aws.String(taskDefinitionARN)})
-			if err != nil {
-				return nil, err
-			}
-			if out.TaskDefinition == nil {
-				continue
-			}
-			taskDefinition = *out.TaskDefinition
-			taskDefinitions[taskDefinitionARN] = taskDefinition
-		}
-		taskEvents, err := fetchTaskLogEvents(ctx, clients.Logs, task, taskDefinition, s.maxEntries())
-		if err != nil {
-			return nil, err
-		}
-		events = append(events, taskEvents...)
-		if len(events) >= s.maxEntries() {
-			break
-		}
+	events, err := fetchRecentServiceTaskLogEvents(ctx, clients.ECS, clients.Logs, tasks, s.maxEntries())
+	if err != nil {
+		return nil, err
 	}
 	if len(events) == 0 {
 		return nil, resourceaws.NewUnavailableError(UnavailableReasonNoLogSource)
@@ -476,7 +454,13 @@ func (s Service) listCodeDeployEventsFromAWS(ctx context.Context, req CodeDeploy
 	if err != nil {
 		return nil, err
 	}
-	infos, err := listCodeDeployDeploymentInfos(ctx, clients.Config, req.Region, codeDeployApplicationName(req.DeploymentName), strings.TrimSpace(req.ResourceName), s.maxEntries())
+	applicationName := codeDeployApplicationName(req.DeploymentName)
+	deploymentGroupName := strings.TrimSpace(req.ResourceName)
+	if req.ResourceType == "codeDeployApplication" {
+		applicationName = strings.TrimSpace(req.ResourceName)
+		deploymentGroupName = ""
+	}
+	infos, err := listCodeDeployDeploymentInfos(ctx, clients.Config, req.Region, applicationName, deploymentGroupName, s.maxEntries())
 	if err != nil {
 		return nil, err
 	}
@@ -513,11 +497,51 @@ func findECSService(ctx context.Context, client *ecs.Client, serviceName string)
 	return nil, nil, nil
 }
 
-func findRecentRunningTasks(ctx context.Context, client *ecs.Client, clusterARN, serviceName string) ([]ecstypes.Task, error) {
+type ecsTaskClient interface {
+	ListTasks(context.Context, *ecs.ListTasksInput, ...func(*ecs.Options)) (*ecs.ListTasksOutput, error)
+	DescribeTasks(context.Context, *ecs.DescribeTasksInput, ...func(*ecs.Options)) (*ecs.DescribeTasksOutput, error)
+}
+
+type ecsTaskDefinitionClient interface {
+	DescribeTaskDefinition(context.Context, *ecs.DescribeTaskDefinitionInput, ...func(*ecs.Options)) (*ecs.DescribeTaskDefinitionOutput, error)
+}
+
+type cloudWatchLogEventsClient interface {
+	GetLogEvents(context.Context, *cloudwatchlogs.GetLogEventsInput, ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetLogEventsOutput, error)
+}
+
+func findRecentServiceTasks(ctx context.Context, client ecsTaskClient, clusterARN, serviceName string) ([]ecstypes.Task, error) {
+	seen := map[string]struct{}{}
+	tasks := make([]ecstypes.Task, 0)
+	for _, desiredStatus := range []ecstypes.DesiredStatus{ecstypes.DesiredStatusRunning, ecstypes.DesiredStatusStopped} {
+		statusTasks, err := findRecentServiceTasksByStatus(ctx, client, clusterARN, serviceName, desiredStatus)
+		if err != nil {
+			return nil, err
+		}
+		for _, task := range statusTasks {
+			arn := aws.ToString(task.TaskArn)
+			if arn == "" {
+				continue
+			}
+			if _, ok := seen[arn]; ok {
+				continue
+			}
+			seen[arn] = struct{}{}
+			tasks = append(tasks, task)
+		}
+	}
+	sort.SliceStable(tasks, func(i, j int) bool {
+		return taskRecency(tasks[i]).After(taskRecency(tasks[j]))
+	})
+	return tasks, nil
+}
+
+func findRecentServiceTasksByStatus(ctx context.Context, client ecsTaskClient, clusterARN, serviceName string, desiredStatus ecstypes.DesiredStatus) ([]ecstypes.Task, error) {
 	listOut, err := client.ListTasks(ctx, &ecs.ListTasksInput{
 		Cluster:       aws.String(clusterARN),
 		ServiceName:   aws.String(serviceName),
-		DesiredStatus: ecstypes.DesiredStatusRunning,
+		DesiredStatus: desiredStatus,
+		MaxResults:    aws.Int32(10),
 	})
 	if err != nil {
 		return nil, err
@@ -531,12 +555,55 @@ func findRecentRunningTasks(ctx context.Context, client *ecs.Client, clusterARN,
 	}
 	tasks := append([]ecstypes.Task(nil), describeOut.Tasks...)
 	sort.SliceStable(tasks, func(i, j int) bool {
-		return aws.ToTime(tasks[i].StartedAt).After(aws.ToTime(tasks[j].StartedAt))
+		return taskRecency(tasks[i]).After(taskRecency(tasks[j]))
 	})
 	return tasks, nil
 }
 
-func fetchTaskLogEvents(ctx context.Context, client *cloudwatchlogs.Client, task ecstypes.Task, definition ecstypes.TaskDefinition, limit int) ([]CloudWatchEvent, error) {
+func taskRecency(task ecstypes.Task) time.Time {
+	for _, candidate := range []time.Time{
+		aws.ToTime(task.StoppedAt),
+		aws.ToTime(task.StartedAt),
+		aws.ToTime(task.PullStartedAt),
+		aws.ToTime(task.CreatedAt),
+	} {
+		if !candidate.IsZero() {
+			return candidate
+		}
+	}
+	return time.Time{}
+}
+
+func fetchRecentServiceTaskLogEvents(ctx context.Context, ecsClient ecsTaskDefinitionClient, logsClient cloudWatchLogEventsClient, tasks []ecstypes.Task, limit int) ([]CloudWatchEvent, error) {
+	taskDefinitions := map[string]ecstypes.TaskDefinition{}
+	events := make([]CloudWatchEvent, 0)
+	for _, task := range tasks {
+		taskDefinitionARN := aws.ToString(task.TaskDefinitionArn)
+		if taskDefinitionARN == "" {
+			continue
+		}
+		taskDefinition, ok := taskDefinitions[taskDefinitionARN]
+		if !ok {
+			out, err := ecsClient.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{TaskDefinition: aws.String(taskDefinitionARN)})
+			if err != nil {
+				return nil, err
+			}
+			if out.TaskDefinition == nil {
+				continue
+			}
+			taskDefinition = *out.TaskDefinition
+			taskDefinitions[taskDefinitionARN] = taskDefinition
+		}
+		taskEvents, err := fetchTaskLogEvents(ctx, logsClient, task, taskDefinition, limit)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, taskEvents...)
+	}
+	return events, nil
+}
+
+func fetchTaskLogEvents(ctx context.Context, client cloudWatchLogEventsClient, task ecstypes.Task, definition ecstypes.TaskDefinition, limit int) ([]CloudWatchEvent, error) {
 	containerByName := make(map[string]ecstypes.ContainerDefinition, len(definition.ContainerDefinitions))
 	for _, container := range definition.ContainerDefinitions {
 		containerByName[aws.ToString(container.Name)] = container
@@ -683,13 +750,7 @@ func listCodeDeployDeploymentIDs(ctx context.Context, cfg aws.Config, region, ap
 	nextToken := ""
 	for len(ids) < limit {
 		var response codeDeployListDeploymentsOutput
-		payload := map[string]any{
-			"applicationName":     strings.TrimSpace(applicationName),
-			"deploymentGroupName": strings.TrimSpace(deploymentGroupName),
-		}
-		if nextToken != "" {
-			payload["nextToken"] = nextToken
-		}
+		payload := codeDeployListDeploymentsPayload(applicationName, deploymentGroupName, nextToken)
 		if err := doSignedCodeDeployJSONRequest(ctx, cfg, region, "CodeDeploy_20141006.ListDeployments", payload, &response); err != nil {
 			return nil, err
 		}
@@ -717,6 +778,19 @@ func batchGetCodeDeployDeployments(ctx context.Context, cfg aws.Config, region s
 		return nil, err
 	}
 	return response.DeploymentsInfo, nil
+}
+
+func codeDeployListDeploymentsPayload(applicationName, deploymentGroupName, nextToken string) map[string]any {
+	payload := map[string]any{
+		"applicationName": strings.TrimSpace(applicationName),
+	}
+	if deploymentGroupName := strings.TrimSpace(deploymentGroupName); deploymentGroupName != "" {
+		payload["deploymentGroupName"] = deploymentGroupName
+	}
+	if nextToken != "" {
+		payload["nextToken"] = nextToken
+	}
+	return payload
 }
 
 func doSignedCodeDeployJSONRequest(ctx context.Context, cfg aws.Config, region, target string, payload any, out any) error {

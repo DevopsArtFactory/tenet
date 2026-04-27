@@ -1145,6 +1145,57 @@ func TestRouterAuditLogsMethodNotAllowed(t *testing.T) {
 	}
 }
 
+func TestDeploymentOverviewEventsRouteIncludesManagedDriftSummary(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeploymentEvents: func(_ context.Context, name string) (catalog.DeploymentOverviewEvents, error) {
+			if name != "api-prod" {
+				t.Fatalf("unexpected deployment name %q", name)
+			}
+			return catalog.DeploymentOverviewEvents{
+				DeploymentName: name,
+				Events: []domain.StatusHistoryEntry{{
+					Timestamp: "2026-04-16T06:15:00Z",
+					Source:    "controller",
+					Summary:   "Deployment has managed drift",
+					ManagedDrift: []domain.ManagedDriftItem{
+						{Field: "artifact", Severity: domain.ManagedDriftSeverityHigh},
+						{Field: "runtimeContext.capacity.min", Severity: domain.ManagedDriftSeverityMedium},
+						{Field: "runtimeContext.tags.owner", Severity: domain.ManagedDriftSeverityLow},
+					},
+				}},
+				ManagedDriftSummary: catalog.ManagedDriftSummary{Total: 3, High: 1, Medium: 1, Low: 1},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/events", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode deployment events payload: %v", err)
+	}
+	if payload["deploymentName"] != "api-prod" {
+		t.Fatalf("expected deploymentName in events payload, got %#v", payload)
+	}
+	events, ok := payload["events"].([]any)
+	if !ok || len(events) != 1 {
+		t.Fatalf("expected events array in payload, got %#v", payload["events"])
+	}
+	summary, ok := payload["managedDriftSummary"].(map[string]any)
+	if !ok || summary["total"] != float64(3) || summary["high"] != float64(1) || summary["medium"] != float64(1) || summary["low"] != float64(1) {
+		t.Fatalf("expected managedDriftSummary counts in events payload, got %#v", payload["managedDriftSummary"])
+	}
+	if _, exists := payload["ManagedDriftSummary"]; exists {
+		t.Fatalf("unexpected Go-style managed drift summary field in %#v", payload)
+	}
+}
+
 func TestRouterDeploymentReadAuthorization(t *testing.T) {
 	newGuardedRouter := func(t *testing.T) (http.Handler, *int) {
 		t.Helper()
@@ -5055,6 +5106,107 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 			if got := trafficRoutingResource[key]; !reflect.DeepEqual(got, want) {
 				t.Fatalf("expected trafficRoutingResource[%q]=%v, got %#v", key, want, got)
 			}
+		}
+	})
+
+	t.Run("returns CodeDeploy task-set target-group live payload", func(t *testing.T) {
+		expected := resourceinspection.Result{
+			DeploymentName: "payments-api-staging",
+			ResourceType:   "blueTaskSetTargetGroup",
+			ResourceName:   "payments-api-staging-blue",
+			LookupContext: resourceinspection.LookupContext{
+				Region:                 "ap-northeast-2",
+				ControlAccountID:       "123456789012",
+				TargetAccountID:        "123456789012",
+				CrossAccount:           false,
+				ObserverRoleConfigured: true,
+			},
+			Available: true,
+			Source:    resourceinspection.SourceTrafficRoutingAWS,
+			TrafficRoutingResource: &resourceinspection.TrafficRoutingInspection{
+				Kind:           "blueTaskSetTargetGroup",
+				DisplayName:    "Blue task set target group",
+				InspectionMode: "live",
+				Summary:        "Blue task set target group CodeDeploy treats as the live ECS traffic destination",
+				TargetGroup: &resourceinspection.TargetGroupInspection{
+					TargetGroupName:            "payments-api-staging-blue",
+					TargetGroupARN:             "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-staging-blue/abc123",
+					Protocol:                   "HTTP",
+					Port:                       8080,
+					TargetType:                 "ip",
+					LoadBalancerARNs:           []string{"arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/payments/abc123"},
+					HealthCheckProtocol:        "HTTP",
+					HealthCheckPort:            "traffic-port",
+					HealthCheckPath:            "/healthz",
+					HealthCheckIntervalSeconds: 30,
+					HealthCheckTimeoutSeconds:  5,
+					HealthyThresholdCount:      2,
+					UnhealthyThresholdCount:    3,
+					TargetHealthCounts:         map[string]int{"healthy": 1, "unhealthy": 1},
+					Targets: []resourceinspection.TargetHealthInspection{
+						{TargetID: "10.0.1.10", Port: 8080, State: "healthy"},
+						{TargetID: "10.0.2.10", Port: 8080, State: "unhealthy", Reason: "Target.ResponseCodeMismatch", Description: "Health checks failed"},
+					},
+				},
+			},
+		}
+
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "payments-api-staging" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+				return expected, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=blueTaskSetTargetGroup&resourceName=payments-api-staging-blue", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw CodeDeploy task-set target-group live payload: %v", err)
+		}
+		trafficRoutingResource, ok := raw["trafficRoutingResource"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected trafficRoutingResource object in payload, got %#v", raw["trafficRoutingResource"])
+		}
+		if got := trafficRoutingResource["inspectionMode"]; got != "live" {
+			t.Fatalf("expected live task-set target-group inspection mode, got %#v", got)
+		}
+		targetGroup, ok := trafficRoutingResource["targetGroup"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected targetGroup object in payload, got %#v", trafficRoutingResource["targetGroup"])
+		}
+		for key, want := range map[string]any{
+			"targetGroupName":            "payments-api-staging-blue",
+			"targetGroupArn":             "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-staging-blue/abc123",
+			"protocol":                   "HTTP",
+			"port":                       float64(8080),
+			"targetType":                 "ip",
+			"healthCheckProtocol":        "HTTP",
+			"healthCheckPort":            "traffic-port",
+			"healthCheckPath":            "/healthz",
+			"healthCheckIntervalSeconds": float64(30),
+			"healthCheckTimeoutSeconds":  float64(5),
+			"healthyThresholdCount":      float64(2),
+			"unhealthyThresholdCount":    float64(3),
+		} {
+			if got := targetGroup[key]; !reflect.DeepEqual(got, want) {
+				t.Fatalf("expected targetGroup[%q]=%v, got %#v", key, want, got)
+			}
+		}
+		healthCounts, ok := targetGroup["targetHealthCounts"].(map[string]any)
+		if !ok || healthCounts["healthy"] != float64(1) || healthCounts["unhealthy"] != float64(1) {
+			t.Fatalf("unexpected targetHealthCounts: %#v", targetGroup["targetHealthCounts"])
 		}
 	})
 

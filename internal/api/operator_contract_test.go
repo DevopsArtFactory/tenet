@@ -1083,6 +1083,7 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		"`403 Forbidden` authenticated-but-unauthorized reads",
 		"`200 OK` authorized reads",
 		"`deploymentName` plus `events` list payload contract",
+		"additive `managedDriftSummary` severity counts",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README deployment events auth contract to include %q", fragment)
@@ -1094,6 +1095,7 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		"`GET /v1/overview/deployments/{deploymentName}/events`",
 		"`401` / `403` / `200 OK` contract",
 		"`deploymentName` plus `events` list shape",
+		"additive `managedDriftSummary` object carrying explicit zero/non-zero severity counts",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
 			t.Fatalf("expected local runtime doc deployment events auth contract to include %q", fragment)
@@ -1256,6 +1258,8 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		"- `crossAccount`",
 		"- `observerRoleConfigured`",
 		"`lookupContext` object is always present, including unavailable responses",
+		"newest running and recently stopped service task/container streams",
+		"failed rollouts and crash loops can still surface useful logs",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
 			t.Fatalf("expected resource recent logs doc to include %q", fragment)

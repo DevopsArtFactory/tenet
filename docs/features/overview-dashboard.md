@@ -150,7 +150,7 @@ Current behavior:
 - live `autoScalingGroup` payloads now surface additive live launch-template inspection fields `launchTemplate.imageId` and `launchTemplate.instanceType`, alongside the optional `launchTemplate` and `mixedInstancesPolicy` details already present on `DescribeAutoScalingGroups` when the backing Auto Scaling Group uses them
 - `trafficRoutingResource` keeps the same typed body for `codeDeployApplication`, `codeDeployDeploymentGroup`, `productionListener`, `testListener`, `productionListenerRule`, `activeTargetGroup`, `candidateTargetGroup`, `blueTaskSetTargetGroup`, `greenTaskSetTargetGroup`, and `trafficShiftPlan`; `codeDeployApplication`, `codeDeployDeploymentGroup`, `productionListener`, and `testListener` upgrade from `summary_only` fallback to `inspectionMode=live` when AWS inspection succeeds, and CodeDeploy task-set target groups can now render optional live target-group metadata when that backend evidence is present
 - local/no-AWS runs still return the existing summary-only `trafficRoutingResource` fallback for those CodeDeploy traffic-routing resources, while the weighted-target-group resources `productionListenerRule`, `activeTargetGroup`, `candidateTargetGroup`, and `trafficShiftPlan` stay summary-only by contract; summary-only `blueTaskSetTargetGroup` / `greenTaskSetTargetGroup` payloads remain quiet, but live payloads surface target group name/ARN, protocol/port, target type, health-check settings, load-balancer ARNs, target-health counts, and registered targets in the same `Live inspection` card
-- repeated successful live inspections for `codeDeployApplication`, `codeDeployDeploymentGroup`, `productionListener`, and `testListener` reuse a bounded in-process cache keyed by `(region, target account, observer role, resource type, resource name)` so back-to-back operator drill-downs do not repeat the same AWS lookups inside one API process
+- repeated successful live inspections for `codeDeployApplication`, `codeDeployDeploymentGroup`, `productionListener`, `testListener`, `blueTaskSetTargetGroup`, and `greenTaskSetTargetGroup` reuse a bounded in-process cache keyed by `(region, target account, observer role, resource type, resource name)` so back-to-back operator drill-downs do not repeat the same AWS lookups inside one API process
 - `ecsService` lookups keep a bounded in-process cluster hint per `(region, target account, observer role, service name)` so repeated inspection requests try the last known cluster first; if that hint is stale, Tenet clears it, falls back to the full cluster scan, and refreshes the hint from the recovered service location
 - unsupported or unavailable inspection lookups keep the route usable during troubleshooting by returning `available=false` plus an explicit `unavailableReason` instead of surfacing a raw provider failure
 
@@ -230,9 +230,29 @@ Separate from that controller-runtime timeline, the backend also exposes `GET /v
 
 Current behavior:
 - returns `deploymentName` plus an explicit `events[]` array
-- returns `200 OK` with `events: []` when the deployment exists but no runtime history has been persisted yet
+- returns an additive `managedDriftSummary` object with explicit `total`, `high`, `medium`, and `low` counts derived from the returned history rows; rows with missing/unknown severity count toward `total` only
+- returns `200 OK` with `events: []` and zero drift-summary counts when the deployment exists but no runtime history has been persisted yet
 - never calls live AWS APIs; it only reflects the stored controller/runtime read model
 - the application detail page consumes the same route directly instead of reusing `history[]` from the deeper deployment-detail payload
+
+Example response shape:
+
+```json
+{
+  "deploymentName": "payments-api-prod",
+  "events": [
+    {
+      "timestamp": "2026-04-16T06:15:00Z",
+      "source": "controller",
+      "summary": "Deployment has managed drift",
+      "managedDrift": [
+        {"field": "runtimeContext.capacity.desired", "desired": "6", "actual": "4", "severity": "high"}
+      ]
+    }
+  ],
+  "managedDriftSummary": {"total": 1, "high": 1, "medium": 0, "low": 0}
+}
+```
 
 ## Workspace shells
 
