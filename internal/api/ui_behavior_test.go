@@ -579,6 +579,10 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!driftLink) throw new Error('expected applications page link to deployment-scoped drift view');
   if (driftLink.target !== '_self') throw new Error('expected applications page drift link to stay in embedded UI flow');
   if (driftLink.rel) throw new Error('expected applications page drift link to avoid new-tab rel attributes');
+  const planLink = links.find((node) => node.href === '/?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Plan/apply');
+  if (!planLink) throw new Error('expected applications page link to deployment-scoped plan/apply workspace');
+  if (planLink.target !== '_self') throw new Error('expected applications page plan link to stay in embedded UI flow');
+  if (planLink.rel) throw new Error('expected applications page plan link to avoid new-tab rel attributes');
 })();
 `
 
