@@ -575,6 +575,10 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!appLink) throw new Error('expected applications page link to application detail route');
   if (appLink.target !== '_self') throw new Error('expected applications page link to stay in embedded UI flow');
   if (appLink.rel) throw new Error('expected applications page link to avoid new-tab rel attributes');
+  const driftLink = links.find((node) => node.href === '/?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Drift view');
+  if (!driftLink) throw new Error('expected applications page link to deployment-scoped drift view');
+  if (driftLink.target !== '_self') throw new Error('expected applications page drift link to stay in embedded UI flow');
+  if (driftLink.rel) throw new Error('expected applications page drift link to avoid new-tab rel attributes');
 })();
 `
 
@@ -891,6 +895,9 @@ async function render(search, fetchImpl) {
   }
   if (!overviewLinks.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Open application' && node.target === '_self')) {
     throw new Error('expected applications overview application drill-down link to preserve /console pathname');
+  }
+  if (!overviewLinks.find((node) => node.href === '/console?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Drift view' && node.target === '_self')) {
+    throw new Error('expected applications overview drift handoff link to preserve /console pathname');
   }
   if (!overviewLinks.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Audit log' && node.target === '_self')) {
     throw new Error('expected applications overview deployment-scoped audit link to preserve /console pathname');

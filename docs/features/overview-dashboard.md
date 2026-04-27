@@ -79,7 +79,7 @@ Each row surfaces:
 - health
 - last update
 - `_self` `Open audit log` link to `/?page=audit`
-- expanded deployment rows also add a deployment-scoped `_self` `Audit log` handoff to `/?page=audit&deployment={deploymentName}` beside `_self` `Open application`
+- expanded deployment rows also add deployment-scoped `_self` `Drift view` and `Audit log` handoffs to `/?page=drift&deployment={deploymentName}` and `/?page=audit&deployment={deploymentName}` beside `_self` `Open application`
 - `_self` `Open account` link to `/?page=account&accountId={awsAccountId}`
 - `_self` `Open application` link to `/?page=application&deployment={deploymentName}`
 
@@ -319,7 +319,7 @@ Current plan/apply workspace behavior:
 ## Quick links
 
 The dashboard now exposes the following navigation affordances across the current drill-down flow:
-- landing page: `_self` `Open audit log`, expanded-row deployment-scoped `_self` `Audit log`, `_self` `Open account`, `_self` `Open application`
+- landing page: `_self` `Open audit log`, expanded-row deployment-scoped `_self` `Drift view` and `Audit log`, `_self` `Open account`, `_self` `Open application`
 - account detail page: `Account JSON`, `Group JSON`, `_self` `Open application`
 - application detail page: `_self` `Drift view`, `_self` `Plan/apply`, `_self` `Audit log`, `Open resource`, `Open live inspection`, `Open recent logs`
 - application detail `Audit log` now routes to `/?page=audit&deployment={deploymentName}` so the selected deployment stays visible in the bookmarkable audit slice
