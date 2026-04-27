@@ -1083,7 +1083,7 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     ):
         assert fragment in body, fragment
     assert_fragments("resource_ui", body, operator_read_auth_fragments + (
-        "const createResourceLogsActions = (section, deploymentName, resource, isLoading = false) => [",
+        "const createResourceLogsActions = (section, deploymentName, resource, isLoading = false, detail = null) => [",
         "'Refresh recent logs'",
         "const buildResourceLogsRoute = (deploymentName, resource) => {",
         "const resourceLogsReadRoute = (deploymentName, resource) => `GET ${buildResourceLogsRoute(deploymentName, resource)}`;",
