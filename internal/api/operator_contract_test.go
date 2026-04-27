@@ -1257,9 +1257,21 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		`assert isinstance(resource_logs['lookupContext'].get('observerRoleConfigured'), bool), resource_logs`,
 		`assert isinstance(worker_resource_logs.get('lookupContext'), dict), worker_resource_logs`,
 		`assert isinstance(worker_resource_logs['lookupContext'].get('observerRoleConfigured'), bool), worker_resource_logs`,
+		`traffic_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")`,
+		`assert traffic_resource_logs.get('unavailableReason') == 'no_log_source', traffic_resource_logs`,
 	} {
 		if !strings.Contains(script, fragment) {
 			t.Fatalf("expected smoke-local resource logs contract to include %q", fragment)
+		}
+	}
+
+	dockerScript := readRepoFile(t, "scripts/smoke-docker.sh")
+	for _, fragment := range []string{
+		`traffic_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")`,
+		`assert traffic_resource_logs.get("unavailableReason") == "no_log_source", traffic_resource_logs`,
+	} {
+		if !strings.Contains(dockerScript, fragment) {
+			t.Fatalf("expected smoke-docker resource logs contract to include %q", fragment)
 		}
 	}
 
@@ -1272,6 +1284,8 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		"`lookupContext.crossAccount`",
 		"`lookupContext.observerRoleConfigured`",
 		"present for both `available=true` and unavailable responses",
+		"`trafficShiftPlan`, `productionListenerRule`, `activeTargetGroup`, and `candidateTargetGroup` also preserve the same route and lookup-context envelope",
+		"`unavailableReason=no_log_source`",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README resource log contract to include %q", fragment)
@@ -1288,6 +1302,8 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		"`lookupContext` object is always present, including unavailable responses",
 		"newest running and recently stopped service task/container streams",
 		"failed rollouts and crash loops can still surface useful logs",
+		"Current route-stable rollout resources with explicit no-log-source responses",
+		"weighted-target-group traffic-routing resources (`trafficShiftPlan`, `productionListenerRule`, `activeTargetGroup`, and `candidateTargetGroup`)",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
 			t.Fatalf("expected resource recent logs doc to include %q", fragment)
