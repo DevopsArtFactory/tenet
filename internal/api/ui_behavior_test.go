@@ -4555,6 +4555,7 @@ func TestResourceDetailPageLiveInspectionWithNodeHarness(t *testing.T) {
 		"rollout": map[string]any{
 			"execution": []map[string]any{
 				{"name": "payments-api-staging Deployment Group", "resource": "codeDeployDeploymentGroup", "description": "Linear traffic shifting deployment group"},
+				{"name": "payments-api-staging-blue", "resource": "blueTaskSetTargetGroup", "description": "Blue task-set target group"},
 			},
 		},
 	})
@@ -4631,6 +4632,7 @@ async function settle() { await Promise.resolve(); await new Promise((resolve) =
 
 const ecsResourceID = 'ecsService::payments-api-staging-service::Primary ECS service';
 const summaryResourceID = 'codeDeployDeploymentGroup::payments-api-staging Deployment Group::Linear traffic shifting deployment group';
+const blueTaskSetTargetGroupResourceID = 'blueTaskSetTargetGroup::payments-api-staging-blue::Blue task-set target group';
 const weightedListenerRuleResourceID = 'productionListenerRule::payments-api-staging-prod-listener::Weighted listener rule';
 const asgResourceID = 'candidateAutoScalingGroup::payments-api-prod-candidate::Candidate capacity';
 const bootstrapResourceID = 'userDataBootstrapSource::file:userdata/payments-api-prod.sh::Normalized userdata bootstrap source for candidate EC2 capacity';
@@ -4682,6 +4684,58 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!summaryText.includes('Lookup region')) throw new Error('expected traffic-routing inspection to label lookup context');
   if (!summaryText.includes('Observer role configured')) throw new Error('expected traffic-routing inspection to label observer role configuration');
   if (!summaryText.includes('False')) throw new Error('expected traffic-routing inspection to show missing observer role configuration');
+
+  const blueTargetGroupLogsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=blueTaskSetTargetGroup&resourceName=payments-api-staging-blue';
+  const blueTargetGroupInspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=blueTaskSetTargetGroup&resourceName=payments-api-staging-blue';
+  const blueTargetGroupRun = await renderWithFetch('?page=resource&deployment=payments-api-staging&resourceType=blueTaskSetTargetGroup&resourceId=' + encodeURIComponent(blueTaskSetTargetGroupResourceID), (url) => {
+    if (url === ecsDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(unsupportedDetailBody) });
+    if (url === blueTargetGroupLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === blueTargetGroupInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({
+      available: true,
+      source: 'traffic_routing_aws',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true },
+      trafficRoutingResource: {
+        kind: 'blueTaskSetTargetGroup',
+        displayName: 'Blue task-set target group',
+        inspectionMode: 'live',
+        summary: 'Blue replacement task-set target group receiving test traffic before promotion.',
+        targetGroup: {
+          targetGroupName: 'payments-api-staging-blue',
+          targetGroupArn: 'arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:targetgroup/payments-api-staging-blue/abc123',
+          protocol: 'HTTP',
+          port: 8080,
+          targetType: 'ip',
+          healthCheckProtocol: 'HTTP',
+          healthCheckPort: 'traffic-port',
+          healthCheckPath: '/healthz',
+          healthCheckIntervalSeconds: 30,
+          healthCheckTimeoutSeconds: 5,
+          healthyThresholdCount: 2,
+          unhealthyThresholdCount: 3,
+          loadBalancerArns: ['arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:loadbalancer/app/payments-api/abc'],
+          targetHealthCounts: { healthy: 2, unhealthy: 1, initial: 1 },
+          targets: [{ targetId: '10.0.3.12', port: 8080, state: 'healthy', reason: 'Target.ResponseCodeMismatch', description: '<script>not html</script> remains text' }],
+        },
+      },
+    }) });
+    throw new Error('unexpected blue target-group fetch url: ' + url);
+  });
+  const blueTargetGroupText = collectText(blueTargetGroupRun.document.getElementById('accounts')).join(' | ');
+  if (!blueTargetGroupText.includes('Live AWS inspection')) throw new Error('expected live target-group inspection mode to render live copy');
+  if (!blueTargetGroupText.includes('Target group live details')) throw new Error('expected live target-group details section');
+  if (!blueTargetGroupText.includes('Target group name')) throw new Error('expected live target-group name label');
+  if (!blueTargetGroupText.includes('payments-api-staging-blue')) throw new Error('expected live target-group name value');
+  if (!blueTargetGroupText.includes('Protocol / port')) throw new Error('expected live target-group protocol/port label');
+  if (!blueTargetGroupText.includes('HTTP / 8080')) throw new Error('expected live target-group protocol/port value');
+  if (!blueTargetGroupText.includes('Health check path')) throw new Error('expected live target-group health-check label');
+  if (!blueTargetGroupText.includes('/healthz')) throw new Error('expected live target-group health-check path value');
+  if (!blueTargetGroupText.includes('Target health counts')) throw new Error('expected live target-group health-count label');
+  if (!blueTargetGroupText.includes('healthy 2 · unhealthy 1 · initial 1')) throw new Error('expected live target-group health-count value');
+  if (!blueTargetGroupText.includes('Registered target health')) throw new Error('expected live target-group registered targets section');
+  if (!blueTargetGroupText.includes('Health state · healthy')) throw new Error('expected live target health row');
+  if (!blueTargetGroupText.includes('<script>not html</script> remains text')) throw new Error('expected target description to remain literal text');
+  const blueTargetGroupScripts = collectNodes(blueTargetGroupRun.document.getElementById('accounts'), (node) => node.tagName === 'SCRIPT');
+  if (blueTargetGroupScripts.length !== 0) throw new Error('expected target-group live details to use safe text rendering');
 
   const weightedListenerRuleLogsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=productionListenerRule&resourceName=payments-api-staging-prod-listener';
   const weightedListenerRuleInspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=productionListenerRule&resourceName=payments-api-staging-prod-listener';
