@@ -2244,12 +2244,12 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"survive the Compose `api` service restart",
 			"`TENET_AWS_ENABLE_APPLY=true make docker-up`",
 			"correlated bookmarkable shell reads for the application drill-down, account drill-down, drift workspace, deployment-scoped audit workspace, and bookmarkable plan/apply workspace",
-			"CodeDeploy application resource shell",
+			"CodeDeploy application and task-set target-group resource shells",
 			"bookmarkable application-detail status summary shell",
 			"The raw embedded shell/docs contract also keeps the labels `Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Lookup region`, and `Observer role configured` present",
 			"temp files via the shared `write_payload` helper",
 			"The compose-backed smoke now covers that shipped bootstrap-source drill-down directly",
-			"The compose-backed smoke now covers the shipped CodeDeploy application bookmarkable resource shell directly",
+			"The compose-backed smoke now covers the shipped CodeDeploy application and task-set target-group bookmarkable resource shells directly",
 			"`aws_unavailable` and `no_log_source` as part of the expected local no-AWS contract",
 			"Linux CI runners",
 			"syntax-checks `scripts/smoke-local.sh` with `bash -n`, then runs `make smoke-local`",
@@ -2290,7 +2290,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"`Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Lookup region`, and `Observer role configured`",
 			"temp files through the shared `write_payload` helper",
 			"bookmarkable bootstrap-source resource page plus the paired `userDataBootstrapSource` `resource-logs` and `resource-inspection` routes",
-			"bookmarkable CodeDeploy application resource page",
+			"bookmarkable CodeDeploy application and task-set target-group resource pages",
 			"`aws_unavailable` / `no_log_source` unavailable payloads",
 			"Linux CI runners with tighter environment-size limits",
 			"syntax-checks `scripts/smoke-local.sh` with `bash -n`, then runs `make smoke-local`",
@@ -2305,6 +2305,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"trusted front door",
 			"bookmarkable `/?page=resource&deployment=payments-api-prod&resourceType=userDataBootstrapSource&resourceId=userDataBootstrapSource::file:userdata/payments-api-prod.sh::Normalized userdata bootstrap source for candidate EC2 capacity` page",
 			"bookmarkable `/?page=resource&deployment=payments-api-staging&resourceType=codeDeployApplication&resourceId=codeDeployApplication::payments-api-staging-codedeploy-app::CodeDeploy application coordinating ECS traffic shifting` page",
+			"bookmarkable `/?page=resource&deployment=payments-api-staging&resourceType=blueTaskSetTargetGroup&resourceId=blueTaskSetTargetGroup::payments-api-staging-blue::Blue task set target group CodeDeploy treats as the live ECS traffic destination` page",
 			"`aws_unavailable` and `no_log_source` as expected local no-AWS outcomes",
 		},
 		"../../docs/features/overview-dashboard.md": {
@@ -2391,7 +2392,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		}
 	}
 	for _, fragment := range []string{
-		"for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_application_resource_ui):",
+		"for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_application_resource_ui, blue_task_set_target_group_resource_ui):",
 		"\"const renderResourceDetailPage = (detail, resourceState = null) => {\",",
 		"\"const resourceDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;\",",
 		"\"const createResourceDetailActions = (resourceState = null) => [\",",
