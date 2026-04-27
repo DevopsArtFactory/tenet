@@ -3327,7 +3327,7 @@
           ),
         ];
         if (!isLoading && deploymentName && deploymentEventsHasManagedDrift(result)) {
-          actions.push(createNavLink(buildPageURL('drift', { deployment: deploymentName }), 'Open drift view', '_self'));
+          actions.push(createNavLink(buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName }), 'Open field-level drift', '_self'));
         }
         return actions;
       };
