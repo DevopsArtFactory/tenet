@@ -1406,6 +1406,7 @@
             detailLinks.append(
               createNavLink(buildPageURL('application', { deployment: deployment.name }), 'Open application', '_self'),
               createNavLink(buildPageURL('drift', { deployment: deployment.name }), 'Drift view', '_self'),
+              createNavLink(buildPageURL('plan', { deployment: deployment.name }), 'Plan/apply', '_self'),
               createNavLink(buildPageURL('audit', { deployment: deployment.name }), 'Audit log', '_self'),
             );
           }
