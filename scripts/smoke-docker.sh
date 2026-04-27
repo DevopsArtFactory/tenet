@@ -612,6 +612,10 @@ assert all(isinstance(row.get("field"), str) and row["field"] for row in managed
 assert all(isinstance(row.get("desired"), str) and row["desired"] for row in managed_drift), managed_drift
 assert all(isinstance(row.get("actual"), str) and row["actual"] for row in managed_drift), managed_drift
 assert all(row.get("severity") in {"high", "medium", "low"} for row in managed_drift), managed_drift
+resource_refs = [row.get("resourceRef") for row in managed_drift if isinstance(row.get("resourceRef"), dict)]
+for ref in resource_refs:
+    assert isinstance(ref.get("resourceType"), str) and ref["resourceType"], (ref, managed_drift)
+    assert isinstance(ref.get("resourceName"), str) and ref["resourceName"], (ref, managed_drift)
 
 assert plan_preview["deploymentName"] == "payments-api-prod", plan_preview
 assert plan_preview["status"] == "ready", plan_preview
