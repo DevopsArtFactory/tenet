@@ -984,7 +984,7 @@ for fragment in (
     "Lookup region",
     "Observer role configured",
     "Resolved backing resource",
-    "actions.push(createNavLink(buildPageURL('drift', { deployment: deploymentName }), 'Open drift view', '_self'));",
+    "actions.push(createNavLink(buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName }), 'Open field-level drift', '_self'));",
     "Plan preview actions",
     "Apply request actions",
     "Plan preview approval guidance",
