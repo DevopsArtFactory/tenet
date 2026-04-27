@@ -2280,7 +2280,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"The same smoke-created `POST /v1/applies/{applyId}/transitions` route boundaries: `400` malformed JSON, `404` unknown apply, and `409` invalid terminal move with operator-facing text.",
 			"The same actor-header precedence check used by direct-process smoke, plus the default disabled immutable apply contract.",
 			"Trusted front-door auth by restarting the Compose `api` service",
-			"controller-authored `managedDrift[]` evidence in `GET /v1/overview/deployments/payments-api-prod` with stable `field` / `desired` / `actual` / `severity` rows and aligned `runtimeSummary.managedDrift`",
+			"controller-authored `managedDrift[]` evidence in `GET /v1/overview/deployments/payments-api-prod` with stable `field` / `desired` / `actual` / `severity` rows, validates `resourceRef` shape when backend-authored metadata is present, and keeps the local-friendly no-resourceRef fallback explicit while aligned `runtimeSummary.managedDrift` remains present",
 			"survive the Compose `api` service restart",
 			"`TENET_AWS_ENABLE_APPLY=true make docker-up`",
 			"correlated bookmarkable shell reads for the application drill-down, account drill-down, drift workspace, deployment-scoped audit workspace, and bookmarkable plan/apply workspace",
@@ -2317,7 +2317,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"make smoke-docker",
 			"`docker compose config` plus the `api`, `controller`, and `redis` services present in `compose.yaml`",
 			"The full `GET /v1/audit-logs` collection, exact-action filtering with `GET /v1/audit-logs?action=apply.requested&limit=2`, and `400 Bad Request` on `action=invalid.action`",
-			"controller-authored `managedDrift[]` evidence in `GET /v1/overview/deployments/payments-api-prod` with stable `field` / `desired` / `actual` / `severity` rows and aligned `runtimeSummary.managedDrift`",
+			"controller-authored `managedDrift[]` evidence in `GET /v1/overview/deployments/payments-api-prod` with stable `field` / `desired` / `actual` / `severity` rows, validates `resourceRef` shape when backend-authored metadata is present, and keeps the local-friendly no-resourceRef fallback explicit while aligned `runtimeSummary.managedDrift` remains present",
 			"The same direct-process actor coverage by sending both header families with conflicting identities on a `payments-api-staging` plan/apply flow",
 			"Bookmarkable application, account, drift, audit, plan workspace, and representative resource URLs, checking raw embedded application/account/resource/drift/audit/plan shell HTML/script fragments instead of runtime DOM text",
 			"bookmarkable application-detail status summary shell",
@@ -2389,6 +2389,16 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 	} {
 		if strings.Contains(dockerSmoke, fragment) {
 			t.Fatalf("expected smoke-docker.sh to avoid stale or env-blob fragment %q", fragment)
+		}
+	}
+	for _, fragment := range []string{
+		"resource_refs = [row.get(\"resourceRef\") for row in managed_drift if isinstance(row.get(\"resourceRef\"), dict)]",
+		"for ref in resource_refs:",
+		"assert isinstance(ref.get(\"resourceType\"), str) and ref[\"resourceType\"]",
+		"assert isinstance(ref.get(\"resourceName\"), str) and ref[\"resourceName\"]",
+	} {
+		if !strings.Contains(dockerSmoke, fragment) {
+			t.Fatalf("expected smoke-docker.sh to validate managed drift resourceRef fragment %q", fragment)
 		}
 	}
 	for _, fragment := range []string{
@@ -2593,6 +2603,7 @@ func TestDockerSmokeDocsDescribeResourceRefreshCoverage(t *testing.T) {
 		"../../docs/features/overview-dashboard.md": {
 			"`make smoke-docker`, including raw shell-contract checks for the root applications overview refresh hooks",
 			"the bookmarkable resource page's top-level refresh shell (`Refresh resource detail`, the `GET /v1/overview/deployments/{deploymentName}` route-builder text, and the preserved-detail loading/error copy)",
+			"the drift workspace `Open resource evidence` handoff shell plus optional `managedDrift[].resourceRef` payload-shape validation when live AWS evidence is present",
 			"the bookmarkable resource page's lazy-panel refresh hooks (`Refresh recent logs`, `Refresh live inspection`, their route-builder helpers, and the loading/error/auth-guidance copy)",
 		},
 	}
