@@ -1348,6 +1348,27 @@ auth_unauthenticated_account_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICA
   "http://$HOST:$PORT/v1/overview/accounts")
 auth_unauthenticated_audit_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY" -w "%{http_code}" \
   "http://$HOST:$PORT/v1/audit-logs?action=apply.requested")
+operator_context_trusted=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer, operator" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-prod, worker-prod" \
+  "http://$HOST:$PORT/v1/operator/context")
+operator_context_alias=$(curl -fsS \
+  -H "X-User-ID: alias-456" \
+  -H "X-User-Name: Alias Operator" \
+  -H "X-User-Email: alias@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
+  "http://$HOST:$PORT/v1/operator/context")
+operator_context_no_allowlist=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: no-allowlist-789" \
+  -H "X-Tenet-Authenticated-Name: No Allowlist Operator" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
+  "http://$HOST:$PORT/v1/operator/context")
+operator_context_trusted_path=$(write_payload operator-context-trusted.json "$operator_context_trusted")
+operator_context_alias_path=$(write_payload operator-context-alias.json "$operator_context_alias")
+operator_context_no_allowlist_path=$(write_payload operator-context-no-allowlist.json "$operator_context_no_allowlist")
 auth_role_required_collection_status=$(curl -sS -o "$AUTH_ROLE_REQUIRED_COLLECTION_BODY" -w "%{http_code}" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
@@ -1696,6 +1717,9 @@ AUTH_FORBIDDEN_APPLY_READ_STATUS="$auth_forbidden_apply_read_status" \
 AUTH_FORBIDDEN_APPLY_READ_BODY_PATH="$AUTH_FORBIDDEN_APPLY_READ_BODY" \
 AUTH_FORBIDDEN_AUDIT_STATUS="$auth_forbidden_audit_status" \
 AUTH_FORBIDDEN_AUDIT_BODY_PATH="$AUTH_FORBIDDEN_AUDIT_BODY" \
+OPERATOR_CONTEXT_TRUSTED_PATH="$operator_context_trusted_path" \
+OPERATOR_CONTEXT_ALIAS_PATH="$operator_context_alias_path" \
+OPERATOR_CONTEXT_NO_ALLOWLIST_PATH="$operator_context_no_allowlist_path" \
 ALLOWED_GUARDED_READ_PATH="$allowed_guarded_read_path" \
 ALLOWED_STATUS_READ_PATH="$allowed_status_read_path" \
 ALLOWED_PLAN_READ_PATH="$allowed_plan_read_path" \
@@ -1779,6 +1803,12 @@ with open(os.environ['AUTH_FORBIDDEN_APPLY_READ_BODY_PATH'], encoding='utf-8') a
     forbidden_apply_read_body = fh.read()
 with open(os.environ['AUTH_FORBIDDEN_AUDIT_BODY_PATH'], encoding='utf-8') as fh:
     forbidden_audit_body = fh.read()
+with open(os.environ['OPERATOR_CONTEXT_TRUSTED_PATH'], encoding='utf-8') as fh:
+    operator_context_trusted = json.load(fh)
+with open(os.environ['OPERATOR_CONTEXT_ALIAS_PATH'], encoding='utf-8') as fh:
+    operator_context_alias = json.load(fh)
+with open(os.environ['OPERATOR_CONTEXT_NO_ALLOWLIST_PATH'], encoding='utf-8') as fh:
+    operator_context_no_allowlist = json.load(fh)
 with open(os.environ['ALLOWED_GUARDED_READ_PATH'], encoding='utf-8') as fh:
     allowed_guarded_read = json.load(fh)
 with open(os.environ['ALLOWED_STATUS_READ_PATH'], encoding='utf-8') as fh:
@@ -1874,6 +1904,47 @@ assert os.environ['AUTH_FORBIDDEN_PLAN_READ_STATUS'] == '403', os.environ['AUTH_
 assert forbidden_plan_read_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_plan_read_body
 assert os.environ['AUTH_FORBIDDEN_APPLY_READ_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_APPLY_READ_STATUS']
 assert forbidden_apply_read_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_apply_read_body
+
+def assert_operator_context_common(payload):
+    trusted = payload.get('trustedHeaders') or {}
+    assert trusted.get('enabled') is True, payload
+    assert trusted.get('authenticatedIdentityRequired') is True, payload
+    assert trusted.get('deploymentReadAuthorizationEnforced') is True, payload
+    assert trusted.get('operatorReadRoleEnforced') is True, payload
+    assert trusted.get('operatorWriteRoleEnforced') is True, payload
+
+assert_operator_context_common(operator_context_trusted)
+assert operator_context_trusted['identity']['authenticated'] is True, operator_context_trusted
+assert operator_context_trusted['identity']['id'] == 'front-door-123', operator_context_trusted
+assert operator_context_trusted['identity']['name'] == 'Front Door Operator', operator_context_trusted
+assert operator_context_trusted['identity']['email'] == 'frontdoor@example.com', operator_context_trusted
+assert operator_context_trusted['roles']['names'] == ['viewer', 'operator'], operator_context_trusted
+assert operator_context_trusted['roles']['canRead'] is True, operator_context_trusted
+assert operator_context_trusted['roles']['canWrite'] is True, operator_context_trusted
+assert operator_context_trusted['deploymentAccess']['enforced'] is True, operator_context_trusted
+assert operator_context_trusted['deploymentAccess']['forwarded'] is True, operator_context_trusted
+assert operator_context_trusted['deploymentAccess']['names'] == ['payments-api-prod', 'worker-prod'], operator_context_trusted
+assert_operator_context_common(operator_context_alias)
+assert operator_context_alias['identity']['authenticated'] is True, operator_context_alias
+assert operator_context_alias['identity']['id'] == 'alias-456', operator_context_alias
+assert operator_context_alias['identity']['name'] == 'Alias Operator', operator_context_alias
+assert operator_context_alias['identity']['email'] == 'alias@example.com', operator_context_alias
+assert operator_context_alias['roles']['names'] == ['viewer'], operator_context_alias
+assert operator_context_alias['roles']['canRead'] is True, operator_context_alias
+assert operator_context_alias['roles']['canWrite'] is False, operator_context_alias
+assert operator_context_alias['deploymentAccess']['enforced'] is True, operator_context_alias
+assert operator_context_alias['deploymentAccess']['forwarded'] is False, operator_context_alias
+assert 'names' not in operator_context_alias['deploymentAccess'], operator_context_alias
+assert_operator_context_common(operator_context_no_allowlist)
+assert operator_context_no_allowlist['identity']['authenticated'] is True, operator_context_no_allowlist
+assert operator_context_no_allowlist['identity']['id'] == 'no-allowlist-789', operator_context_no_allowlist
+assert operator_context_no_allowlist['identity']['name'] == 'No Allowlist Operator', operator_context_no_allowlist
+assert operator_context_no_allowlist['roles']['names'] == ['viewer'], operator_context_no_allowlist
+assert operator_context_no_allowlist['roles']['canRead'] is True, operator_context_no_allowlist
+assert operator_context_no_allowlist['roles']['canWrite'] is False, operator_context_no_allowlist
+assert operator_context_no_allowlist['deploymentAccess']['enforced'] is True, operator_context_no_allowlist
+assert operator_context_no_allowlist['deploymentAccess']['forwarded'] is False, operator_context_no_allowlist
+assert 'names' not in operator_context_no_allowlist['deploymentAccess'], operator_context_no_allowlist
 assert allowed_guarded_read['name'] == 'payments-api-staging', allowed_guarded_read
 assert allowed_status_read['deploymentName'] == 'payments-api-staging', allowed_status_read
 assert allowed_plan_read['id'] == os.environ['FRONTDOOR_PLAN_ID'], allowed_plan_read
