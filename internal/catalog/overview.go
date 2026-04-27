@@ -134,10 +134,19 @@ type DeploymentOverviewDetail struct {
 	History            []domain.StatusHistoryEntry    `json:"history,omitempty"`
 }
 
+// ManagedDriftSummary counts controller-authored managed drift evidence in a runtime history view.
+type ManagedDriftSummary struct {
+	Total  int `json:"total"`
+	High   int `json:"high"`
+	Medium int `json:"medium"`
+	Low    int `json:"low"`
+}
+
 // DeploymentOverviewEvents exposes controller-derived runtime history for one deployment.
 type DeploymentOverviewEvents struct {
-	DeploymentName string                      `json:"deploymentName"`
-	Events         []domain.StatusHistoryEntry `json:"events"`
+	DeploymentName      string                      `json:"deploymentName"`
+	Events              []domain.StatusHistoryEntry `json:"events"`
+	ManagedDriftSummary ManagedDriftSummary         `json:"managedDriftSummary"`
 }
 
 // ApplicationOverviewDetail makes the application page contract explicit while preserving deployment detail semantics.
@@ -502,9 +511,28 @@ func BuildDeploymentOverviewEvents(c manifest.Catalog, snapshots []statusstore.S
 	}
 
 	return DeploymentOverviewEvents{
-		DeploymentName: detail.Name,
-		Events:         events,
+		DeploymentName:      detail.Name,
+		Events:              events,
+		ManagedDriftSummary: summarizeManagedDriftEvents(events),
 	}, nil
+}
+
+func summarizeManagedDriftEvents(events []domain.StatusHistoryEntry) ManagedDriftSummary {
+	summary := ManagedDriftSummary{}
+	for _, event := range events {
+		for _, item := range event.ManagedDrift {
+			summary.Total++
+			switch item.Severity {
+			case domain.ManagedDriftSeverityHigh:
+				summary.High++
+			case domain.ManagedDriftSeverityMedium:
+				summary.Medium++
+			case domain.ManagedDriftSeverityLow:
+				summary.Low++
+			}
+		}
+	}
+	return summary
 }
 
 func deriveRuntimeSummary(status domain.DeploymentStatus) *domain.RuntimeSummary {

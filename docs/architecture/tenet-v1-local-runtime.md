@@ -59,7 +59,7 @@ Trusted front-door auth by restarting `tenet-api` remains part of the same smoke
 
 Local smoke still does not claim to prove the new `userDataBootstrapSource` live-inspection payload because that payload depends on the same read-only launch-template bootstrap-source evidence Tenet uses for managed drift and may legitimately be unavailable without AWS access; focused service/router/UI tests lock that additive contract instead.
 
-The same guarded local smoke now also proves `GET /v1/overview/deployments/{deploymentName}/events` follows the deployment-scoped `401` / `403` / `200 OK` contract and keeps the existing `deploymentName` plus `events` list shape for authorized reads.
+The same guarded local smoke now also proves `GET /v1/overview/deployments/{deploymentName}/events` follows the deployment-scoped `401` / `403` / `200 OK` contract and keeps the existing `deploymentName` plus `events` list shape for authorized reads, with an additive `managedDriftSummary` object carrying explicit zero/non-zero severity counts.
 
 Neither local smoke path claims to prove live-backed `managedDrift[]` rows under `runtimeContext.capacity.{desired,min,max}`, `runtimeContext.launchTemplate.bootstrapSource`, `runtimeContext.launchTemplate.imageId`, `runtimeContext.launchTemplate.instanceType`, `runtimeContext.capacity.desired`, `runtimeContext.deploymentConfig.minimumHealthyPercent`, `runtimeContext.deploymentConfig.maximumPercent`, `runtimeContext.deploymentConfig.healthCheckGracePeriodSeconds`, or `runtimeContext.taskDefinition.image`. Local runs may legitimately lack AWS access, so focused `go test ./internal/api` contract coverage locks that additive JSON/UI detail instead.
 

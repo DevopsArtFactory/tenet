@@ -717,6 +717,12 @@ assert actor_audit_logs["entries"][0]["actor"]["email"] == "alex.explicit@exampl
 
 assert deployment_events["deploymentName"] == "payments-api-prod", deployment_events
 assert isinstance(deployment_events.get("events"), list), deployment_events
+event_managed_drift = [item for event in deployment_events["events"] for item in event.get("managedDrift", [])]
+events_drift_summary = deployment_events.get("managedDriftSummary") or {}
+assert events_drift_summary.get("total") == len(event_managed_drift), (events_drift_summary, event_managed_drift)
+assert events_drift_summary.get("high", 0) == sum(1 for item in event_managed_drift if item.get("severity") == "high"), (events_drift_summary, event_managed_drift)
+assert events_drift_summary.get("medium", 0) == sum(1 for item in event_managed_drift if item.get("severity") == "medium"), (events_drift_summary, event_managed_drift)
+assert events_drift_summary.get("low", 0) == sum(1 for item in event_managed_drift if item.get("severity") == "low"), (events_drift_summary, event_managed_drift)
 for event in deployment_events["events"]:
     assert isinstance(event.get("timestamp"), str) and event["timestamp"], deployment_events
     assert isinstance(event.get("source"), str) and event["source"], deployment_events

@@ -107,7 +107,7 @@ That lets the embedded overview UI keep the applications landing page focused on
 
 The `execution[]` list remains a controller-authored read-model summary, not a stream of live AWS observations. Clients should treat the resource names and descriptions as Tenet's intended execution contract for the current plan rather than definitive evidence that AWS has already created, attached, or shifted those resources. The overview builders and API routes preserve the ordered list and resource identifiers as-is while allowing only description text to evolve, so the exact identifier strings above are part of the stable read-model contract rather than documentation-only examples.
 
-The deployment events route follows the same principle: it is copied from persisted `status.history`, returns `events: []` when no runtime history exists yet for a known deployment, and is not a full durable audit/event system at this stage.
+The deployment events route follows the same principle: it is copied from persisted `status.history`, returns `events: []` when no runtime history exists yet for a known deployment, includes an additive `managedDriftSummary` object with explicit `total`, `high`, `medium`, and `low` counts across the returned history rows, and is not a full durable audit/event system at this stage. For example, a drifted history response can include `"managedDriftSummary":{"total":1,"high":1,"medium":0,"low":0}` beside the `events[]` timeline, while empty history returns the same object with zero counts.
 
 ## Compatibility
 
