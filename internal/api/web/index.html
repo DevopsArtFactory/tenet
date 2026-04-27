@@ -306,17 +306,26 @@
         return `Showing ${driftRowLabel(visibleRows)} out of ${driftRowLabel(totalRows)} after filters.`;
       };
       const driftValueText = (value) => value == null || value === '' ? '—' : String(value);
+      const normalizeManagedDriftResourceRef = (resourceRef) => {
+        if (!resourceRef || typeof resourceRef !== 'object') return null;
+        const resourceType = typeof resourceRef.resourceType === 'string' ? resourceRef.resourceType.trim() : '';
+        const resourceName = typeof resourceRef.resourceName === 'string' ? resourceRef.resourceName.trim() : '';
+        if (!resourceType || !resourceName) return null;
+        return { resourceType, resourceName };
+      };
       const normalizeManagedDriftRow = (row) => {
         if (!row || typeof row !== 'object') return null;
         const field = typeof row.field === 'string' ? row.field.trim() : '';
         if (!field) return null;
         const severity = typeof row.severity === 'string' ? row.severity.toLowerCase() : '';
+        const resourceRef = normalizeManagedDriftResourceRef(row.resourceRef);
         return {
           field,
           desired: driftValueText(row.desired),
           actual: driftValueText(row.actual),
           severity: ['high', 'medium', 'low'].includes(severity) ? severity : 'low',
-          search: [field, row.desired, row.actual, row.severity].filter((value) => value != null && value !== '').join(' '),
+          resourceRef,
+          search: [field, row.desired, row.actual, row.severity, resourceRef?.resourceType, resourceRef?.resourceName].filter((value) => value != null && value !== '').join(' '),
         };
       };
       const managedDeploymentDriftRows = (detail) => {
@@ -936,6 +945,13 @@
       const rolloutExecutionResources = (detail) => {
         const execution = detail.rollout?.execution || [];
         return execution.length ? execution : canonicalRolloutExecutionFallback(detail);
+      };
+      const normalizedRolloutResources = (detail) => rolloutExecutionResources(detail).map((resource) => normalizeResource(resource));
+      const resolveManagedDriftResourceRef = (detail, resourceRef) => {
+        if (!resourceRef?.resourceType || !resourceRef?.resourceName) return null;
+        return normalizedRolloutResources(detail).find((resource) => (
+          resource.type === resourceRef.resourceType && resource.name === resourceRef.resourceName
+        )) || null;
       };
       const createSelect = (labelText, value, options, onChange) => {
         const field = createElement('label', 'toolbar-field');
@@ -4849,7 +4865,7 @@
 
             const table = createElement('table', 'drift-table');
             const headerRow = createElement('tr');
-            ['Field path', 'Desired', 'Actual', 'Severity'].forEach((label) => {
+            ['Field path', 'Desired', 'Actual', 'Severity', 'Evidence'].forEach((label) => {
               headerRow.append(createElement('th', '', label));
             });
             const thead = createElement('thead');
@@ -4865,6 +4881,18 @@
               const severityCell = createElement('td');
               severityCell.append(createElement('span', `severity-indicator severity-indicator-${row.severity}`, row.severity));
               tableRow.append(severityCell);
+              const evidenceCell = createElement('td');
+              const evidenceResource = resolveManagedDriftResourceRef(detail, row.resourceRef);
+              if (evidenceResource && detail.name) {
+                evidenceCell.append(createNavLink(buildPageURL('resource', {
+                  deployment: detail.name,
+                  resourceType: evidenceResource.type,
+                  resourceId: evidenceResource.id,
+                }), 'Open resource evidence', '_self'));
+              } else {
+                evidenceCell.append(createElement('span', 'muted', '—'));
+              }
+              tableRow.append(evidenceCell);
               tbody.append(tableRow);
             });
             table.append(thead, tbody);

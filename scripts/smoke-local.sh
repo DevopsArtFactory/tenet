@@ -912,6 +912,10 @@ assert 'Breadcrumbs' in ui, ui
 assert 'No linked resources are available in this drift workspace yet.' in ui, ui
 assert 'Current source: controller-authored managedDrift rows.' in ui, ui
 assert 'Current source: derived fallback read-model heuristics.' in ui, ui
+assert 'Severity' in ui, ui
+assert 'Evidence' in ui, ui
+assert 'Open resource evidence' in ui, ui
+assert "resolveManagedDriftResourceRef(detail, row.resourceRef)" in ui, ui
 assert 'Drift summary' in ui, ui
 assert 'Refresh drift workspace' in ui, ui
 assert 'Clear drift filters' in ui, ui
