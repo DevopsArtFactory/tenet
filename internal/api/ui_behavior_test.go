@@ -295,6 +295,75 @@ const scenarios = [
 	runNodeHarness(t, nodeProgram)
 }
 
+func TestEmbeddedUIOperatorContextBannerWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const sampleApplications = [{ name: 'payments-api-prod', appRef: 'payments', environmentRef: 'prod', accountName: 'prod-core', awsAccountId: '123456789012', region: 'us-west-2', targetType: 'ecs', executionMode: 'ecsRolling', sync: { state: 'Synced' }, health: { overall: 'Healthy' }, runtimeSummary: { timestamp: '2026-04-16T06:40:00Z' } }];
+class Element {
+  constructor(tagName, ownerDocument) { this.tagName = String(tagName).toUpperCase(); this.ownerDocument = ownerDocument; this.children = []; this.parentNode = null; this.className = ''; this.textContent = ''; this.dataset = {}; this.listeners = {}; this.attributes = {}; this.hidden = false; this.value = ''; this.disabled = false; this.type = ''; this.placeholder = ''; this.autocomplete = ''; this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } }; }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); await Promise.resolve(); }
+async function render(operatorResponse) {
+  const document = new Document();
+  document.byID.set('operator-context', document.createElement('section'));
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  const fetchCalls = [];
+  const window = { location: { pathname: '/', search: '', hash: '' } };
+  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  const fetch = (url) => {
+    fetchCalls.push(String(url));
+    if (url === '/v1/operator/context') return Promise.resolve(operatorResponse);
+    if (url === '/v1/overview/applications') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleApplications) });
+    throw new Error('unexpected fetch url: ' + url);
+  };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle();
+  return { text: collectText(document.getElementById('operator-context')).join(' | '), fetchCalls };
+}
+(async () => {
+  const ready = await render({ ok: true, json: () => Promise.resolve({ trustedHeaders: { enabled: true }, identity: { authenticated: true, name: 'Front Door Operator', email: 'frontdoor@example.com' }, roles: { names: ['viewer', 'operator'], canRead: true, canWrite: true }, deploymentAccess: { enforced: true, forwarded: true, names: ['payments-api-prod', 'worker-prod'] } }) });
+  if (ready.fetchCalls[0] !== '/v1/operator/context') throw new Error('expected operator context endpoint to load before route data');
+  if (!ready.text.includes('Operator context')) throw new Error('expected operator context banner title');
+  if (!ready.text.includes('Front Door Operator')) throw new Error('expected trusted identity in operator context banner');
+  if (!ready.text.includes('Write-capable roles: viewer, operator')) throw new Error('expected role capability in operator context banner');
+  if (!ready.text.includes('2 deployments forwarded: payments-api-prod, worker-prod')) throw new Error('expected deployment allowlist summary');
+  if (!ready.text.includes('Trusted headers enabled')) throw new Error('expected trusted header status');
+  const unavailable = await render({ ok: false, status: 503, text: () => Promise.resolve('operator context provider unavailable') });
+  if (!unavailable.text.includes('Operator context unavailable')) throw new Error('expected unavailable operator context state');
+  if (!unavailable.text.includes('GET /v1/operator/context')) throw new Error('expected diagnostic route in unavailable state');
+  if (!unavailable.text.includes('operator context provider unavailable')) throw new Error('expected backend error detail in unavailable state');
+})();
+`
+
+	runNodeHarness(t, nodeProgram)
+}
+
 func TestApplicationsOverviewPageWithNodeHarness(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not installed")

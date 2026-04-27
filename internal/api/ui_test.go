@@ -7,6 +7,41 @@ import (
 	"testing"
 )
 
+func TestEmbeddedUIRendersOperatorContextBannerSafely(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"id=\"operator-context\"",
+		"const operatorContextRoute = () => '/v1/operator/context';",
+		"const operatorContextReadRoute = () => 'GET /v1/operator/context';",
+		"const operatorContextIdentityLabel = (context) => {",
+		"const operatorContextRoleLabel = (context) => {",
+		"const operatorContextDeploymentAccessLabel = (context) => {",
+		"const renderOperatorContextBanner = () => {",
+		"const loadOperatorContextBanner = () => {",
+		"loadOperatorContextBanner().catch(() => {});",
+		"Checking trusted front-door context…",
+		"No trusted operator identity forwarded",
+		"No viewer/operator/admin role forwarded",
+		"No deployment allowlist forwarded",
+		"Operator context unavailable",
+		"Operator context check failed",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI to include %q", fragment)
+		}
+	}
+
+	for _, unsafe := range []string{
+		"operatorContext.innerHTML",
+		"operator-context.innerHTML",
+	} {
+		if strings.Contains(body, unsafe) {
+			t.Fatalf("embedded operator context banner should avoid unsafe rendering with %q", unsafe)
+		}
+	}
+}
+
 func TestEmbeddedUILazyLoadsDeploymentDetailsOnExpandOnly(t *testing.T) {
 	body := string(indexHTML)
 

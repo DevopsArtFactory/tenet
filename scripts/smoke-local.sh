@@ -881,6 +881,10 @@ assert traffic_resource_inspection['trafficRoutingResource'].get('kind') == 'tra
 assert traffic_resource_inspection['trafficRoutingResource'].get('inspectionMode') == 'summary_only', traffic_resource_inspection
 assert isinstance(traffic_resource_inspection['trafficRoutingResource'].get('summary'), str) and traffic_resource_inspection['trafficRoutingResource']['summary'], traffic_resource_inspection
 assert 'Application status overview' in ui, ui
+assert 'Operator context' in ui, ui
+assert "const operatorContextRoute = () => '/v1/operator/context';" in ui, ui
+assert "const operatorContextReadRoute = () => 'GET /v1/operator/context';" in ui, ui
+assert "loadOperatorContextBanner().catch(() => {});" in ui, ui
 assert '/v1/overview/applications' in ui, ui
 assert '/v1/overview/applications/${encodeURIComponent(deploymentName)}' in ui, ui
 assert "const fetchApplicationsOverview = () => fetchEmbeddedReadRouteJSON('/v1/overview/applications', {" in ui, ui

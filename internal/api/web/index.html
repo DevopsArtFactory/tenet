@@ -30,6 +30,14 @@
       .hero { display: flex; justify-content: space-between; gap: 16px; align-items: end; margin-bottom: 24px; }
       .title { font-size: 36px; font-weight: 800; letter-spacing: -0.04em; margin: 0 0 8px; }
       .subtitle { margin: 0; color: var(--muted); max-width: 720px; line-height: 1.5; }
+      .operator-context { display:grid; gap: 10px; margin: -8px 0 24px; padding: 14px 16px; background: rgba(11, 24, 43, 0.72); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 14px 34px rgba(0,0,0,0.18); }
+      .operator-context-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap: 10px; }
+      .operator-context-title { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+      .operator-context-summary { color: var(--text); font-size: 14px; font-weight: 700; }
+      .operator-context-meta { display:flex; flex-wrap:wrap; gap: 8px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+      .operator-context-meta span { padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); }
+      .operator-context.unavailable { border-color: rgba(244,201,93,.24); }
+      .operator-context.error { border-color: rgba(255,123,123,.24); }
       .toolbar { display:grid; gap: 16px; margin-bottom: 24px; padding: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 18px 40px rgba(0,0,0,0.24); }
       .toolbar-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
       .toolbar-field { display:grid; gap: 8px; }
@@ -145,6 +153,13 @@
           <p class="subtitle">Account-oriented rollout visibility for EC2 binaries and ECS images, with strategy-aware step labels such as ShiftTrafficCanary and CreateCodeDeployDeployment for weighted-target-group and ECS CodeDeploy rollouts.</p>
         </div>
       </div>
+      <section class="operator-context" id="operator-context" aria-live="polite">
+        <div class="operator-context-head">
+          <div class="operator-context-title">Operator context</div>
+          <div class="operator-context-summary">Checking trusted front-door context…</div>
+        </div>
+        <div class="operator-context-meta"><span>GET /v1/operator/context</span></div>
+      </section>
       <section class="toolbar" id="toolbar"></section>
       <section class="summary" id="summary"></section>
       <section id="accounts" class="accounts">
@@ -157,6 +172,7 @@
       const resourceLogStateByKey = new Map();
       const resourceInspectionStateByKey = new Map();
       let auditLogsPageState = { status: 'idle', route: '', result: null, error: null, promise: null, requestId: 0 };
+      let operatorContextState = { status: 'idle', context: null, error: null };
       let allAccounts = [];
       let allApplications = [];
       let applicationsOverviewState = null;
@@ -720,6 +736,79 @@
         if (className) node.className = className;
         if (text !== undefined) node.textContent = text;
         return node;
+      };
+      const operatorContextRoute = () => '/v1/operator/context';
+      const operatorContextReadRoute = () => 'GET /v1/operator/context';
+      const operatorContextIdentityLabel = (context) => {
+        const identity = context?.identity || {};
+        if (!identity.authenticated) return 'No trusted operator identity forwarded';
+        return identity.name || identity.email || identity.id || 'Authenticated operator';
+      };
+      const operatorContextRoleLabel = (context) => {
+        const roles = context?.roles || {};
+        const names = Array.isArray(roles.names) ? roles.names.filter(Boolean) : [];
+        if (roles.canWrite) return names.length ? `Write-capable roles: ${names.join(', ')}` : 'Write-capable role forwarded';
+        if (roles.canRead) return names.length ? `Read-capable roles: ${names.join(', ')}` : 'Read-capable role forwarded';
+        if (names.length) return `Roles forwarded: ${names.join(', ')}`;
+        return 'No viewer/operator/admin role forwarded';
+      };
+      const operatorContextDeploymentAccessLabel = (context) => {
+        const access = context?.deploymentAccess || {};
+        const names = Array.isArray(access.names) ? access.names.filter(Boolean) : [];
+        if (!access.enforced) return 'Deployment allowlist not enforced';
+        if (!access.forwarded) return 'No deployment allowlist forwarded';
+        if (names.length === 1) return `1 deployment forwarded: ${names[0]}`;
+        if (names.length > 1) return `${names.length} deployments forwarded: ${names.slice(0, 3).join(', ')}${names.length > 3 ? ', …' : ''}`;
+        return 'Deployment allowlist forwarded empty';
+      };
+      const renderOperatorContextBanner = () => {
+        const root = document.getElementById('operator-context');
+        if (!root) return;
+        root.className = 'operator-context';
+        const head = createElement('div', 'operator-context-head');
+        head.append(createElement('div', 'operator-context-title', 'Operator context'));
+        const summary = createElement('div', 'operator-context-summary');
+        const meta = createElement('div', 'operator-context-meta');
+        if (operatorContextState.status === 'loading' || operatorContextState.status === 'idle') {
+          summary.textContent = 'Checking trusted front-door context…';
+          meta.append(createElement('span', '', operatorContextReadRoute()));
+        } else if (operatorContextState.status === 'ready') {
+          const context = operatorContextState.context || {};
+          summary.textContent = operatorContextIdentityLabel(context);
+          meta.append(
+            createElement('span', '', operatorContextRoleLabel(context)),
+            createElement('span', '', operatorContextDeploymentAccessLabel(context)),
+            createElement('span', '', context?.trustedHeaders?.enabled ? 'Trusted headers enabled' : 'Trusted headers disabled'),
+          );
+        } else {
+          root.classList.add(operatorContextState.status === 'unavailable' ? 'unavailable' : 'error');
+          summary.textContent = operatorContextState.status === 'unavailable' ? 'Operator context unavailable' : 'Operator context check failed';
+          meta.append(
+            createElement('span', '', operatorContextReadRoute()),
+            createElement('span', '', operatorContextState.error?.message || 'Tenet could not load trusted front-door context.'),
+          );
+        }
+        head.append(summary);
+        root.replaceChildren(head, meta);
+      };
+      const loadOperatorContextBanner = () => {
+        if (!document.getElementById('operator-context')) return Promise.resolve(null);
+        operatorContextState = { status: 'loading', context: null, error: null };
+        renderOperatorContextBanner();
+        return fetchEmbeddedReadRouteJSON(operatorContextRoute(), {
+          unavailable: 'operator context unavailable',
+          failure: 'operator context request failed',
+        })
+          .then((context) => {
+            operatorContextState = { status: 'ready', context, error: null };
+            renderOperatorContextBanner();
+            return context;
+          })
+          .catch((error) => {
+            operatorContextState = { status: error.kind === 'unavailable' ? 'unavailable' : 'error', context: null, error };
+            renderOperatorContextBanner();
+            return null;
+          });
       };
       const createMetric = (label, value, className = '') => {
         const metric = createElement('div', 'metric');
@@ -5486,6 +5575,7 @@
 
       currentPageState = parsePageState();
       currentViewState = parseViewState();
+      loadOperatorContextBanner().catch(() => {});
       if (currentPageState.page === 'applications') {
         fetchApplicationsOverview()
           .then((applications) => {
