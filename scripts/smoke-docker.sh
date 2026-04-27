@@ -1237,6 +1237,24 @@ auth_unauthenticated_status_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICAT
   "$API_BASE_URL/v1/status/deployments")
 auth_unauthenticated_audit_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY" -w "%{http_code}" \
   "$API_BASE_URL/v1/audit-logs?action=apply.requested")
+operator_context_trusted=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer, operator" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-prod, worker-prod" \
+  "$API_BASE_URL/v1/operator/context")
+operator_context_alias=$(curl -fsS \
+  -H "X-User-ID: alias-456" \
+  -H "X-User-Name: Alias Operator" \
+  -H "X-User-Email: alias@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
+  "$API_BASE_URL/v1/operator/context")
+operator_context_no_allowlist=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: no-allowlist-789" \
+  -H "X-Tenet-Authenticated-Name: No Allowlist Operator" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
+  "$API_BASE_URL/v1/operator/context")
 auth_unauthenticated_plan_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" -w "%{http_code}" \
   "$API_BASE_URL/v1/plans/$plan_id")
 auth_unauthenticated_apply_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" -w "%{http_code}" \
@@ -1399,6 +1417,9 @@ filtered_audit_collection_path=$(write_payload filtered-audit-collection.json "$
 empty_applications_collection_path=$(write_payload empty-applications-collection.json "$empty_applications_collection")
 empty_status_collection_path=$(write_payload empty-status-collection.json "$empty_status_collection")
 empty_audit_collection_path=$(write_payload empty-audit-collection.json "$empty_audit_collection")
+operator_context_trusted_path=$(write_payload operator-context-trusted.json "$operator_context_trusted")
+operator_context_alias_path=$(write_payload operator-context-alias.json "$operator_context_alias")
+operator_context_no_allowlist_path=$(write_payload operator-context-no-allowlist.json "$operator_context_no_allowlist")
 
 PLAN_ID="$plan_id" \
 APPLY_ID="$apply_id" \
@@ -1442,6 +1463,9 @@ AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS="$auth_forbidden_resource_logs_status" \
 AUTH_FORBIDDEN_RESOURCE_LOGS_BODY_PATH="$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" \
 AUTH_FORBIDDEN_RESOURCE_INSPECTION_STATUS="$auth_forbidden_resource_inspection_status" \
 AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY_PATH="$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" \
+OPERATOR_CONTEXT_TRUSTED_PATH="$operator_context_trusted_path" \
+OPERATOR_CONTEXT_ALIAS_PATH="$operator_context_alias_path" \
+OPERATOR_CONTEXT_NO_ALLOWLIST_PATH="$operator_context_no_allowlist_path" \
 ALLOWED_STATUS_READ_PATH="$allowed_status_read_path" \
 ALLOWED_EVENTS_READ_PATH="$allowed_events_read_path" \
 ALLOWED_RESOURCE_LOGS_PATH="$allowed_resource_logs_path" \
@@ -1498,6 +1522,12 @@ with open(os.environ["AUTH_FORBIDDEN_RESOURCE_LOGS_BODY_PATH"], encoding="utf-8"
     forbidden_resource_logs_body = fh.read()
 with open(os.environ["AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY_PATH"], encoding="utf-8") as fh:
     forbidden_resource_inspection_body = fh.read()
+with open(os.environ["OPERATOR_CONTEXT_TRUSTED_PATH"], encoding="utf-8") as fh:
+    operator_context_trusted = json.load(fh)
+with open(os.environ["OPERATOR_CONTEXT_ALIAS_PATH"], encoding="utf-8") as fh:
+    operator_context_alias = json.load(fh)
+with open(os.environ["OPERATOR_CONTEXT_NO_ALLOWLIST_PATH"], encoding="utf-8") as fh:
+    operator_context_no_allowlist = json.load(fh)
 with open(os.environ["ALLOWED_STATUS_READ_PATH"], encoding="utf-8") as fh:
     allowed_status_read = json.load(fh)
 with open(os.environ["ALLOWED_EVENTS_READ_PATH"], encoding="utf-8") as fh:
@@ -1556,6 +1586,47 @@ assert os.environ["AUTH_FORBIDDEN_STATUS_READ_STATUS"] == "403", os.environ["AUT
 assert forbidden_status_read_body.strip() == "forbidden: operator does not have access to this deployment", forbidden_status_read_body
 assert os.environ["AUTH_FORBIDDEN_TRANSITION_STATUS"] == "403", os.environ["AUTH_FORBIDDEN_TRANSITION_STATUS"]
 assert forbidden_transition_body.strip() == "forbidden: operator does not have access to this deployment", forbidden_transition_body
+
+def assert_operator_context_common(payload):
+    trusted = payload.get("trustedHeaders") or {}
+    assert trusted.get("enabled") is True, payload
+    assert trusted.get("authenticatedIdentityRequired") is True, payload
+    assert trusted.get("deploymentReadAuthorizationEnforced") is True, payload
+    assert trusted.get("operatorReadRoleEnforced") is True, payload
+    assert trusted.get("operatorWriteRoleEnforced") is True, payload
+
+assert_operator_context_common(operator_context_trusted)
+assert operator_context_trusted["identity"]["authenticated"] is True, operator_context_trusted
+assert operator_context_trusted["identity"]["id"] == "front-door-123", operator_context_trusted
+assert operator_context_trusted["identity"]["name"] == "Front Door Operator", operator_context_trusted
+assert operator_context_trusted["identity"]["email"] == "frontdoor@example.com", operator_context_trusted
+assert operator_context_trusted["roles"]["names"] == ["viewer", "operator"], operator_context_trusted
+assert operator_context_trusted["roles"]["canRead"] is True, operator_context_trusted
+assert operator_context_trusted["roles"]["canWrite"] is True, operator_context_trusted
+assert operator_context_trusted["deploymentAccess"]["enforced"] is True, operator_context_trusted
+assert operator_context_trusted["deploymentAccess"]["forwarded"] is True, operator_context_trusted
+assert operator_context_trusted["deploymentAccess"]["names"] == ["payments-api-prod", "worker-prod"], operator_context_trusted
+assert_operator_context_common(operator_context_alias)
+assert operator_context_alias["identity"]["authenticated"] is True, operator_context_alias
+assert operator_context_alias["identity"]["id"] == "alias-456", operator_context_alias
+assert operator_context_alias["identity"]["name"] == "Alias Operator", operator_context_alias
+assert operator_context_alias["identity"]["email"] == "alias@example.com", operator_context_alias
+assert operator_context_alias["roles"]["names"] == ["viewer"], operator_context_alias
+assert operator_context_alias["roles"]["canRead"] is True, operator_context_alias
+assert operator_context_alias["roles"]["canWrite"] is False, operator_context_alias
+assert operator_context_alias["deploymentAccess"]["enforced"] is True, operator_context_alias
+assert operator_context_alias["deploymentAccess"]["forwarded"] is False, operator_context_alias
+assert "names" not in operator_context_alias["deploymentAccess"], operator_context_alias
+assert_operator_context_common(operator_context_no_allowlist)
+assert operator_context_no_allowlist["identity"]["authenticated"] is True, operator_context_no_allowlist
+assert operator_context_no_allowlist["identity"]["id"] == "no-allowlist-789", operator_context_no_allowlist
+assert operator_context_no_allowlist["identity"]["name"] == "No Allowlist Operator", operator_context_no_allowlist
+assert operator_context_no_allowlist["roles"]["names"] == ["viewer"], operator_context_no_allowlist
+assert operator_context_no_allowlist["roles"]["canRead"] is True, operator_context_no_allowlist
+assert operator_context_no_allowlist["roles"]["canWrite"] is False, operator_context_no_allowlist
+assert operator_context_no_allowlist["deploymentAccess"]["enforced"] is True, operator_context_no_allowlist
+assert operator_context_no_allowlist["deploymentAccess"]["forwarded"] is False, operator_context_no_allowlist
+assert "names" not in operator_context_no_allowlist["deploymentAccess"], operator_context_no_allowlist
 assert os.environ["AUTH_FORBIDDEN_EVENTS_STATUS"] == "403", os.environ["AUTH_FORBIDDEN_EVENTS_STATUS"]
 assert forbidden_events_body.strip() == "forbidden: operator does not have access to this deployment", forbidden_events_body
 assert os.environ["AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS"] == "403", os.environ["AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS"]
