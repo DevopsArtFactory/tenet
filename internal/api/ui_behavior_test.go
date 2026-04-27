@@ -327,37 +327,74 @@ class Document {
 }
 const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
 async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); await Promise.resolve(); }
-async function render(operatorResponse) {
+const findFirst = (node, predicate) => {
+  if (!node) return null;
+  if (predicate(node)) return node;
+  for (const child of node.children || []) {
+    const found = findFirst(child, predicate);
+    if (found) return found;
+  }
+  return null;
+};
+async function render(operatorResponses) {
   const document = new Document();
   document.byID.set('operator-context', document.createElement('section'));
   document.byID.set('toolbar', document.createElement('section'));
   document.byID.set('summary', document.createElement('section'));
   document.byID.set('accounts', document.createElement('section'));
   const fetchCalls = [];
+  const responses = Array.isArray(operatorResponses) ? operatorResponses.slice() : [operatorResponses];
   const window = { location: { pathname: '/', search: '', hash: '' } };
   const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
   const fetch = (url) => {
     fetchCalls.push(String(url));
-    if (url === '/v1/operator/context') return Promise.resolve(operatorResponse);
+    if (url === '/v1/operator/context') return Promise.resolve(responses.shift());
     if (url === '/v1/overview/applications') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleApplications) });
     throw new Error('unexpected fetch url: ' + url);
   };
   new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
   await settle();
-  return { text: collectText(document.getElementById('operator-context')).join(' | '), fetchCalls };
+  const text = () => collectText(document.getElementById('operator-context')).join(' | ');
+  const refresh = () => findFirst(document.getElementById('operator-context'), (node) => node.tagName === 'BUTTON' && node.textContent.includes('Refresh'));
+  return { document, window, text, fetchCalls, refresh };
 }
 (async () => {
-  const ready = await render({ ok: true, json: () => Promise.resolve({ trustedHeaders: { enabled: true }, identity: { authenticated: true, name: 'Front Door Operator', email: 'frontdoor@example.com' }, roles: { names: ['viewer', 'operator'], canRead: true, canWrite: true }, deploymentAccess: { enforced: true, forwarded: true, names: ['payments-api-prod', 'worker-prod'] } }) });
+  const firstContext = { trustedHeaders: { enabled: true }, identity: { authenticated: true, name: 'Front Door Operator', email: 'frontdoor@example.com' }, roles: { names: ['viewer', 'operator'], canRead: true, canWrite: true }, deploymentAccess: { enforced: true, forwarded: true, names: ['payments-api-prod', 'worker-prod'] } };
+  const ready = await render({ ok: true, json: () => Promise.resolve(firstContext) });
   if (ready.fetchCalls[0] !== '/v1/operator/context') throw new Error('expected operator context endpoint to load before route data');
-  if (!ready.text.includes('Operator context')) throw new Error('expected operator context banner title');
-  if (!ready.text.includes('Front Door Operator')) throw new Error('expected trusted identity in operator context banner');
-  if (!ready.text.includes('Write-capable roles: viewer, operator')) throw new Error('expected role capability in operator context banner');
-  if (!ready.text.includes('2 deployments forwarded: payments-api-prod, worker-prod')) throw new Error('expected deployment allowlist summary');
-  if (!ready.text.includes('Trusted headers enabled')) throw new Error('expected trusted header status');
+  if (!ready.text().includes('Operator context')) throw new Error('expected operator context banner title');
+  if (!ready.text().includes('Refresh context')) throw new Error('expected refresh action in operator context banner');
+  if (ready.refresh().disabled) throw new Error('refresh action should be enabled after first context load');
+  if (!ready.text().includes('Front Door Operator')) throw new Error('expected trusted identity in operator context banner');
+  if (!ready.text().includes('Write-capable roles: viewer, operator')) throw new Error('expected role capability in operator context banner');
+  if (!ready.text().includes('2 deployments forwarded: payments-api-prod, worker-prod')) throw new Error('expected deployment allowlist summary');
+  if (!ready.text().includes('Trusted headers enabled')) throw new Error('expected trusted header status');
+
+  const refreshed = await render([
+    { ok: true, json: () => Promise.resolve(firstContext) },
+    { ok: true, json: () => Promise.resolve({ ...firstContext, identity: { authenticated: true, name: 'Refreshed Operator' }, roles: { names: ['viewer'], canRead: true, canWrite: false } }) },
+  ]);
+  refreshed.refresh().dispatch('click');
+  await settle();
+  if (refreshed.fetchCalls.filter((url) => url === '/v1/operator/context').length !== 2) throw new Error('expected refresh to re-fetch operator context');
+  if (refreshed.window.location.search !== '') throw new Error('refresh should not change bookmarkable URL state');
+  if (!refreshed.text().includes('Refreshed Operator')) throw new Error('expected refreshed operator identity');
+  if (!refreshed.text().includes('Read-capable roles: viewer')) throw new Error('expected refreshed role capability');
+
+  const failedRefresh = await render([
+    { ok: true, json: () => Promise.resolve(firstContext) },
+    { ok: false, status: 503, text: () => Promise.resolve('operator context provider unavailable') },
+  ]);
+  failedRefresh.refresh().dispatch('click');
+  await settle();
+  if (!failedRefresh.text().includes('Front Door Operator')) throw new Error('failed refresh should keep last successful operator context visible');
+  if (!failedRefresh.text().includes('Last refresh failed:')) throw new Error('expected failed refresh diagnostic');
+  if (!failedRefresh.text().includes('operator context provider unavailable')) throw new Error('expected failed refresh backend detail');
+
   const unavailable = await render({ ok: false, status: 503, text: () => Promise.resolve('operator context provider unavailable') });
-  if (!unavailable.text.includes('Operator context unavailable')) throw new Error('expected unavailable operator context state');
-  if (!unavailable.text.includes('GET /v1/operator/context')) throw new Error('expected diagnostic route in unavailable state');
-  if (!unavailable.text.includes('operator context provider unavailable')) throw new Error('expected backend error detail in unavailable state');
+  if (!unavailable.text().includes('Operator context unavailable')) throw new Error('expected unavailable operator context state');
+  if (!unavailable.text().includes('GET /v1/operator/context')) throw new Error('expected diagnostic route in unavailable state');
+  if (!unavailable.text().includes('operator context provider unavailable')) throw new Error('expected backend error detail in unavailable state');
 })();
 `
 
