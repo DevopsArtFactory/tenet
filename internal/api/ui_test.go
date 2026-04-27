@@ -1789,7 +1789,7 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		t.Fatalf("expected smoke-local.sh to fetch bookmarkable CodeDeploy application resource page")
 	}
 	if !strings.Contains(text, "blue_task_set_target_group_resource_ui=$(curl -fsS \"http://$HOST:$PORT/?page=resource&deployment=payments-api-staging&resourceType=blueTaskSetTargetGroup&resourceId=blueTaskSetTargetGroup%3A%3Apayments-api-staging-blue%3A%3ABlue+task+set+target+group+CodeDeploy+treats+as+the+live+ECS+traffic+destination\")") {
-		t.Fatalf("expected smoke-local.sh to fetch bookmarkable CodeDeploy blue task-set target group resource page")
+		t.Fatalf("expected smoke-local.sh to fetch bookmarkable CodeDeploy blue task-set target-group resource page")
 	}
 	if !strings.Contains(text, "codedeploy_application_resource_ui_path=$(write_payload codedeploy-application-resource-ui.html \"$codedeploy_application_resource_ui\")") || !strings.Contains(text, "blue_task_set_target_group_resource_ui_path=$(write_payload blue-task-set-target-group-resource-ui.html \"$blue_task_set_target_group_resource_ui\")") {
 		t.Fatalf("expected smoke-local.sh to keep CodeDeploy resource shells file-backed")
