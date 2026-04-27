@@ -926,6 +926,7 @@ assert 'Controller-derived runtime events from GET /v1/overview/deployments/{dep
 assert 'Loading controller runtime events…' in ui, ui
 assert 'No controller runtime events have been persisted yet.' in ui, ui
 assert 'Controller runtime events are currently unavailable.' in ui, ui
+assert 'Managed drift summary · ${counts.total} total · ${counts.high} high · ${counts.medium} medium · ${counts.low} low' in ui, ui
 assert "const deploymentEventsReadRoute = (deploymentName) => `GET ${buildDeploymentEventsReadRoute(deploymentName)}`;" in ui, ui
 assert "createDeploymentEventsActions(section, deploymentName)," in ui, ui
 assert "createDeploymentEventsActions(container, deploymentName)," in ui, ui

@@ -233,7 +233,7 @@ Current behavior:
 - returns an additive `managedDriftSummary` object with explicit `total`, `high`, `medium`, and `low` counts derived from the returned history rows; rows with missing/unknown severity count toward `total` only
 - returns `200 OK` with `events: []` and zero drift-summary counts when the deployment exists but no runtime history has been persisted yet
 - never calls live AWS APIs; it only reflects the stored controller/runtime read model
-- the application detail page consumes the same route directly instead of reusing `history[]` from the deeper deployment-detail payload
+- the application detail page consumes the same route directly instead of reusing `history[]` from the deeper deployment-detail payload, and renders the additive summary as `Managed drift summary · {total} total · {high} high · {medium} medium · {low} low` above the event list so drift severity is visible without expanding every event
 
 Example response shape:
 

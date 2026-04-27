@@ -3325,6 +3325,17 @@
         }
         section.replaceChildren(heading, intro, stateNode);
       };
+      const deploymentEventsManagedDriftSummary = (result) => {
+        const summary = result?.managedDriftSummary || {};
+        const eventRows = (result?.events || []).flatMap((event) => Array.isArray(event?.managedDrift) ? event.managedDrift : []);
+        const counts = {
+          total: Number.isFinite(Number(summary.total)) ? Number(summary.total) : eventRows.length,
+          high: Number.isFinite(Number(summary.high)) ? Number(summary.high) : eventRows.filter((row) => String(row?.severity || '').toLowerCase() === 'high').length,
+          medium: Number.isFinite(Number(summary.medium)) ? Number(summary.medium) : eventRows.filter((row) => String(row?.severity || '').toLowerCase() === 'medium').length,
+          low: Number.isFinite(Number(summary.low)) ? Number(summary.low) : eventRows.filter((row) => String(row?.severity || '').toLowerCase() === 'low').length,
+        };
+        return `Managed drift summary · ${counts.total} total · ${counts.high} high · ${counts.medium} medium · ${counts.low} low`;
+      };
       const renderDeploymentEventsPayload = (section, deploymentName, result) => {
         const events = sortTimelineEvents(result?.events || []);
         if (!events.length) {
@@ -3335,6 +3346,7 @@
         const heading = createDetailSectionHeader('Controller runtime events', createDeploymentEventsActions(section, deploymentName));
         const intro = createDeploymentEventsIntro();
         const ordering = createElement('div', 'detail-condition-meta', `${events.length} event${events.length === 1 ? '' : 's'} · newest controller event first`);
+        const driftSummary = createElement('div', 'detail-condition-meta', deploymentEventsManagedDriftSummary(result));
         const eventList = createElement('ol', 'detail-list');
 
         events.forEach((event) => {
@@ -3386,7 +3398,7 @@
           eventList.append(item);
         });
 
-        section.replaceChildren(heading, intro, ordering, eventList);
+        section.replaceChildren(heading, intro, ordering, driftSummary, eventList);
       };
       const renderDeploymentEventsSection = (section, deploymentName, options = {}) => {
         const force = Boolean(options?.force);
