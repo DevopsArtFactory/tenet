@@ -31,6 +31,8 @@ const (
 var runtimeHistoryNow = time.Now
 
 type runtimeLiveCapacityObservation struct {
+	ResourceType                  string
+	ResourceName                  string
 	Desired                       int
 	Min                           int
 	Max                           int
@@ -292,6 +294,8 @@ func runtimeLiveCapacityLookupFromInspection(ctx context.Context, inspector reso
 			launchTemplateInstanceType = strings.TrimSpace(result.AutoScalingGroup.LaunchTemplate.InstanceType)
 		}
 		return &runtimeLiveCapacityObservation{
+			ResourceType:                  resourceType,
+			ResourceName:                  resourceName,
 			Desired:                       int(result.AutoScalingGroup.DesiredCapacity),
 			Min:                           int(result.AutoScalingGroup.MinSize),
 			Max:                           int(result.AutoScalingGroup.MaxSize),
@@ -302,6 +306,8 @@ func runtimeLiveCapacityLookupFromInspection(ctx context.Context, inspector reso
 	}
 	if result.ECSService != nil {
 		return &runtimeLiveCapacityObservation{
+			ResourceType:                  resourceType,
+			ResourceName:                  resourceName,
 			Desired:                       int(result.ECSService.DesiredCount),
 			TaskDefinitionImage:           strings.TrimSpace(result.ECSService.TaskDefinitionImage),
 			MinimumHealthyPercent:         result.ECSService.MinimumHealthyPercent,
@@ -322,8 +328,19 @@ func runtimeLiveCapacityResource(deployment domain.Deployment) (resourceType str
 	return "", "", false
 }
 
+func managedDriftResourceRef(observation *runtimeLiveCapacityObservation) *domain.ManagedDriftResourceRef {
+	if observation == nil || strings.TrimSpace(observation.ResourceType) == "" || strings.TrimSpace(observation.ResourceName) == "" {
+		return nil
+	}
+	return &domain.ManagedDriftResourceRef{
+		ResourceType: strings.TrimSpace(observation.ResourceType),
+		ResourceName: strings.TrimSpace(observation.ResourceName),
+	}
+}
+
 func deriveManagedDriftItems(deployment domain.Deployment, status domain.DeploymentStatus, liveCapacity *runtimeLiveCapacityObservation) []domain.ManagedDriftItem {
 	items := make([]domain.ManagedDriftItem, 0, 8)
+	liveResourceRef := managedDriftResourceRef(liveCapacity)
 
 	desiredArtifact := describeDeploymentArtifact(deployment.DesiredArtifact)
 	actualArtifact := describeDeploymentArtifact(status.DeployedArtifact)
@@ -379,85 +396,95 @@ func deriveManagedDriftItems(deployment domain.Deployment, status domain.Deploym
 	if liveCapacity != nil {
 		if desiredImage := strings.TrimSpace(deployment.DesiredArtifact.Image); desiredImage != "" && liveCapacity.TaskDefinitionImage != "" && desiredImage != liveCapacity.TaskDefinitionImage {
 			items = append(items, domain.ManagedDriftItem{
-				Field:    "runtimeContext.taskDefinition.image",
-				Desired:  desiredImage,
-				Actual:   liveCapacity.TaskDefinitionImage,
-				Severity: domain.ManagedDriftSeverityHigh,
+				Field:       "runtimeContext.taskDefinition.image",
+				Desired:     desiredImage,
+				Actual:      liveCapacity.TaskDefinitionImage,
+				Severity:    domain.ManagedDriftSeverityHigh,
+				ResourceRef: liveResourceRef,
 			})
 		}
 		if desiredMinHealthy := deployment.RolloutConfig.Strategy.MinHealthyPercent; desiredMinHealthy > 0 && liveCapacity.MinimumHealthyPercent != nil && desiredMinHealthy != int(*liveCapacity.MinimumHealthyPercent) {
 			items = append(items, domain.ManagedDriftItem{
-				Field:    "runtimeContext.deploymentConfig.minimumHealthyPercent",
-				Desired:  fmt.Sprintf("%d", desiredMinHealthy),
-				Actual:   fmt.Sprintf("%d", *liveCapacity.MinimumHealthyPercent),
-				Severity: domain.ManagedDriftSeverityMedium,
+				Field:       "runtimeContext.deploymentConfig.minimumHealthyPercent",
+				Desired:     fmt.Sprintf("%d", desiredMinHealthy),
+				Actual:      fmt.Sprintf("%d", *liveCapacity.MinimumHealthyPercent),
+				Severity:    domain.ManagedDriftSeverityMedium,
+				ResourceRef: liveResourceRef,
 			})
 		}
 		if liveCapacity.MaximumPercent != nil && int(*liveCapacity.MaximumPercent) != 200 {
 			items = append(items, domain.ManagedDriftItem{
-				Field:    "runtimeContext.deploymentConfig.maximumPercent",
-				Desired:  "200",
-				Actual:   fmt.Sprintf("%d", *liveCapacity.MaximumPercent),
-				Severity: domain.ManagedDriftSeverityMedium,
+				Field:       "runtimeContext.deploymentConfig.maximumPercent",
+				Desired:     "200",
+				Actual:      fmt.Sprintf("%d", *liveCapacity.MaximumPercent),
+				Severity:    domain.ManagedDriftSeverityMedium,
+				ResourceRef: liveResourceRef,
 			})
 		}
 		if desiredGracePeriod := deployment.RolloutConfig.Strategy.WarmupSeconds; desiredGracePeriod > 0 && liveCapacity.HealthCheckGracePeriodSeconds != nil && desiredGracePeriod != int(*liveCapacity.HealthCheckGracePeriodSeconds) {
 			items = append(items, domain.ManagedDriftItem{
-				Field:    "runtimeContext.deploymentConfig.healthCheckGracePeriodSeconds",
-				Desired:  fmt.Sprintf("%d", desiredGracePeriod),
-				Actual:   fmt.Sprintf("%d", *liveCapacity.HealthCheckGracePeriodSeconds),
-				Severity: domain.ManagedDriftSeverityMedium,
+				Field:       "runtimeContext.deploymentConfig.healthCheckGracePeriodSeconds",
+				Desired:     fmt.Sprintf("%d", desiredGracePeriod),
+				Actual:      fmt.Sprintf("%d", *liveCapacity.HealthCheckGracePeriodSeconds),
+				Severity:    domain.ManagedDriftSeverityMedium,
+				ResourceRef: liveResourceRef,
 			})
 		}
 		desiredCapacity := deployment.RolloutConfig.Capacity
 		if desiredCapacity.Desired != liveCapacity.Desired {
 			items = append(items, domain.ManagedDriftItem{
-				Field:    "runtimeContext.capacity.desired",
-				Desired:  fmt.Sprintf("%d", desiredCapacity.Desired),
-				Actual:   fmt.Sprintf("%d", liveCapacity.Desired),
-				Severity: domain.ManagedDriftSeverityMedium,
+				Field:       "runtimeContext.capacity.desired",
+				Desired:     fmt.Sprintf("%d", desiredCapacity.Desired),
+				Actual:      fmt.Sprintf("%d", liveCapacity.Desired),
+				Severity:    domain.ManagedDriftSeverityMedium,
+				ResourceRef: liveResourceRef,
 			})
 		}
 		switch deployment.ExecutionMode {
 		case "asgWeightedTargetGroups", "asgInstanceRefresh":
 			if desiredImageID := strings.TrimSpace(deployment.EC2LaunchTemplate.ImageID); desiredImageID != "" && liveCapacity.LaunchTemplateImageID != "" && desiredImageID != liveCapacity.LaunchTemplateImageID {
 				items = append(items, domain.ManagedDriftItem{
-					Field:    "runtimeContext.launchTemplate.imageId",
-					Desired:  desiredImageID,
-					Actual:   liveCapacity.LaunchTemplateImageID,
-					Severity: domain.ManagedDriftSeverityHigh,
+					Field:       "runtimeContext.launchTemplate.imageId",
+					Desired:     desiredImageID,
+					Actual:      liveCapacity.LaunchTemplateImageID,
+					Severity:    domain.ManagedDriftSeverityHigh,
+					ResourceRef: liveResourceRef,
 				})
 			}
 			if desiredInstanceType := strings.TrimSpace(deployment.EC2LaunchTemplate.InstanceType); desiredInstanceType != "" && liveCapacity.LaunchTemplateInstanceType != "" && desiredInstanceType != liveCapacity.LaunchTemplateInstanceType {
 				items = append(items, domain.ManagedDriftItem{
-					Field:    "runtimeContext.launchTemplate.instanceType",
-					Desired:  desiredInstanceType,
-					Actual:   liveCapacity.LaunchTemplateInstanceType,
-					Severity: domain.ManagedDriftSeverityHigh,
+					Field:       "runtimeContext.launchTemplate.instanceType",
+					Desired:     desiredInstanceType,
+					Actual:      liveCapacity.LaunchTemplateInstanceType,
+					Severity:    domain.ManagedDriftSeverityHigh,
+					ResourceRef: liveResourceRef,
 				})
 			}
 			if desiredBootstrapSource := userDataBootstrapSource(deployment.UserData); desiredBootstrapSource != "unspecified" && liveCapacity.LaunchTemplateBootstrapSource != "" && desiredBootstrapSource != liveCapacity.LaunchTemplateBootstrapSource {
 				items = append(items, domain.ManagedDriftItem{
-					Field:    "runtimeContext.launchTemplate.bootstrapSource",
-					Desired:  desiredBootstrapSource,
-					Actual:   liveCapacity.LaunchTemplateBootstrapSource,
-					Severity: domain.ManagedDriftSeverityHigh,
+					Field:       "runtimeContext.launchTemplate.bootstrapSource",
+					Desired:     desiredBootstrapSource,
+					Actual:      liveCapacity.LaunchTemplateBootstrapSource,
+					Severity:    domain.ManagedDriftSeverityHigh,
+					ResourceRef: liveResourceRef,
 				})
 			}
 			if desiredCapacity.Min != liveCapacity.Min {
 				items = append(items, domain.ManagedDriftItem{
-					Field:    "runtimeContext.capacity.min",
-					Desired:  fmt.Sprintf("%d", desiredCapacity.Min),
-					Actual:   fmt.Sprintf("%d", liveCapacity.Min),
-					Severity: domain.ManagedDriftSeverityMedium,
+					Field:       "runtimeContext.capacity.min",
+					Desired:     fmt.Sprintf("%d", desiredCapacity.Min),
+					Actual:      fmt.Sprintf("%d", liveCapacity.Min),
+					Severity:    domain.ManagedDriftSeverityMedium,
+					ResourceRef: liveResourceRef,
 				})
 			}
 			if desiredCapacity.Max != liveCapacity.Max {
 				items = append(items, domain.ManagedDriftItem{
-					Field:    "runtimeContext.capacity.max",
-					Desired:  fmt.Sprintf("%d", desiredCapacity.Max),
-					Actual:   fmt.Sprintf("%d", liveCapacity.Max),
-					Severity: domain.ManagedDriftSeverityMedium,
+					Field:       "runtimeContext.capacity.max",
+					Desired:     fmt.Sprintf("%d", desiredCapacity.Max),
+					Actual:      fmt.Sprintf("%d", liveCapacity.Max),
+					Severity:    domain.ManagedDriftSeverityMedium,
+					ResourceRef: liveResourceRef,
 				})
 			}
 		}
@@ -487,7 +514,22 @@ func managedDriftItemLess(left domain.ManagedDriftItem, right domain.ManagedDrif
 	if left.Actual != right.Actual {
 		return left.Actual < right.Actual
 	}
-	return left.Severity < right.Severity
+	if left.Severity != right.Severity {
+		return left.Severity < right.Severity
+	}
+	leftRefType, leftRefName := managedDriftRefSortValues(left.ResourceRef)
+	rightRefType, rightRefName := managedDriftRefSortValues(right.ResourceRef)
+	if leftRefType != rightRefType {
+		return leftRefType < rightRefType
+	}
+	return leftRefName < rightRefName
+}
+
+func managedDriftRefSortValues(ref *domain.ManagedDriftResourceRef) (resourceType string, resourceName string) {
+	if ref == nil {
+		return "", ""
+	}
+	return ref.ResourceType, ref.ResourceName
 }
 
 func runtimeHistoryHasControllerEntry(history []domain.StatusHistoryEntry) bool {

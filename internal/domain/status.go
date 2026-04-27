@@ -84,12 +84,19 @@ const (
 	ManagedDriftSeverityLow    ManagedDriftSeverity = "low"
 )
 
+// ManagedDriftResourceRef identifies the live resource that produced a managed drift item.
+type ManagedDriftResourceRef struct {
+	ResourceType string `json:"resourceType"`
+	ResourceName string `json:"resourceName"`
+}
+
 // ManagedDriftItem captures one controller-authored field-level drift item for Tenet-managed runtime fields.
 type ManagedDriftItem struct {
-	Field    string               `json:"field"`
-	Desired  string               `json:"desired,omitempty"`
-	Actual   string               `json:"actual,omitempty"`
-	Severity ManagedDriftSeverity `json:"severity,omitempty"`
+	Field       string                   `json:"field"`
+	Desired     string                   `json:"desired,omitempty"`
+	Actual      string                   `json:"actual,omitempty"`
+	Severity    ManagedDriftSeverity     `json:"severity,omitempty"`
+	ResourceRef *ManagedDriftResourceRef `json:"resourceRef,omitempty"`
 }
 
 // RolloutSummary captures the controller-owned rollout view for a deployment.

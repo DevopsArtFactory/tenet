@@ -2059,7 +2059,7 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 				Health:             domain.Health{Overall: domain.HealthHealthy, Summary: "all checks passed"},
 				ManagedDrift: []domain.ManagedDriftItem{
 					{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r4", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r3", Severity: domain.ManagedDriftSeverityHigh},
-					{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh},
+					{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh, ResourceRef: &domain.ManagedDriftResourceRef{ResourceType: "candidateAutoScalingGroup", ResourceName: "payments-api-prod-candidate"}},
 					{Field: "runtimeContext.capacity.min", Desired: "4", Actual: "2", Severity: domain.ManagedDriftSeverityMedium},
 					{Field: "runtimeContext.capacity.max", Desired: "12", Actual: "8", Severity: domain.ManagedDriftSeverityLow},
 					{Field: "runtimeContext.launchTemplate.imageId", Desired: "ami-1234567890abcdef0", Actual: "ami-fffffffffffffffff", Severity: domain.ManagedDriftSeverityHigh},
@@ -2082,7 +2082,7 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 					Health:    domain.Health{Overall: domain.HealthProgressing, Summary: "warming"},
 					ManagedDrift: []domain.ManagedDriftItem{
 						{Field: "artifact", Desired: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r4", Actual: "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r3", Severity: domain.ManagedDriftSeverityHigh},
-						{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh},
+						{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh, ResourceRef: &domain.ManagedDriftResourceRef{ResourceType: "candidateAutoScalingGroup", ResourceName: "payments-api-prod-candidate"}},
 						{Field: "runtimeContext.capacity.min", Desired: "4", Actual: "2", Severity: domain.ManagedDriftSeverityMedium},
 						{Field: "runtimeContext.capacity.max", Desired: "12", Actual: "8", Severity: domain.ManagedDriftSeverityLow},
 						{Field: "runtimeContext.launchTemplate.imageId", Desired: "ami-1234567890abcdef0", Actual: "ami-fffffffffffffffff", Severity: domain.ManagedDriftSeverityHigh},
@@ -2181,8 +2181,16 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 	if driftItem["desired"] != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r4" || driftItem["actual"] != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r3" || driftItem["severity"] != string(domain.ManagedDriftSeverityHigh) {
 		t.Fatalf("expected managedDrift artifact item fields, got %#v", driftItem)
 	}
+	if _, exists := driftItem["resourceRef"]; exists {
+		t.Fatalf("expected read-model-only artifact drift to omit resourceRef, got %#v", driftItem)
+	}
 	if desiredCapacityDrift := requireManagedDriftItemByField(t, managedDrift, "runtimeContext.capacity.desired"); desiredCapacityDrift["desired"] != "6" || desiredCapacityDrift["actual"] != "4" || desiredCapacityDrift["severity"] != string(domain.ManagedDriftSeverityHigh) {
 		t.Fatalf("expected managedDrift desired-capacity item fields, got %#v", desiredCapacityDrift)
+	} else {
+		ref, ok := desiredCapacityDrift["resourceRef"].(map[string]any)
+		if !ok || ref["resourceType"] != "candidateAutoScalingGroup" || ref["resourceName"] != "payments-api-prod-candidate" {
+			t.Fatalf("expected managedDrift desired-capacity resourceRef, got %#v", desiredCapacityDrift["resourceRef"])
+		}
 	}
 	if minCapacityDrift := requireManagedDriftItemByField(t, managedDrift, "runtimeContext.capacity.min"); minCapacityDrift["desired"] != "4" || minCapacityDrift["actual"] != "2" || minCapacityDrift["severity"] != string(domain.ManagedDriftSeverityMedium) {
 		t.Fatalf("expected managedDrift min-capacity item fields, got %#v", minCapacityDrift)
@@ -2202,6 +2210,11 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 	}
 	if historyDesiredCapacityDrift := requireManagedDriftItemByField(t, historyManagedDrift, "runtimeContext.capacity.desired"); historyDesiredCapacityDrift["desired"] != "6" || historyDesiredCapacityDrift["actual"] != "4" {
 		t.Fatalf("expected history managedDrift desired-capacity item fields, got %#v", historyDesiredCapacityDrift)
+	} else {
+		ref, ok := historyDesiredCapacityDrift["resourceRef"].(map[string]any)
+		if !ok || ref["resourceType"] != "candidateAutoScalingGroup" || ref["resourceName"] != "payments-api-prod-candidate" {
+			t.Fatalf("expected history managedDrift desired-capacity resourceRef, got %#v", historyDesiredCapacityDrift["resourceRef"])
+		}
 	}
 	if _, exists := status["ManagedDrift"]; exists {
 		t.Fatalf("unexpected Go-style managedDrift field name in %#v", status)
@@ -3817,7 +3830,7 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 				Name: "api-prod",
 				ManagedDrift: []domain.ManagedDriftItem{
 					{Field: "artifact", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh},
-					{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh},
+					{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh, ResourceRef: &domain.ManagedDriftResourceRef{ResourceType: "candidateAutoScalingGroup", ResourceName: "payments-api-prod-candidate"}},
 					{Field: "runtimeContext.capacity.min", Desired: "4", Actual: "2", Severity: domain.ManagedDriftSeverityMedium},
 					{Field: "runtimeContext.capacity.max", Desired: "12", Actual: "8", Severity: domain.ManagedDriftSeverityLow},
 					{Field: "runtimeContext.launchTemplate.imageId", Desired: "ami-1234567890abcdef0", Actual: "ami-fffffffffffffffff", Severity: domain.ManagedDriftSeverityHigh},
@@ -3838,7 +3851,7 @@ func TestOverviewDeploymentResponseIncludesRuntimeSummary(t *testing.T) {
 					ExecutionMode:      "ecsCodeDeploy",
 					ManagedDrift: []domain.ManagedDriftItem{
 						{Field: "artifact", Desired: "ghcr.io/devopsartfactory/payments-api:2026-04-16.2", Actual: "ghcr.io/devopsartfactory/payments-api:2026-04-16.1", Severity: domain.ManagedDriftSeverityHigh},
-						{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh},
+						{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh, ResourceRef: &domain.ManagedDriftResourceRef{ResourceType: "candidateAutoScalingGroup", ResourceName: "payments-api-prod-candidate"}},
 						{Field: "runtimeContext.capacity.min", Desired: "4", Actual: "2", Severity: domain.ManagedDriftSeverityMedium},
 						{Field: "runtimeContext.capacity.max", Desired: "12", Actual: "8", Severity: domain.ManagedDriftSeverityLow},
 						{Field: "runtimeContext.launchTemplate.imageId", Desired: "ami-1234567890abcdef0", Actual: "ami-fffffffffffffffff", Severity: domain.ManagedDriftSeverityHigh},
