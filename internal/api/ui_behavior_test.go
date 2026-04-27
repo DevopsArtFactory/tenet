@@ -589,6 +589,100 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 		runNodeHarness(t, nodeProgram)
 	})
 
+	t.Run("applications overview explains hidden runtime search matches", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const sampleApplications = [{
+  name: 'payments-api-prod',
+  appRef: 'payments',
+  environmentRef: 'prod-apne2',
+  accountName: 'prod-core',
+  awsAccountId: '123456789012',
+  region: 'ap-northeast-2',
+  targetType: 'ec2',
+  executionMode: 'asgWeightedTargetGroups',
+  sync: { state: 'Synced', reason: 'latest desired generation applied' },
+  health: { overall: 'Healthy', summary: '3/3 targets healthy' },
+  runtimeSummary: {
+    timestamp: '2026-04-16T06:40:00Z',
+    changeDetails: ['managed drift added 2 rows'],
+    conditions: [{ type: 'Ready', status: false, reason: 'DeploymentProgressing' }],
+    deployedArtifact: { image: 'ghcr.io/example/payments@sha256:abcdef' },
+    currentStep: 'ShiftTrafficToCandidate'
+  },
+}];
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const createDocument = () => {
+  const document = new Document();
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  return document;
+};
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+async function render(search) {
+  const document = createDocument();
+  const window = { location: { pathname: '/', search, hash: '' } };
+  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  const fetch = (url) => {
+    if (url === '/v1/overview/applications') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleApplications) });
+    throw new Error('unexpected fetch url: ' + url);
+  };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle();
+  return collectText(document.getElementById('accounts')).join(' | ');
+}
+(async () => {
+  const runtimeMatchText = await render('?q=managed+drift+added&sync=all&account=all');
+  if (!runtimeMatchText.includes('payments-api-prod')) throw new Error('expected runtime-only search to keep matching row');
+  if (!runtimeMatchText.includes('Search match')) throw new Error('expected visible search match context');
+  if (!runtimeMatchText.includes('Matched runtime: managed drift added 2 rows')) throw new Error('expected runtime change-detail match context');
+  const visibleMatchText = await render('?q=payments&sync=all&account=all');
+  if (visibleMatchText.includes('Search match')) throw new Error('visible application-name search should keep overview row compact');
+  const noSearchText = await render('?sync=all&account=all');
+  if (noSearchText.includes('Search match')) throw new Error('no-search overview should stay compact');
+})();
+`
+
+		runNodeHarness(t, nodeProgram)
+	})
+
 	t.Run("applications overview refresh keeps bookmarkable state and shared auth guidance", func(t *testing.T) {
 		nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;

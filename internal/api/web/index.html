@@ -86,6 +86,8 @@
       .metric .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
       .metric .v { margin-top: 8px; font-size: 14px; font-weight: 650; word-break: break-word; }
       .metric.summary { grid-column: 1 / -1; }
+      .row-match-context { margin: 0 16px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(103,183,255,.18); background: rgba(103,183,255,.08); color: var(--muted); font-size: 13px; line-height: 1.45; }
+      .row-match-context strong { color: var(--blue); }
       .detail-panel { padding: 0 16px 16px; display:grid; gap: 12px; }
       .detail-state { padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.03); color: var(--muted); }
       .detail-state.error { border-color: rgba(255,123,123,.28); color: #ffd0d0; }
@@ -1215,6 +1217,64 @@
         syncViewState(currentViewState);
         renderApplicationsOverview(allApplications, focusState);
       };
+      const normalizeSearchValue = (value) => {
+        if (value == null) return '';
+        const text = String(value).trim();
+        return text && text !== '—' ? text : '';
+      };
+      const searchMatches = (value, needle) => {
+        const text = normalizeSearchValue(value);
+        return Boolean(text && needle && text.toLowerCase().includes(needle));
+      };
+      const applicationRuntimeMatchCandidates = (deployment) => {
+        const runtimeSummary = deployment.runtimeSummary || {};
+        return [
+          ...changeDetailLabels(runtimeSummary.changeDetails).map((detail) => ['runtime', detail]),
+          ...changeLabels(runtimeSummary.changes).map((change) => ['runtime', change]),
+          ...[runtimeSummary.summary, runtimeSummary.sync?.reason, runtimeSummary.health?.summary, runtimeSummary.source].map((value) => ['runtime', value]),
+          ...runtimeConditionsText(runtimeSummary.conditions, '').split('; ').filter(Boolean).map((condition) => ['condition', condition]),
+          ...[runtimeSummary.rolloutPhase, runtimeSummary.currentStep, deployment.rollout?.phase, deployment.rollout?.currentStep, deployment.rollout?.summary, plannedSteps(deployment.rollout)].map((value) => ['rollout', value]),
+          ...[runtimeArtifactText(runtimeSummary.deployedArtifact), artifact(deployment.desiredArtifact), artifact(deployment.deployedArtifact)].map((value) => ['artifact', value]),
+        ]
+          .map(([label, value]) => [label, normalizeSearchValue(value)])
+          .filter(([, value]) => value);
+      };
+      const applicationVisibleSearchText = (deployment) => [
+        deployment.accountName,
+        deployment.awsAccountId,
+        deployment.name,
+        deployment.appRef,
+        deployment.environmentRef,
+        deployment.region,
+        deployment.targetType,
+        deployment.executionMode,
+        deployment.sync?.state,
+        healthLabel(deployment.health),
+        deployment.health?.summary,
+        runtimeSummaryTimestamp(deployment.runtimeSummary),
+      ].map((value) => normalizeSearchValue(value)).filter(Boolean).join(' ').toLowerCase();
+      const applicationRuntimeMatchReasons = (deployment, query) => {
+        const needle = query.trim().toLowerCase();
+        if (!needle || applicationVisibleSearchText(deployment).includes(needle)) return [];
+        const seen = new Set();
+        return applicationRuntimeMatchCandidates(deployment)
+          .filter(([, value]) => searchMatches(value, needle))
+          .filter(([label, value]) => {
+            const key = `${label}::${value}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
+          .slice(0, 2);
+      };
+      const createApplicationMatchContext = (deployment, query) => {
+        const reasons = applicationRuntimeMatchReasons(deployment, query);
+        if (!reasons.length) return null;
+        const context = createElement('div', 'row-match-context');
+        context.append(createElement('strong', '', reasons.length === 1 ? 'Search match' : 'Search matches'));
+        context.append(` · ${reasons.map(([label, value]) => `Matched ${label}: ${value}`).join(' · ')}`);
+        return context;
+      };
       const applyViewState = (applications, state) => {
         const searchNeedle = state.query.trim().toLowerCase();
         return applications.filter((deployment) => {
@@ -1410,7 +1470,10 @@
               createNavLink(buildPageURL('audit', { deployment: deployment.name }), 'Audit log', '_self'),
             );
           }
-          row.append(top, metrics, detailLinks);
+          const matchContext = createApplicationMatchContext(deployment, currentViewState.query);
+          row.append(top, metrics);
+          if (matchContext) row.append(matchContext);
+          row.append(detailLinks);
           rows.append(row);
         });
         table.append(rows);
