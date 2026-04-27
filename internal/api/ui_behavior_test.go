@@ -6406,10 +6406,11 @@ func TestDeploymentWorkspaceDriftViewWithNodeHarness(t *testing.T) {
 				"severity": "medium",
 			},
 			{
-				"field":    "runtimeContext.capacity.desired",
-				"desired":  "6",
-				"actual":   "<script>alert('capacity')</script> 4",
-				"severity": "low",
+				"field":       "runtimeContext.capacity.desired",
+				"desired":     "6",
+				"actual":      "<script>alert('capacity')</script> 4",
+				"severity":    "low",
+				"resourceRef": map[string]any{"resourceType": "candidateAutoScalingGroup", "resourceName": "api-managed-candidate"},
 			},
 			{
 				"field":    "runtimeContext.launchTemplate.imageId",
@@ -6439,6 +6440,10 @@ func TestDeploymentWorkspaceDriftViewWithNodeHarness(t *testing.T) {
 		},
 		"rollout": map[string]any{
 			"execution": []map[string]any{{
+				"name":        "api-managed-candidate",
+				"resource":    "candidateAutoScalingGroup",
+				"description": "Candidate Auto Scaling Group Tenet creates for managed drift evidence",
+			}, {
 				"name":        "prod-router",
 				"resource":    "aws_lb_listener_rule.payments_prod",
 				"description": "Routes production traffic to the stable target group",
@@ -6703,12 +6708,17 @@ async function render(detail) {
   const managedRun = await render(managedDetail);
   const managedText = collectText(managedRun.document.getElementById('accounts')).join(' | ');
   const managedRows = collectNodes(managedRun.document.getElementById('accounts'), (node) => node.tagName === 'TR').slice(1).map((node) => collectText(node).join(' | '));
+  const managedLinks = collectNodes(managedRun.document.getElementById('accounts'), (node) => node.tagName === 'A');
   if (!managedText.includes('Active drift source')) throw new Error('expected managed drift workspace source callout label');
   if (!managedText.includes('Current source: controller-authored managedDrift rows.')) throw new Error('expected managed drift workspace source summary');
   if (!managedText.includes('managedDrift is present in the deployment detail payload, so fallback read-model heuristics stay suppressed for this deployment.')) throw new Error('expected managed drift workspace source explanation');
   if (!managedRows.some((row) => row.includes('listener.weight'))) throw new Error('expected backend-authored managed drift row');
   if (!managedRows.some((row) => row.includes('service.taskDefinition'))) throw new Error('expected second backend-authored managed drift row');
-  if (!managedRows.some((row) => row.includes('runtimeContext.capacity.desired') && row.includes("<script>alert('capacity')</script> 4"))) throw new Error('expected managed drift capacity row to render as safe text');
+  if (!managedRows.some((row) => row.includes('runtimeContext.capacity.desired') && row.includes("<script>alert('capacity')</script> 4") && row.includes('Open resource evidence'))) throw new Error('expected managed drift capacity row to render safe text plus resource evidence handoff');
+  if (managedRows.some((row) => row.includes('listener.weight') && row.includes('Open resource evidence'))) throw new Error('expected unmanaged drift row without resourceRef to keep no-handoff rendering');
+  const managedEvidenceLink = managedLinks.find((node) => node.textContent === 'Open resource evidence');
+  const expectedManagedEvidenceHref = '/?page=resource&deployment=api-managed&resourceType=candidateAutoScalingGroup&resourceId=candidateAutoScalingGroup%3A%3Aapi-managed-candidate%3A%3ACandidate+Auto+Scaling+Group+Tenet+creates+for+managed+drift+evidence';
+  if (!managedEvidenceLink || managedEvidenceLink.href !== expectedManagedEvidenceHref || managedEvidenceLink.target !== '_self' || managedEvidenceLink.rel) throw new Error('expected managed drift resource evidence link to target normalized resource route, got ' + (managedEvidenceLink ? managedEvidenceLink.href + ' target=' + managedEvidenceLink.target + ' rel=' + managedEvidenceLink.rel : 'none'));
   if (!managedRows.some((row) => row.includes('runtimeContext.launchTemplate.imageId') && row.includes("<script>alert('ami')</script> ami-fffffffffffffffff"))) throw new Error('expected managed drift launch-template imageId row to render as safe text');
   if (!managedRows.some((row) => row.includes('runtimeContext.launchTemplate.instanceType') && row.includes("<script>alert('instance-type')</script> m6i.large"))) throw new Error('expected managed drift launch-template instanceType row to render as safe text');
   if (managedRows.some((row) => row.includes('artifact'))) throw new Error('expected managed drift rows to suppress fallback artifact derivation');
