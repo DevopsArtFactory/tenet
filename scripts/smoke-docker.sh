@@ -51,6 +51,12 @@ assert_request_id_header() {
   local url=$1
   local headers
 
+  for _ in $(seq 1 20); do
+    if headers=$(curl -fsS -D - -o /dev/null "$url" 2>/dev/null); then
+      break
+    fi
+    sleep 1
+  done
   headers=$(curl -fsS -D - -o /dev/null "$url")
   HEADERS_TEXT="$headers" python3 - <<'PY'
 import os
@@ -212,6 +218,40 @@ wait_for_apply_status() {
   return 1
 }
 
+wait_for_deployment_managed_drift() {
+  local deployment_name=$1
+  local response='{}'
+  local response_path
+
+  for _ in $(seq 1 90); do
+    if ! response=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/$deployment_name" 2>/dev/null); then
+      sleep 1
+      continue
+    fi
+    response_path=$(write_payload wait-for-deployment-detail.json "$response")
+    if python3 - "$response_path" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+managed = payload.get('managedDrift')
+runtime_managed = (payload.get('runtimeSummary') or {}).get('managedDrift')
+if isinstance(managed, list) and managed and isinstance(runtime_managed, list) and runtime_managed:
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
+    then
+      printf '%s' "$response"
+      return 0
+    fi
+    sleep 1
+  done
+
+  printf '%s' "$response"
+  return 1
+}
+
 restart_api_with_apply_mode() {
   local apply_enabled=$1
 
@@ -249,7 +289,7 @@ audit_logs_request_id=$(assert_request_id_header "$API_BASE_URL/v1/audit-logs?ac
 
 summary=$(curl -fsS "$API_BASE_URL/v1/catalog/summary")
 applications=$(curl -fsS "$API_BASE_URL/v1/overview/applications")
-deployment_detail=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod")
+deployment_detail=$(wait_for_deployment_managed_drift payments-api-prod)
 deployment_detail_extract_path=$(write_payload deployment-detail.extract.json "$deployment_detail")
 deployment_source_fingerprint=$(json_string_field_from_path "$deployment_detail_extract_path" sourceFingerprint)
 plan_preview_request_body=$(DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" python3 - <<'PY'
@@ -415,6 +455,7 @@ account_ui=$(curl -fsS "$API_BASE_URL/?page=account&accountId=123456789012")
 resource_ui=$(curl -fsS "$API_BASE_URL/?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=trafficShiftPlan%3A%3Apayments-api-prod-weighted-routing%3A%3AWeighted+routing+plan")
 ecs_resource_ui=$(curl -fsS "$API_BASE_URL/?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=ecsService%3A%3Aworker-prod-service%3A%3AECS+service+Tenet+updates+with+native+rolling+deployment")
 bootstrap_resource_ui=$(curl -fsS "$API_BASE_URL/?page=resource&deployment=payments-api-prod&resourceType=userDataBootstrapSource&resourceId=userDataBootstrapSource%3A%3Afile%3Auserdata%2Fpayments-api-prod.sh%3A%3ANormalized+userdata+bootstrap+source+for+candidate+EC2+capacity")
+codedeploy_application_resource_ui=$(curl -fsS "$API_BASE_URL/?page=resource&deployment=payments-api-staging&resourceType=codeDeployApplication&resourceId=codeDeployApplication%3A%3Apayments-api-staging-codedeploy-app%3A%3ACodeDeploy+application+coordinating+ECS+traffic+shifting")
 drift_ui_request_id=$(assert_request_id_header "$API_BASE_URL/?page=drift&deployment=payments-api-prod")
 drift_ui=$(curl -fsS "$API_BASE_URL/?page=drift&deployment=payments-api-prod")
 audit_ui_request_id=$(assert_request_id_header "$API_BASE_URL/?page=audit&deployment=payments-api-prod&action=apply.requested&limit=2")
@@ -463,11 +504,12 @@ account_ui_path=$(write_payload account-ui.html "$account_ui")
 resource_ui_path=$(write_payload resource-ui.html "$resource_ui")
 ecs_resource_ui_path=$(write_payload ecs-resource-ui.html "$ecs_resource_ui")
 bootstrap_resource_ui_path=$(write_payload bootstrap-resource-ui.html "$bootstrap_resource_ui")
+codedeploy_application_resource_ui_path=$(write_payload codedeploy-application-resource-ui.html "$codedeploy_application_resource_ui")
 drift_ui_path=$(write_payload drift-ui.html "$drift_ui")
 audit_ui_path=$(write_payload audit-ui.html "$audit_ui")
 plan_apply_ui_path=$(write_payload plan-apply-ui.html "$plan_apply_ui")
 
-SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" INVALID_APPLY_TRANSITION_STATUS="$invalid_apply_transition_status" INVALID_APPLY_TRANSITION_PATH="$invalid_apply_transition_path" UNKNOWN_APPLY_TRANSITION_STATUS="$unknown_apply_transition_status" UNKNOWN_APPLY_TRANSITION_PATH="$unknown_apply_transition_path" TERMINAL_APPLY_TRANSITION_STATUS="$terminal_apply_transition_status" TERMINAL_APPLY_TRANSITION_PATH="$terminal_apply_transition_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" DEPLOYMENT_EVENTS_PATH="$deployment_events_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" BOOTSTRAP_RESOURCE_LOGS_PATH="$bootstrap_resource_logs_path" BOOTSTRAP_RESOURCE_INSPECTION_PATH="$bootstrap_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_APPLICATION_RESOURCE_INSPECTION_PATH="$codedeploy_application_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$blue_task_set_target_group_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" PRODUCTION_LISTENER_RULE_RESOURCE_INSPECTION_PATH="$production_listener_rule_resource_inspection_path" ACTIVE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$active_target_group_resource_inspection_path" CANDIDATE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$candidate_target_group_resource_inspection_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PUSH_STATUS="$webhook_push_status" WEBHOOK_PING_PATH="$webhook_ping_path" WEBHOOK_PING_STATUS="$webhook_ping_status" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" UI_PATH="$ui_path" APPLICATION_UI_PATH="$application_ui_path" ACCOUNT_UI_PATH="$account_ui_path" RESOURCE_UI_PATH="$resource_ui_path" ECS_RESOURCE_UI_PATH="$ecs_resource_ui_path" BOOTSTRAP_RESOURCE_UI_PATH="$bootstrap_resource_ui_path" DRIFT_UI_PATH="$drift_ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_APPLY_UI_PATH="$plan_apply_ui_path" python3 - <<'PY'
+SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" INVALID_APPLY_TRANSITION_STATUS="$invalid_apply_transition_status" INVALID_APPLY_TRANSITION_PATH="$invalid_apply_transition_path" UNKNOWN_APPLY_TRANSITION_STATUS="$unknown_apply_transition_status" UNKNOWN_APPLY_TRANSITION_PATH="$unknown_apply_transition_path" TERMINAL_APPLY_TRANSITION_STATUS="$terminal_apply_transition_status" TERMINAL_APPLY_TRANSITION_PATH="$terminal_apply_transition_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" DEPLOYMENT_EVENTS_PATH="$deployment_events_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" BOOTSTRAP_RESOURCE_LOGS_PATH="$bootstrap_resource_logs_path" BOOTSTRAP_RESOURCE_INSPECTION_PATH="$bootstrap_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_APPLICATION_RESOURCE_INSPECTION_PATH="$codedeploy_application_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$blue_task_set_target_group_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" PRODUCTION_LISTENER_RULE_RESOURCE_INSPECTION_PATH="$production_listener_rule_resource_inspection_path" ACTIVE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$active_target_group_resource_inspection_path" CANDIDATE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$candidate_target_group_resource_inspection_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PUSH_STATUS="$webhook_push_status" WEBHOOK_PING_PATH="$webhook_ping_path" WEBHOOK_PING_STATUS="$webhook_ping_status" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" UI_PATH="$ui_path" APPLICATION_UI_PATH="$application_ui_path" ACCOUNT_UI_PATH="$account_ui_path" RESOURCE_UI_PATH="$resource_ui_path" ECS_RESOURCE_UI_PATH="$ecs_resource_ui_path" BOOTSTRAP_RESOURCE_UI_PATH="$bootstrap_resource_ui_path" CODEDEPLOY_APPLICATION_RESOURCE_UI_PATH="$codedeploy_application_resource_ui_path" DRIFT_UI_PATH="$drift_ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_APPLY_UI_PATH="$plan_apply_ui_path" python3 - <<'PY'
 import json, os
 
 def read_json(path_env):
@@ -528,6 +570,7 @@ account_ui = read_text("ACCOUNT_UI_PATH")
 resource_ui = read_text("RESOURCE_UI_PATH")
 ecs_resource_ui = read_text("ECS_RESOURCE_UI_PATH")
 bootstrap_resource_ui = read_text("BOOTSTRAP_RESOURCE_UI_PATH")
+codedeploy_application_resource_ui = read_text("CODEDEPLOY_APPLICATION_RESOURCE_UI_PATH")
 drift_ui = read_text("DRIFT_UI_PATH")
 audit_ui = read_text("AUDIT_UI_PATH")
 plan_apply_ui = read_text("PLAN_APPLY_UI_PATH")
@@ -645,9 +688,15 @@ assert webhook_ping["processed"] is False, webhook_ping
 assert "desiredStateSourceMatch" not in webhook_ping, webhook_ping
 assert os.environ["INVALID_WEBHOOK_STATUS"] == "400", os.environ["INVALID_WEBHOOK_STATUS"]
 assert "github webhook signature mismatch" in invalid_webhook, invalid_webhook
+expected_audit_refs = {
+    "payments-api-prod": ("payments-api", "prod-apne2"),
+    "payments-api-staging": ("payments-api", "staging-apne2"),
+    "worker-prod": ("worker", "prod-apne2"),
+}
 for entry in audit_logs["entries"]:
-    assert entry["appRef"] == "payments-api", entry
-    assert entry["environmentRef"] in {"prod-apne2", "staging-apne2"}, entry
+    app_ref, environment_ref = expected_audit_refs[entry["deploymentName"]]
+    assert entry["appRef"] == app_ref, entry
+    assert entry["environmentRef"] == environment_ref, entry
     assert isinstance(entry.get("metadata", {}), dict), entry
     assert isinstance(entry.get("source", {}), dict), entry
 fallback_entries = [entry for entry in audit_logs["entries"] if entry["deploymentName"] == "payments-api-prod"]
@@ -1000,7 +1049,7 @@ assert_fragments("application_ui", application_ui, (
     "createQuickNavChip('Application detail', 'Current destination: Application detail')",
 ))
 
-for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui):
+for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_application_resource_ui):
     for fragment in (
         "const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);",
         "Opened via bookmarked resource alias.",
