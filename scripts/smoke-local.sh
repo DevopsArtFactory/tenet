@@ -873,6 +873,8 @@ assert "buildPageURL('audit', { deployment: deployment.name })" in ui, ui
 assert 'Refresh applications overview' in ui, ui
 assert 'Refreshing applications overview from GET /v1/overview/applications…' in ui, ui
 assert 'Failed to refresh applications overview:' in ui, ui
+assert 'row-match-context' in ui, ui
+assert 'Matched ${label}: ${value}' in ui, ui
 assert 'Runtime change details' in ui, ui
 assert 'History change details' in ui, ui
 assert "buildPageURL('account', { accountId: deployment.awsAccountId })" in ui, ui
