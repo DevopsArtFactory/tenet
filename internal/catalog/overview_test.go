@@ -1023,6 +1023,12 @@ func TestBuildDeploymentOverviewEvents(t *testing.T) {
 					RolloutPhase:       domain.RolloutPhaseAccepted,
 					CurrentStep:        "CreateCandidateCapacity",
 					ChangeDetails:      []string{"Summary changed to Accepted rollout for r7"},
+					ManagedDrift: []domain.ManagedDriftItem{
+						{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh},
+						{Field: "runtimeContext.capacity.min", Desired: "4", Actual: "2", Severity: domain.ManagedDriftSeverityMedium},
+						{Field: "runtimeContext.tags.owner", Desired: "payments", Actual: "platform", Severity: domain.ManagedDriftSeverityLow},
+						{Field: "runtimeContext.unknown", Desired: "desired", Actual: "actual"},
+					},
 				},
 			},
 		},
@@ -1037,6 +1043,9 @@ func TestBuildDeploymentOverviewEvents(t *testing.T) {
 	}
 	if len(events.Events) != 1 || events.Events[0].Summary != "Accepted rollout for r7" || events.Events[0].Source != "controller" {
 		t.Fatalf("expected controller-derived runtime events, got %+v", events.Events)
+	}
+	if events.ManagedDriftSummary != (ManagedDriftSummary{Total: 4, High: 1, Medium: 1, Low: 1}) {
+		t.Fatalf("expected managed drift summary to count events by severity, got %+v", events.ManagedDriftSummary)
 	}
 
 	snapshots[0].Status.History[0].Summary = "mutated"
@@ -1069,6 +1078,9 @@ func TestBuildDeploymentOverviewEventsReturnsEmptyListWhenHistoryMissing(t *test
 	if events.Events == nil || len(events.Events) != 0 {
 		t.Fatalf("expected explicit empty events list, got %+v", events.Events)
 	}
+	if events.ManagedDriftSummary != (ManagedDriftSummary{}) {
+		t.Fatalf("expected zero managed drift summary for empty history, got %+v", events.ManagedDriftSummary)
+	}
 
 	payload, err := json.Marshal(events)
 	if err != nil {
@@ -1084,6 +1096,10 @@ func TestBuildDeploymentOverviewEventsReturnsEmptyListWhenHistoryMissing(t *test
 	}
 	if decoded["deploymentName"] != "payments-api-prod" {
 		t.Fatalf("expected deploymentName JSON field, got %#v", decoded)
+	}
+	summary, ok := decoded["managedDriftSummary"].(map[string]any)
+	if !ok || summary["total"] != float64(0) || summary["high"] != float64(0) || summary["medium"] != float64(0) || summary["low"] != float64(0) {
+		t.Fatalf("expected managedDriftSummary zero counts in JSON payload, got %#v", decoded["managedDriftSummary"])
 	}
 	if _, exists := decoded["DeploymentName"]; exists {
 		t.Fatalf("unexpected Go-style field names in %#v", decoded)

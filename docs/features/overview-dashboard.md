@@ -230,9 +230,29 @@ Separate from that controller-runtime timeline, the backend also exposes `GET /v
 
 Current behavior:
 - returns `deploymentName` plus an explicit `events[]` array
-- returns `200 OK` with `events: []` when the deployment exists but no runtime history has been persisted yet
+- returns an additive `managedDriftSummary` object with explicit `total`, `high`, `medium`, and `low` counts derived from the returned history rows; rows with missing/unknown severity count toward `total` only
+- returns `200 OK` with `events: []` and zero drift-summary counts when the deployment exists but no runtime history has been persisted yet
 - never calls live AWS APIs; it only reflects the stored controller/runtime read model
 - the application detail page consumes the same route directly instead of reusing `history[]` from the deeper deployment-detail payload
+
+Example response shape:
+
+```json
+{
+  "deploymentName": "payments-api-prod",
+  "events": [
+    {
+      "timestamp": "2026-04-16T06:15:00Z",
+      "source": "controller",
+      "summary": "Deployment has managed drift",
+      "managedDrift": [
+        {"field": "runtimeContext.capacity.desired", "desired": "6", "actual": "4", "severity": "high"}
+      ]
+    }
+  ],
+  "managedDriftSummary": {"total": 1, "high": 1, "medium": 0, "low": 0}
+}
+```
 
 ## Workspace shells
 

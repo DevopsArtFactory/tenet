@@ -1145,6 +1145,57 @@ func TestRouterAuditLogsMethodNotAllowed(t *testing.T) {
 	}
 }
 
+func TestDeploymentOverviewEventsRouteIncludesManagedDriftSummary(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeploymentEvents: func(_ context.Context, name string) (catalog.DeploymentOverviewEvents, error) {
+			if name != "api-prod" {
+				t.Fatalf("unexpected deployment name %q", name)
+			}
+			return catalog.DeploymentOverviewEvents{
+				DeploymentName: name,
+				Events: []domain.StatusHistoryEntry{{
+					Timestamp: "2026-04-16T06:15:00Z",
+					Source:    "controller",
+					Summary:   "Deployment has managed drift",
+					ManagedDrift: []domain.ManagedDriftItem{
+						{Field: "artifact", Severity: domain.ManagedDriftSeverityHigh},
+						{Field: "runtimeContext.capacity.min", Severity: domain.ManagedDriftSeverityMedium},
+						{Field: "runtimeContext.tags.owner", Severity: domain.ManagedDriftSeverityLow},
+					},
+				}},
+				ManagedDriftSummary: catalog.ManagedDriftSummary{Total: 3, High: 1, Medium: 1, Low: 1},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/events", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode deployment events payload: %v", err)
+	}
+	if payload["deploymentName"] != "api-prod" {
+		t.Fatalf("expected deploymentName in events payload, got %#v", payload)
+	}
+	events, ok := payload["events"].([]any)
+	if !ok || len(events) != 1 {
+		t.Fatalf("expected events array in payload, got %#v", payload["events"])
+	}
+	summary, ok := payload["managedDriftSummary"].(map[string]any)
+	if !ok || summary["total"] != float64(3) || summary["high"] != float64(1) || summary["medium"] != float64(1) || summary["low"] != float64(1) {
+		t.Fatalf("expected managedDriftSummary counts in events payload, got %#v", payload["managedDriftSummary"])
+	}
+	if _, exists := payload["ManagedDriftSummary"]; exists {
+		t.Fatalf("unexpected Go-style managed drift summary field in %#v", payload)
+	}
+}
+
 func TestRouterDeploymentReadAuthorization(t *testing.T) {
 	newGuardedRouter := func(t *testing.T) (http.Handler, *int) {
 		t.Helper()

@@ -560,6 +560,7 @@ if deployment_history:
 assert deployment_events_fixture['deploymentName'] == 'payments-api-prod', deployment_events_fixture
 assert isinstance(deployment_events_fixture['events'], list), deployment_events_fixture
 assert len(deployment_events_fixture['events']) == 0, deployment_events_fixture
+assert deployment_events_fixture.get('managedDriftSummary') == {'total': 0, 'high': 0, 'medium': 0, 'low': 0}, deployment_events_fixture
 assert plan_preview['deploymentName'] == 'payments-api-prod', plan_preview
 assert plan_preview['status'] == 'ready', plan_preview
 assert plan_preview['source']['route'] == '/v1/overview/deployments/payments-api-prod', plan_preview
@@ -2002,6 +2003,12 @@ assert all(isinstance(item.get('field'), str) and item['field'] for item in mana
 assert all(item.get('severity') in {'high', 'medium', 'low'} for item in managed_drift), managed_drift
 assert events_payload['deploymentName'] == 'payments-api-prod', events_payload
 assert isinstance(events_payload['events'], list) and events_payload['events'], events_payload
+summary = events_payload.get('managedDriftSummary') or {}
+event_managed_drift = [item for event in events_payload['events'] for item in event.get('managedDrift', [])]
+assert summary.get('total') == len(event_managed_drift), (summary, event_managed_drift)
+assert summary.get('high', 0) == sum(1 for item in event_managed_drift if item.get('severity') == 'high'), (summary, event_managed_drift)
+assert summary.get('medium', 0) == sum(1 for item in event_managed_drift if item.get('severity') == 'medium'), (summary, event_managed_drift)
+assert summary.get('low', 0) == sum(1 for item in event_managed_drift if item.get('severity') == 'low'), (summary, event_managed_drift)
 for event in events_payload['events']:
     assert event.get('source') == 'controller', events_payload
 print('smoke-local: controller changeDetails path ok')

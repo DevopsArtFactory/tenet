@@ -1969,6 +1969,7 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"assert deployment_events_fixture['deploymentName'] == 'payments-api-prod', deployment_events_fixture",
 		"assert isinstance(deployment_events_fixture['events'], list), deployment_events_fixture",
 		"assert len(deployment_events_fixture['events']) == 0, deployment_events_fixture",
+		"assert deployment_events_fixture.get('managedDriftSummary') == {'total': 0, 'high': 0, 'medium': 0, 'low': 0}, deployment_events_fixture",
 		"assert resource_logs['deploymentName'] == 'payments-api-staging', resource_logs",
 		"assert resource_logs['resourceType'] == 'codeDeployDeploymentGroup', resource_logs",
 		"assert resource_logs['resourceName'] == 'payments-api-staging-codedeploy-group', resource_logs",
@@ -2135,7 +2136,7 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "if deployment_history:") || !strings.Contains(text, "assert isinstance(deployment_history[0].get('changeDetails', []), list), deployment_detail") {
 		t.Fatalf("expected smoke-local.sh to verify deployment detail history changeDetails shape")
 	}
-	if !strings.Contains(text, "assert events_payload['deploymentName'] == 'payments-api-prod', events_payload") || !strings.Contains(text, "assert event.get('source') == 'controller', events_payload") {
+	if !strings.Contains(text, "assert events_payload['deploymentName'] == 'payments-api-prod', events_payload") || !strings.Contains(text, "summary.get('total') == len(event_managed_drift)") || !strings.Contains(text, "assert event.get('source') == 'controller', events_payload") {
 		t.Fatalf("expected smoke-local.sh to verify controller-populated deployment events payload")
 	}
 	if !strings.Contains(text, "assert 'Runtime change details' in ui, ui") {
