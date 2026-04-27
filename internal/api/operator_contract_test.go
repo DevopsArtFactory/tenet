@@ -1256,6 +1256,8 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		"- `crossAccount`",
 		"- `observerRoleConfigured`",
 		"`lookupContext` object is always present, including unavailable responses",
+		"newest running and recently stopped service task/container streams",
+		"failed rollouts and crash loops can still surface useful logs",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
 			t.Fatalf("expected resource recent logs doc to include %q", fragment)

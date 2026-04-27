@@ -305,7 +305,7 @@ Canonical resource-log routes stay stable across rollout modes so operators can 
 - `ecsRolling`: `ecsService` (`{deployment}-service`)
 - `ecsCodeDeploy`: `codeDeployDeploymentGroup` (`{deployment}-codedeploy-group`) plus the sibling `productionListener`, `testListener`, `blueTaskSetTargetGroup`, and `greenTaskSetTargetGroup` routes that reuse that same deployment-group history through additive backing-resource metadata
 
-Behind those routes, the built-in AWS-backed recent-log provider now reuses SDK config/client setup per `(region, target account, observer role)` key inside a running Tenet API process instead of rebuilding ECS / CloudWatch Logs / Auto Scaling / EC2 clients on every fetch, and it reuses that same AWS config for signed CodeDeploy deployment-history lookups.
+Behind those routes, the built-in AWS-backed recent-log provider now reuses SDK config/client setup per `(region, target account, observer role)` key inside a running Tenet API process instead of rebuilding ECS / CloudWatch Logs / Auto Scaling / EC2 clients on every fetch, and it reuses that same AWS config for signed CodeDeploy deployment-history lookups. For `ecsService`, the provider inspects both newest running tasks and recently stopped service tasks, then returns the same bounded newest-first `entries[]` envelope so failed rollouts and crash loops can still expose container logs even when no task is currently running.
 
 Current provider-backed recent-log support includes:
 - `ecsService`
