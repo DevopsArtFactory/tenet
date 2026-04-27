@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -198,6 +199,8 @@ func filterAuthorizedApplicationOverviews(applications []catalog.ApplicationOver
 	return filtered
 }
 
+const operatorContextUnmatchedDeploymentLimit = 25
+
 type operatorContextResponse struct {
 	TrustedHeaders   operatorContextTrustedHeaders      `json:"trustedHeaders"`
 	Identity         requestactor.AuthenticatedIdentity `json:"identity"`
@@ -220,15 +223,28 @@ type operatorContextRoles struct {
 }
 
 type operatorContextDeploymentAccess struct {
-	Enforced  bool     `json:"enforced"`
-	Forwarded bool     `json:"forwarded"`
-	Names     []string `json:"names,omitempty"`
+	Enforced  bool                          `json:"enforced"`
+	Forwarded bool                          `json:"forwarded"`
+	Names     []string                      `json:"names,omitempty"`
+	Summary   *operatorContextAccessSummary `json:"summary,omitempty"`
+}
+
+type operatorContextAccessSummary struct {
+	Available         bool     `json:"available"`
+	UnavailableReason string   `json:"unavailableReason,omitempty"`
+	ForwardedCount    int      `json:"forwardedCount"`
+	MatchedCount      int      `json:"matchedCount"`
+	UnmatchedNames    []string `json:"unmatchedNames,omitempty"`
+	AccountCount      int      `json:"accountCount,omitempty"`
+	ProjectCount      int      `json:"projectCount,omitempty"`
+	EnvironmentCount  int      `json:"environmentCount,omitempty"`
 }
 
 func buildOperatorContextResponse(r *http.Request, options Options) operatorContextResponse {
 	identity := requestactor.AuthenticatedIdentityFromContext(r.Context())
 	roles := requestactor.AuthenticatedRolesFromContext(r.Context())
 	deployments := requestactor.AuthorizedDeploymentsFromContext(r.Context())
+	summary := buildOperatorContextAccessSummary(r.Context(), options, deployments)
 	return operatorContextResponse{
 		TrustedHeaders: operatorContextTrustedHeaders{
 			Enabled:                             options.TrustAuthenticatedHeaders,
@@ -247,8 +263,68 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 			Enforced:  options.RequireDeploymentReadAuthorization,
 			Forwarded: len(deployments.Names) > 0,
 			Names:     deployments.Names,
+			Summary:   summary,
 		},
 	}
+}
+
+func buildOperatorContextAccessSummary(ctx context.Context, options Options, deployments requestactor.AuthorizedDeployments) *operatorContextAccessSummary {
+	if !options.RequireDeploymentReadAuthorization || len(deployments.Names) == 0 {
+		return nil
+	}
+	summary := &operatorContextAccessSummary{ForwardedCount: len(deployments.Names)}
+	if options.CatalogPlacements == nil {
+		summary.UnavailableReason = "catalog placement provider is unavailable"
+		return summary
+	}
+	placements, err := options.CatalogPlacements(ctx)
+	if err != nil {
+		summary.UnavailableReason = "catalog placement lookup failed"
+		return summary
+	}
+
+	forwarded := make(map[string]struct{}, len(deployments.Names))
+	for _, name := range deployments.Names {
+		forwarded[name] = struct{}{}
+	}
+	matched := make(map[string]catalog.PlacementView)
+	for _, placement := range placements {
+		if _, ok := forwarded[placement.DeploymentName]; ok {
+			matched[placement.DeploymentName] = placement
+		}
+	}
+	unmatched := make([]string, 0, len(deployments.Names))
+	for _, name := range deployments.Names {
+		if _, ok := matched[name]; !ok {
+			unmatched = append(unmatched, name)
+		}
+	}
+
+	accounts := map[string]struct{}{}
+	projects := map[string]struct{}{}
+	environments := map[string]struct{}{}
+	for _, placement := range matched {
+		if placement.AWSAccountID != "" {
+			accounts[placement.AWSAccountID] = struct{}{}
+		}
+		if placement.AppRef != "" {
+			projects[placement.AppRef] = struct{}{}
+		}
+		if placement.EnvironmentRef != "" {
+			environments[placement.EnvironmentRef] = struct{}{}
+		}
+	}
+	sort.Strings(unmatched)
+	if len(unmatched) > operatorContextUnmatchedDeploymentLimit {
+		unmatched = unmatched[:operatorContextUnmatchedDeploymentLimit]
+	}
+	summary.Available = true
+	summary.MatchedCount = len(matched)
+	summary.UnmatchedNames = unmatched
+	summary.AccountCount = len(accounts)
+	summary.ProjectCount = len(projects)
+	summary.EnvironmentCount = len(environments)
+	return summary
 }
 
 type deploymentOverviewCounts struct {

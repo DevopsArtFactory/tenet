@@ -152,6 +152,103 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if deploymentAccess["enforced"] != true || deploymentAccess["forwarded"] != true || !reflect.DeepEqual(deploymentAccess["names"], []any{"payments-api-prod", "worker-prod"}) {
 		t.Fatalf("unexpected deploymentAccess payload: %#v", deploymentAccess)
 	}
+	summary, ok := deploymentAccess["summary"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected explicit unavailable deploymentAccess summary, got %#v", deploymentAccess["summary"])
+	}
+	if summary["available"] != false || summary["unavailableReason"] != "catalog placement provider is unavailable" || summary["forwardedCount"] != float64(2) {
+		t.Fatalf("unexpected unavailable deploymentAccess summary: %#v", summary)
+	}
+}
+
+func TestRouterOperatorContextSummarizesMatchedAndUnmatchedDeploymentAccess(t *testing.T) {
+	router := NewRouter(Options{
+		TrustAuthenticatedHeaders:          true,
+		RequireDeploymentReadAuthorization: true,
+		CatalogPlacements: func(context.Context) ([]catalog.PlacementView, error) {
+			return []catalog.PlacementView{
+				{DeploymentName: "payments-api-prod", AppRef: "payments", EnvironmentRef: "prod", AWSAccountID: "123456789012"},
+				{DeploymentName: "payments-worker-prod", AppRef: "payments", EnvironmentRef: "prod", AWSAccountID: "123456789012"},
+				{DeploymentName: "unforwarded-api", AppRef: "internal", EnvironmentRef: "staging", AWSAccountID: "210987654321"},
+			}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+	req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+	req.Header.Add(requestactor.AuthorizedDeploymentsHeader, "payments-api-prod, stale-api")
+	req.Header.Add(requestactor.AuthorizedDeploymentsHeader, "payments-worker-prod, archived-api")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode operator context response: %v", err)
+	}
+	deploymentAccess := body["deploymentAccess"].(map[string]any)
+	if !reflect.DeepEqual(deploymentAccess["names"], []any{"payments-api-prod", "stale-api", "payments-worker-prod", "archived-api"}) {
+		t.Fatalf("expected forwarded deployment names to stay raw and ordered, got %#v", deploymentAccess["names"])
+	}
+	summary, ok := deploymentAccess["summary"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected deploymentAccess summary object, got %#v", deploymentAccess["summary"])
+	}
+	if summary["available"] != true {
+		t.Fatalf("expected available summary, got %#v", summary)
+	}
+	expected := map[string]any{
+		"forwardedCount":   float64(4),
+		"matchedCount":     float64(2),
+		"accountCount":     float64(1),
+		"projectCount":     float64(1),
+		"environmentCount": float64(1),
+	}
+	for key, want := range expected {
+		if summary[key] != want {
+			t.Fatalf("expected summary[%s]=%#v, got %#v in %#v", key, want, summary[key], summary)
+		}
+	}
+	if !reflect.DeepEqual(summary["unmatchedNames"], []any{"archived-api", "stale-api"}) {
+		t.Fatalf("expected deterministic unmatched names, got %#v", summary["unmatchedNames"])
+	}
+	if _, ok := summary["unavailableReason"]; ok {
+		t.Fatalf("expected no unavailable reason for available summary, got %#v", summary)
+	}
+}
+
+func TestRouterOperatorContextSummaryReportsCatalogLookupFailure(t *testing.T) {
+	router := NewRouter(Options{
+		TrustAuthenticatedHeaders:          true,
+		RequireDeploymentReadAuthorization: true,
+		CatalogPlacements: func(context.Context) ([]catalog.PlacementView, error) {
+			return nil, errors.New("catalog unavailable")
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+	req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+	req.Header.Add(requestactor.AuthorizedDeploymentsHeader, "payments-api-prod")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode operator context response: %v", err)
+	}
+	deploymentAccess := body["deploymentAccess"].(map[string]any)
+	summary, ok := deploymentAccess["summary"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected deploymentAccess summary object, got %#v", deploymentAccess["summary"])
+	}
+	if summary["available"] != false || summary["unavailableReason"] != "catalog placement lookup failed" || summary["forwardedCount"] != float64(1) {
+		t.Fatalf("unexpected catalog failure summary: %#v", summary)
+	}
 }
 
 func TestRouterOperatorContextIsExplicitWhenTrustedHeadersAreUnavailable(t *testing.T) {
