@@ -177,9 +177,9 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 		}
 		entries := formatConsoleEntries(consoles, s.maxEntries())
 		return availableResult(req, SourceEC2Console, entries), nil
-	case "codeDeployDeploymentGroup", "productionListener", "testListener", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup":
+	case "codeDeployApplication", "codeDeployDeploymentGroup", "productionListener", "testListener", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup":
 		resourceName := req.ResourceName
-		if req.ResourceType != "codeDeployDeploymentGroup" {
+		if req.ResourceType != "codeDeployApplication" && req.ResourceType != "codeDeployDeploymentGroup" {
 			resourceName = strings.TrimSpace(req.BackingResourceName)
 			if resourceName == "" {
 				return unavailableResult(req, UnavailableReasonNoLogSource), nil
@@ -194,6 +194,7 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 		}
 		events, err := list(ctx, CodeDeployRequest{
 			DeploymentName:  req.DeploymentName,
+			ResourceType:    req.ResourceType,
 			ResourceName:    resourceName,
 			Region:          req.Region,
 			TargetAccountID: req.TargetAccountID,
@@ -236,6 +237,7 @@ type ASGRequest struct {
 
 type CodeDeployRequest struct {
 	DeploymentName  string
+	ResourceType    string
 	ResourceName    string
 	Region          string
 	TargetAccountID string
@@ -452,7 +454,13 @@ func (s Service) listCodeDeployEventsFromAWS(ctx context.Context, req CodeDeploy
 	if err != nil {
 		return nil, err
 	}
-	infos, err := listCodeDeployDeploymentInfos(ctx, clients.Config, req.Region, codeDeployApplicationName(req.DeploymentName), strings.TrimSpace(req.ResourceName), s.maxEntries())
+	applicationName := codeDeployApplicationName(req.DeploymentName)
+	deploymentGroupName := strings.TrimSpace(req.ResourceName)
+	if req.ResourceType == "codeDeployApplication" {
+		applicationName = strings.TrimSpace(req.ResourceName)
+		deploymentGroupName = ""
+	}
+	infos, err := listCodeDeployDeploymentInfos(ctx, clients.Config, req.Region, applicationName, deploymentGroupName, s.maxEntries())
 	if err != nil {
 		return nil, err
 	}
@@ -742,13 +750,7 @@ func listCodeDeployDeploymentIDs(ctx context.Context, cfg aws.Config, region, ap
 	nextToken := ""
 	for len(ids) < limit {
 		var response codeDeployListDeploymentsOutput
-		payload := map[string]any{
-			"applicationName":     strings.TrimSpace(applicationName),
-			"deploymentGroupName": strings.TrimSpace(deploymentGroupName),
-		}
-		if nextToken != "" {
-			payload["nextToken"] = nextToken
-		}
+		payload := codeDeployListDeploymentsPayload(applicationName, deploymentGroupName, nextToken)
 		if err := doSignedCodeDeployJSONRequest(ctx, cfg, region, "CodeDeploy_20141006.ListDeployments", payload, &response); err != nil {
 			return nil, err
 		}
@@ -776,6 +778,19 @@ func batchGetCodeDeployDeployments(ctx context.Context, cfg aws.Config, region s
 		return nil, err
 	}
 	return response.DeploymentsInfo, nil
+}
+
+func codeDeployListDeploymentsPayload(applicationName, deploymentGroupName, nextToken string) map[string]any {
+	payload := map[string]any{
+		"applicationName": strings.TrimSpace(applicationName),
+	}
+	if deploymentGroupName := strings.TrimSpace(deploymentGroupName); deploymentGroupName != "" {
+		payload["deploymentGroupName"] = deploymentGroupName
+	}
+	if nextToken != "" {
+		payload["nextToken"] = nextToken
+	}
+	return payload
 }
 
 func doSignedCodeDeployJSONRequest(ctx context.Context, cfg aws.Config, region, target string, payload any, out any) error {

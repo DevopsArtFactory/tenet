@@ -470,6 +470,7 @@ func TestServiceRecent(t *testing.T) {
 		}
 		if !reflect.DeepEqual(gotLookup, CodeDeployRequest{
 			DeploymentName:  "payments-api-staging",
+			ResourceType:    "codeDeployDeploymentGroup",
 			ResourceName:    "payments-api-staging-codedeploy-group",
 			Region:          "ap-northeast-2",
 			TargetAccountID: "123456789012",
@@ -490,6 +491,57 @@ func TestServiceRecent(t *testing.T) {
 		}
 		if !reflect.DeepEqual(result, want) {
 			t.Fatalf("unexpected CodeDeploy resource logs result: %+v", result)
+		}
+	})
+
+	t.Run("codeDeploy application returns application-wide rollout history entries", func(t *testing.T) {
+		var gotLookup CodeDeployRequest
+		service := NewService(Options{
+			MaxEntries: 1,
+			ListCodeDeployEvents: func(ctx context.Context, req CodeDeployRequest) ([]CodeDeployEvent, error) {
+				gotLookup = req
+				return []CodeDeployEvent{
+					{Timestamp: time.Date(2026, 4, 18, 9, 20, 0, 0, time.UTC), Message: "Status: Succeeded — application rollout completed", DeploymentID: "d-application"},
+					{Timestamp: time.Date(2026, 4, 18, 9, 18, 0, 0, time.UTC), Message: "Status: InProgress — older deployment group rollout", DeploymentID: "d-older"},
+				}, nil
+			},
+		})
+
+		result, err := service.Recent(context.Background(), Request{
+			DeploymentName:   "payments-api-staging",
+			ResourceType:     "codeDeployApplication",
+			ResourceName:     "payments-api-staging-codedeploy-app",
+			ControlAccountID: "123456789012",
+			TargetAccountID:  "123456789012",
+			Region:           "ap-northeast-2",
+		})
+		if err != nil {
+			t.Fatalf("Recent returned error: %v", err)
+		}
+		if !reflect.DeepEqual(gotLookup, CodeDeployRequest{
+			DeploymentName:  "payments-api-staging",
+			ResourceType:    "codeDeployApplication",
+			ResourceName:    "payments-api-staging-codedeploy-app",
+			Region:          "ap-northeast-2",
+			TargetAccountID: "123456789012",
+		}) {
+			t.Fatalf("unexpected CodeDeploy application lookup request: %+v", gotLookup)
+		}
+		want := Result{
+			DeploymentName: "payments-api-staging",
+			ResourceType:   "codeDeployApplication",
+			ResourceName:   "payments-api-staging-codedeploy-app",
+			LookupContext:  expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
+			Available:      true,
+			Source:         SourceCodeDeploy,
+			Entries: []Entry{{
+				Timestamp: "2026-04-18T09:20:00Z",
+				Message:   "Status: Succeeded — application rollout completed",
+				Stream:    "d-application",
+			}},
+		}
+		if !reflect.DeepEqual(result, want) {
+			t.Fatalf("unexpected CodeDeploy application recent logs result: %+v", result)
 		}
 	})
 
@@ -520,6 +572,7 @@ func TestServiceRecent(t *testing.T) {
 		}
 		if !reflect.DeepEqual(gotLookup, CodeDeployRequest{
 			DeploymentName:  "payments-api-staging",
+			ResourceType:    "testListener",
 			ResourceName:    "payments-api-staging-codedeploy-group",
 			Region:          "ap-northeast-2",
 			TargetAccountID: "123456789012",
@@ -1154,6 +1207,28 @@ func (f *fakeCloudWatchLogEventsClient) GetLogEvents(ctx context.Context, input 
 		return nil, &cwtypes.ResourceNotFoundException{Message: aws.String("stream not found")}
 	}
 	return &cloudwatchlogs.GetLogEventsOutput{Events: append([]cwtypes.OutputLogEvent(nil), f.eventsByStream[streamName]...)}, nil
+}
+
+func TestCodeDeployListDeploymentsPayloadOmitsEmptyDeploymentGroup(t *testing.T) {
+	payload := codeDeployListDeploymentsPayload(" payments-api-staging-codedeploy-app ", " ", "token-1")
+
+	if payload["applicationName"] != "payments-api-staging-codedeploy-app" {
+		t.Fatalf("unexpected applicationName: %#v", payload["applicationName"])
+	}
+	if _, ok := payload["deploymentGroupName"]; ok {
+		t.Fatalf("expected application-wide CodeDeploy lookup to omit deploymentGroupName, got %#v", payload)
+	}
+	if payload["nextToken"] != "token-1" {
+		t.Fatalf("unexpected nextToken: %#v", payload["nextToken"])
+	}
+
+	groupPayload := codeDeployListDeploymentsPayload("payments-api-staging-codedeploy-app", " payments-api-staging-codedeploy-group ", "")
+	if groupPayload["deploymentGroupName"] != "payments-api-staging-codedeploy-group" {
+		t.Fatalf("expected deployment-group scoped lookup to include deploymentGroupName, got %#v", groupPayload)
+	}
+	if _, ok := groupPayload["nextToken"]; ok {
+		t.Fatalf("expected empty nextToken to be omitted, got %#v", groupPayload)
+	}
 }
 
 func TestServiceAWSClientCache(t *testing.T) {
