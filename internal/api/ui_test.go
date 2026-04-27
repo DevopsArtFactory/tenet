@@ -1785,6 +1785,12 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "bootstrap_resource_ui=$(curl -fsS \"http://$HOST:$PORT/?page=resource&deployment=payments-api-prod&resourceType=userDataBootstrapSource&resourceId=userDataBootstrapSource%3A%3Afile%3Auserdata%2Fpayments-api-prod.sh%3A%3ANormalized+userdata+bootstrap+source+for+candidate+EC2+capacity\")") {
 		t.Fatalf("expected smoke-local.sh to fetch bookmarkable bootstrap resource page")
 	}
+	if !strings.Contains(text, "codedeploy_application_resource_ui=$(curl -fsS \"http://$HOST:$PORT/?page=resource&deployment=payments-api-staging&resourceType=codeDeployApplication&resourceId=codeDeployApplication%3A%3Apayments-api-staging-codedeploy-app%3A%3ACodeDeploy+application+coordinating+ECS+traffic+shifting\")") {
+		t.Fatalf("expected smoke-local.sh to fetch bookmarkable CodeDeploy application resource page")
+	}
+	if !strings.Contains(text, "blue_task_set_target_group_resource_ui=$(curl -fsS \"http://$HOST:$PORT/?page=resource&deployment=payments-api-staging&resourceType=blueTaskSetTargetGroup&resourceId=blueTaskSetTargetGroup%3A%3Apayments-api-staging-blue%3A%3ABlue+task+set+target+group+CodeDeploy+treats+as+the+live+ECS+traffic+destination\")") {
+		t.Fatalf("expected smoke-local.sh to fetch bookmarkable CodeDeploy blue task-set target-group resource page")
+	}
 	if !strings.Contains(text, "bootstrap_resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=userDataBootstrapSource&resourceName=git%3Auserdata%2Fpayments-api-prod.sh\")") {
 		t.Fatalf("expected smoke-local.sh to fetch bootstrap-source recent logs payload")
 	}
@@ -1845,7 +1851,7 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"href: buildPageSectionURL('account', sectionID, { accountId: accountID }),\" in account_ui, account_ui") {
 		t.Fatalf("expected smoke-local.sh to assert account section link builder contract")
 	}
-	if !strings.Contains(text, "for label, body in ((\"resource_ui\", resource_ui), (\"ecs_resource_ui\", ecs_resource_ui), (\"bootstrap_resource_ui\", bootstrap_resource_ui)):") {
+	if !strings.Contains(text, "for label, body in ((\"resource_ui\", resource_ui), (\"ecs_resource_ui\", ecs_resource_ui), (\"bootstrap_resource_ui\", bootstrap_resource_ui), (\"codedeploy_application_resource_ui\", codedeploy_application_resource_ui), (\"blue_task_set_target_group_resource_ui\", blue_task_set_target_group_resource_ui)):") {
 		t.Fatalf("expected smoke-local.sh to assert all bookmarkable resource pages")
 	}
 	if !strings.Contains(text, "\"return 'Account detail';\",") || !strings.Contains(text, "\"return `GET /v1/overview/accounts/${accountID}`;\",") {
@@ -1902,7 +1908,7 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"eventsSection.id = 'application-runtime-events';\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page runtime-events anchor contract")
 	}
-	if !strings.Contains(text, "for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui):") {
+	if !strings.Contains(text, "for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_application_resource_ui, blue_task_set_target_group_resource_ui):") {
 		t.Fatalf("expected smoke-local.sh to iterate over all resource page payloads")
 	}
 	if !strings.Contains(text, "assert \"const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);\" in body, body") {
