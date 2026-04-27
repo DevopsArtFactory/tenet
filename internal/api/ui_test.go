@@ -2434,7 +2434,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		"\"renderResourceDetailPage(resourceState.detail, resourceState);\",",
 		"\"return fetchDeploymentDetail(deploymentName)\",",
 		"assert_fragments(\"resource_ui\", body, operator_read_auth_fragments + (",
-		"\"const createResourceLogsActions = (section, deploymentName, resource, isLoading = false) => [\",",
+		"\"const createResourceLogsActions = (section, deploymentName, resource, isLoading = false, detail = null) => [\",",
 		"\"'Refresh recent logs'\",",
 		"\"const buildResourceLogsRoute = (deploymentName, resource) => {\",",
 		"\"const resourceLogsReadRoute = (deploymentName, resource) => `GET ${buildResourceLogsRoute(deploymentName, resource)}`;\",",
