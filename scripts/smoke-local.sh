@@ -867,6 +867,7 @@ assert "return `GET /v1/overview/accounts/${accountID}`;" in ui, ui
 assert 'Open account' in ui, ui
 assert 'Open application' in ui, ui
 assert 'Open audit log' in ui, ui
+assert "buildPageURL('drift', { deployment: deployment.name })" in ui, ui
 assert "buildPageURL('audit', { deployment: deployment.name })" in ui, ui
 assert 'Refresh applications overview' in ui, ui
 assert 'Refreshing applications overview from GET /v1/overview/applications…' in ui, ui

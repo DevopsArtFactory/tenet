@@ -501,6 +501,8 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"createNavLink(buildPageURL('account', { accountId: deployment.awsAccountId }), 'Open account', '_self')",
 		"Open application",
 		"createNavLink(buildPageURL('application', { deployment: deployment.name }), 'Open application', '_self')",
+		"Drift view",
+		"createNavLink(buildPageURL('drift', { deployment: deployment.name }), 'Drift view', '_self')",
 		"const renderAccountDetailPage = (account, accountState = null) => {",
 		"Account deployment overview",
 		"Account JSON",
