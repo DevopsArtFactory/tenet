@@ -924,6 +924,10 @@ assert_fragments("account_ui", account_ui, operator_read_auth_fragments + (
     "renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);",
 ))
 assert_fragments("ui", ui, (
+    "Operator context",
+    "const operatorContextRoute = () => '/v1/operator/context';",
+    "const operatorContextReadRoute = () => 'GET /v1/operator/context';",
+    "loadOperatorContextBanner().catch(() => {});",
     "fetchApplicationsOverview()",
     "const applicationsOverviewReadRoute = () => 'GET /v1/overview/applications';",
     "const createApplicationsOverviewActions = (overviewState = null) => [",
