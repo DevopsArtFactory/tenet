@@ -900,6 +900,9 @@ assert 'Operator context' in ui, ui
 assert "const operatorContextRoute = () => '/v1/operator/context';" in ui, ui
 assert "const operatorContextReadRoute = () => 'GET /v1/operator/context';" in ui, ui
 assert "loadOperatorContextBanner().catch(() => {});" in ui, ui
+assert "loadOperatorContextBanner({ refresh: true });" in ui, ui
+assert 'Refresh context' in ui, ui
+assert 'Last refresh failed:' in ui, ui
 assert '/v1/overview/applications' in ui, ui
 assert '/v1/overview/applications/${encodeURIComponent(deploymentName)}' in ui, ui
 assert "const fetchApplicationsOverview = () => fetchEmbeddedReadRouteJSON('/v1/overview/applications', {" in ui, ui
