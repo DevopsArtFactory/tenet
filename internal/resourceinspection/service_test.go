@@ -435,6 +435,47 @@ func TestServiceInspect(t *testing.T) {
 							}},
 						},
 					}, nil
+				case "blueTaskSetTargetGroup":
+					return TrafficRoutingInspection{
+						Kind:           req.ResourceType,
+						DisplayName:    "Blue task set target group",
+						InspectionMode: "live",
+						Summary:        req.ResourceDescription,
+						TargetGroup: &TargetGroupInspection{
+							TargetGroupName:            "payments-api-prod-blue",
+							TargetGroupARN:             "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-prod-blue/abc123",
+							Protocol:                   "HTTP",
+							Port:                       8080,
+							TargetType:                 "ip",
+							LoadBalancerARNs:           []string{"arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/payments/abc123"},
+							HealthCheckProtocol:        "HTTP",
+							HealthCheckPort:            "traffic-port",
+							HealthCheckPath:            "/healthz",
+							HealthCheckIntervalSeconds: 30,
+							HealthCheckTimeoutSeconds:  5,
+							HealthyThresholdCount:      2,
+							UnhealthyThresholdCount:    3,
+							TargetHealthCounts:         map[string]int{"healthy": 2, "unhealthy": 1},
+							Targets: []TargetHealthInspection{
+								{TargetID: "10.0.1.10", Port: 8080, State: "healthy"},
+								{TargetID: "10.0.2.10", Port: 8080, State: "unhealthy", Reason: "Target.ResponseCodeMismatch", Description: "Health checks failed"},
+							},
+						},
+					}, nil
+				case "greenTaskSetTargetGroup":
+					return TrafficRoutingInspection{
+						Kind:           req.ResourceType,
+						DisplayName:    "Green task set target group",
+						InspectionMode: "live",
+						Summary:        req.ResourceDescription,
+						TargetGroup: &TargetGroupInspection{
+							TargetGroupName: "payments-api-prod-green",
+							TargetGroupARN:  "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-prod-green/def456",
+							Protocol:        "HTTP",
+							Port:            8080,
+							TargetType:      "ip",
+						},
+					}, nil
 				default:
 					t.Fatalf("unexpected traffic routing provider request: %+v", req)
 					return TrafficRoutingInspection{}, nil
@@ -467,6 +508,16 @@ func TestServiceInspect(t *testing.T) {
 				resourceName: "payments-api-prod-test-listener",
 				summary:      "Test listener CodeDeploy uses to validate the replacement ECS task set before promotion (style: linear)",
 			},
+			{
+				resourceType: "blueTaskSetTargetGroup",
+				resourceName: "payments-api-prod-blue",
+				summary:      "Blue task set target group CodeDeploy treats as the live ECS traffic destination (style: linear)",
+			},
+			{
+				resourceType: "greenTaskSetTargetGroup",
+				resourceName: "payments-api-prod-green",
+				summary:      "Green task set target group CodeDeploy warms before shifting ECS traffic (style: linear)",
+			},
 		} {
 			result, err := service.Inspect(context.Background(), Request{
 				DeploymentName:      "payments-api-prod",
@@ -489,6 +540,21 @@ func TestServiceInspect(t *testing.T) {
 			}
 			if result.TrafficRoutingResource == nil || result.TrafficRoutingResource.InspectionMode != "live" {
 				t.Fatalf("expected live traffic routing payload for %s/%s, got %+v", tc.resourceType, tc.resourceName, result)
+			}
+			if tc.resourceType == "blueTaskSetTargetGroup" {
+				targetGroup := result.TrafficRoutingResource.TargetGroup
+				if targetGroup == nil {
+					t.Fatalf("expected live targetGroup payload, got %+v", result.TrafficRoutingResource)
+				}
+				if targetGroup.TargetGroupName != "payments-api-prod-blue" || targetGroup.Protocol != "HTTP" || targetGroup.Port != 8080 || targetGroup.TargetType != "ip" {
+					t.Fatalf("unexpected target group metadata: %+v", targetGroup)
+				}
+				if !reflect.DeepEqual(targetGroup.TargetHealthCounts, map[string]int{"healthy": 2, "unhealthy": 1}) {
+					t.Fatalf("unexpected target health counts: %+v", targetGroup.TargetHealthCounts)
+				}
+				if len(targetGroup.Targets) != 2 || targetGroup.Targets[1].Reason != "Target.ResponseCodeMismatch" {
+					t.Fatalf("unexpected target health rows: %+v", targetGroup.Targets)
+				}
 			}
 		}
 		if !reflect.DeepEqual(calls, []call{
@@ -524,6 +590,24 @@ func TestServiceInspect(t *testing.T) {
 				ResourceType:        "testListener",
 				ResourceName:        "payments-api-prod-test-listener",
 				ResourceDescription: "Test listener CodeDeploy uses to validate the replacement ECS task set before promotion (style: linear)",
+				Region:              "ap-northeast-2",
+				TargetAccountID:     "123456789012",
+				ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
+			},
+			{
+				DeploymentName:      "payments-api-prod",
+				ResourceType:        "blueTaskSetTargetGroup",
+				ResourceName:        "payments-api-prod-blue",
+				ResourceDescription: "Blue task set target group CodeDeploy treats as the live ECS traffic destination (style: linear)",
+				Region:              "ap-northeast-2",
+				TargetAccountID:     "123456789012",
+				ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
+			},
+			{
+				DeploymentName:      "payments-api-prod",
+				ResourceType:        "greenTaskSetTargetGroup",
+				ResourceName:        "payments-api-prod-green",
+				ResourceDescription: "Green task set target group CodeDeploy warms before shifting ECS traffic (style: linear)",
 				Region:              "ap-northeast-2",
 				TargetAccountID:     "123456789012",
 				ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
@@ -569,20 +653,6 @@ func TestServiceInspect(t *testing.T) {
 				displayName:  "Candidate target group",
 				summary:      "Candidate target group Tenet will register and warm before traffic shifting",
 			},
-			{
-				name:         "blue task set target group",
-				resourceType: "blueTaskSetTargetGroup",
-				resourceName: "payments-api-staging-blue",
-				displayName:  "Blue task set target group",
-				summary:      "Blue task set target group CodeDeploy treats as the live ECS traffic destination (style: linear; qualifiers: min healthy 80% and warmup 45s)",
-			},
-			{
-				name:         "green task set target group",
-				resourceType: "greenTaskSetTargetGroup",
-				resourceName: "payments-api-staging-green",
-				displayName:  "Green task set target group",
-				summary:      "Green task set target group CodeDeploy warms before shifting ECS traffic (style: linear; qualifiers: min healthy 80% and warmup 45s)",
-			},
 		}
 
 		for _, tc := range testCases {
@@ -617,6 +687,36 @@ func TestServiceInspect(t *testing.T) {
 					t.Fatalf("unexpected weighted target group summary inspection result: %+v", result)
 				}
 			})
+		}
+	})
+
+	t.Run("CodeDeploy task-set target-group live lookup falls back to summary when AWS is unavailable", func(t *testing.T) {
+		service := NewService(Options{
+			InspectTrafficRoutingResource: func(ctx context.Context, req TrafficRoutingRequest) (TrafficRoutingInspection, error) {
+				if req.ResourceType != "blueTaskSetTargetGroup" {
+					t.Fatalf("unexpected traffic routing provider request: %+v", req)
+				}
+				return TrafficRoutingInspection{}, resourceaws.NewUnavailableError(resourceaws.UnavailableReasonAWSUnavailable)
+			},
+		})
+
+		result, err := service.Inspect(context.Background(), Request{
+			DeploymentName:      "payments-api-staging",
+			ResourceType:        "blueTaskSetTargetGroup",
+			ResourceName:        "payments-api-staging-blue",
+			ResourceDescription: "Blue task set target group CodeDeploy treats as the live ECS traffic destination",
+			ControlAccountID:    "123456789012",
+			TargetAccountID:     "123456789012",
+			Region:              "ap-northeast-2",
+		})
+		if err != nil {
+			t.Fatalf("Inspect returned error: %v", err)
+		}
+		if !result.Available || result.Source != SourceRolloutSummary {
+			t.Fatalf("expected local-friendly summary fallback, got %+v", result)
+		}
+		if result.TrafficRoutingResource == nil || result.TrafficRoutingResource.InspectionMode != "summary_only" || result.TrafficRoutingResource.TargetGroup != nil {
+			t.Fatalf("expected summary-only task-set target-group payload without live fields, got %+v", result.TrafficRoutingResource)
 		}
 	})
 
