@@ -31,6 +31,8 @@ The goal is fast triage, not completeness. The denser account/group deployment s
 
 Initial auth failures on the landing read now follow the same shared operator-read contract as the other bookmarkable operator pages. `401 Unauthorized` on `/` tells the operator to retry the same bookmarkable page through the trusted front door so authenticated identity can be provided, while `403 Forbidden` explains that identity was recognized but the current operator is not authorized for that route.
 
+The `GET /v1/operator/context` endpoint behind the embedded banner may also return diagnostic `deploymentAccess.summary` JSON when Tenet can compare a forwarded deployment allowlist with catalog placements. Use the matched/unmatched counts and unmatched-name evidence to troubleshoot stale front-door allowlists; the summary is not an authorization source and the UI must not make client-side access decisions from it.
+
 Initial auth failures on the secondary account drill-down now follow that same shared operator-read contract. `401 Unauthorized` on `/?page=account&accountId={awsAccountId}` tells the operator to retry the same bookmarkable page through the trusted front door so authenticated identity can be provided, while `403 Forbidden` explains that identity was recognized but the current operator is not authorized for that route or deployment.
 
 ### 1b. Audit timeline

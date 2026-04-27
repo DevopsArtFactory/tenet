@@ -66,7 +66,7 @@ Current behavior:
 The first page now shows only application-level rows plus search/filter controls, backed by `/v1/overview/applications`.
 
 Current applications-overview behavior:
-- renders a compact `Operator context` banner above the toolbar, backed by `GET /v1/operator/context`, so operators can confirm trusted front-door identity, read/write roles, deployment allowlist, and trusted-header mode before interpreting guarded route results
+- renders a compact `Operator context` banner above the toolbar, backed by `GET /v1/operator/context`, so operators can confirm trusted front-door identity, read/write roles, deployment allowlist, and trusted-header mode before interpreting guarded route results; the same backing endpoint may also include diagnostic `deploymentAccess.summary` JSON that reports matched versus unmatched forwarded deployment names for raw endpoint troubleshooting, but that summary is not a client-side authorization decision
 - keeps the existing bookmarkable `q` / `sync` / `account` query state as the primary first-page triage surface
 - exposes an in-place `Refresh applications overview` control that re-runs only `GET /v1/overview/applications`, disables only while that overview fetch is active, and keeps the same bookmarkable applications URL/query state stable
 - keeps the current applications summary plus visible rows rendered with explicit loading/error copy while that in-place refresh is running or fails
