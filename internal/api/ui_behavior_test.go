@@ -3295,6 +3295,9 @@ async function render(fetchImpl) {
   refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
   if (!refreshEvents) throw new Error('expected runtime-events refresh button after initial response');
   if (refreshEvents.disabled) throw new Error('expected runtime-events refresh button enabled after initial fetch settles');
+  let runtimeEventLinks = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'A');
+  const driftHandoff = runtimeEventLinks.find((node) => node.textContent === 'Open drift view' && node.href === '/?page=drift&deployment=payments-api-staging');
+  if (!driftHandoff || driftHandoff.target !== '_self' || driftHandoff.rel) throw new Error('expected runtime-events managed-drift handoff to open the drift workspace in shell');
 
   refreshEvents.dispatch('click');
   await settle();
@@ -3316,6 +3319,8 @@ async function render(fetchImpl) {
   buttons = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
   refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
   if (!refreshEvents || refreshEvents.disabled) throw new Error('expected runtime-events refresh button re-enabled after refresh completes');
+  runtimeEventLinks = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'A');
+  if (runtimeEventLinks.find((node) => node.textContent === 'Open drift view' && node.href === '/?page=drift&deployment=payments-api-staging')) throw new Error('expected zero-drift runtime-events refresh to remove drift workspace handoff');
 
   const emptyView = await render((url) => {
     if (url === detailURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
@@ -3327,6 +3332,8 @@ async function render(fetchImpl) {
   buttons = collectNodes(emptyView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
   refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
   if (!refreshEvents || refreshEvents.disabled) throw new Error('expected runtime-events refresh button enabled in empty state');
+  const emptyLinks = collectNodes(emptyView.document.getElementById('accounts'), (node) => node.tagName === 'A');
+  if (emptyLinks.find((node) => node.textContent === 'Open drift view' && node.href === '/?page=drift&deployment=payments-api-staging')) throw new Error('expected empty runtime-events state not to show drift workspace handoff');
 
   const unavailableView = await render((url) => {
     if (url === detailURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });

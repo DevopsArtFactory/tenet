@@ -3307,13 +3307,30 @@
           return left.index - right.index;
         })
         .map(({ event }) => event);
-      const createDeploymentEventsActions = (section, deploymentName, isLoading = false) => [
-        createRefreshButton(
-          'Refresh runtime events',
-          isLoading || !deploymentName,
-          () => renderDeploymentEventsSection(section, deploymentName, { force: true }).catch(() => {}),
-        ),
-      ];
+      const deploymentEventsManagedDriftCounts = (result) => {
+        const summary = result?.managedDriftSummary || {};
+        const eventRows = (result?.events || []).flatMap((event) => Array.isArray(event?.managedDrift) ? event.managedDrift : []);
+        return {
+          total: Number.isFinite(Number(summary.total)) ? Number(summary.total) : eventRows.length,
+          high: Number.isFinite(Number(summary.high)) ? Number(summary.high) : eventRows.filter((row) => String(row?.severity || '').toLowerCase() === 'high').length,
+          medium: Number.isFinite(Number(summary.medium)) ? Number(summary.medium) : eventRows.filter((row) => String(row?.severity || '').toLowerCase() === 'medium').length,
+          low: Number.isFinite(Number(summary.low)) ? Number(summary.low) : eventRows.filter((row) => String(row?.severity || '').toLowerCase() === 'low').length,
+        };
+      };
+      const deploymentEventsHasManagedDrift = (result) => deploymentEventsManagedDriftCounts(result).total > 0;
+      const createDeploymentEventsActions = (section, deploymentName, isLoading = false, result = null) => {
+        const actions = [
+          createRefreshButton(
+            'Refresh runtime events',
+            isLoading || !deploymentName,
+            () => renderDeploymentEventsSection(section, deploymentName, { force: true }).catch(() => {}),
+          ),
+        ];
+        if (!isLoading && deploymentName && deploymentEventsHasManagedDrift(result)) {
+          actions.push(createNavLink(buildPageURL('drift', { deployment: deploymentName }), 'Open drift view', '_self'));
+        }
+        return actions;
+      };
       const renderDeploymentEventsState = (section, deploymentName, text, className = '', detailText = '', isLoading = false) => {
         const heading = createDetailSectionHeader('Controller runtime events', createDeploymentEventsActions(section, deploymentName, isLoading));
         const intro = createDeploymentEventsIntro();
@@ -3326,14 +3343,7 @@
         section.replaceChildren(heading, intro, stateNode);
       };
       const deploymentEventsManagedDriftSummary = (result) => {
-        const summary = result?.managedDriftSummary || {};
-        const eventRows = (result?.events || []).flatMap((event) => Array.isArray(event?.managedDrift) ? event.managedDrift : []);
-        const counts = {
-          total: Number.isFinite(Number(summary.total)) ? Number(summary.total) : eventRows.length,
-          high: Number.isFinite(Number(summary.high)) ? Number(summary.high) : eventRows.filter((row) => String(row?.severity || '').toLowerCase() === 'high').length,
-          medium: Number.isFinite(Number(summary.medium)) ? Number(summary.medium) : eventRows.filter((row) => String(row?.severity || '').toLowerCase() === 'medium').length,
-          low: Number.isFinite(Number(summary.low)) ? Number(summary.low) : eventRows.filter((row) => String(row?.severity || '').toLowerCase() === 'low').length,
-        };
+        const counts = deploymentEventsManagedDriftCounts(result);
         return `Managed drift summary · ${counts.total} total · ${counts.high} high · ${counts.medium} medium · ${counts.low} low`;
       };
       const renderDeploymentEventsPayload = (section, deploymentName, result) => {
@@ -3343,7 +3353,7 @@
           return;
         }
 
-        const heading = createDetailSectionHeader('Controller runtime events', createDeploymentEventsActions(section, deploymentName));
+        const heading = createDetailSectionHeader('Controller runtime events', createDeploymentEventsActions(section, deploymentName, false, result));
         const intro = createDeploymentEventsIntro();
         const ordering = createElement('div', 'detail-condition-meta', `${events.length} event${events.length === 1 ? '' : 's'} · newest controller event first`);
         const driftSummary = createElement('div', 'detail-condition-meta', deploymentEventsManagedDriftSummary(result));
