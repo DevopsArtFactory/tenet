@@ -2170,6 +2170,93 @@ func TestDeriveManagedDriftItemsAddsLiveECSTaskDefinitionImageEvidence(t *testin
 	}
 }
 
+func TestDeriveManagedDriftItemsAddsLiveResourceRefs(t *testing.T) {
+	t.Run("ecs service drift rows", func(t *testing.T) {
+		deployment := domain.Deployment{
+			Name:          "payments-worker-prod",
+			ExecutionMode: "ecsCodeDeploy",
+			DesiredArtifact: domain.DeploymentArtifact{
+				Image: "ghcr.io/devopsartfactory/payments-worker:1.2.3",
+			},
+			RolloutConfig: domain.DeploymentRolloutConfig{
+				Strategy: domain.DeploymentRolloutStrategy{MinHealthyPercent: 80, WarmupSeconds: 45},
+				Capacity: domain.DeploymentRolloutCapacity{Desired: 3, Min: 1, Max: 5},
+			},
+		}
+		resourceRef := &domain.ManagedDriftResourceRef{ResourceType: "ecsService", ResourceName: "payments-worker-prod-service"}
+
+		got := deriveManagedDriftItems(deployment, domain.DeploymentStatus{}, &runtimeLiveCapacityObservation{
+			ResourceType:                  resourceRef.ResourceType,
+			ResourceName:                  resourceRef.ResourceName,
+			Desired:                       2,
+			TaskDefinitionImage:           "ghcr.io/devopsartfactory/payments-worker:1.2.2",
+			MinimumHealthyPercent:         int32Ptr(100),
+			MaximumPercent:                int32Ptr(150),
+			HealthCheckGracePeriodSeconds: int32Ptr(30),
+		})
+
+		for _, field := range []string{
+			"runtimeContext.capacity.desired",
+			"runtimeContext.deploymentConfig.healthCheckGracePeriodSeconds",
+			"runtimeContext.deploymentConfig.maximumPercent",
+			"runtimeContext.deploymentConfig.minimumHealthyPercent",
+			"runtimeContext.taskDefinition.image",
+		} {
+			item := managedDriftItemByField(got, field)
+			if item == nil || !reflect.DeepEqual(item.ResourceRef, resourceRef) {
+				t.Fatalf("expected %s to carry ECS resourceRef %+v, got %+v", field, resourceRef, item)
+			}
+		}
+	})
+
+	t.Run("ec2 asg drift rows", func(t *testing.T) {
+		deployment := domain.Deployment{
+			Name:              "payments-api-prod",
+			ExecutionMode:     "asgWeightedTargetGroups",
+			UserData:          domain.DeploymentUserData{Type: "file", Path: "userdata/api-prod.sh"},
+			EC2LaunchTemplate: domain.DeploymentEC2LaunchTemplate{ImageID: "ami-1234567890abcdef0", InstanceType: "t3.medium"},
+			RolloutConfig: domain.DeploymentRolloutConfig{
+				Capacity: domain.DeploymentRolloutCapacity{Desired: 4, Min: 2, Max: 8},
+			},
+		}
+		resourceRef := &domain.ManagedDriftResourceRef{ResourceType: "candidateAutoScalingGroup", ResourceName: "payments-api-prod-candidate"}
+
+		got := deriveManagedDriftItems(deployment, domain.DeploymentStatus{}, &runtimeLiveCapacityObservation{
+			ResourceType:                  resourceRef.ResourceType,
+			ResourceName:                  resourceRef.ResourceName,
+			Desired:                       3,
+			Min:                           1,
+			Max:                           6,
+			LaunchTemplateImageID:         "ami-fffffffffffffffff",
+			LaunchTemplateInstanceType:    "m6i.large",
+			LaunchTemplateBootstrapSource: "file:userdata/api-prod-legacy.sh",
+		})
+
+		for _, field := range []string{
+			"runtimeContext.capacity.desired",
+			"runtimeContext.capacity.max",
+			"runtimeContext.capacity.min",
+			"runtimeContext.launchTemplate.bootstrapSource",
+			"runtimeContext.launchTemplate.imageId",
+			"runtimeContext.launchTemplate.instanceType",
+		} {
+			item := managedDriftItemByField(got, field)
+			if item == nil || !reflect.DeepEqual(item.ResourceRef, resourceRef) {
+				t.Fatalf("expected %s to carry ASG resourceRef %+v, got %+v", field, resourceRef, item)
+			}
+		}
+	})
+}
+
+func managedDriftItemByField(items []domain.ManagedDriftItem, field string) *domain.ManagedDriftItem {
+	for i := range items {
+		if items[i].Field == field {
+			return &items[i]
+		}
+	}
+	return nil
+}
+
 func TestRuntimeLiveCapacityLookupFromInspectionUsesECSServiceDesiredCount(t *testing.T) {
 	accounts := []domain.Account{{
 		Name:           "prod-core",
@@ -2209,6 +2296,8 @@ func TestRuntimeLiveCapacityLookupFromInspectionUsesECSServiceDesiredCount(t *te
 				t.Fatalf("runtimeLiveCapacityLookupFromInspection returned error: %v", err)
 			}
 			if !reflect.DeepEqual(got, &runtimeLiveCapacityObservation{
+				ResourceType:                  "ecsService",
+				ResourceName:                  "payments-worker-prod-service",
 				Desired:                       3,
 				MinimumHealthyPercent:         int32Ptr(100),
 				MaximumPercent:                int32Ptr(200),
@@ -2265,6 +2354,8 @@ func TestRuntimeLiveCapacityLookupFromInspectionUsesAutoScalingBootstrapSource(t
 		t.Fatalf("runtimeLiveCapacityLookupFromInspection returned error: %v", err)
 	}
 	if !reflect.DeepEqual(got, &runtimeLiveCapacityObservation{
+		ResourceType:                  "candidateAutoScalingGroup",
+		ResourceName:                  "payments-api-prod-candidate",
 		Desired:                       4,
 		Min:                           2,
 		Max:                           8,
