@@ -177,6 +177,8 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 		}
 		entries := formatConsoleEntries(consoles, s.maxEntries())
 		return availableResult(req, SourceEC2Console, entries), nil
+	case "trafficShiftPlan", "productionListenerRule", "activeTargetGroup", "candidateTargetGroup":
+		return unavailableResult(req, UnavailableReasonNoLogSource), nil
 	case "codeDeployApplication", "codeDeployDeploymentGroup", "productionListener", "testListener", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup":
 		resourceName := req.ResourceName
 		if req.ResourceType != "codeDeployApplication" && req.ResourceType != "codeDeployDeploymentGroup" {

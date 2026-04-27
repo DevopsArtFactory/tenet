@@ -40,6 +40,12 @@ Current provider-backed resource types:
 - `blueTaskSetTargetGroup`
 - `greenTaskSetTargetGroup`
 
+Current route-stable rollout resources with explicit no-log-source responses:
+- `trafficShiftPlan`
+- `productionListenerRule`
+- `activeTargetGroup`
+- `candidateTargetGroup`
+
 Behavior by type:
 - `ecsService` reads recent CloudWatch log events from the newest running and recently stopped service task/container streams when the ECS task definition and awslogs configuration can be resolved. Recently stopped tasks are included in the same bounded newest-first result so failed rollouts and crash loops can still surface useful logs when running tasks are absent or older.
 - `candidateAutoScalingGroup` and `serviceAutoScalingGroup` read recent EC2 instance console/bootstrap output from the newest instance in the Auto Scaling Group.
@@ -47,6 +53,7 @@ Behavior by type:
 - `codeDeployApplication` reads the newest deployment records across the selected CodeDeploy application without narrowing to one deployment group, returns them newest-first, and projects each deployment into one operator-facing recent-log row with the deployment ID in `entries[].stream`.
 - `codeDeployDeploymentGroup` reads the newest deployment records for the selected CodeDeploy deployment group, returns them newest-first, and projects each deployment into one operator-facing recent-log row with the deployment ID in `entries[].stream`.
 - `productionListener`, `testListener`, `blueTaskSetTargetGroup`, and `greenTaskSetTargetGroup` now reuse that same CodeDeploy deployment-group history through additive `backingResourceType=codeDeployDeploymentGroup` and `backingResourceName={deployment}-codedeploy-group`, so the resource page can show rollout history for those drill-down siblings without inventing a second event route.
+- weighted-target-group traffic-routing resources (`trafficShiftPlan`, `productionListenerRule`, `activeTargetGroup`, and `candidateTargetGroup`) are first-class route resources even though they do not have an independent recent-log stream yet; the recent-log route returns `available=false` with `unavailableReason=no_log_source` instead of treating them as unsupported, while the lookup context stays present for operator troubleshooting.
 - when a bootstrap-source or CodeDeploy sibling lookup resolves through a backing resource, the response also keeps the original `resourceType`/`resourceName` and adds the resolved `backingResourceType` plus `backingResourceName` so the payload stays self-describing without changing the route shape.
 
 Inside one Tenet API process, the built-in AWS-backed provider now reuses SDK config/client setup per `(region, targetAccountID, observerRoleARN)` key. That keeps repeated operator refreshes on the same deployment/resource from rebuilding ECS, CloudWatch Logs, Auto Scaling, and EC2 clients for every request.

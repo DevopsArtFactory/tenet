@@ -771,6 +771,54 @@ func TestServiceRecent(t *testing.T) {
 		}
 	})
 
+	t.Run("weighted traffic-routing resources report no log source", func(t *testing.T) {
+		service := NewService(Options{
+			ListASGInstanceConsoles: func(ctx context.Context, req ASGRequest) ([]InstanceConsole, error) {
+				t.Fatalf("weighted traffic routing resources should not call ASG provider: %+v", req)
+				return nil, nil
+			},
+			ListCodeDeployEvents: func(ctx context.Context, req CodeDeployRequest) ([]CodeDeployEvent, error) {
+				t.Fatalf("weighted traffic routing resources should not call CodeDeploy provider: %+v", req)
+				return nil, nil
+			},
+		})
+
+		for _, resource := range []struct {
+			resourceType string
+			resourceName string
+		}{
+			{resourceType: "trafficShiftPlan", resourceName: "payments-api-prod-weighted-routing"},
+			{resourceType: "productionListenerRule", resourceName: "payments-api-prod-prod-listener"},
+			{resourceType: "activeTargetGroup", resourceName: "payments-api-prod-active"},
+			{resourceType: "candidateTargetGroup", resourceName: "payments-api-prod-candidate"},
+		} {
+			result, err := service.Recent(context.Background(), Request{
+				DeploymentName:   "payments-api-prod",
+				ResourceType:     resource.resourceType,
+				ResourceName:     resource.resourceName,
+				ControlAccountID: "123456789012",
+				TargetAccountID:  "123456789012",
+				Region:           "ap-northeast-2",
+			})
+			if err != nil {
+				t.Fatalf("Recent returned error for %s: %v", resource.resourceType, err)
+			}
+			want := Result{
+				DeploymentName:    "payments-api-prod",
+				ResourceType:      resource.resourceType,
+				ResourceName:      resource.resourceName,
+				LookupContext:     expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
+				Available:         false,
+				Source:            "",
+				Entries:           nil,
+				UnavailableReason: UnavailableReasonNoLogSource,
+			}
+			if !reflect.DeepEqual(result, want) {
+				t.Fatalf("unexpected weighted traffic-routing log result for %s: got %+v want %+v", resource.resourceType, result, want)
+			}
+		}
+	})
+
 	t.Run("cross account without observer role returns unavailable payload", func(t *testing.T) {
 		service := NewService(Options{
 			ListECSLogEvents: func(ctx context.Context, req ECSRequest) ([]CloudWatchEvent, error) {
