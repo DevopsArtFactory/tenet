@@ -2300,7 +2300,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION",
 			"strips any client-supplied `X-Tenet-Authenticated-*`, `X-Tenet-Authenticated-Roles`, and `X-Tenet-Authorized-Deployments` headers before forwarding trusted values",
 			"Do not expose a header-trusting `tenet-api` instance directly to untrusted clients",
-			"The same trusted front-door read contract also covers `GET /v1/overview/accounts/{awsAccountId}`",
+			"The same trusted front-door read contract covers `GET /v1/overview/accounts/{awsAccountId}`",
 			"`GET /v1/overview/deployments/{deploymentName}/resource-logs`, `GET /v1/overview/deployments/{deploymentName}/resource-inspection`",
 			"### Smoke verification scope",
 			"Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis.",
