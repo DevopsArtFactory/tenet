@@ -2905,9 +2905,85 @@
         switch (value) {
           case 'summary_only':
             return 'Rollout summary only';
+          case 'live':
+            return 'Live AWS inspection';
           default:
             return textOrDash(value);
         }
+      };
+      const trafficRoutingTargetGroupDetail = (trafficRouting) => {
+        if (!trafficRouting || typeof trafficRouting !== 'object') return null;
+        const candidate = trafficRouting.targetGroup || trafficRouting.targetGroupInspection || trafficRouting.loadBalancerTargetGroup;
+        return candidate && typeof candidate === 'object' ? candidate : null;
+      };
+      const targetHealthCountsText = (counts) => {
+        if (!counts || typeof counts !== 'object') return '—';
+        const labels = [
+          ['healthy', 'healthy'],
+          ['unhealthy', 'unhealthy'],
+          ['initial', 'initial'],
+          ['draining', 'draining'],
+          ['unused', 'unused'],
+          ['unavailable', 'unavailable'],
+        ];
+        const parts = labels
+          .filter(([key]) => Number.isFinite(counts[key]))
+          .map(([key, label]) => `${label} ${counts[key]}`);
+        return parts.length ? parts.join(' · ') : '—';
+      };
+      const createTrafficRoutingTargetGroupSection = (trafficRouting) => {
+        const targetGroup = trafficRoutingTargetGroupDetail(trafficRouting);
+        if (!targetGroup) return null;
+        const section = createElement('section', 'detail-section');
+        section.append(createElement('h4', '', 'Target group live details'));
+        const metadata = createElement('div', 'detail-grid');
+        [
+          ['Target group name', textOrDash(targetGroup.targetGroupName || targetGroup.name)],
+          ['Target group ARN', textOrDash(targetGroup.targetGroupArn || targetGroup.arn)],
+          ['Protocol / port', targetGroup.protocol || Number.isFinite(targetGroup.port) ? `${textOrDash(targetGroup.protocol)} / ${countText(targetGroup.port)}` : '—'],
+          ['Target type', textOrDash(targetGroup.targetType)],
+          ['Health check protocol / port', targetGroup.healthCheckProtocol || targetGroup.healthCheckPort ? `${textOrDash(targetGroup.healthCheckProtocol)} / ${textOrDash(targetGroup.healthCheckPort)}` : '—'],
+          ['Health check path', textOrDash(targetGroup.healthCheckPath)],
+          ['Health check interval', durationSecondsText(targetGroup.healthCheckIntervalSeconds)],
+          ['Health check timeout', durationSecondsText(targetGroup.healthCheckTimeoutSeconds)],
+          ['Healthy threshold', countText(targetGroup.healthyThresholdCount)],
+          ['Unhealthy threshold', countText(targetGroup.unhealthyThresholdCount)],
+          ['Target health counts', targetHealthCountsText(targetGroup.targetHealthCounts || targetGroup.healthCounts)],
+        ].forEach(([label, value]) => metadata.append(createMetric(label, value)));
+        section.append(metadata);
+        const loadBalancerArns = Array.isArray(targetGroup.loadBalancerArns) ? targetGroup.loadBalancerArns : [];
+        const loadBalancersSection = createInspectionListSection(
+          'Load balancer ARNs',
+          loadBalancerArns,
+          (loadBalancerARN) => {
+            const item = createElement('li');
+            item.append(createElement('strong', '', textOrDash(loadBalancerARN)));
+            return item;
+          },
+          'No load balancer ARNs are currently reported for this target group.',
+        );
+        const targets = Array.isArray(targetGroup.targets) ? targetGroup.targets : [];
+        const targetsSection = createInspectionListSection(
+          'Registered target health',
+          targets,
+          (target) => {
+            const item = createElement('li');
+            const identity = target.targetId || target.id || target.instanceId || target.ipAddress || target.availabilityZone || 'Registered target';
+            item.append(createElement('strong', '', textOrDash(identity)));
+            const meta = createElement('div', 'detail-history-meta');
+            meta.append(
+              createElement('span', 'detail-condition-meta', `Health state · ${textOrDash(target.state || target.healthState)}`),
+              createElement('span', 'detail-condition-meta', `Port · ${textOrDash(target.port)}`),
+              createElement('span', 'detail-condition-meta', `Reason · ${textOrDash(target.reason)}`),
+              createElement('span', 'detail-condition-meta', `Description · ${textOrDash(target.description)}`),
+            );
+            item.append(meta);
+            return item;
+          },
+          'No registered target-health rows are currently reported for this target group.',
+        );
+        section.append(loadBalancersSection, targetsSection);
+        return section;
       };
       const renderTrafficRoutingInspection = (section, deploymentName, resource, result) => {
         const trafficRouting = result?.trafficRoutingResource;
@@ -2923,10 +2999,12 @@
           createElement('h4', '', 'Rollout summary'),
           createElement('p', 'detail-section-copy', textOrDash(trafficRouting?.summary)),
         );
+        const targetGroupSection = createTrafficRoutingTargetGroupSection(trafficRouting);
         section.replaceChildren(
           createDetailSectionHeader('Live inspection', actions),
-          createElement('p', 'detail-section-copy', 'Read-only traffic-routing summary from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
+          createElement('p', 'detail-section-copy', 'Read-only traffic-routing inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
           metadata,
+          ...(targetGroupSection ? [targetGroupSection] : []),
           summarySection,
         );
       };
