@@ -198,6 +198,59 @@ func filterAuthorizedApplicationOverviews(applications []catalog.ApplicationOver
 	return filtered
 }
 
+type operatorContextResponse struct {
+	TrustedHeaders   operatorContextTrustedHeaders      `json:"trustedHeaders"`
+	Identity         requestactor.AuthenticatedIdentity `json:"identity"`
+	Roles            operatorContextRoles               `json:"roles"`
+	DeploymentAccess operatorContextDeploymentAccess    `json:"deploymentAccess"`
+}
+
+type operatorContextTrustedHeaders struct {
+	Enabled                             bool `json:"enabled"`
+	AuthenticatedIdentityRequired       bool `json:"authenticatedIdentityRequired"`
+	DeploymentReadAuthorizationEnforced bool `json:"deploymentReadAuthorizationEnforced"`
+	OperatorReadRoleEnforced            bool `json:"operatorReadRoleEnforced"`
+	OperatorWriteRoleEnforced           bool `json:"operatorWriteRoleEnforced"`
+}
+
+type operatorContextRoles struct {
+	Names    []string `json:"names,omitempty"`
+	CanRead  bool     `json:"canRead"`
+	CanWrite bool     `json:"canWrite"`
+}
+
+type operatorContextDeploymentAccess struct {
+	Enforced  bool     `json:"enforced"`
+	Forwarded bool     `json:"forwarded"`
+	Names     []string `json:"names,omitempty"`
+}
+
+func buildOperatorContextResponse(r *http.Request, options Options) operatorContextResponse {
+	identity := requestactor.AuthenticatedIdentityFromContext(r.Context())
+	roles := requestactor.AuthenticatedRolesFromContext(r.Context())
+	deployments := requestactor.AuthorizedDeploymentsFromContext(r.Context())
+	return operatorContextResponse{
+		TrustedHeaders: operatorContextTrustedHeaders{
+			Enabled:                             options.TrustAuthenticatedHeaders,
+			AuthenticatedIdentityRequired:       options.RequireAuthenticatedIdentity,
+			DeploymentReadAuthorizationEnforced: options.RequireDeploymentReadAuthorization,
+			OperatorReadRoleEnforced:            options.RequireOperatorRoleForRead,
+			OperatorWriteRoleEnforced:           options.RequireOperatorRoleForWrite,
+		},
+		Identity: identity,
+		Roles: operatorContextRoles{
+			Names:    roles.Names,
+			CanRead:  roles.AllowsOperatorRead(),
+			CanWrite: roles.AllowsOperatorWrite(),
+		},
+		DeploymentAccess: operatorContextDeploymentAccess{
+			Enforced:  options.RequireDeploymentReadAuthorization,
+			Forwarded: len(deployments.Names) > 0,
+			Names:     deployments.Names,
+		},
+	}
+}
+
 type deploymentOverviewCounts struct {
 	deploymentCount  int
 	projectCount     int
@@ -416,6 +469,13 @@ func NewRouter(options Options) http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(options.BuildInfo)
+	})
+	mux.HandleFunc("/v1/operator/context", func(w http.ResponseWriter, r *http.Request) {
+		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(buildOperatorContextResponse(r, options))
 	})
 	mux.HandleFunc("/api/v1/github/webhook", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodPost) {
