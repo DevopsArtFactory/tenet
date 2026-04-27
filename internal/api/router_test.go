@@ -96,6 +96,120 @@ func TestRouterHealthz(t *testing.T) {
 	assertResponseRequestID(t, resp)
 }
 
+func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
+	router := NewRouter(Options{
+		TrustAuthenticatedHeaders:          true,
+		RequireDeploymentReadAuthorization: true,
+		RequireOperatorRoleForRead:         true,
+		RequireOperatorRoleForWrite:        true,
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+	req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+	req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+	req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+	req.Header.Add(requestactor.AuthenticatedRolesHeader, "operator, admin, operator")
+	req.Header.Add(requestactor.AuthorizedDeploymentsHeader, "payments-api-prod, worker-prod")
+	req.Header.Add(requestactor.AuthorizedDeploymentsHeader, "payments-api-prod")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode operator context response: %v", err)
+	}
+	trustedHeaders, ok := body["trustedHeaders"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected trustedHeaders object, got %#v", body["trustedHeaders"])
+	}
+	if trustedHeaders["enabled"] != true {
+		t.Fatalf("expected trustedHeaders.enabled=true, got %#v", trustedHeaders)
+	}
+	if trustedHeaders["deploymentReadAuthorizationEnforced"] != true || trustedHeaders["operatorReadRoleEnforced"] != true || trustedHeaders["operatorWriteRoleEnforced"] != true {
+		t.Fatalf("expected auth enforcement flags to be present, got %#v", trustedHeaders)
+	}
+	identity, ok := body["identity"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected identity object, got %#v", body["identity"])
+	}
+	if identity["authenticated"] != true || identity["id"] != "front-door-123" || identity["name"] != "Front Door Operator" || identity["email"] != "frontdoor@example.com" {
+		t.Fatalf("unexpected identity payload: %#v", identity)
+	}
+	roles, ok := body["roles"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected roles object, got %#v", body["roles"])
+	}
+	if !reflect.DeepEqual(roles["names"], []any{"operator", "admin"}) || roles["canRead"] != true || roles["canWrite"] != true {
+		t.Fatalf("unexpected roles payload: %#v", roles)
+	}
+	deploymentAccess, ok := body["deploymentAccess"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected deploymentAccess object, got %#v", body["deploymentAccess"])
+	}
+	if deploymentAccess["enforced"] != true || deploymentAccess["forwarded"] != true || !reflect.DeepEqual(deploymentAccess["names"], []any{"payments-api-prod", "worker-prod"}) {
+		t.Fatalf("unexpected deploymentAccess payload: %#v", deploymentAccess)
+	}
+}
+
+func TestRouterOperatorContextIsExplicitWhenTrustedHeadersAreUnavailable(t *testing.T) {
+	router := NewRouter(Options{})
+	req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+	req.Header.Set(requestactor.AuthenticatedHeaderID, "ignored-when-untrusted")
+	req.Header.Set(requestactor.AuthenticatedRolesHeader, "admin")
+	req.Header.Set(requestactor.AuthorizedDeploymentsHeader, "payments-api-prod")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode operator context response: %v", err)
+	}
+	trustedHeaders := body["trustedHeaders"].(map[string]any)
+	if trustedHeaders["enabled"] != false || trustedHeaders["deploymentReadAuthorizationEnforced"] != false {
+		t.Fatalf("expected disabled trusted-header flags, got %#v", trustedHeaders)
+	}
+	identity := body["identity"].(map[string]any)
+	if identity["authenticated"] != false || identity["reason"] != requestactor.AuthenticatedIdentityUnavailableReason {
+		t.Fatalf("expected explicit unavailable identity, got %#v", identity)
+	}
+	roles := body["roles"].(map[string]any)
+	if roles["canRead"] != false || roles["canWrite"] != false {
+		t.Fatalf("expected unavailable roles without capabilities, got %#v", roles)
+	}
+	if _, ok := roles["names"]; ok {
+		t.Fatalf("expected omitted role names without trusted headers, got %#v", roles)
+	}
+	deploymentAccess := body["deploymentAccess"].(map[string]any)
+	if deploymentAccess["enforced"] != false || deploymentAccess["forwarded"] != false {
+		t.Fatalf("expected explicit unforwarded deployment access, got %#v", deploymentAccess)
+	}
+	if _, ok := deploymentAccess["names"]; ok {
+		t.Fatalf("expected omitted deployment names without trusted headers, got %#v", deploymentAccess)
+	}
+}
+
+func TestRouterOperatorContextRejectsWrongMethod(t *testing.T) {
+	router := NewRouter(Options{})
+	req := httptest.NewRequest(http.MethodPost, "/v1/operator/context", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d", resp.Code)
+	}
+	if got := resp.Header().Get("Allow"); got != http.MethodGet {
+		t.Fatalf("expected Allow %q, got %q", http.MethodGet, got)
+	}
+}
+
 func TestRouterStructuredRequestLoggingCoversAPIAndUIRequests(t *testing.T) {
 	var output bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&output, nil))
