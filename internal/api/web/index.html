@@ -2366,7 +2366,7 @@
 
         const logsSection = createDetailSection('Recent logs');
         pushResourceSection(logsSection, 'resource-recent-logs', 'Recent logs');
-        renderResourceLogsSection(logsSection, detail.name || currentPageState.deployment || '', resource).catch(() => {});
+        renderResourceLogsSection(logsSection, detail.name || currentPageState.deployment || '', resource, { detail }).catch(() => {});
 
         const quickNav = createResourceQuickNav(detail, resource, resourceSectionLinks);
         const refreshState = resourceDetailRefreshState(resourceState);
@@ -2538,11 +2538,11 @@
         });
         return metadata;
       };
-      const createResourceLogsActions = (section, deploymentName, resource, isLoading = false) => [
+      const createResourceLogsActions = (section, deploymentName, resource, isLoading = false, detail = null) => [
         createRefreshButton(
           'Refresh recent logs',
           isLoading || !deploymentName || !resource?.type || !resource?.name,
-          () => renderResourceLogsSection(section, deploymentName, resource, { force: true }).catch(() => {}),
+          () => renderResourceLogsSection(section, deploymentName, resource, { force: true, detail }).catch(() => {}),
         ),
       ];
       const buildResourceLogsRoute = (deploymentName, resource) => {
@@ -2576,23 +2576,38 @@
       const fetchResourceLogs = (deploymentName, resource) => {
         return fetchResourcePanelJSON(buildResourceLogsRoute(deploymentName, resource), 'resource logs request failed');
       };
-      const renderResourceLogsPayload = (section, deploymentName, resource, result) => {
-        const actions = createResourceLogsActions(section, deploymentName, resource);
+      const createResourceLogsBackingResourceHandoffSection = (detail, result) => {
+        const handoff = resolveBackingResourceDrillDown(detail, result);
+        if (!handoff) return null;
+        const handoffSection = createElement('section', 'detail-section');
+        const handoffLinks = createElement('div', 'row-links');
+        handoffLinks.append(createNavLink(handoff.href, `Open ${handoff.resource.name} drill-down`, '_self'));
+        handoffSection.append(
+          createElement('h4', '', 'Resolved backing resource'),
+          createElement('p', 'detail-section-copy', `Open the resolved ${handoff.resource.type} drill-down Tenet used for this recent-log lookup.`),
+          handoffLinks,
+        );
+        return handoffSection;
+      };
+      const renderResourceLogsPayload = (section, deploymentName, resource, result, detail = null) => {
+        const actions = createResourceLogsActions(section, deploymentName, resource, false, detail);
         const backingResourceFields = resourceLogsBackingResourceFields(result);
+        const handoffSection = createResourceLogsBackingResourceHandoffSection(detail, result);
+        const beforeNodes = (metadata) => handoffSection ? [metadata, handoffSection] : [metadata];
         if (!result?.available) {
           const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, backingResourceFields);
           const unavailableReason = resourceLogsUnavailableReasonText(result?.unavailableReason);
           const details = unavailableReason
             ? [createElement('div', 'detail-condition-meta', unavailableReason)]
             : [];
-          renderResourceLogsState(section, 'Recent logs are unavailable for this resource.', '', [metadata], details, actions);
+          renderResourceLogsState(section, 'Recent logs are unavailable for this resource.', '', beforeNodes(metadata), details, actions);
           return;
         }
 
         const entries = result.entries || [];
         if (!entries.length) {
           const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, backingResourceFields);
-          renderResourceLogsState(section, 'No recent logs are available for this resource.', '', [metadata], [], actions);
+          renderResourceLogsState(section, 'No recent logs are available for this resource.', '', beforeNodes(metadata), [], actions);
           return;
         }
 
@@ -2601,7 +2616,7 @@
           ['Logs source', metricValue(result.source)],
           ...backingResourceFields,
         ]);
-        fragment.push(metadata);
+        fragment.push(...beforeNodes(metadata));
 
         const logList = createElement('ol', 'detail-list');
         entries.forEach((entry) => {
@@ -2621,20 +2636,21 @@
       };
       const renderResourceLogsSection = (section, deploymentName, resource, options = {}) => {
         const force = Boolean(options?.force);
+        const detail = options?.detail || null;
         const logsKey = resourceLogCacheKey(deploymentName, resource);
         const cached = resourceLogStateByKey.get(logsKey);
-        const loadingActions = createResourceLogsActions(section, deploymentName, resource, true);
+        const loadingActions = createResourceLogsActions(section, deploymentName, resource, true, detail);
 
         if (!deploymentName || !resource?.type || !resource?.name) {
-          renderResourceLogsState(section, 'Recent logs are unavailable for this resource.', '', [], [], createResourceLogsActions(section, deploymentName, resource));
+          renderResourceLogsState(section, 'Recent logs are unavailable for this resource.', '', [], [], createResourceLogsActions(section, deploymentName, resource, false, detail));
           return Promise.resolve(null);
         }
         if (!force && cached?.status === 'ready') {
-          renderResourceLogsPayload(section, deploymentName, resource, cached.result);
+          renderResourceLogsPayload(section, deploymentName, resource, cached.result, detail);
           return Promise.resolve(cached.result);
         }
         if (cached?.status === 'loading') {
-          resourceLogStateByKey.set(logsKey, { ...cached, sections: [...(cached.sections || []), section] });
+          resourceLogStateByKey.set(logsKey, { ...cached, sections: [...(cached.sections || []), { section, detail }] });
           renderResourceLogsState(section, 'Loading recent logs…', '', [], [], loadingActions);
           return cached.promise;
         }
@@ -2644,18 +2660,22 @@
           .then((result) => {
             const current = resourceLogStateByKey.get(logsKey);
             resourceLogStateByKey.set(logsKey, { status: 'ready', result });
-            (current?.sections || []).forEach((container) => renderResourceLogsPayload(container, deploymentName, resource, result));
+            (current?.sections || []).forEach((target) => {
+              const container = target?.section || target;
+              renderResourceLogsPayload(container, deploymentName, resource, result, target?.detail || detail);
+            });
             scrollToCurrentHashTarget();
             return result;
           })
           .catch((error) => {
             const current = resourceLogStateByKey.get(logsKey);
             resourceLogStateByKey.set(logsKey, { status: 'error', error });
-            (current?.sections || []).forEach((container) => {
+            (current?.sections || []).forEach((target) => {
+              const container = target?.section || target;
               if (renderOperatorReadFailurePanel(
                 container,
                 'Recent logs',
-                createResourceLogsActions(container, deploymentName, resource),
+                createResourceLogsActions(container, deploymentName, resource, false, target?.detail || detail),
                 resourceLogsReadRoute(deploymentName, resource),
                 error,
               )) {
@@ -2667,14 +2687,14 @@
                 'error',
                 [],
                 [],
-                createResourceLogsActions(container, deploymentName, resource),
+                createResourceLogsActions(container, deploymentName, resource, false, target?.detail || detail),
               );
             });
             scrollToCurrentHashTarget();
             throw error;
           });
 
-        resourceLogStateByKey.set(logsKey, { status: 'loading', promise, sections: [section] });
+        resourceLogStateByKey.set(logsKey, { status: 'loading', promise, sections: [{ section, detail }] });
         return promise;
       };
       const resourceInspectionCacheKey = (deploymentName, resource) => resourceLogCacheKey(deploymentName, resource);
