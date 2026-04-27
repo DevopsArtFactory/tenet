@@ -83,6 +83,33 @@ type TrafficRoutingInspection struct {
 	CodeDeployApplication     *CodeDeployApplicationInspection     `json:"codeDeployApplication,omitempty"`
 	CodeDeployDeploymentGroup *CodeDeployDeploymentGroupInspection `json:"codeDeployDeploymentGroup,omitempty"`
 	Listener                  *ListenerInspection                  `json:"listener,omitempty"`
+	TargetGroup               *TargetGroupInspection               `json:"targetGroup,omitempty"`
+}
+
+type TargetGroupInspection struct {
+	TargetGroupName            string                   `json:"targetGroupName"`
+	TargetGroupARN             string                   `json:"targetGroupArn"`
+	Protocol                   string                   `json:"protocol,omitempty"`
+	Port                       int32                    `json:"port,omitempty"`
+	TargetType                 string                   `json:"targetType,omitempty"`
+	LoadBalancerARNs           []string                 `json:"loadBalancerArns,omitempty"`
+	HealthCheckProtocol        string                   `json:"healthCheckProtocol,omitempty"`
+	HealthCheckPort            string                   `json:"healthCheckPort,omitempty"`
+	HealthCheckPath            string                   `json:"healthCheckPath,omitempty"`
+	HealthCheckIntervalSeconds int32                    `json:"healthCheckIntervalSeconds,omitempty"`
+	HealthCheckTimeoutSeconds  int32                    `json:"healthCheckTimeoutSeconds,omitempty"`
+	HealthyThresholdCount      int32                    `json:"healthyThresholdCount,omitempty"`
+	UnhealthyThresholdCount    int32                    `json:"unhealthyThresholdCount,omitempty"`
+	TargetHealthCounts         map[string]int           `json:"targetHealthCounts,omitempty"`
+	Targets                    []TargetHealthInspection `json:"targets,omitempty"`
+}
+
+type TargetHealthInspection struct {
+	TargetID    string `json:"targetId"`
+	Port        int32  `json:"port,omitempty"`
+	State       string `json:"state,omitempty"`
+	Reason      string `json:"reason,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 type CodeDeployApplicationInspection struct {
@@ -453,9 +480,9 @@ type TrafficRoutingRequest struct {
 
 func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
 	switch req.ResourceType {
-	case "trafficShiftPlan", "productionListenerRule", "activeTargetGroup", "candidateTargetGroup", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup":
+	case "trafficShiftPlan", "productionListenerRule", "activeTargetGroup", "candidateTargetGroup":
 		return availableTrafficRoutingResult(req, trafficRoutingInspection(req)), nil
-	case "codeDeployApplication", "codeDeployDeploymentGroup", "productionListener", "testListener":
+	case "codeDeployApplication", "codeDeployDeploymentGroup", "productionListener", "testListener", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup":
 		cacheKey := newTrafficRoutingInspectionCacheKey(req.Region, req.TargetAccountID, req.ObserverRoleARN, req.ResourceType, req.ResourceName)
 		if detail, ok := s.trafficRoutingCache.Get(cacheKey); ok {
 			detail.Summary = trafficRoutingSummary(req)
@@ -767,6 +794,24 @@ func cloneTrafficRoutingInspection(detail TrafficRoutingInspection) TrafficRouti
 		listener.Certificates = append([]string(nil), detail.Listener.Certificates...)
 		listener.DefaultActions = cloneListenerActions(detail.Listener.DefaultActions)
 		cloned.Listener = &listener
+	}
+	if detail.TargetGroup != nil {
+		targetGroup := *detail.TargetGroup
+		targetGroup.LoadBalancerARNs = append([]string(nil), detail.TargetGroup.LoadBalancerARNs...)
+		targetGroup.TargetHealthCounts = cloneStringIntMap(detail.TargetGroup.TargetHealthCounts)
+		targetGroup.Targets = append([]TargetHealthInspection(nil), detail.TargetGroup.Targets...)
+		cloned.TargetGroup = &targetGroup
+	}
+	return cloned
+}
+
+func cloneStringIntMap(values map[string]int) map[string]int {
+	if len(values) == 0 {
+		return nil
+	}
+	cloned := make(map[string]int, len(values))
+	for key, value := range values {
+		cloned[key] = value
 	}
 	return cloned
 }

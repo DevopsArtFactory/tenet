@@ -60,6 +60,20 @@ func (s Service) inspectTrafficRoutingResourceFromAWS(ctx context.Context, req T
 			return TrafficRoutingInspection{}, err
 		}
 		return trafficRoutingInspectionFromListener(req, listener), nil
+	case "blueTaskSetTargetGroup", "greenTaskSetTargetGroup":
+		targetGroupName := codeDeployTaskSetTargetGroupName(group, req.ResourceType, req.ResourceName)
+		if targetGroupName == "" {
+			return TrafficRoutingInspection{}, resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
+		}
+		targetGroup, err := describeTargetGroup(ctx, clients.Config, req.Region, targetGroupName)
+		if err != nil {
+			return TrafficRoutingInspection{}, err
+		}
+		targetHealth, err := describeTargetHealth(ctx, clients.Config, req.Region, targetGroup.TargetGroupARN)
+		if err != nil {
+			return TrafficRoutingInspection{}, err
+		}
+		return trafficRoutingInspectionFromTargetGroup(req, targetGroup, targetHealth), nil
 	default:
 		return TrafficRoutingInspection{}, resourceaws.NewUnavailableError(resourceaws.UnavailableReasonUnsupportedResourceType)
 	}
@@ -109,6 +123,59 @@ func trafficRoutingInspectionFromDeploymentGroup(req TrafficRoutingRequest, grou
 			TargetGroups:          targetGroups,
 			ProductionListenerARN: codeDeployProductionListenerARN(group),
 			TestListenerARN:       codeDeployTestListenerARN(group),
+		},
+	}
+}
+
+func trafficRoutingInspectionFromTargetGroup(req TrafficRoutingRequest, targetGroup elbv2TargetGroupPayload, targetHealth []elbv2TargetHealthDescriptionPayload) TrafficRoutingInspection {
+	loadBalancerARNs := append([]string(nil), targetGroup.LoadBalancerARNs...)
+	sort.Strings(loadBalancerARNs)
+	healthCounts := make(map[string]int)
+	targets := make([]TargetHealthInspection, 0, len(targetHealth))
+	for _, health := range targetHealth {
+		state := strings.TrimSpace(health.TargetHealth.State)
+		if state != "" {
+			healthCounts[state]++
+		}
+		target := TargetHealthInspection{
+			TargetID:    strings.TrimSpace(health.Target.ID),
+			Port:        health.Target.Port,
+			State:       state,
+			Reason:      strings.TrimSpace(health.TargetHealth.Reason),
+			Description: strings.TrimSpace(health.TargetHealth.Description),
+		}
+		if target.TargetID == "" && target.Port == 0 && target.State == "" && target.Reason == "" && target.Description == "" {
+			continue
+		}
+		targets = append(targets, target)
+	}
+	sort.SliceStable(targets, func(i, j int) bool {
+		if targets[i].TargetID == targets[j].TargetID {
+			return targets[i].Port < targets[j].Port
+		}
+		return targets[i].TargetID < targets[j].TargetID
+	})
+	return TrafficRoutingInspection{
+		Kind:           req.ResourceType,
+		DisplayName:    trafficRoutingDisplayName(req.ResourceType),
+		InspectionMode: "live",
+		Summary:        trafficRoutingSummaryText(req.ResourceType, req.ResourceDescription),
+		TargetGroup: &TargetGroupInspection{
+			TargetGroupName:            strings.TrimSpace(targetGroup.TargetGroupName),
+			TargetGroupARN:             strings.TrimSpace(targetGroup.TargetGroupARN),
+			Protocol:                   strings.TrimSpace(targetGroup.Protocol),
+			Port:                       targetGroup.Port,
+			TargetType:                 strings.TrimSpace(targetGroup.TargetType),
+			LoadBalancerARNs:           loadBalancerARNs,
+			HealthCheckProtocol:        strings.TrimSpace(targetGroup.HealthCheckProtocol),
+			HealthCheckPort:            strings.TrimSpace(targetGroup.HealthCheckPort),
+			HealthCheckPath:            strings.TrimSpace(targetGroup.HealthCheckPath),
+			HealthCheckIntervalSeconds: targetGroup.HealthCheckIntervalSeconds,
+			HealthCheckTimeoutSeconds:  targetGroup.HealthCheckTimeoutSeconds,
+			HealthyThresholdCount:      targetGroup.HealthyThresholdCount,
+			UnhealthyThresholdCount:    targetGroup.UnhealthyThresholdCount,
+			TargetHealthCounts:         healthCounts,
+			Targets:                    targets,
 		},
 	}
 }
@@ -178,6 +245,32 @@ func codeDeployDeploymentGroups(application codeDeployApplicationInfoPayload) []
 		deploymentGroups = append(deploymentGroups, group)
 	}
 	return deploymentGroups
+}
+
+func codeDeployTaskSetTargetGroupName(group codeDeployDeploymentGroupInfoPayload, resourceType, resourceName string) string {
+	targetGroups := codeDeployTargetGroups(group)
+	trimmedName := strings.TrimSpace(resourceName)
+	if trimmedName != "" {
+		for _, targetGroup := range targetGroups {
+			if targetGroup == trimmedName {
+				return targetGroup
+			}
+		}
+	}
+	switch resourceType {
+	case "blueTaskSetTargetGroup":
+		if len(targetGroups) > 0 {
+			return targetGroups[0]
+		}
+	case "greenTaskSetTargetGroup":
+		if len(targetGroups) > 1 {
+			return targetGroups[1]
+		}
+		if len(targetGroups) == 1 {
+			return targetGroups[0]
+		}
+	}
+	return ""
 }
 
 func codeDeployTargetGroups(group codeDeployDeploymentGroupInfoPayload) []string {
@@ -322,6 +415,73 @@ func getCodeDeployDeploymentGroup(ctx context.Context, cfg aws.Config, region, a
 		return codeDeployDeploymentGroupInfoPayload{}, resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
 	}
 	return response.DeploymentGroupInfo, nil
+}
+
+func describeTargetGroup(ctx context.Context, cfg aws.Config, region, targetGroupName string) (elbv2TargetGroupPayload, error) {
+	body, err := doSignedAWSQueryRequest(
+		ctx,
+		cfg,
+		"elasticloadbalancing",
+		region,
+		"https://elasticloadbalancing."+strings.TrimSpace(region)+".amazonaws.com/",
+		url.Values{
+			"Action":         []string{"DescribeTargetGroups"},
+			"Version":        []string{"2015-12-01"},
+			"Names.member.1": []string{strings.TrimSpace(targetGroupName)},
+		},
+		func(responseBody []byte) error {
+			code := parseAWSQueryError(responseBody)
+			switch code {
+			case "TargetGroupNotFound", "LoadBalancerNotFound":
+				return resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
+			default:
+				return resourceaws.NewUnavailableError(resourceaws.UnavailableReasonAWSUnavailable)
+			}
+		},
+	)
+	if err != nil {
+		return elbv2TargetGroupPayload{}, err
+	}
+	var response elbv2DescribeTargetGroupsResponse
+	if err := xml.Unmarshal(body, &response); err != nil {
+		return elbv2TargetGroupPayload{}, err
+	}
+	if len(response.Result.TargetGroups) == 0 {
+		return elbv2TargetGroupPayload{}, resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
+	}
+	return response.Result.TargetGroups[0], nil
+}
+
+func describeTargetHealth(ctx context.Context, cfg aws.Config, region, targetGroupARN string) ([]elbv2TargetHealthDescriptionPayload, error) {
+	body, err := doSignedAWSQueryRequest(
+		ctx,
+		cfg,
+		"elasticloadbalancing",
+		region,
+		"https://elasticloadbalancing."+strings.TrimSpace(region)+".amazonaws.com/",
+		url.Values{
+			"Action":         []string{"DescribeTargetHealth"},
+			"Version":        []string{"2015-12-01"},
+			"TargetGroupArn": []string{strings.TrimSpace(targetGroupARN)},
+		},
+		func(responseBody []byte) error {
+			code := parseAWSQueryError(responseBody)
+			switch code {
+			case "TargetGroupNotFound", "LoadBalancerNotFound":
+				return resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
+			default:
+				return resourceaws.NewUnavailableError(resourceaws.UnavailableReasonAWSUnavailable)
+			}
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	var response elbv2DescribeTargetHealthResponse
+	if err := xml.Unmarshal(body, &response); err != nil {
+		return nil, err
+	}
+	return response.Result.TargetHealthDescriptions, nil
 }
 
 func describeListener(ctx context.Context, cfg aws.Config, region, listenerARN string) (elbv2ListenerPayload, error) {
@@ -540,6 +700,54 @@ type codeDeployTrafficRoutePayload struct {
 
 type codeDeployTargetGroupPayload struct {
 	Name string `json:"name"`
+}
+
+type elbv2DescribeTargetGroupsResponse struct {
+	Result elbv2DescribeTargetGroupsResult `xml:"DescribeTargetGroupsResult"`
+}
+
+type elbv2DescribeTargetGroupsResult struct {
+	TargetGroups []elbv2TargetGroupPayload `xml:"TargetGroups>member"`
+}
+
+type elbv2TargetGroupPayload struct {
+	TargetGroupARN             string   `xml:"TargetGroupArn"`
+	TargetGroupName            string   `xml:"TargetGroupName"`
+	Protocol                   string   `xml:"Protocol"`
+	Port                       int32    `xml:"Port"`
+	TargetType                 string   `xml:"TargetType"`
+	LoadBalancerARNs           []string `xml:"LoadBalancerArns>member"`
+	HealthCheckProtocol        string   `xml:"HealthCheckProtocol"`
+	HealthCheckPort            string   `xml:"HealthCheckPort"`
+	HealthCheckPath            string   `xml:"HealthCheckPath"`
+	HealthCheckIntervalSeconds int32    `xml:"HealthCheckIntervalSeconds"`
+	HealthCheckTimeoutSeconds  int32    `xml:"HealthCheckTimeoutSeconds"`
+	HealthyThresholdCount      int32    `xml:"HealthyThresholdCount"`
+	UnhealthyThresholdCount    int32    `xml:"UnhealthyThresholdCount"`
+}
+
+type elbv2DescribeTargetHealthResponse struct {
+	Result elbv2DescribeTargetHealthResult `xml:"DescribeTargetHealthResult"`
+}
+
+type elbv2DescribeTargetHealthResult struct {
+	TargetHealthDescriptions []elbv2TargetHealthDescriptionPayload `xml:"TargetHealthDescriptions>member"`
+}
+
+type elbv2TargetHealthDescriptionPayload struct {
+	Target       elbv2TargetDescriptionPayload `xml:"Target"`
+	TargetHealth elbv2TargetHealthPayload      `xml:"TargetHealth"`
+}
+
+type elbv2TargetDescriptionPayload struct {
+	ID   string `xml:"Id"`
+	Port int32  `xml:"Port"`
+}
+
+type elbv2TargetHealthPayload struct {
+	State       string `xml:"State"`
+	Reason      string `xml:"Reason"`
+	Description string `xml:"Description"`
 }
 
 type elbv2DescribeListenersResponse struct {
