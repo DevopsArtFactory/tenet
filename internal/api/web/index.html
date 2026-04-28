@@ -768,6 +768,30 @@
         if (names.length > 1) return `${names.length} deployments forwarded: ${names.slice(0, 3).join(', ')}${names.length > 3 ? ', …' : ''}`;
         return 'Deployment allowlist forwarded empty';
       };
+      const operatorContextDeploymentAccessSummaryLabel = (context) => {
+        const access = context?.deploymentAccess || {};
+        if (!access.enforced || !access.forwarded) return null;
+        const summary = access.summary || null;
+        if (!summary) return 'Deployment access summary unavailable for this response';
+        const forwarded = Number.isFinite(summary.forwardedCount) ? summary.forwardedCount : (Array.isArray(access.names) ? access.names.length : 0);
+        if (summary.available === false) {
+          const reason = summary.unavailableReason || 'catalog placement summary is unavailable';
+          return `Deployment access summary unavailable: ${reason}${forwarded ? ` (${forwarded} forwarded)` : ''}`;
+        }
+        const matched = Number.isFinite(summary.matchedCount) ? summary.matchedCount : 0;
+        const unmatchedNames = Array.isArray(summary.unmatchedNames) ? summary.unmatchedNames.filter(Boolean) : [];
+        const unmatchedCount = Math.max(0, forwarded - matched);
+        const placementCounts = [];
+        if (Number.isFinite(summary.accountCount)) placementCounts.push(`${summary.accountCount} ${summary.accountCount === 1 ? 'account' : 'accounts'}`);
+        if (Number.isFinite(summary.projectCount)) placementCounts.push(`${summary.projectCount} ${summary.projectCount === 1 ? 'project' : 'projects'}`);
+        if (Number.isFinite(summary.environmentCount)) placementCounts.push(`${summary.environmentCount} ${summary.environmentCount === 1 ? 'environment' : 'environments'}`);
+        const placementText = placementCounts.length ? ` across ${placementCounts.join(', ')}` : '';
+        if (unmatchedCount > 0) {
+          const examples = unmatchedNames.length ? `: ${unmatchedNames.slice(0, 3).join(', ')}${unmatchedNames.length > 3 ? ', …' : ''}` : '';
+          return `Deployment access: ${matched} of ${forwarded} forwarded match catalog${placementText}; ${unmatchedCount} unmatched${examples}`;
+        }
+        return `Deployment access: all ${forwarded} forwarded deployments match catalog${placementText}`;
+      };
       const renderOperatorContextBanner = () => {
         const root = document.getElementById('operator-context');
         if (!root) return;
@@ -797,6 +821,10 @@
             createElement('span', '', operatorContextDeploymentAccessLabel(context)),
             createElement('span', '', context?.trustedHeaders?.enabled ? 'Trusted headers enabled' : 'Trusted headers disabled'),
           );
+          const deploymentAccessSummary = operatorContextDeploymentAccessSummaryLabel(context);
+          if (deploymentAccessSummary) {
+            meta.append(createElement('span', '', deploymentAccessSummary));
+          }
           if (operatorContextState.refreshing) {
             meta.append(createElement('span', '', 'Refreshing trusted front-door context…'));
           } else if (operatorContextState.error) {

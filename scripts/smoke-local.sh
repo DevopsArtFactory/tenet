@@ -899,6 +899,10 @@ assert 'Application status overview' in ui, ui
 assert 'Operator context' in ui, ui
 assert "const operatorContextRoute = () => '/v1/operator/context';" in ui, ui
 assert "const operatorContextReadRoute = () => 'GET /v1/operator/context';" in ui, ui
+assert "const operatorContextDeploymentAccessSummaryLabel = (context) => {" in ui, ui
+assert 'Deployment access summary unavailable for this response' in ui, ui
+assert 'forwarded match catalog' in ui, ui
+assert 'unmatched' in ui, ui
 assert "loadOperatorContextBanner().catch(() => {});" in ui, ui
 assert "loadOperatorContextBanner({ refresh: true });" in ui, ui
 assert 'Refresh context' in ui, ui

@@ -359,7 +359,10 @@ async function render(operatorResponses) {
   return { document, window, text, fetchCalls, refresh };
 }
 (async () => {
-  const firstContext = { trustedHeaders: { enabled: true }, identity: { authenticated: true, name: 'Front Door Operator', email: 'frontdoor@example.com' }, roles: { names: ['viewer', 'operator'], canRead: true, canWrite: true }, deploymentAccess: { enforced: true, forwarded: true, names: ['payments-api-prod', 'worker-prod'] } };
+  const firstContext = { trustedHeaders: { enabled: true }, identity: { authenticated: true, name: 'Front Door Operator', email: 'frontdoor@example.com' }, roles: { names: ['viewer', 'operator'], canRead: true, canWrite: true }, deploymentAccess: { enforced: true, forwarded: true, names: ['payments-api-prod', 'worker-prod'], summary: { available: true, forwardedCount: 2, matchedCount: 2, accountCount: 1, projectCount: 1, environmentCount: 2, unmatchedNames: [] } } };
+  const unmatchedContext = { ...firstContext, deploymentAccess: { enforced: true, forwarded: true, names: ['payments-api-prod', 'stale-api', 'archived-api'], summary: { available: true, forwardedCount: 3, matchedCount: 1, accountCount: 1, projectCount: 1, environmentCount: 1, unmatchedNames: ['archived-api', 'stale-api'] } } };
+  const unavailableSummaryContext = { ...firstContext, deploymentAccess: { enforced: true, forwarded: true, names: ['payments-api-prod'], summary: { available: false, forwardedCount: 1, unavailableReason: 'catalog placement provider is unavailable' } } };
+  const absentSummaryContext = { ...firstContext, deploymentAccess: { enforced: true, forwarded: true, names: ['payments-api-prod'] } };
   const ready = await render({ ok: true, json: () => Promise.resolve(firstContext) });
   if (ready.fetchCalls[0] !== '/v1/operator/context') throw new Error('expected operator context endpoint to load before route data');
   if (!ready.text().includes('Operator context')) throw new Error('expected operator context banner title');
@@ -368,7 +371,18 @@ async function render(operatorResponses) {
   if (!ready.text().includes('Front Door Operator')) throw new Error('expected trusted identity in operator context banner');
   if (!ready.text().includes('Write-capable roles: viewer, operator')) throw new Error('expected role capability in operator context banner');
   if (!ready.text().includes('2 deployments forwarded: payments-api-prod, worker-prod')) throw new Error('expected deployment allowlist summary');
+  if (!ready.text().includes('Deployment access: all 2 forwarded deployments match catalog across 1 account, 1 project, 2 environments')) throw new Error('expected matched deployment access diagnostic summary');
   if (!ready.text().includes('Trusted headers enabled')) throw new Error('expected trusted header status');
+
+  const unmatched = await render({ ok: true, json: () => Promise.resolve(unmatchedContext) });
+  if (!unmatched.text().includes('3 deployments forwarded: payments-api-prod, stale-api, archived-api')) throw new Error('expected forwarded deployment allowlist to stay visible');
+  if (!unmatched.text().includes('Deployment access: 1 of 3 forwarded match catalog across 1 account, 1 project, 1 environment; 2 unmatched: archived-api, stale-api')) throw new Error('expected unmatched deployment access diagnostic summary');
+
+  const unavailableSummary = await render({ ok: true, json: () => Promise.resolve(unavailableSummaryContext) });
+  if (!unavailableSummary.text().includes('Deployment access summary unavailable: catalog placement provider is unavailable (1 forwarded)')) throw new Error('expected unavailable summary diagnostic copy');
+
+  const absentSummary = await render({ ok: true, json: () => Promise.resolve(absentSummaryContext) });
+  if (!absentSummary.text().includes('Deployment access summary unavailable for this response')) throw new Error('expected summary-absent fallback copy');
 
   const refreshed = await render([
     { ok: true, json: () => Promise.resolve(firstContext) },
