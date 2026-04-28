@@ -1304,6 +1304,7 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		"failed rollouts and crash loops can still surface useful logs",
 		"Current route-stable rollout resources with explicit no-log-source responses",
 		"weighted-target-group traffic-routing resources (`trafficShiftPlan`, `productionListenerRule`, `activeTargetGroup`, and `candidateTargetGroup`)",
+		"This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet.",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
 			t.Fatalf("expected resource recent logs doc to include %q", fragment)

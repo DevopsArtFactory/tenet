@@ -84,7 +84,7 @@ The UI keeps the logs slice narrowly scoped to the selected resource and uses sa
 
 Rendered states:
 - loading: `Loading recent logs…`
-- unavailable: `Recent logs are unavailable for this resource.` plus the lookup-context fields above and friendly UI copy mapped from known provider `unavailableReason` codes such as `unsupported_resource_type`, `cross_account_not_configured`, `no_log_source`, `no_running_tasks`, `no_instances`, `resource_not_found`, and `aws_unavailable`
+- unavailable: `Recent logs are unavailable for this resource.` plus the lookup-context fields above and friendly UI copy mapped from known provider `unavailableReason` codes such as `unsupported_resource_type`, `cross_account_not_configured`, `no_log_source`, `no_running_tasks`, `no_instances`, `resource_not_found`, and `aws_unavailable`. For route-stable rollout resources that intentionally have no independent stream yet, `no_log_source` renders as `This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet.` so operators do not confuse a valid drill-down page with an unsupported resource family.
 - empty: `No recent logs are available for this resource.` plus the same lookup-context fields when the backend returns `available=true` with `entries=[]`
 - populated: source metadata, the same lookup-context fields, and per-entry timestamp, optional stream, and message text
 
