@@ -4989,7 +4989,7 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   const weightedListenerRuleInspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=productionListenerRule&resourceName=payments-api-staging-prod-listener';
   const weightedListenerRuleRun = await renderWithFetch('?page=resource&deployment=payments-api-staging&resourceType=productionListenerRule&resourceId=' + encodeURIComponent(weightedListenerRuleResourceID), (url) => {
     if (url === ecsDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(unsupportedDetailBody) });
-    if (url === weightedListenerRuleLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === weightedListenerRuleLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'no_log_source', entries: [] }) });
     if (url === weightedListenerRuleInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'rollout_execution_summary', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: false }, trafficRoutingResource: { kind: 'productionListenerRule', displayName: 'Production listener rule', inspectionMode: 'summary_only', summary: 'Weighted listener rule' } }) });
     throw new Error('unexpected weighted listener rule fetch url: ' + url);
   });
@@ -4998,6 +4998,7 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!weightedListenerRuleText.includes('Production listener rule')) throw new Error('expected weighted listener rule inspection to render display name');
   if (!weightedListenerRuleText.includes('Rollout summary only')) throw new Error('expected weighted listener rule inspection to render summary inspection mode');
   if (!weightedListenerRuleText.includes('Weighted listener rule')) throw new Error('expected weighted listener rule inspection to render controller summary');
+  if (!weightedListenerRuleText.includes('This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet.')) throw new Error('expected weighted listener rule recent logs to explain no-log-source state');
 
   const emptyRun = await renderWithFetch('?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(ecsResourceID), (url) => {
     if (url === ecsDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(ecsDetailBody) });
@@ -5221,7 +5222,7 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   const trafficShiftPlanInspectionURL = '/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing';
   const trafficShiftPlanRun = await renderWithFetch('?page=resource&deployment=payments-api-prod&resourceType=trafficShiftPlan&resourceId=' + encodeURIComponent(trafficShiftPlanResourceID), (url) => {
     if (url === asgDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(asgDetailBody) });
-    if (url === trafficShiftPlanLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === trafficShiftPlanLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'no_log_source', entries: [] }) });
     if (url === trafficShiftPlanInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({
       available: true,
       source: 'rollout_execution_summary',
@@ -5238,6 +5239,7 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   const trafficShiftPlanText = collectText(trafficShiftPlanRun.document.getElementById('accounts')).join(' | ');
   if (!trafficShiftPlanText.includes('Traffic shift plan')) throw new Error('expected traffic shift plan inspection to render display name');
   if (!trafficShiftPlanText.includes('Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s')) throw new Error('expected traffic shift plan inspection to render summary text');
+  if (!trafficShiftPlanText.includes('This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet.')) throw new Error('expected traffic shift plan recent logs to explain no-log-source state');
 })();
 `
 

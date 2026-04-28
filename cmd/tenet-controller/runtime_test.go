@@ -690,6 +690,7 @@ func TestEmitRuntimePlansBatchWriterIncludesChangedAndNewSnapshots(t *testing.T)
 	if store.applied[0].DeploymentName != "api-prod" || store.applied[1].DeploymentName != "worker-prod" {
 		t.Fatalf("expected deterministic batch snapshot order for changed and new deployments, got %+v", store.applied)
 	}
+	alignRuntimeHistoryTimestampsForTest(t, &wantChanged, store.applied[0].Status.History)
 	if !reflect.DeepEqual(store.applied[0].Status, wantChanged) {
 		t.Fatalf("expected changed snapshot to be updated to current derived status, got %+v want %+v", store.applied[0].Status, wantChanged)
 	}
@@ -3215,6 +3216,16 @@ func compiledRuntimeStatusForTest(t *testing.T, root string, deploymentName stri
 	}
 	t.Fatalf("deployment %q not found in compiled catalog", deploymentName)
 	return domain.DeploymentStatus{}
+}
+
+func alignRuntimeHistoryTimestampsForTest(t *testing.T, want *domain.DeploymentStatus, actual []domain.StatusHistoryEntry) {
+	t.Helper()
+	if len(want.History) != len(actual) {
+		t.Fatalf("expected runtime history length %d, got %d", len(want.History), len(actual))
+	}
+	for i := range want.History {
+		want.History[i].Timestamp = actual[i].Timestamp
+	}
 }
 
 func rolloutStepKinds(steps []domain.RolloutStepSummary) []string {

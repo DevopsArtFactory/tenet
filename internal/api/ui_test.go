@@ -1498,6 +1498,8 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 		"return 'Recent logs are not supported for this resource type.';",
 		"case 'cross_account_not_configured':",
 		"return 'Cross-account access is not configured for this deployment.';",
+		"case 'no_log_source':",
+		"return 'This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet.';",
 		"case 'aws_unavailable':",
 		"return 'AWS access is currently unavailable for recent logs.';",
 		"const lookupContextText = (value) => value == null || value === '' ? '—' : String(value);",
