@@ -376,7 +376,9 @@ async function render(operatorResponses) {
 
   const unmatched = await render({ ok: true, json: () => Promise.resolve(unmatchedContext) });
   if (!unmatched.text().includes('3 deployments forwarded: payments-api-prod, stale-api, archived-api')) throw new Error('expected forwarded deployment allowlist to stay visible');
-  if (!unmatched.text().includes('Deployment access: 1 of 3 forwarded match catalog across 1 account, 1 project, 1 environment; 2 unmatched: archived-api, stale-api')) throw new Error('expected unmatched deployment access diagnostic summary');
+  if (!unmatched.text().includes('Deployment access warning: 1 of 3 forwarded match catalog across 1 account, 1 project, 1 environment; 2 unmatched front-door names: archived-api, stale-api. Check the front-door allowlist.')) throw new Error('expected unmatched deployment access diagnostic summary');
+  const warningPill = findFirst(unmatched.document.getElementById('operator-context'), (node) => String(node.className || '').includes('operator-context-warning'));
+  if (!warningPill || !warningPill.textContent.includes('Check the front-door allowlist.')) throw new Error('expected unmatched deployment access warning pill');
 
   const unavailableSummary = await render({ ok: true, json: () => Promise.resolve(unavailableSummaryContext) });
   if (!unavailableSummary.text().includes('Deployment access summary unavailable: catalog placement provider is unavailable (1 forwarded)')) throw new Error('expected unavailable summary diagnostic copy');
