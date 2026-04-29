@@ -206,6 +206,7 @@ type operatorContextResponse struct {
 	Identity         requestactor.AuthenticatedIdentity `json:"identity"`
 	Roles            operatorContextRoles               `json:"roles"`
 	DeploymentAccess operatorContextDeploymentAccess    `json:"deploymentAccess"`
+	AccessVerdicts   operatorContextAccessVerdicts      `json:"accessVerdicts"`
 }
 
 type operatorContextTrustedHeaders struct {
@@ -240,6 +241,25 @@ type operatorContextAccessSummary struct {
 	EnvironmentCount  int      `json:"environmentCount,omitempty"`
 }
 
+type operatorContextAccessVerdicts struct {
+	OperatorRead          operatorContextAccessVerdict `json:"operatorRead"`
+	OperatorWrite         operatorContextAccessVerdict `json:"operatorWrite"`
+	DeploymentScopedRead  operatorContextAccessVerdict `json:"deploymentScopedRead"`
+	DeploymentScopedWrite operatorContextAccessVerdict `json:"deploymentScopedWrite"`
+	CollectionRead        operatorContextAccessVerdict `json:"collectionRead"`
+}
+
+type operatorContextAccessVerdict struct {
+	Allowed                               bool   `json:"allowed"`
+	Reason                                string `json:"reason"`
+	RequiresAuthenticatedIdentity         bool   `json:"requiresAuthenticatedIdentity"`
+	RequiresViewerCapableRole             bool   `json:"requiresViewerCapableRole,omitempty"`
+	RequiresOperatorRole                  bool   `json:"requiresOperatorRole,omitempty"`
+	RequiresExactDeploymentAllowlistMatch bool   `json:"requiresExactDeploymentAllowlistMatch,omitempty"`
+	FiltersCollectionsByDeploymentAccess  bool   `json:"filtersCollectionsByDeploymentAccess,omitempty"`
+	EmptyCollectionLikely                 bool   `json:"emptyCollectionLikely,omitempty"`
+}
+
 func buildOperatorContextResponse(r *http.Request, options Options) operatorContextResponse {
 	identity := requestactor.AuthenticatedIdentityFromContext(r.Context())
 	roles := requestactor.AuthenticatedRolesFromContext(r.Context())
@@ -265,7 +285,132 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 			Names:     deployments.Names,
 			Summary:   summary,
 		},
+		AccessVerdicts: buildOperatorContextAccessVerdicts(options, identity, roles, deployments, summary),
 	}
+}
+
+func buildOperatorContextAccessVerdicts(options Options, identity requestactor.AuthenticatedIdentity, roles requestactor.AuthenticatedRoles, deployments requestactor.AuthorizedDeployments, summary *operatorContextAccessSummary) operatorContextAccessVerdicts {
+	operatorRead := operatorContextReadVerdict(options, identity, roles)
+	operatorWrite := operatorContextWriteVerdict(options, identity, roles)
+	return operatorContextAccessVerdicts{
+		OperatorRead:          operatorRead,
+		OperatorWrite:         operatorWrite,
+		DeploymentScopedRead:  operatorContextDeploymentScopedReadVerdict(options, identity, roles, deployments),
+		DeploymentScopedWrite: operatorContextDeploymentScopedWriteVerdict(options, identity, roles, deployments, operatorWrite),
+		CollectionRead:        operatorContextCollectionReadVerdict(options, identity, roles, deployments, summary),
+	}
+}
+
+func operatorContextReadVerdict(options Options, identity requestactor.AuthenticatedIdentity, roles requestactor.AuthenticatedRoles) operatorContextAccessVerdict {
+	verdict := operatorContextAccessVerdict{
+		Allowed:                       true,
+		Reason:                        "operator read routes are not enforcing trusted front-door identity for this API instance",
+		RequiresAuthenticatedIdentity: options.RequireDeploymentReadAuthorization,
+		RequiresViewerCapableRole:     options.RequireDeploymentReadAuthorization && options.RequireOperatorRoleForRead,
+	}
+	if !options.RequireDeploymentReadAuthorization {
+		return verdict
+	}
+	if !identity.Authenticated {
+		verdict.Allowed = false
+		verdict.Reason = "authenticated identity is required for guarded operator read routes"
+		return verdict
+	}
+	if options.RequireOperatorRoleForRead && !roles.AllowsOperatorRead() {
+		verdict.Allowed = false
+		verdict.Reason = "authenticated viewer-capable role is required for guarded operator read routes"
+		return verdict
+	}
+	verdict.Reason = "guarded operator read prerequisites are satisfied for this request"
+	return verdict
+}
+
+func operatorContextWriteVerdict(options Options, identity requestactor.AuthenticatedIdentity, roles requestactor.AuthenticatedRoles) operatorContextAccessVerdict {
+	identityRequired := options.RequireAuthenticatedIdentity || options.RequireOperatorRoleForWrite || options.RequireDeploymentReadAuthorization
+	verdict := operatorContextAccessVerdict{
+		Allowed:                       true,
+		Reason:                        "operator write routes are not enforcing trusted front-door identity for this API instance",
+		RequiresAuthenticatedIdentity: identityRequired,
+		RequiresOperatorRole:          options.RequireOperatorRoleForWrite,
+	}
+	if !identityRequired {
+		return verdict
+	}
+	if !identity.Authenticated {
+		verdict.Allowed = false
+		verdict.Reason = "authenticated identity is required for guarded operator write routes"
+		return verdict
+	}
+	if options.RequireOperatorRoleForWrite && !roles.AllowsOperatorWrite() {
+		verdict.Allowed = false
+		verdict.Reason = "authenticated operator role is required for guarded operator write routes"
+		return verdict
+	}
+	verdict.Reason = "guarded operator write prerequisites are satisfied for this request"
+	return verdict
+}
+
+func operatorContextDeploymentScopedReadVerdict(options Options, identity requestactor.AuthenticatedIdentity, roles requestactor.AuthenticatedRoles, deployments requestactor.AuthorizedDeployments) operatorContextAccessVerdict {
+	verdict := operatorContextReadVerdict(options, identity, roles)
+	verdict.RequiresExactDeploymentAllowlistMatch = options.RequireDeploymentReadAuthorization
+	if !options.RequireDeploymentReadAuthorization {
+		verdict.Allowed = true
+		verdict.Reason = "deployment-scoped reads are not requiring exact deployment allowlist membership for this API instance"
+		return verdict
+	}
+	if !verdict.Allowed {
+		return verdict
+	}
+	if len(deployments.Names) == 0 {
+		verdict.Allowed = false
+		verdict.Reason = "deployment-scoped reads will return 403 unless X-Tenet-Authorized-Deployments includes the exact deployment name"
+		return verdict
+	}
+	verdict.Reason = "deployment-scoped reads can pass only for deployments named in X-Tenet-Authorized-Deployments"
+	return verdict
+}
+
+func operatorContextDeploymentScopedWriteVerdict(options Options, identity requestactor.AuthenticatedIdentity, roles requestactor.AuthenticatedRoles, deployments requestactor.AuthorizedDeployments, operatorWrite operatorContextAccessVerdict) operatorContextAccessVerdict {
+	verdict := operatorWrite
+	verdict.RequiresExactDeploymentAllowlistMatch = options.RequireDeploymentReadAuthorization
+	if !verdict.Allowed {
+		return verdict
+	}
+	if !options.RequireDeploymentReadAuthorization {
+		verdict.Reason = "deployment-scoped writes are not requiring exact deployment allowlist membership for this API instance"
+		return verdict
+	}
+	if len(deployments.Names) == 0 {
+		verdict.Allowed = false
+		verdict.Reason = "deployment-scoped writes will return 403 unless X-Tenet-Authorized-Deployments includes the exact deployment name"
+		return verdict
+	}
+	verdict.Reason = "deployment-scoped writes can pass only for deployments named in X-Tenet-Authorized-Deployments"
+	return verdict
+}
+
+func operatorContextCollectionReadVerdict(options Options, identity requestactor.AuthenticatedIdentity, roles requestactor.AuthenticatedRoles, deployments requestactor.AuthorizedDeployments, summary *operatorContextAccessSummary) operatorContextAccessVerdict {
+	verdict := operatorContextReadVerdict(options, identity, roles)
+	verdict.FiltersCollectionsByDeploymentAccess = options.RequireDeploymentReadAuthorization
+	if !options.RequireDeploymentReadAuthorization {
+		verdict.Allowed = true
+		verdict.Reason = "collection reads are not filtered by deployment allowlist for this API instance"
+		return verdict
+	}
+	if !verdict.Allowed {
+		return verdict
+	}
+	verdict.Reason = "collection reads are filtered to deployments named in X-Tenet-Authorized-Deployments"
+	if len(deployments.Names) == 0 {
+		verdict.EmptyCollectionLikely = true
+		verdict.Reason = "collection reads will be allowed but return empty collections until X-Tenet-Authorized-Deployments forwards at least one visible deployment"
+		return verdict
+	}
+	if summary != nil && summary.Available && summary.MatchedCount == 0 {
+		verdict.EmptyCollectionLikely = true
+		verdict.Reason = "collection reads will be allowed but likely empty because the forwarded deployment allowlist does not match catalog deployments"
+	}
+	return verdict
 }
 
 func buildOperatorContextAccessSummary(ctx context.Context, options Options, deployments requestactor.AuthorizedDeployments) *operatorContextAccessSummary {

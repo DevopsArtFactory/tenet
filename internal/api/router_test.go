@@ -159,6 +159,22 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if summary["available"] != false || summary["unavailableReason"] != "catalog placement provider is unavailable" || summary["forwardedCount"] != float64(2) {
 		t.Fatalf("unexpected unavailable deploymentAccess summary: %#v", summary)
 	}
+	accessVerdicts, ok := body["accessVerdicts"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected accessVerdicts object, got %#v", body["accessVerdicts"])
+	}
+	operatorRead := accessVerdicts["operatorRead"].(map[string]any)
+	if operatorRead["allowed"] != true || operatorRead["requiresAuthenticatedIdentity"] != true || operatorRead["requiresViewerCapableRole"] != true {
+		t.Fatalf("expected allowed read verdict with identity/read-role requirements, got %#v", operatorRead)
+	}
+	operatorWrite := accessVerdicts["operatorWrite"].(map[string]any)
+	if operatorWrite["allowed"] != true || operatorWrite["requiresOperatorRole"] != true || operatorWrite["reason"] != "guarded operator write prerequisites are satisfied for this request" {
+		t.Fatalf("expected allowed write verdict, got %#v", operatorWrite)
+	}
+	deploymentScopedRead := accessVerdicts["deploymentScopedRead"].(map[string]any)
+	if deploymentScopedRead["allowed"] != true || deploymentScopedRead["requiresExactDeploymentAllowlistMatch"] != true || deploymentScopedRead["reason"] != "deployment-scoped reads can pass only for deployments named in X-Tenet-Authorized-Deployments" {
+		t.Fatalf("expected conditional deployment read verdict, got %#v", deploymentScopedRead)
+	}
 }
 
 func TestRouterOperatorContextSummarizesMatchedAndUnmatchedDeploymentAccess(t *testing.T) {
@@ -217,6 +233,74 @@ func TestRouterOperatorContextSummarizesMatchedAndUnmatchedDeploymentAccess(t *t
 	if _, ok := summary["unavailableReason"]; ok {
 		t.Fatalf("expected no unavailable reason for available summary, got %#v", summary)
 	}
+	accessVerdicts := body["accessVerdicts"].(map[string]any)
+	collectionRead := accessVerdicts["collectionRead"].(map[string]any)
+	if collectionRead["allowed"] != true || collectionRead["filtersCollectionsByDeploymentAccess"] != true || collectionRead["emptyCollectionLikely"] != nil {
+		t.Fatalf("expected collection read verdict to report filtering without likely-empty warning, got %#v", collectionRead)
+	}
+}
+
+func TestRouterOperatorContextVerdictsExplainDeniedAndEmptyCollectionCases(t *testing.T) {
+	t.Run("missing identity matches guarded read unauthorized path", func(t *testing.T) {
+		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
+			RequireDeploymentReadAuthorization: true,
+			RequireOperatorRoleForRead:         true,
+			RequireOperatorRoleForWrite:        true,
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected diagnostic context to stay readable, got %d: %s", resp.Code, resp.Body.String())
+		}
+		var body map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode operator context response: %v", err)
+		}
+		accessVerdicts := body["accessVerdicts"].(map[string]any)
+		operatorRead := accessVerdicts["operatorRead"].(map[string]any)
+		if operatorRead["allowed"] != false || operatorRead["reason"] != "authenticated identity is required for guarded operator read routes" {
+			t.Fatalf("expected read verdict to mirror guarded 401 reason, got %#v", operatorRead)
+		}
+		operatorWrite := accessVerdicts["operatorWrite"].(map[string]any)
+		if operatorWrite["allowed"] != false || operatorWrite["reason"] != "authenticated identity is required for guarded operator write routes" {
+			t.Fatalf("expected write verdict to mirror guarded 401 reason, got %#v", operatorWrite)
+		}
+	})
+
+	t.Run("missing allowlist explains empty collection and deployment 403 risk", func(t *testing.T) {
+		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
+			RequireDeploymentReadAuthorization: true,
+			RequireOperatorRoleForRead:         true,
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedRolesHeader, "viewer")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected diagnostic context to stay readable, got %d: %s", resp.Code, resp.Body.String())
+		}
+		var body map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode operator context response: %v", err)
+		}
+		accessVerdicts := body["accessVerdicts"].(map[string]any)
+		deploymentScopedRead := accessVerdicts["deploymentScopedRead"].(map[string]any)
+		if deploymentScopedRead["allowed"] != false || deploymentScopedRead["reason"] != "deployment-scoped reads will return 403 unless X-Tenet-Authorized-Deployments includes the exact deployment name" {
+			t.Fatalf("expected deployment read verdict to explain exact allowlist requirement, got %#v", deploymentScopedRead)
+		}
+		collectionRead := accessVerdicts["collectionRead"].(map[string]any)
+		if collectionRead["allowed"] != true || collectionRead["emptyCollectionLikely"] != true || collectionRead["reason"] != "collection reads will be allowed but return empty collections until X-Tenet-Authorized-Deployments forwards at least one visible deployment" {
+			t.Fatalf("expected collection verdict to explain empty filtered collections, got %#v", collectionRead)
+		}
+	})
 }
 
 func TestRouterOperatorContextSummaryReportsCatalogLookupFailure(t *testing.T) {
