@@ -18,6 +18,8 @@ func TestEmbeddedUIRendersOperatorContextBannerSafely(t *testing.T) {
 		"const operatorContextRoleLabel = (context) => {",
 		"const operatorContextDeploymentAccessLabel = (context) => {",
 		"const operatorContextDeploymentAccessSummaryLabel = (context) => {",
+		"const operatorContextDeploymentAccessSummaryClass = (context) => {",
+		"operator-context-warning",
 		"Deployment access summary unavailable for this response",
 		"Deployment access summary unavailable:",
 		"forwarded match catalog",

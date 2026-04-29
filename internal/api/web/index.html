@@ -37,6 +37,7 @@
       .operator-context-summary { color: var(--text); font-size: 14px; font-weight: 700; }
       .operator-context-meta { display:flex; flex-wrap:wrap; gap: 8px; color: var(--muted); font-size: 13px; line-height: 1.45; }
       .operator-context-meta span { padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); }
+      .operator-context-meta span.operator-context-warning { color: #fde68a; background: rgba(244,201,93,.12); border-color: rgba(244,201,93,.35); }
       .operator-context-action { appearance:none; border: 1px solid rgba(134,239,172,.24); background: rgba(34,197,94,.10); color: var(--text); border-radius: 999px; padding: 6px 11px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
       .operator-context-action:hover:not(:disabled), .operator-context-action:focus-visible:not(:disabled) { border-color: rgba(134,239,172,.45); background: rgba(34,197,94,.18); }
       .operator-context-action:disabled { cursor: progress; opacity: .62; }
@@ -788,9 +789,17 @@
         const placementText = placementCounts.length ? ` across ${placementCounts.join(', ')}` : '';
         if (unmatchedCount > 0) {
           const examples = unmatchedNames.length ? `: ${unmatchedNames.slice(0, 3).join(', ')}${unmatchedNames.length > 3 ? ', …' : ''}` : '';
-          return `Deployment access: ${matched} of ${forwarded} forwarded match catalog${placementText}; ${unmatchedCount} unmatched${examples}`;
+          return `Deployment access warning: ${matched} of ${forwarded} forwarded match catalog${placementText}; ${unmatchedCount} unmatched front-door names${examples}. Check the front-door allowlist.`;
         }
         return `Deployment access: all ${forwarded} forwarded deployments match catalog${placementText}`;
+      };
+      const operatorContextDeploymentAccessSummaryClass = (context) => {
+        const access = context?.deploymentAccess || {};
+        const summary = access.summary || null;
+        if (!access.enforced || !access.forwarded || !summary || summary.available === false) return '';
+        const forwarded = Number.isFinite(summary.forwardedCount) ? summary.forwardedCount : (Array.isArray(access.names) ? access.names.length : 0);
+        const matched = Number.isFinite(summary.matchedCount) ? summary.matchedCount : 0;
+        return Math.max(0, forwarded - matched) > 0 ? 'operator-context-warning' : '';
       };
       const renderOperatorContextBanner = () => {
         const root = document.getElementById('operator-context');
@@ -823,7 +832,7 @@
           );
           const deploymentAccessSummary = operatorContextDeploymentAccessSummaryLabel(context);
           if (deploymentAccessSummary) {
-            meta.append(createElement('span', '', deploymentAccessSummary));
+            meta.append(createElement('span', operatorContextDeploymentAccessSummaryClass(context), deploymentAccessSummary));
           }
           if (operatorContextState.refreshing) {
             meta.append(createElement('span', '', 'Refreshing trusted front-door context…'));
