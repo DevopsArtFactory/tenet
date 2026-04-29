@@ -1627,6 +1627,12 @@ def assert_operator_context_common(payload):
     assert trusted.get("deploymentReadAuthorizationEnforced") is True, payload
     assert trusted.get("operatorReadRoleEnforced") is True, payload
     assert trusted.get("operatorWriteRoleEnforced") is True, payload
+    access_verdicts = payload.get("accessVerdicts") or {}
+    assert access_verdicts.get("operatorRead", {}).get("requiresAuthenticatedIdentity") is True, payload
+    assert access_verdicts.get("operatorRead", {}).get("requiresViewerCapableRole") is True, payload
+    assert access_verdicts.get("operatorWrite", {}).get("requiresOperatorRole") is True, payload
+    assert access_verdicts.get("deploymentScopedRead", {}).get("requiresExactDeploymentAllowlistMatch") is True, payload
+    assert access_verdicts.get("collectionRead", {}).get("filtersCollectionsByDeploymentAccess") is True, payload
 
 assert_operator_context_common(operator_context_trusted)
 assert operator_context_trusted["identity"]["authenticated"] is True, operator_context_trusted
@@ -1647,6 +1653,11 @@ assert trusted_summary.get("unmatchedNames", []) == [], operator_context_trusted
 assert trusted_summary["accountCount"] >= 1, operator_context_trusted
 assert trusted_summary["projectCount"] >= 1, operator_context_trusted
 assert trusted_summary["environmentCount"] >= 1, operator_context_trusted
+trusted_verdicts = operator_context_trusted["accessVerdicts"]
+assert trusted_verdicts["operatorRead"]["allowed"] is True, operator_context_trusted
+assert trusted_verdicts["operatorWrite"]["allowed"] is True, operator_context_trusted
+assert trusted_verdicts["deploymentScopedRead"]["reason"] == "deployment-scoped reads can pass only for deployments named in X-Tenet-Authorized-Deployments", operator_context_trusted
+assert trusted_verdicts["collectionRead"]["allowed"] is True, operator_context_trusted
 assert_operator_context_common(operator_context_unmatched)
 assert operator_context_unmatched["deploymentAccess"]["enforced"] is True, operator_context_unmatched
 assert operator_context_unmatched["deploymentAccess"]["forwarded"] is True, operator_context_unmatched
@@ -1680,6 +1691,10 @@ assert operator_context_no_allowlist["roles"]["canWrite"] is False, operator_con
 assert operator_context_no_allowlist["deploymentAccess"]["enforced"] is True, operator_context_no_allowlist
 assert operator_context_no_allowlist["deploymentAccess"]["forwarded"] is False, operator_context_no_allowlist
 assert "names" not in operator_context_no_allowlist["deploymentAccess"], operator_context_no_allowlist
+no_allowlist_verdicts = operator_context_no_allowlist["accessVerdicts"]
+assert no_allowlist_verdicts["deploymentScopedRead"]["allowed"] is False, operator_context_no_allowlist
+assert no_allowlist_verdicts["collectionRead"]["allowed"] is True, operator_context_no_allowlist
+assert no_allowlist_verdicts["collectionRead"]["emptyCollectionLikely"] is True, operator_context_no_allowlist
 assert os.environ["AUTH_FORBIDDEN_EVENTS_STATUS"] == "403", os.environ["AUTH_FORBIDDEN_EVENTS_STATUS"]
 assert forbidden_events_body.strip() == "forbidden: operator does not have access to this deployment", forbidden_events_body
 assert os.environ["AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS"] == "403", os.environ["AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS"]
