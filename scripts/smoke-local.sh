@@ -1377,6 +1377,13 @@ operator_context_trusted=$(curl -fsS \
   -H "X-Tenet-Authenticated-Roles: viewer, operator" \
   -H "X-Tenet-Authorized-Deployments: payments-api-prod, worker-prod" \
   "http://$HOST:$PORT/v1/operator/context")
+operator_context_unmatched=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer, operator" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-prod, stale-api, worker-prod" \
+  "http://$HOST:$PORT/v1/operator/context")
 operator_context_alias=$(curl -fsS \
   -H "X-User-ID: alias-456" \
   -H "X-User-Name: Alias Operator" \
@@ -1389,6 +1396,7 @@ operator_context_no_allowlist=$(curl -fsS \
   -H "X-Tenet-Authenticated-Roles: viewer" \
   "http://$HOST:$PORT/v1/operator/context")
 operator_context_trusted_path=$(write_payload operator-context-trusted.json "$operator_context_trusted")
+operator_context_unmatched_path=$(write_payload operator-context-unmatched.json "$operator_context_unmatched")
 operator_context_alias_path=$(write_payload operator-context-alias.json "$operator_context_alias")
 operator_context_no_allowlist_path=$(write_payload operator-context-no-allowlist.json "$operator_context_no_allowlist")
 auth_role_required_collection_status=$(curl -sS -o "$AUTH_ROLE_REQUIRED_COLLECTION_BODY" -w "%{http_code}" \
@@ -1740,6 +1748,7 @@ AUTH_FORBIDDEN_APPLY_READ_BODY_PATH="$AUTH_FORBIDDEN_APPLY_READ_BODY" \
 AUTH_FORBIDDEN_AUDIT_STATUS="$auth_forbidden_audit_status" \
 AUTH_FORBIDDEN_AUDIT_BODY_PATH="$AUTH_FORBIDDEN_AUDIT_BODY" \
 OPERATOR_CONTEXT_TRUSTED_PATH="$operator_context_trusted_path" \
+OPERATOR_CONTEXT_UNMATCHED_PATH="$operator_context_unmatched_path" \
 OPERATOR_CONTEXT_ALIAS_PATH="$operator_context_alias_path" \
 OPERATOR_CONTEXT_NO_ALLOWLIST_PATH="$operator_context_no_allowlist_path" \
 ALLOWED_GUARDED_READ_PATH="$allowed_guarded_read_path" \
@@ -1827,6 +1836,8 @@ with open(os.environ['AUTH_FORBIDDEN_AUDIT_BODY_PATH'], encoding='utf-8') as fh:
     forbidden_audit_body = fh.read()
 with open(os.environ['OPERATOR_CONTEXT_TRUSTED_PATH'], encoding='utf-8') as fh:
     operator_context_trusted = json.load(fh)
+with open(os.environ['OPERATOR_CONTEXT_UNMATCHED_PATH'], encoding='utf-8') as fh:
+    operator_context_unmatched = json.load(fh)
 with open(os.environ['OPERATOR_CONTEXT_ALIAS_PATH'], encoding='utf-8') as fh:
     operator_context_alias = json.load(fh)
 with open(os.environ['OPERATOR_CONTEXT_NO_ALLOWLIST_PATH'], encoding='utf-8') as fh:
@@ -1946,6 +1957,26 @@ assert operator_context_trusted['roles']['canWrite'] is True, operator_context_t
 assert operator_context_trusted['deploymentAccess']['enforced'] is True, operator_context_trusted
 assert operator_context_trusted['deploymentAccess']['forwarded'] is True, operator_context_trusted
 assert operator_context_trusted['deploymentAccess']['names'] == ['payments-api-prod', 'worker-prod'], operator_context_trusted
+trusted_summary = operator_context_trusted['deploymentAccess']['summary']
+assert trusted_summary['available'] is True, operator_context_trusted
+assert trusted_summary['forwardedCount'] == 2, operator_context_trusted
+assert trusted_summary['matchedCount'] == 2, operator_context_trusted
+assert trusted_summary.get('unmatchedNames', []) == [], operator_context_trusted
+assert trusted_summary['accountCount'] >= 1, operator_context_trusted
+assert trusted_summary['projectCount'] >= 1, operator_context_trusted
+assert trusted_summary['environmentCount'] >= 1, operator_context_trusted
+assert_operator_context_common(operator_context_unmatched)
+assert operator_context_unmatched['deploymentAccess']['enforced'] is True, operator_context_unmatched
+assert operator_context_unmatched['deploymentAccess']['forwarded'] is True, operator_context_unmatched
+assert operator_context_unmatched['deploymentAccess']['names'] == ['payments-api-prod', 'stale-api', 'worker-prod'], operator_context_unmatched
+unmatched_summary = operator_context_unmatched['deploymentAccess']['summary']
+assert unmatched_summary['available'] is True, operator_context_unmatched
+assert unmatched_summary['forwardedCount'] == 3, operator_context_unmatched
+assert unmatched_summary['matchedCount'] == 2, operator_context_unmatched
+assert unmatched_summary['unmatchedNames'] == ['stale-api'], operator_context_unmatched
+assert unmatched_summary['accountCount'] >= 1, operator_context_unmatched
+assert unmatched_summary['projectCount'] >= 1, operator_context_unmatched
+assert unmatched_summary['environmentCount'] >= 1, operator_context_unmatched
 assert_operator_context_common(operator_context_alias)
 assert operator_context_alias['identity']['authenticated'] is True, operator_context_alias
 assert operator_context_alias['identity']['id'] == 'alias-456', operator_context_alias
