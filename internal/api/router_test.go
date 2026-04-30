@@ -643,6 +643,75 @@ func TestRouterOverviewApplicationPassesRequestContextToProvider(t *testing.T) {
 	}
 }
 
+func TestRouterOverviewDetailManagedDriftSummaryJSON(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+	}{
+		{name: "deployment detail", path: "/v1/overview/deployments/payments-api-prod"},
+		{name: "application detail", path: "/v1/overview/applications/payments-api-prod"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := NewRouter(Options{
+				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+				OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+					if name != "payments-api-prod" {
+						t.Fatalf("unexpected deployment name: %s", name)
+					}
+					return catalog.DeploymentOverviewDetail{
+						Name: "payments-api-prod",
+						ManagedDrift: []domain.ManagedDriftItem{
+							{Field: "artifact", Severity: domain.ManagedDriftSeverityHigh},
+							{Field: "generation", Severity: domain.ManagedDriftSeverityMedium},
+							{Field: "runtimeContext.capacity.desired", Severity: domain.ManagedDriftSeverityLow},
+						},
+						ManagedDriftSummary: catalog.ManagedDriftSummary{Total: 3, High: 1, Medium: 1, Low: 1},
+					}, nil
+				},
+				OverviewApplication: func(_ context.Context, name string) (catalog.ApplicationOverviewDetail, error) {
+					if name != "payments-api-prod" {
+						t.Fatalf("unexpected deployment name: %s", name)
+					}
+					return catalog.ApplicationOverviewDetail{
+						Name: "payments-api-prod",
+						ManagedDrift: []domain.ManagedDriftItem{
+							{Field: "artifact", Severity: domain.ManagedDriftSeverityHigh},
+							{Field: "generation", Severity: domain.ManagedDriftSeverityMedium},
+							{Field: "runtimeContext.capacity.desired", Severity: domain.ManagedDriftSeverityLow},
+						},
+						ManagedDriftSummary: catalog.ManagedDriftSummary{Total: 3, High: 1, Medium: 1, Low: 1},
+					}, nil
+				},
+			})
+
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			resp := httptest.NewRecorder()
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			summary, ok := payload["managedDriftSummary"].(map[string]any)
+			if !ok || summary["total"] != float64(3) || summary["high"] != float64(1) || summary["medium"] != float64(1) || summary["low"] != float64(1) {
+				t.Fatalf("expected managedDriftSummary counts in payload, got %#v", payload["managedDriftSummary"])
+			}
+			if _, exists := payload["ManagedDriftSummary"]; exists {
+				t.Fatalf("unexpected Go-style managed drift summary field in %#v", payload)
+			}
+			items, ok := payload["managedDrift"].([]any)
+			if !ok || len(items) != 3 {
+				t.Fatalf("expected managedDrift rows to be preserved, got %#v", payload["managedDrift"])
+			}
+		})
+	}
+}
+
 func TestRouterCatalogSummaryTreatsCanceledContextAsUnavailable(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
