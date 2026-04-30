@@ -900,6 +900,10 @@ assert 'Operator context' in ui, ui
 assert "const operatorContextRoute = () => '/v1/operator/context';" in ui, ui
 assert "const operatorContextReadRoute = () => 'GET /v1/operator/context';" in ui, ui
 assert "const operatorContextDeploymentAccessSummaryLabel = (context) => {" in ui, ui
+assert "const operatorContextEnforcementModeLabel = (context) => {" in ui, ui
+assert "Enforcement mode:" in ui, ui
+assert "read/write guarded" in ui, ui
+assert "local unrestricted" in ui, ui
 assert "const operatorContextAccessVerdictEntries = (context) => {" in ui, ui
 assert 'Operator reads' in ui, ui
 assert 'Collection reads' in ui, ui
