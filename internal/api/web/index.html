@@ -5061,9 +5061,9 @@
               createMetric('Drift summary', driftSummaryCopy(driftRows.length, filteredRows.length), 'summary'),
               createMetric('Total rows', String(driftRows.length)),
               createMetric('Visible rows', String(filteredRows.length)),
-              createMetric('High', String(filteredCounts.high)),
-              createMetric('Medium', String(filteredCounts.medium)),
-              createMetric('Low', String(filteredCounts.low)),
+              createMetric('Visible high', String(filteredCounts.high)),
+              createMetric('Visible medium', String(filteredCounts.medium)),
+              createMetric('Visible low', String(filteredCounts.low)),
             );
 
             if (!filteredRows.length) {

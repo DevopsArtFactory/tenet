@@ -295,7 +295,7 @@ Current drift workspace behavior:
 - adds a compact drift summary ahead of the table with total rows, visible rows after the current query/severity filters, and live `high` / `medium` / `low` counts so filter impact is obvious without scanning the full table
 - adds an explicit `Clear drift filters` control that resets the drift query, severity, and sort controls back to their defaults in one step without mutating the bookmarkable `/?page=drift...` route or re-running the deployment-detail fetch
 - uses source-specific empty-state copy so operators can distinguish "no controller-authored field-level drift was reported" from "no derived fallback field-level drift was detected"; local runs, missing AWS access, and older payloads continue to land on the existing clean fallback path instead of inventing live-backed rows
-- adds filtered-empty copy that tells operators the current query/severity controls are hiding all reported drift rows
+- adds filtered-empty copy that tells operators the current query/severity controls are hiding all reported drift rows and labels the high/medium/low severity counters as visible-row counts so filtered counts are not mistaken for the total baseline
 - keeps client-side severity filtering, query filtering, and sorting consistent across both backend-authored and fallback-derived drift rows
 - keeps the toolbar `Audit log` link deployment-scoped so operators land on `/?page=audit&deployment={name}` instead of the global audit slice
 
