@@ -795,6 +795,10 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"restarting `tenet-api`",
 		"The same trusted front-door read contract covers `GET /v1/overview/accounts/{awsAccountId}`",
 		"one trusted `X-Tenet-Authenticated-Roles: viewer` raw status detail read succeeds",
+		"Operator troubleshooting checklist for guarded reads and writes",
+		"If a collection read returns `200 OK` with `[]` or `{\"entries\":[]}`, compare `deploymentAccess.summary.matchedCount` and `unmatchedNames` against `X-Tenet-Authorized-Deployments`",
+		"If an operator write returns `403 Forbidden`, confirm both `roles.canWrite=true` (`operator` or `admin`) and exact deployment membership",
+		"curl -fsS http://localhost:8080/v1/operator/context",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README front-door auth contract to include %q", fragment)
@@ -850,6 +854,10 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"trusted `X-Tenet-Authorized-Deployments` filters returned application rows, raw status snapshots, account aggregates, and unscoped audit entries",
 		"`[]` for guarded collections",
 		"one trusted `X-Tenet-Authenticated-Roles: viewer` raw status detail read succeeds",
+		"Guarded-route troubleshooting workflow",
+		"`identity.authenticated`: `false` explains `401 Unauthorized` on guarded reads or writes",
+		"`deploymentAccess.summary`: `matchedCount=0` or non-empty `unmatchedNames` explains `200 OK` empty collections",
+		"`accessVerdicts`: use the blocked or likely-empty verdict reason as the operator-facing summary",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
 			t.Fatalf("expected local runtime doc front-door auth contract to include %q", fragment)
@@ -929,6 +937,10 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"when the applications allowlist is omitted or matches nothing, the API returns `200 OK` with `[]`",
 		"`GET /v1/audit-logs`",
 		"`{\"entries\":[]}`",
+		"Guarded-read troubleshooting from the embedded dashboard follows the same diagnostic order as the API docs",
+		"check `identity.authenticated` for `401`, check `roles.canRead` before allowlist debugging for viewer-role `403`",
+		"use `deploymentAccess.summary.matchedCount` / `unmatchedNames` to explain empty `200 OK` collections",
+		"it does not authorize routes client-side",
 	} {
 		if !strings.Contains(overviewFeatureDoc, fragment) {
 			t.Fatalf("expected overview feature doc front-door auth contract to include %q", fragment)

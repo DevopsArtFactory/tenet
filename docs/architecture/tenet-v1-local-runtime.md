@@ -40,6 +40,25 @@ Use these settings only when every request reaches Tenet through a front door th
 - `GET /v1/operator/context` is diagnostic-only and reports Tenet's normalized trusted identity, forwarded roles, forwarded deployment allowlist, and active auth/RBAC enforcement toggles for the current request. Its additive `enforcement` object summarizes the API process mode (for example `trusted_front_door_read_write`) plus whether trusted headers, guarded read/write routes, deployment-scoped allowlists, and collection filtering are active. Its additive `accessVerdicts` block summarizes whether common operator read, operator write, deployment-scoped read/write, and filtered collection-read route classes have the current request ingredients they need, including reason strings for missing identity, missing roles, missing exact deployment allowlist membership, and collection reads that are likely empty because no visible deployments were forwarded. The embedded `Operator context` banner now renders those verdicts beside the identity/role/allowlist summary and visually highlights blocked or likely-empty verdicts so operators do not have to mentally combine the raw fields before following drill-down links. When deployment-read authorization is enforced and catalog placements are available, `deploymentAccess.summary` additively reports how many forwarded deployment names matched catalog deployments, how many remain unmatched, and deterministic unmatched-name evidence for stale front-door configuration. Use these diagnostics behind the same trusted front door to debug forwarded-header wiring. The deployment access summary is diagnostic-only; it does not mint sessions, perform OAuth, authorize routes, or replace the guarded route checks. The enforcement summary and access verdicts are diagnostic-only too.
 - The same trusted front-door read contract also covers `GET /v1/overview/accounts/{awsAccountId}`, `GET /v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}`, `GET /v1/overview/applications/{deploymentName}`, `GET /v1/overview/deployments/{deploymentName}`, `GET /v1/overview/deployments/{deploymentName}/events`, `GET /v1/overview/deployments/{deploymentName}/resource-logs`, `GET /v1/overview/deployments/{deploymentName}/resource-inspection`, `GET /v1/status/deployments/{deploymentName}`, deployment-scoped `GET /v1/audit-logs`, and immutable stored reads `GET /v1/plans/{planId}` / `GET /v1/applies/{applyId}` using the persisted record deployment.
 
+### Guarded-route troubleshooting workflow
+
+Use `GET /v1/operator/context` as the first diagnostic before changing role or deployment headers. Treat the fields in this order:
+
+1. `identity.authenticated`: `false` explains `401 Unauthorized` on guarded reads or writes; fix trusted identity forwarding first.
+2. `roles.canRead` / `roles.canWrite`: missing read capability explains viewer-role `403` responses before any deployment allowlist is considered, while missing write capability explains operator-write `403` responses before plan/apply lookup.
+3. `deploymentAccess.summary`: `matchedCount=0` or non-empty `unmatchedNames` explains `200 OK` empty collections even when the request is authenticated and read-capable.
+4. `X-Tenet-Authorized-Deployments`: scoped reads and writes require exact deployment-name membership; account/project filters do not widen that allowlist.
+5. `accessVerdicts`: use the blocked or likely-empty verdict reason as the operator-facing summary, but remember each guarded route still performs its own server-side check.
+
+A safe local diagnostic mirrors the trusted headers your front door should forward:
+
+```bash
+curl -fsS http://localhost:8080/v1/operator/context \
+  -H 'X-Tenet-Authenticated-Id: operator-123' \
+  -H 'X-Tenet-Authenticated-Roles: viewer,operator' \
+  -H 'X-Tenet-Authorized-Deployments: payments-api-prod,worker-prod'
+```
+
 ## Developer flows
 
 ### Local smoke check without Docker
