@@ -802,6 +802,27 @@
         const matched = Number.isFinite(summary.matchedCount) ? summary.matchedCount : 0;
         return Math.max(0, forwarded - matched) > 0 ? 'operator-context-warning' : '';
       };
+      const operatorContextEnforcementModeLabel = (context) => {
+        const mode = context?.enforcement?.mode || '';
+        const labels = {
+          local_unrestricted: 'local unrestricted',
+          trusted_headers_observed_only: 'observed only',
+          trusted_front_door_read_only: 'read routes guarded',
+          trusted_front_door_write_only: 'write routes guarded',
+          trusted_front_door_read_write: 'read/write guarded',
+        };
+        return `Enforcement mode: ${labels[mode] || mode || 'unknown'}`;
+      };
+      const operatorContextEnforcementSummaryLabel = (context) => {
+        const summary = context?.enforcement?.summary || '';
+        return summary ? `Enforcement summary: ${summary}` : null;
+      };
+      const operatorContextEnforcementClass = (context) => {
+        const mode = context?.enforcement?.mode || '';
+        if (mode === 'trusted_front_door_read_write') return '';
+        if (mode === 'trusted_front_door_read_only' || mode === 'trusted_front_door_write_only' || mode === 'trusted_headers_observed_only' || mode === 'local_unrestricted') return 'operator-context-warning';
+        return '';
+      };
       const operatorContextAccessVerdictLabel = (label, verdict) => {
         if (!verdict || typeof verdict !== 'object') return null;
         const state = verdict.allowed ? 'allowed' : 'blocked';
@@ -853,8 +874,13 @@
           meta.append(
             createElement('span', '', operatorContextRoleLabel(context)),
             createElement('span', '', operatorContextDeploymentAccessLabel(context)),
+            createElement('span', operatorContextEnforcementClass(context), operatorContextEnforcementModeLabel(context)),
             createElement('span', '', context?.trustedHeaders?.enabled ? 'Trusted headers enabled' : 'Trusted headers disabled'),
           );
+          const enforcementSummary = operatorContextEnforcementSummaryLabel(context);
+          if (enforcementSummary) {
+            meta.append(createElement('span', operatorContextEnforcementClass(context), enforcementSummary));
+          }
           const deploymentAccessSummary = operatorContextDeploymentAccessSummaryLabel(context);
           if (deploymentAccessSummary) {
             meta.append(createElement('span', operatorContextDeploymentAccessSummaryClass(context), deploymentAccessSummary));

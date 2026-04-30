@@ -89,6 +89,8 @@ Recommended pattern:
 - TLS termination at the ALB
 - authentication handled by your chosen front door or identity layer before the request reaches Tenet
 
+Tenet's shipped control-plane runtime consumes trusted forwarded identity headers from that layer. It does not currently run a built-in GitHub OAuth browser login, issue Tenet-managed browser sessions, or manage an OAuth/OIDC provider lifecycle inside `tenet-api`.
+
 The UI is embedded in `tenet-api`, so you do not need a separate frontend service.
 
 If you enable `TENET_API_TRUST_AUTHENTICATED_HEADERS=true`, `TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true`, and/or `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`, keep that `tenet-api` instance behind the same authenticating front door. The proxy/load balancer layer must strip any inbound `X-Tenet-Authenticated-*` headers and `X-Tenet-Authorized-Deployments` from untrusted clients and then add its own trusted forwarded identity plus deployment-allowlist values, or callers can spoof operator identity or deployment access by sending those headers directly.
