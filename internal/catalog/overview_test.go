@@ -1427,6 +1427,29 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 	if len(detail.ManagedDrift) != 3 || detail.ManagedDrift[0].Field != "artifact" || detail.RuntimeSummary == nil || len(detail.RuntimeSummary.ManagedDrift) != 3 {
 		t.Fatalf("expected managed drift fields for application page, got detail=%+v runtime=%+v", detail.ManagedDrift, detail.RuntimeSummary)
 	}
+	if detail.ManagedDriftSummary != (ManagedDriftSummary{Total: 3, High: 2, Medium: 1, Low: 0}) {
+		t.Fatalf("expected managed drift summary for application page, got %+v", detail.ManagedDriftSummary)
+	}
+	if deploymentDetail.ManagedDriftSummary != detail.ManagedDriftSummary {
+		t.Fatalf("expected deployment detail managed drift summary to match application detail, got deployment=%+v application=%+v", deploymentDetail.ManagedDriftSummary, detail.ManagedDriftSummary)
+	}
+	for label, payload := range map[string]any{"application": detail, "deployment": deploymentDetail} {
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("marshal %s detail: %v", label, err)
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			t.Fatalf("unmarshal %s detail: %v", label, err)
+		}
+		summary, ok := decoded["managedDriftSummary"].(map[string]any)
+		if !ok || summary["total"] != float64(3) || summary["high"] != float64(2) || summary["medium"] != float64(1) || summary["low"] != float64(0) {
+			t.Fatalf("expected managedDriftSummary counts in %s detail JSON, got %#v", label, decoded["managedDriftSummary"])
+		}
+		if _, exists := decoded["ManagedDriftSummary"]; exists {
+			t.Fatalf("unexpected Go-style managed drift summary field in %s detail JSON: %#v", label, decoded)
+		}
+	}
 	if detail.Rollout == nil || detail.Rollout.Phase != domain.RolloutPhasePromoting || detail.Rollout.CurrentStep != "ShiftTrafficCanary" || len(detail.Rollout.Steps) != 2 {
 		t.Fatalf("expected rollout summary fields for application page, got %+v", detail.Rollout)
 	}
@@ -1437,29 +1460,30 @@ func TestBuildApplicationOverviewDetail(t *testing.T) {
 		t.Fatalf("expected history for application page, got %+v", detail.History)
 	}
 	expected := ApplicationOverviewDetail{
-		Name:               deploymentDetail.Name,
-		AppRef:             deploymentDetail.AppRef,
-		EnvironmentRef:     deploymentDetail.EnvironmentRef,
-		AccountName:        deploymentDetail.AccountName,
-		AWSAccountID:       deploymentDetail.AWSAccountID,
-		AllowedRegions:     append([]string(nil), deploymentDetail.AllowedRegions...),
-		Region:             deploymentDetail.Region,
-		TargetType:         deploymentDetail.TargetType,
-		Strategy:           deploymentDetail.Strategy,
-		ExecutionMode:      deploymentDetail.ExecutionMode,
-		DesiredArtifact:    deploymentDetail.DesiredArtifact,
-		UserData:           deploymentDetail.UserData,
-		RolloutConfig:      cloneDeploymentRolloutConfig(deploymentDetail.RolloutConfig),
-		DeployedArtifact:   deploymentDetail.DeployedArtifact,
-		ObservedGeneration: deploymentDetail.ObservedGeneration,
-		SourceFingerprint:  deploymentDetail.SourceFingerprint,
-		Sync:               deploymentDetail.Sync,
-		Health:             deploymentDetail.Health,
-		ManagedDrift:       cloneManagedDrift(deploymentDetail.ManagedDrift),
-		RuntimeSummary:     cloneRuntimeSummary(deploymentDetail.RuntimeSummary),
-		Rollout:            cloneRolloutSummary(deploymentDetail.Rollout),
-		Conditions:         append([]domain.Condition(nil), deploymentDetail.Conditions...),
-		History:            cloneStatusHistory(deploymentDetail.History),
+		Name:                deploymentDetail.Name,
+		AppRef:              deploymentDetail.AppRef,
+		EnvironmentRef:      deploymentDetail.EnvironmentRef,
+		AccountName:         deploymentDetail.AccountName,
+		AWSAccountID:        deploymentDetail.AWSAccountID,
+		AllowedRegions:      append([]string(nil), deploymentDetail.AllowedRegions...),
+		Region:              deploymentDetail.Region,
+		TargetType:          deploymentDetail.TargetType,
+		Strategy:            deploymentDetail.Strategy,
+		ExecutionMode:       deploymentDetail.ExecutionMode,
+		DesiredArtifact:     deploymentDetail.DesiredArtifact,
+		UserData:            deploymentDetail.UserData,
+		RolloutConfig:       cloneDeploymentRolloutConfig(deploymentDetail.RolloutConfig),
+		DeployedArtifact:    deploymentDetail.DeployedArtifact,
+		ObservedGeneration:  deploymentDetail.ObservedGeneration,
+		SourceFingerprint:   deploymentDetail.SourceFingerprint,
+		Sync:                deploymentDetail.Sync,
+		Health:              deploymentDetail.Health,
+		ManagedDrift:        cloneManagedDrift(deploymentDetail.ManagedDrift),
+		ManagedDriftSummary: deploymentDetail.ManagedDriftSummary,
+		RuntimeSummary:      cloneRuntimeSummary(deploymentDetail.RuntimeSummary),
+		Rollout:             cloneRolloutSummary(deploymentDetail.Rollout),
+		Conditions:          append([]domain.Condition(nil), deploymentDetail.Conditions...),
+		History:             cloneStatusHistory(deploymentDetail.History),
 	}
 	if !reflect.DeepEqual(detail, expected) {
 		t.Fatalf("expected application detail to preserve deployment detail semantics, got application=%+v expected=%+v", detail, expected)
