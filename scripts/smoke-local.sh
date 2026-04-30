@@ -1950,6 +1950,13 @@ def assert_operator_context_common(payload):
     assert trusted.get('deploymentReadAuthorizationEnforced') is True, payload
     assert trusted.get('operatorReadRoleEnforced') is True, payload
     assert trusted.get('operatorWriteRoleEnforced') is True, payload
+    enforcement = payload.get('enforcement') or {}
+    assert enforcement.get('mode') == 'trusted_front_door_read_write', payload
+    assert enforcement.get('trustedHeadersEnabled') is True, payload
+    assert enforcement.get('readRoutesGuarded') is True, payload
+    assert enforcement.get('writeRoutesGuarded') is True, payload
+    assert enforcement.get('deploymentScopedRoutesRequireAllowlist') is True, payload
+    assert enforcement.get('collectionReadsFiltered') is True, payload
     access_verdicts = payload.get('accessVerdicts') or {}
     assert access_verdicts.get('operatorRead', {}).get('requiresAuthenticatedIdentity') is True, payload
     assert access_verdicts.get('operatorRead', {}).get('requiresViewerCapableRole') is True, payload
