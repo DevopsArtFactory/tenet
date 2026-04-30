@@ -1057,6 +1057,7 @@ for fragment in (
     "Drift summary",
     "Total rows",
     "Visible rows",
+    "Visible high",
     "Field path",
     "Desired",
     "Actual",

@@ -6876,9 +6876,9 @@ async function render(detail) {
   if (!managedText.includes('Total rows')) throw new Error('expected managed drift total-row summary');
   if (!managedText.includes('Visible rows')) throw new Error('expected managed drift visible-row summary');
   if (!managedText.includes('Showing all 5 drift rows.')) throw new Error('expected managed drift summary copy');
-  if (!/High \| 2(?: \||$)/.test(managedText)) throw new Error('expected managed drift high-severity summary count');
-  if (!/Medium \| 2(?: \||$)/.test(managedText)) throw new Error('expected managed drift medium-severity summary count');
-  if (!/Low \| 1(?: \||$)/.test(managedText)) throw new Error('expected managed drift low-severity summary count');
+  if (!/Visible high \| 2(?: \||$)/.test(managedText)) throw new Error('expected managed drift visible high-severity summary count');
+  if (!/Visible medium \| 2(?: \||$)/.test(managedText)) throw new Error('expected managed drift visible medium-severity summary count');
+  if (!/Visible low \| 1(?: \||$)/.test(managedText)) throw new Error('expected managed drift visible low-severity summary count');
   if (!managedText.includes("<script>alert('xss')</script> stable=80 canary=20")) throw new Error('expected managed drift value to render as safe text');
   const managedSeverityField = managedRun.document.querySelector('[data-toolbar-field="Severity"]');
   if (!managedSeverityField) throw new Error('expected managed drift severity filter control');
