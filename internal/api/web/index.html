@@ -38,6 +38,7 @@
       .operator-context-meta { display:flex; flex-wrap:wrap; gap: 8px; color: var(--muted); font-size: 13px; line-height: 1.45; }
       .operator-context-meta span { padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); }
       .operator-context-meta span.operator-context-warning { color: #fde68a; background: rgba(244,201,93,.12); border-color: rgba(244,201,93,.35); }
+      .operator-context-meta span.operator-context-denied { color: #ffd0d0; background: rgba(255,123,123,.12); border-color: rgba(255,123,123,.32); }
       .operator-context-action { appearance:none; border: 1px solid rgba(134,239,172,.24); background: rgba(34,197,94,.10); color: var(--text); border-radius: 999px; padding: 6px 11px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
       .operator-context-action:hover:not(:disabled), .operator-context-action:focus-visible:not(:disabled) { border-color: rgba(134,239,172,.45); background: rgba(34,197,94,.18); }
       .operator-context-action:disabled { cursor: progress; opacity: .62; }
@@ -801,6 +802,30 @@
         const matched = Number.isFinite(summary.matchedCount) ? summary.matchedCount : 0;
         return Math.max(0, forwarded - matched) > 0 ? 'operator-context-warning' : '';
       };
+      const operatorContextAccessVerdictLabel = (label, verdict) => {
+        if (!verdict || typeof verdict !== 'object') return null;
+        const state = verdict.allowed ? 'allowed' : 'blocked';
+        const reason = verdict.reason ? `: ${verdict.reason}` : '';
+        return `${label} ${state}${reason}`;
+      };
+      const operatorContextAccessVerdictClass = (verdict) => {
+        if (!verdict || typeof verdict !== 'object') return '';
+        if (!verdict.allowed) return 'operator-context-denied';
+        if (verdict.emptyCollectionLikely) return 'operator-context-warning';
+        return '';
+      };
+      const operatorContextAccessVerdictEntries = (context) => {
+        const verdicts = context?.accessVerdicts || {};
+        return [
+          ['Operator reads', verdicts.operatorRead],
+          ['Operator writes', verdicts.operatorWrite],
+          ['Deployment reads', verdicts.deploymentScopedRead],
+          ['Deployment writes', verdicts.deploymentScopedWrite],
+          ['Collection reads', verdicts.collectionRead],
+        ]
+          .map(([label, verdict]) => ({ label: operatorContextAccessVerdictLabel(label, verdict), className: operatorContextAccessVerdictClass(verdict) }))
+          .filter((entry) => entry.label);
+      };
       const renderOperatorContextBanner = () => {
         const root = document.getElementById('operator-context');
         if (!root) return;
@@ -834,6 +859,9 @@
           if (deploymentAccessSummary) {
             meta.append(createElement('span', operatorContextDeploymentAccessSummaryClass(context), deploymentAccessSummary));
           }
+          operatorContextAccessVerdictEntries(context).forEach((entry) => {
+            meta.append(createElement('span', entry.className, entry.label));
+          });
           if (operatorContextState.refreshing) {
             meta.append(createElement('span', '', 'Refreshing trusted front-door context…'));
           } else if (operatorContextState.error) {

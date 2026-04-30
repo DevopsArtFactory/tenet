@@ -900,6 +900,11 @@ assert 'Operator context' in ui, ui
 assert "const operatorContextRoute = () => '/v1/operator/context';" in ui, ui
 assert "const operatorContextReadRoute = () => 'GET /v1/operator/context';" in ui, ui
 assert "const operatorContextDeploymentAccessSummaryLabel = (context) => {" in ui, ui
+assert "const operatorContextAccessVerdictEntries = (context) => {" in ui, ui
+assert 'Operator reads' in ui, ui
+assert 'Collection reads' in ui, ui
+assert 'operator-context-denied' in ui, ui
+assert 'emptyCollectionLikely' in ui, ui
 assert 'Deployment access summary unavailable for this response' in ui, ui
 assert 'forwarded match catalog' in ui, ui
 assert 'unmatched' in ui, ui
@@ -1949,6 +1954,13 @@ def assert_operator_context_common(payload):
     assert trusted.get('deploymentReadAuthorizationEnforced') is True, payload
     assert trusted.get('operatorReadRoleEnforced') is True, payload
     assert trusted.get('operatorWriteRoleEnforced') is True, payload
+    enforcement = payload.get('enforcement') or {}
+    assert enforcement.get('mode') == 'trusted_front_door_read_write', payload
+    assert enforcement.get('trustedHeadersEnabled') is True, payload
+    assert enforcement.get('readRoutesGuarded') is True, payload
+    assert enforcement.get('writeRoutesGuarded') is True, payload
+    assert enforcement.get('deploymentScopedRoutesRequireAllowlist') is True, payload
+    assert enforcement.get('collectionReadsFiltered') is True, payload
     access_verdicts = payload.get('accessVerdicts') or {}
     assert access_verdicts.get('operatorRead', {}).get('requiresAuthenticatedIdentity') is True, payload
     assert access_verdicts.get('operatorRead', {}).get('requiresViewerCapableRole') is True, payload
