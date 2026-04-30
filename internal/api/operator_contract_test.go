@@ -1206,6 +1206,7 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 		"`X-Tenet-Authorized-Deployments`",
 		"strip any inbound `X-Tenet-Authenticated-*` headers and `X-Tenet-Authorized-Deployments` from untrusted clients",
 		"callers can spoof operator identity or deployment access by sending those headers directly",
+		"does not currently run a built-in GitHub OAuth browser login, issue Tenet-managed browser sessions, or manage an OAuth/OIDC provider lifecycle inside `tenet-api`",
 		"`TENET_GITHUB_WEBHOOK_SECRET`",
 		"`POST /api/v1/github/webhook`",
 		"`smoke-webhook-secret`",
