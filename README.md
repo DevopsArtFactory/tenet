@@ -157,6 +157,22 @@ Use these settings only when every request reaches Tenet through a front door th
 - `GET /v1/operator/context` is a read-only diagnostic endpoint for trusted front-door troubleshooting. It reports the normalized trusted identity, forwarded roles with read/write capability booleans, forwarded deployment allowlist, and which auth/RBAC enforcement toggles are active for the request. Its additive `enforcement` object summarizes the API process mode (for example `trusted_front_door_read_write`) plus whether guarded read/write routes, deployment-scoped exact allowlists, and collection filtering are active. Its additive `accessVerdicts` block summarizes whether common operator read, operator write, deployment-scoped read/write, and filtered collection-read paths have the request ingredients they need, including clear reason strings for missing identity, missing read/write roles, missing exact deployment allowlist membership, and collection reads that are likely empty because no visible deployments were forwarded. When deployment-read authorization is enforced and a catalog placement provider is available, `deploymentAccess.summary` also reports forwarded, matched/visible, and unmatched deployment-name counts plus bounded unmatched-name evidence so operators can spot stale front-door allowlists. That summary is diagnostic-only: it does not mint sessions, replace OAuth/RBAC, or authorize routes by itself. The enforcement summary and access verdicts are troubleshooting-only too; guarded routes still evaluate the request-scoped identity, roles, and exact deployment allowlist independently.
 - The same trusted front-door read contract covers `GET /v1/overview/accounts/{awsAccountId}`, `GET /v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}`, `GET /v1/overview/applications/{deploymentName}`, `GET /v1/overview/deployments/{deploymentName}`, `GET /v1/overview/deployments/{deploymentName}/events`, `GET /v1/overview/deployments/{deploymentName}/resource-logs`, `GET /v1/overview/deployments/{deploymentName}/resource-inspection`, `GET /v1/status/deployments/{deploymentName}`, deployment-scoped `GET /v1/audit-logs`, and immutable stored reads `GET /v1/plans/{planId}` / `GET /v1/applies/{applyId}` using the persisted record deployment.
 
+Operator troubleshooting checklist for guarded reads and writes:
+1. If a guarded read returns `401 Unauthorized`, confirm the request reached Tenet through the trusted front door and that `GET /v1/operator/context` shows `identity.authenticated=true` instead of trying to add deployment names first.
+2. If a guarded read returns `403 Forbidden` with the viewer-capable-role message, inspect `roles.names` and `roles.canRead` in `GET /v1/operator/context`; the allowlist is not evaluated until the request has a `viewer`, `operator`, or `admin` role.
+3. If a collection read returns `200 OK` with `[]` or `{"entries":[]}`, compare `deploymentAccess.summary.matchedCount` and `unmatchedNames` against `X-Tenet-Authorized-Deployments`; an empty collection usually means the trusted allowlist is missing, stale, or does not match catalog deployment names.
+4. If a deployment-scoped read returns `403 Forbidden`, confirm the exact deployment name appears in the trusted `X-Tenet-Authorized-Deployments` header before debugging account/project filters.
+5. If an operator write returns `403 Forbidden`, confirm both `roles.canWrite=true` (`operator` or `admin`) and exact deployment membership; writes fail before plan/apply lookup when either prerequisite is missing.
+
+A minimal diagnostic request mirrors the headers your front door should forward:
+
+```bash
+curl -fsS http://localhost:8080/v1/operator/context \
+  -H 'X-Tenet-Authenticated-Id: operator-123' \
+  -H 'X-Tenet-Authenticated-Roles: viewer,operator' \
+  -H 'X-Tenet-Authorized-Deployments: payments-api-prod,worker-prod'
+```
+
 ### Smoke verification scope
 
 Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis.
