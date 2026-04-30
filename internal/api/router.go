@@ -203,6 +203,7 @@ const operatorContextUnmatchedDeploymentLimit = 25
 
 type operatorContextResponse struct {
 	TrustedHeaders   operatorContextTrustedHeaders      `json:"trustedHeaders"`
+	Enforcement      operatorContextEnforcement         `json:"enforcement"`
 	Identity         requestactor.AuthenticatedIdentity `json:"identity"`
 	Roles            operatorContextRoles               `json:"roles"`
 	DeploymentAccess operatorContextDeploymentAccess    `json:"deploymentAccess"`
@@ -215,6 +216,20 @@ type operatorContextTrustedHeaders struct {
 	DeploymentReadAuthorizationEnforced bool `json:"deploymentReadAuthorizationEnforced"`
 	OperatorReadRoleEnforced            bool `json:"operatorReadRoleEnforced"`
 	OperatorWriteRoleEnforced           bool `json:"operatorWriteRoleEnforced"`
+}
+
+type operatorContextEnforcement struct {
+	Mode                                   string `json:"mode"`
+	Summary                                string `json:"summary"`
+	TrustedHeadersEnabled                  bool   `json:"trustedHeadersEnabled"`
+	AuthenticatedIdentityRequired          bool   `json:"authenticatedIdentityRequired"`
+	DeploymentReadAuthorizationEnforced    bool   `json:"deploymentReadAuthorizationEnforced"`
+	OperatorReadRoleEnforced               bool   `json:"operatorReadRoleEnforced"`
+	OperatorWriteRoleEnforced              bool   `json:"operatorWriteRoleEnforced"`
+	ReadRoutesGuarded                      bool   `json:"readRoutesGuarded"`
+	WriteRoutesGuarded                     bool   `json:"writeRoutesGuarded"`
+	DeploymentScopedRoutesRequireAllowlist bool   `json:"deploymentScopedRoutesRequireAllowlist"`
+	CollectionReadsFiltered                bool   `json:"collectionReadsFiltered"`
 }
 
 type operatorContextRoles struct {
@@ -273,7 +288,8 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 			OperatorReadRoleEnforced:            options.RequireOperatorRoleForRead,
 			OperatorWriteRoleEnforced:           options.RequireOperatorRoleForWrite,
 		},
-		Identity: identity,
+		Enforcement: buildOperatorContextEnforcement(options),
+		Identity:    identity,
 		Roles: operatorContextRoles{
 			Names:    roles.Names,
 			CanRead:  roles.AllowsOperatorRead(),
@@ -287,6 +303,45 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 		},
 		AccessVerdicts: buildOperatorContextAccessVerdicts(options, identity, roles, deployments, summary),
 	}
+}
+
+func buildOperatorContextEnforcement(options Options) operatorContextEnforcement {
+	readRoutesGuarded := options.RequireDeploymentReadAuthorization
+	writeRoutesGuarded := options.RequireAuthenticatedIdentity || options.RequireOperatorRoleForWrite || options.RequireDeploymentReadAuthorization
+	enforcement := operatorContextEnforcement{
+		Mode:                                   "local_unrestricted",
+		Summary:                                "trusted front-door headers are not enabled; Tenet is not enforcing authenticated operator gates for this API instance",
+		TrustedHeadersEnabled:                  options.TrustAuthenticatedHeaders,
+		AuthenticatedIdentityRequired:          options.RequireAuthenticatedIdentity,
+		DeploymentReadAuthorizationEnforced:    options.RequireDeploymentReadAuthorization,
+		OperatorReadRoleEnforced:               options.RequireOperatorRoleForRead,
+		OperatorWriteRoleEnforced:              options.RequireOperatorRoleForWrite,
+		ReadRoutesGuarded:                      readRoutesGuarded,
+		WriteRoutesGuarded:                     writeRoutesGuarded,
+		DeploymentScopedRoutesRequireAllowlist: options.RequireDeploymentReadAuthorization,
+		CollectionReadsFiltered:                options.RequireDeploymentReadAuthorization,
+	}
+	if !options.TrustAuthenticatedHeaders {
+		return enforcement
+	}
+	if !readRoutesGuarded && !writeRoutesGuarded {
+		enforcement.Mode = "trusted_headers_observed_only"
+		enforcement.Summary = "trusted front-door headers are accepted for diagnostics and actor projection, but guarded operator route enforcement is disabled"
+		return enforcement
+	}
+	if readRoutesGuarded && writeRoutesGuarded {
+		enforcement.Mode = "trusted_front_door_read_write"
+		enforcement.Summary = "trusted front-door identity, roles, and deployment allowlists are enforcing guarded operator read/write routes"
+		return enforcement
+	}
+	if readRoutesGuarded {
+		enforcement.Mode = "trusted_front_door_read_only"
+		enforcement.Summary = "trusted front-door identity, viewer-capable roles, and deployment allowlists are enforcing guarded operator read routes"
+		return enforcement
+	}
+	enforcement.Mode = "trusted_front_door_write_only"
+	enforcement.Summary = "trusted front-door identity and operator roles are enforcing guarded operator write routes"
+	return enforcement
 }
 
 func buildOperatorContextAccessVerdicts(options Options, identity requestactor.AuthenticatedIdentity, roles requestactor.AuthenticatedRoles, deployments requestactor.AuthorizedDeployments, summary *operatorContextAccessSummary) operatorContextAccessVerdicts {

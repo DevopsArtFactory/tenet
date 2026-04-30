@@ -131,6 +131,16 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if trustedHeaders["deploymentReadAuthorizationEnforced"] != true || trustedHeaders["operatorReadRoleEnforced"] != true || trustedHeaders["operatorWriteRoleEnforced"] != true {
 		t.Fatalf("expected auth enforcement flags to be present, got %#v", trustedHeaders)
 	}
+	enforcement, ok := body["enforcement"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected enforcement object, got %#v", body["enforcement"])
+	}
+	if enforcement["mode"] != "trusted_front_door_read_write" || enforcement["trustedHeadersEnabled"] != true || enforcement["readRoutesGuarded"] != true || enforcement["writeRoutesGuarded"] != true {
+		t.Fatalf("expected read/write trusted-front-door enforcement summary, got %#v", enforcement)
+	}
+	if enforcement["deploymentScopedRoutesRequireAllowlist"] != true || enforcement["collectionReadsFiltered"] != true || enforcement["summary"] != "trusted front-door identity, roles, and deployment allowlists are enforcing guarded operator read/write routes" {
+		t.Fatalf("expected allowlist/filtering enforcement details, got %#v", enforcement)
+	}
 	identity, ok := body["identity"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected identity object, got %#v", body["identity"])
@@ -335,6 +345,55 @@ func TestRouterOperatorContextSummaryReportsCatalogLookupFailure(t *testing.T) {
 	}
 }
 
+func TestRouterOperatorContextEnforcementReportsTrustedHeaderModes(t *testing.T) {
+	tests := []struct {
+		name       string
+		options    Options
+		wantMode   string
+		wantRead   bool
+		wantWrite  bool
+		wantFilter bool
+	}{
+		{
+			name:     "observed only",
+			options:  Options{TrustAuthenticatedHeaders: true},
+			wantMode: "trusted_headers_observed_only",
+		},
+		{
+			name:       "write only",
+			options:    Options{TrustAuthenticatedHeaders: true, RequireAuthenticatedIdentity: true, RequireOperatorRoleForWrite: true},
+			wantMode:   "trusted_front_door_write_only",
+			wantWrite:  true,
+			wantFilter: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := NewRouter(tt.options)
+			req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+			}
+			var body map[string]any
+			if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode operator context response: %v", err)
+			}
+			enforcement, ok := body["enforcement"].(map[string]any)
+			if !ok {
+				t.Fatalf("expected enforcement object, got %#v", body["enforcement"])
+			}
+			if enforcement["mode"] != tt.wantMode || enforcement["readRoutesGuarded"] != tt.wantRead || enforcement["writeRoutesGuarded"] != tt.wantWrite || enforcement["collectionReadsFiltered"] != tt.wantFilter {
+				t.Fatalf("unexpected enforcement payload for %s: %#v", tt.name, enforcement)
+			}
+		})
+	}
+}
+
 func TestRouterOperatorContextIsExplicitWhenTrustedHeadersAreUnavailable(t *testing.T) {
 	router := NewRouter(Options{})
 	req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
@@ -355,6 +414,10 @@ func TestRouterOperatorContextIsExplicitWhenTrustedHeadersAreUnavailable(t *test
 	trustedHeaders := body["trustedHeaders"].(map[string]any)
 	if trustedHeaders["enabled"] != false || trustedHeaders["deploymentReadAuthorizationEnforced"] != false {
 		t.Fatalf("expected disabled trusted-header flags, got %#v", trustedHeaders)
+	}
+	enforcement := body["enforcement"].(map[string]any)
+	if enforcement["mode"] != "local_unrestricted" || enforcement["trustedHeadersEnabled"] != false || enforcement["readRoutesGuarded"] != false || enforcement["writeRoutesGuarded"] != false {
+		t.Fatalf("expected local unrestricted enforcement summary, got %#v", enforcement)
 	}
 	identity := body["identity"].(map[string]any)
 	if identity["authenticated"] != false || identity["reason"] != requestactor.AuthenticatedIdentityUnavailableReason {
