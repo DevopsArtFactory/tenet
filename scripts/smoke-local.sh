@@ -900,6 +900,11 @@ assert 'Operator context' in ui, ui
 assert "const operatorContextRoute = () => '/v1/operator/context';" in ui, ui
 assert "const operatorContextReadRoute = () => 'GET /v1/operator/context';" in ui, ui
 assert "const operatorContextDeploymentAccessSummaryLabel = (context) => {" in ui, ui
+assert "const operatorContextAccessVerdictEntries = (context) => {" in ui, ui
+assert 'Operator reads' in ui, ui
+assert 'Collection reads' in ui, ui
+assert 'operator-context-denied' in ui, ui
+assert 'emptyCollectionLikely' in ui, ui
 assert 'Deployment access summary unavailable for this response' in ui, ui
 assert 'forwarded match catalog' in ui, ui
 assert 'unmatched' in ui, ui
