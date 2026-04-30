@@ -927,6 +927,10 @@ assert "buildPageURL('drift', { deployment: deployment.name })" in ui, ui
 assert "buildPageURL('plan', { deployment: deployment.name })" in ui, ui
 assert "buildPageURL('audit', { deployment: deployment.name })" in ui, ui
 assert 'Refresh applications overview' in ui, ui
+assert 'Health' in ui, ui
+assert 'All health states' in ui, ui
+assert "params.set('health', currentViewState.healthState)" in ui, ui
+assert 'matchesHealth' in ui, ui
 assert 'Refreshing applications overview from GET /v1/overview/applications…' in ui, ui
 assert 'Failed to refresh applications overview:' in ui, ui
 assert 'row-match-context' in ui, ui

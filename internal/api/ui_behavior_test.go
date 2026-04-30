@@ -679,7 +679,7 @@ document.byID.set('toolbar', document.createElement('section'));
 document.byID.set('summary', document.createElement('section'));
 document.byID.set('accounts', document.createElement('section'));
 const fetchCalls = [];
-const window = { location: { pathname: '/', search: '?q=payments&sync=OutOfSync&account=210987654321', hash: '' } };
+const window = { location: { pathname: '/', search: '?q=payments&sync=OutOfSync&health=Progressing&account=210987654321', hash: '' } };
 const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
 const fetch = (url) => {
   fetchCalls.push(String(url));
@@ -697,27 +697,31 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/applications') throw new Error('expected only overview applications fetch on applications page');
   if (!toolbarText.includes('Search applications')) throw new Error('expected applications page toolbar');
+  if (!toolbarText.includes('Health')) throw new Error('expected applications page health filter label');
+  const healthSelect = document.querySelector('[data-toolbar-field="Health"]');
+  if (!healthSelect || healthSelect.value !== 'Progressing') throw new Error('expected applications page health filter to restore bookmarkable Progressing state');
   if (!summaryText.includes('Application status overview')) throw new Error('expected applications page overview title');
   if (!summaryText.includes('Last update')) throw new Error('expected applications page last update column label');
   if (!summaryText.includes('2026-04-16T07:10:00Z')) throw new Error('expected applications page last update value');
   if (!accountsText.includes('payments-api-staging')) throw new Error('expected applications page row text');
+  if (accountsText.includes('payments-api-prod')) throw new Error('expected health/sync/account filters to hide the prod row');
   if (accountsText.includes('Overview JSON')) throw new Error('applications page should not expose deployment read-model quick links');
   if (accountsText.includes('Status JSON')) throw new Error('applications page should not expose status quick links');
   if (accountsText.includes('Rollout execution')) throw new Error('applications page should not render deep detail sections');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
-  const accountLink = links.find((node) => node.href === '/?page=account&q=payments&sync=OutOfSync&account=210987654321&accountId=210987654321');
+  const accountLink = links.find((node) => node.href === '/?page=account&q=payments&sync=OutOfSync&health=Progressing&account=210987654321&accountId=210987654321');
   if (!accountLink) throw new Error('expected applications page link to account detail route');
   if (accountLink.target !== '_self') throw new Error('expected applications page account link to stay in embedded UI flow');
   if (accountLink.rel) throw new Error('expected applications page account link to avoid new-tab rel attributes');
-  const appLink = links.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging');
+  const appLink = links.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&health=Progressing&account=210987654321&deployment=payments-api-staging');
   if (!appLink) throw new Error('expected applications page link to application detail route');
   if (appLink.target !== '_self') throw new Error('expected applications page link to stay in embedded UI flow');
   if (appLink.rel) throw new Error('expected applications page link to avoid new-tab rel attributes');
-  const driftLink = links.find((node) => node.href === '/?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Drift view');
+  const driftLink = links.find((node) => node.href === '/?page=drift&q=payments&sync=OutOfSync&health=Progressing&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Drift view');
   if (!driftLink) throw new Error('expected applications page link to deployment-scoped drift view');
   if (driftLink.target !== '_self') throw new Error('expected applications page drift link to stay in embedded UI flow');
   if (driftLink.rel) throw new Error('expected applications page drift link to avoid new-tab rel attributes');
-  const planLink = links.find((node) => node.href === '/?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Plan/apply');
+  const planLink = links.find((node) => node.href === '/?page=plan&q=payments&sync=OutOfSync&health=Progressing&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Plan/apply');
   if (!planLink) throw new Error('expected applications page link to deployment-scoped plan/apply workspace');
   if (planLink.target !== '_self') throw new Error('expected applications page plan link to stay in embedded UI flow');
   if (planLink.rel) throw new Error('expected applications page plan link to avoid new-tab rel attributes');
@@ -1052,6 +1056,11 @@ async function render(search) {
   const conditionText = await render('?q=TrafficShiftComplete&sync=all&account=all');
   if (!conditionText.includes('payments-api-staging')) throw new Error('expected runtime condition search to match the staging row');
   if (conditionText.includes('payments-api-prod')) throw new Error('expected runtime condition search not to match rows without runtime condition context');
+  const healthyText = await render('?health=Healthy&sync=all&account=all');
+  if (!healthyText.includes('payments-api-prod')) throw new Error('expected health filter to match rows by displayed Healthy label');
+  if (healthyText.includes('payments-api-staging')) throw new Error('expected health filter to hide rows with non-matching displayed health labels');
+  const invalidHealthText = await render('?health=NeedsAttention&sync=all&account=all');
+  if (!invalidHealthText.includes('payments-api-prod') || !invalidHealthText.includes('payments-api-staging')) throw new Error('expected invalid health filter value to normalize back to all');
 })();
 `
 
