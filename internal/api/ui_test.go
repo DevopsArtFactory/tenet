@@ -1968,6 +1968,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "bootstrap_resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=userDataBootstrapSource&resourceName=git%3Auserdata%2Fpayments-api-prod.sh\")") {
 		t.Fatalf("expected smoke-local.sh to fetch bootstrap-source recent logs payload")
 	}
+	if !strings.Contains(text, "active_target_group_resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=activeTargetGroup&resourceName=payments-api-prod-active\")") || !strings.Contains(text, "candidate_target_group_resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=candidateTargetGroup&resourceName=payments-api-prod-candidate\")") {
+		t.Fatalf("expected smoke-local.sh to fetch weighted target-group recent logs payloads")
+	}
 	if !strings.Contains(text, "bootstrap_resource_inspection=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=userDataBootstrapSource&resourceName=git%3Auserdata%2Fpayments-api-prod.sh\")") {
 		t.Fatalf("expected smoke-local.sh to fetch bootstrap-source inspection payload")
 	}
@@ -2441,7 +2444,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"gates guarded application, raw-status collection, account collection, unscoped audit collection, raw-status detail, account detail, grouped-account, immutable plan/apply, deployment-scoped audit reads, plus the exact `GET /v1/overview/deployments/{deploymentName}/resource-logs` and `GET /v1/overview/deployments/{deploymentName}/resource-inspection` drill-down routes.",
 			"the unscoped audit collection still returns `{\"entries\":[]}` when no audit rows are visible",
 			"Use `make smoke-docker` when you need to validate the containerized local stack itself.",
-			"API health, representative endpoints, deployment-events/resource-logs/audit-log JSON shapes, including the compose-backed `codeDeployApplication` recent-log envelope and `testListener` backing-resource metadata, and representative `Request-Id` response headers",
+			"API health, representative endpoints, deployment-events/resource-logs/audit-log JSON shapes, including the compose-backed `codeDeployApplication` recent-log envelope, `testListener` backing-resource metadata, weighted `activeTargetGroup` / `candidateTargetGroup` `no_log_source` recent-log payloads, and representative `Request-Id` response headers",
 			"The full `GET /v1/audit-logs` collection with expected `plan.created` and `apply.requested` actions present",
 			"The same smoke-created `POST /v1/applies/{applyId}/transitions` route boundaries: `400` malformed JSON, `404` unknown apply, and `409` invalid terminal move with operator-facing text.",
 			"The same actor-header precedence check used by direct-process smoke, plus the default disabled immutable apply contract.",
@@ -2506,9 +2509,9 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"correlated structured `http_request` logs with stable fields such as `request_id`, `method`, `path`, `status`, `duration_ms`, and `result` for the bookmarkable application drill-down shell request, bookmarkable account drill-down shell request, bookmarkable drift workspace request, the deployment-scoped audit workspace request, and the bookmarkable plan/apply workspace shell request",
 			"`Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Resolved backing resource`, `Lookup region`, `Observer role configured`, and the runtime-events `Open field-level drift` handoff",
 			"temp files through the shared `write_payload` helper",
-			"bookmarkable bootstrap-source resource page plus the paired `userDataBootstrapSource` `resource-logs` and `resource-inspection` routes, the `codeDeployApplication` recent-log route, the `testListener` recent-log backing-resource metadata",
+			"bookmarkable bootstrap-source resource page plus the paired `userDataBootstrapSource` `resource-logs` and `resource-inspection` routes, the `codeDeployApplication` recent-log route, the `testListener` recent-log backing-resource metadata, and weighted target-group `no_log_source` recent-log payloads",
 			"bookmarkable CodeDeploy application, `blueTaskSetTargetGroup`, and `productionListenerRule` resource pages and the local-friendly traffic-routing inspection fallback",
-			"`aws_unavailable` / `no_log_source` unavailable payloads as expected local-runtime outcomes",
+			"`aws_unavailable` / `no_log_source` unavailable payloads as expected local-runtime outcomes, including route-stable weighted target-group resources that have no independent recent-log stream",
 			"Linux CI runners with tighter environment-size limits",
 			"syntax-checks both `scripts/smoke-local.sh` and `scripts/smoke-docker.sh` with `bash -n`, then runs `make smoke-local`",
 			"syntax-checks `scripts/smoke-docker.sh` with `bash -n` again, then runs `make smoke-docker`",
