@@ -30,6 +30,37 @@ func readRepoFile(t *testing.T, relativePath string) string {
 	return string(body)
 }
 
+func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
+	docPaths := []string{
+		"README.md",
+		"docs/architecture/tenet-v1-local-runtime.md",
+		"docs/architecture/tenet-v1-audit-log-api.md",
+		"docs/architecture/tenet-v1-deployment-status-api.md",
+		"docs/architecture/tenet-v1-overview-ui.md",
+		"docs/architecture/tenet-v1-runtime-rollout-summary.md",
+		"docs/architecture/tenet-v1-aws-central-control-plane.md",
+		"docs/features/overview-dashboard.md",
+	}
+	for _, path := range docPaths {
+		doc := readRepoFile(t, path)
+		for _, placeholder := range []string{
+			"TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
+			"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
+			"TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=***",
+			"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***",
+		} {
+			if strings.Contains(doc, placeholder) {
+				t.Fatalf("expected %s to use operator-readable boolean examples instead of placeholder %q", path, placeholder)
+			}
+		}
+	}
+
+	localRuntimeDoc := readRepoFile(t, "docs/architecture/tenet-v1-local-runtime.md")
+	if !strings.Contains(localRuntimeDoc, "The auth/RBAC toggles below are boolean examples. Set them to `true` only on API instances that are reachable exclusively through that trusted front door.") {
+		t.Fatal("expected local runtime trusted-front-door docs to explain that auth/RBAC toggles are boolean examples")
+	}
+}
+
 func TestDockerUpOperatorContract(t *testing.T) {
 	compose := readRepoFile(t, "compose.yaml")
 	if !strings.Contains(compose, `TENET_AWS_ENABLE_APPLY: ${TENET_AWS_ENABLE_APPLY:-false}`) {
