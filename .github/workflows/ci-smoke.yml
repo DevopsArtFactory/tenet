@@ -28,8 +28,11 @@ jobs:
       - name: Run Go tests
         run: go test ./...
 
-      - name: Syntax-check smoke script
+      - name: Syntax-check local smoke script
         run: bash -n scripts/smoke-local.sh
+
+      - name: Syntax-check docker smoke script
+        run: bash -n scripts/smoke-docker.sh
 
       - name: Run local smoke test
         run: make smoke-local
@@ -43,7 +46,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Syntax-check smoke script
+      - name: Syntax-check docker smoke script
         run: bash -n scripts/smoke-docker.sh
 
       - name: Run docker smoke test

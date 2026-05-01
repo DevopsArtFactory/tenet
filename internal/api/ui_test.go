@@ -1791,6 +1791,44 @@ func TestEmbeddedUIIncludesRuntimeAndHistoryChangeDetailsRendering(t *testing.T)
 	}
 }
 
+func TestCISmokeWorkflowSyntaxChecksBothSmokeScriptsInFastLane(t *testing.T) {
+	body, err := os.ReadFile("../../.github/workflows/ci-smoke.yml")
+	if err != nil {
+		t.Fatalf("read ci-smoke workflow: %v", err)
+	}
+
+	text := string(body)
+	fastStart := strings.Index(text, "  fast-smoke:")
+	dockerStart := strings.Index(text, "  docker-smoke:")
+	if fastStart < 0 || dockerStart < 0 || dockerStart <= fastStart {
+		t.Fatalf("expected fast-smoke and docker-smoke jobs in workflow")
+	}
+	fastJob := text[fastStart:dockerStart]
+	for _, fragment := range []string{
+		"run: bash -n scripts/smoke-local.sh",
+		"run: bash -n scripts/smoke-docker.sh",
+		"run: make smoke-local",
+	} {
+		if !strings.Contains(fastJob, fragment) {
+			t.Fatalf("expected fast-smoke job to include %q", fragment)
+		}
+	}
+	if strings.Contains(fastJob, "make smoke-docker") {
+		t.Fatalf("fast-smoke job must not run full docker smoke")
+	}
+
+	dockerJob := text[dockerStart:]
+	for _, fragment := range []string{
+		"if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')",
+		"run: bash -n scripts/smoke-docker.sh",
+		"run: make smoke-docker",
+	} {
+		if !strings.Contains(dockerJob, fragment) {
+			t.Fatalf("expected docker-smoke job to include %q", fragment)
+		}
+	}
+}
+
 func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	body, err := os.ReadFile("../../scripts/smoke-local.sh")
 	if err != nil {
@@ -2404,8 +2442,8 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"`aws_unavailable` and `no_log_source` as part of the expected local no-AWS contract",
 			"valid drill-down target but has no independent recent-log stream yet",
 			"Linux CI runners",
-			"syntax-checks `scripts/smoke-local.sh` with `bash -n`, then runs `make smoke-local`",
-			"syntax-checks `scripts/smoke-docker.sh` with `bash -n` before running `make smoke-docker`",
+			"syntax-checks both `scripts/smoke-local.sh` and `scripts/smoke-docker.sh` with `bash -n`, then runs `make smoke-local`",
+			"syntax-checks `scripts/smoke-docker.sh` with `bash -n` again before running the full `make smoke-docker` container stack",
 			"make smoke-docker",
 		},
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
@@ -2454,8 +2492,8 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"bookmarkable CodeDeploy application and `blueTaskSetTargetGroup` resource pages and the local-friendly CodeDeploy inspection fallback",
 			"`aws_unavailable` / `no_log_source` unavailable payloads as expected local-runtime outcomes",
 			"Linux CI runners with tighter environment-size limits",
-			"syntax-checks `scripts/smoke-local.sh` with `bash -n`, then runs `make smoke-local`",
-			"syntax-checks `scripts/smoke-docker.sh` with `bash -n`, then runs `make smoke-docker`",
+			"syntax-checks both `scripts/smoke-local.sh` and `scripts/smoke-docker.sh` with `bash -n`, then runs `make smoke-local`",
+			"syntax-checks `scripts/smoke-docker.sh` with `bash -n` again, then runs `make smoke-docker`",
 			"`docker compose down --remove-orphans` even on failure",
 		},
 		"../../docs/architecture/tenet-v1-overview-ui.md": {
