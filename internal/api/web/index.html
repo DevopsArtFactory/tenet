@@ -764,11 +764,35 @@
       const operatorContextDeploymentAccessLabel = (context) => {
         const access = context?.deploymentAccess || {};
         const names = Array.isArray(access.names) ? access.names.filter(Boolean) : [];
-        if (!access.enforced) return 'Deployment allowlist not enforced';
-        if (!access.forwarded) return 'No deployment allowlist forwarded';
-        if (names.length === 1) return `1 deployment forwarded: ${names[0]}`;
-        if (names.length > 1) return `${names.length} deployments forwarded: ${names.slice(0, 3).join(', ')}${names.length > 3 ? ', …' : ''}`;
-        return 'Deployment allowlist forwarded empty';
+        const scopes = access.scopes || {};
+        const scopesForwarded = Boolean(scopes.forwarded) || (Array.isArray(scopes.projects) && scopes.projects.length > 0) || (Array.isArray(scopes.environments) && scopes.environments.length > 0);
+        if (!access.enforced) return 'Deployment access not enforced';
+        if (!access.forwarded && !scopesForwarded) return 'No exact deployment grants or project/environment scopes forwarded';
+        if (names.length === 1) return `Exact deployment grants: ${names[0]}`;
+        if (names.length > 1) return `Exact deployment grants: ${names.slice(0, 3).join(', ')}${names.length > 3 ? ', …' : ''}`;
+        return 'Exact deployment grants: none forwarded';
+      };
+      const operatorContextProjectEnvironmentScopesLabel = (context) => {
+        const access = context?.deploymentAccess || {};
+        const scopes = access.scopes || {};
+        const projects = Array.isArray(scopes.projects) ? scopes.projects.filter(Boolean) : [];
+        const environments = Array.isArray(scopes.environments) ? scopes.environments.filter(Boolean) : [];
+        const scopesForwarded = Boolean(scopes.forwarded) || projects.length > 0 || environments.length > 0;
+        if (!access.enforced) return null;
+        if (!scopesForwarded) return 'Project/environment scopes: none forwarded';
+        const projectText = projects.length ? `projects ${projects.slice(0, 3).join(', ')}${projects.length > 3 ? ', …' : ''}` : 'no projects';
+        const environmentText = environments.length ? `environments ${environments.slice(0, 3).join(', ')}${environments.length > 3 ? ', …' : ''}` : 'no environments';
+        if (!projects.length || !environments.length) {
+          return `Project/environment scopes warning: ${projectText}; ${environmentText}. Scoped reads require both project and environment headers.`;
+        }
+        return `Project/environment scopes: ${projectText}; ${environmentText}`;
+      };
+      const operatorContextProjectEnvironmentScopesClass = (context) => {
+        const scopes = context?.deploymentAccess?.scopes || {};
+        const projects = Array.isArray(scopes.projects) ? scopes.projects.filter(Boolean) : [];
+        const environments = Array.isArray(scopes.environments) ? scopes.environments.filter(Boolean) : [];
+        if (!scopes.forwarded && !projects.length && !environments.length) return '';
+        return !projects.length || !environments.length ? 'operator-context-warning' : '';
       };
       const operatorContextDeploymentAccessSummaryLabel = (context) => {
         const access = context?.deploymentAccess || {};
@@ -822,8 +846,10 @@
           const parts = [example.appRef, example.environmentRef, example.region, example.awsAccountId].filter(Boolean);
           const placement = parts.length ? parts.join(' / ') : 'unknown placement';
           const deploymentCount = Number.isFinite(example.deploymentCount) ? example.deploymentCount : null;
+          const deploymentNames = Array.isArray(example.exampleDeployments) ? example.exampleDeployments.filter(Boolean) : [];
           const deploymentText = deploymentCount !== null ? ` (${deploymentCount} ${deploymentCount === 1 ? 'deployment' : 'deployments'})` : '';
-          return `${placement}${deploymentText}`;
+          const exampleText = deploymentNames.length ? ` e.g. ${deploymentNames.slice(0, 3).join(', ')}${deploymentNames.length > 3 ? ', …' : ''}` : '';
+          return `${placement}${deploymentText}${exampleText}`;
         });
         const hiddenCount = examples.length - visibleExamples.length;
         return `Project/environment visibility: ${visibleExamples.join('; ')}${hiddenCount > 0 ? `; +${hiddenCount} more` : ''}`;
@@ -923,6 +949,7 @@
           meta.append(
             createElement('span', '', operatorContextRoleLabel(context)),
             createElement('span', '', operatorContextDeploymentAccessLabel(context)),
+            createElement('span', operatorContextProjectEnvironmentScopesClass(context), operatorContextProjectEnvironmentScopesLabel(context)),
             createElement('span', operatorContextEnforcementClass(context), operatorContextEnforcementModeLabel(context)),
             createElement('span', '', context?.trustedHeaders?.enabled ? 'Trusted headers enabled' : 'Trusted headers disabled'),
           );
