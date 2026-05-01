@@ -176,6 +176,24 @@ func TestAuthorizedDeploymentsFromHeadersReturnsNormalizedAllowlist(t *testing.T
 	}
 }
 
+func TestAuthorizedProjectEnvironmentScopesFromHeadersReturnsNormalizedScopes(t *testing.T) {
+	header := http.Header{}
+	header.Add(AuthorizedProjectsHeader, "payments, platform ,,payments")
+	header.Add(AuthorizedProjectsHeader, "observability")
+	header.Add(AuthorizedEnvironmentsHeader, "prod, staging ,,prod")
+	header.Add(AuthorizedEnvironmentsHeader, "dev")
+
+	scopes := AuthorizedProjectEnvironmentScopesFromHeaders(header)
+	wantProjects := []string{"payments", "platform", "observability"}
+	wantEnvironments := []string{"prod", "staging", "dev"}
+	if !reflect.DeepEqual(scopes.Projects, wantProjects) {
+		t.Fatalf("unexpected project scopes: got %#v want %#v", scopes.Projects, wantProjects)
+	}
+	if !reflect.DeepEqual(scopes.Environments, wantEnvironments) {
+		t.Fatalf("unexpected environment scopes: got %#v want %#v", scopes.Environments, wantEnvironments)
+	}
+}
+
 func TestAuthorizedDeploymentsAllowsOnlyExactDeploymentMatches(t *testing.T) {
 	deployments := AuthorizedDeployments{Names: []string{"payments-api-prod", "worker-prod"}}
 	if !deployments.Allows("payments-api-prod") {
@@ -258,6 +276,23 @@ func TestWithAuthorizedDeploymentsContextRoundTrip(t *testing.T) {
 	want := []string{"payments-api-prod", "worker-prod"}
 	if !reflect.DeepEqual(deployments.Names, want) {
 		t.Fatalf("unexpected context deployment allowlist: got %#v want %#v", deployments.Names, want)
+	}
+}
+
+func TestWithAuthorizedProjectEnvironmentScopesContextRoundTrip(t *testing.T) {
+	ctx := WithAuthorizedProjectEnvironmentScopesContext(context.Background(), AuthorizedProjectEnvironmentScopes{
+		Projects:     []string{"payments", " platform ", "payments"},
+		Environments: []string{"prod", " staging ", "prod"},
+	})
+
+	scopes := AuthorizedProjectEnvironmentScopesFromContext(ctx)
+	wantProjects := []string{"payments", "platform"}
+	wantEnvironments := []string{"prod", "staging"}
+	if !reflect.DeepEqual(scopes.Projects, wantProjects) {
+		t.Fatalf("unexpected context project scopes: got %#v want %#v", scopes.Projects, wantProjects)
+	}
+	if !reflect.DeepEqual(scopes.Environments, wantEnvironments) {
+		t.Fatalf("unexpected context environment scopes: got %#v want %#v", scopes.Environments, wantEnvironments)
 	}
 }
 

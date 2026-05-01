@@ -13,6 +13,7 @@ func requestActorMiddleware(trustAuthenticatedHeaders bool, next http.Handler) h
 			ctx = requestactor.WithAuthenticatedIdentityContext(ctx, requestactor.AuthenticatedIdentityFromHeaders(r.Header))
 			ctx = requestactor.WithAuthenticatedRolesContext(ctx, requestactor.AuthenticatedRolesFromHeaders(r.Header))
 			ctx = requestactor.WithAuthorizedDeploymentsContext(ctx, requestactor.AuthorizedDeploymentsFromHeaders(r.Header))
+			ctx = requestactor.WithAuthorizedProjectEnvironmentScopesContext(ctx, requestactor.AuthorizedProjectEnvironmentScopesFromHeaders(r.Header))
 		}
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

@@ -15,11 +15,13 @@ const (
 	HeaderAliasName  = "X-User-Name"
 	HeaderAliasEmail = "X-User-Email"
 
-	AuthenticatedHeaderID       = "X-Tenet-Authenticated-Id"
-	AuthenticatedHeaderName     = "X-Tenet-Authenticated-Name"
-	AuthenticatedHeaderEmail    = "X-Tenet-Authenticated-Email"
-	AuthenticatedRolesHeader    = "X-Tenet-Authenticated-Roles"
-	AuthorizedDeploymentsHeader = "X-Tenet-Authorized-Deployments"
+	AuthenticatedHeaderID        = "X-Tenet-Authenticated-Id"
+	AuthenticatedHeaderName      = "X-Tenet-Authenticated-Name"
+	AuthenticatedHeaderEmail     = "X-Tenet-Authenticated-Email"
+	AuthenticatedRolesHeader     = "X-Tenet-Authenticated-Roles"
+	AuthorizedDeploymentsHeader  = "X-Tenet-Authorized-Deployments"
+	AuthorizedProjectsHeader     = "X-Tenet-Authorized-Projects"
+	AuthorizedEnvironmentsHeader = "X-Tenet-Authorized-Environments"
 
 	UnavailableReason                      = "actor information is unavailable because no authenticated request context was available for this local request"
 	AuthenticatedIdentityUnavailableReason = "authenticated identity is unavailable because no trusted forwarded identity headers were available for this request"
@@ -33,6 +35,7 @@ type actorContextKey struct{}
 type authenticatedIdentityContextKey struct{}
 type authenticatedRolesContextKey struct{}
 type authorizedDeploymentsContextKey struct{}
+type authorizedProjectEnvironmentScopesContextKey struct{}
 
 // Actor captures request-scoped operator identity without inventing missing auth data.
 type Actor struct {
@@ -62,6 +65,14 @@ type AuthenticatedRoles struct {
 // AuthorizedDeployments captures the trusted front-door deployment allowlist for one request.
 type AuthorizedDeployments struct {
 	Names []string `json:"names,omitempty"`
+}
+
+// AuthorizedProjectEnvironmentScopes captures trusted front-door project/environment visibility
+// grants for one request. A deployment matches this scope only when Tenet can prove both its
+// project and environment placement from the catalog.
+type AuthorizedProjectEnvironmentScopes struct {
+	Projects     []string `json:"projects,omitempty"`
+	Environments []string `json:"environments,omitempty"`
 }
 
 // WithContext stores one normalized request actor on the context.
@@ -94,6 +105,14 @@ func WithAuthorizedDeploymentsContext(ctx context.Context, deployments Authorize
 		ctx = context.Background()
 	}
 	return context.WithValue(ctx, authorizedDeploymentsContextKey{}, NormalizeAuthorizedDeployments(deployments))
+}
+
+// WithAuthorizedProjectEnvironmentScopesContext stores normalized project/environment scopes on the context.
+func WithAuthorizedProjectEnvironmentScopesContext(ctx context.Context, scopes AuthorizedProjectEnvironmentScopes) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, authorizedProjectEnvironmentScopesContextKey{}, NormalizeAuthorizedProjectEnvironmentScopes(scopes))
 }
 
 // FromContext returns the normalized request actor stored on the context.
@@ -138,6 +157,15 @@ func AuthorizedDeploymentsFromContext(ctx context.Context) AuthorizedDeployments
 	}
 	deployments, _ := ctx.Value(authorizedDeploymentsContextKey{}).(AuthorizedDeployments)
 	return NormalizeAuthorizedDeployments(deployments)
+}
+
+// AuthorizedProjectEnvironmentScopesFromContext returns normalized project/environment scopes stored on the context.
+func AuthorizedProjectEnvironmentScopesFromContext(ctx context.Context) AuthorizedProjectEnvironmentScopes {
+	if ctx == nil {
+		return NormalizeAuthorizedProjectEnvironmentScopes(AuthorizedProjectEnvironmentScopes{})
+	}
+	scopes, _ := ctx.Value(authorizedProjectEnvironmentScopesContextKey{}).(AuthorizedProjectEnvironmentScopes)
+	return NormalizeAuthorizedProjectEnvironmentScopes(scopes)
 }
 
 // FromHeaders derives explicit local-friendly actor context from Tenet request headers.
@@ -196,15 +224,30 @@ func AuthorizedDeploymentsFromHeaders(header http.Header) AuthorizedDeployments 
 	if header == nil {
 		return NormalizeAuthorizedDeployments(AuthorizedDeployments{})
 	}
-	names := make([]string, 0)
-	for _, raw := range header.Values(AuthorizedDeploymentsHeader) {
+	return NormalizeAuthorizedDeployments(AuthorizedDeployments{Names: valuesFromCommaHeaders(header, AuthorizedDeploymentsHeader)})
+}
+
+// AuthorizedProjectEnvironmentScopesFromHeaders derives normalized project/environment scopes from trusted forwarded front-door headers.
+func AuthorizedProjectEnvironmentScopesFromHeaders(header http.Header) AuthorizedProjectEnvironmentScopes {
+	if header == nil {
+		return NormalizeAuthorizedProjectEnvironmentScopes(AuthorizedProjectEnvironmentScopes{})
+	}
+	return NormalizeAuthorizedProjectEnvironmentScopes(AuthorizedProjectEnvironmentScopes{
+		Projects:     valuesFromCommaHeaders(header, AuthorizedProjectsHeader),
+		Environments: valuesFromCommaHeaders(header, AuthorizedEnvironmentsHeader),
+	})
+}
+
+func valuesFromCommaHeaders(header http.Header, name string) []string {
+	values := make([]string, 0)
+	for _, raw := range header.Values(name) {
 		for _, candidate := range strings.Split(raw, ",") {
-			if name := strings.TrimSpace(candidate); name != "" {
-				names = append(names, name)
+			if value := strings.TrimSpace(candidate); value != "" {
+				values = append(values, value)
 			}
 		}
 	}
-	return NormalizeAuthorizedDeployments(AuthorizedDeployments{Names: names})
+	return values
 }
 
 // ProjectAuthenticatedIdentity maps a trusted authenticated identity into persisted actor fields.
@@ -334,27 +377,36 @@ func NormalizeAuthenticatedRoles(roles AuthenticatedRoles) AuthenticatedRoles {
 
 // NormalizeAuthorizedDeployments trims whitespace, drops empties, and keeps the allowlist stable.
 func NormalizeAuthorizedDeployments(deployments AuthorizedDeployments) AuthorizedDeployments {
-	if len(deployments.Names) == 0 {
-		deployments.Names = nil
-		return deployments
-	}
-	seen := make(map[string]struct{}, len(deployments.Names))
-	names := make([]string, 0, len(deployments.Names))
-	for _, raw := range deployments.Names {
-		name := strings.TrimSpace(raw)
-		if name == "" {
-			continue
-		}
-		if _, ok := seen[name]; ok {
-			continue
-		}
-		seen[name] = struct{}{}
-		names = append(names, name)
-	}
-	if len(names) == 0 {
-		deployments.Names = nil
-		return deployments
-	}
-	deployments.Names = names
+	deployments.Names = normalizeStringSet(deployments.Names)
 	return deployments
+}
+
+// NormalizeAuthorizedProjectEnvironmentScopes trims whitespace, drops empties, and keeps scope sets stable.
+func NormalizeAuthorizedProjectEnvironmentScopes(scopes AuthorizedProjectEnvironmentScopes) AuthorizedProjectEnvironmentScopes {
+	scopes.Projects = normalizeStringSet(scopes.Projects)
+	scopes.Environments = normalizeStringSet(scopes.Environments)
+	return scopes
+}
+
+func normalizeStringSet(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	normalized := make([]string, 0, len(values))
+	for _, raw := range values {
+		value := strings.TrimSpace(raw)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	return normalized
 }

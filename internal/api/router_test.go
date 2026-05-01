@@ -111,6 +111,8 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	req.Header.Add(requestactor.AuthenticatedRolesHeader, "operator, admin, operator")
 	req.Header.Add(requestactor.AuthorizedDeploymentsHeader, "payments-api-prod, worker-prod")
 	req.Header.Add(requestactor.AuthorizedDeploymentsHeader, "payments-api-prod")
+	req.Header.Add(requestactor.AuthorizedProjectsHeader, "payments, platform, payments")
+	req.Header.Add(requestactor.AuthorizedEnvironmentsHeader, "prod, staging")
 	resp := httptest.NewRecorder()
 
 	router.ServeHTTP(resp, req)
@@ -163,6 +165,13 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if deploymentAccess["enforced"] != true || deploymentAccess["forwarded"] != true || !reflect.DeepEqual(deploymentAccess["names"], []any{"payments-api-prod", "worker-prod"}) {
 		t.Fatalf("unexpected deploymentAccess payload: %#v", deploymentAccess)
 	}
+	scopes, ok := deploymentAccess["scopes"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected deploymentAccess scopes object, got %#v", deploymentAccess["scopes"])
+	}
+	if scopes["forwarded"] != true || !reflect.DeepEqual(scopes["projects"], []any{"payments", "platform"}) || !reflect.DeepEqual(scopes["environments"], []any{"prod", "staging"}) {
+		t.Fatalf("unexpected deploymentAccess scopes payload: %#v", scopes)
+	}
 	summary, ok := deploymentAccess["summary"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected explicit unavailable deploymentAccess summary, got %#v", deploymentAccess["summary"])
@@ -195,13 +204,13 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 		t.Fatalf("expected operator write trusted headers, got %#v", operatorWrite["requiredTrustedHeaders"])
 	}
 	deploymentScopedRead := accessVerdicts["deploymentScopedRead"].(map[string]any)
-	if deploymentScopedRead["allowed"] != true || deploymentScopedRead["requiresExactDeploymentAllowlistMatch"] != true || deploymentScopedRead["reason"] != "deployment-scoped reads can pass only for deployments named in X-Tenet-Authorized-Deployments" {
+	if deploymentScopedRead["allowed"] != true || deploymentScopedRead["requiresExactDeploymentAllowlistMatch"] != true || deploymentScopedRead["reason"] != "deployment-scoped reads can pass for deployments named in X-Tenet-Authorized-Deployments or matched by X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments" {
 		t.Fatalf("expected conditional deployment read verdict, got %#v", deploymentScopedRead)
 	}
 	if !reflect.DeepEqual(deploymentScopedRead["exampleRoutes"], []any{"GET /v1/overview/deployments/{deploymentName}", "GET /v1/status/deployments/{deploymentName}", "GET /v1/audit-logs?deployment={deploymentName}"}) {
 		t.Fatalf("expected deployment-scoped read route examples, got %#v", deploymentScopedRead["exampleRoutes"])
 	}
-	if !reflect.DeepEqual(deploymentScopedRead["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles", "X-Tenet-Authorized-Deployments"}) {
+	if !reflect.DeepEqual(deploymentScopedRead["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles", "X-Tenet-Authorized-Deployments", "X-Tenet-Authorized-Projects", "X-Tenet-Authorized-Environments"}) {
 		t.Fatalf("expected deployment-scoped read trusted headers, got %#v", deploymentScopedRead["requiredTrustedHeaders"])
 	}
 	deploymentScopedWrite := accessVerdicts["deploymentScopedWrite"].(map[string]any)
@@ -221,7 +230,7 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if !reflect.DeepEqual(collectionRead["exampleRoutes"], []any{"GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/overview/accounts", "GET /v1/audit-logs"}) {
 		t.Fatalf("expected collection read route examples, got %#v", collectionRead["exampleRoutes"])
 	}
-	if !reflect.DeepEqual(collectionRead["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles", "X-Tenet-Authorized-Deployments"}) {
+	if !reflect.DeepEqual(collectionRead["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles", "X-Tenet-Authorized-Deployments", "X-Tenet-Authorized-Projects", "X-Tenet-Authorized-Environments"}) {
 		t.Fatalf("expected collection read trusted headers, got %#v", collectionRead["requiredTrustedHeaders"])
 	}
 }
@@ -304,6 +313,48 @@ func TestRouterOperatorContextSummarizesMatchedAndUnmatchedDeploymentAccess(t *t
 	collectionRead := accessVerdicts["collectionRead"].(map[string]any)
 	if collectionRead["allowed"] != true || collectionRead["filtersCollectionsByDeploymentAccess"] != true || collectionRead["emptyCollectionLikely"] != nil {
 		t.Fatalf("expected collection read verdict to report filtering without likely-empty warning, got %#v", collectionRead)
+	}
+}
+
+func TestRouterOperatorContextSummarizesProjectEnvironmentScopedAccess(t *testing.T) {
+	router := NewRouter(Options{
+		TrustAuthenticatedHeaders:          true,
+		RequireDeploymentReadAuthorization: true,
+		CatalogPlacements: func(context.Context) ([]catalog.PlacementView, error) {
+			return []catalog.PlacementView{
+				{DeploymentName: "payments-api-prod", AppRef: "payments", EnvironmentRef: "prod", AWSAccountID: "123456789012", Region: "us-west-2"},
+				{DeploymentName: "payments-api-staging", AppRef: "payments", EnvironmentRef: "staging", AWSAccountID: "210987654321", Region: "us-east-1"},
+				{DeploymentName: "worker-prod", AppRef: "workers", EnvironmentRef: "prod", AWSAccountID: "123456789012", Region: "us-west-2"},
+			}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+	req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+	req.Header.Set(requestactor.AuthorizedProjectsHeader, "payments")
+	req.Header.Set(requestactor.AuthorizedEnvironmentsHeader, "prod, staging")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode operator context response: %v", err)
+	}
+	deploymentAccess := body["deploymentAccess"].(map[string]any)
+	scopes := deploymentAccess["scopes"].(map[string]any)
+	if scopes["forwarded"] != true || !reflect.DeepEqual(scopes["projects"], []any{"payments"}) || !reflect.DeepEqual(scopes["environments"], []any{"prod", "staging"}) {
+		t.Fatalf("unexpected forwarded project/environment scopes: %#v", scopes)
+	}
+	summary := deploymentAccess["summary"].(map[string]any)
+	if summary["available"] != true || summary["forwardedCount"] != float64(0) || summary["matchedCount"] != float64(2) || summary["projectCount"] != float64(1) || summary["environmentCount"] != float64(2) {
+		t.Fatalf("unexpected project/environment access summary: %#v", summary)
+	}
+	examples := summary["projectEnvironmentExamples"].([]any)
+	if len(examples) != 2 {
+		t.Fatalf("expected two scoped project/environment examples, got %#v", examples)
 	}
 }
 
@@ -407,11 +458,11 @@ func TestRouterOperatorContextVerdictsExplainDeniedAndEmptyCollectionCases(t *te
 		}
 		accessVerdicts := body["accessVerdicts"].(map[string]any)
 		deploymentScopedRead := accessVerdicts["deploymentScopedRead"].(map[string]any)
-		if deploymentScopedRead["allowed"] != false || deploymentScopedRead["reason"] != "deployment-scoped reads will return 403 unless X-Tenet-Authorized-Deployments includes the exact deployment name" {
-			t.Fatalf("expected deployment read verdict to explain exact allowlist requirement, got %#v", deploymentScopedRead)
+		if deploymentScopedRead["allowed"] != false || deploymentScopedRead["reason"] != "deployment-scoped reads will return 403 unless X-Tenet-Authorized-Deployments names the deployment or project/environment scopes match catalog placement" {
+			t.Fatalf("expected deployment read verdict to explain deployment or scope requirement, got %#v", deploymentScopedRead)
 		}
 		collectionRead := accessVerdicts["collectionRead"].(map[string]any)
-		if collectionRead["allowed"] != true || collectionRead["emptyCollectionLikely"] != true || collectionRead["reason"] != "collection reads will be allowed but return empty collections until X-Tenet-Authorized-Deployments forwards at least one visible deployment" {
+		if collectionRead["allowed"] != true || collectionRead["emptyCollectionLikely"] != true || collectionRead["reason"] != "collection reads will be allowed but return empty collections until deployment or project/environment scopes forward at least one visible deployment" {
 			t.Fatalf("expected collection verdict to explain empty filtered collections, got %#v", collectionRead)
 		}
 	})
@@ -446,7 +497,7 @@ func TestRouterOperatorContextSummaryReportsEmptyVisibleProjectEnvironmentSet(t 
 	if !ok {
 		t.Fatalf("expected deploymentAccess summary object, got %#v", deploymentAccess["summary"])
 	}
-	if summary["available"] != true || summary["forwardedCount"] != float64(1) || summary["matchedCount"] != float64(0) || summary["unmatchedCount"] != float64(1) || summary["emptyReason"] != "no forwarded deployment names match catalog placements" {
+	if summary["available"] != true || summary["forwardedCount"] != float64(1) || summary["matchedCount"] != float64(0) || summary["unmatchedCount"] != float64(1) || summary["emptyReason"] != "no forwarded deployment names or project/environment scopes match catalog placements" {
 		t.Fatalf("unexpected empty visible summary: %#v", summary)
 	}
 	if !reflect.DeepEqual(summary["unmatchedNames"], []any{"stale-api"}) {
@@ -457,7 +508,7 @@ func TestRouterOperatorContextSummaryReportsEmptyVisibleProjectEnvironmentSet(t 
 	}
 	accessVerdicts := body["accessVerdicts"].(map[string]any)
 	collectionRead := accessVerdicts["collectionRead"].(map[string]any)
-	if collectionRead["emptyCollectionLikely"] != true || collectionRead["reason"] != "collection reads will be allowed but likely empty because the forwarded deployment allowlist does not match catalog deployments" {
+	if collectionRead["emptyCollectionLikely"] != true || collectionRead["reason"] != "collection reads will be allowed but likely empty because the forwarded deployment grants or project/environment scopes do not match catalog deployments" {
 		t.Fatalf("expected likely-empty collection verdict, got %#v", collectionRead)
 	}
 }
@@ -1784,6 +1835,13 @@ func TestRouterDeploymentReadAuthorization(t *testing.T) {
 				providerCalls++
 				return []catalog.ApplicationOverview{{Name: "api-prod"}}, nil
 			},
+			CatalogPlacements: func(context.Context) ([]catalog.PlacementView, error) {
+				return []catalog.PlacementView{
+					{DeploymentName: "api-prod", AppRef: "payments", EnvironmentRef: "prod", AWSAccountID: "123456789012", Region: "us-west-2"},
+					{DeploymentName: "worker-prod", AppRef: "workers", EnvironmentRef: "prod", AWSAccountID: "123456789012", Region: "us-west-2"},
+					{DeploymentName: "payments-api-staging", AppRef: "payments", EnvironmentRef: "staging", AWSAccountID: "210987654321", Region: "us-east-1"},
+				}, nil
+			},
 			OverviewApplication: func(_ context.Context, name string) (catalog.ApplicationOverviewDetail, error) {
 				providerCalls++
 				return catalog.ApplicationOverviewDetail{Name: name}, nil
@@ -1859,6 +1917,17 @@ func TestRouterDeploymentReadAuthorization(t *testing.T) {
 		return req
 	}
 
+	newProjectEnvironmentRequest := func(path string, projects string, environments string) *http.Request {
+		req := newAuthenticatedRequest(path, "")
+		if projects != "" {
+			req.Header.Set(requestactor.AuthorizedProjectsHeader, projects)
+		}
+		if environments != "" {
+			req.Header.Set(requestactor.AuthorizedEnvironmentsHeader, environments)
+		}
+		return req
+	}
+
 	guardedRoutes := []struct {
 		name string
 		path string
@@ -1912,6 +1981,21 @@ func TestRouterDeploymentReadAuthorization(t *testing.T) {
 		t.Run(tc.name+" allowed", func(t *testing.T) {
 			router, providerCalls := newGuardedRouter(t)
 			req := newAuthenticatedRequest(tc.path, "api-prod, worker-prod")
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+			}
+			if *providerCalls == 0 {
+				t.Fatal("expected guarded route provider to run")
+			}
+		})
+
+		t.Run(tc.name+" allowed by project/environment scope", func(t *testing.T) {
+			router, providerCalls := newGuardedRouter(t)
+			req := newProjectEnvironmentRequest(tc.path, "payments", "prod")
 			resp := httptest.NewRecorder()
 
 			router.ServeHTTP(resp, req)
@@ -2029,6 +2113,47 @@ func TestRouterDeploymentReadAuthorization(t *testing.T) {
 		want := []statusstore.Snapshot{{DeploymentName: "worker-prod"}, {DeploymentName: "payments-api-staging"}}
 		if !reflect.DeepEqual(snapshots, want) {
 			t.Fatalf("unexpected filtered deployment statuses: got %+v want %+v", snapshots, want)
+		}
+		if *providerCalls != 1 {
+			t.Fatalf("expected deployment statuses provider call, got %d", *providerCalls)
+		}
+	})
+
+	t.Run("deployment status collection filters project environment scoped deployments", func(t *testing.T) {
+		router, providerCalls := newGuardedRouter(t)
+		req := newProjectEnvironmentRequest("/v1/status/deployments", "payments", "staging")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		var snapshots []statusstore.Snapshot
+		if err := json.Unmarshal(resp.Body.Bytes(), &snapshots); err != nil {
+			t.Fatalf("decode deployment statuses: %v", err)
+		}
+		want := []statusstore.Snapshot{{DeploymentName: "payments-api-staging"}}
+		if !reflect.DeepEqual(snapshots, want) {
+			t.Fatalf("unexpected project/environment filtered deployment statuses: got %+v want %+v", snapshots, want)
+		}
+		if *providerCalls != 1 {
+			t.Fatalf("expected deployment statuses provider call, got %d", *providerCalls)
+		}
+	})
+
+	t.Run("deployment status collection returns empty array for nonmatching project environment scope", func(t *testing.T) {
+		router, providerCalls := newGuardedRouter(t)
+		req := newProjectEnvironmentRequest("/v1/status/deployments", "payments", "dev")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if body := strings.TrimSpace(resp.Body.String()); body != "[]" {
+			t.Fatalf("expected empty JSON array, got %q", body)
 		}
 		if *providerCalls != 1 {
 			t.Fatalf("expected deployment statuses provider call, got %d", *providerCalls)
