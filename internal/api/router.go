@@ -505,7 +505,7 @@ func buildOperatorContextAccessVerdicts(options Options, identity requestactor.A
 	return operatorContextAccessVerdicts{
 		OperatorRead:          operatorRead,
 		OperatorWrite:         operatorWrite,
-		DeploymentScopedRead:  operatorContextDeploymentScopedReadVerdict(options, identity, roles, deployments, scopes),
+		DeploymentScopedRead:  operatorContextDeploymentScopedReadVerdict(options, identity, roles, deployments, scopes, summary),
 		DeploymentScopedWrite: operatorContextDeploymentScopedWriteVerdict(options, identity, roles, deployments, operatorWrite),
 		CollectionRead:        operatorContextCollectionReadVerdict(options, identity, roles, deployments, scopes, summary),
 	}
@@ -574,7 +574,7 @@ func operatorContextWriteVerdict(options Options, identity requestactor.Authenti
 	return verdict
 }
 
-func operatorContextDeploymentScopedReadVerdict(options Options, identity requestactor.AuthenticatedIdentity, roles requestactor.AuthenticatedRoles, deployments requestactor.AuthorizedDeployments, scopes requestactor.AuthorizedProjectEnvironmentScopes) operatorContextAccessVerdict {
+func operatorContextDeploymentScopedReadVerdict(options Options, identity requestactor.AuthenticatedIdentity, roles requestactor.AuthenticatedRoles, deployments requestactor.AuthorizedDeployments, scopes requestactor.AuthorizedProjectEnvironmentScopes, summary *operatorContextAccessSummary) operatorContextAccessVerdict {
 	verdict := operatorContextReadVerdict(options, identity, roles)
 	verdict.ExampleRoutes = cloneOperatorContextExampleRoutes(operatorContextDeploymentScopedReadExampleRoutes)
 	verdict.RequiresExactDeploymentAllowlistMatch = options.RequireDeploymentReadAuthorization
@@ -589,10 +589,30 @@ func operatorContextDeploymentScopedReadVerdict(options Options, identity reques
 	if !verdict.Allowed {
 		return verdict
 	}
-	if len(deployments.Names) == 0 && len(scopes.Projects) == 0 && len(scopes.Environments) == 0 {
+	hasExactGrant := len(deployments.Names) > 0
+	hasProjectScope := len(scopes.Projects) > 0
+	hasEnvironmentScope := len(scopes.Environments) > 0
+	if !hasExactGrant && !hasProjectScope && !hasEnvironmentScope {
 		verdict.Allowed = false
 		verdict.Reason = "deployment-scoped reads will return 403 unless X-Tenet-Authorized-Deployments names the deployment or project/environment scopes match catalog placement"
 		return verdict
+	}
+	if !hasExactGrant && (hasProjectScope != hasEnvironmentScope) {
+		verdict.Allowed = false
+		verdict.Reason = "deployment-scoped reads need both X-Tenet-Authorized-Projects and X-Tenet-Authorized-Environments when no exact deployment allowlist is forwarded"
+		return verdict
+	}
+	if !hasExactGrant && hasProjectScope && hasEnvironmentScope {
+		if summary == nil || !summary.Available {
+			verdict.Allowed = false
+			verdict.Reason = "deployment-scoped reads using only project/environment scopes will fail safely until catalog placement data is available"
+			return verdict
+		}
+		if summary.MatchedCount == 0 {
+			verdict.Allowed = false
+			verdict.Reason = "deployment-scoped reads using only project/environment scopes will return 403 because those scopes do not match catalog deployments"
+			return verdict
+		}
 	}
 	verdict.Reason = "deployment-scoped reads can pass for deployments named in X-Tenet-Authorized-Deployments or matched by X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments"
 	return verdict

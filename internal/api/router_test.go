@@ -466,6 +466,81 @@ func TestRouterOperatorContextVerdictsExplainDeniedAndEmptyCollectionCases(t *te
 			t.Fatalf("expected collection verdict to explain empty filtered collections, got %#v", collectionRead)
 		}
 	})
+
+	t.Run("partial project environment scopes explain deployment 403 risk", func(t *testing.T) {
+		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
+			RequireDeploymentReadAuthorization: true,
+			RequireOperatorRoleForRead:         true,
+			CatalogPlacements: func(context.Context) ([]catalog.PlacementView, error) {
+				return []catalog.PlacementView{
+					{DeploymentName: "payments-api-prod", AppRef: "payments", EnvironmentRef: "prod"},
+				}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedRolesHeader, "viewer")
+		req.Header.Set(requestactor.AuthorizedProjectsHeader, "payments")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected diagnostic context to stay readable, got %d: %s", resp.Code, resp.Body.String())
+		}
+		var body map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode operator context response: %v", err)
+		}
+		accessVerdicts := body["accessVerdicts"].(map[string]any)
+		deploymentScopedRead := accessVerdicts["deploymentScopedRead"].(map[string]any)
+		if deploymentScopedRead["allowed"] != false || deploymentScopedRead["reason"] != "deployment-scoped reads need both X-Tenet-Authorized-Projects and X-Tenet-Authorized-Environments when no exact deployment allowlist is forwarded" {
+			t.Fatalf("expected partial project/environment scopes to explain missing paired scope, got %#v", deploymentScopedRead)
+		}
+		collectionRead := accessVerdicts["collectionRead"].(map[string]any)
+		if collectionRead["allowed"] != true || collectionRead["emptyCollectionLikely"] != true || collectionRead["reason"] != "collection reads will be allowed but likely empty because the forwarded deployment grants or project/environment scopes do not match catalog deployments" {
+			t.Fatalf("expected partial scope collection verdict to warn likely empty, got %#v", collectionRead)
+		}
+	})
+
+	t.Run("nonmatching project environment scopes explain deployment 403 risk", func(t *testing.T) {
+		router := NewRouter(Options{
+			TrustAuthenticatedHeaders:          true,
+			RequireDeploymentReadAuthorization: true,
+			RequireOperatorRoleForRead:         true,
+			CatalogPlacements: func(context.Context) ([]catalog.PlacementView, error) {
+				return []catalog.PlacementView{
+					{DeploymentName: "payments-api-prod", AppRef: "payments", EnvironmentRef: "prod"},
+				}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedRolesHeader, "viewer")
+		req.Header.Set(requestactor.AuthorizedProjectsHeader, "payments")
+		req.Header.Set(requestactor.AuthorizedEnvironmentsHeader, "dev")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected diagnostic context to stay readable, got %d: %s", resp.Code, resp.Body.String())
+		}
+		var body map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode operator context response: %v", err)
+		}
+		accessVerdicts := body["accessVerdicts"].(map[string]any)
+		deploymentScopedRead := accessVerdicts["deploymentScopedRead"].(map[string]any)
+		if deploymentScopedRead["allowed"] != false || deploymentScopedRead["reason"] != "deployment-scoped reads using only project/environment scopes will return 403 because those scopes do not match catalog deployments" {
+			t.Fatalf("expected nonmatching project/environment scopes to explain no catalog match, got %#v", deploymentScopedRead)
+		}
+		collectionRead := accessVerdicts["collectionRead"].(map[string]any)
+		if collectionRead["allowed"] != true || collectionRead["emptyCollectionLikely"] != true || collectionRead["reason"] != "collection reads will be allowed but likely empty because the forwarded deployment grants or project/environment scopes do not match catalog deployments" {
+			t.Fatalf("expected nonmatching scope collection verdict to warn likely empty, got %#v", collectionRead)
+		}
+	})
 }
 
 func TestRouterOperatorContextSummaryReportsEmptyVisibleProjectEnvironmentSet(t *testing.T) {
