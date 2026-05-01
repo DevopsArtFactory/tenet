@@ -900,6 +900,9 @@ assert 'Operator context' in ui, ui
 assert "const operatorContextRoute = () => '/v1/operator/context';" in ui, ui
 assert "const operatorContextReadRoute = () => 'GET /v1/operator/context';" in ui, ui
 assert "const operatorContextDeploymentAccessSummaryLabel = (context) => {" in ui, ui
+assert "const operatorContextProjectEnvironmentExamplesLabel = (context) => {" in ui, ui
+assert "Project/environment visibility:" in ui, ui
+assert "projectEnvironmentExamples" in ui, ui
 assert "const operatorContextEnforcementModeLabel = (context) => {" in ui, ui
 assert "Enforcement mode:" in ui, ui
 assert "read/write guarded" in ui, ui

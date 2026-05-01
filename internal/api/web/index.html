@@ -802,6 +802,37 @@
         const matched = Number.isFinite(summary.matchedCount) ? summary.matchedCount : 0;
         return Math.max(0, forwarded - matched) > 0 ? 'operator-context-warning' : '';
       };
+      const operatorContextProjectEnvironmentExamplesLabel = (context) => {
+        const access = context?.deploymentAccess || {};
+        if (!access.enforced || !access.forwarded) return null;
+        const summary = access.summary || null;
+        if (!summary) return null;
+        if (summary.available === false) {
+          const reason = summary.unavailableReason || 'catalog placement data is unavailable';
+          return `Project/environment visibility unavailable: ${reason}`;
+        }
+        const examples = Array.isArray(summary.projectEnvironmentExamples) ? summary.projectEnvironmentExamples.filter(Boolean) : [];
+        if (!examples.length) {
+          const reason = summary.emptyReason || 'no forwarded deployments currently match catalog project/environment placement';
+          return `Project/environment visibility: no visible project/environment groups (${reason})`;
+        }
+        const visibleExamples = examples.slice(0, 3).map((example) => {
+          const parts = [example.appRef, example.environmentRef, example.region, example.awsAccountId].filter(Boolean);
+          const placement = parts.length ? parts.join(' / ') : 'unknown placement';
+          const deploymentCount = Number.isFinite(example.deploymentCount) ? example.deploymentCount : null;
+          const deploymentText = deploymentCount !== null ? ` (${deploymentCount} ${deploymentCount === 1 ? 'deployment' : 'deployments'})` : '';
+          return `${placement}${deploymentText}`;
+        });
+        const hiddenCount = examples.length - visibleExamples.length;
+        return `Project/environment visibility: ${visibleExamples.join('; ')}${hiddenCount > 0 ? `; +${hiddenCount} more` : ''}`;
+      };
+      const operatorContextProjectEnvironmentExamplesClass = (context) => {
+        const summary = context?.deploymentAccess?.summary || null;
+        if (!summary) return '';
+        if (summary.available === false) return 'operator-context-warning';
+        const examples = Array.isArray(summary.projectEnvironmentExamples) ? summary.projectEnvironmentExamples.filter(Boolean) : [];
+        return examples.length ? '' : 'operator-context-warning';
+      };
       const operatorContextEnforcementModeLabel = (context) => {
         const mode = context?.enforcement?.mode || '';
         const labels = {
@@ -900,6 +931,10 @@
           const deploymentAccessSummary = operatorContextDeploymentAccessSummaryLabel(context);
           if (deploymentAccessSummary) {
             meta.append(createElement('span', operatorContextDeploymentAccessSummaryClass(context), deploymentAccessSummary));
+          }
+          const projectEnvironmentExamples = operatorContextProjectEnvironmentExamplesLabel(context);
+          if (projectEnvironmentExamples) {
+            meta.append(createElement('span', operatorContextProjectEnvironmentExamplesClass(context), projectEnvironmentExamples));
           }
           operatorContextAccessVerdictEntries(context).forEach((entry) => {
             meta.append(createElement('span', entry.className, entry.label));
