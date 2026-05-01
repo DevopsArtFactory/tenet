@@ -431,8 +431,8 @@ async function render(operatorResponses) {
   const scopedReadOnly = await render({ ok: true, json: () => Promise.resolve(scopedReadOnlyContext) });
   if (!scopedReadOnly.text().includes('Exact deployment grants: none forwarded')) throw new Error('expected exact grants empty state when scoped reads are available without exact grants');
   if (!scopedReadOnly.text().includes('Project/environment scopes: projects payments; environments prod')) throw new Error('expected complete project/environment scope summary');
-  if (!scopedReadOnly.text().includes('Write scope reminder: project/environment scopes currently widen guarded reads only; plan/apply writes still require an exact X-Tenet-Authorized-Deployments grant.')) throw new Error('expected scoped write reminder');
-  const writeReminderPill = findFirst(scopedReadOnly.document.getElementById('operator-context'), (node) => String(node.className || '').includes('operator-context-warning') && node.textContent.includes('plan/apply writes still require an exact X-Tenet-Authorized-Deployments grant'));
+  if (!scopedReadOnly.text().includes('Write scope reminder: deployment-scoped writes can pass with an exact X-Tenet-Authorized-Deployments grant or matching X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments catalog placement.')) throw new Error('expected scoped write reminder');
+  const writeReminderPill = findFirst(scopedReadOnly.document.getElementById('operator-context'), (node) => String(node.className || '').includes('operator-context-warning') && node.textContent.includes('matching X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments catalog placement'));
   if (!writeReminderPill) throw new Error('expected scoped write reminder warning pill');
 
   const unavailableSummary = await render({ ok: true, json: () => Promise.resolve(unavailableSummaryContext) });

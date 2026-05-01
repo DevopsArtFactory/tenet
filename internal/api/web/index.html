@@ -808,7 +808,7 @@
         const environments = Array.isArray(scopes.environments) ? scopes.environments.filter(Boolean) : [];
         const scopesForwarded = Boolean(scopes.forwarded) || projects.length > 0 || environments.length > 0;
         if (!scopesForwarded || !projects.length || !environments.length || exactNames.length > 0) return null;
-        return 'Write scope reminder: project/environment scopes currently widen guarded reads only; plan/apply writes still require an exact X-Tenet-Authorized-Deployments grant.';
+        return 'Write scope reminder: deployment-scoped writes can pass with an exact X-Tenet-Authorized-Deployments grant or matching X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments catalog placement.';
       };
       const operatorContextScopedWriteReminderClass = (context) => operatorContextScopedWriteReminderLabel(context) ? 'operator-context-warning' : '';
       const operatorContextDeploymentAccessSummaryLabel = (context) => {

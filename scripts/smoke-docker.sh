@@ -1758,7 +1758,7 @@ def assert_operator_context_common(payload):
     assert access_verdicts.get("deploymentScopedRead", {}).get("exampleRoutes") == ["GET /v1/overview/deployments/{deploymentName}", "GET /v1/status/deployments/{deploymentName}", "GET /v1/audit-logs?deployment={deploymentName}"], payload
     assert access_verdicts.get("deploymentScopedRead", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers + project_environment_scope_headers, payload
     assert access_verdicts.get("deploymentScopedWrite", {}).get("requiresExactDeploymentAllowlistMatch") is True, payload
-    assert access_verdicts.get("deploymentScopedWrite", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers, payload
+    assert access_verdicts.get("deploymentScopedWrite", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers + project_environment_scope_headers, payload
     assert access_verdicts.get("collectionRead", {}).get("filtersCollectionsByDeploymentAccess") is True, payload
     assert access_verdicts.get("collectionRead", {}).get("exampleRoutes") == ["GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/overview/accounts", "GET /v1/audit-logs"], payload
     assert access_verdicts.get("collectionRead", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers + project_environment_scope_headers, payload

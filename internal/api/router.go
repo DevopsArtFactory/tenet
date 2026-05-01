@@ -187,14 +187,14 @@ func requireDeploymentReadAuthorization(w http.ResponseWriter, r *http.Request, 
 	return requireDeploymentReadAccessWithOptions(w, r, options, deploymentName)
 }
 
-func requireDeploymentWriteAuthorization(w http.ResponseWriter, r *http.Request, enabled bool, deploymentName string) bool {
-	if !enabled {
+func requireDeploymentWriteAuthorization(w http.ResponseWriter, r *http.Request, options Options, deploymentName string) bool {
+	if !options.RequireDeploymentReadAuthorization {
 		return true
 	}
 	if !requireAuthenticatedIdentity(w, r) {
 		return false
 	}
-	return requireDeploymentReadAccess(w, r, enabled, deploymentName)
+	return requireDeploymentReadAccessWithOptions(w, r, options, deploymentName)
 }
 
 func requestHasDeploymentAccess(ctx context.Context, options Options, deploymentName string, deployments requestactor.AuthorizedDeployments, scopes requestactor.AuthorizedProjectEnvironmentScopes, placements []catalog.PlacementView) bool {
@@ -514,7 +514,7 @@ func buildOperatorContextAccessVerdicts(options Options, identity requestactor.A
 		OperatorRead:          operatorRead,
 		OperatorWrite:         operatorWrite,
 		DeploymentScopedRead:  operatorContextDeploymentScopedReadVerdict(options, identity, roles, deployments, scopes, summary),
-		DeploymentScopedWrite: operatorContextDeploymentScopedWriteVerdict(options, identity, roles, deployments, operatorWrite),
+		DeploymentScopedWrite: operatorContextDeploymentScopedWriteVerdict(options, identity, roles, deployments, scopes, summary, operatorWrite),
 		CollectionRead:        operatorContextCollectionReadVerdict(options, identity, roles, deployments, scopes, summary),
 	}
 }
@@ -626,26 +626,46 @@ func operatorContextDeploymentScopedReadVerdict(options Options, identity reques
 	return verdict
 }
 
-func operatorContextDeploymentScopedWriteVerdict(options Options, identity requestactor.AuthenticatedIdentity, roles requestactor.AuthenticatedRoles, deployments requestactor.AuthorizedDeployments, operatorWrite operatorContextAccessVerdict) operatorContextAccessVerdict {
+func operatorContextDeploymentScopedWriteVerdict(options Options, identity requestactor.AuthenticatedIdentity, roles requestactor.AuthenticatedRoles, deployments requestactor.AuthorizedDeployments, scopes requestactor.AuthorizedProjectEnvironmentScopes, summary *operatorContextAccessSummary, operatorWrite operatorContextAccessVerdict) operatorContextAccessVerdict {
 	verdict := operatorWrite
 	verdict.ExampleRoutes = cloneOperatorContextExampleRoutes(operatorContextDeploymentScopedWriteExampleRoutes)
 	verdict.RequiresExactDeploymentAllowlistMatch = options.RequireDeploymentReadAuthorization
 	if verdict.RequiresExactDeploymentAllowlistMatch {
-		verdict.RequiredTrustedHeaders = appendOperatorContextRequiredHeaders(verdict.RequiredTrustedHeaders, operatorContextDeploymentAllowlistHeaders)
+		verdict.RequiredTrustedHeaders = appendOperatorContextRequiredHeaders(verdict.RequiredTrustedHeaders, operatorContextDeploymentAllowlistHeaders, operatorContextProjectEnvironmentScopeHeaders)
 	}
 	if !verdict.Allowed {
 		return verdict
 	}
 	if !options.RequireDeploymentReadAuthorization {
-		verdict.Reason = "deployment-scoped writes are not requiring exact deployment allowlist membership for this API instance"
+		verdict.Reason = "deployment-scoped writes are not requiring deployment allowlist or project/environment scope membership for this API instance"
 		return verdict
 	}
-	if len(deployments.Names) == 0 {
+	hasExactGrant := len(deployments.Names) > 0
+	hasProjectScope := len(scopes.Projects) > 0
+	hasEnvironmentScope := len(scopes.Environments) > 0
+	if !hasExactGrant && !hasProjectScope && !hasEnvironmentScope {
 		verdict.Allowed = false
-		verdict.Reason = "deployment-scoped writes will return 403 unless X-Tenet-Authorized-Deployments includes the exact deployment name"
+		verdict.Reason = "deployment-scoped writes will return 403 unless X-Tenet-Authorized-Deployments names the deployment or project/environment scopes match catalog placement"
 		return verdict
 	}
-	verdict.Reason = "deployment-scoped writes can pass only for deployments named in X-Tenet-Authorized-Deployments"
+	if !hasExactGrant && (hasProjectScope != hasEnvironmentScope) {
+		verdict.Allowed = false
+		verdict.Reason = "deployment-scoped writes need both X-Tenet-Authorized-Projects and X-Tenet-Authorized-Environments when no exact deployment allowlist is forwarded"
+		return verdict
+	}
+	if !hasExactGrant && hasProjectScope && hasEnvironmentScope {
+		if summary == nil || !summary.Available {
+			verdict.Allowed = false
+			verdict.Reason = "deployment-scoped writes using only project/environment scopes will fail safely until catalog placement data is available"
+			return verdict
+		}
+		if summary.MatchedCount == 0 {
+			verdict.Allowed = false
+			verdict.Reason = "deployment-scoped writes using only project/environment scopes will return 403 because those scopes do not match catalog deployments"
+			return verdict
+		}
+	}
+	verdict.Reason = "deployment-scoped writes can pass for deployments named in X-Tenet-Authorized-Deployments or matched by X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments"
 	return verdict
 }
 
@@ -1533,7 +1553,7 @@ func NewRouter(options Options) http.Handler {
 			http.Error(w, "invalid deployment name", http.StatusBadRequest)
 			return
 		}
-		if !requireDeploymentWriteAuthorization(w, r, options.RequireDeploymentReadAuthorization, name) {
+		if !requireDeploymentWriteAuthorization(w, r, options, name) {
 			return
 		}
 		var req planpreview.CreateRequest
@@ -1615,7 +1635,7 @@ func NewRouter(options Options) http.Handler {
 				respondLookupError(w, err)
 				return
 			}
-			if !requireDeploymentWriteAuthorization(w, r, true, planRecord.DeploymentName) {
+			if !requireDeploymentWriteAuthorization(w, r, options, planRecord.DeploymentName) {
 				return
 			}
 		}
@@ -1676,7 +1696,7 @@ func NewRouter(options Options) http.Handler {
 					respondLookupError(w, err)
 					return
 				}
-				if !requireDeploymentReadAccess(w, r, true, record.DeploymentName) {
+				if !requireDeploymentWriteAuthorization(w, r, options, record.DeploymentName) {
 					return
 				}
 			}

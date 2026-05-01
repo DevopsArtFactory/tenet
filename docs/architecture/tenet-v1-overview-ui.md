@@ -35,7 +35,7 @@ The `GET /v1/operator/context` endpoint behind the embedded banner also returns 
 
 Initial auth failures on the secondary account drill-down now follow that same shared operator-read contract. `401 Unauthorized` on `/?page=account&accountId={awsAccountId}` tells the operator to reopen or sign in to the same bookmarkable page through the trusted front door so authenticated identity can be provided, read-role `403 Forbidden` points at the missing viewer/operator/admin role, and deployment-access `403 Forbidden` asks for the matching deployment, project, or environment scope.
 
-When the banner sees complete project/environment scopes but no exact deployment allowlist, it now shows a warning reminder instead of leaving the operator to infer the write gap from a later `403`: project/environment scopes can explain visible guarded reads today, but `POST /v1/plans/deployments/{deploymentName}`, `POST /v1/applies/plans/{planId}`, and apply transitions still need an exact `X-Tenet-Authorized-Deployments` grant until the backend write-scope contract changes.
+When the banner sees complete project/environment scopes but no exact deployment allowlist, it now shows a reminder instead of leaving the operator to infer authorization behavior from a later `403`: project/environment scopes can authorize guarded deployment reads and immutable writes when catalog placement matches both headers; `POST /v1/plans/deployments/{deploymentName}`, `POST /v1/applies/plans/{planId}`, and apply transitions still fail closed when the matching catalog placement is unavailable or stale.
 
 ### 1b. Audit timeline
 The audit page is a sibling operator slice, not a replacement for the application drill-down.
