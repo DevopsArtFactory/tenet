@@ -4008,15 +4008,24 @@
         const labels = [];
         if (currentPageState.deployment) labels.push(`deployment ${currentPageState.deployment}`);
         if (currentPageState.auditAction) labels.push(`action ${currentPageState.auditAction}`);
-        if (currentPageState.auditLimit > 0) labels.push(`limit ${currentPageState.auditLimit}`);
+        return labels;
+      };
+      const auditLimitLabel = () => currentPageState.auditLimit > 0 ? `Limit cap: latest ${currentPageState.auditLimit}` : 'Limit cap: all entries';
+      const auditControlLabels = () => {
+        const labels = auditFilterLabels();
+        if (currentPageState.auditLimit > 0) labels.push(auditLimitLabel());
         return labels;
       };
       const auditEmptyStateText = () => {
         const filters = auditFilterLabels();
-        if (!filters.length) {
+        const hasLimit = currentPageState.auditLimit > 0;
+        if (!filters.length && !hasLimit) {
           return 'No audit activity has been persisted yet.';
         }
-        return `No audit entries match the current filters (${filters.join(' · ')}). Clear audit filters to return to the full audit timeline.`;
+        if (!filters.length) {
+          return `No audit entries are visible with the current limit cap (${auditLimitLabel()}). Increase the limit or clear audit controls to return to the full audit timeline.`;
+        }
+        return `No audit entries match the current filters (${filters.join(' · ')}${hasLimit ? `; ${auditLimitLabel()}` : ''}). Clear audit controls to return to the full audit timeline.`;
       };
       const createAuditDeploymentContextCallout = () => {
         const deploymentName = auditDeploymentName();
@@ -4055,13 +4064,14 @@
           }),
         );
         const activeFilters = auditFilterLabels();
+        const activeControls = auditControlLabels();
         const toolbarActions = createElement('div', 'toolbar-actions');
         toolbarActions.append(
           backLink,
-          createElement('div', 'toolbar-active', activeFilters.length ? `Audit filters: ${activeFilters.join(' · ')}` : 'Audit filters: none'),
+          createElement('div', 'toolbar-active', `${activeFilters.length ? `Audit filters: ${activeFilters.join(' · ')}` : 'Audit filters: none'} · ${auditLimitLabel()}`),
         );
-        if (activeFilters.length) {
-          const clearFiltersButton = createElement('button', 'toolbar-button', 'Clear audit filters');
+        if (activeControls.length) {
+          const clearFiltersButton = createElement('button', 'toolbar-button', activeFilters.length ? 'Clear audit filters' : 'Clear audit controls');
           clearFiltersButton.type = 'button';
           clearFiltersButton.addEventListener('click', () => {
             clearAuditPageFilters();
@@ -4078,7 +4088,7 @@
           createElement('div', 'account-meta', deploymentName
             ? `Immutable plan preview and apply-request activity for deployment ${deploymentName} rendered from GET /v1/audit-logs.`
             : 'Immutable plan preview and apply-request activity rendered from GET /v1/audit-logs.'),
-          createElement('div', 'account-topology', activeFilters.length ? `Newest entries first. Actor identity remains explicit when unavailable or unknown. ${activeFilters.join(' · ')}.` : 'Newest entries first. Actor identity remains explicit when unavailable or unknown.'),
+          createElement('div', 'account-topology', activeControls.length ? `Newest entries first. Actor identity remains explicit when unavailable or unknown. ${activeControls.join(' · ')}.` : 'Newest entries first. Actor identity remains explicit when unavailable or unknown.'),
         );
         summary.replaceChildren(detailSummary);
       };
@@ -4196,7 +4206,13 @@
           return;
         }
 
-        timelineSection.append(createElement('div', 'detail-condition-meta', `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} · newest record first${currentPageState.deployment ? ` · deployment ${currentPageState.deployment}` : ''}${currentPageState.auditAction ? ` · action ${currentPageState.auditAction}` : ''}${currentPageState.auditLimit > 0 ? ` · limit ${currentPageState.auditLimit}` : ''}`));
+        const timelineMeta = [
+          `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}`,
+          'newest record first',
+          ...auditFilterLabels(),
+          auditLimitLabel(),
+        ];
+        timelineSection.append(createElement('div', 'detail-condition-meta', timelineMeta.join(' · ')));
         const rows = createElement('div', 'rows');
         entries.forEach((entry) => {
           const row = createElement('div', 'row');

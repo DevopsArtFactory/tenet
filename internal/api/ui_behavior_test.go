@@ -9320,7 +9320,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/audit-logs?deployment=payments-api-prod&limit=2') throw new Error('expected only filtered audit log fetch on audit page');
   if (!toolbarText.includes('Back to applications')) throw new Error('expected audit page back link');
-  if (!toolbarText.includes('Audit filters: deployment payments-api-prod · limit 2')) throw new Error('expected audit toolbar filters');
+  if (!toolbarText.includes('Audit filters: deployment payments-api-prod · Limit cap: latest 2')) throw new Error('expected audit toolbar filters');
   if (!summaryText.includes('Operator audit log')) throw new Error('expected audit page summary title');
   if (!summaryText.includes('Deployment audit timeline')) throw new Error('expected deployment-scoped audit summary label');
   if (!summaryText.includes('Immutable plan preview and apply-request activity for deployment payments-api-prod rendered from GET /v1/audit-logs.')) throw new Error('expected deployment-scoped audit summary copy');
@@ -9331,7 +9331,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!accountsText.includes('plan.created')) throw new Error('expected older audit entry text');
   if (!accountsText.includes('2 entries')) throw new Error('expected audit entry count copy');
   if (!accountsText.includes('deployment payments-api-prod')) throw new Error('expected audit deployment copy');
-  if (!accountsText.includes('limit 2')) throw new Error('expected audit limit copy');
+  if (!accountsText.includes('Limit cap: latest 2')) throw new Error('expected audit limit cap copy');
   if (!accountsText.includes('Actor detail')) throw new Error('expected explicit actor label');
   if (!accountsText.includes('Recorded')) throw new Error('expected recorded actor state');
   if (!accountsText.includes('Jane Operator')) throw new Error('expected recorded actor details');
@@ -9413,8 +9413,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   await settle();
   const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
-  if (!toolbarText.includes('Audit filters: deployment payments-api-prod · action apply.requested · limit 1')) throw new Error('expected active audit filters in toolbar');
-  if (!accountsText.includes('No audit entries match the current filters (deployment payments-api-prod · action apply.requested · limit 1). Clear audit filters to return to the full audit timeline.')) throw new Error('expected filtered audit empty-state recovery copy, got ' + accountsText);
+  if (!toolbarText.includes('Audit filters: deployment payments-api-prod · action apply.requested · Limit cap: latest 1')) throw new Error('expected active audit filters in toolbar');
+  if (!accountsText.includes('No audit entries match the current filters (deployment payments-api-prod · action apply.requested; Limit cap: latest 1). Clear audit controls to return to the full audit timeline.')) throw new Error('expected filtered audit empty-state recovery copy, got ' + accountsText);
   if (accountsText.includes('No audit activity has been persisted yet for deployment payments-api-prod.')) throw new Error('expected filtered empty state to avoid unfiltered no-activity copy');
   const clearButton = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear audit filters');
   if (!clearButton) throw new Error('expected clear audit filters button');
@@ -9650,11 +9650,11 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   await settle();
   if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/audit-logs?deployment=payments-api-prod&action=apply.requested&limit=2') throw new Error('expected initial deployment and action filtered audit fetch');
   const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
-  if (!toolbarText.includes('Audit filters: deployment payments-api-prod · action apply.requested · limit 2')) throw new Error('expected deployment, action, and limit filters in toolbar');
+  if (!toolbarText.includes('Audit filters: deployment payments-api-prod · action apply.requested · Limit cap: latest 2')) throw new Error('expected deployment, action, and limit filters in toolbar');
   let clearFiltersButton = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear audit filters');
   if (!clearFiltersButton || clearFiltersButton.disabled) throw new Error('expected enabled clear audit filters recovery action while filters are active');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
-  if (!accountsText.includes('1 entry · newest record first · deployment payments-api-prod · action apply.requested · limit 2')) throw new Error('expected active deployment, action, and limit filter copy in audit timeline');
+  if (!accountsText.includes('1 entry · newest record first · deployment payments-api-prod · action apply.requested · Limit cap: latest 2')) throw new Error('expected active deployment, action, and limit filter copy in audit timeline');
   const auditQuickNavLink = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A').find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&action=apply.requested&limit=2' && node.textContent === 'Audit log');
   const auditQuickNavChip = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip').find((node) => node.textContent === 'Audit log');
   if (auditQuickNavLink) throw new Error('expected audit quick navigation to render active workspace as a chip while preserving URL state');
@@ -9695,7 +9695,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (clearedAccountsText.includes('Quick navigation')) throw new Error('did not expect deployment quick navigation after clearing audit filters');
   if (clearedAccountsText.includes('deployment payments-api-prod')) throw new Error('did not expect deployment filter copy after clearing audit filters');
   if (clearedAccountsText.includes('action plan.created')) throw new Error('did not expect action filter copy after clearing audit filters');
-  if (clearedAccountsText.includes('limit 5')) throw new Error('did not expect limit filter copy after clearing audit filters');
+  if (clearedAccountsText.includes('Limit cap: latest 5')) throw new Error('did not expect limit cap copy after clearing audit filters');
 })();
 `
 		runNodeHarness(t, nodeProgram)
@@ -9741,6 +9741,19 @@ async function renderWithFetch(fetchImpl, search = '?page=audit') {
   const emptyText = collectText(loadingRun.document.getElementById('accounts')).join(' | ');
   if (!emptyText.includes('No audit activity has been persisted yet.')) throw new Error('expected audit empty state after resolve');
   if (emptyText.includes('Quick navigation')) throw new Error('did not expect audit quick navigation without a deployment filter');
+
+  const limitOnlyRun = await renderWithFetch((url) => {
+    if (url !== '/v1/audit-logs?limit=2') throw new Error('unexpected limit-only audit fetch: ' + url);
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({ entries: [] }) });
+  }, '?page=audit&limit=2');
+  await settle();
+  await settle();
+  const limitToolbarText = collectText(limitOnlyRun.document.getElementById('toolbar')).join(' | ');
+  const limitOnlyText = collectText(limitOnlyRun.document.getElementById('accounts')).join(' | ');
+  if (!limitToolbarText.includes('Audit filters: none · Limit cap: latest 2')) throw new Error('expected limit-only audit toolbar to separate filters from cap');
+  if (!limitOnlyText.includes('No audit entries are visible with the current limit cap (Limit cap: latest 2). Increase the limit or clear audit controls to return to the full audit timeline.')) throw new Error('expected limit-only audit empty-state guidance, got ' + limitOnlyText);
+  const clearControlsButton = collectNodes(limitOnlyRun.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear audit controls');
+  if (!clearControlsButton) throw new Error('expected limit-only audit page to offer clear audit controls');
 
   const unavailableRun = await renderWithFetch(() => Promise.resolve({
     ok: false,
