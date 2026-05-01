@@ -1345,6 +1345,14 @@ operator_context_unmatched=$(curl -fsS \
   -H "X-Tenet-Authenticated-Roles: viewer, operator" \
   -H "X-Tenet-Authorized-Deployments: payments-api-prod, stale-api, worker-prod" \
   "$API_BASE_URL/v1/operator/context")
+operator_context_stale_scopes=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer, operator" \
+  -H "X-Tenet-Authorized-Projects: payments-api, archived-payments" \
+  -H "X-Tenet-Authorized-Environments: staging-apne2, stale-env" \
+  "$API_BASE_URL/v1/operator/context")
 operator_context_alias=$(curl -fsS \
   -H "X-User-ID: alias-456" \
   -H "X-User-Name: Alias Operator" \
@@ -1528,6 +1536,7 @@ empty_status_collection_path=$(write_payload empty-status-collection.json "$empt
 empty_audit_collection_path=$(write_payload empty-audit-collection.json "$empty_audit_collection")
 operator_context_trusted_path=$(write_payload operator-context-trusted.json "$operator_context_trusted")
 operator_context_unmatched_path=$(write_payload operator-context-unmatched.json "$operator_context_unmatched")
+operator_context_stale_scopes_path=$(write_payload operator-context-stale-scopes.json "$operator_context_stale_scopes")
 operator_context_alias_path=$(write_payload operator-context-alias.json "$operator_context_alias")
 operator_context_no_allowlist_path=$(write_payload operator-context-no-allowlist.json "$operator_context_no_allowlist")
 
@@ -1575,6 +1584,7 @@ AUTH_FORBIDDEN_RESOURCE_INSPECTION_STATUS="$auth_forbidden_resource_inspection_s
 AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY_PATH="$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" \
 OPERATOR_CONTEXT_TRUSTED_PATH="$operator_context_trusted_path" \
 OPERATOR_CONTEXT_UNMATCHED_PATH="$operator_context_unmatched_path" \
+OPERATOR_CONTEXT_STALE_SCOPES_PATH="$operator_context_stale_scopes_path" \
 OPERATOR_CONTEXT_ALIAS_PATH="$operator_context_alias_path" \
 OPERATOR_CONTEXT_NO_ALLOWLIST_PATH="$operator_context_no_allowlist_path" \
 ALLOWED_STATUS_READ_PATH="$allowed_status_read_path" \
@@ -1637,6 +1647,8 @@ with open(os.environ["OPERATOR_CONTEXT_TRUSTED_PATH"], encoding="utf-8") as fh:
     operator_context_trusted = json.load(fh)
 with open(os.environ["OPERATOR_CONTEXT_UNMATCHED_PATH"], encoding="utf-8") as fh:
     operator_context_unmatched = json.load(fh)
+with open(os.environ["OPERATOR_CONTEXT_STALE_SCOPES_PATH"], encoding="utf-8") as fh:
+    operator_context_stale_scopes = json.load(fh)
 with open(os.environ["OPERATOR_CONTEXT_ALIAS_PATH"], encoding="utf-8") as fh:
     operator_context_alias = json.load(fh)
 with open(os.environ["OPERATOR_CONTEXT_NO_ALLOWLIST_PATH"], encoding="utf-8") as fh:
@@ -1791,6 +1803,30 @@ assert unmatched_summary["projectCount"] >= 1, operator_context_unmatched
 assert unmatched_summary["environmentCount"] >= 1, operator_context_unmatched
 assert unmatched_summary.get("emptyReason") is None, operator_context_unmatched
 assert unmatched_summary["projectEnvironmentExamples"], operator_context_unmatched
+assert_operator_context_common(operator_context_stale_scopes)
+assert operator_context_stale_scopes["deploymentAccess"]["enforced"] is True, operator_context_stale_scopes
+assert operator_context_stale_scopes["deploymentAccess"]["forwarded"] is True, operator_context_stale_scopes
+assert "names" not in operator_context_stale_scopes["deploymentAccess"], operator_context_stale_scopes
+stale_scopes = operator_context_stale_scopes["deploymentAccess"]["scopes"]
+assert stale_scopes["forwarded"] is True, operator_context_stale_scopes
+assert stale_scopes["projects"] == ["payments-api", "archived-payments"], operator_context_stale_scopes
+assert stale_scopes["environments"] == ["staging-apne2", "stale-env"], operator_context_stale_scopes
+stale_scopes_summary = operator_context_stale_scopes["deploymentAccess"]["summary"]
+assert stale_scopes_summary["available"] is True, operator_context_stale_scopes
+assert stale_scopes_summary["forwardedCount"] == 0, operator_context_stale_scopes
+assert stale_scopes_summary["forwardedProjectCount"] == 2, operator_context_stale_scopes
+assert stale_scopes_summary["forwardedEnvironmentCount"] == 2, operator_context_stale_scopes
+assert stale_scopes_summary["matchedCount"] == 1, operator_context_stale_scopes
+assert stale_scopes_summary.get("unmatchedNames", []) == [], operator_context_stale_scopes
+assert stale_scopes_summary["unmatchedProjects"] == ["archived-payments"], operator_context_stale_scopes
+assert stale_scopes_summary["unmatchedProjectCount"] == 1, operator_context_stale_scopes
+assert stale_scopes_summary["unmatchedEnvironments"] == ["stale-env"], operator_context_stale_scopes
+assert stale_scopes_summary["unmatchedEnvironmentCount"] == 1, operator_context_stale_scopes
+assert stale_scopes_summary["projectEnvironmentExamples"], operator_context_stale_scopes
+stale_scope_project_envs = {(row["appRef"], row["environmentRef"]) for row in stale_scopes_summary["projectEnvironmentExamples"]}
+assert stale_scope_project_envs == {("payments-api", "staging-apne2")}, operator_context_stale_scopes
+assert operator_context_stale_scopes["accessVerdicts"]["deploymentScopedRead"]["allowed"] is True, operator_context_stale_scopes
+assert operator_context_stale_scopes["accessVerdicts"]["collectionRead"]["allowed"] is True, operator_context_stale_scopes
 assert_operator_context_common(operator_context_alias)
 assert operator_context_alias["identity"]["authenticated"] is True, operator_context_alias
 assert operator_context_alias["identity"]["id"] == "alias-456", operator_context_alias
