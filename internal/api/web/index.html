@@ -794,6 +794,18 @@
         if (!scopes.forwarded && !projects.length && !environments.length) return '';
         return !projects.length || !environments.length ? 'operator-context-warning' : '';
       };
+      const operatorContextScopedWriteReminderLabel = (context) => {
+        const access = context?.deploymentAccess || {};
+        if (!access.enforced) return null;
+        const exactNames = Array.isArray(access.names) ? access.names.filter(Boolean) : [];
+        const scopes = access.scopes || {};
+        const projects = Array.isArray(scopes.projects) ? scopes.projects.filter(Boolean) : [];
+        const environments = Array.isArray(scopes.environments) ? scopes.environments.filter(Boolean) : [];
+        const scopesForwarded = Boolean(scopes.forwarded) || projects.length > 0 || environments.length > 0;
+        if (!scopesForwarded || !projects.length || !environments.length || exactNames.length > 0) return null;
+        return 'Write scope reminder: project/environment scopes currently widen guarded reads only; plan/apply writes still require an exact X-Tenet-Authorized-Deployments grant.';
+      };
+      const operatorContextScopedWriteReminderClass = (context) => operatorContextScopedWriteReminderLabel(context) ? 'operator-context-warning' : '';
       const operatorContextDeploymentAccessSummaryLabel = (context) => {
         const access = context?.deploymentAccess || {};
         if (!access.enforced || !access.forwarded) return null;
@@ -986,6 +998,10 @@
           const enforcementSummary = operatorContextEnforcementSummaryLabel(context);
           if (enforcementSummary) {
             meta.append(createElement('span', operatorContextEnforcementClass(context), enforcementSummary));
+          }
+          const scopedWriteReminder = operatorContextScopedWriteReminderLabel(context);
+          if (scopedWriteReminder) {
+            meta.append(createElement('span', operatorContextScopedWriteReminderClass(context), scopedWriteReminder));
           }
           const deploymentAccessSummary = operatorContextDeploymentAccessSummaryLabel(context);
           if (deploymentAccessSummary) {
