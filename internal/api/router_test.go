@@ -231,9 +231,9 @@ func TestRouterOperatorContextSummarizesMatchedAndUnmatchedDeploymentAccess(t *t
 		RequireDeploymentReadAuthorization: true,
 		CatalogPlacements: func(context.Context) ([]catalog.PlacementView, error) {
 			return []catalog.PlacementView{
-				{DeploymentName: "payments-api-prod", AppRef: "payments", EnvironmentRef: "prod", AWSAccountID: "123456789012"},
-				{DeploymentName: "payments-worker-prod", AppRef: "payments", EnvironmentRef: "prod", AWSAccountID: "123456789012"},
-				{DeploymentName: "unforwarded-api", AppRef: "internal", EnvironmentRef: "staging", AWSAccountID: "210987654321"},
+				{DeploymentName: "payments-api-prod", AppRef: "payments", EnvironmentRef: "prod", AWSAccountID: "123456789012", Region: "us-west-2"},
+				{DeploymentName: "payments-worker-prod", AppRef: "payments", EnvironmentRef: "prod", AWSAccountID: "123456789012", Region: "us-west-2"},
+				{DeploymentName: "unforwarded-api", AppRef: "internal", EnvironmentRef: "staging", AWSAccountID: "210987654321", Region: "us-east-1"},
 			}, nil
 		},
 	})
@@ -277,6 +277,20 @@ func TestRouterOperatorContextSummarizesMatchedAndUnmatchedDeploymentAccess(t *t
 	}
 	if !reflect.DeepEqual(summary["unmatchedNames"], []any{"archived-api", "stale-api"}) {
 		t.Fatalf("expected deterministic unmatched names, got %#v", summary["unmatchedNames"])
+	}
+	examples, ok := summary["projectEnvironmentExamples"].([]any)
+	if !ok || len(examples) != 1 {
+		t.Fatalf("expected one project/environment diagnostic example, got %#v", summary["projectEnvironmentExamples"])
+	}
+	example := examples[0].(map[string]any)
+	if example["appRef"] != "payments" || example["environmentRef"] != "prod" || example["region"] != "us-west-2" || example["awsAccountId"] != "123456789012" || example["deploymentCount"] != float64(2) {
+		t.Fatalf("unexpected project/environment example metadata: %#v", example)
+	}
+	if !reflect.DeepEqual(example["exampleDeployments"], []any{"payments-api-prod", "payments-worker-prod"}) {
+		t.Fatalf("expected deterministic visible deployment examples, got %#v", example["exampleDeployments"])
+	}
+	if _, ok := summary["emptyReason"]; ok {
+		t.Fatalf("expected no empty reason when forwarded deployments match, got %#v", summary)
 	}
 	if _, ok := summary["unavailableReason"]; ok {
 		t.Fatalf("expected no unavailable reason for available summary, got %#v", summary)
@@ -349,6 +363,51 @@ func TestRouterOperatorContextVerdictsExplainDeniedAndEmptyCollectionCases(t *te
 			t.Fatalf("expected collection verdict to explain empty filtered collections, got %#v", collectionRead)
 		}
 	})
+}
+
+func TestRouterOperatorContextSummaryReportsEmptyVisibleProjectEnvironmentSet(t *testing.T) {
+	router := NewRouter(Options{
+		TrustAuthenticatedHeaders:          true,
+		RequireDeploymentReadAuthorization: true,
+		CatalogPlacements: func(context.Context) ([]catalog.PlacementView, error) {
+			return []catalog.PlacementView{
+				{DeploymentName: "payments-api-prod", AppRef: "payments", EnvironmentRef: "prod", AWSAccountID: "123456789012", Region: "us-west-2"},
+			}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+	req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+	req.Header.Add(requestactor.AuthorizedDeploymentsHeader, "stale-api")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode operator context response: %v", err)
+	}
+	deploymentAccess := body["deploymentAccess"].(map[string]any)
+	summary, ok := deploymentAccess["summary"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected deploymentAccess summary object, got %#v", deploymentAccess["summary"])
+	}
+	if summary["available"] != true || summary["forwardedCount"] != float64(1) || summary["matchedCount"] != float64(0) || summary["emptyReason"] != "no forwarded deployment names match catalog placements" {
+		t.Fatalf("unexpected empty visible summary: %#v", summary)
+	}
+	if !reflect.DeepEqual(summary["unmatchedNames"], []any{"stale-api"}) {
+		t.Fatalf("expected stale forwarded deployment as unmatched, got %#v", summary["unmatchedNames"])
+	}
+	if _, ok := summary["projectEnvironmentExamples"]; ok {
+		t.Fatalf("expected omitted examples when no project/environment pair is visible, got %#v", summary["projectEnvironmentExamples"])
+	}
+	accessVerdicts := body["accessVerdicts"].(map[string]any)
+	collectionRead := accessVerdicts["collectionRead"].(map[string]any)
+	if collectionRead["emptyCollectionLikely"] != true || collectionRead["reason"] != "collection reads will be allowed but likely empty because the forwarded deployment allowlist does not match catalog deployments" {
+		t.Fatalf("expected likely-empty collection verdict, got %#v", collectionRead)
+	}
 }
 
 func TestRouterOperatorContextSummaryReportsCatalogLookupFailure(t *testing.T) {

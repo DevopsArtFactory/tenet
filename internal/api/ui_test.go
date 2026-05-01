@@ -2359,6 +2359,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"Tenet does not treat raw browser-supplied `X-User-*` headers as a login session",
 			"The same trusted front-door read contract covers `GET /v1/overview/accounts/{awsAccountId}`",
 			"`deploymentAccess.summary` also reports forwarded, matched/visible, and unmatched deployment-name counts",
+			"deterministic `projectEnvironmentExamples`",
 			"That summary is diagnostic-only: it does not mint sessions, replace OAuth/RBAC, or authorize routes by itself",
 			"`GET /v1/overview/deployments/{deploymentName}/resource-logs`, `GET /v1/overview/deployments/{deploymentName}/resource-inspection`",
 			"### Smoke verification scope",
@@ -2406,6 +2407,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"Tenet does not treat raw browser-supplied `X-User-*` headers as a login session",
 			"The same trusted front-door read contract also covers `GET /v1/overview/accounts/{awsAccountId}`",
 			"`deploymentAccess.summary` additively reports how many forwarded deployment names matched catalog deployments",
+			"`projectEnvironmentExamples` shows which visible project/environment groups",
 			"it does not mint sessions, perform OAuth, authorize routes, or replace the guarded route checks",
 			"`GET /v1/overview/deployments/{deploymentName}/resource-logs`, `GET /v1/overview/deployments/{deploymentName}/resource-inspection`",
 			"Use `make smoke-local` for the fastest fixture-backed regression check when you only need direct-process validation.",
@@ -2440,6 +2442,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		},
 		"../../docs/architecture/tenet-v1-overview-ui.md": {
 			"diagnostic `deploymentAccess.summary` JSON when Tenet can compare a forwarded deployment allowlist with catalog placements",
+			"project/environment evidence",
 			"the summary is not an authorization source and the UI must not make client-side access decisions from it",
 			"`/?page=plan&deployment={deploymentName}&planId={planId}` workspace keeps the URL shareable/bookmarkable",
 			"`POST /v1/applies/{applyId}/transitions`",
@@ -2454,6 +2457,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		"../../docs/features/overview-dashboard.md": {
 			"when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION` is enabled, `GET /v1/overview/applications` requires trusted `X-Tenet-Authenticated-*` identity",
 			"diagnostic `deploymentAccess.summary` JSON that reports matched versus unmatched forwarded deployment names",
+			"deterministic project/environment examples",
 			"not a client-side authorization decision",
 			"when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION` is enabled, stored `GET /v1/plans/{planId}` reloads reuse the same trusted `X-Tenet-Authenticated-*` identity",
 			"when `TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION` is enabled, `POST /v1/plans/deployments/{deploymentName}`",
