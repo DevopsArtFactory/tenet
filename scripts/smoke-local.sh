@@ -1267,7 +1267,10 @@ assert "timelineSection.setAttribute('id', timelineSectionID);" in audit_ui, aud
 assert "buildPageSectionURL('audit', sectionID, {" in audit_ui, audit_ui
 assert "createElement('div', 'quick-nav-current', `${deploymentName || 'Deployment'} · ${currentWorkspace}`)" in audit_ui, audit_ui
 assert 'Immutable plan preview and apply-request activity for deployment ${deploymentName} rendered from GET /v1/audit-logs.' in audit_ui, audit_ui
-assert 'No audit activity has been persisted yet for deployment ${currentPageState.deployment}.' in audit_ui, audit_ui
+assert 'No audit activity has been persisted yet.' in audit_ui, audit_ui
+assert "const auditFilterLabels = () => {" in audit_ui, audit_ui
+assert "const auditEmptyStateText = () => {" in audit_ui, audit_ui
+assert "No audit entries match the current filters (${filters.join(' · ')}). Clear audit filters to return to the full audit timeline." in audit_ui, audit_ui
 assert 'Loading audit log…' in audit_ui, audit_ui
 assert 'Audit log is currently unavailable.' in audit_ui, audit_ui
 assert 'Refresh audit log' in audit_ui, audit_ui

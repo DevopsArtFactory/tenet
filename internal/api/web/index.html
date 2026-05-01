@@ -3954,6 +3954,20 @@
         }
         return '';
       };
+      const auditFilterLabels = () => {
+        const labels = [];
+        if (currentPageState.deployment) labels.push(`deployment ${currentPageState.deployment}`);
+        if (currentPageState.auditAction) labels.push(`action ${currentPageState.auditAction}`);
+        if (currentPageState.auditLimit > 0) labels.push(`limit ${currentPageState.auditLimit}`);
+        return labels;
+      };
+      const auditEmptyStateText = () => {
+        const filters = auditFilterLabels();
+        if (!filters.length) {
+          return 'No audit activity has been persisted yet.';
+        }
+        return `No audit entries match the current filters (${filters.join(' · ')}). Clear audit filters to return to the full audit timeline.`;
+      };
       const createAuditDeploymentContextCallout = () => {
         const deploymentName = auditDeploymentName();
         if (!deploymentName) return null;
@@ -3990,10 +4004,7 @@
             loadAuditLogsPage().catch(() => {});
           }),
         );
-        const activeFilters = [];
-        if (currentPageState.deployment) activeFilters.push(`deployment ${currentPageState.deployment}`);
-        if (currentPageState.auditAction) activeFilters.push(`action ${currentPageState.auditAction}`);
-        if (currentPageState.auditLimit > 0) activeFilters.push(`limit ${currentPageState.auditLimit}`);
+        const activeFilters = auditFilterLabels();
         const toolbarActions = createElement('div', 'toolbar-actions');
         toolbarActions.append(
           backLink,
@@ -4126,9 +4137,7 @@
           timelineSection.append(createElement('div', auditState?.status === 'error' ? 'detail-state error' : 'detail-state', refreshStateText));
         }
         if (!entries.length) {
-          timelineSection.append(createElement('div', 'detail-state', currentPageState.deployment
-            ? `No audit activity has been persisted yet for deployment ${currentPageState.deployment}.`
-            : 'No audit activity has been persisted yet.'));
+          timelineSection.append(createElement('div', 'detail-state', auditEmptyStateText()));
           page.append(timelineSection);
           root.replaceChildren(page);
           activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;

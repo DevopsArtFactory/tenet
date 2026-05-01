@@ -44,7 +44,7 @@ It stays intentionally narrow:
 - render a safe action filter control for exactly `plan.created` and `apply.requested`
 - render immutable plan/apply activity newest-first
 - make a selected deployment obvious in both the audit chrome and the audit body when `deployment={deploymentName}` is present
-- swap to deployment-specific empty-state copy when one deployment is selected and no audit entries match, while keeping the generic unfiltered empty state unchanged
+- swap to filter-aware empty-state copy when selected deployment/action/limit filters match no audit entries, while keeping the generic unfiltered empty state unchanged and pointing operators at `Clear audit filters`
 - keep actor identity explicit as unavailable or unknown instead of inventing names
 - provide `_self` links back into the existing `application` drill-down and `plan` workspace when deployment / plan / apply identifiers exist
 
