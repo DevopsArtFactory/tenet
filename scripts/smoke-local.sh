@@ -912,6 +912,8 @@ assert "const headers = Array.isArray(verdict?.requiredTrustedHeaders) ? verdict
 assert "const visibleHeaders = headers.slice(0, 3).join('; ');" in ui, ui
 assert 'requiredTrustedHeaders' in ui, ui
 assert 'Headers:' in ui, ui
+assert "const headers = operatorContextAccessVerdictRequiredHeadersLabel(verdict);" in ui, ui
+assert 'return `${label} ${state}${reason}${examples}${headers}`;' in ui, ui
 assert "const operatorContextAccessVerdictEntries = (context) => {" in ui, ui
 assert 'Operator reads' in ui, ui
 assert 'Collection reads' in ui, ui
