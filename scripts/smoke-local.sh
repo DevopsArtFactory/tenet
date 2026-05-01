@@ -935,6 +935,10 @@ assert '/v1/overview/applications/${encodeURIComponent(deploymentName)}' in ui, 
 assert "const fetchApplicationsOverview = () => fetchEmbeddedReadRouteJSON('/v1/overview/applications', {" in ui, ui
 assert "failure: 'applications overview request failed'," in ui, ui
 assert "return 'Applications overview';" in ui, ui
+assert "const setEmbeddedBrowserTitle = (...parts) => {" in ui, ui
+assert "document.title = [...titleParts, 'Tenet'].join(' · ');" in ui, ui
+assert "setBrowserTitleFromPageState(currentPageState);" in ui, ui
+assert "setEmbeddedBrowserTitle(resource.name || pageState.resourceType, pageState.deployment, pageLabel);" in ui, ui
 assert "return 'Account detail';" in ui, ui
 assert "return 'GET /v1/overview/applications';" in ui, ui
 assert "return `GET /v1/overview/accounts/${accountID}`;" in ui, ui

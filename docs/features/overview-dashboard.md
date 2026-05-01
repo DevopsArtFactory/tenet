@@ -56,6 +56,7 @@ Current behavior:
 - `account` uses stable `awsAccountId`
 - invalid `sync` and `account` values normalize to `all`
 - unrelated query params/hash fragments are preserved when updating managed filters
+- browser tab titles are derived from the active route and loaded resource/account/deployment identity as safe text, while the static `<title>Tenet Control Plane</title>` remains the non-JS fallback
 - search input focus and caret position survive rerenders
 - when filters remove all results, the UI renders `No applications match the current filters.`
 

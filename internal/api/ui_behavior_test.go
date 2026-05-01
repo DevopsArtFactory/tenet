@@ -708,6 +708,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const summaryText = collectText(document.getElementById('summary')).join(' | ');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/applications') throw new Error('expected only overview applications fetch on applications page');
+  if (document.title !== 'Applications overview · Tenet') throw new Error('expected applications page browser title, got ' + document.title);
   if (!toolbarText.includes('Search applications')) throw new Error('expected applications page toolbar');
   if (!toolbarText.includes('Health')) throw new Error('expected applications page health filter label');
   const healthSelect = document.querySelector('[data-toolbar-field="Health"]');
@@ -1431,6 +1432,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const summaryText = collectText(document.getElementById('summary')).join(' | ');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/accounts/210987654321') throw new Error('expected only account overview detail fetch on account page');
+  if (document.title !== '210987654321 · Account detail · Tenet') throw new Error('expected account page browser title, got ' + document.title);
   if (!toolbarText.includes('Back to applications')) throw new Error('expected account page back link');
   const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
   const backLink = toolbarLinks.find((node) => node.href === '/?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.target === '_self');
@@ -1886,6 +1888,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (fetchCalls.length !== expectedFetches.length || expectedFetches.some((url, index) => fetchCalls[index] !== url)) {
     throw new Error('expected application route to load application detail plus deployment events, got ' + fetchCalls.join(', '));
   }
+  if (document.title !== 'payments-api-staging · Application detail · Tenet') throw new Error('expected application page browser title, got ' + document.title);
   const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
   const summaryText = collectText(document.getElementById('summary')).join(' | ');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
