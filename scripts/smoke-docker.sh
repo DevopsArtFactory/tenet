@@ -1147,7 +1147,7 @@ for fragment in (
     "const auditFilterLabels = () => {",
     "const auditEmptyStateText = () => {",
     "No audit entries match the current filters (${filters.join(' · ')}${hasLimit ? `; ${auditLimitLabel()}` : ''}). Clear audit controls to return to the full audit timeline.",
-    "action ${currentPageState.auditAction}",
+    "labels.push(`action ${auditActionLabel(currentPageState.auditAction)}`);",
     "const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {",
     "if (action) params.set('action', action);",
     "createSelect('Action', currentPageState.auditAction, auditActionOptions, (event) => {",

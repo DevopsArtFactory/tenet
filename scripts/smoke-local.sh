@@ -1296,6 +1296,7 @@ assert "const normalizeAuditLimit = (value) => {" in audit_ui, audit_ui
 assert "{ value: 'plan.created', label: 'Plan preview created (plan.created)' }," in audit_ui, audit_ui
 assert "{ value: 'apply.requested', label: 'Apply requested (apply.requested)' }," in audit_ui, audit_ui
 assert "const auditActionLabel = (value) => {" in audit_ui, audit_ui
+assert "labels.push(`action ${auditActionLabel(currentPageState.auditAction)}`);" in audit_ui, audit_ui
 assert "const auditLimitSelectOptions = (limit) => {" in audit_ui, audit_ui
 assert "const syncAuditQueryParams = (params, pageState) => {" in audit_ui, audit_ui
 assert "const clearAuditPageFilters = () => {" in audit_ui, audit_ui
