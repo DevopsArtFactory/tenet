@@ -37,6 +37,8 @@ func TestEmbeddedUIRendersOperatorContextBannerSafely(t *testing.T) {
 		"requiredTrustedHeaders",
 		"Headers:",
 		"const operatorContextAccessVerdictLabel = (label, verdict) => {",
+		"const headers = operatorContextAccessVerdictRequiredHeadersLabel(verdict);",
+		"return `${label} ${state}${reason}${examples}${headers}`;",
 		"const operatorContextAccessVerdictClass = (verdict) => {",
 		"const operatorContextAccessVerdictEntries = (context) => {",
 		"exampleRoutes",

@@ -955,6 +955,8 @@ assert_fragments("ui", ui, (
     "const visibleHeaders = headers.slice(0, 3).join('; ');",
     "requiredTrustedHeaders",
     "Headers:",
+    "const headers = operatorContextAccessVerdictRequiredHeadersLabel(verdict);",
+    "return `${label} ${state}${reason}${examples}${headers}`;",
     "const operatorContextAccessVerdictEntries = (context) => {",
     "Operator reads",
     "Collection reads",
