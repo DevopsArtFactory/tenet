@@ -941,13 +941,17 @@
         if (!headers.length) return '';
         return ` Required trusted headers: ${headers.join('; ')}`;
       };
+      const operatorContextAccessVerdictScopeGrantLabel = (verdict) => verdict?.acceptsProjectEnvironmentScopes
+        ? ' Scope grants: exact deployments or matching project/environment scopes'
+        : '';
       const operatorContextAccessVerdictLabel = (label, verdict) => {
         if (!verdict || typeof verdict !== 'object') return null;
         const state = verdict.allowed ? 'allowed' : 'blocked';
         const reason = verdict.reason ? `: ${verdict.reason}` : '';
         const examples = operatorContextAccessVerdictExampleRoutesLabel(verdict);
         const headers = operatorContextAccessVerdictRequiredHeadersLabel(verdict);
-        return `${label} ${state}${reason}${examples}${headers}`;
+        const scopeGrants = operatorContextAccessVerdictScopeGrantLabel(verdict);
+        return `${label} ${state}${reason}${examples}${headers}${scopeGrants}`;
       };
       const operatorContextAccessVerdictClass = (verdict) => {
         if (!verdict || typeof verdict !== 'object') return '';
