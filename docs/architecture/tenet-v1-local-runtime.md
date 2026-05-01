@@ -53,11 +53,11 @@ Keep that split intact when integrating GitHub OAuth or another identity provide
 
 Use `GET /v1/operator/context` as the first diagnostic before changing role or deployment headers. Treat the fields in this order:
 
-1. `identity.authenticated`: `false` explains `401 Unauthorized` on guarded reads or writes; fix trusted identity forwarding first.
-2. `roles.canRead` / `roles.canWrite`: missing read capability explains viewer-role `403` responses before any deployment allowlist is considered, while missing write capability explains operator-write `403` responses before plan/apply lookup.
-3. `deploymentAccess.summary`: `matchedCount=0` or non-empty `unmatchedNames` explains `200 OK` empty collections even when the request is authenticated and read-capable.
-4. `X-Tenet-Authorized-Deployments`: scoped reads and writes require exact deployment-name membership; account/project filters do not widen that allowlist.
-5. `accessVerdicts`: use the blocked or likely-empty verdict reason as the operator-facing summary, but remember each guarded route still performs its own server-side check.
+1. Start in the embedded `Operator context` banner, or call `GET /v1/operator/context` directly when you are outside the UI.
+2. `identity.authenticated`: `false` explains `401 Unauthorized` on guarded reads or writes; fix trusted identity forwarding first.
+3. `roles.canRead` / `roles.canWrite`: missing read capability explains viewer-role `403` responses before any deployment allowlist is considered, while missing write capability explains operator-write `403` responses before plan/apply lookup.
+4. `deploymentAccess.summary`: `matchedCount=0` or non-empty `unmatchedNames` explains `200 OK` empty collections even when the request is authenticated and read-capable.
+5. `accessVerdicts`: use the blocked or likely-empty verdict reason plus its bounded route examples to identify the affected route family, then debug that class's exact trusted-header prerequisites and `X-Tenet-Authorized-Deployments` membership. Each guarded route still performs its own server-side check.
 
 A safe local diagnostic mirrors the trusted headers your front door should forward:
 

@@ -29,6 +29,8 @@ func TestEmbeddedUIRendersOperatorContextBannerSafely(t *testing.T) {
 		"observed only",
 		"read/write guarded",
 		"const operatorContextAccessVerdictExampleRoutesLabel = (verdict) => {",
+		"const visibleRoutes = routes.slice(0, 2).join('; ');",
+		"const hiddenCount = routes.length - 2;",
 		"const operatorContextAccessVerdictLabel = (label, verdict) => {",
 		"const operatorContextAccessVerdictClass = (verdict) => {",
 		"const operatorContextAccessVerdictEntries = (context) => {",

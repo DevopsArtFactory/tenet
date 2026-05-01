@@ -948,6 +948,8 @@ assert_fragments("ui", ui, (
     "read/write guarded",
     "local unrestricted",
     "const operatorContextAccessVerdictExampleRoutesLabel = (verdict) => {",
+    "const visibleRoutes = routes.slice(0, 2).join('; ');",
+    "const hiddenCount = routes.length - 2;",
     "const operatorContextAccessVerdictEntries = (context) => {",
     "Operator reads",
     "Collection reads",
