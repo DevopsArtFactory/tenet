@@ -940,6 +940,11 @@ assert 'Operator context' in ui, ui
 assert "const operatorContextRoute = () => '/v1/operator/context';" in ui, ui
 assert "const operatorContextReadRoute = () => 'GET /v1/operator/context';" in ui, ui
 assert "const operatorContextDeploymentAccessSummaryLabel = (context) => {" in ui, ui
+assert "const operatorContextStaleScopeDiagnosticsLabel = (context) => {" in ui, ui
+assert "Project/environment scope warning:" in ui, ui
+assert "unmatchedProjects" in ui, ui
+assert "unmatchedEnvironments" in ui, ui
+assert "X-Tenet-Authorized-Projects and X-Tenet-Authorized-Environments" in ui, ui
 assert "const operatorContextProjectEnvironmentExamplesLabel = (context) => {" in ui, ui
 assert "Project/environment visibility:" in ui, ui
 assert "projectEnvironmentExamples" in ui, ui

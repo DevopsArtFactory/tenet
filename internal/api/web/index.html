@@ -828,6 +828,36 @@
         const unmatchedCount = Number.isFinite(summary.unmatchedCount) ? summary.unmatchedCount : Math.max(0, forwarded - matched);
         return unmatchedCount > 0 ? 'operator-context-warning' : '';
       };
+      const operatorContextBoundedListLabel = (values, truncated, limit = 3) => {
+        const visibleValues = Array.isArray(values) ? values.filter(Boolean).slice(0, limit) : [];
+        if (!visibleValues.length) return '';
+        return `${visibleValues.join(', ')}${truncated || values.length > limit ? ', …' : ''}`;
+      };
+      const operatorContextStaleScopeDiagnosticsLabel = (context) => {
+        const access = context?.deploymentAccess || {};
+        const summary = access.summary || null;
+        if (!access.enforced || !access.forwarded || !summary || summary.available === false) return null;
+        const forwardedProjectCount = Number.isFinite(summary.forwardedProjectCount) ? summary.forwardedProjectCount : 0;
+        const forwardedEnvironmentCount = Number.isFinite(summary.forwardedEnvironmentCount) ? summary.forwardedEnvironmentCount : 0;
+        const unmatchedProjectCount = Number.isFinite(summary.unmatchedProjectCount) ? summary.unmatchedProjectCount : 0;
+        const unmatchedEnvironmentCount = Number.isFinite(summary.unmatchedEnvironmentCount) ? summary.unmatchedEnvironmentCount : 0;
+        const unmatchedProjects = Array.isArray(summary.unmatchedProjects) ? summary.unmatchedProjects.filter(Boolean) : [];
+        const unmatchedEnvironments = Array.isArray(summary.unmatchedEnvironments) ? summary.unmatchedEnvironments.filter(Boolean) : [];
+        if (unmatchedProjectCount <= 0 && unmatchedEnvironmentCount <= 0 && !unmatchedProjects.length && !unmatchedEnvironments.length) return null;
+        const diagnostics = [];
+        if (unmatchedProjectCount > 0 || unmatchedProjects.length) {
+          const matchedProjects = Math.max(0, forwardedProjectCount - Math.max(unmatchedProjectCount, unmatchedProjects.length));
+          const projectSamples = operatorContextBoundedListLabel(unmatchedProjects, Boolean(summary.unmatchedProjectsTruncated));
+          diagnostics.push(`${matchedProjects} of ${forwardedProjectCount} forwarded projects match catalog; ${Math.max(unmatchedProjectCount, unmatchedProjects.length)} unmatched${projectSamples ? `: ${projectSamples}` : ''}`);
+        }
+        if (unmatchedEnvironmentCount > 0 || unmatchedEnvironments.length) {
+          const matchedEnvironments = Math.max(0, forwardedEnvironmentCount - Math.max(unmatchedEnvironmentCount, unmatchedEnvironments.length));
+          const environmentSamples = operatorContextBoundedListLabel(unmatchedEnvironments, Boolean(summary.unmatchedEnvironmentsTruncated));
+          diagnostics.push(`${matchedEnvironments} of ${forwardedEnvironmentCount} forwarded environments match catalog; ${Math.max(unmatchedEnvironmentCount, unmatchedEnvironments.length)} unmatched${environmentSamples ? `: ${environmentSamples}` : ''}`);
+        }
+        return `Project/environment scope warning: ${diagnostics.join('. ')}. Check X-Tenet-Authorized-Projects and X-Tenet-Authorized-Environments.`;
+      };
+      const operatorContextStaleScopeDiagnosticsClass = (context) => operatorContextStaleScopeDiagnosticsLabel(context) ? 'operator-context-warning' : '';
       const operatorContextProjectEnvironmentExamplesLabel = (context) => {
         const access = context?.deploymentAccess || {};
         if (!access.enforced || !access.forwarded) return null;
@@ -960,6 +990,10 @@
           const deploymentAccessSummary = operatorContextDeploymentAccessSummaryLabel(context);
           if (deploymentAccessSummary) {
             meta.append(createElement('span', operatorContextDeploymentAccessSummaryClass(context), deploymentAccessSummary));
+          }
+          const staleScopeDiagnostics = operatorContextStaleScopeDiagnosticsLabel(context);
+          if (staleScopeDiagnostics) {
+            meta.append(createElement('span', operatorContextStaleScopeDiagnosticsClass(context), staleScopeDiagnostics));
           }
           const projectEnvironmentExamples = operatorContextProjectEnvironmentExamplesLabel(context);
           if (projectEnvironmentExamples) {
