@@ -927,16 +927,22 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`",
 		"`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true`",
 		"`X-Tenet-Authorized-Deployments`",
-		"the raw status collection now requires trusted authenticated identity and filters snapshots to the authorized deployment subset",
-		"the raw status detail route now follows the same deployment-scoped `401` / `403` contract as other guarded operator reads",
+		"the raw status collection requires trusted authenticated identity and filters snapshots to the authorized deployment subset",
+		"returning `200 OK` with `[]` when that allowlist is omitted or has no matches",
+		"The raw status detail route follows the same deployment-scoped `401 Unauthorized` / `403 Forbidden` contract as other guarded operator reads",
+		"missing trusted identity returns `unauthenticated: authenticated identity is required for this operator read route`",
+		"a recognized operator without deployment membership gets `forbidden: operator does not have access to this deployment`",
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` is the concrete toggle example for that guarded raw-status collection/detail contract",
 	} {
 		if !strings.Contains(runtimeRolloutSummaryDoc, fragment) {
 			t.Fatalf("expected runtime rollout summary doc front-door auth contract to include %q", fragment)
 		}
 	}
 	for _, forbidden := range []string{
-		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***`",
-		"`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=***`",
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***",
+		"`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=***",
+		"the raw status collection now requires",
+		"Stated directly: the raw status detail route now follows",
 	} {
 		if strings.Contains(runtimeRolloutSummaryDoc, forbidden) {
 			t.Fatalf("expected runtime rollout summary doc front-door auth contract to reject %q", forbidden)
