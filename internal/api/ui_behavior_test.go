@@ -8148,8 +8148,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const text = collectText(root).join(' | ');
   if (!text.includes('Operator access denied')) throw new Error('expected access-denied heading for forbidden create');
   if (!text.includes('Tenet rejected POST /v1/plans/deployments/api-prod after recognizing the caller\'s identity, but this operator is not authorized to create plan for that deployment through this route.')) throw new Error('expected operator-facing create access-denied explanation');
-  if (!text.includes('Ask a front-door/RBAC admin to add this deployment to X-Tenet-Authorized-Deployments for the trusted session, then retry Create Plan.')) throw new Error('expected exact deployment grant recovery guidance for create');
-  if (!text.includes('Project/environment scopes may make the deployment visible for guarded reads, but immutable writes still require an exact deployment grant until project/environment write scopes land.')) throw new Error('expected scoped-read versus write distinction for create');
+  if (!text.includes('Ask a front-door/RBAC admin to authorize this deployment through either X-Tenet-Authorized-Deployments or matching X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments catalog placement, then retry Create Plan.')) throw new Error('expected exact-or-scoped grant recovery guidance for create');
+  if (!text.includes('Partial, stale, or unavailable project/environment placement still fails closed, so use the Operator context banner to confirm the forwarded scopes match this deployment.')) throw new Error('expected project-environment fail-closed guidance for create');
   if (text.includes('Failed to create a plan preview')) throw new Error('expected forbidden create to avoid generic fetch-error copy');
 })();
 `
@@ -8358,8 +8358,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const text = collectText(root).join(' | ');
   if (!text.includes('Operator access denied')) throw new Error('expected access-denied heading for forbidden apply create');
   if (!text.includes('Tenet rejected POST /v1/applies/plans/plan_ready_123 after recognizing the caller\'s identity, but this operator is not authorized to apply plan for that deployment through this route.')) throw new Error('expected operator-facing apply access-denied explanation');
-  if (!text.includes('Ask a front-door/RBAC admin to add this deployment to X-Tenet-Authorized-Deployments for the trusted session, then retry Apply Plan.')) throw new Error('expected exact deployment grant recovery guidance for apply');
-  if (!text.includes('Project/environment scopes may make the deployment visible for guarded reads, but immutable writes still require an exact deployment grant until project/environment write scopes land.')) throw new Error('expected scoped-read versus write distinction for apply');
+  if (!text.includes('Ask a front-door/RBAC admin to authorize this deployment through either X-Tenet-Authorized-Deployments or matching X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments catalog placement, then retry Apply Plan.')) throw new Error('expected exact-or-scoped grant recovery guidance for apply');
+  if (!text.includes('Partial, stale, or unavailable project/environment placement still fails closed, so use the Operator context banner to confirm the forwarded scopes match this deployment.')) throw new Error('expected project-environment fail-closed guidance for apply');
   if (text.includes('Failed to create an apply request')) throw new Error('expected forbidden apply create to avoid generic fetch-error copy');
 })();
 `
