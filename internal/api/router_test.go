@@ -267,6 +267,7 @@ func TestRouterOperatorContextSummarizesMatchedAndUnmatchedDeploymentAccess(t *t
 	expected := map[string]any{
 		"forwardedCount":   float64(4),
 		"matchedCount":     float64(2),
+		"unmatchedCount":   float64(2),
 		"accountCount":     float64(1),
 		"projectCount":     float64(1),
 		"environmentCount": float64(1),
@@ -278,6 +279,9 @@ func TestRouterOperatorContextSummarizesMatchedAndUnmatchedDeploymentAccess(t *t
 	}
 	if !reflect.DeepEqual(summary["unmatchedNames"], []any{"archived-api", "stale-api"}) {
 		t.Fatalf("expected deterministic unmatched names, got %#v", summary["unmatchedNames"])
+	}
+	if _, ok := summary["unmatchedNamesTruncated"]; ok {
+		t.Fatalf("expected unmatched names truncation flag to be omitted when the sample is complete, got %#v", summary)
 	}
 	examples, ok := summary["projectEnvironmentExamples"].([]any)
 	if !ok || len(examples) != 1 {
@@ -300,6 +304,53 @@ func TestRouterOperatorContextSummarizesMatchedAndUnmatchedDeploymentAccess(t *t
 	collectionRead := accessVerdicts["collectionRead"].(map[string]any)
 	if collectionRead["allowed"] != true || collectionRead["filtersCollectionsByDeploymentAccess"] != true || collectionRead["emptyCollectionLikely"] != nil {
 		t.Fatalf("expected collection read verdict to report filtering without likely-empty warning, got %#v", collectionRead)
+	}
+}
+
+func TestRouterOperatorContextSummaryReportsBoundedUnmatchedDeploymentSample(t *testing.T) {
+	router := NewRouter(Options{
+		TrustAuthenticatedHeaders:          true,
+		RequireDeploymentReadAuthorization: true,
+		CatalogPlacements: func(context.Context) ([]catalog.PlacementView, error) {
+			return []catalog.PlacementView{
+				{DeploymentName: "payments-api-prod", AppRef: "payments", EnvironmentRef: "prod", AWSAccountID: "123456789012", Region: "us-west-2"},
+			}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+	req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+	req.Header.Add(requestactor.AuthorizedDeploymentsHeader, "payments-api-prod")
+	for i := 0; i < operatorContextUnmatchedDeploymentLimit+3; i++ {
+		req.Header.Add(requestactor.AuthorizedDeploymentsHeader, fmt.Sprintf("stale-api-%02d", i))
+	}
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode operator context response: %v", err)
+	}
+	deploymentAccess := body["deploymentAccess"].(map[string]any)
+	summary, ok := deploymentAccess["summary"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected deploymentAccess summary object, got %#v", deploymentAccess["summary"])
+	}
+	if summary["available"] != true || summary["forwardedCount"] != float64(operatorContextUnmatchedDeploymentLimit+4) || summary["matchedCount"] != float64(1) || summary["unmatchedCount"] != float64(operatorContextUnmatchedDeploymentLimit+3) {
+		t.Fatalf("unexpected bounded unmatched summary counts: %#v", summary)
+	}
+	unmatchedNames, ok := summary["unmatchedNames"].([]any)
+	if !ok || len(unmatchedNames) != operatorContextUnmatchedDeploymentLimit {
+		t.Fatalf("expected bounded unmatchedNames sample of %d entries, got %#v", operatorContextUnmatchedDeploymentLimit, summary["unmatchedNames"])
+	}
+	if unmatchedNames[0] != "stale-api-00" || unmatchedNames[len(unmatchedNames)-1] != "stale-api-24" {
+		t.Fatalf("expected deterministic sorted unmatchedNames sample, got %#v", unmatchedNames)
+	}
+	if summary["unmatchedNamesTruncated"] != true {
+		t.Fatalf("expected unmatchedNamesTruncated=true for bounded sample, got %#v", summary)
 	}
 }
 
@@ -395,7 +446,7 @@ func TestRouterOperatorContextSummaryReportsEmptyVisibleProjectEnvironmentSet(t 
 	if !ok {
 		t.Fatalf("expected deploymentAccess summary object, got %#v", deploymentAccess["summary"])
 	}
-	if summary["available"] != true || summary["forwardedCount"] != float64(1) || summary["matchedCount"] != float64(0) || summary["emptyReason"] != "no forwarded deployment names match catalog placements" {
+	if summary["available"] != true || summary["forwardedCount"] != float64(1) || summary["matchedCount"] != float64(0) || summary["unmatchedCount"] != float64(1) || summary["emptyReason"] != "no forwarded deployment names match catalog placements" {
 		t.Fatalf("unexpected empty visible summary: %#v", summary)
 	}
 	if !reflect.DeepEqual(summary["unmatchedNames"], []any{"stale-api"}) {

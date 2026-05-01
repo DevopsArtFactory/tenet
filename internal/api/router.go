@@ -297,7 +297,9 @@ type operatorContextAccessSummary struct {
 	EmptyReason                string                                     `json:"emptyReason,omitempty"`
 	ForwardedCount             int                                        `json:"forwardedCount"`
 	MatchedCount               int                                        `json:"matchedCount"`
+	UnmatchedCount             int                                        `json:"unmatchedCount"`
 	UnmatchedNames             []string                                   `json:"unmatchedNames,omitempty"`
+	UnmatchedNamesTruncated    bool                                       `json:"unmatchedNamesTruncated,omitempty"`
 	AccountCount               int                                        `json:"accountCount,omitempty"`
 	ProjectCount               int                                        `json:"projectCount,omitempty"`
 	EnvironmentCount           int                                        `json:"environmentCount,omitempty"`
@@ -615,7 +617,9 @@ func buildOperatorContextAccessSummary(ctx context.Context, options Options, dep
 		}
 	}
 	sort.Strings(unmatched)
+	summary.UnmatchedCount = len(unmatched)
 	if len(unmatched) > operatorContextUnmatchedDeploymentLimit {
+		summary.UnmatchedNamesTruncated = true
 		unmatched = unmatched[:operatorContextUnmatchedDeploymentLimit]
 	}
 	summary.Available = true
