@@ -45,6 +45,12 @@ type runtimeLiveCapacityObservation struct {
 	HealthCheckGracePeriodSeconds *int32
 }
 
+type runtimeLiveTrafficRoutingObservation struct {
+	ResourceType string
+	ResourceName string
+	Detail       resourceinspection.TrafficRoutingInspection
+}
+
 var runtimeLiveCapacityLookup = runtimeLiveCapacityLookupFromInspection
 
 func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupConfig, store statusstore.Store) error {
@@ -116,7 +122,8 @@ func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupCon
 		status = normalizeRuntimeStatus(deployment, status, plan)
 		status.Rollout = deriveRolloutSummary(deployment, status, plan)
 		liveCapacity := runtimeLiveCapacity(ctx, logger, liveInspectionService, compiled.Accounts, compiled.Environments, deployment)
-		status.ManagedDrift = deriveManagedDriftItems(deployment, status, liveCapacity)
+		liveTrafficRouting := runtimeLiveTrafficRouting(ctx, logger, liveInspectionService, compiled.Accounts, compiled.Environments, deployment)
+		status.ManagedDrift = deriveManagedDriftItems(deployment, status, liveCapacity, liveTrafficRouting...)
 		status = applyControllerManagedDriftStatus(status, plan)
 		status.History = appendRuntimeHistory(previousStatus, status)
 		currentStatuses[deployment.Name] = status
@@ -264,6 +271,67 @@ func runtimeLiveCapacity(ctx context.Context, logger *log.Logger, inspector reso
 	return nil
 }
 
+func runtimeLiveTrafficRouting(ctx context.Context, logger *log.Logger, inspector resourceinspection.Service, accounts []domain.Account, environments []domain.Environment, deployment domain.Deployment) []runtimeLiveTrafficRoutingObservation {
+	observations, err := runtimeLiveTrafficRoutingLookupFromInspection(ctx, inspector, accounts, environments, deployment)
+	if err == nil {
+		return observations
+	}
+	if logger != nil {
+		logger.Printf(
+			"controller live traffic-routing drift enrichment skipped deployment=%s execution_mode=%s err=%v",
+			deployment.Name,
+			deployment.ExecutionMode,
+			err,
+		)
+	}
+	return nil
+}
+
+func runtimeLiveTrafficRoutingLookupFromInspection(ctx context.Context, inspector resourceinspection.Service, accounts []domain.Account, environments []domain.Environment, deployment domain.Deployment) ([]runtimeLiveTrafficRoutingObservation, error) {
+	resources := runtimeLiveTrafficRoutingResources(deployment)
+	if len(resources) == 0 {
+		return nil, nil
+	}
+	resolved, err := (placement.Resolver{}).Resolve(accounts, environments, deployment)
+	if err != nil {
+		return nil, err
+	}
+	observations := make([]runtimeLiveTrafficRoutingObservation, 0, len(resources))
+	for _, resource := range resources {
+		result, err := inspector.Inspect(ctx, resourceinspection.Request{
+			DeploymentName:      deployment.Name,
+			ResourceType:        resource.Resource,
+			ResourceName:        resource.Name,
+			ResourceDescription: resource.Description,
+			TargetAccountID:     resolved.AccountID,
+			Region:              resolved.Region,
+		})
+		if err != nil {
+			return observations, err
+		}
+		if !result.Available || result.TrafficRoutingResource == nil || result.TrafficRoutingResource.InspectionMode != "live" {
+			continue
+		}
+		observations = append(observations, runtimeLiveTrafficRoutingObservation{
+			ResourceType: resource.Resource,
+			ResourceName: resource.Name,
+			Detail:       *result.TrafficRoutingResource,
+		})
+	}
+	return observations, nil
+}
+
+func runtimeLiveTrafficRoutingResources(deployment domain.Deployment) []domain.RolloutExecutionDetail {
+	resources := make([]domain.RolloutExecutionDetail, 0, 4)
+	for _, detail := range deriveRolloutExecutionDetails(deployment) {
+		switch detail.Resource {
+		case "productionListenerRule", "trafficShiftPlan", "codeDeployDeploymentGroup", "productionListener", "testListener", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup":
+			resources = append(resources, detail)
+		}
+	}
+	return resources
+}
+
 func runtimeLiveCapacityLookupFromInspection(ctx context.Context, inspector resourceinspection.Service, accounts []domain.Account, environments []domain.Environment, deployment domain.Deployment) (*runtimeLiveCapacityObservation, error) {
 	resourceType, resourceName, ok := runtimeLiveCapacityResource(deployment)
 	if !ok {
@@ -338,8 +406,8 @@ func managedDriftResourceRef(observation *runtimeLiveCapacityObservation) *domai
 	}
 }
 
-func deriveManagedDriftItems(deployment domain.Deployment, status domain.DeploymentStatus, liveCapacity *runtimeLiveCapacityObservation) []domain.ManagedDriftItem {
-	items := make([]domain.ManagedDriftItem, 0, 8)
+func deriveManagedDriftItems(deployment domain.Deployment, status domain.DeploymentStatus, liveCapacity *runtimeLiveCapacityObservation, liveTrafficRouting ...runtimeLiveTrafficRoutingObservation) []domain.ManagedDriftItem {
+	items := make([]domain.ManagedDriftItem, 0, 12)
 	liveResourceRef := managedDriftResourceRef(liveCapacity)
 
 	desiredArtifact := describeDeploymentArtifact(deployment.DesiredArtifact)
@@ -490,7 +558,161 @@ func deriveManagedDriftItems(deployment domain.Deployment, status domain.Deploym
 		}
 	}
 
+	items = append(items, deriveTrafficRoutingManagedDriftItems(deployment, liveTrafficRouting)...)
+
 	return normalizeManagedDriftItems(items)
+}
+
+func deriveTrafficRoutingManagedDriftItems(deployment domain.Deployment, observations []runtimeLiveTrafficRoutingObservation) []domain.ManagedDriftItem {
+	if len(observations) == 0 {
+		return nil
+	}
+	items := make([]domain.ManagedDriftItem, 0, len(observations))
+	for _, observation := range observations {
+		if observation.Detail.InspectionMode != "live" {
+			continue
+		}
+		ref := managedDriftTrafficRoutingResourceRef(observation)
+		switch observation.ResourceType {
+		case "productionListenerRule", "productionListener", "testListener":
+			items = append(items, trafficRoutingListenerManagedDriftItems(deployment, observation, ref)...)
+		case "codeDeployDeploymentGroup":
+			items = append(items, codeDeployDeploymentGroupManagedDriftItems(deployment, observation, ref)...)
+		case "blueTaskSetTargetGroup", "greenTaskSetTargetGroup":
+			items = append(items, taskSetTargetGroupManagedDriftItems(observation, ref)...)
+		}
+	}
+	return items
+}
+
+func managedDriftTrafficRoutingResourceRef(observation runtimeLiveTrafficRoutingObservation) *domain.ManagedDriftResourceRef {
+	if strings.TrimSpace(observation.ResourceType) == "" || strings.TrimSpace(observation.ResourceName) == "" {
+		return nil
+	}
+	return &domain.ManagedDriftResourceRef{ResourceType: strings.TrimSpace(observation.ResourceType), ResourceName: strings.TrimSpace(observation.ResourceName)}
+}
+
+func trafficRoutingListenerManagedDriftItems(deployment domain.Deployment, observation runtimeLiveTrafficRoutingObservation, ref *domain.ManagedDriftResourceRef) []domain.ManagedDriftItem {
+	listener := observation.Detail.Listener
+	if listener == nil {
+		return nil
+	}
+	actualTargets := listenerForwardTargetGroupNames(listener.DefaultActions)
+	if len(actualTargets) == 0 {
+		return []domain.ManagedDriftItem{{Field: "runtimeContext.trafficRouting.listenerTargets", Desired: desiredTrafficRoutingTargetGroups(deployment), Actual: "none", Severity: domain.ManagedDriftSeverityHigh, ResourceRef: ref}}
+	}
+	if deployment.ExecutionMode != "asgWeightedTargetGroups" {
+		return nil
+	}
+	wanted := []string{deployment.Name + "-active", deployment.Name + "-candidate"}
+	missing := missingStrings(wanted, actualTargets)
+	if len(missing) == 0 {
+		return nil
+	}
+	return []domain.ManagedDriftItem{{Field: "runtimeContext.trafficRouting.weightedTargetGroups", Desired: strings.Join(wanted, ","), Actual: strings.Join(actualTargets, ","), Severity: domain.ManagedDriftSeverityHigh, ResourceRef: ref}}
+}
+
+func codeDeployDeploymentGroupManagedDriftItems(deployment domain.Deployment, observation runtimeLiveTrafficRoutingObservation, ref *domain.ManagedDriftResourceRef) []domain.ManagedDriftItem {
+	group := observation.Detail.CodeDeployDeploymentGroup
+	if group == nil {
+		return nil
+	}
+	actualTargets := normalizeStringSet(group.TargetGroups)
+	if len(actualTargets) == 0 {
+		return []domain.ManagedDriftItem{{Field: "runtimeContext.trafficRouting.codeDeployTargetGroups", Desired: desiredTrafficRoutingTargetGroups(deployment), Actual: "none", Severity: domain.ManagedDriftSeverityHigh, ResourceRef: ref}}
+	}
+	wanted := []string{deployment.Name + "-blue", deployment.Name + "-green"}
+	missing := missingStrings(wanted, actualTargets)
+	if len(missing) == 0 {
+		return nil
+	}
+	return []domain.ManagedDriftItem{{Field: "runtimeContext.trafficRouting.codeDeployTargetGroups", Desired: strings.Join(wanted, ","), Actual: strings.Join(actualTargets, ","), Severity: domain.ManagedDriftSeverityHigh, ResourceRef: ref}}
+}
+
+func taskSetTargetGroupManagedDriftItems(observation runtimeLiveTrafficRoutingObservation, ref *domain.ManagedDriftResourceRef) []domain.ManagedDriftItem {
+	targetGroup := observation.Detail.TargetGroup
+	if targetGroup == nil || len(targetGroup.TargetHealthCounts) == 0 {
+		return nil
+	}
+	healthy := targetGroup.TargetHealthCounts["healthy"]
+	if healthy > 0 {
+		return nil
+	}
+	field := "runtimeContext.trafficRouting." + observation.ResourceType + ".healthyTargets"
+	return []domain.ManagedDriftItem{{Field: field, Desired: ">0", Actual: "0", Severity: domain.ManagedDriftSeverityHigh, ResourceRef: ref}}
+}
+
+func desiredTrafficRoutingTargetGroups(deployment domain.Deployment) string {
+	switch deployment.ExecutionMode {
+	case "asgWeightedTargetGroups":
+		return deployment.Name + "-active," + deployment.Name + "-candidate"
+	case "ecsCodeDeploy":
+		return deployment.Name + "-blue," + deployment.Name + "-green"
+	default:
+		return "configured traffic-routing target groups"
+	}
+}
+
+func listenerForwardTargetGroupNames(actions []resourceinspection.ListenerActionInspection) []string {
+	names := make([]string, 0)
+	for _, action := range actions {
+		if name := targetGroupNameFromARN(action.TargetGroupARN); name != "" {
+			names = append(names, name)
+		}
+		for _, target := range action.TargetGroups {
+			if name := targetGroupNameFromARN(target.TargetGroupARN); name != "" {
+				names = append(names, name)
+			}
+		}
+	}
+	return normalizeStringSet(names)
+}
+
+func targetGroupNameFromARN(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if marker := ":targetgroup/"; strings.Contains(value, marker) {
+		value = value[strings.LastIndex(value, marker)+len(marker):]
+	}
+	parts := strings.Split(value, "/")
+	if len(parts) > 0 {
+		return strings.TrimSpace(parts[0])
+	}
+	return value
+}
+
+func normalizeStringSet(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	sort.Strings(normalized)
+	return normalized
+}
+
+func missingStrings(wanted []string, actual []string) []string {
+	actualSet := make(map[string]struct{}, len(actual))
+	for _, value := range actual {
+		actualSet[value] = struct{}{}
+	}
+	missing := make([]string, 0)
+	for _, value := range wanted {
+		if _, ok := actualSet[value]; !ok {
+			missing = append(missing, value)
+		}
+	}
+	return missing
 }
 
 func normalizeManagedDriftItems(items []domain.ManagedDriftItem) []domain.ManagedDriftItem {
