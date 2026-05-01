@@ -858,6 +858,8 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"Inspect the `accessVerdicts` chips and their bounded route examples",
 		"Debug the specific guarded route class by checking the exact required trusted headers",
 		"If an operator write returns `403 Forbidden`, confirm both `roles.canWrite=true` (`operator` or `admin`) and exact deployment membership",
+		"those scopes currently widen guarded reads only",
+		"plan/apply writes still require an exact `X-Tenet-Authorized-Deployments` grant",
 		"curl -fsS http://localhost:8080/v1/operator/context",
 	} {
 		if !strings.Contains(readme, fragment) {
@@ -926,6 +928,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`projectEnvironmentExamples` shows which visible project/environment groups",
 		"additive `requiredTrustedHeaders` (`X-Tenet-Authenticated-Id` or `X-User-ID`, `X-Tenet-Authenticated-Roles`, and the exact `X-Tenet-Authorized-Deployments` allowlist and/or matching `X-Tenet-Authorized-Projects` plus `X-Tenet-Authorized-Environments` scopes depending on the route class)",
 		"`accessVerdicts`: use the blocked or likely-empty verdict reason plus its bounded route examples and `requiredTrustedHeaders`",
+		"plan/apply writes still require exact `X-Tenet-Authorized-Deployments` membership until the backend write-scope contract changes",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
 			t.Fatalf("expected local runtime doc front-door auth contract to include %q", fragment)
