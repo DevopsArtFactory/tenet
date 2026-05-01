@@ -83,6 +83,7 @@ type TrafficRoutingInspection struct {
 	CodeDeployApplication     *CodeDeployApplicationInspection     `json:"codeDeployApplication,omitempty"`
 	CodeDeployDeploymentGroup *CodeDeployDeploymentGroupInspection `json:"codeDeployDeploymentGroup,omitempty"`
 	Listener                  *ListenerInspection                  `json:"listener,omitempty"`
+	ListenerRule              *ListenerRuleInspection              `json:"listenerRule,omitempty"`
 	TargetGroup               *TargetGroupInspection               `json:"targetGroup,omitempty"`
 }
 
@@ -146,6 +147,19 @@ type ListenerInspection struct {
 	SSLPolicy       string                     `json:"sslPolicy,omitempty"`
 	Certificates    []string                   `json:"certificates,omitempty"`
 	DefaultActions  []ListenerActionInspection `json:"defaultActions,omitempty"`
+}
+
+type ListenerRuleInspection struct {
+	RuleARN    string                            `json:"ruleArn"`
+	Priority   string                            `json:"priority,omitempty"`
+	IsDefault  bool                              `json:"isDefault"`
+	Conditions []ListenerRuleConditionInspection `json:"conditions,omitempty"`
+	Actions    []ListenerActionInspection        `json:"actions,omitempty"`
+}
+
+type ListenerRuleConditionInspection struct {
+	Field  string   `json:"field,omitempty"`
+	Values []string `json:"values,omitempty"`
 }
 
 type ListenerActionInspection struct {
@@ -480,9 +494,12 @@ type TrafficRoutingRequest struct {
 
 func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
 	switch req.ResourceType {
-	case "trafficShiftPlan", "productionListenerRule":
+	case "trafficShiftPlan":
 		return availableTrafficRoutingResult(req, trafficRoutingInspection(req)), nil
-	case "codeDeployApplication", "codeDeployDeploymentGroup", "productionListener", "testListener", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup", "activeTargetGroup", "candidateTargetGroup":
+	case "codeDeployApplication", "codeDeployDeploymentGroup", "productionListener", "testListener", "productionListenerRule", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup", "activeTargetGroup", "candidateTargetGroup":
+		if req.ResourceType == "productionListenerRule" && !strings.Contains(strings.TrimSpace(req.ResourceName), ":listener-rule/") {
+			return availableTrafficRoutingResult(req, trafficRoutingInspection(req)), nil
+		}
 		cacheKey := newTrafficRoutingInspectionCacheKey(req.Region, req.TargetAccountID, req.ObserverRoleARN, req.ResourceType, req.ResourceName)
 		if detail, ok := s.trafficRoutingCache.Get(cacheKey); ok {
 			detail.Summary = trafficRoutingSummary(req)
@@ -795,6 +812,12 @@ func cloneTrafficRoutingInspection(detail TrafficRoutingInspection) TrafficRouti
 		listener.DefaultActions = cloneListenerActions(detail.Listener.DefaultActions)
 		cloned.Listener = &listener
 	}
+	if detail.ListenerRule != nil {
+		rule := *detail.ListenerRule
+		rule.Conditions = cloneListenerRuleConditions(detail.ListenerRule.Conditions)
+		rule.Actions = cloneListenerActions(detail.ListenerRule.Actions)
+		cloned.ListenerRule = &rule
+	}
 	if detail.TargetGroup != nil {
 		targetGroup := *detail.TargetGroup
 		targetGroup.LoadBalancerARNs = append([]string(nil), detail.TargetGroup.LoadBalancerARNs...)
@@ -824,6 +847,18 @@ func cloneListenerActions(actions []ListenerActionInspection) []ListenerActionIn
 	for i, action := range actions {
 		cloned[i] = action
 		cloned[i].TargetGroups = append([]ListenerActionTargetInspection(nil), action.TargetGroups...)
+	}
+	return cloned
+}
+
+func cloneListenerRuleConditions(conditions []ListenerRuleConditionInspection) []ListenerRuleConditionInspection {
+	if len(conditions) == 0 {
+		return nil
+	}
+	cloned := make([]ListenerRuleConditionInspection, len(conditions))
+	for i, condition := range conditions {
+		cloned[i] = condition
+		cloned[i].Values = append([]string(nil), condition.Values...)
 	}
 	return cloned
 }
