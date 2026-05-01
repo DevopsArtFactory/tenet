@@ -807,6 +807,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"scoped reads return the existing operator-read `403` unless exact deployment membership or project/environment placement proves access",
 		"retry through the trusted front door",
 		"Use these settings only when every request reaches Tenet through a front door that authenticates the caller and strips any client-supplied `X-Tenet-Authenticated-*`, `X-Tenet-Authenticated-Roles`, `X-Tenet-Authorized-Deployments`, `X-Tenet-Authorized-Projects`, `X-Tenet-Authorized-Environments`, and trusted-alias `X-User-*` headers before forwarding trusted values.",
+		"strips any client-supplied `X-Tenet-Authorized-Deployments`, `X-Tenet-Authorized-Projects`, and `X-Tenet-Authorized-Environments` headers",
 		"Do not expose a header-trusting `tenet-api` instance directly to untrusted clients",
 		"Tenet currently has two intentionally separate identity header families",
 		"`X-Tenet-Authenticated-*`, `X-Tenet-Authenticated-Roles`, `X-Tenet-Authorized-Deployments`, `X-Tenet-Authorized-Projects`, `X-Tenet-Authorized-Environments` | Authenticating front door only | Request-scoped route authorization",
@@ -844,7 +845,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`403 Forbidden` plus `forbidden: operator does not have access to this deployment`",
 		"`POST /v1/plans/deployments/{deploymentName}` and `POST /v1/applies/plans/{planId}`",
 		"front-door identity headers",
-		"strips any client-supplied `X-Tenet-Authenticated-*`, `X-Tenet-Authorized-Deployments`, and trusted-alias `X-User-*` headers before forwarding trusted values",
+		"strips any client-supplied `X-Tenet-Authenticated-*`, `X-Tenet-Authenticated-Roles`, `X-Tenet-Authorized-Deployments`, `X-Tenet-Authorized-Projects`, `X-Tenet-Authorized-Environments`, and trusted-alias `X-User-*` headers before forwarding trusted values",
 		"not a safe deployment shape",
 		"`X-Tenet-Actor-*` values still win over `X-User-*` aliases for local actor context.",
 		"persisted actor fields for immutable plan/apply records",
@@ -917,7 +918,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`200 OK` with `[]`",
 		"`make smoke-docker` restarts the Compose `api` service with trusted-header auth enabled and proves this exact route contract",
 		"when both `payments-api-prod` and `worker-prod` are allowlisted, the Compose smoke proves the controller-populated raw status collection returns both rows",
-		"Only enable that trust when a front door authenticates the caller and strips any client-supplied `X-Tenet-Authenticated-*`, `X-Tenet-Authorized-Deployments`, and trusted-alias `X-User-*` headers before forwarding trusted values.",
+		"Only enable that trust when a front door authenticates the caller and strips any client-supplied `X-Tenet-Authenticated-*`, `X-Tenet-Authorized-Deployments`, `X-Tenet-Authorized-Projects`, `X-Tenet-Authorized-Environments`, and trusted-alias `X-User-*` headers before forwarding trusted values.",
 	} {
 		if !strings.Contains(deploymentStatusDoc, fragment) {
 			t.Fatalf("expected deployment status doc front-door auth contract to include %q", fragment)
@@ -1262,7 +1263,7 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 		"`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true`",
 		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`",
 		"`X-Tenet-Authorized-Deployments`",
-		"strip any inbound `X-Tenet-Authenticated-*`, `X-Tenet-Authorized-Deployments`, and trusted-alias `X-User-*` headers from untrusted clients",
+		"strip any inbound `X-Tenet-Authenticated-*`, `X-Tenet-Authorized-Deployments`, `X-Tenet-Authorized-Projects`, `X-Tenet-Authorized-Environments`, and trusted-alias `X-User-*` headers from untrusted clients",
 		"callers can spoof operator identity or deployment access by sending those headers directly",
 		"does not currently run a built-in GitHub OAuth browser login, issue Tenet-managed browser sessions, or manage an OAuth/OIDC provider lifecycle inside `tenet-api`",
 		"`TENET_GITHUB_WEBHOOK_SECRET`",
