@@ -480,9 +480,9 @@ type TrafficRoutingRequest struct {
 
 func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
 	switch req.ResourceType {
-	case "trafficShiftPlan", "productionListenerRule", "activeTargetGroup", "candidateTargetGroup":
+	case "trafficShiftPlan", "productionListenerRule":
 		return availableTrafficRoutingResult(req, trafficRoutingInspection(req)), nil
-	case "codeDeployApplication", "codeDeployDeploymentGroup", "productionListener", "testListener", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup":
+	case "codeDeployApplication", "codeDeployDeploymentGroup", "productionListener", "testListener", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup", "activeTargetGroup", "candidateTargetGroup":
 		cacheKey := newTrafficRoutingInspectionCacheKey(req.Region, req.TargetAccountID, req.ObserverRoleARN, req.ResourceType, req.ResourceName)
 		if detail, ok := s.trafficRoutingCache.Get(cacheKey); ok {
 			detail.Summary = trafficRoutingSummary(req)

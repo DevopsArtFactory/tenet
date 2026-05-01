@@ -32,6 +32,20 @@ func (s Service) inspectTrafficRoutingResourceFromAWS(ctx context.Context, req T
 			return TrafficRoutingInspection{}, err
 		}
 		return trafficRoutingInspectionFromApplication(req, application), nil
+	case "activeTargetGroup", "candidateTargetGroup":
+		targetGroupName := strings.TrimSpace(req.ResourceName)
+		if targetGroupName == "" {
+			return TrafficRoutingInspection{}, resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
+		}
+		targetGroup, err := describeTargetGroup(ctx, clients.Config, req.Region, targetGroupName)
+		if err != nil {
+			return TrafficRoutingInspection{}, err
+		}
+		targetHealth, err := describeTargetHealth(ctx, clients.Config, req.Region, targetGroup.TargetGroupARN)
+		if err != nil {
+			return TrafficRoutingInspection{}, err
+		}
+		return trafficRoutingInspectionFromTargetGroup(req, targetGroup, targetHealth), nil
 	}
 	group, err := getCodeDeployDeploymentGroup(ctx, clients.Config, req.Region, codeDeployApplicationName(req.DeploymentName, req.ResourceName, req.ResourceType), codeDeployDeploymentGroupName(req))
 	if err != nil {

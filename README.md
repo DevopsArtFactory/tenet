@@ -383,7 +383,7 @@ Supported traffic-routing inspection currently covers:
 - `greenTaskSetTargetGroup`
 - `trafficShiftPlan`
 
-Within one running Tenet API process, repeated successful live inspections for `codeDeployApplication`, `codeDeployDeploymentGroup`, `productionListener`, and `testListener` now reuse a bounded in-process cache keyed by `(region, target account, observer role, resource type, resource name)`. Summary-only fallbacks and unavailable outcomes are still recomputed or returned through the existing non-cached path.
+Within one running Tenet API process, repeated successful live inspections for `codeDeployApplication`, `codeDeployDeploymentGroup`, `productionListener`, `testListener`, `activeTargetGroup`, `candidateTargetGroup`, `blueTaskSetTargetGroup`, and `greenTaskSetTargetGroup` now reuse a bounded in-process cache keyed by `(region, target account, observer role, resource type, resource name)`. Summary-only fallbacks and unavailable outcomes are still recomputed or returned through the existing non-cached path.
 
 For `ecsService`, Tenet now keeps a bounded in-process hint of the last cluster that resolved a given `(region, target account, observer role, service name)` lookup so repeated drill-downs avoid brute-force cluster scans. If that hint is stale or the service moved, the lookup falls back to the full cluster scan path, refreshes the hint, and keeps the existing resource-not-found semantics unchanged.
 
@@ -391,17 +391,47 @@ The embedded `Live inspection` panel renders operator-friendly summaries from th
 - `ecsService`: service identity/status, desired-running-pending counts, additive deployment-configuration fields (`minimumHealthyPercent`, `maximumPercent`, `healthCheckGracePeriodSeconds`) when ECS returns them, active deployments, and recent ECS service events
 - `autoScalingGroup`: group sizing/health settings, attached target groups, current instances, and additive launch-template details including `launchTemplate.imageId` and `launchTemplate.instanceType` when the live EC2 launch-template lookup resolves them
 - `userDataBootstrapSource`: normalized desired bootstrap source, observed launch-template bootstrap-source marker, the backing Auto Scaling resource Tenet inspected, the launch template version Tenet used for that observation, and an additive in-app handoff to the resolved backing resource drill-down when that resource can be matched safely from the loaded deployment metadata
-- `trafficRoutingResource`: summary-only or live traffic-routing context with explicit resource kind, display name, inspection mode, rollout summary text, additive live fields for CodeDeploy applications/deployment groups/listeners when AWS access is available, and target-group live details for `blueTaskSetTargetGroup` / `greenTaskSetTargetGroup` payloads that include protocol/port, health-check settings, load-balancer ARNs, and registered target-health counts
+- `trafficRoutingResource`: summary-only or live traffic-routing context with explicit resource kind, display name, inspection mode, rollout summary text, additive live fields for CodeDeploy applications/deployment groups/listeners when AWS access is available, and target-group live details for `activeTargetGroup` / `candidateTargetGroup` / `blueTaskSetTargetGroup` / `greenTaskSetTargetGroup` payloads that include protocol/port, health-check settings, load-balancer ARNs, and registered target-health counts
 
 Resource-inspection responses keep the contract explicit for UI consumers:
 - common fields: `deploymentName`, `resourceType`, `resourceName`, `lookupContext`, `available`, `source`, `unavailableReason`
 - ECS payloads add `ecsService`, including additive deployment-configuration fields `minimumHealthyPercent`, `maximumPercent`, and `healthCheckGracePeriodSeconds` when `DescribeServices` returns them
 - Auto Scaling payloads add `autoScalingGroup`, including optional `launchTemplate` and `mixedInstancesPolicy` metadata when `DescribeAutoScalingGroups` returns launch-template details plus additive observed launch-template runtime fields such as `launchTemplate.imageId` and `launchTemplate.instanceType` when the live EC2 launch-template lookup resolves them
 - EC2 bootstrap-source payloads add `userDataBootstrapSource`, including `desiredBootstrapSource`, optional `observedBootstrapSource`, the backing Auto Scaling resource identity, and the observed launch template summary Tenet used for that comparison, including additive `launchTemplate.imageId` and `launchTemplate.instanceType` when live EC2 launch-template data is available
-- traffic-routing payloads add `trafficRoutingResource`; when live CodeDeploy task-set target-group metadata is present, the embedded UI reads it from `trafficRoutingResource.targetGroup` (or compatible `targetGroupInspection` / `loadBalancerTargetGroup` shapes) and renders the target group name/ARN, protocol/port, target type, health-check settings, load-balancer ARNs, target-health counts, and registered target rows without requiring operators to open raw JSON
+- traffic-routing payloads add `trafficRoutingResource`; when live weighted or CodeDeploy task-set target-group metadata is present, the embedded UI reads it from `trafficRoutingResource.targetGroup` (or compatible `targetGroupInspection` / `loadBalancerTargetGroup` shapes) and renders the target group name/ARN, protocol/port, target type, health-check settings, load-balancer ARNs, target-health counts, and registered target rows without requiring operators to open raw JSON
 
 Traffic-routing inspection stays local-friendly without changing the route shape:
-- `trafficShiftPlan`, `productionListenerRule`, `activeTargetGroup`, and `candidateTargetGroup` remain `summary_only`; `blueTaskSetTargetGroup` and `greenTaskSetTargetGroup` still render summary-only local/no-AWS payloads without empty live-field placeholders, and upgrade in place when the backend returns `inspectionMode=live` plus target-group metadata
+- `trafficShiftPlan` and `productionListenerRule` remain `summary_only` because they are controller-authored rollout summaries rather than direct target-group health lookups.
+- `activeTargetGroup`, `candidateTargetGroup`, `blueTaskSetTargetGroup`, and `greenTaskSetTargetGroup` still render summary-only local/no-AWS payloads without empty live-field placeholders, and upgrade in place when the backend returns `inspectionMode=live` plus `targetGroup` metadata. For example:
+
+  ```http
+  GET /v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=activeTargetGroup&resourceName=payments-api-prod-active
+  ```
+
+  ```json
+  {
+    "deploymentName": "payments-api-prod",
+    "resourceType": "activeTargetGroup",
+    "resourceName": "payments-api-prod-active",
+    "available": true,
+    "source": "traffic_routing_aws",
+    "trafficRoutingResource": {
+      "kind": "activeTargetGroup",
+      "displayName": "Active target group",
+      "inspectionMode": "live",
+      "targetGroup": {
+        "targetGroupName": "payments-api-prod-active",
+        "targetGroupArn": "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-prod-active/abc123",
+        "protocol": "HTTP",
+        "port": 8080,
+        "targetType": "instance",
+        "targetHealthCounts": {"healthy": 3}
+      }
+    }
+  }
+  ```
+
+  The candidate path uses the same schema with `resourceType=candidateTargetGroup` and `resourceName={candidate-target-group-name}`.
 - `codeDeployApplication`, `codeDeployDeploymentGroup`, `productionListener`, and `testListener` stay `summary_only` when AWS inspection is disabled, and switch to `inspectionMode=live` with additive `codeDeployApplication`, `codeDeployDeploymentGroup`, or `listener` details when live AWS access succeeds
 - AWS-side traffic-routing failures still return `available=false` with an explicit `unavailableReason` and `lookupContext`
 
