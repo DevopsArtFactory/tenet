@@ -4605,6 +4605,9 @@ const inspectionURL = '/v1/overview/deployments/payments-api-prod/resource-inspe
   if (!accountsText.includes('Opened via bookmarked resource alias.')) throw new Error('expected alias resource page cue');
   if (!accountsText.includes(requestedAliasID)) throw new Error('expected alias resource page cue to keep requested bookmarked resource id visible');
   if (!accountsText.includes(canonicalID)) throw new Error('expected alias resource page to keep resolved canonical resource id visible');
+  if (!accountsText.includes('Recent logs are unavailable for this resource.')) throw new Error('expected no-log-source resource page to render recent logs unavailable state');
+  if (!accountsText.includes('This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet.')) throw new Error('expected no-log-source recent logs state to render friendly operator copy');
+  if (accountsText.includes('no_log_source')) throw new Error('expected no-log-source recent logs state not to expose raw unavailableReason code');
 
   const sectionLinks = collectNodes(accountsRoot, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#resource-'));
   if (!sectionLinks.length) throw new Error('expected alias resource page section links');

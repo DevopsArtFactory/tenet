@@ -1042,6 +1042,7 @@ for fragment in (
     "Recent logs",
     "Lookup region",
     "Observer role configured",
+    "This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet.",
     "Resolved backing resource",
     "actions.push(createNavLink(buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName }), 'Open field-level drift', '_self'));",
     "Plan preview actions",
