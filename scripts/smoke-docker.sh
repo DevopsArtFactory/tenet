@@ -1644,6 +1644,19 @@ assert forbidden_status_read_body.strip() == "forbidden: operator does not have 
 assert os.environ["AUTH_FORBIDDEN_TRANSITION_STATUS"] == "403", os.environ["AUTH_FORBIDDEN_TRANSITION_STATUS"]
 assert forbidden_transition_body.strip() == "forbidden: operator does not have access to this deployment", forbidden_transition_body
 
+def assert_operator_context_project_environment_examples(examples, payload):
+    assert 1 <= len(examples) <= 5, payload
+    for row in examples:
+        assert isinstance(row.get("appRef"), str) and row["appRef"], payload
+        assert isinstance(row.get("environmentRef"), str) and row["environmentRef"], payload
+        assert isinstance(row.get("region"), str) and row["region"], payload
+        assert isinstance(row.get("awsAccountId"), str) and row["awsAccountId"], payload
+        assert isinstance(row.get("deploymentCount"), int) and row["deploymentCount"] > 0, payload
+        example_deployments = row.get("exampleDeployments") or []
+        assert len(example_deployments) <= row["deploymentCount"], payload
+        assert all(isinstance(name, str) and name for name in example_deployments), payload
+
+
 def assert_operator_context_common(payload):
     trusted = payload.get("trustedHeaders") or {}
     assert trusted.get("enabled") is True, payload
@@ -1699,6 +1712,7 @@ assert trusted_summary["projectCount"] >= 1, operator_context_trusted
 assert trusted_summary["environmentCount"] >= 1, operator_context_trusted
 assert trusted_summary.get("emptyReason") is None, operator_context_trusted
 assert trusted_summary["projectEnvironmentExamples"], operator_context_trusted
+assert_operator_context_project_environment_examples(trusted_summary["projectEnvironmentExamples"], operator_context_trusted)
 trusted_project_envs = {(row["appRef"], row["environmentRef"]) for row in trusted_summary["projectEnvironmentExamples"]}
 assert ("payments-api", "prod-apne2") in trusted_project_envs or ("worker", "prod-apne2") in trusted_project_envs, operator_context_trusted
 trusted_verdicts = operator_context_trusted["accessVerdicts"]
