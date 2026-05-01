@@ -2089,6 +2089,93 @@ func TestDeriveManagedDriftItemsAddsLiveEC2LaunchTemplateIntentEvidence(t *testi
 	}
 }
 
+func TestDeriveManagedDriftItemsAddsLiveTrafficRoutingEvidence(t *testing.T) {
+	t.Run("ec2 weighted target group listener missing candidate target group", func(t *testing.T) {
+		deployment := domain.Deployment{
+			Name:          "payments-api-prod",
+			ExecutionMode: "asgWeightedTargetGroups",
+		}
+
+		got := deriveManagedDriftItems(deployment, domain.DeploymentStatus{}, nil, runtimeLiveTrafficRoutingObservation{
+			ResourceType: "productionListenerRule",
+			ResourceName: "payments-api-prod-prod-listener",
+			Detail: resourceinspection.TrafficRoutingInspection{
+				InspectionMode: "live",
+				Listener: &resourceinspection.ListenerInspection{
+					DefaultActions: []resourceinspection.ListenerActionInspection{{
+						Type: "forward",
+						TargetGroups: []resourceinspection.ListenerActionTargetInspection{{
+							TargetGroupARN: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-prod-active/abc123",
+							Weight:         100,
+						}},
+					}},
+				},
+			},
+		})
+		want := []domain.ManagedDriftItem{{
+			Field:    "runtimeContext.trafficRouting.weightedTargetGroups",
+			Desired:  "payments-api-prod-active,payments-api-prod-candidate",
+			Actual:   "payments-api-prod-active",
+			Severity: domain.ManagedDriftSeverityHigh,
+			ResourceRef: &domain.ManagedDriftResourceRef{
+				ResourceType: "productionListenerRule",
+				ResourceName: "payments-api-prod-prod-listener",
+			},
+		}}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("expected live EC2 traffic-routing drift evidence, got %+v", got)
+		}
+	})
+
+	t.Run("ecs codedeploy deployment group missing green target group", func(t *testing.T) {
+		deployment := domain.Deployment{
+			Name:          "payments-worker-prod",
+			ExecutionMode: "ecsCodeDeploy",
+		}
+
+		got := deriveManagedDriftItems(deployment, domain.DeploymentStatus{}, nil, runtimeLiveTrafficRoutingObservation{
+			ResourceType: "codeDeployDeploymentGroup",
+			ResourceName: "payments-worker-prod-codedeploy-group",
+			Detail: resourceinspection.TrafficRoutingInspection{
+				InspectionMode: "live",
+				CodeDeployDeploymentGroup: &resourceinspection.CodeDeployDeploymentGroupInspection{
+					TargetGroups: []string{"payments-worker-prod-blue"},
+				},
+			},
+		})
+		want := []domain.ManagedDriftItem{{
+			Field:    "runtimeContext.trafficRouting.codeDeployTargetGroups",
+			Desired:  "payments-worker-prod-blue,payments-worker-prod-green",
+			Actual:   "payments-worker-prod-blue",
+			Severity: domain.ManagedDriftSeverityHigh,
+			ResourceRef: &domain.ManagedDriftResourceRef{
+				ResourceType: "codeDeployDeploymentGroup",
+				ResourceName: "payments-worker-prod-codedeploy-group",
+			},
+		}}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("expected live ECS traffic-routing drift evidence, got %+v", got)
+		}
+	})
+
+	t.Run("summary only traffic routing observations do not fabricate rows", func(t *testing.T) {
+		deployment := domain.Deployment{Name: "payments-worker-prod", ExecutionMode: "ecsCodeDeploy"}
+		got := deriveManagedDriftItems(deployment, domain.DeploymentStatus{}, nil, runtimeLiveTrafficRoutingObservation{
+			ResourceType: "codeDeployDeploymentGroup",
+			ResourceName: "payments-worker-prod-codedeploy-group",
+			Detail: resourceinspection.TrafficRoutingInspection{
+				InspectionMode: "summary_only",
+				CodeDeployDeploymentGroup: &resourceinspection.CodeDeployDeploymentGroupInspection{
+					TargetGroups: []string{"unexpected"},
+				},
+			},
+		})
+		if len(got) != 0 {
+			t.Fatalf("expected summary-only traffic-routing evidence to be ignored, got %+v", got)
+		}
+	})
+}
+
 func TestDeriveManagedDriftItemsAddsLiveECSDesiredCapacityEvidence(t *testing.T) {
 	for _, executionMode := range []string{"ecsCodeDeploy", "ecsRolling"} {
 		t.Run(executionMode, func(t *testing.T) {

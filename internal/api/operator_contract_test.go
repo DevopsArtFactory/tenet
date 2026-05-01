@@ -343,6 +343,9 @@ func TestManagedLiveDriftDocsPreferFocusedContractCoverageOverLocalSmoke(t *test
 		"`runtimeContext.deploymentConfig.maximumPercent`",
 		"`runtimeContext.deploymentConfig.healthCheckGracePeriodSeconds`",
 		"`runtimeContext.taskDefinition.image`",
+		"`runtimeContext.trafficRouting.weightedTargetGroups`",
+		"`runtimeContext.trafficRouting.codeDeployTargetGroups`",
+		"summary-only traffic-routing resources, unavailable AWS access, and local fixture-only runs intentionally omit those rows rather than inventing drift from static rollout summaries",
 		"focused `go test ./internal/api` coverage locks the live-backed EC2 launch-template drift rows for `runtimeContext.launchTemplate.imageId` and `runtimeContext.launchTemplate.instanceType` because local smoke may legitimately lack AWS access and therefore does not claim to prove those rows",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
@@ -359,7 +362,8 @@ func TestManagedLiveDriftDocsPreferFocusedContractCoverageOverLocalSmoke(t *test
 		"`runtimeContext.deploymentConfig.maximumPercent`",
 		"`runtimeContext.deploymentConfig.healthCheckGracePeriodSeconds`",
 		"`runtimeContext.taskDefinition.image`",
-		"Local runs may legitimately lack AWS access, so focused `go test ./internal/api` contract coverage locks that additive JSON/UI detail instead.",
+		"`runtimeContext.trafficRouting.*`",
+		"Local runs may legitimately lack AWS access, so focused API/controller unit coverage locks those additive JSON/UI and live-evidence derivation details instead.",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
 			t.Fatalf("expected local runtime managed live drift doc to include %q", fragment)
