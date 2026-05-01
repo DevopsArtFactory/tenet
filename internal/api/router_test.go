@@ -177,13 +177,36 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if operatorRead["allowed"] != true || operatorRead["requiresAuthenticatedIdentity"] != true || operatorRead["requiresViewerCapableRole"] != true {
 		t.Fatalf("expected allowed read verdict with identity/read-role requirements, got %#v", operatorRead)
 	}
+	if !reflect.DeepEqual(operatorRead["exampleRoutes"], []any{"GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/audit-logs"}) {
+		t.Fatalf("expected operator read route examples, got %#v", operatorRead["exampleRoutes"])
+	}
 	operatorWrite := accessVerdicts["operatorWrite"].(map[string]any)
 	if operatorWrite["allowed"] != true || operatorWrite["requiresOperatorRole"] != true || operatorWrite["reason"] != "guarded operator write prerequisites are satisfied for this request" {
 		t.Fatalf("expected allowed write verdict, got %#v", operatorWrite)
 	}
+	if !reflect.DeepEqual(operatorWrite["exampleRoutes"], []any{"POST /v1/plans/deployments/{deploymentName}", "POST /v1/applies/plans/{planId}", "POST /v1/applies/{applyId}/transitions"}) {
+		t.Fatalf("expected operator write route examples, got %#v", operatorWrite["exampleRoutes"])
+	}
 	deploymentScopedRead := accessVerdicts["deploymentScopedRead"].(map[string]any)
 	if deploymentScopedRead["allowed"] != true || deploymentScopedRead["requiresExactDeploymentAllowlistMatch"] != true || deploymentScopedRead["reason"] != "deployment-scoped reads can pass only for deployments named in X-Tenet-Authorized-Deployments" {
 		t.Fatalf("expected conditional deployment read verdict, got %#v", deploymentScopedRead)
+	}
+	if !reflect.DeepEqual(deploymentScopedRead["exampleRoutes"], []any{"GET /v1/overview/deployments/{deploymentName}", "GET /v1/status/deployments/{deploymentName}", "GET /v1/audit-logs?deployment={deploymentName}"}) {
+		t.Fatalf("expected deployment-scoped read route examples, got %#v", deploymentScopedRead["exampleRoutes"])
+	}
+	deploymentScopedWrite := accessVerdicts["deploymentScopedWrite"].(map[string]any)
+	if deploymentScopedWrite["allowed"] != true || deploymentScopedWrite["requiresExactDeploymentAllowlistMatch"] != true {
+		t.Fatalf("expected conditional deployment write verdict, got %#v", deploymentScopedWrite)
+	}
+	if !reflect.DeepEqual(deploymentScopedWrite["exampleRoutes"], []any{"POST /v1/plans/deployments/{deploymentName}", "POST /v1/applies/plans/{planId}", "POST /v1/applies/{applyId}/transitions"}) {
+		t.Fatalf("expected deployment-scoped write route examples, got %#v", deploymentScopedWrite["exampleRoutes"])
+	}
+	collectionRead := accessVerdicts["collectionRead"].(map[string]any)
+	if collectionRead["allowed"] != true || collectionRead["filtersCollectionsByDeploymentAccess"] != true {
+		t.Fatalf("expected collection read verdict, got %#v", collectionRead)
+	}
+	if !reflect.DeepEqual(collectionRead["exampleRoutes"], []any{"GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/overview/accounts", "GET /v1/audit-logs"}) {
+		t.Fatalf("expected collection read route examples, got %#v", collectionRead["exampleRoutes"])
 	}
 }
 

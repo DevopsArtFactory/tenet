@@ -201,6 +201,35 @@ func filterAuthorizedApplicationOverviews(applications []catalog.ApplicationOver
 
 const operatorContextUnmatchedDeploymentLimit = 25
 
+var (
+	operatorContextOperatorReadExampleRoutes = []string{
+		"GET /v1/overview/applications",
+		"GET /v1/status/deployments",
+		"GET /v1/audit-logs",
+	}
+	operatorContextOperatorWriteExampleRoutes = []string{
+		"POST /v1/plans/deployments/{deploymentName}",
+		"POST /v1/applies/plans/{planId}",
+		"POST /v1/applies/{applyId}/transitions",
+	}
+	operatorContextDeploymentScopedReadExampleRoutes = []string{
+		"GET /v1/overview/deployments/{deploymentName}",
+		"GET /v1/status/deployments/{deploymentName}",
+		"GET /v1/audit-logs?deployment={deploymentName}",
+	}
+	operatorContextDeploymentScopedWriteExampleRoutes = []string{
+		"POST /v1/plans/deployments/{deploymentName}",
+		"POST /v1/applies/plans/{planId}",
+		"POST /v1/applies/{applyId}/transitions",
+	}
+	operatorContextCollectionReadExampleRoutes = []string{
+		"GET /v1/overview/applications",
+		"GET /v1/status/deployments",
+		"GET /v1/overview/accounts",
+		"GET /v1/audit-logs",
+	}
+)
+
 type operatorContextResponse struct {
 	TrustedHeaders   operatorContextTrustedHeaders      `json:"trustedHeaders"`
 	Enforcement      operatorContextEnforcement         `json:"enforcement"`
@@ -265,14 +294,15 @@ type operatorContextAccessVerdicts struct {
 }
 
 type operatorContextAccessVerdict struct {
-	Allowed                               bool   `json:"allowed"`
-	Reason                                string `json:"reason"`
-	RequiresAuthenticatedIdentity         bool   `json:"requiresAuthenticatedIdentity"`
-	RequiresViewerCapableRole             bool   `json:"requiresViewerCapableRole,omitempty"`
-	RequiresOperatorRole                  bool   `json:"requiresOperatorRole,omitempty"`
-	RequiresExactDeploymentAllowlistMatch bool   `json:"requiresExactDeploymentAllowlistMatch,omitempty"`
-	FiltersCollectionsByDeploymentAccess  bool   `json:"filtersCollectionsByDeploymentAccess,omitempty"`
-	EmptyCollectionLikely                 bool   `json:"emptyCollectionLikely,omitempty"`
+	Allowed                               bool     `json:"allowed"`
+	Reason                                string   `json:"reason"`
+	ExampleRoutes                         []string `json:"exampleRoutes"`
+	RequiresAuthenticatedIdentity         bool     `json:"requiresAuthenticatedIdentity"`
+	RequiresViewerCapableRole             bool     `json:"requiresViewerCapableRole,omitempty"`
+	RequiresOperatorRole                  bool     `json:"requiresOperatorRole,omitempty"`
+	RequiresExactDeploymentAllowlistMatch bool     `json:"requiresExactDeploymentAllowlistMatch,omitempty"`
+	FiltersCollectionsByDeploymentAccess  bool     `json:"filtersCollectionsByDeploymentAccess,omitempty"`
+	EmptyCollectionLikely                 bool     `json:"emptyCollectionLikely,omitempty"`
 }
 
 func buildOperatorContextResponse(r *http.Request, options Options) operatorContextResponse {
@@ -360,6 +390,7 @@ func operatorContextReadVerdict(options Options, identity requestactor.Authentic
 	verdict := operatorContextAccessVerdict{
 		Allowed:                       true,
 		Reason:                        "operator read routes are not enforcing trusted front-door identity for this API instance",
+		ExampleRoutes:                 cloneOperatorContextExampleRoutes(operatorContextOperatorReadExampleRoutes),
 		RequiresAuthenticatedIdentity: options.RequireDeploymentReadAuthorization,
 		RequiresViewerCapableRole:     options.RequireDeploymentReadAuthorization && options.RequireOperatorRoleForRead,
 	}
@@ -385,6 +416,7 @@ func operatorContextWriteVerdict(options Options, identity requestactor.Authenti
 	verdict := operatorContextAccessVerdict{
 		Allowed:                       true,
 		Reason:                        "operator write routes are not enforcing trusted front-door identity for this API instance",
+		ExampleRoutes:                 cloneOperatorContextExampleRoutes(operatorContextOperatorWriteExampleRoutes),
 		RequiresAuthenticatedIdentity: identityRequired,
 		RequiresOperatorRole:          options.RequireOperatorRoleForWrite,
 	}
@@ -407,6 +439,7 @@ func operatorContextWriteVerdict(options Options, identity requestactor.Authenti
 
 func operatorContextDeploymentScopedReadVerdict(options Options, identity requestactor.AuthenticatedIdentity, roles requestactor.AuthenticatedRoles, deployments requestactor.AuthorizedDeployments) operatorContextAccessVerdict {
 	verdict := operatorContextReadVerdict(options, identity, roles)
+	verdict.ExampleRoutes = cloneOperatorContextExampleRoutes(operatorContextDeploymentScopedReadExampleRoutes)
 	verdict.RequiresExactDeploymentAllowlistMatch = options.RequireDeploymentReadAuthorization
 	if !options.RequireDeploymentReadAuthorization {
 		verdict.Allowed = true
@@ -427,6 +460,7 @@ func operatorContextDeploymentScopedReadVerdict(options Options, identity reques
 
 func operatorContextDeploymentScopedWriteVerdict(options Options, identity requestactor.AuthenticatedIdentity, roles requestactor.AuthenticatedRoles, deployments requestactor.AuthorizedDeployments, operatorWrite operatorContextAccessVerdict) operatorContextAccessVerdict {
 	verdict := operatorWrite
+	verdict.ExampleRoutes = cloneOperatorContextExampleRoutes(operatorContextDeploymentScopedWriteExampleRoutes)
 	verdict.RequiresExactDeploymentAllowlistMatch = options.RequireDeploymentReadAuthorization
 	if !verdict.Allowed {
 		return verdict
@@ -446,6 +480,7 @@ func operatorContextDeploymentScopedWriteVerdict(options Options, identity reque
 
 func operatorContextCollectionReadVerdict(options Options, identity requestactor.AuthenticatedIdentity, roles requestactor.AuthenticatedRoles, deployments requestactor.AuthorizedDeployments, summary *operatorContextAccessSummary) operatorContextAccessVerdict {
 	verdict := operatorContextReadVerdict(options, identity, roles)
+	verdict.ExampleRoutes = cloneOperatorContextExampleRoutes(operatorContextCollectionReadExampleRoutes)
 	verdict.FiltersCollectionsByDeploymentAccess = options.RequireDeploymentReadAuthorization
 	if !options.RequireDeploymentReadAuthorization {
 		verdict.Allowed = true
@@ -466,6 +501,10 @@ func operatorContextCollectionReadVerdict(options Options, identity requestactor
 		verdict.Reason = "collection reads will be allowed but likely empty because the forwarded deployment allowlist does not match catalog deployments"
 	}
 	return verdict
+}
+
+func cloneOperatorContextExampleRoutes(routes []string) []string {
+	return append([]string(nil), routes...)
 }
 
 func buildOperatorContextAccessSummary(ctx context.Context, options Options, deployments requestactor.AuthorizedDeployments) *operatorContextAccessSummary {
