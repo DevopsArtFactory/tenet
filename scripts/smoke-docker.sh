@@ -1060,6 +1060,9 @@ assert_fragments("drift_ui", drift_ui, operator_read_auth_fragments + (
 ))
 assert_fragments("audit_ui", audit_ui, operator_read_auth_fragments + (
     "return `GET ${buildAuditLogsRoute({",
+    "{ value: 'plan.created', label: 'Plan preview created (plan.created)' },",
+    "{ value: 'apply.requested', label: 'Apply requested (apply.requested)' },",
+    "const auditActionLabel = (value) => {",
     "renderAuditLogsState(operatorReadFailureHeading(error), 'error', operatorReadFailureMessage(buildEmbeddedPageReadRoute(currentPageState), error));",
 ))
 

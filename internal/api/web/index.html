@@ -199,10 +199,15 @@
       };
       const auditActionOptions = [
         { value: '', label: 'All actions' },
-        { value: 'plan.created', label: 'plan.created' },
-        { value: 'apply.requested', label: 'apply.requested' },
+        { value: 'plan.created', label: 'Plan preview created (plan.created)' },
+        { value: 'apply.requested', label: 'Apply requested (apply.requested)' },
       ];
       const validAuditActions = new Set(auditActionOptions.map((option) => option.value).filter(Boolean));
+      const auditActionLabel = (value) => {
+        const action = String(value || '').trim();
+        const option = auditActionOptions.find((entry) => entry.value === action);
+        return option?.label || textOrDash(action);
+      };
 
       const statusClass = (state) => {
         switch (state) {
@@ -4005,7 +4010,7 @@
       const auditFilterLabels = () => {
         const labels = [];
         if (currentPageState.deployment) labels.push(`deployment ${currentPageState.deployment}`);
-        if (currentPageState.auditAction) labels.push(`action ${currentPageState.auditAction}`);
+        if (currentPageState.auditAction) labels.push(`action ${auditActionLabel(currentPageState.auditAction)}`);
         return labels;
       };
       const auditLimitLabel = () => currentPageState.auditLimit > 0 ? `Limit cap: latest ${currentPageState.auditLimit}` : 'Limit cap: all entries';
@@ -4222,7 +4227,7 @@
             entry.environmentRef ? `Environment ${entry.environmentRef}` : '',
           ].filter(Boolean).join(' · ') || 'No deployment context recorded';
           titleWrap.append(
-            createElement('h3', 'row-title', textOrDash(entry.action)),
+            createElement('h3', 'row-title', auditActionLabel(entry.action)),
             createElement('div', 'row-subtitle', deploymentContext),
           );
           const rowPills = createElement('div', 'pills');
@@ -4236,7 +4241,7 @@
 
           const metrics = createElement('div', 'metrics');
           [
-            ['Action', textOrDash(entry.action)],
+            ['Action', auditActionLabel(entry.action)],
             ['Timestamp', textOrDash(entry.timestamp)],
             ['Deployment', textOrDash(entry.deploymentName)],
             ['Application', textOrDash(entry.appRef)],
