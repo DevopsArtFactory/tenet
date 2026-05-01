@@ -926,6 +926,12 @@ operator_read_auth_fragments = (
     "const operatorReadRoleRequiredMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity because this operator read route requires a trusted forwarded viewer/operator/admin role. Retry this bookmarkable page through the trusted front door so it can forward X-Tenet-Authenticated-Roles for a read-capable session.`;",
     "const operatorReadForbiddenMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized for that route or deployment.`;",
 )
+assert_fragments("ui", ui, (
+    "const setEmbeddedBrowserTitle = (...parts) => {",
+    "document.title = [...titleParts, 'Tenet'].join(' · ');",
+    "setBrowserTitleFromPageState(currentPageState);",
+    "setEmbeddedBrowserTitle(resource.name || pageState.resourceType, pageState.deployment, pageLabel);",
+))
 assert_fragments("application_ui", application_ui, operator_read_auth_fragments + (
     "return 'Application detail';",
     "return `GET /v1/overview/applications/${deploymentName}`;",

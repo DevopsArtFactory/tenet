@@ -842,6 +842,13 @@ func TestEmbeddedUIIncludesOperatorReadAuthGuidanceContract(t *testing.T) {
 		"return 'Application detail';",
 		"return 'Resource detail';",
 		"return 'Drift viewer';",
+		"const browserPageTitle = (page) => {",
+		"return 'Drift view';",
+		"return 'Plan/apply';",
+		"const setEmbeddedBrowserTitle = (...parts) => {",
+		"document.title = [...titleParts, 'Tenet'].join(' · ');",
+		"const setBrowserTitleFromPageState = (pageState = currentPageState) => {",
+		"setEmbeddedBrowserTitle(resource.name || pageState.resourceType, pageState.deployment, pageLabel);",
 		"const buildEmbeddedPageReadRoute = (pageState = currentPageState) => {",
 		"return 'GET /v1/overview/applications';",
 		"return `GET /v1/overview/applications/${deploymentName}`;",
@@ -1970,6 +1977,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert \"return 'Applications overview';\" in ui, ui") || !strings.Contains(text, "assert \"return 'GET /v1/overview/applications';\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert landing-page operator read auth labels")
+	}
+	if !strings.Contains(text, "assert \"const setEmbeddedBrowserTitle = (...parts) => {\" in ui, ui") || !strings.Contains(text, "assert \"document.title = [...titleParts, 'Tenet'].join(' · ');\" in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded browser-title contract")
 	}
 	if !strings.Contains(text, "assert \"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page resource link contract")

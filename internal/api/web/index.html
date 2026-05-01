@@ -1784,6 +1784,7 @@
         root.replaceChildren(table);
       };
       const renderApplicationsOverview = (applications, focusState = null) => {
+        setEmbeddedBrowserTitle('Applications overview');
         renderToolbar(allApplications, currentViewState);
         const visibleApplications = applyViewState(applications, currentViewState);
         renderApplicationsSummary(visibleApplications);
@@ -1979,6 +1980,7 @@
         const summary = document.getElementById('summary');
         const root = document.getElementById('accounts');
         const deploymentName = detail.name || currentPageState.deployment || '';
+        setEmbeddedBrowserTitle(deploymentName, 'Application detail');
         const eventsDeploymentName = deploymentName;
         const resourceGroups = nonEmptyResourceSections(detail);
         const applicationSectionIDs = {
@@ -2505,6 +2507,7 @@
         const summary = document.getElementById('summary');
         const root = document.getElementById('accounts');
         const resource = resolveResourceDetail(detail);
+        setEmbeddedBrowserTitle(resource?.name, detail.name || currentPageState.deployment, 'Resource detail');
         const resourceRouteState = createCurrentResourceRouteState(resource);
         const deploymentName = detail.name || currentPageState.deployment || '';
         const resourceSectionLinks = [];
@@ -2706,8 +2709,51 @@
             return 'Drift viewer';
           case 'plan':
             return 'Plan and apply';
+          case 'audit':
+            return 'Audit log';
           default:
             return 'Operator detail';
+        }
+      };
+      const browserPageTitle = (page) => {
+        switch (page) {
+          case 'drift':
+            return 'Drift view';
+          case 'plan':
+            return 'Plan/apply';
+          default:
+            return embeddedPageTitle(page);
+        }
+      };
+      const setEmbeddedBrowserTitle = (...parts) => {
+        if (!document) return;
+        const titleParts = parts
+          .map((part) => String(part || '').trim())
+          .filter(Boolean);
+        document.title = [...titleParts, 'Tenet'].join(' · ');
+      };
+      const setBrowserTitleFromPageState = (pageState = currentPageState) => {
+        const pageLabel = browserPageTitle(pageState?.page || 'applications');
+        switch (pageState?.page) {
+          case 'account':
+            setEmbeddedBrowserTitle(pageState.accountId, pageLabel);
+            return;
+          case 'application':
+          case 'drift':
+          case 'plan':
+            setEmbeddedBrowserTitle(pageState.deployment, pageLabel);
+            return;
+          case 'resource': {
+            const resource = parseResourceIdentity(pageState.resourceId);
+            setEmbeddedBrowserTitle(resource.name || pageState.resourceType, pageState.deployment, pageLabel);
+            return;
+          }
+          case 'audit':
+            setEmbeddedBrowserTitle(pageState.deployment, pageLabel);
+            return;
+          case 'applications':
+          default:
+            setEmbeddedBrowserTitle(pageLabel);
         }
       };
       const buildEmbeddedPageReadRoute = (pageState = currentPageState) => {
@@ -3923,6 +3969,7 @@
         Promise.resolve().then(() => scrollToCurrentHashTarget());
       };
       const renderAuditLogsPage = (result, auditState = null) => {
+        setEmbeddedBrowserTitle(currentPageState.deployment, 'Audit log');
         renderAuditPageChrome();
         const root = document.getElementById('accounts');
         const page = createElement('article', 'account');
@@ -4931,6 +4978,7 @@
         const workspaceTitle = mode === 'drift' ? 'Drift viewer' : 'Plan and apply';
         const workspaceBreadcrumbLabel = mode === 'drift' ? 'Drift view' : 'Plan/apply';
         const emptyTitle = mode === 'drift' ? 'Field-level drift' : 'Plan operations';
+        setEmbeddedBrowserTitle(detail.name || currentPageState.deployment || '', workspaceBreadcrumbLabel);
         const header = createElement('article', 'account');
         const breadcrumb = createDeploymentBreadcrumb({
           deploymentName: detail.name || currentPageState.deployment || '',
@@ -5698,6 +5746,8 @@
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
         const root = document.getElementById('accounts');
+        const accountLabel = account?.awsAccountId || currentPageState.accountId || account?.name || '';
+        setEmbeddedBrowserTitle(accountLabel, 'Account detail');
         const backLink = createNavLink(buildPageURL('applications'), 'Back to applications');
         backLink.target = '_self';
         backLink.rel = '';
@@ -5774,6 +5824,7 @@
 
       currentPageState = parsePageState();
       currentViewState = parseViewState();
+      setBrowserTitleFromPageState(currentPageState);
       loadOperatorContextBanner().catch(() => {});
       if (currentPageState.page === 'applications') {
         fetchApplicationsOverview()
