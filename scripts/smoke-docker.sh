@@ -1143,7 +1143,7 @@ for fragment in (
     "No audit activity has been persisted yet.",
     "const auditFilterLabels = () => {",
     "const auditEmptyStateText = () => {",
-    "No audit entries match the current filters (${filters.join(' · ')}). Clear audit filters to return to the full audit timeline.",
+    "No audit entries match the current filters (${filters.join(' · ')}${hasLimit ? `; ${auditLimitLabel()}` : ''}). Clear audit controls to return to the full audit timeline.",
     "action ${currentPageState.auditAction}",
     "const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {",
     "if (action) params.set('action', action);",

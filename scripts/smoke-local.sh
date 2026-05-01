@@ -1280,7 +1280,7 @@ assert 'Immutable plan preview and apply-request activity for deployment ${deplo
 assert 'No audit activity has been persisted yet.' in audit_ui, audit_ui
 assert "const auditFilterLabels = () => {" in audit_ui, audit_ui
 assert "const auditEmptyStateText = () => {" in audit_ui, audit_ui
-assert "No audit entries match the current filters (${filters.join(' · ')}). Clear audit filters to return to the full audit timeline." in audit_ui, audit_ui
+assert "No audit entries match the current filters (${filters.join(' · ')}${hasLimit ? `; ${auditLimitLabel()}` : ''}). Clear audit controls to return to the full audit timeline." in audit_ui, audit_ui
 assert 'Loading audit log…' in audit_ui, audit_ui
 assert 'Audit log is currently unavailable.' in audit_ui, audit_ui
 assert 'Refresh audit log' in audit_ui, audit_ui
@@ -1296,7 +1296,7 @@ assert "const normalizeAuditLimit = (value) => {" in audit_ui, audit_ui
 assert "const auditLimitSelectOptions = (limit) => {" in audit_ui, audit_ui
 assert "const syncAuditQueryParams = (params, pageState) => {" in audit_ui, audit_ui
 assert "const clearAuditPageFilters = () => {" in audit_ui, audit_ui
-assert "createElement('button', 'toolbar-button', 'Clear audit filters')" in audit_ui, audit_ui
+assert "createElement('button', 'toolbar-button', activeFilters.length ? 'Clear audit filters' : 'Clear audit controls')" in audit_ui, audit_ui
 assert "createSelect('Action', currentPageState.auditAction, auditActionOptions, (event) => {" in audit_ui, audit_ui
 assert "createSelect('Limit', String(currentPageState.auditLimit || ''), auditLimitSelectOptions(currentPageState.auditLimit), (event) => {" in audit_ui, audit_ui
 assert 'Open application drill-down' in audit_ui, audit_ui
