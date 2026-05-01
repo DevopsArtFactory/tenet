@@ -783,6 +783,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`GET /v1/operator/context` is a read-only diagnostic endpoint",
 		"reports the normalized trusted identity, forwarded roles with read/write capability booleans, forwarded deployment allowlist, and which auth/RBAC enforcement toggles are active",
 		"When deployment-read authorization is enforced and a catalog placement provider is available, `deploymentAccess.summary` also reports forwarded, matched/visible, and unmatched deployment-name counts",
+		"plus `requiredTrustedHeaders` such as `X-Tenet-Authenticated-Id`, `X-User-ID`, `X-Tenet-Authenticated-Roles`, and `X-Tenet-Authorized-Deployments`",
 		"both smoke lanes assert `GET /v1/operator/context` `deploymentAccess.summary` for all-matched and stale/unmatched forwarded allowlists",
 		"That summary is diagnostic-only: it does not mint sessions, replace OAuth/RBAC, or authorize routes by itself",
 		"filters `GET /v1/overview/applications`, `GET /v1/status/deployments`, `GET /v1/overview/accounts`, and unscoped `GET /v1/audit-logs` down to authorized deployments",
@@ -857,6 +858,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"Guarded-route troubleshooting workflow",
 		"`identity.authenticated`: `false` explains `401 Unauthorized` on guarded reads or writes",
 		"`deploymentAccess.summary`: `matchedCount=0` or non-empty `unmatchedNames` explains `200 OK` empty collections",
+		"additive `requiredTrustedHeaders` (`X-Tenet-Authenticated-Id` or `X-User-ID`, `X-Tenet-Authenticated-Roles`, and/or `X-Tenet-Authorized-Deployments` depending on the route class)",
 		"`accessVerdicts`: use the blocked or likely-empty verdict reason as the operator-facing summary",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {

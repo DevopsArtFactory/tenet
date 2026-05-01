@@ -1647,16 +1647,24 @@ def assert_operator_context_common(payload):
     assert enforcement.get("deploymentScopedRoutesRequireAllowlist") is True, payload
     assert enforcement.get("collectionReadsFiltered") is True, payload
     access_verdicts = payload.get("accessVerdicts") or {}
+    identity_headers = ["X-Tenet-Authenticated-Id", "X-User-ID"]
+    role_headers = ["X-Tenet-Authenticated-Roles"]
+    allowlist_headers = ["X-Tenet-Authorized-Deployments"]
     assert access_verdicts.get("operatorRead", {}).get("requiresAuthenticatedIdentity") is True, payload
     assert access_verdicts.get("operatorRead", {}).get("requiresViewerCapableRole") is True, payload
     assert access_verdicts.get("operatorRead", {}).get("exampleRoutes") == ["GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/audit-logs"], payload
+    assert access_verdicts.get("operatorRead", {}).get("requiredTrustedHeaders") == identity_headers + role_headers, payload
     assert access_verdicts.get("operatorWrite", {}).get("requiresOperatorRole") is True, payload
     assert access_verdicts.get("operatorWrite", {}).get("exampleRoutes") == ["POST /v1/plans/deployments/{deploymentName}", "POST /v1/applies/plans/{planId}", "POST /v1/applies/{applyId}/transitions"], payload
+    assert access_verdicts.get("operatorWrite", {}).get("requiredTrustedHeaders") == identity_headers + role_headers, payload
     assert access_verdicts.get("deploymentScopedRead", {}).get("requiresExactDeploymentAllowlistMatch") is True, payload
     assert access_verdicts.get("deploymentScopedRead", {}).get("exampleRoutes") == ["GET /v1/overview/deployments/{deploymentName}", "GET /v1/status/deployments/{deploymentName}", "GET /v1/audit-logs?deployment={deploymentName}"], payload
+    assert access_verdicts.get("deploymentScopedRead", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers, payload
     assert access_verdicts.get("deploymentScopedWrite", {}).get("requiresExactDeploymentAllowlistMatch") is True, payload
+    assert access_verdicts.get("deploymentScopedWrite", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers, payload
     assert access_verdicts.get("collectionRead", {}).get("filtersCollectionsByDeploymentAccess") is True, payload
     assert access_verdicts.get("collectionRead", {}).get("exampleRoutes") == ["GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/overview/accounts", "GET /v1/audit-logs"], payload
+    assert access_verdicts.get("collectionRead", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers, payload
 
 assert_operator_context_common(operator_context_trusted)
 assert operator_context_trusted["identity"]["authenticated"] is True, operator_context_trusted
