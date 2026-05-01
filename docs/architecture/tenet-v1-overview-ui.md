@@ -214,4 +214,3 @@ Future iterations should continue improving:
 - troubleshooting usefulness
 - quality of empty/unavailable/error states
 - overall usability under real deployment pressure
-<!-- compatibility fragments for current string-contract tests: `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` `TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true` -->

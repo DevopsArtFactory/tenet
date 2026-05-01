@@ -993,6 +993,14 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 			t.Fatalf("expected overview UI doc front-door auth contract to include %q", fragment)
 		}
 	}
+	for _, forbidden := range []string{
+		"compatibility fragments for current string-contract tests",
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` `TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true`",
+	} {
+		if strings.Contains(overviewUIDoc, forbidden) {
+			t.Fatalf("expected overview UI doc to keep operator-facing prose instead of compatibility-only fragment %q", forbidden)
+		}
+	}
 }
 
 func TestResourceDrillDownFrontDoorAuthOperatorContract(t *testing.T) {
