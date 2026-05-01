@@ -830,12 +830,20 @@
         const hiddenCount = routes.length - 2;
         return ` Examples: ${visibleRoutes}${hiddenCount > 0 ? `; +${hiddenCount} more` : ''}`;
       };
+      const operatorContextAccessVerdictTrustedHeadersLabel = (verdict) => {
+        const headers = Array.isArray(verdict?.requiredTrustedHeaders) ? verdict.requiredTrustedHeaders.filter(Boolean) : [];
+        if (!headers.length) return '';
+        const visibleHeaders = headers.slice(0, 3).join(', ');
+        const hiddenCount = headers.length - 3;
+        return ` Headers: ${visibleHeaders}${hiddenCount > 0 ? `; +${hiddenCount} more` : ''}`;
+      };
       const operatorContextAccessVerdictLabel = (label, verdict) => {
         if (!verdict || typeof verdict !== 'object') return null;
         const state = verdict.allowed ? 'allowed' : 'blocked';
         const reason = verdict.reason ? `: ${verdict.reason}` : '';
+        const headers = operatorContextAccessVerdictTrustedHeadersLabel(verdict);
         const examples = operatorContextAccessVerdictExampleRoutesLabel(verdict);
-        return `${label} ${state}${reason}${examples}`;
+        return `${label} ${state}${reason}${headers}${examples}`;
       };
       const operatorContextAccessVerdictClass = (verdict) => {
         if (!verdict || typeof verdict !== 'object') return '';

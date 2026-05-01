@@ -958,7 +958,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"Guarded-read troubleshooting from the embedded dashboard follows the same diagnostic order as the API docs",
 		"start with the `Operator context` banner",
 		"inspect `identity.authenticated` for `401`, inspect `roles.canRead` before allowlist debugging for viewer-role `403`",
-		"then inspect `accessVerdicts` and their bounded route examples to choose the exact guarded route class to debug",
+		"then inspect `accessVerdicts`, their bounded route examples, and their `Headers:` prerequisites to choose the exact guarded route class and forwarded headers to debug",
 		"it does not authorize routes client-side",
 	} {
 		if !strings.Contains(overviewFeatureDoc, fragment) {
