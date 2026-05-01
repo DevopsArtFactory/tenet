@@ -858,6 +858,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"Tenet will not start a built-in GitHub OAuth login or Tenet-managed browser session from the page",
 		"The same shared operator-read guidance path on `/`, the bookmarkable application drill-down, the bookmarkable account drill-down, the resource/drift/audit shells, and the bookmarkable `/?page=plan` workspace; unauthenticated `401` copy explicitly points operators back through the trusted front door",
 		"Inspect the `accessVerdicts` chips and their bounded route examples",
+		"Deployment-scoped read/write chips also show `Scope grants: exact deployments or matching project/environment scopes`",
 		"Debug the specific guarded route class by checking the banner's full `Required trusted headers:` fragment",
 		"If an operator write returns `403 Forbidden`, confirm `roles.canWrite=true` (`operator` or `admin`) plus either exact deployment membership or matching project/environment catalog placement",
 		"deployment-scoped plan/apply writes require both `X-Tenet-Authorized-Projects` and `X-Tenet-Authorized-Environments` to match catalog placement",
@@ -923,14 +924,14 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"trusted `X-Tenet-Authenticated-Roles: viewer` deployment detail/status/events and immutable plan/apply reads succeed through matching `X-Tenet-Authorized-Projects` plus `X-Tenet-Authorized-Environments` scopes even when `X-Tenet-Authorized-Deployments` does not name the deployment",
 		"Guarded-route troubleshooting workflow",
 		"Start in the embedded `Operator context` banner",
-		"plus its bounded route examples and the embedded banner's full `Required trusted headers:` label",
+		"plus its bounded route examples, any deployment-scoped `Scope grants: exact deployments or matching project/environment scopes` cue, and the embedded banner's full `Required trusted headers:` label",
 		"`identity.authenticated`: `false` explains `401 Unauthorized` on guarded reads or writes",
 		"Tenet does not start a built-in GitHub OAuth login or browser session from the page",
 		"`deploymentAccess.summary`: `matchedCount=0`, `emptyReason`, or non-empty `unmatchedNames` explains `200 OK` empty collections",
 		"`projectEnvironmentExamples` shows which visible project/environment groups",
 		"additive `requiredTrustedHeaders` (`X-Tenet-Authenticated-Id` or `X-User-ID`, `X-Tenet-Authenticated-Roles`, and the exact `X-Tenet-Authorized-Deployments` allowlist and/or matching `X-Tenet-Authorized-Projects` plus `X-Tenet-Authorized-Environments` scopes depending on the route class)",
 		"`acceptsProjectEnvironmentScopes` markers for deployment-scoped read/write classes that can be satisfied by matched project/environment placement",
-		"`accessVerdicts`: use the blocked or likely-empty verdict reason plus its bounded route examples and the embedded banner's full `Required trusted headers:` label",
+		"`accessVerdicts`: use the blocked or likely-empty verdict reason plus its bounded route examples, any deployment-scoped `Scope grants: exact deployments or matching project/environment scopes` cue, and the embedded banner's full `Required trusted headers:` label",
 		"Project/environment-scoped reads and deployment-scoped plan/apply writes require both forwarded scope headers and a catalog placement match",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
@@ -1023,7 +1024,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"Guarded-read troubleshooting from the embedded dashboard follows the same diagnostic order as the API docs",
 		"start with the `Operator context` banner",
 		"inspect `identity.authenticated` for `401`, inspect `roles.canRead` before allowlist debugging for viewer-role `403`",
-		"then inspect `accessVerdicts`, their bounded route examples, and the `Required trusted headers:` fragment to choose the exact guarded route class",
+		"then inspect `accessVerdicts`, their bounded route examples, any deployment-scoped `Scope grants: exact deployments or matching project/environment scopes` cue, and the `Required trusted headers:` fragment to choose the exact guarded route class",
 		"it does not authorize routes client-side",
 	} {
 		if !strings.Contains(overviewFeatureDoc, fragment) {
@@ -1053,6 +1054,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"returning `200 OK` with `[]` when no grant matches anything",
 		"`GET /v1/audit-logs` now follows that same collection contract under read enforcement",
 		"`{\"entries\":[]}`",
+		"deployment-scoped `acceptsProjectEnvironmentScopes` evidence in each verdict chip",
 	} {
 		if !strings.Contains(overviewUIDoc, fragment) {
 			t.Fatalf("expected overview UI doc front-door auth contract to include %q", fragment)

@@ -960,8 +960,12 @@ assert "const headers = Array.isArray(verdict?.requiredTrustedHeaders) ? verdict
 assert "return ` Required trusted headers: ${headers.join('; ')}`;" in ui, ui
 assert 'requiredTrustedHeaders' in ui, ui
 assert 'Required trusted headers:' in ui, ui
+assert "const operatorContextAccessVerdictScopeGrantLabel = (verdict) => verdict?.acceptsProjectEnvironmentScopes" in ui, ui
+assert 'Scope grants: exact deployments or matching project/environment scopes' in ui, ui
+assert 'acceptsProjectEnvironmentScopes' in ui, ui
 assert "const headers = operatorContextAccessVerdictRequiredHeadersLabel(verdict);" in ui, ui
-assert 'return `${label} ${state}${reason}${examples}${headers}`;' in ui, ui
+assert "const scopeGrants = operatorContextAccessVerdictScopeGrantLabel(verdict);" in ui, ui
+assert 'return `${label} ${state}${reason}${examples}${headers}${scopeGrants}`;' in ui, ui
 assert "const operatorContextAccessVerdictEntries = (context) => {" in ui, ui
 assert 'Operator reads' in ui, ui
 assert 'Collection reads' in ui, ui
