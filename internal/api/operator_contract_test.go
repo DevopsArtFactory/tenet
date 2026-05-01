@@ -700,7 +700,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		`-H "X-Tenet-Authorized-Projects: archived-payments" \`,
 		`assert 'Authenticated operator required' in ui, ui`,
 		`assert 'const operatorWriteAuthRequiredMessage = (route, action) => ` + "`Tenet rejected ${route} because authenticated identity is required on operator write routes. Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page; retry ${action} for this same bookmarkable workspace through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet sends the write.`;" + `' in ui, ui`,
-		`assert 'const operatorWriteForbiddenMessage = (route, action) => ` + "`Tenet rejected ${route} after recognizing the caller\\x27s identity, but this operator is not authorized to ${action.toLowerCase()} for that deployment through this route.`;" + `' in ui, ui`,
+		`assert 'const operatorWriteForbiddenMessage = (route, action) => ` + "`Tenet rejected ${route} after recognizing the caller\\x27s identity, but this operator is not authorized to ${action.toLowerCase()} for that deployment through this route. Ask a front-door/RBAC admin to add this deployment to X-Tenet-Authorized-Deployments for the trusted session, then retry ${action}. Project/environment scopes may make the deployment visible for guarded reads, but immutable writes still require an exact deployment grant until project/environment write scopes land.`;" + `' in ui, ui`,
 		`assert 'Operator access denied' in ui, ui`,
 		`assert actor['id'] == 'front-door-123', payload`,
 		`assert entry['actor']['email'] == 'frontdoor@example.com', entry`,
