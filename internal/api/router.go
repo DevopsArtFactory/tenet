@@ -199,7 +199,11 @@ func filterAuthorizedApplicationOverviews(applications []catalog.ApplicationOver
 	return filtered
 }
 
-const operatorContextUnmatchedDeploymentLimit = 25
+const (
+	operatorContextUnmatchedDeploymentLimit                 = 25
+	operatorContextProjectEnvironmentExampleLimit           = 10
+	operatorContextProjectEnvironmentExampleDeploymentLimit = 5
+)
 
 var (
 	operatorContextOperatorReadExampleRoutes = []string{
@@ -288,14 +292,25 @@ type operatorContextDeploymentAccess struct {
 }
 
 type operatorContextAccessSummary struct {
-	Available         bool     `json:"available"`
-	UnavailableReason string   `json:"unavailableReason,omitempty"`
-	ForwardedCount    int      `json:"forwardedCount"`
-	MatchedCount      int      `json:"matchedCount"`
-	UnmatchedNames    []string `json:"unmatchedNames,omitempty"`
-	AccountCount      int      `json:"accountCount,omitempty"`
-	ProjectCount      int      `json:"projectCount,omitempty"`
-	EnvironmentCount  int      `json:"environmentCount,omitempty"`
+	Available                  bool                                       `json:"available"`
+	UnavailableReason          string                                     `json:"unavailableReason,omitempty"`
+	EmptyReason                string                                     `json:"emptyReason,omitempty"`
+	ForwardedCount             int                                        `json:"forwardedCount"`
+	MatchedCount               int                                        `json:"matchedCount"`
+	UnmatchedNames             []string                                   `json:"unmatchedNames,omitempty"`
+	AccountCount               int                                        `json:"accountCount,omitempty"`
+	ProjectCount               int                                        `json:"projectCount,omitempty"`
+	EnvironmentCount           int                                        `json:"environmentCount,omitempty"`
+	ProjectEnvironmentExamples []operatorContextProjectEnvironmentExample `json:"projectEnvironmentExamples,omitempty"`
+}
+
+type operatorContextProjectEnvironmentExample struct {
+	AppRef             string   `json:"appRef"`
+	EnvironmentRef     string   `json:"environmentRef"`
+	Region             string   `json:"region,omitempty"`
+	AWSAccountID       string   `json:"awsAccountId,omitempty"`
+	DeploymentCount    int      `json:"deploymentCount"`
+	ExampleDeployments []string `json:"exampleDeployments,omitempty"`
 }
 
 type operatorContextAccessVerdicts struct {
@@ -609,7 +624,67 @@ func buildOperatorContextAccessSummary(ctx context.Context, options Options, dep
 	summary.AccountCount = len(accounts)
 	summary.ProjectCount = len(projects)
 	summary.EnvironmentCount = len(environments)
+	summary.ProjectEnvironmentExamples = buildOperatorContextProjectEnvironmentExamples(matched)
+	if len(matched) == 0 {
+		summary.EmptyReason = "no forwarded deployment names match catalog placements"
+	}
 	return summary
+}
+
+func buildOperatorContextProjectEnvironmentExamples(matched map[string]catalog.PlacementView) []operatorContextProjectEnvironmentExample {
+	type groupKey struct {
+		appRef         string
+		environmentRef string
+		region         string
+		awsAccountID   string
+	}
+	groups := make(map[groupKey][]string)
+	for deploymentName, placement := range matched {
+		key := groupKey{
+			appRef:         placement.AppRef,
+			environmentRef: placement.EnvironmentRef,
+			region:         placement.Region,
+			awsAccountID:   placement.AWSAccountID,
+		}
+		groups[key] = append(groups[key], deploymentName)
+	}
+	keys := make([]groupKey, 0, len(groups))
+	for key := range groups {
+		keys = append(keys, key)
+		sort.Strings(groups[key])
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].appRef != keys[j].appRef {
+			return keys[i].appRef < keys[j].appRef
+		}
+		if keys[i].environmentRef != keys[j].environmentRef {
+			return keys[i].environmentRef < keys[j].environmentRef
+		}
+		if keys[i].region != keys[j].region {
+			return keys[i].region < keys[j].region
+		}
+		return keys[i].awsAccountID < keys[j].awsAccountID
+	})
+	if len(keys) > operatorContextProjectEnvironmentExampleLimit {
+		keys = keys[:operatorContextProjectEnvironmentExampleLimit]
+	}
+	examples := make([]operatorContextProjectEnvironmentExample, 0, len(keys))
+	for _, key := range keys {
+		deployments := groups[key]
+		exampleDeployments := deployments
+		if len(exampleDeployments) > operatorContextProjectEnvironmentExampleDeploymentLimit {
+			exampleDeployments = exampleDeployments[:operatorContextProjectEnvironmentExampleDeploymentLimit]
+		}
+		examples = append(examples, operatorContextProjectEnvironmentExample{
+			AppRef:             key.appRef,
+			EnvironmentRef:     key.environmentRef,
+			Region:             key.region,
+			AWSAccountID:       key.awsAccountID,
+			DeploymentCount:    len(deployments),
+			ExampleDeployments: append([]string(nil), exampleDeployments...),
+		})
+	}
+	return examples
 }
 
 type deploymentOverviewCounts struct {

@@ -2016,6 +2016,10 @@ assert trusted_summary.get('unmatchedNames', []) == [], operator_context_trusted
 assert trusted_summary['accountCount'] >= 1, operator_context_trusted
 assert trusted_summary['projectCount'] >= 1, operator_context_trusted
 assert trusted_summary['environmentCount'] >= 1, operator_context_trusted
+assert trusted_summary.get('emptyReason') is None, operator_context_trusted
+assert trusted_summary['projectEnvironmentExamples'], operator_context_trusted
+trusted_project_envs = {(row['appRef'], row['environmentRef']) for row in trusted_summary['projectEnvironmentExamples']}
+assert ('payments-api', 'prod-apne2') in trusted_project_envs or ('worker', 'prod-apne2') in trusted_project_envs, operator_context_trusted
 trusted_verdicts = operator_context_trusted['accessVerdicts']
 assert trusted_verdicts['operatorRead']['allowed'] is True, operator_context_trusted
 assert trusted_verdicts['operatorWrite']['allowed'] is True, operator_context_trusted
@@ -2033,6 +2037,8 @@ assert unmatched_summary['unmatchedNames'] == ['stale-api'], operator_context_un
 assert unmatched_summary['accountCount'] >= 1, operator_context_unmatched
 assert unmatched_summary['projectCount'] >= 1, operator_context_unmatched
 assert unmatched_summary['environmentCount'] >= 1, operator_context_unmatched
+assert unmatched_summary.get('emptyReason') is None, operator_context_unmatched
+assert unmatched_summary['projectEnvironmentExamples'], operator_context_unmatched
 assert_operator_context_common(operator_context_alias)
 assert operator_context_alias['identity']['authenticated'] is True, operator_context_alias
 assert operator_context_alias['identity']['id'] == 'alias-456', operator_context_alias
