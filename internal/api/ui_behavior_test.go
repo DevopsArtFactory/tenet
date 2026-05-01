@@ -5090,6 +5090,9 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!liveWeightedListenerRuleText.includes('Listener rule conditions')) throw new Error('expected live listener-rule conditions section');
   if (!liveWeightedListenerRuleText.includes('path-pattern')) throw new Error('expected live listener-rule condition field');
   if (!liveWeightedListenerRuleText.includes('Values · /api/*, <script>still text</script>')) throw new Error('expected live listener-rule condition values to render as text');
+  if (liveWeightedListenerRuleText.includes('No listener-rule conditions are currently reported for this rule.')) throw new Error('expected a single live listener-rule condition to render instead of the empty state');
+  const liveWeightedListenerRuleConditionItems = collectNodes(liveWeightedListenerRuleRun.document.getElementById('accounts'), (node) => node.tagName === 'LI' && collectText(node).join(' | ').includes('path-pattern'));
+  if (liveWeightedListenerRuleConditionItems.length !== 1) throw new Error('expected exactly one live listener-rule condition row, got ' + liveWeightedListenerRuleConditionItems.length);
   if (!liveWeightedListenerRuleText.includes('Listener rule actions')) throw new Error('expected live listener-rule actions section');
   if (!liveWeightedListenerRuleText.includes('forward')) throw new Error('expected live listener-rule action type');
   if (!liveWeightedListenerRuleText.includes('Order · 1')) throw new Error('expected live listener-rule action order');
