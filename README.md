@@ -341,8 +341,8 @@ The page is backed directly by `GET /v1/audit-logs` and currently focuses on:
 - a bookmarkable limit control in the audit toolbar that updates the fetch route and URL in place while preserving deployment and action filters
 - an explicit in-place `Refresh audit log` control that re-fetches only `GET /v1/audit-logs`, disables only while that audit fetch is active, and keeps the current bookmarkable `/?page=audit...` URL/query state stable
 - an explicit in-page `Clear audit filters` / `Clear audit controls` control that appears when deployment/action filters or a limit cap are active and resets those audit controls back to the default unscoped `/?page=audit` route while preserving bookmarkable `q` / `sync` / `account` state
-- active filter copy such as `Audit filters: action apply.requested · Limit cap: latest 2` when you reopen `/?page=audit&action=apply.requested&limit=2`
-- deployment-scoped filter copy such as `Audit filters: deployment payments-api-prod · action apply.requested · Limit cap: latest 2` when you reopen `/?page=audit&deployment=payments-api-prod&action=apply.requested&limit=2`
+- active filter copy such as `Audit filters: action Apply requested (apply.requested) · Limit cap: latest 2` when you reopen `/?page=audit&action=apply.requested&limit=2`
+- deployment-scoped filter copy such as `Audit filters: deployment payments-api-prod · action Apply requested (apply.requested) · Limit cap: latest 2` when you reopen `/?page=audit&deployment=payments-api-prod&action=apply.requested&limit=2`
 - deployment / app / environment context
 - deployment-scoped chrome/body copy plus a deployment-specific empty state when `deployment={deploymentName}` is present and no persisted audit entries match
 - deployment-scoped quick navigation that keeps `Applications overview`, `Back to application`, the current non-click `Audit log` destination, sibling `Drift view` / `Plan/apply` workspace links, and a hash-aware `Current section` / `On this page` pair for `Deployment context` and `Audit timeline` fragments such as `/?page=audit&deployment=payments-api-prod&limit=2#audit-timeline`

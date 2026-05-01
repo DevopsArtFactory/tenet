@@ -9327,8 +9327,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!accountsText.includes('Audit timeline')) throw new Error('expected audit page body title');
   if (!accountsText.includes('Active deployment context')) throw new Error('expected deployment context callout');
   if (!accountsText.includes('payments-api-prod')) throw new Error('expected deployment context value');
-  if (!accountsText.includes('apply.requested')) throw new Error('expected newest audit entry text');
-  if (!accountsText.includes('plan.created')) throw new Error('expected older audit entry text');
+  if (!accountsText.includes('Apply requested (apply.requested)')) throw new Error('expected newest audit entry label');
+  if (!accountsText.includes('Plan preview created (plan.created)')) throw new Error('expected older audit entry label');
   if (!accountsText.includes('2 entries')) throw new Error('expected audit entry count copy');
   if (!accountsText.includes('deployment payments-api-prod')) throw new Error('expected audit deployment copy');
   if (!accountsText.includes('Limit cap: latest 2')) throw new Error('expected audit limit cap copy');
@@ -9347,7 +9347,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const rows = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'DIV' && node.className === 'row');
   if (rows.length < 2) throw new Error('expected audit page rows');
   const rowTexts = rows.map((node) => collectText(node).join(' | '));
-  if (!rowTexts[0].includes('apply.requested')) throw new Error('expected newest audit entry first, got ' + rowTexts.join(' || '));
+  if (!rowTexts[0].includes('Apply requested (apply.requested)')) throw new Error('expected newest audit entry first, got ' + rowTexts.join(' || '));
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
   const breadcrumbChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className.includes('breadcrumb-current'));
   const applicationsBreadcrumb = links.find((node) => node.href === '/console?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.textContent === 'Applications' && node.target === '_self');
@@ -9413,8 +9413,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   await settle();
   const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
-  if (!toolbarText.includes('Audit filters: deployment payments-api-prod · action apply.requested · Limit cap: latest 1')) throw new Error('expected active audit filters in toolbar');
-  if (!accountsText.includes('No audit entries match the current filters (deployment payments-api-prod · action apply.requested; Limit cap: latest 1). Clear audit controls to return to the full audit timeline.')) throw new Error('expected filtered audit empty-state recovery copy, got ' + accountsText);
+  if (!toolbarText.includes('Audit filters: deployment payments-api-prod · action Apply requested (apply.requested) · Limit cap: latest 1')) throw new Error('expected active audit filters in toolbar');
+  if (!accountsText.includes('No audit entries match the current filters (deployment payments-api-prod · action Apply requested (apply.requested); Limit cap: latest 1). Clear audit controls to return to the full audit timeline.')) throw new Error('expected filtered audit empty-state recovery copy, got ' + accountsText);
   if (accountsText.includes('No audit activity has been persisted yet for deployment payments-api-prod.')) throw new Error('expected filtered empty state to avoid unfiltered no-activity copy');
   const clearButton = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear audit filters');
   if (!clearButton) throw new Error('expected clear audit filters button');
@@ -9650,11 +9650,11 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   await settle();
   if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/audit-logs?deployment=payments-api-prod&action=apply.requested&limit=2') throw new Error('expected initial deployment and action filtered audit fetch');
   const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
-  if (!toolbarText.includes('Audit filters: deployment payments-api-prod · action apply.requested · Limit cap: latest 2')) throw new Error('expected deployment, action, and limit filters in toolbar');
+  if (!toolbarText.includes('Audit filters: deployment payments-api-prod · action Apply requested (apply.requested) · Limit cap: latest 2')) throw new Error('expected deployment, action, and limit filters in toolbar');
   let clearFiltersButton = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear audit filters');
   if (!clearFiltersButton || clearFiltersButton.disabled) throw new Error('expected enabled clear audit filters recovery action while filters are active');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
-  if (!accountsText.includes('1 entry · newest record first · deployment payments-api-prod · action apply.requested · Limit cap: latest 2')) throw new Error('expected active deployment, action, and limit filter copy in audit timeline');
+  if (!accountsText.includes('1 entry · newest record first · deployment payments-api-prod · action Apply requested (apply.requested) · Limit cap: latest 2')) throw new Error('expected active deployment, action, and limit filter copy in audit timeline');
   const auditQuickNavLink = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A').find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&action=apply.requested&limit=2' && node.textContent === 'Audit log');
   const auditQuickNavChip = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip').find((node) => node.textContent === 'Audit log');
   if (auditQuickNavLink) throw new Error('expected audit quick navigation to render active workspace as a chip while preserving URL state');
@@ -9694,7 +9694,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (clearedAccountsText.includes('Active deployment context')) throw new Error('did not expect deployment-scoped callout after clearing audit filters');
   if (clearedAccountsText.includes('Quick navigation')) throw new Error('did not expect deployment quick navigation after clearing audit filters');
   if (clearedAccountsText.includes('deployment payments-api-prod')) throw new Error('did not expect deployment filter copy after clearing audit filters');
-  if (clearedAccountsText.includes('action plan.created')) throw new Error('did not expect action filter copy after clearing audit filters');
+  if (clearedAccountsText.includes('action Plan preview created (plan.created)')) throw new Error('did not expect action filter copy after clearing audit filters');
   if (clearedAccountsText.includes('Limit cap: latest 5')) throw new Error('did not expect limit cap copy after clearing audit filters');
 })();
 `
