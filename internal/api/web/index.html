@@ -782,14 +782,15 @@
         }
         const matched = Number.isFinite(summary.matchedCount) ? summary.matchedCount : 0;
         const unmatchedNames = Array.isArray(summary.unmatchedNames) ? summary.unmatchedNames.filter(Boolean) : [];
-        const unmatchedCount = Math.max(0, forwarded - matched);
+        const unmatchedCount = Number.isFinite(summary.unmatchedCount) ? summary.unmatchedCount : Math.max(0, forwarded - matched);
+        const unmatchedTruncated = Boolean(summary.unmatchedNamesTruncated);
         const placementCounts = [];
         if (Number.isFinite(summary.accountCount)) placementCounts.push(`${summary.accountCount} ${summary.accountCount === 1 ? 'account' : 'accounts'}`);
         if (Number.isFinite(summary.projectCount)) placementCounts.push(`${summary.projectCount} ${summary.projectCount === 1 ? 'project' : 'projects'}`);
         if (Number.isFinite(summary.environmentCount)) placementCounts.push(`${summary.environmentCount} ${summary.environmentCount === 1 ? 'environment' : 'environments'}`);
         const placementText = placementCounts.length ? ` across ${placementCounts.join(', ')}` : '';
         if (unmatchedCount > 0) {
-          const examples = unmatchedNames.length ? `: ${unmatchedNames.slice(0, 3).join(', ')}${unmatchedNames.length > 3 ? ', …' : ''}` : '';
+          const examples = unmatchedNames.length ? `: ${unmatchedNames.slice(0, 3).join(', ')}${unmatchedTruncated || unmatchedNames.length > 3 ? ', …' : ''}` : '';
           return `Deployment access warning: ${matched} of ${forwarded} forwarded match catalog${placementText}; ${unmatchedCount} unmatched front-door names${examples}. Check the front-door allowlist.`;
         }
         return `Deployment access: all ${forwarded} forwarded deployments match catalog${placementText}`;
@@ -800,7 +801,8 @@
         if (!access.enforced || !access.forwarded || !summary || summary.available === false) return '';
         const forwarded = Number.isFinite(summary.forwardedCount) ? summary.forwardedCount : (Array.isArray(access.names) ? access.names.length : 0);
         const matched = Number.isFinite(summary.matchedCount) ? summary.matchedCount : 0;
-        return Math.max(0, forwarded - matched) > 0 ? 'operator-context-warning' : '';
+        const unmatchedCount = Number.isFinite(summary.unmatchedCount) ? summary.unmatchedCount : Math.max(0, forwarded - matched);
+        return unmatchedCount > 0 ? 'operator-context-warning' : '';
       };
       const operatorContextProjectEnvironmentExamplesLabel = (context) => {
         const access = context?.deploymentAccess || {};

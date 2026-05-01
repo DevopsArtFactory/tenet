@@ -792,7 +792,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`operator` / `admin`",
 		"`GET /v1/operator/context` is a read-only diagnostic endpoint",
 		"reports the normalized trusted identity, forwarded roles with read/write capability booleans, forwarded deployment allowlist, and which auth/RBAC enforcement toggles are active",
-		"When deployment-read authorization is enforced and a catalog placement provider is available, `deploymentAccess.summary` also reports forwarded, matched/visible, and unmatched deployment-name counts",
+		"When deployment-read authorization is enforced and a catalog placement provider is available, `deploymentAccess.summary` also reports forwarded, matched/visible, and total unmatched deployment-name counts",
 		"deterministic `projectEnvironmentExamples`",
 		"`emptyReason`; if catalog placement data cannot be loaded, the summary stays present with `available=false` and `unavailableReason`",
 		"plus `requiredTrustedHeaders` such as `X-Tenet-Authenticated-Id`, `X-User-ID`, `X-Tenet-Authenticated-Roles`, and `X-Tenet-Authorized-Deployments`",
