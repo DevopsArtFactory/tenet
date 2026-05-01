@@ -162,18 +162,29 @@ func requireDeploymentReadAccess(w http.ResponseWriter, r *http.Request, enabled
 	if !enabled {
 		return true
 	}
-	if requestactor.AuthorizedDeploymentsFromContext(r.Context()).Allows(deploymentName) {
+	if requestHasDeploymentAccess(r.Context(), Options{}, deploymentName, requestactor.AuthorizedDeploymentsFromContext(r.Context()), requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context()), nil) {
 		return true
 	}
 	respondForbiddenError(w, "forbidden: operator does not have access to this deployment")
 	return false
 }
 
-func requireDeploymentReadAuthorization(w http.ResponseWriter, r *http.Request, identityEnabled bool, roleEnabled bool, deploymentName string) bool {
-	if !requireDeploymentReadIdentity(w, r, identityEnabled, roleEnabled) {
+func requireDeploymentReadAccessWithOptions(w http.ResponseWriter, r *http.Request, options Options, deploymentName string) bool {
+	if !options.RequireDeploymentReadAuthorization {
+		return true
+	}
+	if requestHasDeploymentAccess(r.Context(), options, deploymentName, requestactor.AuthorizedDeploymentsFromContext(r.Context()), requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context()), nil) {
+		return true
+	}
+	respondForbiddenError(w, "forbidden: operator does not have access to this deployment")
+	return false
+}
+
+func requireDeploymentReadAuthorization(w http.ResponseWriter, r *http.Request, options Options, deploymentName string) bool {
+	if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
 		return false
 	}
-	return requireDeploymentReadAccess(w, r, identityEnabled, deploymentName)
+	return requireDeploymentReadAccessWithOptions(w, r, options, deploymentName)
 }
 
 func requireDeploymentWriteAuthorization(w http.ResponseWriter, r *http.Request, enabled bool, deploymentName string) bool {
@@ -186,13 +197,79 @@ func requireDeploymentWriteAuthorization(w http.ResponseWriter, r *http.Request,
 	return requireDeploymentReadAccess(w, r, enabled, deploymentName)
 }
 
-func filterAuthorizedApplicationOverviews(applications []catalog.ApplicationOverview, authorized requestactor.AuthorizedDeployments, enabled bool) []catalog.ApplicationOverview {
+func requestHasDeploymentAccess(ctx context.Context, options Options, deploymentName string, deployments requestactor.AuthorizedDeployments, scopes requestactor.AuthorizedProjectEnvironmentScopes, placements []catalog.PlacementView) bool {
+	if deployments.Allows(deploymentName) {
+		return true
+	}
+	if len(scopes.Projects) == 0 || len(scopes.Environments) == 0 {
+		return false
+	}
+	if placements == nil && options.CatalogPlacements != nil {
+		var err error
+		placements, err = options.CatalogPlacements(ctx)
+		if err != nil {
+			return false
+		}
+	}
+	if len(placements) == 0 {
+		return false
+	}
+	projects := stringSet(scopes.Projects)
+	environments := stringSet(scopes.Environments)
+	for _, placement := range placements {
+		if placement.DeploymentName == deploymentName && placement.AppRef != "" && placement.EnvironmentRef != "" {
+			_, projectOK := projects[placement.AppRef]
+			_, environmentOK := environments[placement.EnvironmentRef]
+			return projectOK && environmentOK
+		}
+	}
+	return false
+}
+
+func authorizedDeploymentNameSet(ctx context.Context, options Options, deployments requestactor.AuthorizedDeployments, scopes requestactor.AuthorizedProjectEnvironmentScopes) map[string]struct{} {
+	visible := make(map[string]struct{}, len(deployments.Names))
+	for _, name := range deployments.Names {
+		visible[name] = struct{}{}
+	}
+	if len(scopes.Projects) == 0 || len(scopes.Environments) == 0 || options.CatalogPlacements == nil {
+		return visible
+	}
+	placements, err := options.CatalogPlacements(ctx)
+	if err != nil {
+		return visible
+	}
+	projects := stringSet(scopes.Projects)
+	environments := stringSet(scopes.Environments)
+	for _, placement := range placements {
+		if placement.DeploymentName == "" || placement.AppRef == "" || placement.EnvironmentRef == "" {
+			continue
+		}
+		if _, ok := projects[placement.AppRef]; !ok {
+			continue
+		}
+		if _, ok := environments[placement.EnvironmentRef]; !ok {
+			continue
+		}
+		visible[placement.DeploymentName] = struct{}{}
+	}
+	return visible
+}
+
+func stringSet(values []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		set[value] = struct{}{}
+	}
+	return set
+}
+
+func filterAuthorizedApplicationOverviews(applications []catalog.ApplicationOverview, visible map[string]struct{}, enabled bool) []catalog.ApplicationOverview {
 	if !enabled {
 		return applications
 	}
 	filtered := make([]catalog.ApplicationOverview, 0, len(applications))
 	for _, application := range applications {
-		if authorized.Allows(application.Name) {
+		if _, ok := visible[application.Name]; ok {
 			filtered = append(filtered, application)
 		}
 	}
@@ -245,6 +322,10 @@ var (
 	operatorContextDeploymentAllowlistHeaders = []string{
 		"X-Tenet-Authorized-Deployments",
 	}
+	operatorContextProjectEnvironmentScopeHeaders = []string{
+		"X-Tenet-Authorized-Projects",
+		"X-Tenet-Authorized-Environments",
+	}
 )
 
 type operatorContextResponse struct {
@@ -288,7 +369,14 @@ type operatorContextDeploymentAccess struct {
 	Enforced  bool                          `json:"enforced"`
 	Forwarded bool                          `json:"forwarded"`
 	Names     []string                      `json:"names,omitempty"`
+	Scopes    operatorContextAccessScopes   `json:"scopes"`
 	Summary   *operatorContextAccessSummary `json:"summary,omitempty"`
+}
+
+type operatorContextAccessScopes struct {
+	Forwarded    bool     `json:"forwarded"`
+	Projects     []string `json:"projects,omitempty"`
+	Environments []string `json:"environments,omitempty"`
 }
 
 type operatorContextAccessSummary struct {
@@ -340,7 +428,8 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 	identity := requestactor.AuthenticatedIdentityFromContext(r.Context())
 	roles := requestactor.AuthenticatedRolesFromContext(r.Context())
 	deployments := requestactor.AuthorizedDeploymentsFromContext(r.Context())
-	summary := buildOperatorContextAccessSummary(r.Context(), options, deployments)
+	scopes := requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context())
+	summary := buildOperatorContextAccessSummary(r.Context(), options, deployments, scopes)
 	return operatorContextResponse{
 		TrustedHeaders: operatorContextTrustedHeaders{
 			Enabled:                             options.TrustAuthenticatedHeaders,
@@ -358,11 +447,16 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 		},
 		DeploymentAccess: operatorContextDeploymentAccess{
 			Enforced:  options.RequireDeploymentReadAuthorization,
-			Forwarded: len(deployments.Names) > 0,
+			Forwarded: len(deployments.Names) > 0 || len(scopes.Projects) > 0 || len(scopes.Environments) > 0,
 			Names:     deployments.Names,
-			Summary:   summary,
+			Scopes: operatorContextAccessScopes{
+				Forwarded:    len(scopes.Projects) > 0 || len(scopes.Environments) > 0,
+				Projects:     scopes.Projects,
+				Environments: scopes.Environments,
+			},
+			Summary: summary,
 		},
-		AccessVerdicts: buildOperatorContextAccessVerdicts(options, identity, roles, deployments, summary),
+		AccessVerdicts: buildOperatorContextAccessVerdicts(options, identity, roles, deployments, scopes, summary),
 	}
 }
 
@@ -405,15 +499,15 @@ func buildOperatorContextEnforcement(options Options) operatorContextEnforcement
 	return enforcement
 }
 
-func buildOperatorContextAccessVerdicts(options Options, identity requestactor.AuthenticatedIdentity, roles requestactor.AuthenticatedRoles, deployments requestactor.AuthorizedDeployments, summary *operatorContextAccessSummary) operatorContextAccessVerdicts {
+func buildOperatorContextAccessVerdicts(options Options, identity requestactor.AuthenticatedIdentity, roles requestactor.AuthenticatedRoles, deployments requestactor.AuthorizedDeployments, scopes requestactor.AuthorizedProjectEnvironmentScopes, summary *operatorContextAccessSummary) operatorContextAccessVerdicts {
 	operatorRead := operatorContextReadVerdict(options, identity, roles)
 	operatorWrite := operatorContextWriteVerdict(options, identity, roles)
 	return operatorContextAccessVerdicts{
 		OperatorRead:          operatorRead,
 		OperatorWrite:         operatorWrite,
-		DeploymentScopedRead:  operatorContextDeploymentScopedReadVerdict(options, identity, roles, deployments),
+		DeploymentScopedRead:  operatorContextDeploymentScopedReadVerdict(options, identity, roles, deployments, scopes),
 		DeploymentScopedWrite: operatorContextDeploymentScopedWriteVerdict(options, identity, roles, deployments, operatorWrite),
-		CollectionRead:        operatorContextCollectionReadVerdict(options, identity, roles, deployments, summary),
+		CollectionRead:        operatorContextCollectionReadVerdict(options, identity, roles, deployments, scopes, summary),
 	}
 }
 
@@ -480,12 +574,12 @@ func operatorContextWriteVerdict(options Options, identity requestactor.Authenti
 	return verdict
 }
 
-func operatorContextDeploymentScopedReadVerdict(options Options, identity requestactor.AuthenticatedIdentity, roles requestactor.AuthenticatedRoles, deployments requestactor.AuthorizedDeployments) operatorContextAccessVerdict {
+func operatorContextDeploymentScopedReadVerdict(options Options, identity requestactor.AuthenticatedIdentity, roles requestactor.AuthenticatedRoles, deployments requestactor.AuthorizedDeployments, scopes requestactor.AuthorizedProjectEnvironmentScopes) operatorContextAccessVerdict {
 	verdict := operatorContextReadVerdict(options, identity, roles)
 	verdict.ExampleRoutes = cloneOperatorContextExampleRoutes(operatorContextDeploymentScopedReadExampleRoutes)
 	verdict.RequiresExactDeploymentAllowlistMatch = options.RequireDeploymentReadAuthorization
 	if verdict.RequiresExactDeploymentAllowlistMatch {
-		verdict.RequiredTrustedHeaders = appendOperatorContextRequiredHeaders(verdict.RequiredTrustedHeaders, operatorContextDeploymentAllowlistHeaders)
+		verdict.RequiredTrustedHeaders = appendOperatorContextRequiredHeaders(verdict.RequiredTrustedHeaders, operatorContextDeploymentAllowlistHeaders, operatorContextProjectEnvironmentScopeHeaders)
 	}
 	if !options.RequireDeploymentReadAuthorization {
 		verdict.Allowed = true
@@ -495,12 +589,12 @@ func operatorContextDeploymentScopedReadVerdict(options Options, identity reques
 	if !verdict.Allowed {
 		return verdict
 	}
-	if len(deployments.Names) == 0 {
+	if len(deployments.Names) == 0 && len(scopes.Projects) == 0 && len(scopes.Environments) == 0 {
 		verdict.Allowed = false
-		verdict.Reason = "deployment-scoped reads will return 403 unless X-Tenet-Authorized-Deployments includes the exact deployment name"
+		verdict.Reason = "deployment-scoped reads will return 403 unless X-Tenet-Authorized-Deployments names the deployment or project/environment scopes match catalog placement"
 		return verdict
 	}
-	verdict.Reason = "deployment-scoped reads can pass only for deployments named in X-Tenet-Authorized-Deployments"
+	verdict.Reason = "deployment-scoped reads can pass for deployments named in X-Tenet-Authorized-Deployments or matched by X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments"
 	return verdict
 }
 
@@ -527,12 +621,12 @@ func operatorContextDeploymentScopedWriteVerdict(options Options, identity reque
 	return verdict
 }
 
-func operatorContextCollectionReadVerdict(options Options, identity requestactor.AuthenticatedIdentity, roles requestactor.AuthenticatedRoles, deployments requestactor.AuthorizedDeployments, summary *operatorContextAccessSummary) operatorContextAccessVerdict {
+func operatorContextCollectionReadVerdict(options Options, identity requestactor.AuthenticatedIdentity, roles requestactor.AuthenticatedRoles, deployments requestactor.AuthorizedDeployments, scopes requestactor.AuthorizedProjectEnvironmentScopes, summary *operatorContextAccessSummary) operatorContextAccessVerdict {
 	verdict := operatorContextReadVerdict(options, identity, roles)
 	verdict.ExampleRoutes = cloneOperatorContextExampleRoutes(operatorContextCollectionReadExampleRoutes)
 	verdict.FiltersCollectionsByDeploymentAccess = options.RequireDeploymentReadAuthorization
 	if verdict.FiltersCollectionsByDeploymentAccess {
-		verdict.RequiredTrustedHeaders = appendOperatorContextRequiredHeaders(verdict.RequiredTrustedHeaders, operatorContextDeploymentAllowlistHeaders)
+		verdict.RequiredTrustedHeaders = appendOperatorContextRequiredHeaders(verdict.RequiredTrustedHeaders, operatorContextDeploymentAllowlistHeaders, operatorContextProjectEnvironmentScopeHeaders)
 	}
 	if !options.RequireDeploymentReadAuthorization {
 		verdict.Allowed = true
@@ -542,15 +636,15 @@ func operatorContextCollectionReadVerdict(options Options, identity requestactor
 	if !verdict.Allowed {
 		return verdict
 	}
-	verdict.Reason = "collection reads are filtered to deployments named in X-Tenet-Authorized-Deployments"
-	if len(deployments.Names) == 0 {
+	verdict.Reason = "collection reads are filtered to the union of exact deployment grants and project/environment-scoped catalog matches"
+	if len(deployments.Names) == 0 && len(scopes.Projects) == 0 && len(scopes.Environments) == 0 {
 		verdict.EmptyCollectionLikely = true
-		verdict.Reason = "collection reads will be allowed but return empty collections until X-Tenet-Authorized-Deployments forwards at least one visible deployment"
+		verdict.Reason = "collection reads will be allowed but return empty collections until deployment or project/environment scopes forward at least one visible deployment"
 		return verdict
 	}
 	if summary != nil && summary.Available && summary.MatchedCount == 0 {
 		verdict.EmptyCollectionLikely = true
-		verdict.Reason = "collection reads will be allowed but likely empty because the forwarded deployment allowlist does not match catalog deployments"
+		verdict.Reason = "collection reads will be allowed but likely empty because the forwarded deployment grants or project/environment scopes do not match catalog deployments"
 	}
 	return verdict
 }
@@ -570,8 +664,8 @@ func appendOperatorContextRequiredHeaders(headers []string, additional ...[]stri
 	return headers
 }
 
-func buildOperatorContextAccessSummary(ctx context.Context, options Options, deployments requestactor.AuthorizedDeployments) *operatorContextAccessSummary {
-	if !options.RequireDeploymentReadAuthorization || len(deployments.Names) == 0 {
+func buildOperatorContextAccessSummary(ctx context.Context, options Options, deployments requestactor.AuthorizedDeployments, scopes requestactor.AuthorizedProjectEnvironmentScopes) *operatorContextAccessSummary {
+	if !options.RequireDeploymentReadAuthorization || (len(deployments.Names) == 0 && len(scopes.Projects) == 0 && len(scopes.Environments) == 0) {
 		return nil
 	}
 	summary := &operatorContextAccessSummary{ForwardedCount: len(deployments.Names)}
@@ -589,11 +683,25 @@ func buildOperatorContextAccessSummary(ctx context.Context, options Options, dep
 	for _, name := range deployments.Names {
 		forwarded[name] = struct{}{}
 	}
+	projectsScope := stringSet(scopes.Projects)
+	environmentsScope := stringSet(scopes.Environments)
+	hasProjectEnvironmentScope := len(projectsScope) > 0 && len(environmentsScope) > 0
 	matched := make(map[string]catalog.PlacementView)
 	for _, placement := range placements {
 		if _, ok := forwarded[placement.DeploymentName]; ok {
 			matched[placement.DeploymentName] = placement
+			continue
 		}
+		if !hasProjectEnvironmentScope || placement.DeploymentName == "" || placement.AppRef == "" || placement.EnvironmentRef == "" {
+			continue
+		}
+		if _, ok := projectsScope[placement.AppRef]; !ok {
+			continue
+		}
+		if _, ok := environmentsScope[placement.EnvironmentRef]; !ok {
+			continue
+		}
+		matched[placement.DeploymentName] = placement
 	}
 	unmatched := make([]string, 0, len(deployments.Names))
 	for _, name := range deployments.Names {
@@ -630,7 +738,7 @@ func buildOperatorContextAccessSummary(ctx context.Context, options Options, dep
 	summary.EnvironmentCount = len(environments)
 	summary.ProjectEnvironmentExamples = buildOperatorContextProjectEnvironmentExamples(matched)
 	if len(matched) == 0 {
-		summary.EmptyReason = "no forwarded deployment names match catalog placements"
+		summary.EmptyReason = "no forwarded deployment names or project/environment scopes match catalog placements"
 	}
 	return summary
 }
@@ -701,39 +809,39 @@ type deploymentOverviewCounts struct {
 	errorCount       int
 }
 
-func filterAuthorizedDeploymentOverviews(deployments []catalog.DeploymentOverview, authorized requestactor.AuthorizedDeployments, enabled bool) []catalog.DeploymentOverview {
+func filterAuthorizedDeploymentOverviews(deployments []catalog.DeploymentOverview, visible map[string]struct{}, enabled bool) []catalog.DeploymentOverview {
 	if !enabled {
 		return deployments
 	}
 	filtered := make([]catalog.DeploymentOverview, 0, len(deployments))
 	for _, deployment := range deployments {
-		if authorized.Allows(deployment.Name) {
+		if _, ok := visible[deployment.Name]; ok {
 			filtered = append(filtered, deployment)
 		}
 	}
 	return filtered
 }
 
-func filterAuthorizedStatusSnapshots(snapshots []statusstore.Snapshot, authorized requestactor.AuthorizedDeployments, enabled bool) []statusstore.Snapshot {
+func filterAuthorizedStatusSnapshots(snapshots []statusstore.Snapshot, visible map[string]struct{}, enabled bool) []statusstore.Snapshot {
 	if !enabled {
 		return snapshots
 	}
 	filtered := make([]statusstore.Snapshot, 0, len(snapshots))
 	for _, snapshot := range snapshots {
-		if authorized.Allows(snapshot.DeploymentName) {
+		if _, ok := visible[snapshot.DeploymentName]; ok {
 			filtered = append(filtered, snapshot)
 		}
 	}
 	return filtered
 }
 
-func filterAuthorizedAuditEntries(entries []auditlog.Entry, authorized requestactor.AuthorizedDeployments, enabled bool) []auditlog.Entry {
+func filterAuthorizedAuditEntries(entries []auditlog.Entry, visible map[string]struct{}, enabled bool) []auditlog.Entry {
 	if !enabled {
 		return entries
 	}
 	filtered := make([]auditlog.Entry, 0, len(entries))
 	for _, entry := range entries {
-		if authorized.Allows(entry.DeploymentName) {
+		if _, ok := visible[entry.DeploymentName]; ok {
 			filtered = append(filtered, entry)
 		}
 	}
@@ -769,13 +877,13 @@ func summarizeDeploymentOverviews(deployments []catalog.DeploymentOverview) depl
 	return counts
 }
 
-func filterAuthorizedAccountOverviews(accounts []catalog.AccountOverview, authorized requestactor.AuthorizedDeployments, enabled bool) []catalog.AccountOverview {
+func filterAuthorizedAccountOverviews(accounts []catalog.AccountOverview, visible map[string]struct{}, enabled bool) []catalog.AccountOverview {
 	if !enabled {
 		return accounts
 	}
 	filtered := make([]catalog.AccountOverview, 0, len(accounts))
 	for _, account := range accounts {
-		visibleDeployments := filterAuthorizedDeploymentOverviews(account.Deployments, authorized, enabled)
+		visibleDeployments := filterAuthorizedDeploymentOverviews(account.Deployments, visible, enabled)
 		if len(visibleDeployments) == 0 {
 			continue
 		}
@@ -797,11 +905,11 @@ func filterAuthorizedAccountOverviews(accounts []catalog.AccountOverview, author
 	return filtered
 }
 
-func filterAuthorizedAccountOverviewDetail(detail catalog.AccountOverviewDetail, authorized requestactor.AuthorizedDeployments, enabled bool) catalog.AccountOverviewDetail {
+func filterAuthorizedAccountOverviewDetail(detail catalog.AccountOverviewDetail, visible map[string]struct{}, enabled bool) catalog.AccountOverviewDetail {
 	if !enabled {
 		return detail
 	}
-	visibleDeployments := filterAuthorizedDeploymentOverviews(detail.Deployments, authorized, enabled)
+	visibleDeployments := filterAuthorizedDeploymentOverviews(detail.Deployments, visible, enabled)
 	counts := summarizeDeploymentOverviews(visibleDeployments)
 	return catalog.AccountOverviewDetail{
 		Name:             detail.Name,
@@ -818,11 +926,11 @@ func filterAuthorizedAccountOverviewDetail(detail catalog.AccountOverviewDetail,
 	}
 }
 
-func filterAuthorizedProjectEnvironmentOverviewDetail(detail catalog.ProjectEnvironmentOverviewDetail, authorized requestactor.AuthorizedDeployments, enabled bool) catalog.ProjectEnvironmentOverviewDetail {
+func filterAuthorizedProjectEnvironmentOverviewDetail(detail catalog.ProjectEnvironmentOverviewDetail, visible map[string]struct{}, enabled bool) catalog.ProjectEnvironmentOverviewDetail {
 	if !enabled {
 		return detail
 	}
-	visibleDeployments := filterAuthorizedDeploymentOverviews(detail.Deployments, authorized, enabled)
+	visibleDeployments := filterAuthorizedDeploymentOverviews(detail.Deployments, visible, enabled)
 	counts := summarizeDeploymentOverviews(visibleDeployments)
 	return catalog.ProjectEnvironmentOverviewDetail{
 		AccountName:      detail.AccountName,
@@ -1067,7 +1175,7 @@ func NewRouter(options Options) http.Handler {
 		}
 		applications = filterAuthorizedApplicationOverviews(
 			applications,
-			requestactor.AuthorizedDeploymentsFromContext(r.Context()),
+			authorizedDeploymentNameSet(r.Context(), options, requestactor.AuthorizedDeploymentsFromContext(r.Context()), requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context())),
 			options.RequireDeploymentReadAuthorization,
 		)
 		w.Header().Set("Content-Type", "application/json")
@@ -1086,7 +1194,7 @@ func NewRouter(options Options) http.Handler {
 			http.Error(w, "invalid deployment name", http.StatusBadRequest)
 			return
 		}
-		if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead, name) {
+		if !requireDeploymentReadAuthorization(w, r, options, name) {
 			return
 		}
 		detail, err := options.OverviewApplication(r.Context(), name)
@@ -1115,7 +1223,7 @@ func NewRouter(options Options) http.Handler {
 		}
 		accounts = filterAuthorizedAccountOverviews(
 			accounts,
-			requestactor.AuthorizedDeploymentsFromContext(r.Context()),
+			authorizedDeploymentNameSet(r.Context(), options, requestactor.AuthorizedDeploymentsFromContext(r.Context()), requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context())),
 			options.RequireDeploymentReadAuthorization,
 		)
 		w.Header().Set("Content-Type", "application/json")
@@ -1143,7 +1251,7 @@ func NewRouter(options Options) http.Handler {
 			}
 			detail = filterAuthorizedAccountOverviewDetail(
 				detail,
-				requestactor.AuthorizedDeploymentsFromContext(r.Context()),
+				authorizedDeploymentNameSet(r.Context(), options, requestactor.AuthorizedDeploymentsFromContext(r.Context()), requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context())),
 				options.RequireDeploymentReadAuthorization,
 			)
 			if options.RequireDeploymentReadAuthorization && len(detail.Deployments) == 0 {
@@ -1167,7 +1275,7 @@ func NewRouter(options Options) http.Handler {
 			}
 			detail = filterAuthorizedProjectEnvironmentOverviewDetail(
 				detail,
-				requestactor.AuthorizedDeploymentsFromContext(r.Context()),
+				authorizedDeploymentNameSet(r.Context(), options, requestactor.AuthorizedDeploymentsFromContext(r.Context()), requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context())),
 				options.RequireDeploymentReadAuthorization,
 			)
 			if options.RequireDeploymentReadAuthorization && len(detail.Deployments) == 0 {
@@ -1196,7 +1304,7 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "invalid deployment name", http.StatusBadRequest)
 				return
 			}
-			if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead, name) {
+			if !requireDeploymentReadAuthorization(w, r, options, name) {
 				return
 			}
 			events, err := options.OverviewDeploymentEvents(r.Context(), name)
@@ -1220,7 +1328,7 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "invalid deployment name", http.StatusBadRequest)
 				return
 			}
-			if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead, name) {
+			if !requireDeploymentReadAuthorization(w, r, options, name) {
 				return
 			}
 			resourceType, resourceName, ok := parseResourceQuery(w, r)
@@ -1252,7 +1360,7 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "invalid deployment name", http.StatusBadRequest)
 				return
 			}
-			if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead, name) {
+			if !requireDeploymentReadAuthorization(w, r, options, name) {
 				return
 			}
 			resourceType, resourceName, ok := parseResourceQuery(w, r)
@@ -1280,7 +1388,7 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "invalid deployment name", http.StatusBadRequest)
 				return
 			}
-			if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead, name) {
+			if !requireDeploymentReadAuthorization(w, r, options, name) {
 				return
 			}
 			detail, err := options.OverviewDeployment(r.Context(), name)
@@ -1307,7 +1415,7 @@ func NewRouter(options Options) http.Handler {
 				http.Error(w, "invalid deployment query", http.StatusBadRequest)
 				return
 			}
-			if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead, deploymentName) {
+			if !requireDeploymentReadAuthorization(w, r, options, deploymentName) {
 				return
 			}
 			query.DeploymentName = deploymentName
@@ -1339,7 +1447,7 @@ func NewRouter(options Options) http.Handler {
 		if query.DeploymentName == "" {
 			result.Entries = filterAuthorizedAuditEntries(
 				result.Entries,
-				requestactor.AuthorizedDeploymentsFromContext(r.Context()),
+				authorizedDeploymentNameSet(r.Context(), options, requestactor.AuthorizedDeploymentsFromContext(r.Context()), requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context())),
 				options.RequireDeploymentReadAuthorization,
 			)
 		}
@@ -1412,7 +1520,7 @@ func NewRouter(options Options) http.Handler {
 			respondLookupError(w, err)
 			return
 		}
-		if !requireDeploymentReadAccess(w, r, options.RequireDeploymentReadAuthorization, record.DeploymentName) {
+		if !requireDeploymentReadAccessWithOptions(w, r, options, record.DeploymentName) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -1483,7 +1591,7 @@ func NewRouter(options Options) http.Handler {
 				respondLookupError(w, err)
 				return
 			}
-			if !requireDeploymentReadAccess(w, r, options.RequireDeploymentReadAuthorization, record.DeploymentName) {
+			if !requireDeploymentReadAccessWithOptions(w, r, options, record.DeploymentName) {
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -1554,7 +1662,7 @@ func NewRouter(options Options) http.Handler {
 			respondReadProviderError(w, err, "deployment statuses unavailable")
 			return
 		}
-		snapshots = filterAuthorizedStatusSnapshots(snapshots, requestactor.AuthorizedDeploymentsFromContext(r.Context()), options.RequireDeploymentReadAuthorization)
+		snapshots = filterAuthorizedStatusSnapshots(snapshots, authorizedDeploymentNameSet(r.Context(), options, requestactor.AuthorizedDeploymentsFromContext(r.Context()), requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context())), options.RequireDeploymentReadAuthorization)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(snapshots)
 	})
@@ -1571,7 +1679,7 @@ func NewRouter(options Options) http.Handler {
 			http.Error(w, "invalid deployment name", http.StatusBadRequest)
 			return
 		}
-		if !requireDeploymentReadAuthorization(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead, name) {
+		if !requireDeploymentReadAuthorization(w, r, options, name) {
 			return
 		}
 		snapshot, err := options.DeploymentStatus(r.Context(), name)
