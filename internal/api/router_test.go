@@ -358,6 +358,63 @@ func TestRouterOperatorContextSummarizesProjectEnvironmentScopedAccess(t *testin
 	}
 }
 
+func TestRouterOperatorContextSummaryReportsUnmatchedProjectEnvironmentScopes(t *testing.T) {
+	router := NewRouter(Options{
+		TrustAuthenticatedHeaders:          true,
+		RequireDeploymentReadAuthorization: true,
+		CatalogPlacements: func(context.Context) ([]catalog.PlacementView, error) {
+			return []catalog.PlacementView{
+				{DeploymentName: "payments-api-prod", AppRef: "payments", EnvironmentRef: "prod", AWSAccountID: "123456789012", Region: "us-west-2"},
+				{DeploymentName: "payments-api-staging", AppRef: "payments", EnvironmentRef: "staging", AWSAccountID: "210987654321", Region: "us-east-1"},
+				{DeploymentName: "worker-prod", AppRef: "workers", EnvironmentRef: "prod", AWSAccountID: "123456789012", Region: "us-west-2"},
+			}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+	req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+	req.Header.Set(requestactor.AuthorizedProjectsHeader, "payments, archived")
+	req.Header.Set(requestactor.AuthorizedEnvironmentsHeader, "prod, qa")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode operator context response: %v", err)
+	}
+	deploymentAccess := body["deploymentAccess"].(map[string]any)
+	summary := deploymentAccess["summary"].(map[string]any)
+	expected := map[string]any{
+		"forwardedProjectCount":     float64(2),
+		"forwardedEnvironmentCount": float64(2),
+		"matchedCount":              float64(1),
+		"unmatchedProjectCount":     float64(1),
+		"unmatchedEnvironmentCount": float64(1),
+		"projectCount":              float64(1),
+		"environmentCount":          float64(1),
+	}
+	for key, want := range expected {
+		if summary[key] != want {
+			t.Fatalf("expected summary[%s]=%#v, got %#v in %#v", key, want, summary[key], summary)
+		}
+	}
+	if !reflect.DeepEqual(summary["unmatchedProjects"], []any{"archived"}) {
+		t.Fatalf("expected deterministic unmatched project scope sample, got %#v", summary["unmatchedProjects"])
+	}
+	if !reflect.DeepEqual(summary["unmatchedEnvironments"], []any{"qa"}) {
+		t.Fatalf("expected deterministic unmatched environment scope sample, got %#v", summary["unmatchedEnvironments"])
+	}
+	if _, ok := summary["unmatchedProjectsTruncated"]; ok {
+		t.Fatalf("expected unmatched project truncation flag to be omitted when sample is complete, got %#v", summary)
+	}
+	if _, ok := summary["unmatchedEnvironmentsTruncated"]; ok {
+		t.Fatalf("expected unmatched environment truncation flag to be omitted when sample is complete, got %#v", summary)
+	}
+}
+
 func TestRouterOperatorContextSummaryReportsBoundedUnmatchedDeploymentSample(t *testing.T) {
 	router := NewRouter(Options{
 		TrustAuthenticatedHeaders:          true,
