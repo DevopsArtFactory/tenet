@@ -144,7 +144,7 @@ const scenarios = [
       'Applications overview',
       'Authenticated operator required',
       'Tenet rejected GET /v1/overview/applications because authenticated identity is required on this operator read route.',
-      'Reopen or sign in to this same bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers before Tenet loads the view.',
+      'Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page; reopen or sign in through the trusted front door for this same bookmarkable URL so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.',
     ],
     unexpected: 'Failed to load overview:',
   },
@@ -185,7 +185,7 @@ const scenarios = [
       'Account detail',
       'Authenticated operator required',
       'Tenet rejected GET /v1/overview/accounts/210987654321 because authenticated identity is required on this operator read route.',
-      'Reopen or sign in to this same bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers before Tenet loads the view.',
+      'Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page; reopen or sign in through the trusted front door for this same bookmarkable URL so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.',
     ],
     unexpected: 'Failed to load overview:',
   },
@@ -211,7 +211,7 @@ const scenarios = [
     expected: [
       'Authenticated operator required',
       'Tenet rejected GET /v1/overview/applications/api-prod because authenticated identity is required on this operator read route.',
-      'Reopen or sign in to this same bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers before Tenet loads the view.',
+      'Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page; reopen or sign in through the trusted front door for this same bookmarkable URL so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.',
     ],
     unexpected: 'Failed to load overview:',
   },
@@ -471,11 +471,11 @@ async function render(operatorResponses) {
   await settle();
   if (failedAuthRefresh.window.location.search !== '') throw new Error('auth failed refresh should not change bookmarkable URL state');
   if (!failedAuthRefresh.text().includes('Front Door Operator')) throw new Error('auth failed refresh should keep last successful operator context visible');
-  if (!failedAuthRefresh.text().includes('Last refresh failed: Tenet rejected GET /v1/operator/context because authenticated identity is required on this operator read route. Reopen or sign in to this same bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers before Tenet loads the view.')) throw new Error('expected auth guidance on failed operator context refresh');
+  if (!failedAuthRefresh.text().includes('Last refresh failed: Tenet rejected GET /v1/operator/context because authenticated identity is required on this operator read route. Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page; reopen or sign in through the trusted front door for this same bookmarkable URL so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.')) throw new Error('expected auth guidance on failed operator context refresh');
 
   const authRequired = await render({ ok: false, status: 401, text: () => Promise.resolve('authenticated identity is required on this operator read route') });
   if (!authRequired.text().includes('Authenticated operator required')) throw new Error('expected auth-required operator context heading');
-  if (!authRequired.text().includes('Tenet rejected GET /v1/operator/context because authenticated identity is required on this operator read route. Reopen or sign in to this same bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers before Tenet loads the view.')) throw new Error('expected auth-required operator context recovery guidance');
+  if (!authRequired.text().includes('Tenet rejected GET /v1/operator/context because authenticated identity is required on this operator read route. Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page; reopen or sign in through the trusted front door for this same bookmarkable URL so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.')) throw new Error('expected auth-required operator context recovery guidance');
 
   const roleRequired = await render({ ok: false, status: 403, text: () => Promise.resolve('authenticated viewer-capable role is required for this operator read route') });
   if (!roleRequired.text().includes('Viewer role required')) throw new Error('expected role-required operator context heading');
@@ -3584,7 +3584,7 @@ async function render(fetchImpl) {
   });
   let authText = collectText(unauthorizedView.document.getElementById('accounts')).join(' | ');
   if (!authText.includes('Authenticated operator required')) throw new Error('expected operator auth-required heading for deployment events');
-  if (!authText.includes('Tenet rejected GET /v1/overview/deployments/payments-api-staging/events because authenticated identity is required on this operator read route. Reopen or sign in to this same bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers before Tenet loads the view.')) throw new Error('expected trusted front door guidance for deployment events 401');
+  if (!authText.includes('Tenet rejected GET /v1/overview/deployments/payments-api-staging/events because authenticated identity is required on this operator read route. Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page; reopen or sign in through the trusted front door for this same bookmarkable URL so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.')) throw new Error('expected trusted front door guidance for deployment events 401');
   if (authText.includes('Failed to load controller runtime events:')) throw new Error('expected deployment events 401 to replace generic fetch error copy');
   buttons = collectNodes(unauthorizedView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
   refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
@@ -5498,7 +5498,7 @@ const scenarios = [
     status: 401,
     body: 'unauthenticated: operator identity missing',
     expectedHeading: 'Authenticated operator required',
-    expectedMessage: 'Tenet rejected GET /v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service because authenticated identity is required on this operator read route. Reopen or sign in to this same bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers before Tenet loads the view.',
+    expectedMessage: 'Tenet rejected GET /v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service because authenticated identity is required on this operator read route. Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page; reopen or sign in through the trusted front door for this same bookmarkable URL so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.',
     unexpectedText: 'Failed to load recent logs:',
     buttonLabel: 'Refresh recent logs',
   },
@@ -5518,7 +5518,7 @@ const scenarios = [
     status: 401,
     body: 'unauthenticated: operator identity missing',
     expectedHeading: 'Authenticated operator required',
-    expectedMessage: 'Tenet rejected GET /v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service because authenticated identity is required on this operator read route. Reopen or sign in to this same bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers before Tenet loads the view.',
+    expectedMessage: 'Tenet rejected GET /v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service because authenticated identity is required on this operator read route. Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page; reopen or sign in through the trusted front door for this same bookmarkable URL so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.',
     unexpectedText: 'Failed to load live inspection:',
     buttonLabel: 'Refresh live inspection',
   },
