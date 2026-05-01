@@ -699,7 +699,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		`-H "X-Tenet-Authorized-Environments: staging-apne2" \`,
 		`-H "X-Tenet-Authorized-Projects: archived-payments" \`,
 		`assert 'Authenticated operator required' in ui, ui`,
-		`assert 'const operatorWriteAuthRequiredMessage = (route, action) => ` + "`Tenet rejected ${route} because authenticated identity is required on operator write routes. When auth enforcement is enabled, retry ${action} through the trusted front door so it can authenticate you and forward trusted identity headers.`;" + `' in ui, ui`,
+		`assert 'const operatorWriteAuthRequiredMessage = (route, action) => ` + "`Tenet rejected ${route} because authenticated identity is required on operator write routes. Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page; retry ${action} for this same bookmarkable workspace through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet sends the write.`;" + `' in ui, ui`,
 		`assert 'const operatorWriteForbiddenMessage = (route, action) => ` + "`Tenet rejected ${route} after recognizing the caller\\x27s identity, but this operator is not authorized to ${action.toLowerCase()} for that deployment through this route.`;" + `' in ui, ui`,
 		`assert 'Operator access denied' in ui, ui`,
 		`assert actor['id'] == 'front-door-123', payload`,
