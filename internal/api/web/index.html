@@ -3445,6 +3445,59 @@
         section.append(loadBalancersSection, targetsSection);
         return section;
       };
+      const listenerRuleArrayText = (values) => Array.isArray(values) && values.length ? values.map((value) => textOrDash(value)).join(', ') : '—';
+      const createTrafficRoutingListenerRuleSection = (trafficRouting) => {
+        const listenerRule = trafficRouting?.listenerRule;
+        if (!listenerRule || typeof listenerRule !== 'object') return null;
+        const section = createElement('section', 'detail-section');
+        section.append(createElement('h4', '', 'Listener rule live details'));
+        const metadata = createElement('div', 'detail-grid');
+        [
+          ['Rule ARN', textOrDash(listenerRule.ruleArn || listenerRule.arn)],
+          ['Priority', textOrDash(listenerRule.priority)],
+          ['Default rule', lookupContextBoolText(listenerRule.isDefault)],
+        ].forEach(([label, value]) => metadata.append(createMetric(label, value)));
+        section.append(metadata);
+        const conditions = Array.isArray(listenerRule.conditions) ? listenerRule.conditions : [];
+        const conditionsSection = createInspectionListSection(
+          'Listener rule conditions',
+          conditions,
+          (condition) => {
+            const item = createElement('li');
+            item.append(createElement('strong', '', textOrDash(condition?.field || condition?.type || 'Condition')));
+            const meta = createElement('div', 'detail-history-meta');
+            meta.append(createElement('span', 'detail-condition-meta', `Values · ${listenerRuleArrayText(condition?.values)}`));
+            item.append(meta);
+            return item;
+          },
+          'No listener-rule conditions are currently reported for this rule.',
+        );
+        const actions = Array.isArray(listenerRule.actions) ? listenerRule.actions : [];
+        const actionsSection = createInspectionListSection(
+          'Listener rule actions',
+          actions,
+          (action) => {
+            const item = createElement('li');
+            item.append(createElement('strong', '', textOrDash(action?.type || 'Action')));
+            const meta = createElement('div', 'detail-history-meta');
+            meta.append(
+              createElement('span', 'detail-condition-meta', `Order · ${countText(action?.order)}`),
+              createElement('span', 'detail-condition-meta', `Target group ARN · ${textOrDash(action?.targetGroupArn)}`),
+            );
+            const targetGroups = Array.isArray(action?.targetGroups) ? action.targetGroups : [];
+            targetGroups.forEach((targetGroup, index) => {
+              const label = targetGroup?.targetGroupArn || `Target group ${index + 1}`;
+              const weight = Number.isFinite(targetGroup?.weight) ? targetGroup.weight : targetGroup?.weight;
+              meta.append(createElement('span', 'detail-condition-meta', `${label} · weight ${textOrDash(weight)}`));
+            });
+            item.append(meta);
+            return item;
+          },
+          'No listener-rule actions are currently reported for this rule.',
+        );
+        section.append(conditionsSection, actionsSection);
+        return section;
+      };
       const renderTrafficRoutingInspection = (section, deploymentName, resource, result) => {
         const trafficRouting = result?.trafficRoutingResource;
         const actions = createResourceInspectionActions(section, deploymentName, resource);
@@ -3459,11 +3512,13 @@
           createElement('h4', '', 'Rollout summary'),
           createElement('p', 'detail-section-copy', textOrDash(trafficRouting?.summary)),
         );
+        const listenerRuleSection = createTrafficRoutingListenerRuleSection(trafficRouting);
         const targetGroupSection = createTrafficRoutingTargetGroupSection(trafficRouting);
         section.replaceChildren(
           createDetailSectionHeader('Live inspection', actions),
           createElement('p', 'detail-section-copy', 'Read-only traffic-routing inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
           metadata,
+          ...(listenerRuleSection ? [listenerRuleSection] : []),
           ...(targetGroupSection ? [targetGroupSection] : []),
           summarySection,
         );

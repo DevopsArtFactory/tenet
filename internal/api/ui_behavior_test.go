@@ -5054,6 +5054,50 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!weightedListenerRuleText.includes('Weighted listener rule')) throw new Error('expected weighted listener rule inspection to render controller summary');
   if (!weightedListenerRuleText.includes('This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet.')) throw new Error('expected weighted listener rule recent logs to explain no-log-source state');
 
+  const liveWeightedListenerRuleRun = await renderWithFetch('?page=resource&deployment=payments-api-staging&resourceType=productionListenerRule&resourceId=' + encodeURIComponent(weightedListenerRuleResourceID), (url) => {
+    if (url === ecsDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(unsupportedDetailBody) });
+    if (url === weightedListenerRuleLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'no_log_source', entries: [] }) });
+    if (url === weightedListenerRuleInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({
+      available: true,
+      source: 'traffic_routing_aws',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true },
+      trafficRoutingResource: {
+        kind: 'productionListenerRule',
+        displayName: 'Production listener rule',
+        inspectionMode: 'live',
+        summary: 'Production listener rule operators inspect while Tenet updates weighted forwarding during rollout',
+        listenerRule: {
+          ruleArn: 'arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:listener-rule/app/payments/50dc6c495c0c9188/abcdef0123456789/1234567890abcdef',
+          priority: '10',
+          isDefault: false,
+          conditions: [{ field: 'path-pattern', values: ['/api/*', '<script>still text</script>'] }],
+          actions: [{ type: 'forward', order: 1, targetGroups: [
+            { targetGroupArn: 'arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:targetgroup/payments-active/abc123', weight: 80 },
+            { targetGroupArn: 'arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:targetgroup/payments-candidate/def456', weight: 20 },
+          ] }],
+        },
+      },
+    }) });
+    throw new Error('unexpected live weighted listener rule fetch url: ' + url);
+  });
+  const liveWeightedListenerRuleText = collectText(liveWeightedListenerRuleRun.document.getElementById('accounts')).join(' | ');
+  if (!liveWeightedListenerRuleText.includes('Live AWS inspection')) throw new Error('expected live listener-rule inspection mode to render live copy');
+  if (!liveWeightedListenerRuleText.includes('Listener rule live details')) throw new Error('expected live listener-rule details section');
+  if (!liveWeightedListenerRuleText.includes('Rule ARN')) throw new Error('expected live listener-rule ARN label');
+  if (!liveWeightedListenerRuleText.includes('Priority')) throw new Error('expected live listener-rule priority label');
+  if (!liveWeightedListenerRuleText.includes('Default rule')) throw new Error('expected live listener-rule default label');
+  if (!liveWeightedListenerRuleText.includes('False')) throw new Error('expected live listener-rule default value');
+  if (!liveWeightedListenerRuleText.includes('Listener rule conditions')) throw new Error('expected live listener-rule conditions section');
+  if (!liveWeightedListenerRuleText.includes('path-pattern')) throw new Error('expected live listener-rule condition field');
+  if (!liveWeightedListenerRuleText.includes('Values · /api/*, <script>still text</script>')) throw new Error('expected live listener-rule condition values to render as text');
+  if (!liveWeightedListenerRuleText.includes('Listener rule actions')) throw new Error('expected live listener-rule actions section');
+  if (!liveWeightedListenerRuleText.includes('forward')) throw new Error('expected live listener-rule action type');
+  if (!liveWeightedListenerRuleText.includes('Order · 1')) throw new Error('expected live listener-rule action order');
+  if (!liveWeightedListenerRuleText.includes('targetgroup/payments-active/abc123 · weight 80')) throw new Error('expected live listener-rule active target weight');
+  if (!liveWeightedListenerRuleText.includes('targetgroup/payments-candidate/def456 · weight 20')) throw new Error('expected live listener-rule candidate target weight');
+  const liveWeightedListenerRuleScripts = collectNodes(liveWeightedListenerRuleRun.document.getElementById('accounts'), (node) => node.tagName === 'SCRIPT');
+  if (liveWeightedListenerRuleScripts.length !== 0) throw new Error('expected listener-rule live details to use safe text rendering');
+
   const emptyRun = await renderWithFetch('?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(ecsResourceID), (url) => {
     if (url === ecsDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(ecsDetailBody) });
     if (url === ecsLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
