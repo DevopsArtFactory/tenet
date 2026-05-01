@@ -8094,7 +8094,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const text = collectText(root).join(' | ');
   if (!text.includes('Authenticated operator required')) throw new Error('expected operator-auth heading for unauthorized create');
   if (!text.includes('Tenet rejected POST /v1/plans/deployments/api-prod because authenticated identity is required on operator write routes.')) throw new Error('expected operator-facing create auth explanation');
-  if (!text.includes('retry Create Plan through the trusted front door so it can authenticate you and forward trusted identity headers.')) throw new Error('expected trusted front door create guidance');
+  if (!text.includes('retry Create Plan for this same bookmarkable workspace through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet sends the write.')) throw new Error('expected trusted front door create guidance');
   if (text.includes('Failed to create a plan preview')) throw new Error('expected unauthorized create to avoid generic fetch-error copy');
   buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
   const createPlanAfter = buttons.find((node) => node.textContent === 'Create Plan');
@@ -8246,7 +8246,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Authenticated operator required')) throw new Error('expected operator-auth heading for unauthorized apply create');
   if (!text.includes('Auth required')) throw new Error('expected apply auth-required pill copy');
   if (!text.includes('Tenet rejected POST /v1/applies/plans/plan_ready_123 because authenticated identity is required on operator write routes.')) throw new Error('expected operator-facing apply auth explanation');
-  if (!text.includes('retry Apply Plan through the trusted front door so it can authenticate you and forward trusted identity headers.')) throw new Error('expected trusted front door apply guidance');
+  if (!text.includes('retry Apply Plan for this same bookmarkable workspace through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet sends the write.')) throw new Error('expected trusted front door apply guidance');
   if (text.includes('Failed to create an apply request')) throw new Error('expected unauthorized apply create to avoid generic fetch-error copy');
   buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
   const createPlan = buttons.find((node) => node.textContent === 'Create Plan');
