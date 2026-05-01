@@ -823,11 +823,19 @@
         if (mode === 'trusted_front_door_read_only' || mode === 'trusted_front_door_write_only' || mode === 'trusted_headers_observed_only' || mode === 'local_unrestricted') return 'operator-context-warning';
         return '';
       };
+      const operatorContextAccessVerdictExampleRoutesLabel = (verdict) => {
+        const routes = Array.isArray(verdict?.exampleRoutes) ? verdict.exampleRoutes.filter(Boolean) : [];
+        if (!routes.length) return '';
+        const visibleRoutes = routes.slice(0, 2).join('; ');
+        const hiddenCount = routes.length - 2;
+        return ` Examples: ${visibleRoutes}${hiddenCount > 0 ? `; +${hiddenCount} more` : ''}`;
+      };
       const operatorContextAccessVerdictLabel = (label, verdict) => {
         if (!verdict || typeof verdict !== 'object') return null;
         const state = verdict.allowed ? 'allowed' : 'blocked';
         const reason = verdict.reason ? `: ${verdict.reason}` : '';
-        return `${label} ${state}${reason}`;
+        const examples = operatorContextAccessVerdictExampleRoutesLabel(verdict);
+        return `${label} ${state}${reason}${examples}`;
       };
       const operatorContextAccessVerdictClass = (verdict) => {
         if (!verdict || typeof verdict !== 'object') return '';
