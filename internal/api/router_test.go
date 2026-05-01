@@ -220,7 +220,7 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if !reflect.DeepEqual(deploymentScopedWrite["exampleRoutes"], []any{"POST /v1/plans/deployments/{deploymentName}", "POST /v1/applies/plans/{planId}", "POST /v1/applies/{applyId}/transitions"}) {
 		t.Fatalf("expected deployment-scoped write route examples, got %#v", deploymentScopedWrite["exampleRoutes"])
 	}
-	if !reflect.DeepEqual(deploymentScopedWrite["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles", "X-Tenet-Authorized-Deployments"}) {
+	if !reflect.DeepEqual(deploymentScopedWrite["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles", "X-Tenet-Authorized-Deployments", "X-Tenet-Authorized-Projects", "X-Tenet-Authorized-Environments"}) {
 		t.Fatalf("expected deployment-scoped write trusted headers, got %#v", deploymentScopedWrite["requiredTrustedHeaders"])
 	}
 	collectionRead := accessVerdicts["collectionRead"].(map[string]any)
@@ -7077,6 +7077,69 @@ func TestRouterCreateDeploymentPlanPreviewStatusCodes(t *testing.T) {
 		}
 	})
 
+	t.Run("project environment authorization allows scoped create", func(t *testing.T) {
+		providerCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			CatalogPlacements: func(context.Context) ([]catalog.PlacementView, error) {
+				return []catalog.PlacementView{{DeploymentName: "api-prod", AppRef: "payments", EnvironmentRef: "prod"}}, nil
+			},
+			CreateDeploymentPlanPreview: func(_ context.Context, deploymentName string, req planpreview.CreateRequest) (planpreview.CreateResult, error) {
+				providerCalls++
+				if deploymentName != "api-prod" {
+					t.Fatalf("unexpected deployment name %q", deploymentName)
+				}
+				return planpreview.CreateResult{Created: true, Record: planpreview.Record{ID: "plan_1234abcd", DeploymentName: deploymentName, Status: planpreview.StatusReady, CreatedAt: "2026-04-17T08:00:00Z", Source: planpreview.SourceContext{DeploymentName: deploymentName, Fingerprint: req.IfMatch}}}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/plans/deployments/api-prod", strings.NewReader(`{"ifMatch":"plan_input"}`))
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+		req.Header.Set(requestactor.AuthorizedProjectsHeader, "payments")
+		req.Header.Set(requestactor.AuthorizedEnvironmentsHeader, "prod")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if providerCalls != 1 {
+			t.Fatalf("expected create provider to run once, got %d calls", providerCalls)
+		}
+	})
+
+	t.Run("project environment authorization fails closed without catalog placement", func(t *testing.T) {
+		providerCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			CreateDeploymentPlanPreview: func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error) {
+				providerCalls++
+				t.Fatal("create provider should not run without catalog placement data")
+				return planpreview.CreateResult{}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/plans/deployments/api-prod", strings.NewReader(`{}`))
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+		req.Header.Set(requestactor.AuthorizedProjectsHeader, "payments")
+		req.Header.Set(requestactor.AuthorizedEnvironmentsHeader, "prod")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if providerCalls != 0 {
+			t.Fatalf("expected authz guard to short-circuit before create provider, got %d calls", providerCalls)
+		}
+	})
+
 	t.Run("invalid body", func(t *testing.T) {
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
@@ -7594,6 +7657,42 @@ func TestRouterCreateApplyRequestStatusCodes(t *testing.T) {
 		}
 	})
 
+	t.Run("project environment authorization allows scoped create", func(t *testing.T) {
+		planLookupCalls := 0
+		createCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			CatalogPlacements: func(context.Context) ([]catalog.PlacementView, error) {
+				return []catalog.PlacementView{{DeploymentName: "api-prod", AppRef: "payments", EnvironmentRef: "prod"}}, nil
+			},
+			PlanPreview: func(context.Context, string) (planpreview.Record, error) {
+				planLookupCalls++
+				return planpreview.Record{ID: "plan_1234abcd", DeploymentName: "api-prod", Status: planpreview.StatusReady, CreatedAt: "2026-04-18T08:00:00Z"}, nil
+			},
+			CreateApplyRequest: func(_ context.Context, planID string) (applyrequest.CreateResult, error) {
+				createCalls++
+				return applyrequest.CreateResult{Created: true, Record: applyrequest.Record{ID: "apply_1234abcd", PlanID: planID, DeploymentName: "api-prod", Status: applyrequest.StatusFailed, CreatedAt: "2026-04-18T08:00:00Z"}}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/plans/plan_1234abcd", nil)
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+		req.Header.Set(requestactor.AuthorizedProjectsHeader, "payments")
+		req.Header.Set(requestactor.AuthorizedEnvironmentsHeader, "prod")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if planLookupCalls != 1 || createCalls != 1 {
+			t.Fatalf("expected one plan lookup and one create call, got %d/%d", planLookupCalls, createCalls)
+		}
+	})
+
 	t.Run("not found", func(t *testing.T) {
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
@@ -8023,6 +8122,45 @@ func TestRouterTransitionApplyRequest(t *testing.T) {
 		}
 		if transitionCalls != 0 {
 			t.Fatalf("expected authz guard to short-circuit before transition provider, got %d calls", transitionCalls)
+		}
+	})
+
+	t.Run("project environment authorization allows scoped transition", func(t *testing.T) {
+		applyLookupCalls := 0
+		transitionCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireDeploymentReadAuthorization: true,
+			CatalogPlacements: func(context.Context) ([]catalog.PlacementView, error) {
+				return []catalog.PlacementView{{DeploymentName: "api-prod", AppRef: "payments", EnvironmentRef: "prod"}}, nil
+			},
+			ApplyRequest: func(context.Context, string) (applyrequest.Record, error) {
+				applyLookupCalls++
+				return applyrequest.Record{ID: "apply_1234abcd", DeploymentName: "api-prod", Status: applyrequest.StatusQueued, CreatedAt: "2026-04-18T08:00:00Z"}, nil
+			},
+			TransitionApplyRequest: func(_ context.Context, applyID string, req applyrequest.TransitionRequest) (applyrequest.Record, error) {
+				transitionCalls++
+				if applyID != "apply_1234abcd" || req.Status != applyrequest.StatusRunning || req.Step != 1 {
+					t.Fatalf("unexpected transition request %q %+v", applyID, req)
+				}
+				return applyrequest.Record{ID: applyID, DeploymentName: "api-prod", Status: applyrequest.StatusRunning, CreatedAt: "2026-04-18T08:00:00Z"}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/applies/apply_1234abcd/transitions", strings.NewReader(`{"status":"running","step":1}`))
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+		req.Header.Set(requestactor.AuthorizedProjectsHeader, "payments")
+		req.Header.Set(requestactor.AuthorizedEnvironmentsHeader, "prod")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if applyLookupCalls != 1 || transitionCalls != 1 {
+			t.Fatalf("expected one apply lookup and one transition, got %d/%d", applyLookupCalls, transitionCalls)
 		}
 	})
 

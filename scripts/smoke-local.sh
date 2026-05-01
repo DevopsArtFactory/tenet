@@ -1697,6 +1697,40 @@ allowed_apply_read=$(curl -fsS \
   -H "X-Tenet-Authorized-Projects: payments-api" \
   -H "X-Tenet-Authorized-Environments: staging-apne2" \
   "http://$HOST:$PORT/v1/applies/$frontdoor_apply_id")
+scoped_write_plan_preview=$(curl -fsS -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-Tenet-Authenticated-Id: scoped-writer-123" \
+  -H "X-Tenet-Authenticated-Name: Scoped Write Operator" \
+  -H "X-Tenet-Authenticated-Email: scoped-writer@example.com" \
+  -H "X-Tenet-Authenticated-Roles: operator" \
+  -H "X-Tenet-Authorized-Projects: payments-api" \
+  -H "X-Tenet-Authorized-Environments: staging-apne2" \
+  -d '{}' \
+  "http://$HOST:$PORT/v1/plans/deployments/payments-api-staging")
+scoped_write_plan_preview_path=$(write_payload scoped-write-plan-preview.json "$scoped_write_plan_preview")
+scoped_write_plan_id=$(json_string_field_from_path "$scoped_write_plan_preview_path" id)
+scoped_write_apply_record=$(curl -fsS -X POST \
+  -H "X-Tenet-Authenticated-Id: scoped-writer-123" \
+  -H "X-Tenet-Authenticated-Name: Scoped Write Operator" \
+  -H "X-Tenet-Authenticated-Email: scoped-writer@example.com" \
+  -H "X-Tenet-Authenticated-Roles: operator" \
+  -H "X-Tenet-Authorized-Projects: payments-api" \
+  -H "X-Tenet-Authorized-Environments: staging-apne2" \
+  "http://$HOST:$PORT/v1/applies/plans/$scoped_write_plan_id")
+scoped_write_apply_record_path=$(write_payload scoped-write-apply-record.json "$scoped_write_apply_record")
+scoped_write_apply_id=$(json_string_field_from_path "$scoped_write_apply_record_path" id)
+SCOPED_WRITE_TRANSITION_BODY=$(write_payload scoped-write-transition-body.txt "")
+scoped_write_transition_status=$(curl -sS -o "$SCOPED_WRITE_TRANSITION_BODY" -w "%{http_code}" \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-Tenet-Authenticated-Id: scoped-writer-123" \
+  -H "X-Tenet-Authenticated-Name: Scoped Write Operator" \
+  -H "X-Tenet-Authenticated-Email: scoped-writer@example.com" \
+  -H "X-Tenet-Authenticated-Roles: operator" \
+  -H "X-Tenet-Authorized-Projects: payments-api" \
+  -H "X-Tenet-Authorized-Environments: staging-apne2" \
+  --data '{"status":"running","step":1}' \
+  "http://$HOST:$PORT/v1/applies/$scoped_write_apply_id/transitions")
 filtered_applications_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
@@ -1872,6 +1906,10 @@ ALLOWED_GUARDED_READ_PATH="$allowed_guarded_read_path" \
 ALLOWED_STATUS_READ_PATH="$allowed_status_read_path" \
 ALLOWED_PLAN_READ_PATH="$allowed_plan_read_path" \
 ALLOWED_APPLY_READ_PATH="$allowed_apply_read_path" \
+SCOPED_WRITE_PLAN_PREVIEW_PATH="$scoped_write_plan_preview_path" \
+SCOPED_WRITE_APPLY_RECORD_PATH="$scoped_write_apply_record_path" \
+SCOPED_WRITE_TRANSITION_STATUS="$scoped_write_transition_status" \
+SCOPED_WRITE_TRANSITION_BODY_PATH="$SCOPED_WRITE_TRANSITION_BODY" \
 ALLOWED_EVENTS_READ_PATH="$allowed_events_read_path" \
 ALLOWED_RESOURCE_LOGS_PATH="$allowed_resource_logs_path" \
 ALLOWED_RESOURCE_INSPECTION_PATH="$allowed_resource_inspection_path" \
@@ -1972,6 +2010,12 @@ with open(os.environ['ALLOWED_PLAN_READ_PATH'], encoding='utf-8') as fh:
     allowed_plan_read = json.load(fh)
 with open(os.environ['ALLOWED_APPLY_READ_PATH'], encoding='utf-8') as fh:
     allowed_apply_read = json.load(fh)
+with open(os.environ['SCOPED_WRITE_PLAN_PREVIEW_PATH'], encoding='utf-8') as fh:
+    scoped_write_plan_preview = json.load(fh)
+with open(os.environ['SCOPED_WRITE_APPLY_RECORD_PATH'], encoding='utf-8') as fh:
+    scoped_write_apply_record = json.load(fh)
+with open(os.environ['SCOPED_WRITE_TRANSITION_BODY_PATH'], encoding='utf-8') as fh:
+    scoped_write_transition_body = fh.read()
 with open(os.environ['ALLOWED_EVENTS_READ_PATH'], encoding='utf-8') as fh:
     allowed_events_read = json.load(fh)
 with open(os.environ['ALLOWED_RESOURCE_LOGS_PATH'], encoding='utf-8') as fh:
@@ -2103,7 +2147,7 @@ def assert_operator_context_common(payload):
     assert access_verdicts.get('deploymentScopedRead', {}).get('exampleRoutes') == ['GET /v1/overview/deployments/{deploymentName}', 'GET /v1/status/deployments/{deploymentName}', 'GET /v1/audit-logs?deployment={deploymentName}'], payload
     assert access_verdicts.get('deploymentScopedRead', {}).get('requiredTrustedHeaders') == identity_headers + role_headers + access_headers, payload
     assert access_verdicts.get('deploymentScopedWrite', {}).get('requiresExactDeploymentAllowlistMatch') is True, payload
-    assert access_verdicts.get('deploymentScopedWrite', {}).get('requiredTrustedHeaders') == identity_headers + role_headers + allowlist_headers, payload
+    assert access_verdicts.get('deploymentScopedWrite', {}).get('requiredTrustedHeaders') == identity_headers + role_headers + access_headers, payload
     assert access_verdicts.get('collectionRead', {}).get('filtersCollectionsByDeploymentAccess') is True, payload
     assert access_verdicts.get('collectionRead', {}).get('exampleRoutes') == ['GET /v1/overview/applications', 'GET /v1/status/deployments', 'GET /v1/overview/accounts', 'GET /v1/audit-logs'], payload
     assert access_verdicts.get('collectionRead', {}).get('requiredTrustedHeaders') == identity_headers + role_headers + access_headers, payload

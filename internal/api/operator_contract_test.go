@@ -859,9 +859,8 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"The same shared operator-read guidance path on `/`, the bookmarkable application drill-down, the bookmarkable account drill-down, the resource/drift/audit shells, and the bookmarkable `/?page=plan` workspace; unauthenticated `401` copy explicitly points operators back through the trusted front door",
 		"Inspect the `accessVerdicts` chips and their bounded route examples",
 		"Debug the specific guarded route class by checking the banner's full `Required trusted headers:` fragment",
-		"If an operator write returns `403 Forbidden`, confirm both `roles.canWrite=true` (`operator` or `admin`) and exact deployment membership",
-		"those scopes currently widen guarded reads only",
-		"plan/apply writes still require an exact `X-Tenet-Authorized-Deployments` grant",
+		"If an operator write returns `403 Forbidden`, confirm `roles.canWrite=true` (`operator` or `admin`) plus either exact deployment membership or matching project/environment catalog placement",
+		"deployment-scoped plan/apply writes require both `X-Tenet-Authorized-Projects` and `X-Tenet-Authorized-Environments` to match catalog placement",
 		"curl -fsS http://localhost:8080/v1/operator/context",
 	} {
 		if !strings.Contains(readme, fragment) {
@@ -914,7 +913,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`X-Tenet-Authenticated-*`, `X-Tenet-Authenticated-Roles`, `X-Tenet-Authorized-Deployments`, `X-Tenet-Authorized-Projects`, `X-Tenet-Authorized-Environments` | Authenticating front door only | Request-scoped route authorization",
 		"`X-Tenet-Actor-*` plus compatible `X-User-*` aliases | Local proxy, smoke, or trusted integration creating immutable records | Persisted actor metadata",
 		"Tenet does not treat raw browser-supplied `X-User-*` headers as a login session",
-		"deployment-scoped reads enforce trusted `X-Tenet-Authenticated-*` identity plus `X-Tenet-Authorized-Deployments`",
+		"deployment-scoped reads enforce trusted `X-Tenet-Authenticated-*` identity plus `X-Tenet-Authorized-Deployments` or matching project/environment scopes",
 		"including the persisted `POST /v1/applies/{applyId}/transitions` write route",
 		"the bookmarkable `/?page=plan` workspace",
 		"strips inbound trust headers, including `X-User-*` aliases, before forwarding its own values",
@@ -931,7 +930,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`projectEnvironmentExamples` shows which visible project/environment groups",
 		"additive `requiredTrustedHeaders` (`X-Tenet-Authenticated-Id` or `X-User-ID`, `X-Tenet-Authenticated-Roles`, and the exact `X-Tenet-Authorized-Deployments` allowlist and/or matching `X-Tenet-Authorized-Projects` plus `X-Tenet-Authorized-Environments` scopes depending on the route class)",
 		"`accessVerdicts`: use the blocked or likely-empty verdict reason plus its bounded route examples and the embedded banner's full `Required trusted headers:` label",
-		"plan/apply writes still require exact `X-Tenet-Authorized-Deployments` membership until the backend write-scope contract changes",
+		"Project/environment-scoped reads and deployment-scoped plan/apply writes require both forwarded scope headers and a catalog placement match",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
 			t.Fatalf("expected local runtime doc front-door auth contract to include %q", fragment)
@@ -959,8 +958,8 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`403 Forbidden` plus `forbidden: operator does not have access to this deployment`",
 		"`200 OK` with `[]`",
 		"`make smoke-docker` restarts the Compose `api` service with trusted-header auth enabled and proves this exact route contract",
-		"This raw-status read contract is intentionally broader than the current immutable write contract",
-		"until the backend work tracked in #482 lands, `POST /v1/plans/deployments/{deploymentName}`, `POST /v1/applies/plans/{planId}`, and `POST /v1/applies/{applyId}/transitions` still require an exact trusted `X-Tenet-Authorized-Deployments` grant for the target deployment",
+		"The same deployment-access model now covers immutable deployment-scoped writes",
+		"`POST /v1/plans/deployments/{deploymentName}`, `POST /v1/applies/plans/{planId}`, and `POST /v1/applies/{applyId}/transitions` require trusted identity plus either an exact `X-Tenet-Authorized-Deployments` grant for the target deployment or matching `X-Tenet-Authorized-Projects` plus `X-Tenet-Authorized-Environments` catalog placement",
 		"matching project/environment scopes can authorize the same read surface without an exact deployment-name grant",
 		"omitting all deployment/project/environment grants returns `[]`",
 		"Only enable that trust when a front door authenticates the caller and strips any client-supplied `X-Tenet-Authenticated-*`, `X-Tenet-Authorized-Deployments`, `X-Tenet-Authorized-Projects`, `X-Tenet-Authorized-Environments`, and trusted-alias `X-User-*` headers before forwarding trusted values.",
