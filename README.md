@@ -167,10 +167,10 @@ Keep that split intact when integrating GitHub OAuth or another identity provide
 - The same trusted front-door read contract covers `GET /v1/overview/accounts/{awsAccountId}`, `GET /v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}`, `GET /v1/overview/applications/{deploymentName}`, `GET /v1/overview/deployments/{deploymentName}`, `GET /v1/overview/deployments/{deploymentName}/events`, `GET /v1/overview/deployments/{deploymentName}/resource-logs`, `GET /v1/overview/deployments/{deploymentName}/resource-inspection`, `GET /v1/status/deployments/{deploymentName}`, deployment-scoped `GET /v1/audit-logs`, and immutable stored reads `GET /v1/plans/{planId}` / `GET /v1/applies/{applyId}` using the persisted record deployment.
 
 Operator troubleshooting checklist for guarded reads and writes:
-1. If a guarded read returns `401 Unauthorized`, confirm the request reached Tenet through the trusted front door and that `GET /v1/operator/context` shows `identity.authenticated=true` instead of trying to add deployment names first.
-2. If a guarded read returns `403 Forbidden` with the viewer-capable-role message, inspect `roles.names` and `roles.canRead` in `GET /v1/operator/context`; the allowlist is not evaluated until the request has a `viewer`, `operator`, or `admin` role.
-3. If a collection read returns `200 OK` with `[]` or `{"entries":[]}`, compare `deploymentAccess.summary.matchedCount` and `unmatchedNames` against `X-Tenet-Authorized-Deployments`; an empty collection usually means the trusted allowlist is missing, stale, or does not match catalog deployment names.
-4. If a deployment-scoped read returns `403 Forbidden`, confirm the exact deployment name appears in the trusted `X-Tenet-Authorized-Deployments` header before debugging account/project filters.
+1. Start in the embedded `Operator context` banner, or call `GET /v1/operator/context` directly, before changing role or deployment headers.
+2. Inspect `identity.authenticated`, `roles.canRead` / `roles.canWrite`, and `deploymentAccess.summary` first; these explain `401`, viewer-role `403`, and likely-empty collection reads before route-specific debugging.
+3. Inspect the `accessVerdicts` chips and their bounded route examples to map the blocked or likely-empty verdict to the concrete guarded route family, such as applications collections, deployment drill-downs, immutable plan/apply writes, or audit reads.
+4. Debug the specific guarded route class by checking the exact required trusted headers: identity, read/write role, and/or exact `X-Tenet-Authorized-Deployments` membership.
 5. If an operator write returns `403 Forbidden`, confirm both `roles.canWrite=true` (`operator` or `admin`) and exact deployment membership; writes fail before plan/apply lookup when either prerequisite is missing.
 
 A minimal diagnostic request mirrors the headers your front door should forward:

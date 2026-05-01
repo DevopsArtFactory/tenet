@@ -905,6 +905,8 @@ assert "Enforcement mode:" in ui, ui
 assert "read/write guarded" in ui, ui
 assert "local unrestricted" in ui, ui
 assert "const operatorContextAccessVerdictExampleRoutesLabel = (verdict) => {" in ui, ui
+assert "const visibleRoutes = routes.slice(0, 2).join('; ');" in ui, ui
+assert "const hiddenCount = routes.length - 2;" in ui, ui
 assert "const operatorContextAccessVerdictEntries = (context) => {" in ui, ui
 assert 'Operator reads' in ui, ui
 assert 'Collection reads' in ui, ui
