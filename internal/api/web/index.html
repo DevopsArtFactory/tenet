@@ -972,14 +972,14 @@
             meta.append(createElement('span', '', 'Refreshing trusted front-door context…'));
           } else if (operatorContextState.error) {
             root.classList.add(operatorContextState.status === 'unavailable' ? 'unavailable' : 'error');
-            meta.append(createElement('span', '', `Last refresh failed: ${operatorContextState.error?.message || 'Tenet could not load trusted front-door context.'}`));
+            meta.append(createElement('span', '', `Last refresh failed: ${operatorContextFailureMessage(operatorContextState.error)}`));
           }
         } else {
           root.classList.add(operatorContextState.status === 'unavailable' ? 'unavailable' : 'error');
-          summary.textContent = operatorContextState.status === 'unavailable' ? 'Operator context unavailable' : 'Operator context check failed';
+          summary.textContent = operatorContextFailureHeading(operatorContextState.error) || (operatorContextState.status === 'unavailable' ? 'Operator context unavailable' : 'Operator context check failed');
           meta.append(
             createElement('span', '', operatorContextReadRoute()),
-            createElement('span', '', operatorContextState.error?.message || 'Tenet could not load trusted front-door context.'),
+            createElement('span', '', operatorContextFailureMessage(operatorContextState.error)),
           );
         }
         head.append(summary);
@@ -4723,6 +4723,11 @@
           return operatorReadForbiddenMessage(route);
         }
         return error?.message || 'unknown error';
+      };
+      const operatorContextFailureHeading = (error) => operatorReadFailureHeading(error);
+      const operatorContextFailureMessage = (error) => {
+        const message = operatorReadFailureMessage(operatorContextReadRoute(), error);
+        return message && message !== 'unknown error' ? message : 'Tenet could not load trusted front-door context.';
       };
       const operatorReadStateAuthRequired = (state) => state?.request === 'load' && state?.status === 'fetch-error' && operatorReadAuthRequiredState(state?.error);
       const operatorReadStateRoleRequired = (state) => state?.request === 'load' && state?.status === 'fetch-error' && operatorReadRoleRequiredState(state?.error);

@@ -447,6 +447,28 @@ async function render(operatorResponses) {
   if (!failedRefresh.text().includes('Last refresh failed:')) throw new Error('expected failed refresh diagnostic');
   if (!failedRefresh.text().includes('operator context provider unavailable')) throw new Error('expected failed refresh backend detail');
 
+  const failedAuthRefresh = await render([
+    { ok: true, json: () => Promise.resolve(firstContext) },
+    { ok: false, status: 401, text: () => Promise.resolve('authenticated identity is required on this operator read route') },
+  ]);
+  failedAuthRefresh.refresh().dispatch('click');
+  await settle();
+  if (failedAuthRefresh.window.location.search !== '') throw new Error('auth failed refresh should not change bookmarkable URL state');
+  if (!failedAuthRefresh.text().includes('Front Door Operator')) throw new Error('auth failed refresh should keep last successful operator context visible');
+  if (!failedAuthRefresh.text().includes('Last refresh failed: Tenet rejected GET /v1/operator/context because authenticated identity is required on this operator read route. Reopen or sign in to this same bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers before Tenet loads the view.')) throw new Error('expected auth guidance on failed operator context refresh');
+
+  const authRequired = await render({ ok: false, status: 401, text: () => Promise.resolve('authenticated identity is required on this operator read route') });
+  if (!authRequired.text().includes('Authenticated operator required')) throw new Error('expected auth-required operator context heading');
+  if (!authRequired.text().includes('Tenet rejected GET /v1/operator/context because authenticated identity is required on this operator read route. Reopen or sign in to this same bookmarkable page through the trusted front door so it can authenticate you and forward trusted identity headers before Tenet loads the view.')) throw new Error('expected auth-required operator context recovery guidance');
+
+  const roleRequired = await render({ ok: false, status: 403, text: () => Promise.resolve('authenticated viewer-capable role is required for this operator read route') });
+  if (!roleRequired.text().includes('Viewer role required')) throw new Error('expected role-required operator context heading');
+  if (!roleRequired.text().includes('Tenet rejected GET /v1/operator/context after recognizing the caller\'s identity because this operator read route requires a trusted forwarded viewer/operator/admin role. Ask the front-door/RBAC admin to forward X-Tenet-Authenticated-Roles with viewer, operator, or admin, then retry this same bookmarkable page.')) throw new Error('expected role-required operator context recovery guidance');
+
+  const forbidden = await render({ ok: false, status: 403, text: () => Promise.resolve('deployment access denied') });
+  if (!forbidden.text().includes('Operator access denied')) throw new Error('expected forbidden operator context heading');
+  if (!forbidden.text().includes('Tenet rejected GET /v1/operator/context after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Ask an admin to grant the deployment, project, or environment scope for this route, then retry this same bookmarkable page.')) throw new Error('expected forbidden operator context recovery guidance');
+
   const unavailable = await render({ ok: false, status: 503, text: () => Promise.resolve('operator context provider unavailable') });
   if (!unavailable.text().includes('Operator context unavailable')) throw new Error('expected unavailable operator context state');
   if (!unavailable.text().includes('GET /v1/operator/context')) throw new Error('expected diagnostic route in unavailable state');
