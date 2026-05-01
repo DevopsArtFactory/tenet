@@ -48,7 +48,7 @@ func TestEmbeddedUIRendersOperatorContextBannerSafely(t *testing.T) {
 		"const headers = Array.isArray(verdict?.requiredTrustedHeaders) ? verdict.requiredTrustedHeaders.filter(Boolean) : [];",
 		"const visibleHeaders = headers.slice(0, 3).join('; ');",
 		"requiredTrustedHeaders",
-		"Headers:",
+		"Required trusted headers:",
 		"const operatorContextAccessVerdictLabel = (label, verdict) => {",
 		"const headers = operatorContextAccessVerdictRequiredHeadersLabel(verdict);",
 		"return `${label} ${state}${reason}${examples}${headers}`;",

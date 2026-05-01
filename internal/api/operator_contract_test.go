@@ -856,7 +856,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"Operator troubleshooting checklist for guarded reads and writes",
 		"Start in the embedded `Operator context` banner, or call `GET /v1/operator/context` directly",
 		"Inspect the `accessVerdicts` chips and their bounded route examples",
-		"Debug the specific guarded route class by checking the exact required trusted headers",
+		"Debug the specific guarded route class by checking the banner's `Required trusted headers:` fragment",
 		"If an operator write returns `403 Forbidden`, confirm both `roles.canWrite=true` (`operator` or `admin`) and exact deployment membership",
 		"those scopes currently widen guarded reads only",
 		"plan/apply writes still require an exact `X-Tenet-Authorized-Deployments` grant",
@@ -922,12 +922,12 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"trusted `X-Tenet-Authenticated-Roles: viewer` deployment detail/status/events and immutable plan/apply reads succeed through matching `X-Tenet-Authorized-Projects` plus `X-Tenet-Authorized-Environments` scopes even when `X-Tenet-Authorized-Deployments` does not name the deployment",
 		"Guarded-route troubleshooting workflow",
 		"Start in the embedded `Operator context` banner",
-		"plus its bounded route examples and `requiredTrustedHeaders` to identify the affected route family",
+		"plus its bounded route examples and the embedded banner's `Required trusted headers:` label",
 		"`identity.authenticated`: `false` explains `401 Unauthorized` on guarded reads or writes",
 		"`deploymentAccess.summary`: `matchedCount=0`, `emptyReason`, or non-empty `unmatchedNames` explains `200 OK` empty collections",
 		"`projectEnvironmentExamples` shows which visible project/environment groups",
 		"additive `requiredTrustedHeaders` (`X-Tenet-Authenticated-Id` or `X-User-ID`, `X-Tenet-Authenticated-Roles`, and the exact `X-Tenet-Authorized-Deployments` allowlist and/or matching `X-Tenet-Authorized-Projects` plus `X-Tenet-Authorized-Environments` scopes depending on the route class)",
-		"`accessVerdicts`: use the blocked or likely-empty verdict reason plus its bounded route examples and `requiredTrustedHeaders`",
+		"`accessVerdicts`: use the blocked or likely-empty verdict reason plus its bounded route examples and the embedded banner's `Required trusted headers:` label",
 		"plan/apply writes still require exact `X-Tenet-Authorized-Deployments` membership until the backend write-scope contract changes",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
@@ -1020,7 +1020,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"Guarded-read troubleshooting from the embedded dashboard follows the same diagnostic order as the API docs",
 		"start with the `Operator context` banner",
 		"inspect `identity.authenticated` for `401`, inspect `roles.canRead` before allowlist debugging for viewer-role `403`",
-		"then inspect `accessVerdicts`, their bounded route examples, and their required trusted headers to choose the exact guarded route class",
+		"then inspect `accessVerdicts`, their bounded route examples, and the `Required trusted headers:` fragment to choose the exact guarded route class",
 		"it does not authorize routes client-side",
 	} {
 		if !strings.Contains(overviewFeatureDoc, fragment) {

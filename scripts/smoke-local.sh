@@ -959,7 +959,7 @@ assert "const operatorContextAccessVerdictRequiredHeadersLabel = (verdict) => {"
 assert "const headers = Array.isArray(verdict?.requiredTrustedHeaders) ? verdict.requiredTrustedHeaders.filter(Boolean) : [];" in ui, ui
 assert "const visibleHeaders = headers.slice(0, 3).join('; ');" in ui, ui
 assert 'requiredTrustedHeaders' in ui, ui
-assert 'Headers:' in ui, ui
+assert 'Required trusted headers:' in ui, ui
 assert "const headers = operatorContextAccessVerdictRequiredHeadersLabel(verdict);" in ui, ui
 assert 'return `${label} ${state}${reason}${examples}${headers}`;' in ui, ui
 assert "const operatorContextAccessVerdictEntries = (context) => {" in ui, ui
