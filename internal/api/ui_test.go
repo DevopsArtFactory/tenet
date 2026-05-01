@@ -46,7 +46,7 @@ func TestEmbeddedUIRendersOperatorContextBannerSafely(t *testing.T) {
 		"const hiddenCount = routes.length - 2;",
 		"const operatorContextAccessVerdictRequiredHeadersLabel = (verdict) => {",
 		"const headers = Array.isArray(verdict?.requiredTrustedHeaders) ? verdict.requiredTrustedHeaders.filter(Boolean) : [];",
-		"const visibleHeaders = headers.slice(0, 3).join('; ');",
+		"return ` Required trusted headers: ${headers.join('; ')}`;",
 		"requiredTrustedHeaders",
 		"Required trusted headers:",
 		"const operatorContextAccessVerdictLabel = (label, verdict) => {",

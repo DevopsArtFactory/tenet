@@ -957,7 +957,7 @@ assert "const visibleRoutes = routes.slice(0, 2).join('; ');" in ui, ui
 assert "const hiddenCount = routes.length - 2;" in ui, ui
 assert "const operatorContextAccessVerdictRequiredHeadersLabel = (verdict) => {" in ui, ui
 assert "const headers = Array.isArray(verdict?.requiredTrustedHeaders) ? verdict.requiredTrustedHeaders.filter(Boolean) : [];" in ui, ui
-assert "const visibleHeaders = headers.slice(0, 3).join('; ');" in ui, ui
+assert "return ` Required trusted headers: ${headers.join('; ')}`;" in ui, ui
 assert 'requiredTrustedHeaders' in ui, ui
 assert 'Required trusted headers:' in ui, ui
 assert "const headers = operatorContextAccessVerdictRequiredHeadersLabel(verdict);" in ui, ui
