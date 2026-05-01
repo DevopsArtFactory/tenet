@@ -46,6 +46,16 @@ func (s Service) inspectTrafficRoutingResourceFromAWS(ctx context.Context, req T
 			return TrafficRoutingInspection{}, err
 		}
 		return trafficRoutingInspectionFromTargetGroup(req, targetGroup, targetHealth), nil
+	case "productionListenerRule":
+		ruleARN := strings.TrimSpace(req.ResourceName)
+		if !strings.Contains(ruleARN, ":listener-rule/") {
+			return TrafficRoutingInspection{}, resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
+		}
+		rule, err := describeListenerRule(ctx, clients.Config, req.Region, ruleARN)
+		if err != nil {
+			return TrafficRoutingInspection{}, err
+		}
+		return trafficRoutingInspectionFromListenerRule(req, rule), nil
 	}
 	group, err := getCodeDeployDeploymentGroup(ctx, clients.Config, req.Region, codeDeployApplicationName(req.DeploymentName, req.ResourceName, req.ResourceType), codeDeployDeploymentGroupName(req))
 	if err != nil {
@@ -221,6 +231,24 @@ func trafficRoutingInspectionFromListener(req TrafficRoutingRequest, listener el
 	}
 }
 
+func trafficRoutingInspectionFromListenerRule(req TrafficRoutingRequest, rule elbv2RulePayload) TrafficRoutingInspection {
+	actions := listenerRuleActions(rule)
+	conditions := listenerRuleConditions(rule)
+	return TrafficRoutingInspection{
+		Kind:           req.ResourceType,
+		DisplayName:    trafficRoutingDisplayName(req.ResourceType),
+		InspectionMode: "live",
+		Summary:        trafficRoutingSummaryText(req.ResourceType, req.ResourceDescription),
+		ListenerRule: &ListenerRuleInspection{
+			RuleARN:    strings.TrimSpace(rule.RuleARN),
+			Priority:   strings.TrimSpace(rule.Priority),
+			IsDefault:  rule.IsDefault,
+			Conditions: conditions,
+			Actions:    actions,
+		},
+	}
+}
+
 func codeDeployApplicationName(deploymentName, resourceName, resourceType string) string {
 	if resourceType == "codeDeployApplication" && strings.TrimSpace(resourceName) != "" {
 		return strings.TrimSpace(resourceName)
@@ -345,27 +373,80 @@ func listenerCertificates(listener elbv2ListenerPayload) []string {
 func listenerActions(listener elbv2ListenerPayload) []ListenerActionInspection {
 	actions := make([]ListenerActionInspection, 0, len(listener.DefaultActions))
 	for _, action := range listener.DefaultActions {
-		targetGroups := make([]ListenerActionTargetInspection, 0, len(action.ForwardConfig.TargetGroups))
-		for _, targetGroup := range action.ForwardConfig.TargetGroups {
-			targetGroups = append(targetGroups, ListenerActionTargetInspection{
-				TargetGroupARN: strings.TrimSpace(targetGroup.TargetGroupARN),
-				Weight:         targetGroup.Weight,
-			})
-		}
-		sort.SliceStable(targetGroups, func(i, j int) bool {
-			if targetGroups[i].Weight == targetGroups[j].Weight {
-				return targetGroups[i].TargetGroupARN < targetGroups[j].TargetGroupARN
-			}
-			return targetGroups[i].Weight < targetGroups[j].Weight
-		})
-		actions = append(actions, ListenerActionInspection{
-			Type:           strings.TrimSpace(action.Type),
-			Order:          action.Order,
-			TargetGroupARN: strings.TrimSpace(action.TargetGroupARN),
-			TargetGroups:   targetGroups,
-		})
+		actions = append(actions, listenerActionInspection(action))
 	}
 	return actions
+}
+
+func listenerRuleActions(rule elbv2RulePayload) []ListenerActionInspection {
+	actions := make([]ListenerActionInspection, 0, len(rule.Actions))
+	for _, action := range rule.Actions {
+		actions = append(actions, listenerActionInspection(action))
+	}
+	sort.SliceStable(actions, func(i, j int) bool {
+		if actions[i].Order == actions[j].Order {
+			return actions[i].Type < actions[j].Type
+		}
+		return actions[i].Order < actions[j].Order
+	})
+	return actions
+}
+
+func listenerActionInspection(action elbv2ActionPayload) ListenerActionInspection {
+	targetGroups := make([]ListenerActionTargetInspection, 0, len(action.ForwardConfig.TargetGroups))
+	for _, targetGroup := range action.ForwardConfig.TargetGroups {
+		targetGroups = append(targetGroups, ListenerActionTargetInspection{
+			TargetGroupARN: strings.TrimSpace(targetGroup.TargetGroupARN),
+			Weight:         targetGroup.Weight,
+		})
+	}
+	sort.SliceStable(targetGroups, func(i, j int) bool {
+		if targetGroups[i].Weight == targetGroups[j].Weight {
+			return targetGroups[i].TargetGroupARN < targetGroups[j].TargetGroupARN
+		}
+		return targetGroups[i].Weight < targetGroups[j].Weight
+	})
+	return ListenerActionInspection{
+		Type:           strings.TrimSpace(action.Type),
+		Order:          action.Order,
+		TargetGroupARN: strings.TrimSpace(action.TargetGroupARN),
+		TargetGroups:   targetGroups,
+	}
+}
+
+func listenerRuleConditions(rule elbv2RulePayload) []ListenerRuleConditionInspection {
+	conditions := make([]ListenerRuleConditionInspection, 0, len(rule.Conditions))
+	for _, condition := range rule.Conditions {
+		values := append([]string(nil), condition.Values...)
+		values = append(values, condition.HostHeaderConfig.Values...)
+		values = append(values, condition.PathPatternConfig.Values...)
+		cleaned := make([]string, 0, len(values))
+		seen := make(map[string]struct{})
+		for _, value := range values {
+			value = strings.TrimSpace(value)
+			if value == "" {
+				continue
+			}
+			if _, ok := seen[value]; ok {
+				continue
+			}
+			seen[value] = struct{}{}
+			cleaned = append(cleaned, value)
+		}
+		sort.Strings(cleaned)
+		field := strings.TrimSpace(condition.Field)
+		if field == "" && len(cleaned) == 0 {
+			continue
+		}
+		conditions = append(conditions, ListenerRuleConditionInspection{Field: field, Values: cleaned})
+	}
+	sort.SliceStable(conditions, func(i, j int) bool {
+		if conditions[i].Field == conditions[j].Field {
+			return strings.Join(conditions[i].Values, "\x00") < strings.Join(conditions[j].Values, "\x00")
+		}
+		return conditions[i].Field < conditions[j].Field
+	})
+	return conditions
 }
 
 func getCodeDeployApplication(ctx context.Context, cfg aws.Config, region, applicationName string) (codeDeployApplicationInfoPayload, error) {
@@ -531,6 +612,41 @@ func describeListener(ctx context.Context, cfg aws.Config, region, listenerARN s
 		return elbv2ListenerPayload{}, resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
 	}
 	return response.Result.Listeners[0], nil
+}
+
+func describeListenerRule(ctx context.Context, cfg aws.Config, region, ruleARN string) (elbv2RulePayload, error) {
+	body, err := doSignedAWSQueryRequest(
+		ctx,
+		cfg,
+		"elasticloadbalancing",
+		region,
+		"https://elasticloadbalancing."+strings.TrimSpace(region)+".amazonaws.com/",
+		url.Values{
+			"Action":            []string{"DescribeRules"},
+			"Version":           []string{"2015-12-01"},
+			"RuleArns.member.1": []string{strings.TrimSpace(ruleARN)},
+		},
+		func(responseBody []byte) error {
+			code := parseAWSQueryError(responseBody)
+			switch code {
+			case "RuleNotFound", "ListenerNotFound", "LoadBalancerNotFound":
+				return resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
+			default:
+				return resourceaws.NewUnavailableError(resourceaws.UnavailableReasonAWSUnavailable)
+			}
+		},
+	)
+	if err != nil {
+		return elbv2RulePayload{}, err
+	}
+	var response elbv2DescribeRulesResponse
+	if err := xml.Unmarshal(body, &response); err != nil {
+		return elbv2RulePayload{}, err
+	}
+	if len(response.Result.Rules) == 0 {
+		return elbv2RulePayload{}, resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
+	}
+	return response.Result.Rules[0], nil
 }
 
 func doSignedAWSJSONRequest(
@@ -770,6 +886,33 @@ type elbv2DescribeListenersResponse struct {
 
 type elbv2DescribeListenersResult struct {
 	Listeners []elbv2ListenerPayload `xml:"Listeners>member"`
+}
+
+type elbv2DescribeRulesResponse struct {
+	Result elbv2DescribeRulesResult `xml:"DescribeRulesResult"`
+}
+
+type elbv2DescribeRulesResult struct {
+	Rules []elbv2RulePayload `xml:"Rules>member"`
+}
+
+type elbv2RulePayload struct {
+	RuleARN    string                  `xml:"RuleArn"`
+	Priority   string                  `xml:"Priority"`
+	IsDefault  bool                    `xml:"IsDefault"`
+	Conditions []elbv2ConditionPayload `xml:"Conditions>member"`
+	Actions    []elbv2ActionPayload    `xml:"Actions>member"`
+}
+
+type elbv2ConditionPayload struct {
+	Field             string                      `xml:"Field"`
+	Values            []string                    `xml:"Values>member"`
+	HostHeaderConfig  elbv2ConditionValuesPayload `xml:"HostHeaderConfig"`
+	PathPatternConfig elbv2ConditionValuesPayload `xml:"PathPatternConfig"`
+}
+
+type elbv2ConditionValuesPayload struct {
+	Values []string `xml:"Values>member"`
 }
 
 type elbv2ListenerPayload struct {

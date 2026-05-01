@@ -1433,6 +1433,8 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"`mixedInstancesPolicy`",
 		"`launchTemplate.imageId`",
 		"`launchTemplate.instanceType`",
+		"`listenerRule`",
+		"`ruleArn`, `priority`, `isDefault`, `conditions`, `actions`",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README resource inspection contract to include %q", fragment)
@@ -1451,6 +1453,7 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"`greenTaskSetTargetGroup`",
 		"`launchTemplate.imageId`",
 		"`launchTemplate.instanceType`",
+		"`listenerRule` metadata",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
 			t.Fatalf("expected overview dashboard doc to include %q", fragment)
@@ -1468,6 +1471,7 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"`greenTaskSetTargetGroup`",
 		"`launchTemplate.imageId`",
 		"`launchTemplate.instanceType`",
+		"`listenerRule` details",
 	} {
 		if !strings.Contains(uiDoc, fragment) {
 			t.Fatalf("expected overview UI doc to include %q", fragment)

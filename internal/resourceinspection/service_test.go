@@ -447,6 +447,29 @@ func TestServiceInspect(t *testing.T) {
 							}},
 						},
 					}, nil
+				case "productionListenerRule":
+					return TrafficRoutingInspection{
+						Kind:           req.ResourceType,
+						DisplayName:    "Production listener rule",
+						InspectionMode: "live",
+						Summary:        req.ResourceDescription,
+						ListenerRule: &ListenerRuleInspection{
+							RuleARN:  "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:listener-rule/app/payments/abc123/prod456/rule789",
+							Priority: "10",
+							Conditions: []ListenerRuleConditionInspection{
+								{Field: "host-header", Values: []string{"payments.example.com"}},
+								{Field: "path-pattern", Values: []string{"/api/*"}},
+							},
+							Actions: []ListenerActionInspection{{
+								Type:  "forward",
+								Order: 1,
+								TargetGroups: []ListenerActionTargetInspection{
+									{TargetGroupARN: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-prod-active/aaa111", Weight: 90},
+									{TargetGroupARN: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-prod-candidate/bbb222", Weight: 10},
+								},
+							}},
+						},
+					}, nil
 				case "blueTaskSetTargetGroup":
 					return TrafficRoutingInspection{
 						Kind:           req.ResourceType,
@@ -549,6 +572,11 @@ func TestServiceInspect(t *testing.T) {
 				resourceType: "testListener",
 				resourceName: "payments-api-prod-test-listener",
 				summary:      "Test listener CodeDeploy uses to validate the replacement ECS task set before promotion (style: linear)",
+			},
+			{
+				resourceType: "productionListenerRule",
+				resourceName: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:listener-rule/app/payments/50dc6c495c0c9188/abcdef0123456789/1234567890abcdef",
+				summary:      "Production listener rule operators inspect while Tenet updates weighted forwarding during rollout",
 			},
 			{
 				resourceType: "blueTaskSetTargetGroup",
@@ -657,6 +685,15 @@ func TestServiceInspect(t *testing.T) {
 			},
 			{
 				DeploymentName:      "payments-api-prod",
+				ResourceType:        "productionListenerRule",
+				ResourceName:        "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:listener-rule/app/payments/50dc6c495c0c9188/abcdef0123456789/1234567890abcdef",
+				ResourceDescription: "Production listener rule operators inspect while Tenet updates weighted forwarding during rollout",
+				Region:              "ap-northeast-2",
+				TargetAccountID:     "123456789012",
+				ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
+			},
+			{
+				DeploymentName:      "payments-api-prod",
 				ResourceType:        "blueTaskSetTargetGroup",
 				ResourceName:        "payments-api-prod-blue",
 				ResourceDescription: "Blue task set target group CodeDeploy treats as the live ECS traffic destination (style: linear)",
@@ -696,69 +733,53 @@ func TestServiceInspect(t *testing.T) {
 		}
 	})
 
-	t.Run("weighted routing plan and listener-rule resources remain summary-only inspection payloads", func(t *testing.T) {
+	t.Run("traffic shift plan remains summary only even when live provider is configured", func(t *testing.T) {
 		service := NewService(Options{
 			InspectTrafficRoutingResource: func(context.Context, TrafficRoutingRequest) (TrafficRoutingInspection, error) {
-				t.Fatalf("summary-only weighted routing plan/listener-rule resources should not invoke the live traffic routing provider")
+				t.Fatalf("trafficShiftPlan should not invoke live traffic routing provider")
 				return TrafficRoutingInspection{}, nil
 			},
 		})
 
-		testCases := []struct {
-			name         string
-			resourceType string
-			resourceName string
-			displayName  string
-			summary      string
-		}{
-			{
-				name:         "traffic shift plan",
-				resourceType: "trafficShiftPlan",
-				resourceName: "payments-api-prod-weighted-routing",
-				displayName:  "Traffic shift plan",
-				summary:      "Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s",
-			},
-			{
-				name:         "production listener rule",
-				resourceType: "productionListenerRule",
-				resourceName: "payments-api-prod-prod-listener",
-				displayName:  "Production listener rule",
-				summary:      "Production listener rule operators inspect while Tenet updates weighted forwarding during rollout",
-			},
+		result, err := service.Inspect(context.Background(), Request{
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "trafficShiftPlan",
+			ResourceName:        "payments-api-prod-weighted-routing",
+			ResourceDescription: "Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s",
+			ControlAccountID:    "123456789012",
+			TargetAccountID:     "123456789012",
+			Region:              "ap-northeast-2",
+		})
+		if err != nil {
+			t.Fatalf("Inspect returned error: %v", err)
 		}
+		if result.Source != SourceRolloutSummary || result.TrafficRoutingResource == nil || result.TrafficRoutingResource.InspectionMode != "summary_only" {
+			t.Fatalf("expected summary-only traffic shift plan payload, got %+v", result)
+		}
+	})
 
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				result, err := service.Inspect(context.Background(), Request{
-					DeploymentName:      "payments-api-prod",
-					ResourceType:        tc.resourceType,
-					ResourceName:        tc.resourceName,
-					ResourceDescription: tc.summary,
-					ControlAccountID:    "123456789012",
-					TargetAccountID:     "123456789012",
-					Region:              "ap-northeast-2",
-				})
-				if err != nil {
-					t.Fatalf("Inspect returned error: %v", err)
-				}
-				want := Result{
-					DeploymentName: "payments-api-prod",
-					ResourceType:   tc.resourceType,
-					ResourceName:   tc.resourceName,
-					LookupContext:  expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
-					Available:      true,
-					Source:         SourceRolloutSummary,
-					TrafficRoutingResource: &TrafficRoutingInspection{
-						Kind:           tc.resourceType,
-						DisplayName:    tc.displayName,
-						InspectionMode: "summary_only",
-						Summary:        tc.summary,
-					},
-				}
-				if !reflect.DeepEqual(result, want) {
-					t.Fatalf("unexpected weighted routing summary inspection result: %+v", result)
-				}
-			})
+	t.Run("production listener rule name keeps summary fallback without live ARN", func(t *testing.T) {
+		service := NewService(Options{
+			InspectTrafficRoutingResource: func(context.Context, TrafficRoutingRequest) (TrafficRoutingInspection, error) {
+				t.Fatalf("productionListenerRule without a listener-rule ARN should not invoke live traffic routing provider")
+				return TrafficRoutingInspection{}, nil
+			},
+		})
+
+		result, err := service.Inspect(context.Background(), Request{
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "productionListenerRule",
+			ResourceName:        "payments-api-prod-prod-listener",
+			ResourceDescription: "Production listener rule operators inspect while Tenet updates weighted forwarding during rollout",
+			ControlAccountID:    "123456789012",
+			TargetAccountID:     "123456789012",
+			Region:              "ap-northeast-2",
+		})
+		if err != nil {
+			t.Fatalf("Inspect returned error: %v", err)
+		}
+		if result.Source != SourceRolloutSummary || result.TrafficRoutingResource == nil || result.TrafficRoutingResource.InspectionMode != "summary_only" {
+			t.Fatalf("expected summary-only production listener rule payload, got %+v", result)
 		}
 	})
 

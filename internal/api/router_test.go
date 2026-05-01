@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
@@ -5518,11 +5519,11 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 	})
 
-	t.Run("returns weighted target group listener-rule summary payload", func(t *testing.T) {
+	t.Run("returns weighted target group listener-rule live payload", func(t *testing.T) {
 		expected := resourceinspection.Result{
 			DeploymentName: "api-prod",
 			ResourceType:   "productionListenerRule",
-			ResourceName:   "api-prod-prod-listener",
+			ResourceName:   "arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:listener-rule/app/payments/50dc6c495c0c9188/abcdef0123456789/1234567890abcdef",
 			LookupContext: resourceinspection.LookupContext{
 				Region:                 "ap-northeast-2",
 				ControlAccountID:       "123456789012",
@@ -5531,12 +5532,31 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				ObserverRoleConfigured: false,
 			},
 			Available: true,
-			Source:    resourceinspection.SourceRolloutSummary,
+			Source:    resourceinspection.SourceTrafficRoutingAWS,
 			TrafficRoutingResource: &resourceinspection.TrafficRoutingInspection{
 				Kind:           "productionListenerRule",
 				DisplayName:    "Production listener rule",
-				InspectionMode: "summary_only",
+				InspectionMode: "live",
 				Summary:        "Production listener rule operators inspect while Tenet updates weighted forwarding during rollout",
+				ListenerRule: &resourceinspection.ListenerRuleInspection{
+					RuleARN:   "arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:listener-rule/app/payments/50dc6c495c0c9188/abcdef0123456789/1234567890abcdef",
+					Priority:  "10",
+					IsDefault: false,
+					Conditions: []resourceinspection.ListenerRuleConditionInspection{
+						{Field: "host-header", Values: []string{"payments.example.com"}},
+						{Field: "path-pattern", Values: []string{"/api/*"}},
+					},
+					Actions: []resourceinspection.ListenerActionInspection{
+						{
+							Type:  "forward",
+							Order: 1,
+							TargetGroups: []resourceinspection.ListenerActionTargetInspection{
+								{TargetGroupARN: "arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:targetgroup/payments-active/abc123", Weight: 80},
+								{TargetGroupARN: "arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:targetgroup/payments-candidate/def456", Weight: 20},
+							},
+						},
+					},
+				},
 			},
 		}
 
@@ -5553,7 +5573,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 			},
 		})
 
-		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=productionListenerRule&resourceName=api-prod-prod-listener", nil)
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=productionListenerRule&resourceName="+url.QueryEscape("arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:listener-rule/app/payments/50dc6c495c0c9188/abcdef0123456789/1234567890abcdef"), nil)
 		resp := httptest.NewRecorder()
 
 		router.ServeHTTP(resp, req)
@@ -5573,12 +5593,41 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		for key, want := range map[string]any{
 			"kind":           "productionListenerRule",
 			"displayName":    "Production listener rule",
-			"inspectionMode": "summary_only",
+			"inspectionMode": "live",
 			"summary":        "Production listener rule operators inspect while Tenet updates weighted forwarding during rollout",
 		} {
 			if got := trafficRoutingResource[key]; !reflect.DeepEqual(got, want) {
 				t.Fatalf("expected trafficRoutingResource[%q]=%v, got %#v", key, want, got)
 			}
+		}
+		listenerRule, ok := trafficRoutingResource["listenerRule"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected listenerRule object in payload, got %#v", trafficRoutingResource["listenerRule"])
+		}
+		for key, want := range map[string]any{
+			"ruleArn":   "arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:listener-rule/app/payments/50dc6c495c0c9188/abcdef0123456789/1234567890abcdef",
+			"priority":  "10",
+			"isDefault": false,
+		} {
+			if got := listenerRule[key]; !reflect.DeepEqual(got, want) {
+				t.Fatalf("expected listenerRule[%q]=%v, got %#v", key, want, got)
+			}
+		}
+		conditions, ok := listenerRule["conditions"].([]any)
+		if !ok || len(conditions) != 2 {
+			t.Fatalf("expected two listenerRule conditions, got %#v", listenerRule["conditions"])
+		}
+		actions, ok := listenerRule["actions"].([]any)
+		if !ok || len(actions) != 1 {
+			t.Fatalf("expected one listenerRule action, got %#v", listenerRule["actions"])
+		}
+		action, ok := actions[0].(map[string]any)
+		if !ok || action["type"] != "forward" {
+			t.Fatalf("expected forward listenerRule action, got %#v", actions[0])
+		}
+		targets, ok := action["targetGroups"].([]any)
+		if !ok || len(targets) != 2 {
+			t.Fatalf("expected weighted listenerRule target groups, got %#v", action["targetGroups"])
 		}
 	})
 
