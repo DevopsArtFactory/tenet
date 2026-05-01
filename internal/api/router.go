@@ -228,6 +228,19 @@ var (
 		"GET /v1/overview/accounts",
 		"GET /v1/audit-logs",
 	}
+	operatorContextAuthenticatedIdentityHeaders = []string{
+		"X-Tenet-Authenticated-Id",
+		"X-User-ID",
+	}
+	operatorContextViewerRoleHeaders = []string{
+		"X-Tenet-Authenticated-Roles",
+	}
+	operatorContextOperatorRoleHeaders = []string{
+		"X-Tenet-Authenticated-Roles",
+	}
+	operatorContextDeploymentAllowlistHeaders = []string{
+		"X-Tenet-Authorized-Deployments",
+	}
 )
 
 type operatorContextResponse struct {
@@ -297,6 +310,7 @@ type operatorContextAccessVerdict struct {
 	Allowed                               bool     `json:"allowed"`
 	Reason                                string   `json:"reason"`
 	ExampleRoutes                         []string `json:"exampleRoutes"`
+	RequiredTrustedHeaders                []string `json:"requiredTrustedHeaders,omitempty"`
 	RequiresAuthenticatedIdentity         bool     `json:"requiresAuthenticatedIdentity"`
 	RequiresViewerCapableRole             bool     `json:"requiresViewerCapableRole,omitempty"`
 	RequiresOperatorRole                  bool     `json:"requiresOperatorRole,omitempty"`
@@ -394,6 +408,12 @@ func operatorContextReadVerdict(options Options, identity requestactor.Authentic
 		RequiresAuthenticatedIdentity: options.RequireDeploymentReadAuthorization,
 		RequiresViewerCapableRole:     options.RequireDeploymentReadAuthorization && options.RequireOperatorRoleForRead,
 	}
+	if verdict.RequiresAuthenticatedIdentity {
+		verdict.RequiredTrustedHeaders = cloneOperatorContextRequiredHeaders(operatorContextAuthenticatedIdentityHeaders)
+	}
+	if verdict.RequiresViewerCapableRole {
+		verdict.RequiredTrustedHeaders = appendOperatorContextRequiredHeaders(verdict.RequiredTrustedHeaders, operatorContextViewerRoleHeaders)
+	}
 	if !options.RequireDeploymentReadAuthorization {
 		return verdict
 	}
@@ -420,6 +440,12 @@ func operatorContextWriteVerdict(options Options, identity requestactor.Authenti
 		RequiresAuthenticatedIdentity: identityRequired,
 		RequiresOperatorRole:          options.RequireOperatorRoleForWrite,
 	}
+	if verdict.RequiresAuthenticatedIdentity {
+		verdict.RequiredTrustedHeaders = cloneOperatorContextRequiredHeaders(operatorContextAuthenticatedIdentityHeaders)
+	}
+	if verdict.RequiresOperatorRole {
+		verdict.RequiredTrustedHeaders = appendOperatorContextRequiredHeaders(verdict.RequiredTrustedHeaders, operatorContextOperatorRoleHeaders)
+	}
 	if !identityRequired {
 		return verdict
 	}
@@ -441,6 +467,9 @@ func operatorContextDeploymentScopedReadVerdict(options Options, identity reques
 	verdict := operatorContextReadVerdict(options, identity, roles)
 	verdict.ExampleRoutes = cloneOperatorContextExampleRoutes(operatorContextDeploymentScopedReadExampleRoutes)
 	verdict.RequiresExactDeploymentAllowlistMatch = options.RequireDeploymentReadAuthorization
+	if verdict.RequiresExactDeploymentAllowlistMatch {
+		verdict.RequiredTrustedHeaders = appendOperatorContextRequiredHeaders(verdict.RequiredTrustedHeaders, operatorContextDeploymentAllowlistHeaders)
+	}
 	if !options.RequireDeploymentReadAuthorization {
 		verdict.Allowed = true
 		verdict.Reason = "deployment-scoped reads are not requiring exact deployment allowlist membership for this API instance"
@@ -462,6 +491,9 @@ func operatorContextDeploymentScopedWriteVerdict(options Options, identity reque
 	verdict := operatorWrite
 	verdict.ExampleRoutes = cloneOperatorContextExampleRoutes(operatorContextDeploymentScopedWriteExampleRoutes)
 	verdict.RequiresExactDeploymentAllowlistMatch = options.RequireDeploymentReadAuthorization
+	if verdict.RequiresExactDeploymentAllowlistMatch {
+		verdict.RequiredTrustedHeaders = appendOperatorContextRequiredHeaders(verdict.RequiredTrustedHeaders, operatorContextDeploymentAllowlistHeaders)
+	}
 	if !verdict.Allowed {
 		return verdict
 	}
@@ -482,6 +514,9 @@ func operatorContextCollectionReadVerdict(options Options, identity requestactor
 	verdict := operatorContextReadVerdict(options, identity, roles)
 	verdict.ExampleRoutes = cloneOperatorContextExampleRoutes(operatorContextCollectionReadExampleRoutes)
 	verdict.FiltersCollectionsByDeploymentAccess = options.RequireDeploymentReadAuthorization
+	if verdict.FiltersCollectionsByDeploymentAccess {
+		verdict.RequiredTrustedHeaders = appendOperatorContextRequiredHeaders(verdict.RequiredTrustedHeaders, operatorContextDeploymentAllowlistHeaders)
+	}
 	if !options.RequireDeploymentReadAuthorization {
 		verdict.Allowed = true
 		verdict.Reason = "collection reads are not filtered by deployment allowlist for this API instance"
@@ -505,6 +540,17 @@ func operatorContextCollectionReadVerdict(options Options, identity requestactor
 
 func cloneOperatorContextExampleRoutes(routes []string) []string {
 	return append([]string(nil), routes...)
+}
+
+func cloneOperatorContextRequiredHeaders(headers []string) []string {
+	return append([]string(nil), headers...)
+}
+
+func appendOperatorContextRequiredHeaders(headers []string, additional ...[]string) []string {
+	for _, set := range additional {
+		headers = append(headers, set...)
+	}
+	return headers
 }
 
 func buildOperatorContextAccessSummary(ctx context.Context, options Options, deployments requestactor.AuthorizedDeployments) *operatorContextAccessSummary {

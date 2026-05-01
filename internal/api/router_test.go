@@ -180,12 +180,18 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if !reflect.DeepEqual(operatorRead["exampleRoutes"], []any{"GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/audit-logs"}) {
 		t.Fatalf("expected operator read route examples, got %#v", operatorRead["exampleRoutes"])
 	}
+	if !reflect.DeepEqual(operatorRead["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles"}) {
+		t.Fatalf("expected operator read trusted headers, got %#v", operatorRead["requiredTrustedHeaders"])
+	}
 	operatorWrite := accessVerdicts["operatorWrite"].(map[string]any)
 	if operatorWrite["allowed"] != true || operatorWrite["requiresOperatorRole"] != true || operatorWrite["reason"] != "guarded operator write prerequisites are satisfied for this request" {
 		t.Fatalf("expected allowed write verdict, got %#v", operatorWrite)
 	}
 	if !reflect.DeepEqual(operatorWrite["exampleRoutes"], []any{"POST /v1/plans/deployments/{deploymentName}", "POST /v1/applies/plans/{planId}", "POST /v1/applies/{applyId}/transitions"}) {
 		t.Fatalf("expected operator write route examples, got %#v", operatorWrite["exampleRoutes"])
+	}
+	if !reflect.DeepEqual(operatorWrite["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles"}) {
+		t.Fatalf("expected operator write trusted headers, got %#v", operatorWrite["requiredTrustedHeaders"])
 	}
 	deploymentScopedRead := accessVerdicts["deploymentScopedRead"].(map[string]any)
 	if deploymentScopedRead["allowed"] != true || deploymentScopedRead["requiresExactDeploymentAllowlistMatch"] != true || deploymentScopedRead["reason"] != "deployment-scoped reads can pass only for deployments named in X-Tenet-Authorized-Deployments" {
@@ -194,6 +200,9 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if !reflect.DeepEqual(deploymentScopedRead["exampleRoutes"], []any{"GET /v1/overview/deployments/{deploymentName}", "GET /v1/status/deployments/{deploymentName}", "GET /v1/audit-logs?deployment={deploymentName}"}) {
 		t.Fatalf("expected deployment-scoped read route examples, got %#v", deploymentScopedRead["exampleRoutes"])
 	}
+	if !reflect.DeepEqual(deploymentScopedRead["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles", "X-Tenet-Authorized-Deployments"}) {
+		t.Fatalf("expected deployment-scoped read trusted headers, got %#v", deploymentScopedRead["requiredTrustedHeaders"])
+	}
 	deploymentScopedWrite := accessVerdicts["deploymentScopedWrite"].(map[string]any)
 	if deploymentScopedWrite["allowed"] != true || deploymentScopedWrite["requiresExactDeploymentAllowlistMatch"] != true {
 		t.Fatalf("expected conditional deployment write verdict, got %#v", deploymentScopedWrite)
@@ -201,12 +210,18 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if !reflect.DeepEqual(deploymentScopedWrite["exampleRoutes"], []any{"POST /v1/plans/deployments/{deploymentName}", "POST /v1/applies/plans/{planId}", "POST /v1/applies/{applyId}/transitions"}) {
 		t.Fatalf("expected deployment-scoped write route examples, got %#v", deploymentScopedWrite["exampleRoutes"])
 	}
+	if !reflect.DeepEqual(deploymentScopedWrite["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles", "X-Tenet-Authorized-Deployments"}) {
+		t.Fatalf("expected deployment-scoped write trusted headers, got %#v", deploymentScopedWrite["requiredTrustedHeaders"])
+	}
 	collectionRead := accessVerdicts["collectionRead"].(map[string]any)
 	if collectionRead["allowed"] != true || collectionRead["filtersCollectionsByDeploymentAccess"] != true {
 		t.Fatalf("expected collection read verdict, got %#v", collectionRead)
 	}
 	if !reflect.DeepEqual(collectionRead["exampleRoutes"], []any{"GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/overview/accounts", "GET /v1/audit-logs"}) {
 		t.Fatalf("expected collection read route examples, got %#v", collectionRead["exampleRoutes"])
+	}
+	if !reflect.DeepEqual(collectionRead["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles", "X-Tenet-Authorized-Deployments"}) {
+		t.Fatalf("expected collection read trusted headers, got %#v", collectionRead["requiredTrustedHeaders"])
 	}
 }
 
