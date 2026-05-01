@@ -5747,6 +5747,110 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 	})
 
+	t.Run("returns weighted target group live payload", func(t *testing.T) {
+		expected := resourceinspection.Result{
+			DeploymentName: "api-prod",
+			ResourceType:   "activeTargetGroup",
+			ResourceName:   "api-prod-active",
+			LookupContext: resourceinspection.LookupContext{
+				Region:                 "ap-northeast-2",
+				ControlAccountID:       "123456789012",
+				TargetAccountID:        "123456789012",
+				CrossAccount:           false,
+				ObserverRoleConfigured: true,
+			},
+			Available: true,
+			Source:    resourceinspection.SourceTrafficRoutingAWS,
+			TrafficRoutingResource: &resourceinspection.TrafficRoutingInspection{
+				Kind:           "activeTargetGroup",
+				DisplayName:    "Active target group",
+				InspectionMode: "live",
+				Summary:        "Currently active target group receiving production traffic",
+				TargetGroup: &resourceinspection.TargetGroupInspection{
+					TargetGroupName:            "api-prod-active",
+					TargetGroupARN:             "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/api-prod-active/abc123",
+					Protocol:                   "HTTP",
+					Port:                       8080,
+					TargetType:                 "instance",
+					LoadBalancerARNs:           []string{"arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:loadbalancer/app/api/abc123"},
+					HealthCheckProtocol:        "HTTP",
+					HealthCheckPort:            "traffic-port",
+					HealthCheckPath:            "/healthz",
+					HealthCheckIntervalSeconds: 30,
+					HealthCheckTimeoutSeconds:  5,
+					HealthyThresholdCount:      2,
+					UnhealthyThresholdCount:    3,
+					TargetHealthCounts:         map[string]int{"healthy": 3},
+					Targets: []resourceinspection.TargetHealthInspection{
+						{TargetID: "i-abc123", Port: 8080, State: "healthy"},
+						{TargetID: "i-def456", Port: 8080, State: "healthy"},
+						{TargetID: "i-ghi789", Port: 8080, State: "healthy"},
+					},
+				},
+			},
+		}
+
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "api-prod" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+				return expected, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=activeTargetGroup&resourceName=api-prod-active", nil)
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw weighted target-group live payload: %v", err)
+		}
+		trafficRoutingResource, ok := raw["trafficRoutingResource"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected trafficRoutingResource object in payload, got %#v", raw["trafficRoutingResource"])
+		}
+		for key, want := range map[string]any{
+			"kind":           "activeTargetGroup",
+			"displayName":    "Active target group",
+			"inspectionMode": "live",
+			"summary":        "Currently active target group receiving production traffic",
+		} {
+			if got := trafficRoutingResource[key]; !reflect.DeepEqual(got, want) {
+				t.Fatalf("expected trafficRoutingResource[%q]=%v, got %#v", key, want, got)
+			}
+		}
+		targetGroup, ok := trafficRoutingResource["targetGroup"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected weighted targetGroup object in payload, got %#v", trafficRoutingResource["targetGroup"])
+		}
+		for key, want := range map[string]any{
+			"targetGroupName":     "api-prod-active",
+			"targetGroupArn":      "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/api-prod-active/abc123",
+			"protocol":            "HTTP",
+			"port":                float64(8080),
+			"targetType":          "instance",
+			"healthCheckProtocol": "HTTP",
+			"healthCheckPath":     "/healthz",
+		} {
+			if got := targetGroup[key]; !reflect.DeepEqual(got, want) {
+				t.Fatalf("expected targetGroup[%q]=%v, got %#v", key, want, got)
+			}
+		}
+		healthCounts, ok := targetGroup["targetHealthCounts"].(map[string]any)
+		if !ok || healthCounts["healthy"] != float64(3) {
+			t.Fatalf("unexpected targetHealthCounts: %#v", targetGroup["targetHealthCounts"])
+		}
+	})
+
 	t.Run("returns auto scaling inspection payload with launch template metadata", func(t *testing.T) {
 		expected := resourceinspection.Result{
 			DeploymentName: "api-prod",

@@ -315,6 +315,18 @@ func TestServiceInspect(t *testing.T) {
 				displayName:  "Traffic shift plan",
 				summary:      "Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s",
 			},
+			{
+				resourceType: "activeTargetGroup",
+				resourceName: "payments-api-prod-active",
+				displayName:  "Active target group",
+				summary:      "Currently active target group receiving production traffic",
+			},
+			{
+				resourceType: "candidateTargetGroup",
+				resourceName: "payments-api-prod-candidate",
+				displayName:  "Candidate target group",
+				summary:      "Candidate target group Tenet will register and warm before traffic shifting",
+			},
 		} {
 			result, err := service.Inspect(context.Background(), Request{
 				DeploymentName:      "payments-api-prod",
@@ -476,6 +488,36 @@ func TestServiceInspect(t *testing.T) {
 							TargetType:      "ip",
 						},
 					}, nil
+				case "activeTargetGroup":
+					return TrafficRoutingInspection{
+						Kind:           req.ResourceType,
+						DisplayName:    "Active target group",
+						InspectionMode: "live",
+						Summary:        req.ResourceDescription,
+						TargetGroup: &TargetGroupInspection{
+							TargetGroupName:    "payments-api-prod-active",
+							TargetGroupARN:     "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-prod-active/aaa111",
+							Protocol:           "HTTP",
+							Port:               8080,
+							TargetType:         "instance",
+							TargetHealthCounts: map[string]int{"healthy": 3},
+						},
+					}, nil
+				case "candidateTargetGroup":
+					return TrafficRoutingInspection{
+						Kind:           req.ResourceType,
+						DisplayName:    "Candidate target group",
+						InspectionMode: "live",
+						Summary:        req.ResourceDescription,
+						TargetGroup: &TargetGroupInspection{
+							TargetGroupName:    "payments-api-prod-candidate",
+							TargetGroupARN:     "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-prod-candidate/bbb222",
+							Protocol:           "HTTP",
+							Port:               8080,
+							TargetType:         "instance",
+							TargetHealthCounts: map[string]int{"initial": 1},
+						},
+					}, nil
 				default:
 					t.Fatalf("unexpected traffic routing provider request: %+v", req)
 					return TrafficRoutingInspection{}, nil
@@ -518,6 +560,16 @@ func TestServiceInspect(t *testing.T) {
 				resourceName: "payments-api-prod-green",
 				summary:      "Green task set target group CodeDeploy warms before shifting ECS traffic (style: linear)",
 			},
+			{
+				resourceType: "activeTargetGroup",
+				resourceName: "payments-api-prod-active",
+				summary:      "Currently active target group receiving production traffic",
+			},
+			{
+				resourceType: "candidateTargetGroup",
+				resourceName: "payments-api-prod-candidate",
+				summary:      "Candidate target group Tenet will register and warm before traffic shifting",
+			},
 		} {
 			result, err := service.Inspect(context.Background(), Request{
 				DeploymentName:      "payments-api-prod",
@@ -554,6 +606,15 @@ func TestServiceInspect(t *testing.T) {
 				}
 				if len(targetGroup.Targets) != 2 || targetGroup.Targets[1].Reason != "Target.ResponseCodeMismatch" {
 					t.Fatalf("unexpected target health rows: %+v", targetGroup.Targets)
+				}
+			}
+			if tc.resourceType == "activeTargetGroup" || tc.resourceType == "candidateTargetGroup" {
+				targetGroup := result.TrafficRoutingResource.TargetGroup
+				if targetGroup == nil {
+					t.Fatalf("expected live weighted targetGroup payload for %s, got %+v", tc.resourceType, result.TrafficRoutingResource)
+				}
+				if targetGroup.TargetGroupName != tc.resourceName || targetGroup.Protocol != "HTTP" || targetGroup.Port != 8080 || targetGroup.TargetType != "instance" {
+					t.Fatalf("unexpected weighted target group metadata for %s: %+v", tc.resourceType, targetGroup)
 				}
 			}
 		}
@@ -612,15 +673,33 @@ func TestServiceInspect(t *testing.T) {
 				TargetAccountID:     "123456789012",
 				ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
 			},
+			{
+				DeploymentName:      "payments-api-prod",
+				ResourceType:        "activeTargetGroup",
+				ResourceName:        "payments-api-prod-active",
+				ResourceDescription: "Currently active target group receiving production traffic",
+				Region:              "ap-northeast-2",
+				TargetAccountID:     "123456789012",
+				ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
+			},
+			{
+				DeploymentName:      "payments-api-prod",
+				ResourceType:        "candidateTargetGroup",
+				ResourceName:        "payments-api-prod-candidate",
+				ResourceDescription: "Candidate target group Tenet will register and warm before traffic shifting",
+				Region:              "ap-northeast-2",
+				TargetAccountID:     "123456789012",
+				ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
+			},
 		}) {
 			t.Fatalf("unexpected traffic routing provider calls: %+v", calls)
 		}
 	})
 
-	t.Run("weighted target group routing resources return summary-only inspection payloads", func(t *testing.T) {
+	t.Run("weighted routing plan and listener-rule resources remain summary-only inspection payloads", func(t *testing.T) {
 		service := NewService(Options{
 			InspectTrafficRoutingResource: func(context.Context, TrafficRoutingRequest) (TrafficRoutingInspection, error) {
-				t.Fatalf("summary-only weighted target group resources should not invoke the live traffic routing provider")
+				t.Fatalf("summary-only weighted routing plan/listener-rule resources should not invoke the live traffic routing provider")
 				return TrafficRoutingInspection{}, nil
 			},
 		})
@@ -633,25 +712,18 @@ func TestServiceInspect(t *testing.T) {
 			summary      string
 		}{
 			{
+				name:         "traffic shift plan",
+				resourceType: "trafficShiftPlan",
+				resourceName: "payments-api-prod-weighted-routing",
+				displayName:  "Traffic shift plan",
+				summary:      "Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s",
+			},
+			{
 				name:         "production listener rule",
 				resourceType: "productionListenerRule",
 				resourceName: "payments-api-prod-prod-listener",
 				displayName:  "Production listener rule",
 				summary:      "Production listener rule operators inspect while Tenet updates weighted forwarding during rollout",
-			},
-			{
-				name:         "active target group",
-				resourceType: "activeTargetGroup",
-				resourceName: "payments-api-prod-active",
-				displayName:  "Active target group",
-				summary:      "Currently active target group receiving production traffic",
-			},
-			{
-				name:         "candidate target group",
-				resourceType: "candidateTargetGroup",
-				resourceName: "payments-api-prod-candidate",
-				displayName:  "Candidate target group",
-				summary:      "Candidate target group Tenet will register and warm before traffic shifting",
 			},
 		}
 
@@ -684,39 +756,68 @@ func TestServiceInspect(t *testing.T) {
 					},
 				}
 				if !reflect.DeepEqual(result, want) {
-					t.Fatalf("unexpected weighted target group summary inspection result: %+v", result)
+					t.Fatalf("unexpected weighted routing summary inspection result: %+v", result)
 				}
 			})
 		}
 	})
 
-	t.Run("CodeDeploy task-set target-group live lookup falls back to summary when AWS is unavailable", func(t *testing.T) {
-		service := NewService(Options{
-			InspectTrafficRoutingResource: func(ctx context.Context, req TrafficRoutingRequest) (TrafficRoutingInspection, error) {
-				if req.ResourceType != "blueTaskSetTargetGroup" {
-					t.Fatalf("unexpected traffic routing provider request: %+v", req)
-				}
-				return TrafficRoutingInspection{}, resourceaws.NewUnavailableError(resourceaws.UnavailableReasonAWSUnavailable)
+	t.Run("target-group live lookup falls back to summary when AWS is unavailable", func(t *testing.T) {
+		for _, tc := range []struct {
+			resourceType string
+			resourceName string
+			summary      string
+		}{
+			{
+				resourceType: "blueTaskSetTargetGroup",
+				resourceName: "payments-api-staging-blue",
+				summary:      "Blue task set target group CodeDeploy treats as the live ECS traffic destination",
 			},
-		})
+			{
+				resourceType: "activeTargetGroup",
+				resourceName: "payments-api-prod-active",
+				summary:      "Currently active target group receiving production traffic",
+			},
+			{
+				resourceType: "candidateTargetGroup",
+				resourceName: "payments-api-prod-candidate",
+				summary:      "Candidate target group Tenet will register and warm before traffic shifting",
+			},
+		} {
+			t.Run(tc.resourceType, func(t *testing.T) {
+				providerCalled := false
+				service := NewService(Options{
+					InspectTrafficRoutingResource: func(ctx context.Context, req TrafficRoutingRequest) (TrafficRoutingInspection, error) {
+						providerCalled = true
+						if req.ResourceType != tc.resourceType || req.ResourceName != tc.resourceName {
+							t.Fatalf("unexpected traffic routing provider request: %+v", req)
+						}
+						return TrafficRoutingInspection{}, resourceaws.NewUnavailableError(resourceaws.UnavailableReasonAWSUnavailable)
+					},
+				})
 
-		result, err := service.Inspect(context.Background(), Request{
-			DeploymentName:      "payments-api-staging",
-			ResourceType:        "blueTaskSetTargetGroup",
-			ResourceName:        "payments-api-staging-blue",
-			ResourceDescription: "Blue task set target group CodeDeploy treats as the live ECS traffic destination",
-			ControlAccountID:    "123456789012",
-			TargetAccountID:     "123456789012",
-			Region:              "ap-northeast-2",
-		})
-		if err != nil {
-			t.Fatalf("Inspect returned error: %v", err)
-		}
-		if !result.Available || result.Source != SourceRolloutSummary {
-			t.Fatalf("expected local-friendly summary fallback, got %+v", result)
-		}
-		if result.TrafficRoutingResource == nil || result.TrafficRoutingResource.InspectionMode != "summary_only" || result.TrafficRoutingResource.TargetGroup != nil {
-			t.Fatalf("expected summary-only task-set target-group payload without live fields, got %+v", result.TrafficRoutingResource)
+				result, err := service.Inspect(context.Background(), Request{
+					DeploymentName:      "payments-api-staging",
+					ResourceType:        tc.resourceType,
+					ResourceName:        tc.resourceName,
+					ResourceDescription: tc.summary,
+					ControlAccountID:    "123456789012",
+					TargetAccountID:     "123456789012",
+					Region:              "ap-northeast-2",
+				})
+				if err != nil {
+					t.Fatalf("Inspect returned error: %v", err)
+				}
+				if !providerCalled {
+					t.Fatalf("expected %s live provider to be attempted before summary fallback", tc.resourceType)
+				}
+				if !result.Available || result.Source != SourceRolloutSummary {
+					t.Fatalf("expected local-friendly summary fallback, got %+v", result)
+				}
+				if result.TrafficRoutingResource == nil || result.TrafficRoutingResource.InspectionMode != "summary_only" || result.TrafficRoutingResource.TargetGroup != nil {
+					t.Fatalf("expected summary-only target-group payload without live fields, got %+v", result.TrafficRoutingResource)
+				}
+			})
 		}
 	})
 
