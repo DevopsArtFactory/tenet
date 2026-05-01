@@ -9351,6 +9351,46 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
 		runNodeHarness(t, nodeProgram)
 	})
 
+	t.Run("filtered audit empty state explains active filters and clear recovery", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const emptyAuditLogs = { entries: [] };
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/console', search: '?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&action=apply.requested&limit=1', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathAndQuery, hash = ''] = String(url).split('#'); const [pathname, query = ''] = pathAndQuery.split('?'); window.location.pathname = pathname || '/console'; window.location.search = query ? '?' + query : ''; window.location.hash = hash ? '#' + hash : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/audit-logs?deployment=payments-api-prod&action=apply.requested&limit=1') return Promise.resolve({ ok: true, json: () => Promise.resolve(emptyAuditLogs) });
+  if (url === '/v1/audit-logs') return Promise.resolve({ ok: true, json: () => Promise.resolve(emptyAuditLogs) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
+  const accountsText = collectText(document.getElementById('accounts')).join(' | ');
+  if (!toolbarText.includes('Audit filters: deployment payments-api-prod · action apply.requested · limit 1')) throw new Error('expected active audit filters in toolbar');
+  if (!accountsText.includes('No audit entries match the current filters (deployment payments-api-prod · action apply.requested · limit 1). Clear audit filters to return to the full audit timeline.')) throw new Error('expected filtered audit empty-state recovery copy, got ' + accountsText);
+  if (accountsText.includes('No audit activity has been persisted yet for deployment payments-api-prod.')) throw new Error('expected filtered empty state to avoid unfiltered no-activity copy');
+  const clearButton = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear audit filters');
+  if (!clearButton) throw new Error('expected clear audit filters button');
+  clearButton.dispatch('click');
+  await settle();
+  await settle();
+  if (window.location.search !== '?page=audit&q=payments&sync=OutOfSync&account=210987654321') throw new Error('expected clear filters to preserve shell query state, got ' + window.location.search);
+  if (fetchCalls[fetchCalls.length - 1] !== '/v1/audit-logs') throw new Error('expected clear filters to reload unfiltered audit log, got ' + fetchCalls.join(' | '));
+})();
+`
+
+		runNodeHarness(t, nodeProgram)
+	})
+
 	t.Run("audit hash route tracks the current section in quick navigation", func(t *testing.T) {
 		nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;
