@@ -929,6 +929,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`deploymentAccess.summary`: `matchedCount=0`, `emptyReason`, or non-empty `unmatchedNames` explains `200 OK` empty collections",
 		"`projectEnvironmentExamples` shows which visible project/environment groups",
 		"additive `requiredTrustedHeaders` (`X-Tenet-Authenticated-Id` or `X-User-ID`, `X-Tenet-Authenticated-Roles`, and the exact `X-Tenet-Authorized-Deployments` allowlist and/or matching `X-Tenet-Authorized-Projects` plus `X-Tenet-Authorized-Environments` scopes depending on the route class)",
+		"`acceptsProjectEnvironmentScopes` markers for deployment-scoped read/write classes that can be satisfied by matched project/environment placement",
 		"`accessVerdicts`: use the blocked or likely-empty verdict reason plus its bounded route examples and the embedded banner's full `Required trusted headers:` label",
 		"Project/environment-scoped reads and deployment-scoped plan/apply writes require both forwarded scope headers and a catalog placement match",
 	} {

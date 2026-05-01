@@ -204,7 +204,7 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 		t.Fatalf("expected operator write trusted headers, got %#v", operatorWrite["requiredTrustedHeaders"])
 	}
 	deploymentScopedRead := accessVerdicts["deploymentScopedRead"].(map[string]any)
-	if deploymentScopedRead["allowed"] != true || deploymentScopedRead["requiresExactDeploymentAllowlistMatch"] != true || deploymentScopedRead["reason"] != "deployment-scoped reads can pass for deployments named in X-Tenet-Authorized-Deployments or matched by X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments" {
+	if deploymentScopedRead["allowed"] != true || deploymentScopedRead["requiresExactDeploymentAllowlistMatch"] != true || deploymentScopedRead["acceptsProjectEnvironmentScopes"] != true || deploymentScopedRead["reason"] != "deployment-scoped reads can pass for deployments named in X-Tenet-Authorized-Deployments or matched by X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments" {
 		t.Fatalf("expected conditional deployment read verdict, got %#v", deploymentScopedRead)
 	}
 	if !reflect.DeepEqual(deploymentScopedRead["exampleRoutes"], []any{"GET /v1/overview/deployments/{deploymentName}", "GET /v1/status/deployments/{deploymentName}", "GET /v1/audit-logs?deployment={deploymentName}"}) {
@@ -214,7 +214,7 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 		t.Fatalf("expected deployment-scoped read trusted headers, got %#v", deploymentScopedRead["requiredTrustedHeaders"])
 	}
 	deploymentScopedWrite := accessVerdicts["deploymentScopedWrite"].(map[string]any)
-	if deploymentScopedWrite["allowed"] != true || deploymentScopedWrite["requiresExactDeploymentAllowlistMatch"] != true {
+	if deploymentScopedWrite["allowed"] != true || deploymentScopedWrite["requiresExactDeploymentAllowlistMatch"] != true || deploymentScopedWrite["acceptsProjectEnvironmentScopes"] != true {
 		t.Fatalf("expected conditional deployment write verdict, got %#v", deploymentScopedWrite)
 	}
 	if !reflect.DeepEqual(deploymentScopedWrite["exampleRoutes"], []any{"POST /v1/plans/deployments/{deploymentName}", "POST /v1/applies/plans/{planId}", "POST /v1/applies/{applyId}/transitions"}) {
