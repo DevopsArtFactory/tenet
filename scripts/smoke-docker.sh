@@ -992,7 +992,7 @@ assert_fragments("ui", ui, (
     "const headers = Array.isArray(verdict?.requiredTrustedHeaders) ? verdict.requiredTrustedHeaders.filter(Boolean) : [];",
     "const visibleHeaders = headers.slice(0, 3).join('; ');",
     "requiredTrustedHeaders",
-    "Headers:",
+    "Required trusted headers:",
     "const headers = operatorContextAccessVerdictRequiredHeadersLabel(verdict);",
     "return `${label} ${state}${reason}${examples}${headers}`;",
     "const operatorContextAccessVerdictEntries = (context) => {",

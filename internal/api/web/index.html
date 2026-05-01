@@ -936,7 +936,7 @@
         if (!headers.length) return '';
         const visibleHeaders = headers.slice(0, 3).join('; ');
         const hiddenCount = headers.length - 3;
-        return ` Headers: ${visibleHeaders}${hiddenCount > 0 ? `; +${hiddenCount} more` : ''}`;
+        return ` Required trusted headers: ${visibleHeaders}${hiddenCount > 0 ? `; +${hiddenCount} more` : ''}`;
       };
       const operatorContextAccessVerdictLabel = (label, verdict) => {
         if (!verdict || typeof verdict !== 'object') return null;
