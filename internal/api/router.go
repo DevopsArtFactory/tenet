@@ -380,18 +380,26 @@ type operatorContextAccessScopes struct {
 }
 
 type operatorContextAccessSummary struct {
-	Available                  bool                                       `json:"available"`
-	UnavailableReason          string                                     `json:"unavailableReason,omitempty"`
-	EmptyReason                string                                     `json:"emptyReason,omitempty"`
-	ForwardedCount             int                                        `json:"forwardedCount"`
-	MatchedCount               int                                        `json:"matchedCount"`
-	UnmatchedCount             int                                        `json:"unmatchedCount"`
-	UnmatchedNames             []string                                   `json:"unmatchedNames,omitempty"`
-	UnmatchedNamesTruncated    bool                                       `json:"unmatchedNamesTruncated,omitempty"`
-	AccountCount               int                                        `json:"accountCount,omitempty"`
-	ProjectCount               int                                        `json:"projectCount,omitempty"`
-	EnvironmentCount           int                                        `json:"environmentCount,omitempty"`
-	ProjectEnvironmentExamples []operatorContextProjectEnvironmentExample `json:"projectEnvironmentExamples,omitempty"`
+	Available                      bool                                       `json:"available"`
+	UnavailableReason              string                                     `json:"unavailableReason,omitempty"`
+	EmptyReason                    string                                     `json:"emptyReason,omitempty"`
+	ForwardedCount                 int                                        `json:"forwardedCount"`
+	ForwardedProjectCount          int                                        `json:"forwardedProjectCount,omitempty"`
+	ForwardedEnvironmentCount      int                                        `json:"forwardedEnvironmentCount,omitempty"`
+	MatchedCount                   int                                        `json:"matchedCount"`
+	UnmatchedCount                 int                                        `json:"unmatchedCount"`
+	UnmatchedNames                 []string                                   `json:"unmatchedNames,omitempty"`
+	UnmatchedNamesTruncated        bool                                       `json:"unmatchedNamesTruncated,omitempty"`
+	UnmatchedProjectCount          int                                        `json:"unmatchedProjectCount,omitempty"`
+	UnmatchedProjects              []string                                   `json:"unmatchedProjects,omitempty"`
+	UnmatchedProjectsTruncated     bool                                       `json:"unmatchedProjectsTruncated,omitempty"`
+	UnmatchedEnvironmentCount      int                                        `json:"unmatchedEnvironmentCount,omitempty"`
+	UnmatchedEnvironments          []string                                   `json:"unmatchedEnvironments,omitempty"`
+	UnmatchedEnvironmentsTruncated bool                                       `json:"unmatchedEnvironmentsTruncated,omitempty"`
+	AccountCount                   int                                        `json:"accountCount,omitempty"`
+	ProjectCount                   int                                        `json:"projectCount,omitempty"`
+	EnvironmentCount               int                                        `json:"environmentCount,omitempty"`
+	ProjectEnvironmentExamples     []operatorContextProjectEnvironmentExample `json:"projectEnvironmentExamples,omitempty"`
 }
 
 type operatorContextProjectEnvironmentExample struct {
@@ -750,6 +758,20 @@ func buildOperatorContextAccessSummary(ctx context.Context, options Options, dep
 		summary.UnmatchedNamesTruncated = true
 		unmatched = unmatched[:operatorContextUnmatchedDeploymentLimit]
 	}
+	if hasProjectEnvironmentScope {
+		matchedProjects := make(map[string]struct{}, len(projects))
+		matchedEnvironments := make(map[string]struct{}, len(environments))
+		for project := range projects {
+			matchedProjects[project] = struct{}{}
+		}
+		for environment := range environments {
+			matchedEnvironments[environment] = struct{}{}
+		}
+		summary.ForwardedProjectCount = len(scopes.Projects)
+		summary.ForwardedEnvironmentCount = len(scopes.Environments)
+		summary.UnmatchedProjects, summary.UnmatchedProjectCount, summary.UnmatchedProjectsTruncated = boundedOperatorContextUnmatchedValues(scopes.Projects, matchedProjects, operatorContextUnmatchedDeploymentLimit)
+		summary.UnmatchedEnvironments, summary.UnmatchedEnvironmentCount, summary.UnmatchedEnvironmentsTruncated = boundedOperatorContextUnmatchedValues(scopes.Environments, matchedEnvironments, operatorContextUnmatchedDeploymentLimit)
+	}
 	summary.Available = true
 	summary.MatchedCount = len(matched)
 	summary.UnmatchedNames = unmatched
@@ -761,6 +783,24 @@ func buildOperatorContextAccessSummary(ctx context.Context, options Options, dep
 		summary.EmptyReason = "no forwarded deployment names or project/environment scopes match catalog placements"
 	}
 	return summary
+}
+
+func boundedOperatorContextUnmatchedValues(forwarded []string, matched map[string]struct{}, limit int) ([]string, int, bool) {
+	unmatched := make([]string, 0, len(forwarded))
+	for _, value := range forwarded {
+		if _, ok := matched[value]; ok {
+			continue
+		}
+		unmatched = append(unmatched, value)
+	}
+	sort.Strings(unmatched)
+	count := len(unmatched)
+	truncated := false
+	if len(unmatched) > limit {
+		truncated = true
+		unmatched = unmatched[:limit]
+	}
+	return unmatched, count, truncated
 }
 
 func buildOperatorContextProjectEnvironmentExamples(matched map[string]catalog.PlacementView) []operatorContextProjectEnvironmentExample {
