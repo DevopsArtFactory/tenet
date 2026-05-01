@@ -2275,6 +2275,16 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"X-Tenet-Actor-Name: Alex Explicit",
 		"X-User-ID: operator-123",
 		"actor_audit_logs=$(curl -fsS \"http://$HOST:$PORT/v1/audit-logs?deployment=payments-api-staging&action=apply.requested&limit=1\")",
+		"operator_context_stale_scopes=$(curl -fsS \\",
+		"X-Tenet-Authorized-Projects: payments-api, archived-payments",
+		"X-Tenet-Authorized-Environments: staging-apne2, stale-env",
+		"operator_context_stale_scopes_path=$(write_payload operator-context-stale-scopes.json \"$operator_context_stale_scopes\")",
+		"OPERATOR_CONTEXT_STALE_SCOPES_PATH=\"$operator_context_stale_scopes_path\"",
+		"operator_context_stale_scopes = read_json('OPERATOR_CONTEXT_STALE_SCOPES_PATH')",
+		"assert stale_scopes_summary['forwardedProjectCount'] == 2, operator_context_stale_scopes",
+		"assert stale_scopes_summary['forwardedEnvironmentCount'] == 2, operator_context_stale_scopes",
+		"assert stale_scopes_summary['unmatchedProjects'] == ['archived-payments'], operator_context_stale_scopes",
+		"assert stale_scopes_summary['unmatchedEnvironments'] == ['stale-env'], operator_context_stale_scopes",
 		"invalid_audit_action_status=$(curl -sS -o \"$INVALID_AUDIT_ACTION_BODY\" -w \"%{http_code}\" \"http://$HOST:$PORT/v1/audit-logs?action=invalid.action\")",
 		"AUDIT_LOGS_ACTION_FILTERED_PATH=\"$audit_logs_action_filtered_path\"",
 		"AUDIT_LOGS_FILTERED_PATH=\"$audit_logs_filtered_path\"",
@@ -2607,6 +2617,22 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 	} {
 		if strings.Contains(dockerSmoke, fragment) {
 			t.Fatalf("expected smoke-docker.sh to avoid stale or env-blob fragment %q", fragment)
+		}
+	}
+	for _, fragment := range []string{
+		"operator_context_stale_scopes=$(curl -fsS \\",
+		"X-Tenet-Authorized-Projects: payments-api, archived-payments",
+		"X-Tenet-Authorized-Environments: staging-apne2, stale-env",
+		"operator_context_stale_scopes_path=$(write_payload operator-context-stale-scopes.json \"$operator_context_stale_scopes\")",
+		"OPERATOR_CONTEXT_STALE_SCOPES_PATH=\"$operator_context_stale_scopes_path\"",
+		"operator_context_stale_scopes = json.load(fh)",
+		"assert stale_scopes_summary[\"forwardedProjectCount\"] == 2, operator_context_stale_scopes",
+		"assert stale_scopes_summary[\"forwardedEnvironmentCount\"] == 2, operator_context_stale_scopes",
+		"assert stale_scopes_summary[\"unmatchedProjects\"] == [\"archived-payments\"], operator_context_stale_scopes",
+		"assert stale_scopes_summary[\"unmatchedEnvironments\"] == [\"stale-env\"], operator_context_stale_scopes",
+	} {
+		if !strings.Contains(dockerSmoke, fragment) {
+			t.Fatalf("expected smoke-docker.sh to validate stale project/environment scope diagnostics fragment %q", fragment)
 		}
 	}
 	for _, fragment := range []string{
