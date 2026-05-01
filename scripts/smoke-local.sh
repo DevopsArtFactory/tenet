@@ -904,9 +904,11 @@ assert "const operatorContextEnforcementModeLabel = (context) => {" in ui, ui
 assert "Enforcement mode:" in ui, ui
 assert "read/write guarded" in ui, ui
 assert "local unrestricted" in ui, ui
+assert "const operatorContextAccessVerdictExampleRoutesLabel = (verdict) => {" in ui, ui
 assert "const operatorContextAccessVerdictEntries = (context) => {" in ui, ui
 assert 'Operator reads' in ui, ui
 assert 'Collection reads' in ui, ui
+assert 'Examples:' in ui, ui
 assert 'operator-context-denied' in ui, ui
 assert 'emptyCollectionLikely' in ui, ui
 assert 'Deployment access summary unavailable for this response' in ui, ui
