@@ -1951,8 +1951,11 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "blue_task_set_target_group_resource_ui=$(curl -fsS \"http://$HOST:$PORT/?page=resource&deployment=payments-api-staging&resourceType=blueTaskSetTargetGroup&resourceId=blueTaskSetTargetGroup%3A%3Apayments-api-staging-blue%3A%3ABlue+task+set+target+group+CodeDeploy+treats+as+the+live+ECS+traffic+destination\")") {
 		t.Fatalf("expected smoke-local.sh to fetch bookmarkable CodeDeploy blue task-set target-group resource page")
 	}
-	if !strings.Contains(text, "codedeploy_application_resource_ui_path=$(write_payload codedeploy-application-resource-ui.html \"$codedeploy_application_resource_ui\")") || !strings.Contains(text, "blue_task_set_target_group_resource_ui_path=$(write_payload blue-task-set-target-group-resource-ui.html \"$blue_task_set_target_group_resource_ui\")") {
-		t.Fatalf("expected smoke-local.sh to keep CodeDeploy resource shells file-backed")
+	if !strings.Contains(text, "production_listener_rule_resource_ui=$(curl -fsS \"http://$HOST:$PORT/?page=resource&deployment=payments-api-prod&resourceType=productionListenerRule&resourceId=productionListenerRule%3A%3Apayments-api-prod-prod-listener%3A%3AProduction+listener+rule+operators+inspect+while+Tenet+updates+weighted+forwarding+during+rollout\")") {
+		t.Fatalf("expected smoke-local.sh to fetch bookmarkable production listener-rule resource page")
+	}
+	if !strings.Contains(text, "codedeploy_application_resource_ui_path=$(write_payload codedeploy-application-resource-ui.html \"$codedeploy_application_resource_ui\")") || !strings.Contains(text, "blue_task_set_target_group_resource_ui_path=$(write_payload blue-task-set-target-group-resource-ui.html \"$blue_task_set_target_group_resource_ui\")") || !strings.Contains(text, "production_listener_rule_resource_ui_path=$(write_payload production-listener-rule-resource-ui.html \"$production_listener_rule_resource_ui\")") {
+		t.Fatalf("expected smoke-local.sh to keep traffic-routing resource shells file-backed")
 	}
 	if !strings.Contains(text, "bootstrap_resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=userDataBootstrapSource&resourceName=git%3Auserdata%2Fpayments-api-prod.sh\")") {
 		t.Fatalf("expected smoke-local.sh to fetch bootstrap-source recent logs payload")
@@ -2014,7 +2017,7 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"href: buildPageSectionURL('account', sectionID, { accountId: accountID }),\" in account_ui, account_ui") {
 		t.Fatalf("expected smoke-local.sh to assert account section link builder contract")
 	}
-	if !strings.Contains(text, "for label, body in ((\"resource_ui\", resource_ui), (\"ecs_resource_ui\", ecs_resource_ui), (\"bootstrap_resource_ui\", bootstrap_resource_ui), (\"codedeploy_application_resource_ui\", codedeploy_application_resource_ui), (\"blue_task_set_target_group_resource_ui\", blue_task_set_target_group_resource_ui)):") {
+	if !strings.Contains(text, "for label, body in ((\"resource_ui\", resource_ui), (\"ecs_resource_ui\", ecs_resource_ui), (\"bootstrap_resource_ui\", bootstrap_resource_ui), (\"codedeploy_application_resource_ui\", codedeploy_application_resource_ui), (\"blue_task_set_target_group_resource_ui\", blue_task_set_target_group_resource_ui), (\"production_listener_rule_resource_ui\", production_listener_rule_resource_ui)):") {
 		t.Fatalf("expected smoke-local.sh to assert all bookmarkable resource pages")
 	}
 	if !strings.Contains(text, "\"return 'Account detail';\",") || !strings.Contains(text, "\"return `GET /v1/overview/accounts/${accountID}`;\",") {
@@ -2074,7 +2077,7 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"eventsSection.id = 'application-runtime-events';\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page runtime-events anchor contract")
 	}
-	if !strings.Contains(text, "for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_application_resource_ui, blue_task_set_target_group_resource_ui):") {
+	if !strings.Contains(text, "for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_application_resource_ui, blue_task_set_target_group_resource_ui, production_listener_rule_resource_ui):") {
 		t.Fatalf("expected smoke-local.sh to iterate over all resource page payloads")
 	}
 	if !strings.Contains(text, "assert \"const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);\" in body, body") {
@@ -2425,7 +2428,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"### Smoke verification scope",
 			"Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis.",
 			"The request-actor header contract by sending conflicting `X-Tenet-Actor-*` and `X-User-*` identities together",
-			"Bookmarkable `/?page=application&deployment=payments-api-prod`, `/?page=account&accountId=123456789012`, the existing traffic-shift resource route, one representative ECS resource route, and representative CodeDeploy `codeDeployApplication` / `blueTaskSetTargetGroup` resource routes",
+			"Bookmarkable `/?page=application&deployment=payments-api-prod`, `/?page=account&accountId=123456789012`, the existing traffic-shift resource route, one representative ECS resource route, representative CodeDeploy `codeDeployApplication` / `blueTaskSetTargetGroup` resource routes, and the weighted `productionListenerRule` resource route",
 			"Trusted front-door auth by restarting `tenet-api`",
 			"gates guarded application, raw-status collection, account collection, unscoped audit collection, raw-status detail, account detail, grouped-account, immutable plan/apply, deployment-scoped audit reads, plus the exact `GET /v1/overview/deployments/{deploymentName}/resource-logs` and `GET /v1/overview/deployments/{deploymentName}/resource-inspection` drill-down routes.",
 			"the unscoped audit collection still returns `{\"entries\":[]}` when no audit rows are visible",
@@ -2439,13 +2442,13 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"survive the Compose `api` service restart",
 			"`TENET_AWS_ENABLE_APPLY=true make docker-up`",
 			"correlated bookmarkable shell reads for the application drill-down, account drill-down, drift workspace, deployment-scoped audit workspace, and bookmarkable plan/apply workspace",
-			"CodeDeploy application and task-set target-group resource shells",
+			"CodeDeploy application, task-set target-group, and weighted production listener-rule resource shells",
 			"bookmarkable application-detail status summary shell",
 			"The raw embedded shell/docs contract also keeps the labels `Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Resolved backing resource`, `Lookup region`, `Observer role configured`, and the runtime-events `Open field-level drift` handoff present",
 			"resource is a valid drill-down target but has no independent recent-log stream yet",
 			"temp files via the shared `write_payload` helper",
-			"The compose-backed smoke now covers that shipped bootstrap-source drill-down directly",
-			"Both smoke lanes now cover the shipped CodeDeploy application and task-set target-group bookmarkable resource shells directly",
+			"The compose-backed smoke now covers shipped resource drill-down shells directly",
+			"Both smoke lanes now cover the shipped CodeDeploy application, task-set target-group, and weighted `productionListenerRule` bookmarkable resource shells directly",
 			"`aws_unavailable` and `no_log_source` as part of the expected local no-AWS contract",
 			"valid drill-down target but has no independent recent-log stream yet",
 			"Linux CI runners",
@@ -2475,7 +2478,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"`GET /v1/overview/deployments/{deploymentName}/resource-logs`, `GET /v1/overview/deployments/{deploymentName}/resource-inspection`",
 			"Use `make smoke-local` for the fastest fixture-backed regression check when you only need direct-process validation.",
 			"Additive `X-User-*` alias support plus explicit `X-Tenet-Actor-*` precedence by sending both header families with conflicting identities",
-			"Bookmarkable `/?page=application&deployment=payments-api-prod`, `/?page=account&accountId=123456789012`, the existing traffic-shift resource route, one representative ECS resource route, and representative CodeDeploy `codeDeployApplication` / `blueTaskSetTargetGroup` resource routes",
+			"Bookmarkable `/?page=application&deployment=payments-api-prod`, `/?page=account&accountId=123456789012`, the existing traffic-shift resource route, one representative ECS resource route, representative CodeDeploy `codeDeployApplication` / `blueTaskSetTargetGroup` resource routes, and the weighted `productionListenerRule` resource route",
 			"Trusted front-door auth by restarting `tenet-api`",
 			"gates guarded application, raw-status collection, account collection, unscoped audit collection, raw-status detail, account detail, grouped-account, immutable plan/apply, deployment-scoped audit reads, plus the exact `GET /v1/overview/deployments/{deploymentName}/resource-logs` and `GET /v1/overview/deployments/{deploymentName}/resource-inspection` drill-down routes.",
 			"The bookmarkable `/?page=plan` workspace, but only behind a trusted front door that strips inbound trust headers before forwarding its own values",
@@ -2496,7 +2499,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"`Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Resolved backing resource`, `Lookup region`, `Observer role configured`, and the runtime-events `Open field-level drift` handoff",
 			"temp files through the shared `write_payload` helper",
 			"bookmarkable bootstrap-source resource page plus the paired `userDataBootstrapSource` `resource-logs` and `resource-inspection` routes, the `codeDeployApplication` recent-log route, the `testListener` recent-log backing-resource metadata",
-			"bookmarkable CodeDeploy application and `blueTaskSetTargetGroup` resource pages and the local-friendly CodeDeploy inspection fallback",
+			"bookmarkable CodeDeploy application, `blueTaskSetTargetGroup`, and `productionListenerRule` resource pages and the local-friendly traffic-routing inspection fallback",
 			"`aws_unavailable` / `no_log_source` unavailable payloads as expected local-runtime outcomes",
 			"Linux CI runners with tighter environment-size limits",
 			"syntax-checks both `scripts/smoke-local.sh` and `scripts/smoke-docker.sh` with `bash -n`, then runs `make smoke-local`",
@@ -2515,7 +2518,8 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"bookmarkable `/?page=resource&deployment=payments-api-prod&resourceType=userDataBootstrapSource&resourceId=userDataBootstrapSource::file:userdata/payments-api-prod.sh::Normalized userdata bootstrap source for candidate EC2 capacity` page",
 			"bookmarkable `/?page=resource&deployment=payments-api-staging&resourceType=codeDeployApplication&resourceId=codeDeployApplication::payments-api-staging-codedeploy-app::CodeDeploy application coordinating ECS traffic shifting` page",
 			"bookmarkable `/?page=resource&deployment=payments-api-staging&resourceType=blueTaskSetTargetGroup&resourceId=blueTaskSetTargetGroup::payments-api-staging-blue::Blue task set target group CodeDeploy treats as the live ECS traffic destination` page",
-			"`aws_unavailable` and `no_log_source` as expected local no-AWS outcomes",
+			"bookmarkable `/?page=resource&deployment=payments-api-prod&resourceType=productionListenerRule&resourceId=productionListenerRule::payments-api-prod-prod-listener::Production listener rule operators inspect while Tenet updates weighted forwarding during rollout` page",
+			"summary-only traffic-routing fallbacks and explicit unavailable reasons",
 		},
 		"../../docs/features/overview-dashboard.md": {
 			"when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION` is enabled, `GET /v1/overview/applications` requires trusted `X-Tenet-Authenticated-*` identity",
@@ -2526,6 +2530,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION` is enabled, stored `GET /v1/plans/{planId}` reloads reuse the same trusted `X-Tenet-Authenticated-*` identity",
 			"when `TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION` is enabled, `POST /v1/plans/deployments/{deploymentName}`",
 			"unavailableReason=no_log_source` render friendly copy that the target has no independent recent-log stream yet",
+			"live `trafficRoutingResource.listenerRule` fields are intentionally AWS-only",
 			"when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION` is enabled, stored `GET /v1/applies/{applyId}` reloads use the same trusted `X-Tenet-Authenticated-*` identity",
 		},
 		"../../docs/architecture/tenet-v1-audit-log-api.md": {
@@ -2620,7 +2625,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		}
 	}
 	for _, fragment := range []string{
-		"for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_application_resource_ui, blue_task_set_target_group_resource_ui):",
+		"for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_application_resource_ui, blue_task_set_target_group_resource_ui, production_listener_rule_resource_ui):",
 		"\"const renderResourceDetailPage = (detail, resourceState = null) => {\",",
 		"\"const resourceDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;\",",
 		"\"const createResourceDetailActions = (resourceState = null) => [\",",
