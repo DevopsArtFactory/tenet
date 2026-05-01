@@ -2747,19 +2747,20 @@ func TestApplicationDetailPageWithNodeHarness(t *testing.T) {
 	}
 
 	detailJSON, err := json.Marshal(map[string]any{
-		"name":             "payments-api-staging",
-		"accountName":      "staging-core",
-		"awsAccountId":     "210987654321",
-		"region":           "ap-northeast-2",
-		"appRef":           "payments",
-		"environmentRef":   "staging-apne2",
-		"targetType":       "ecs",
-		"strategy":         "linear",
-		"executionMode":    "ecsCodeDeploy",
-		"desiredArtifact":  map[string]any{"image": "ghcr.io/devopsartfactory/payments-api:staging-20260415"},
-		"deployedArtifact": map[string]any{"image": "ghcr.io/devopsartfactory/payments-api:staging-20260415"},
-		"sync":             map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
-		"health":           map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy while rollout continues"},
+		"name":                "payments-api-staging",
+		"accountName":         "staging-core",
+		"awsAccountId":        "210987654321",
+		"region":              "ap-northeast-2",
+		"appRef":              "payments",
+		"environmentRef":      "staging-apne2",
+		"targetType":          "ecs",
+		"strategy":            "linear",
+		"executionMode":       "ecsCodeDeploy",
+		"desiredArtifact":     map[string]any{"image": "ghcr.io/devopsartfactory/payments-api:staging-20260415"},
+		"deployedArtifact":    map[string]any{"image": "ghcr.io/devopsartfactory/payments-api:staging-20260415"},
+		"sync":                map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
+		"health":              map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy while rollout continues"},
+		"managedDriftSummary": map[string]any{"total": 3, "high": 1, "medium": 1, "low": 1},
 		"runtimeSummary": map[string]any{
 			"timestamp":    "2026-04-16T07:15:00Z",
 			"historyCount": 2,
@@ -2850,6 +2851,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('Current application status')) throw new Error('expected compact application status summary');
   if (!accountsText.includes('Target ecs · Strategy linear · Execution ecsCodeDeploy')) throw new Error('expected application status summary rollout context');
   if (!accountsText.includes('ghcr.io/devopsartfactory/payments-api:staging-20260415')) throw new Error('expected application status summary artifact');
+  if (!accountsText.includes('Managed drift')) throw new Error('expected application status summary managed drift metric');
+  if (!accountsText.includes('3 total · 1 high · 1 medium · 1 low')) throw new Error('expected application status summary to use server-authored managed drift totals');
   if (!accountsText.includes('2 runtime events')) throw new Error('expected application status summary runtime event count');
   if (!accountsText.includes('2026-04-16T07:15:00Z')) throw new Error('expected application status summary last update');
   if (!accountsText.includes('Workloads')) throw new Error('expected workloads group');
@@ -2912,6 +2915,10 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 			"deployedArtifact": map[string]any{"image": "ghcr.io/devopsartfactory/payments-api:staging-20260415"},
 			"sync":             map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
 			"health":           map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy while rollout continues"},
+			"managedDrift": []map[string]any{
+				{"field": "runtimeContext.capacity.desired", "severity": "high"},
+				{"field": "runtimeContext.launchTemplate.imageId", "severity": "medium"},
+			},
 			"runtimeSummary": map[string]any{
 				"timestamp":    "2026-04-16T07:15:00Z",
 				"historyCount": 1,
@@ -3069,6 +3076,7 @@ async function render(fetchImpl) {
   if (!accountsText.includes('payments-api-staging ECS Service')) throw new Error('expected initial application resource before refresh');
   if (!accountsText.includes('Current application status')) throw new Error('expected initial application status summary before refresh');
   if (!accountsText.includes('1 runtime event')) throw new Error('expected initial application runtime event summary before refresh');
+  if (!accountsText.includes('2 total · 1 high · 1 medium · 0 low')) throw new Error('expected initial application managed drift summary to fall back to managedDrift rows');
   refreshButton.dispatch('click');
   await settle();
   toolbarButtons = collectNodes(loadingView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
@@ -3087,6 +3095,7 @@ async function render(fetchImpl) {
   if (accountsText.includes('payments-api-staging ECS Service')) throw new Error('expected refreshed application detail to replace stale resource content');
   if (!accountsText.includes('replacement task set is warming up')) throw new Error('expected refreshed application summary signal');
   if (!accountsText.includes('3 runtime events')) throw new Error('expected refreshed application runtime event summary');
+  if (!accountsText.includes('No managed drift reported')) throw new Error('expected refreshed application to show managed drift empty state');
   if (!accountsText.includes('ghcr.io/devopsartfactory/payments-api:staging-20260416')) throw new Error('expected refreshed application artifact summary');
   toolbarButtons = collectNodes(loadingView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
   refreshButton = toolbarButtons.find((node) => node.textContent === 'Refresh application detail');

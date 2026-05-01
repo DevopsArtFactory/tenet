@@ -1826,6 +1826,30 @@
         if (Number.isFinite(count) && count >= 0) return `${count} runtime event${count === 1 ? '' : 's'}`;
         return 'No runtime events reported';
       };
+      const applicationManagedDriftCounts = (detail) => {
+        const summary = detail?.managedDriftSummary;
+        if (summary && typeof summary === 'object' && Number.isFinite(summary.total)) {
+          return {
+            total: summary.total,
+            high: Number.isFinite(summary.high) ? summary.high : 0,
+            medium: Number.isFinite(summary.medium) ? summary.medium : 0,
+            low: Number.isFinite(summary.low) ? summary.low : 0,
+          };
+        }
+        return (Array.isArray(detail?.managedDrift) ? detail.managedDrift : []).reduce((counts, row) => {
+          counts.total += 1;
+          const severity = String(row?.severity || '').toLowerCase();
+          if (severity === 'high') counts.high += 1;
+          if (severity === 'medium') counts.medium += 1;
+          if (severity === 'low') counts.low += 1;
+          return counts;
+        }, { total: 0, high: 0, medium: 0, low: 0 });
+      };
+      const applicationManagedDriftSummaryText = (detail) => {
+        const counts = applicationManagedDriftCounts(detail);
+        if (counts.total <= 0) return 'No managed drift reported';
+        return `${counts.total} total · ${counts.high} high · ${counts.medium} medium · ${counts.low} low`;
+      };
       const createApplicationStatusSummary = (detail, resourceGroups = []) => {
         const sync = detail.sync?.state || detail.runtimeSummary?.sync?.state || 'Unknown';
         const syncReason = detail.sync?.reason || detail.runtimeSummary?.sync?.reason || '';
@@ -1858,6 +1882,7 @@
           ['Health', healthText],
           ['Artifact', artifactText !== '—' ? artifactText : 'No artifact reported'],
           ['Linked resources', `${linkedResources} linked resource${linkedResources === 1 ? '' : 's'}`],
+          ['Managed drift', applicationManagedDriftSummaryText(detail)],
           ['Runtime events', applicationRuntimeEventSummary(detail)],
           ['Last update', runtimeSummaryTimestamp(detail.runtimeSummary)],
         ].forEach(([label, value]) => {
