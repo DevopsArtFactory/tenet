@@ -7721,7 +7721,8 @@ class Document {
 }
 const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
 const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
-async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); await Promise.resolve(); }
+async function waitForFetchCount(fetchCalls, expected) { for (let attempt = 0; attempt < 20 && fetchCalls.length < expected; attempt += 1) await settle(); }
 `
 
 	t.Run("create flow renders server authored preview", func(t *testing.T) {
@@ -7972,9 +7973,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const createPlan = buttons.find((node) => node.textContent === 'Create Plan');
   if (!createPlan) throw new Error('expected Create Plan button before unauthorized create');
   createPlan.dispatch('click');
-  await settle();
-  await settle();
-  await settle();
+  await waitForFetchCount(fetchCalls, 2);
   if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/deployments/api-prod') throw new Error('unexpected fetch sequence after unauthorized create: ' + fetchCalls.join(', '));
   if (window.location.search !== '?page=plan&deployment=api-prod') throw new Error('expected unauthorized create to preserve workspace URL, got ' + window.location.search);
   const text = collectText(root).join(' | ');
@@ -8028,9 +8027,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const createPlan = collectNodes(root, (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Create Plan');
   if (!createPlan) throw new Error('expected Create Plan button before forbidden create');
   createPlan.dispatch('click');
-  await settle();
-  await settle();
-  await settle();
+  await waitForFetchCount(fetchCalls, 2);
   if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/deployments/api-prod') throw new Error('unexpected fetch sequence after forbidden create: ' + fetchCalls.join(', '));
   if (window.location.search !== '?page=plan&deployment=api-prod') throw new Error('expected forbidden create to preserve workspace URL, got ' + window.location.search);
   const text = collectText(root).join(' | ');
@@ -8075,9 +8072,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const createPlan = collectNodes(root, (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Create Plan');
   if (!createPlan) throw new Error('expected Create Plan button before role-forbidden create');
   createPlan.dispatch('click');
-  await settle();
-  await settle();
-  await settle();
+  await waitForFetchCount(fetchCalls, 2);
   if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/deployments/api-prod') throw new Error('unexpected fetch sequence after role-forbidden create: ' + fetchCalls.join(', '));
   if (window.location.search !== '?page=plan&deployment=api-prod') throw new Error('expected role-forbidden create to preserve workspace URL, got ' + window.location.search);
   const text = collectText(root).join(' | ');
@@ -9181,7 +9176,7 @@ class Document {
 }
 const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
 const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
-async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); await Promise.resolve(); }
 `
 
 	t.Run("bookmarkable audit page renders newest first with self links", func(t *testing.T) {

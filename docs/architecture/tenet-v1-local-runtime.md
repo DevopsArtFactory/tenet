@@ -32,6 +32,15 @@ Front-door auth remains additive and opt-in. Tenet still expects a real authenti
 
 Use these settings only when every request reaches Tenet through a front door that authenticates callers and strips any client-supplied `X-Tenet-Authenticated-*`, `X-Tenet-Authenticated-Roles`, and `X-Tenet-Authorized-Deployments` headers before forwarding trusted values. Do not expose a header-trusting `tenet-api` instance directly to untrusted clients.
 
+Tenet currently has two intentionally separate identity header families:
+
+| Header family | Trusted source | Current use |
+| --- | --- | --- |
+| `X-Tenet-Authenticated-*`, `X-Tenet-Authenticated-Roles`, `X-Tenet-Authorized-Deployments` | Authenticating front door only | Request-scoped route authorization, `GET /v1/operator/context` diagnostics, and optional projection into persisted plan/apply/audit actor fields when no explicit actor headers are present. |
+| `X-Tenet-Actor-*` plus compatible `X-User-*` aliases | Local proxy, smoke, or trusted integration creating immutable records | Persisted actor metadata on plan previews, apply requests, and audit projections; this family does not authorize routes by itself. |
+
+Keep that split intact when integrating GitHub OAuth or another identity provider at the front door: the provider should authenticate the user, strip spoofable inbound trust headers, and then forward only the trusted authorization headers Tenet is configured to consume. Tenet does not treat raw browser-supplied `X-User-*` headers as a login session.
+
 - `TENET_API_TRUST_AUTHENTICATED_HEADERS=true` trusts front-door-forwarded `X-Tenet-Authenticated-Id`, `X-Tenet-Authenticated-Name`, and `X-Tenet-Authenticated-Email`. When those explicit trusted fields are absent, the same trusted authenticated-identity path also accepts additive `X-User-ID`, `X-User-Name`, and/or `X-User-Email` aliases, and `X-Tenet-Authenticated-*` still wins over `X-User-*`.
 - `TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true` requires authenticated identity on `POST /v1/plans/deployments/{deploymentName}`, `POST /v1/applies/plans/{planId}`, and `POST /v1/applies/{applyId}/transitions`. Unauthenticated requests fail with `401 Unauthorized` plus `unauthenticated: authenticated identity is required for this operator write route`. When explicit actor headers are absent, the trusted authenticated identity path projects that identity into persisted plan/apply/audit actor fields.
 - `TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true` trusts `X-Tenet-Authenticated-Roles`, normalizes comma-separated roles, and requires one operator-capable `operator` or `admin` role on those same operator write routes. Authenticated callers without one of those roles get `403 Forbidden` plus `forbidden: authenticated operator role is required for this operator write route` before any plan/apply lookup.
