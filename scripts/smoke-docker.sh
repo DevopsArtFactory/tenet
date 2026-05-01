@@ -1436,14 +1436,16 @@ allowed_status_read=$(curl -fsS \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authenticated-Roles: viewer" \
-  -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
+  -H "X-Tenet-Authorized-Projects: payments-api" \
+  -H "X-Tenet-Authorized-Environments: staging-apne2" \
   "$API_BASE_URL/v1/status/deployments/payments-api-staging")
 allowed_events_read=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authenticated-Roles: viewer" \
-  -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
+  -H "X-Tenet-Authorized-Projects: payments-api" \
+  -H "X-Tenet-Authorized-Environments: staging-apne2" \
   "$API_BASE_URL/v1/overview/deployments/payments-api-staging/events")
 allowed_resource_logs=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
@@ -1485,18 +1487,24 @@ empty_applications_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authenticated-Roles: viewer" \
+  -H "X-Tenet-Authorized-Projects: archived-payments" \
+  -H "X-Tenet-Authorized-Environments: staging-apne2" \
   "$API_BASE_URL/v1/overview/applications")
 empty_status_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authenticated-Roles: viewer" \
+  -H "X-Tenet-Authorized-Projects: archived-payments" \
+  -H "X-Tenet-Authorized-Environments: staging-apne2" \
   "$API_BASE_URL/v1/status/deployments")
 empty_audit_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authenticated-Roles: viewer" \
+  -H "X-Tenet-Authorized-Projects: archived-payments" \
+  -H "X-Tenet-Authorized-Environments: staging-apne2" \
   "$API_BASE_URL/v1/audit-logs?action=apply.requested")
 restarted_plan_preview_path=$(write_payload restarted-plan-preview.json "$restarted_plan_preview")
 restarted_apply_record_path=$(write_payload restarted-apply-record.json "$restarted_apply_record")

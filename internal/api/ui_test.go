@@ -2497,6 +2497,8 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"Bookmarkable `/?page=application&deployment=payments-api-prod`, `/?page=account&accountId=123456789012`, the existing traffic-shift resource route, one representative ECS resource route, representative CodeDeploy `codeDeployApplication` / `blueTaskSetTargetGroup` resource routes, and the weighted `productionListenerRule` resource route",
 			"Trusted front-door auth by restarting `tenet-api`",
 			"gates guarded application, raw-status collection, account collection, unscoped audit collection, raw-status detail, account detail, grouped-account, immutable plan/apply, deployment-scoped audit reads, plus the exact `GET /v1/overview/deployments/{deploymentName}/resource-logs` and `GET /v1/overview/deployments/{deploymentName}/resource-inspection` drill-down routes.",
+			"trusted `X-Tenet-Authenticated-Roles: viewer` deployment detail/status/events and immutable plan/apply reads succeed through matching `X-Tenet-Authorized-Projects` plus `X-Tenet-Authorized-Environments` scopes even when `X-Tenet-Authorized-Deployments` does not name the deployment",
+			"stale project/environment scopes return empty guarded collections",
 			"The bookmarkable `/?page=plan` workspace, but only behind a trusted front door that strips inbound trust headers, including `X-User-*` aliases, before forwarding its own values",
 			"### Docker stack smoke check",
 			"make smoke-docker",

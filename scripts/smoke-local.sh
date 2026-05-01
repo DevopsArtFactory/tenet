@@ -1621,21 +1621,24 @@ allowed_guarded_read=$(curl -fsS \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authenticated-Roles: viewer" \
-  -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
+  -H "X-Tenet-Authorized-Projects: payments-api" \
+  -H "X-Tenet-Authorized-Environments: staging-apne2" \
   "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging")
 allowed_status_read=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authenticated-Roles: viewer" \
-  -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
+  -H "X-Tenet-Authorized-Projects: payments-api" \
+  -H "X-Tenet-Authorized-Environments: staging-apne2" \
   "http://$HOST:$PORT/v1/status/deployments/payments-api-staging")
 allowed_events_read=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authenticated-Roles: viewer" \
-  -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
+  -H "X-Tenet-Authorized-Projects: payments-api" \
+  -H "X-Tenet-Authorized-Environments: staging-apne2" \
   "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/events")
 allowed_resource_logs=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
@@ -1656,14 +1659,16 @@ allowed_plan_read=$(curl -fsS \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authenticated-Roles: viewer" \
-  -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
+  -H "X-Tenet-Authorized-Projects: payments-api" \
+  -H "X-Tenet-Authorized-Environments: staging-apne2" \
   "http://$HOST:$PORT/v1/plans/$frontdoor_plan_id")
 allowed_apply_read=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authenticated-Roles: viewer" \
-  -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
+  -H "X-Tenet-Authorized-Projects: payments-api" \
+  -H "X-Tenet-Authorized-Environments: staging-apne2" \
   "http://$HOST:$PORT/v1/applies/$frontdoor_apply_id")
 filtered_applications_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
@@ -1705,12 +1710,16 @@ empty_applications_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authenticated-Roles: viewer" \
+  -H "X-Tenet-Authorized-Projects: archived-payments" \
+  -H "X-Tenet-Authorized-Environments: staging-apne2" \
   "http://$HOST:$PORT/v1/overview/applications")
 empty_status_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authenticated-Roles: viewer" \
+  -H "X-Tenet-Authorized-Projects: archived-payments" \
+  -H "X-Tenet-Authorized-Environments: staging-apne2" \
   "http://$HOST:$PORT/v1/status/deployments")
 empty_accounts_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
@@ -1730,6 +1739,8 @@ empty_audit_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authenticated-Roles: viewer" \
+  -H "X-Tenet-Authorized-Projects: archived-payments" \
+  -H "X-Tenet-Authorized-Environments: staging-apne2" \
   "http://$HOST:$PORT/v1/audit-logs?action=apply.requested")
 auth_forbidden_audit_status=$(curl -sS -o "$AUTH_FORBIDDEN_AUDIT_BODY" -w "%{http_code}" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
@@ -1743,7 +1754,8 @@ allowed_scoped_audit=$(curl -fsS \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authenticated-Roles: viewer" \
-  -H "X-Tenet-Authorized-Deployments: payments-api-staging, worker-prod" \
+  -H "X-Tenet-Authorized-Projects: payments-api" \
+  -H "X-Tenet-Authorized-Environments: staging-apne2" \
   "http://$HOST:$PORT/v1/audit-logs?deployment=payments-api-staging&action=apply.requested&limit=1")
 allowed_guarded_read_path=$(write_payload allowed-guarded-read.json "$allowed_guarded_read")
 allowed_plan_read_path=$(write_payload allowed-plan-read.json "$allowed_plan_read")
