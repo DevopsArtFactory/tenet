@@ -1254,6 +1254,7 @@ assert 'Backing resource type' in ui, ui
 assert 'Backing resource name' in ui, ui
 assert 'Lookup region' in ui, ui
 assert 'Observer role configured' in ui, ui
+assert 'This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet.' in ui, ui
 assert 'Plan preview actions' in ui, ui
 assert 'Apply request actions' in ui, ui
 assert 'Plan preview approval guidance' in ui, ui
