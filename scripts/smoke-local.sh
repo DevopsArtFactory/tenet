@@ -907,6 +907,11 @@ assert "local unrestricted" in ui, ui
 assert "const operatorContextAccessVerdictExampleRoutesLabel = (verdict) => {" in ui, ui
 assert "const visibleRoutes = routes.slice(0, 2).join('; ');" in ui, ui
 assert "const hiddenCount = routes.length - 2;" in ui, ui
+assert "const operatorContextAccessVerdictRequiredHeadersLabel = (verdict) => {" in ui, ui
+assert "const headers = Array.isArray(verdict?.requiredTrustedHeaders) ? verdict.requiredTrustedHeaders.filter(Boolean) : [];" in ui, ui
+assert "const visibleHeaders = headers.slice(0, 3).join('; ');" in ui, ui
+assert 'requiredTrustedHeaders' in ui, ui
+assert 'Headers:' in ui, ui
 assert "const operatorContextAccessVerdictEntries = (context) => {" in ui, ui
 assert 'Operator reads' in ui, ui
 assert 'Collection reads' in ui, ui

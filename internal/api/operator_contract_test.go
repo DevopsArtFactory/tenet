@@ -871,11 +871,11 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"one trusted `X-Tenet-Authenticated-Roles: viewer` raw status detail read succeeds",
 		"Guarded-route troubleshooting workflow",
 		"Start in the embedded `Operator context` banner",
-		"plus its bounded route examples to identify the affected route family",
+		"plus its bounded route examples and `requiredTrustedHeaders` to identify the affected route family",
 		"`identity.authenticated`: `false` explains `401 Unauthorized` on guarded reads or writes",
 		"`deploymentAccess.summary`: `matchedCount=0` or non-empty `unmatchedNames` explains `200 OK` empty collections",
 		"additive `requiredTrustedHeaders` (`X-Tenet-Authenticated-Id` or `X-User-ID`, `X-Tenet-Authenticated-Roles`, and/or `X-Tenet-Authorized-Deployments` depending on the route class)",
-		"`accessVerdicts`: use the blocked or likely-empty verdict reason plus its bounded route examples",
+		"`accessVerdicts`: use the blocked or likely-empty verdict reason plus its bounded route examples and `requiredTrustedHeaders`",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
 			t.Fatalf("expected local runtime doc front-door auth contract to include %q", fragment)
@@ -958,7 +958,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"Guarded-read troubleshooting from the embedded dashboard follows the same diagnostic order as the API docs",
 		"start with the `Operator context` banner",
 		"inspect `identity.authenticated` for `401`, inspect `roles.canRead` before allowlist debugging for viewer-role `403`",
-		"then inspect `accessVerdicts` and their bounded route examples to choose the exact guarded route class to debug",
+		"then inspect `accessVerdicts`, their bounded route examples, and their required trusted headers to choose the exact guarded route class",
 		"it does not authorize routes client-side",
 	} {
 		if !strings.Contains(overviewFeatureDoc, fragment) {

@@ -57,7 +57,7 @@ Use `GET /v1/operator/context` as the first diagnostic before changing role or d
 2. `identity.authenticated`: `false` explains `401 Unauthorized` on guarded reads or writes; fix trusted identity forwarding first.
 3. `roles.canRead` / `roles.canWrite`: missing read capability explains viewer-role `403` responses before any deployment allowlist is considered, while missing write capability explains operator-write `403` responses before plan/apply lookup.
 4. `deploymentAccess.summary`: `matchedCount=0` or non-empty `unmatchedNames` explains `200 OK` empty collections even when the request is authenticated and read-capable.
-5. `accessVerdicts`: use the blocked or likely-empty verdict reason plus its bounded route examples to identify the affected route family, then debug that class's exact trusted-header prerequisites and `X-Tenet-Authorized-Deployments` membership. Each guarded route still performs its own server-side check.
+5. `accessVerdicts`: use the blocked or likely-empty verdict reason plus its bounded route examples and `requiredTrustedHeaders` to identify the affected route family, then debug that class's exact identity, role, and/or `X-Tenet-Authorized-Deployments` front-door header wiring. Each guarded route still performs its own server-side check.
 
 A safe local diagnostic mirrors the trusted headers your front door should forward:
 
