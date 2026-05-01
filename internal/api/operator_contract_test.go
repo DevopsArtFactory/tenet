@@ -888,7 +888,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`identity.authenticated`: `false` explains `401 Unauthorized` on guarded reads or writes",
 		"`deploymentAccess.summary`: `matchedCount=0`, `emptyReason`, or non-empty `unmatchedNames` explains `200 OK` empty collections",
 		"`projectEnvironmentExamples` shows which visible project/environment groups",
-		"additive `requiredTrustedHeaders` (`X-Tenet-Authenticated-Id` or `X-User-ID`, `X-Tenet-Authenticated-Roles`, and/or `X-Tenet-Authorized-Deployments` depending on the route class)",
+		"additive `requiredTrustedHeaders` (`X-Tenet-Authenticated-Id` or `X-User-ID`, `X-Tenet-Authenticated-Roles`, and the exact `X-Tenet-Authorized-Deployments` allowlist and/or matching `X-Tenet-Authorized-Projects` plus `X-Tenet-Authorized-Environments` scopes depending on the route class)",
 		"`accessVerdicts`: use the blocked or likely-empty verdict reason plus its bounded route examples and `requiredTrustedHeaders`",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
