@@ -428,6 +428,7 @@ type operatorContextAccessVerdict struct {
 	RequiresViewerCapableRole             bool     `json:"requiresViewerCapableRole,omitempty"`
 	RequiresOperatorRole                  bool     `json:"requiresOperatorRole,omitempty"`
 	RequiresExactDeploymentAllowlistMatch bool     `json:"requiresExactDeploymentAllowlistMatch,omitempty"`
+	AcceptsProjectEnvironmentScopes       bool     `json:"acceptsProjectEnvironmentScopes,omitempty"`
 	FiltersCollectionsByDeploymentAccess  bool     `json:"filtersCollectionsByDeploymentAccess,omitempty"`
 	EmptyCollectionLikely                 bool     `json:"emptyCollectionLikely,omitempty"`
 }
@@ -586,6 +587,7 @@ func operatorContextDeploymentScopedReadVerdict(options Options, identity reques
 	verdict := operatorContextReadVerdict(options, identity, roles)
 	verdict.ExampleRoutes = cloneOperatorContextExampleRoutes(operatorContextDeploymentScopedReadExampleRoutes)
 	verdict.RequiresExactDeploymentAllowlistMatch = options.RequireDeploymentReadAuthorization
+	verdict.AcceptsProjectEnvironmentScopes = options.RequireDeploymentReadAuthorization
 	if verdict.RequiresExactDeploymentAllowlistMatch {
 		verdict.RequiredTrustedHeaders = appendOperatorContextRequiredHeaders(verdict.RequiredTrustedHeaders, operatorContextDeploymentAllowlistHeaders, operatorContextProjectEnvironmentScopeHeaders)
 	}
@@ -630,6 +632,7 @@ func operatorContextDeploymentScopedWriteVerdict(options Options, identity reque
 	verdict := operatorWrite
 	verdict.ExampleRoutes = cloneOperatorContextExampleRoutes(operatorContextDeploymentScopedWriteExampleRoutes)
 	verdict.RequiresExactDeploymentAllowlistMatch = options.RequireDeploymentReadAuthorization
+	verdict.AcceptsProjectEnvironmentScopes = options.RequireDeploymentReadAuthorization
 	if verdict.RequiresExactDeploymentAllowlistMatch {
 		verdict.RequiredTrustedHeaders = appendOperatorContextRequiredHeaders(verdict.RequiredTrustedHeaders, operatorContextDeploymentAllowlistHeaders, operatorContextProjectEnvironmentScopeHeaders)
 	}
