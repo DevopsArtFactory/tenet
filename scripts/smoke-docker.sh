@@ -1715,6 +1715,7 @@ def assert_operator_context_common(payload):
     identity_headers = ["X-Tenet-Authenticated-Id", "X-User-ID"]
     role_headers = ["X-Tenet-Authenticated-Roles"]
     allowlist_headers = ["X-Tenet-Authorized-Deployments"]
+    project_environment_scope_headers = ["X-Tenet-Authorized-Projects", "X-Tenet-Authorized-Environments"]
     assert access_verdicts.get("operatorRead", {}).get("requiresAuthenticatedIdentity") is True, payload
     assert access_verdicts.get("operatorRead", {}).get("requiresViewerCapableRole") is True, payload
     assert access_verdicts.get("operatorRead", {}).get("exampleRoutes") == ["GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/audit-logs"], payload
@@ -1724,12 +1725,12 @@ def assert_operator_context_common(payload):
     assert access_verdicts.get("operatorWrite", {}).get("requiredTrustedHeaders") == identity_headers + role_headers, payload
     assert access_verdicts.get("deploymentScopedRead", {}).get("requiresExactDeploymentAllowlistMatch") is True, payload
     assert access_verdicts.get("deploymentScopedRead", {}).get("exampleRoutes") == ["GET /v1/overview/deployments/{deploymentName}", "GET /v1/status/deployments/{deploymentName}", "GET /v1/audit-logs?deployment={deploymentName}"], payload
-    assert access_verdicts.get("deploymentScopedRead", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers, payload
+    assert access_verdicts.get("deploymentScopedRead", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers + project_environment_scope_headers, payload
     assert access_verdicts.get("deploymentScopedWrite", {}).get("requiresExactDeploymentAllowlistMatch") is True, payload
     assert access_verdicts.get("deploymentScopedWrite", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers, payload
     assert access_verdicts.get("collectionRead", {}).get("filtersCollectionsByDeploymentAccess") is True, payload
     assert access_verdicts.get("collectionRead", {}).get("exampleRoutes") == ["GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/overview/accounts", "GET /v1/audit-logs"], payload
-    assert access_verdicts.get("collectionRead", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers, payload
+    assert access_verdicts.get("collectionRead", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers + project_environment_scope_headers, payload
 
 assert_operator_context_common(operator_context_trusted)
 assert operator_context_trusted["identity"]["authenticated"] is True, operator_context_trusted
@@ -1758,7 +1759,7 @@ assert ("payments-api", "prod-apne2") in trusted_project_envs or ("worker", "pro
 trusted_verdicts = operator_context_trusted["accessVerdicts"]
 assert trusted_verdicts["operatorRead"]["allowed"] is True, operator_context_trusted
 assert trusted_verdicts["operatorWrite"]["allowed"] is True, operator_context_trusted
-assert trusted_verdicts["deploymentScopedRead"]["reason"] == "deployment-scoped reads can pass only for deployments named in X-Tenet-Authorized-Deployments", operator_context_trusted
+assert trusted_verdicts["deploymentScopedRead"]["reason"] == "deployment-scoped reads can pass for deployments named in X-Tenet-Authorized-Deployments or matched by X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments", operator_context_trusted
 assert trusted_verdicts["collectionRead"]["allowed"] is True, operator_context_trusted
 assert_operator_context_common(operator_context_unmatched)
 assert operator_context_unmatched["deploymentAccess"]["enforced"] is True, operator_context_unmatched
