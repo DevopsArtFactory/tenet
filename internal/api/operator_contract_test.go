@@ -59,6 +59,17 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 	if !strings.Contains(localRuntimeDoc, "The auth/RBAC toggles below are boolean examples. Set them to `true` only on API instances that are reachable exclusively through that trusted front door.") {
 		t.Fatal("expected local runtime trusted-front-door docs to explain that auth/RBAC toggles are boolean examples")
 	}
+
+	for _, fragment := range []string{
+		"`TENET_API_TRUST_AUTHENTICATED_HEADERS=true` trusts front-door-forwarded",
+		"`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true` requires authenticated identity",
+		"`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true` trusts `X-Tenet-Authenticated-Roles`",
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` trusts `X-Tenet-Authorized-Deployments`",
+	} {
+		if !strings.Contains(localRuntimeDoc, fragment) {
+			t.Fatalf("expected local runtime trusted-front-door docs to include readable closed inline-code example %q", fragment)
+		}
+	}
 }
 
 func TestDockerUpOperatorContract(t *testing.T) {
