@@ -212,6 +212,27 @@ Example diagnostic summary shape:
 }
 ```
 
+If a front door forwards stale project/environment scopes, the same summary keeps the response diagnostic rather than silently widening access. Operators should look for the stale scope fields before debugging individual routes:
+
+```json
+{
+  "deploymentAccess": {
+    "summary": {
+      "available": true,
+      "forwardedProjectCount": 2,
+      "forwardedEnvironmentCount": 2,
+      "matchedCount": 1,
+      "unmatchedProjectCount": 1,
+      "unmatchedProjects": ["archived-payments"],
+      "unmatchedEnvironmentCount": 1,
+      "unmatchedEnvironments": ["stale-env"]
+    }
+  }
+}
+```
+
+Those fields are troubleshooting evidence only: stale project/environment scope diagnostics do not authorize writes, mint a session, or replace the guarded route checks.
+
 ### Smoke verification scope
 
 Use `make smoke-local` for the fastest fixture-backed API/UI regression check when you only need direct-process validation without Docker or Redis.
