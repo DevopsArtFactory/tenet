@@ -374,6 +374,7 @@ type TenetManagedLoginDiagnostic struct {
 	MissingSettings         []string `json:"missingSettings"`
 	LoginRoute              string   `json:"loginRoute,omitempty"`
 	CallbackRoute           string   `json:"callbackRoute,omitempty"`
+	LogoutRoute             string   `json:"logoutRoute,omitempty"`
 	SessionCookieName       string   `json:"sessionCookieName,omitempty"`
 	StateStoreConfigured    bool     `json:"stateStoreConfigured"`
 	IdentityStoreConfigured bool     `json:"identityStoreConfigured"`
@@ -587,6 +588,9 @@ func normalizeAuthRuntimeDiagnostic(diagnostic AuthRuntimeDiagnostic) AuthRuntim
 		}
 		if managedLogin.CallbackRoute == "" {
 			managedLogin.CallbackRoute = "/auth/callback/github"
+		}
+		if managedLogin.LogoutRoute == "" && managedLogin.Active {
+			managedLogin.LogoutRoute = "/auth/logout"
 		}
 		if managedLogin.SessionCookieName == "" {
 			managedLogin.SessionCookieName = "tenet_session"
@@ -1421,6 +1425,7 @@ func NewRouter(options Options) http.Handler {
 		options.AuthRuntime.TenetManagedLogin.Provider = authSession.Provider.Name()
 		options.AuthRuntime.TenetManagedLogin.LoginRoute = "/auth/login/github"
 		options.AuthRuntime.TenetManagedLogin.CallbackRoute = "/auth/callback/github"
+		options.AuthRuntime.TenetManagedLogin.LogoutRoute = "/auth/logout"
 		options.AuthRuntime.TenetManagedLogin.SessionCookieName = authSession.cookieName()
 		options.AuthRuntime.TenetManagedLogin.MissingSettings = []string{}
 	}
@@ -1442,6 +1447,11 @@ func NewRouter(options Options) http.Handler {
 	mux.HandleFunc("/auth/callback/github", func(w http.ResponseWriter, r *http.Request) {
 		handleGitHubCallback(w, r, authSession)
 	})
+	if authSession.active() {
+		mux.HandleFunc("/auth/logout", func(w http.ResponseWriter, r *http.Request) {
+			handleManagedLoginLogout(w, r, authSession)
+		})
+	}
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
