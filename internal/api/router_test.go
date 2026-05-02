@@ -138,6 +138,7 @@ func TestRouterOperatorContextReportsConfiguredManagedLoginRuntimeGroundwork(t *
 				Provider:                "github",
 				LoginRoute:              "/auth/login/github",
 				CallbackRoute:           "/auth/callback/github",
+				LogoutRoute:             "/auth/logout",
 				SessionCookieName:       "tenet_session",
 				StateStoreConfigured:    true,
 				IdentityStoreConfigured: true,
@@ -162,8 +163,8 @@ func TestRouterOperatorContextReportsConfiguredManagedLoginRuntimeGroundwork(t *
 	if managedLogin["configured"] != true || managedLogin["active"] != false || managedLogin["provider"] != "github" {
 		t.Fatalf("expected configured but inactive managed-login diagnostic, got %#v", managedLogin)
 	}
-	if managedLogin["loginRoute"] != "/auth/login/github" || managedLogin["callbackRoute"] != "/auth/callback/github" || managedLogin["sessionCookieName"] != "tenet_session" {
-		t.Fatalf("expected stable route/session diagnostics, got %#v", managedLogin)
+	if managedLogin["loginRoute"] != "/auth/login/github" || managedLogin["callbackRoute"] != "/auth/callback/github" || managedLogin["logoutRoute"] != "/auth/logout" || managedLogin["sessionCookieName"] != "tenet_session" {
+		t.Fatalf("expected stable route/session diagnostics including logout, got %#v", managedLogin)
 	}
 	if managedLogin["stateStoreConfigured"] != true || managedLogin["identityStoreConfigured"] != true || managedLogin["sessionSecretConfigured"] != true {
 		t.Fatalf("expected store/secret diagnostics, got %#v", managedLogin)
@@ -203,6 +204,13 @@ func TestRouterManagedLoginRoutesRequireActiveRuntime(t *testing.T) {
 				t.Fatalf("expected inactive managed-login runtime to return 503 for %s, got %d: %s", path, resp.Code, resp.Body.String())
 			}
 		})
+	}
+
+	logoutReq := httptest.NewRequest(http.MethodGet, "/auth/logout?returnUrl=/", nil)
+	logoutResp := httptest.NewRecorder()
+	router.ServeHTTP(logoutResp, logoutReq)
+	if logoutResp.Code != http.StatusNotFound {
+		t.Fatalf("expected inactive managed-login runtime to keep logout route unavailable, got %d: %s", logoutResp.Code, logoutResp.Body.String())
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/login", nil)
