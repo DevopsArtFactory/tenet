@@ -795,6 +795,11 @@
         if (!supported.length) return null;
         return `Supported Tenet roles: ${supported.join(', ')}`;
       };
+      const operatorContextSupportedRoleHeadersLabel = (context) => {
+        const supportedHeaders = operatorContextRoleNames(context?.roles || {}, 'supportedHeaderNames');
+        if (!supportedHeaders.length) return null;
+        return `Supported role headers: ${supportedHeaders.join(', ')} (role forwarding has no X-User-* alias)`;
+      };
       const operatorContextRecognizedRolesLabel = (context) => {
         const roles = context?.roles || {};
         const recognized = operatorContextRoleNames(roles, 'recognizedNames');
@@ -1139,6 +1144,10 @@
           const supportedRoles = operatorContextSupportedRolesLabel(context);
           if (supportedRoles) {
             detailsMeta.append(createElement('span', '', supportedRoles));
+          }
+          const supportedRoleHeaders = operatorContextSupportedRoleHeadersLabel(context);
+          if (supportedRoleHeaders) {
+            detailsMeta.append(createElement('span', '', supportedRoleHeaders));
           }
           const recognizedRoles = operatorContextRecognizedRolesLabel(context);
           if (recognizedRoles) {
