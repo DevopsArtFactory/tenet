@@ -3177,6 +3177,20 @@
             return 'GET operator read route';
         }
       };
+      const currentBookmarkableURL = (hashOverride) => {
+        const pathname = window.location.pathname || '/';
+        const search = window.location.search || '';
+        if (hashOverride) return `${pathname}${search}#${hashOverride}`;
+        return `${pathname}${search}${window.location.hash || ''}`;
+      };
+      const createOperatorReadFailureActions = (error) => {
+        const actionBar = createElement('div', 'detail-section-actions operator-read-recovery-actions');
+        actionBar.append(createNavLink(currentBookmarkableURL(), 'Retry current page after front-door sign-in', '_self'));
+        if (operatorReadForbiddenState(error)) {
+          actionBar.append(createNavLink(currentBookmarkableURL(operatorContextAccessDetailsPanelID), 'Open Operator context details', '_self'));
+        }
+        return actionBar;
+      };
       const renderOperatorReadFailurePage = (pageLabel, route, error) => {
         const heading = operatorReadFailureHeading(error);
         if (!heading) {
@@ -3188,6 +3202,7 @@
           createElement('div', 'label', pageLabel),
           createElement('h2', 'account-name', heading),
           createElement('div', 'account-meta', operatorReadFailureMessage(route, error)),
+          createOperatorReadFailureActions(error),
         );
         document.getElementById('accounts').replaceChildren(page);
       };
@@ -3225,6 +3240,7 @@
           createDetailSectionHeader(title, actions),
           createElement('div', 'detail-state error', heading),
           createElement('div', 'detail-condition-meta', operatorReadFailureMessage(route, error)),
+          createOperatorReadFailureActions(error),
         );
         return true;
       };
@@ -4385,7 +4401,7 @@
         );
         summary.replaceChildren(detailSummary);
       };
-      const renderAuditLogsState = (text, className = '', detailText = '') => {
+      const renderAuditLogsState = (text, className = '', detailText = '', afterNodes = []) => {
         renderAuditPageChrome();
         const root = document.getElementById('accounts');
         const page = createElement('article', 'account');
@@ -4430,9 +4446,9 @@
         const stateNode = createElement('div', 'detail-state', text);
         if (className) stateNode.classList.add(className);
         if (detailText) {
-          timelineSection.append(stateNode, createElement('div', 'detail-condition-meta', detailText));
+          timelineSection.append(stateNode, createElement('div', 'detail-condition-meta', detailText), ...afterNodes);
         } else {
-          timelineSection.append(stateNode);
+          timelineSection.append(stateNode, ...afterNodes);
         }
         page.append(timelineSection);
         root.replaceChildren(page);
@@ -4645,7 +4661,7 @@
               throw error;
             }
             if (operatorReadFailureHeading(error)) {
-              renderAuditLogsState(operatorReadFailureHeading(error), 'error', operatorReadFailureMessage(buildEmbeddedPageReadRoute(currentPageState), error));
+              renderAuditLogsState(operatorReadFailureHeading(error), 'error', operatorReadFailureMessage(buildEmbeddedPageReadRoute(currentPageState), error), [createOperatorReadFailureActions(error)]);
               throw error;
             }
             renderAuditLogsState(`Failed to load audit log: ${error?.message || 'unknown error'}`, 'error');
