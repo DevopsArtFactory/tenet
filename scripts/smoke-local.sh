@@ -2315,6 +2315,15 @@ def assert_operator_context_common(payload):
     assert tenet_managed_login.get('active') is False, payload
     assert tenet_managed_login.get('provider') == '', payload
     assert tenet_managed_login.get('unavailableReason') == 'tenet-managed login is disabled because OAuth runtime configuration is incomplete or absent', payload
+    assert tenet_managed_login.get('oauthStateTtlSeconds') == 600, payload
+    assert tenet_managed_login.get('sessionTtlSeconds') == 43200, payload
+    assert tenet_managed_login.get('sessionExpiryEnforced') is True, payload
+    assert tenet_managed_login.get('providerAccessTokenStored') is False, payload
+    assert tenet_managed_login.get('providerAccessTokenReturned') is False, payload
+    assert tenet_managed_login.get('providerTokenRefreshSupported') is False, payload
+    assert tenet_managed_login.get('providerTokenRevocationSupported') is False, payload
+    assert tenet_managed_login.get('logoutClearsSessionCookie') is False, payload
+    assert tenet_managed_login.get('logoutRevokesProviderToken') is False, payload
     assert tenet_managed_login.get('requiredSettings') == managed_login_required_settings, payload
     assert tenet_managed_login.get('missingSettings') == managed_login_required_settings, payload
     assert 'loginRoute' not in tenet_managed_login, payload
