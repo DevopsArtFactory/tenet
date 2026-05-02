@@ -33,6 +33,7 @@ type authSessionConfig struct {
 	IdentityStore authidentity.Store
 	SessionSecret string
 	CookieName    string
+	CookieSecure  bool
 	StateTTL      time.Duration
 	SessionTTL    time.Duration
 	Now           func() time.Time
@@ -45,6 +46,7 @@ func authSessionConfigFromOptions(options Options) authSessionConfig {
 		IdentityStore: options.AuthIdentityStore,
 		SessionSecret: options.AuthSessionSecret,
 		CookieName:    options.AuthSessionCookieName,
+		CookieSecure:  options.AuthSessionCookieSecure,
 	}
 }
 
@@ -78,6 +80,34 @@ func (cfg authSessionConfig) now() time.Time {
 		return cfg.Now().UTC()
 	}
 	return time.Now().UTC()
+}
+
+func (cfg authSessionConfig) secureCookie(r *http.Request) bool {
+	if cfg.CookieSecure {
+		return true
+	}
+	if r != nil && r.TLS != nil {
+		return true
+	}
+	if r == nil {
+		return false
+	}
+	for _, value := range r.Header.Values("X-Forwarded-Proto") {
+		for _, part := range strings.Split(value, ",") {
+			if strings.EqualFold(strings.TrimSpace(part), "https") {
+				return true
+			}
+		}
+	}
+	for _, value := range r.Header.Values("Forwarded") {
+		for _, part := range strings.Split(value, ";") {
+			name, proto, ok := strings.Cut(strings.TrimSpace(part), "=")
+			if ok && strings.EqualFold(strings.TrimSpace(name), "proto") && strings.EqualFold(strings.Trim(strings.TrimSpace(proto), "\""), "https") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 type authSessionClaims struct {
@@ -202,6 +232,7 @@ func handleGitHubCallback(w http.ResponseWriter, r *http.Request, cfg authSessio
 		MaxAge:   int(claims.Expires.Sub(cfg.now()).Seconds()),
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
+		Secure:   cfg.secureCookie(r),
 	})
 	http.Redirect(w, r, state.ReturnURL, http.StatusFound)
 }

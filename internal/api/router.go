@@ -1373,6 +1373,7 @@ type Options struct {
 	AuthIdentityStore                    authidentity.Store
 	AuthSessionSecret                    string
 	AuthSessionCookieName                string
+	AuthSessionCookieSecure              bool
 	TrustAuthenticatedHeaders            bool
 	RequireAuthenticatedIdentity         bool
 	RequireOperatorRoleForRead           bool
