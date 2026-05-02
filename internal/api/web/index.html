@@ -777,14 +777,31 @@
         const provenance = context?.identityProvenance || {};
         return [provenance.idSource, provenance.nameSource, provenance.emailSource].includes('alias') ? 'operator-context-warning' : '';
       };
+      const operatorContextRoleNames = (roles, field) => Array.isArray(roles?.[field]) ? roles[field].filter(Boolean) : [];
       const operatorContextRoleLabel = (context) => {
         const roles = context?.roles || {};
-        const names = Array.isArray(roles.names) ? roles.names.filter(Boolean) : [];
-        if (roles.canWrite) return names.length ? `Write-capable roles: ${names.join(', ')}` : 'Write-capable role forwarded';
-        if (roles.canRead) return names.length ? `Read-capable roles: ${names.join(', ')}` : 'Read-capable role forwarded';
+        const names = operatorContextRoleNames(roles, 'names');
+        const recognized = operatorContextRoleNames(roles, 'recognizedNames');
+        const capabilityNames = recognized.length ? recognized : names;
+        if (roles.canWrite) return capabilityNames.length ? `Write-capable roles: ${capabilityNames.join(', ')}` : 'Write-capable role forwarded';
+        if (roles.canRead) return capabilityNames.length ? `Read-capable roles: ${capabilityNames.join(', ')}` : 'Read-capable role forwarded';
         if (names.length) return `Roles forwarded: ${names.join(', ')}`;
         return 'No viewer/operator/admin role forwarded';
       };
+      const operatorContextRecognizedRolesLabel = (context) => {
+        const roles = context?.roles || {};
+        const recognized = operatorContextRoleNames(roles, 'recognizedNames');
+        const names = operatorContextRoleNames(roles, 'names');
+        if (recognized.length) return `Recognized capability roles: ${recognized.join(', ')}`;
+        if (names.length) return 'Recognized capability roles: none; supported roles are viewer, operator, admin';
+        return null;
+      };
+      const operatorContextUnsupportedRolesLabel = (context) => {
+        const unsupported = operatorContextRoleNames(context?.roles || {}, 'unrecognizedNames');
+        if (!unsupported.length) return null;
+        return `Unsupported forwarded roles ignored for capability checks: ${unsupported.join(', ')}. Forward viewer, operator, or admin to grant Tenet read/write capabilities.`;
+      };
+      const operatorContextUnsupportedRolesClass = (context) => operatorContextUnsupportedRolesLabel(context) ? 'operator-context-warning' : '';
       const operatorContextRoleProvenanceLabel = (context) => {
         const source = context?.roles?.provenance?.source || 'absent';
         const labels = {
@@ -1093,6 +1110,14 @@
           }
           detailsMeta.append(createElement('span', operatorContextIdentityProvenanceClass(context), operatorContextIdentityProvenanceLabel(context)));
           detailsMeta.append(createElement('span', operatorContextRoleProvenanceClass(context), operatorContextRoleProvenanceLabel(context)));
+          const recognizedRoles = operatorContextRecognizedRolesLabel(context);
+          if (recognizedRoles) {
+            detailsMeta.append(createElement('span', '', recognizedRoles));
+          }
+          const unsupportedRoles = operatorContextUnsupportedRolesLabel(context);
+          if (unsupportedRoles) {
+            detailsMeta.append(createElement('span', operatorContextUnsupportedRolesClass(context), unsupportedRoles));
+          }
           const scopedWriteReminder = operatorContextScopedWriteReminderLabel(context);
           if (scopedWriteReminder) {
             detailsMeta.append(createElement('span', operatorContextScopedWriteReminderClass(context), scopedWriteReminder));
