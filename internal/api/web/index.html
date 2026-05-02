@@ -785,6 +785,15 @@
         if (names.length) return `Roles forwarded: ${names.join(', ')}`;
         return 'No viewer/operator/admin role forwarded';
       };
+      const operatorContextRoleProvenanceLabel = (context) => {
+        const source = context?.roles?.provenance?.source || 'absent';
+        const labels = {
+          canonical: 'canonical X-Tenet-Authenticated-Roles',
+          absent: 'absent',
+        };
+        return `Role header source: ${labels[source] || labels.absent}`;
+      };
+      const operatorContextRoleProvenanceClass = (context) => context?.roles?.provenance?.source === 'canonical' ? '' : 'operator-context-warning';
       const operatorContextDeploymentAccessLabel = (context) => {
         const access = context?.deploymentAccess || {};
         const names = Array.isArray(access.names) ? access.names.filter(Boolean) : [];
@@ -1083,6 +1092,7 @@
             detailsMeta.append(createElement('span', operatorContextEnforcementClass(context), enforcementSummary));
           }
           detailsMeta.append(createElement('span', operatorContextIdentityProvenanceClass(context), operatorContextIdentityProvenanceLabel(context)));
+          detailsMeta.append(createElement('span', operatorContextRoleProvenanceClass(context), operatorContextRoleProvenanceLabel(context)));
           const scopedWriteReminder = operatorContextScopedWriteReminderLabel(context);
           if (scopedWriteReminder) {
             detailsMeta.append(createElement('span', operatorContextScopedWriteReminderClass(context), scopedWriteReminder));
