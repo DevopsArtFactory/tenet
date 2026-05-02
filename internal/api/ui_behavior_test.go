@@ -397,6 +397,14 @@ async function render(operatorResponses) {
   if (!ready.text().includes('Trusted headers enabled')) throw new Error('expected trusted header status');
   if (!ready.details()) throw new Error('expected verbose diagnostics details disclosure');
   if (!ready.detailsText().includes('Show access details')) throw new Error('expected collapsed details summary copy');
+  const readyDetailsSummary = findFirst(ready.details(), (node) => node.tagName === 'SUMMARY');
+  const readyDetailsPanel = findFirst(ready.details(), (node) => node.getAttribute && node.getAttribute('id') === 'operator-context-access-details-panel');
+  if (!readyDetailsSummary) throw new Error('expected access details summary control');
+  if (!readyDetailsPanel) throw new Error('expected labelled access diagnostics panel');
+  if (readyDetailsSummary.getAttribute('aria-controls') !== 'operator-context-access-details-panel') throw new Error('expected summary to control access diagnostics panel');
+  if (readyDetailsSummary.getAttribute('aria-expanded') !== 'false') throw new Error('expected collapsed summary aria-expanded=false');
+  if (readyDetailsPanel.getAttribute('role') !== 'group') throw new Error('expected access diagnostics panel group role');
+  if (readyDetailsPanel.getAttribute('aria-label') !== 'Forwarded trusted front-door access diagnostics') throw new Error('expected access diagnostics panel label');
   if (ready.details().open) throw new Error('operator context access details should be collapsed by default');
   if (ready.compactText().includes('Visible deployment examples:')) throw new Error('visible deployment examples should stay out of the compact banner summary');
   if (ready.compactText().includes('Required trusted headers:')) throw new Error('required trusted headers should stay inside expanded access details');
@@ -405,6 +413,7 @@ async function render(operatorResponses) {
   ready.details().open = true;
   ready.details().dispatch('toggle');
   if (!ready.detailsText().includes('Hide access details')) throw new Error('expected expanded details summary copy');
+  if (readyDetailsSummary.getAttribute('aria-expanded') !== 'true') throw new Error('expected expanded summary aria-expanded=true');
   if (ready.text().includes('Project/environment scope warning:')) throw new Error('normal operator context should stay quiet when no stale project/environment scopes are reported');
 
   const unmatched = await render({ ok: true, json: () => Promise.resolve(unmatchedContext) });
@@ -480,6 +489,8 @@ async function render(operatorResponses) {
   if (!refreshed.text().includes('Read-capable roles: viewer')) throw new Error('expected refreshed role capability');
   if (!refreshed.details().open) throw new Error('expanded access details should stay open after context refresh rerender');
   if (!refreshed.detailsText().includes('Hide access details')) throw new Error('expected expanded access details summary to survive context refresh');
+  const refreshedDetailsSummary = findFirst(refreshed.details(), (node) => node.tagName === 'SUMMARY');
+  if (!refreshedDetailsSummary || refreshedDetailsSummary.getAttribute('aria-expanded') !== 'true') throw new Error('expected refreshed expanded summary aria-expanded=true');
 
   const failedRefresh = await render([
     { ok: true, json: () => Promise.resolve(firstContext) },
