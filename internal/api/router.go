@@ -311,6 +311,13 @@ var (
 		"GET /v1/overview/accounts",
 		"GET /v1/audit-logs",
 	}
+	operatorContextCatalogReadExampleRoutes = []string{
+		"GET /v1/catalog/deployments",
+		"GET /v1/catalog/accounts",
+		"GET /v1/catalog/placements",
+		"GET /v1/catalog/topology",
+		"GET /v1/catalog/summary",
+	}
 	operatorContextAuthenticatedIdentityHeaders = []string{
 		"X-Tenet-Authenticated-Id",
 		"X-User-ID",
@@ -419,6 +426,7 @@ type operatorContextAccessVerdicts struct {
 	DeploymentScopedRead  operatorContextAccessVerdict `json:"deploymentScopedRead"`
 	DeploymentScopedWrite operatorContextAccessVerdict `json:"deploymentScopedWrite"`
 	CollectionRead        operatorContextAccessVerdict `json:"collectionRead"`
+	CatalogRead           operatorContextAccessVerdict `json:"catalogRead"`
 }
 
 type operatorContextAccessVerdict struct {
@@ -519,6 +527,7 @@ func buildOperatorContextAccessVerdicts(options Options, identity requestactor.A
 		DeploymentScopedRead:  operatorContextDeploymentScopedReadVerdict(options, identity, roles, deployments, scopes, summary),
 		DeploymentScopedWrite: operatorContextDeploymentScopedWriteVerdict(options, identity, roles, deployments, scopes, summary, operatorWrite),
 		CollectionRead:        operatorContextCollectionReadVerdict(options, identity, roles, deployments, scopes, summary),
+		CatalogRead:           operatorContextCatalogReadVerdict(options, identity, roles, deployments, scopes, summary),
 	}
 }
 
@@ -699,6 +708,23 @@ func operatorContextCollectionReadVerdict(options Options, identity requestactor
 		verdict.EmptyCollectionLikely = true
 		verdict.Reason = "collection reads will be allowed but likely empty because the forwarded deployment grants or project/environment scopes do not match catalog deployments"
 	}
+	return verdict
+}
+
+func operatorContextCatalogReadVerdict(options Options, identity requestactor.AuthenticatedIdentity, roles requestactor.AuthenticatedRoles, deployments requestactor.AuthorizedDeployments, scopes requestactor.AuthorizedProjectEnvironmentScopes, summary *operatorContextAccessSummary) operatorContextAccessVerdict {
+	verdict := operatorContextCollectionReadVerdict(options, identity, roles, deployments, scopes, summary)
+	verdict.ExampleRoutes = cloneOperatorContextExampleRoutes(operatorContextCatalogReadExampleRoutes)
+	if !options.RequireDeploymentReadAuthorization {
+		verdict.Reason = "raw catalog reads are not filtered by deployment allowlist for this API instance"
+		return verdict
+	}
+	if !verdict.Allowed {
+		return verdict
+	}
+	if verdict.EmptyCollectionLikely {
+		return verdict
+	}
+	verdict.Reason = "raw catalog reads are filtered to deployment-visible desired-state metadata before returning catalog collections or summaries"
 	return verdict
 }
 

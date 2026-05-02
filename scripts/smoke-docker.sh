@@ -1775,6 +1775,9 @@ def assert_operator_context_common(payload):
     assert access_verdicts.get("collectionRead", {}).get("filtersCollectionsByDeploymentAccess") is True, payload
     assert access_verdicts.get("collectionRead", {}).get("exampleRoutes") == ["GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/catalog/deployments", "GET /v1/overview/accounts", "GET /v1/audit-logs"], payload
     assert access_verdicts.get("collectionRead", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers + project_environment_scope_headers, payload
+    assert access_verdicts.get("catalogRead", {}).get("filtersCollectionsByDeploymentAccess") is True, payload
+    assert access_verdicts.get("catalogRead", {}).get("exampleRoutes") == ["GET /v1/catalog/deployments", "GET /v1/catalog/accounts", "GET /v1/catalog/placements", "GET /v1/catalog/topology", "GET /v1/catalog/summary"], payload
+    assert access_verdicts.get("catalogRead", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers + project_environment_scope_headers, payload
 
 assert_operator_context_common(operator_context_trusted)
 assert operator_context_trusted["identity"]["authenticated"] is True, operator_context_trusted

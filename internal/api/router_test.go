@@ -233,6 +233,16 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if !reflect.DeepEqual(collectionRead["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles", "X-Tenet-Authorized-Deployments", "X-Tenet-Authorized-Projects", "X-Tenet-Authorized-Environments"}) {
 		t.Fatalf("expected collection read trusted headers, got %#v", collectionRead["requiredTrustedHeaders"])
 	}
+	catalogRead := accessVerdicts["catalogRead"].(map[string]any)
+	if catalogRead["allowed"] != true || catalogRead["filtersCollectionsByDeploymentAccess"] != true || catalogRead["reason"] != "raw catalog reads are filtered to deployment-visible desired-state metadata before returning catalog collections or summaries" {
+		t.Fatalf("expected raw catalog read verdict, got %#v", catalogRead)
+	}
+	if !reflect.DeepEqual(catalogRead["exampleRoutes"], []any{"GET /v1/catalog/deployments", "GET /v1/catalog/accounts", "GET /v1/catalog/placements", "GET /v1/catalog/topology", "GET /v1/catalog/summary"}) {
+		t.Fatalf("expected raw catalog read route examples, got %#v", catalogRead["exampleRoutes"])
+	}
+	if !reflect.DeepEqual(catalogRead["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles", "X-Tenet-Authorized-Deployments", "X-Tenet-Authorized-Projects", "X-Tenet-Authorized-Environments"}) {
+		t.Fatalf("expected raw catalog read trusted headers, got %#v", catalogRead["requiredTrustedHeaders"])
+	}
 }
 
 func TestRouterOperatorContextSummarizesMatchedAndUnmatchedDeploymentAccess(t *testing.T) {

@@ -975,6 +975,7 @@
           ['Deployment reads', verdicts.deploymentScopedRead],
           ['Deployment writes', verdicts.deploymentScopedWrite],
           ['Collection reads', verdicts.collectionRead],
+          ['Raw catalog reads', verdicts.catalogRead],
         ]
           .map(([label, verdict]) => ({ label: operatorContextAccessVerdictLabel(label, verdict), className: operatorContextAccessVerdictClass(verdict) }))
           .filter((entry) => entry.label);
