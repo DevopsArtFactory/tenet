@@ -2287,6 +2287,25 @@ def assert_operator_context_common(payload):
     write_roles = ['operator', 'admin']
     access_headers = ['X-Tenet-Authorized-Deployments', 'X-Tenet-Authorized-Projects', 'X-Tenet-Authorized-Environments']
     allowlist_headers = ['X-Tenet-Authorized-Deployments']
+    managed_login_required_settings = [
+        'TENET_AUTH_PROVIDER',
+        'TENET_GITHUB_OAUTH_CLIENT_ID',
+        'TENET_GITHUB_OAUTH_CLIENT_SECRET',
+        'TENET_GITHUB_OAUTH_REDIRECT_URL',
+        'TENET_AUTH_STATE_STORE_PATH',
+        'TENET_AUTH_IDENTITY_STORE_PATH',
+        'TENET_AUTH_SESSION_SECRET',
+    ]
+    auth_runtime = payload.get('authRuntime') or {}
+    tenet_managed_login = auth_runtime.get('tenetManagedLogin') or {}
+    assert tenet_managed_login.get('configured') is False, payload
+    assert tenet_managed_login.get('active') is False, payload
+    assert tenet_managed_login.get('provider') == '', payload
+    assert tenet_managed_login.get('unavailableReason') == 'tenet-managed login is disabled because OAuth runtime configuration is incomplete or absent', payload
+    assert tenet_managed_login.get('requiredSettings') == managed_login_required_settings, payload
+    assert tenet_managed_login.get('missingSettings') == managed_login_required_settings, payload
+    assert 'loginRoute' not in tenet_managed_login, payload
+    assert 'callbackRoute' not in tenet_managed_login, payload
     identity_header_support = payload.get('identityHeaderSupport') or {}
     actor_header_support = payload.get('actorHeaderSupport') or {}
     assert identity_header_support.get('canonical') == canonical_identity_headers, payload
