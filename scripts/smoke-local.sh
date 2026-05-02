@@ -963,14 +963,18 @@ assert 'Required trusted headers:' in ui, ui
 assert "const operatorContextAccessVerdictScopeGrantLabel = (verdict) => verdict?.acceptsProjectEnvironmentScopes" in ui, ui
 assert 'Scope grants: exact deployments or matching project/environment scopes' in ui, ui
 assert 'acceptsProjectEnvironmentScopes' in ui, ui
+assert "const operatorContextAccessVerdictCollectionFilterLabel = (verdict) => verdict?.filtersCollectionsByDeploymentAccess" in ui, ui
+assert 'filtersCollectionsByDeploymentAccess' in ui, ui
 assert "const headers = operatorContextAccessVerdictRequiredHeadersLabel(verdict);" in ui, ui
+assert "const collectionFilter = operatorContextAccessVerdictCollectionFilterLabel(verdict);" in ui, ui
 assert "const scopeGrants = operatorContextAccessVerdictScopeGrantLabel(verdict);" in ui, ui
-assert 'return `${label} ${state}${reason}${examples}${headers}${scopeGrants}`;' in ui, ui
+assert 'return `${label} ${state}${reason}${examples}${headers}${collectionFilter}${scopeGrants}`;' in ui, ui
 assert "const operatorContextAccessVerdictEntries = (context) => {" in ui, ui
 assert 'Operator reads' in ui, ui
 assert 'Collection reads' in ui, ui
 assert 'Examples:' in ui, ui
 assert 'operator-context-denied' in ui, ui
+assert 'Collection scope: filtered to visible deployments' in ui, ui
 assert 'emptyCollectionLikely' in ui, ui
 assert 'Deployment access summary unavailable for this response' in ui, ui
 assert 'forwarded match catalog' in ui, ui
