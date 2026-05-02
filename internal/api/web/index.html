@@ -788,6 +788,53 @@
         const aliasText = aliases.length ? aliases.join(', ') : 'none reported';
         return `Supported identity headers: canonical ${canonicalText}; compatibility aliases ${aliasText}. Canonical X-Tenet-Authenticated-* identity headers are preferred when both canonical and alias values are present.`;
       };
+      const operatorContextSupportedActorHeadersLabel = (context) => {
+        const support = context?.actorHeaderSupport || {};
+        const canonical = Array.isArray(support.canonical) ? support.canonical.filter(Boolean) : [];
+        const aliases = Array.isArray(support.aliases) ? support.aliases.filter(Boolean) : [];
+        if (!canonical.length && !aliases.length) return null;
+        const canonicalText = canonical.length ? canonical.join(', ') : 'none reported';
+        const aliasText = aliases.length ? aliases.join(', ') : 'none reported';
+        return `Supported actor attribution headers: canonical ${canonicalText}; compatibility aliases ${aliasText}. Explicit X-Tenet-Actor-* actor headers win over X-User-* actor aliases; trusted authenticated identity is projected only when explicit actor context is absent; actor attribution records persisted plan/apply/audit metadata and does not authorize routes.`;
+      };
+      const operatorContextActorProvenanceLabel = (context) => {
+        const provenance = context?.actorProvenance || {};
+        const labels = { canonical: 'canonical X-Tenet-Actor-*', alias: 'compatibility X-User-* actor alias', absent: 'absent' };
+        const entries = [
+          ['id', provenance.idSource],
+          ['name', provenance.nameSource],
+          ['email', provenance.emailSource],
+        ].map(([field, source]) => `${field}: ${labels[source] || labels.absent}`);
+        return `Actor header sources: ${entries.join('; ')}`;
+      };
+      const operatorContextActorProvenanceClass = (context) => {
+        const provenance = context?.actorProvenance || {};
+        return [provenance.idSource, provenance.nameSource, provenance.emailSource].includes('alias') ? 'operator-context-warning' : '';
+      };
+      const operatorContextActorLabel = (context) => {
+        const actor = context?.actor || {};
+        if (actor.available) {
+          const label = actor.name || actor.email || actor.id || 'available actor';
+          const fields = [];
+          if (actor.id) fields.push(`id ${actor.id}`);
+          if (actor.email) fields.push(`email ${actor.email}`);
+          return `Persisted actor fields: ${label}${fields.length ? ` (${fields.join('; ')})` : ''}`;
+        }
+        return `Persisted actor fields: unavailable${actor.reason ? ` — ${actor.reason}` : ''}`;
+      };
+      const operatorContextActorClass = (context) => context?.actor?.available ? '' : 'operator-context-warning';
+      const operatorContextActorAttributionLabel = (context) => {
+        const attribution = context?.actorAttribution || {};
+        const sourceLabels = {
+          explicit_actor_headers: 'explicit actor headers',
+          trusted_authenticated_identity: 'trusted authenticated identity projection',
+          unavailable: 'unavailable',
+        };
+        const status = attribution.available ? `available via ${sourceLabels[attribution.source] || attribution.source || 'reported source'}` : `unavailable${attribution.source && attribution.source !== 'unavailable' ? ` via ${sourceLabels[attribution.source] || attribution.source}` : ''}`;
+        const summary = attribution.summary || 'no server-authored actor attribution summary reported';
+        return `Actor attribution: ${status}. ${summary}`;
+      };
+      const operatorContextActorAttributionClass = (context) => context?.actorAttribution?.available ? '' : 'operator-context-warning';
       const operatorContextRoleNames = (roles, field) => Array.isArray(roles?.[field]) ? roles[field].filter(Boolean) : [];
       const operatorContextRoleLabel = (context) => {
         const roles = context?.roles || {};
@@ -1158,6 +1205,13 @@
           if (supportedIdentityHeaders) {
             detailsMeta.append(createElement('span', '', supportedIdentityHeaders));
           }
+          const supportedActorHeaders = operatorContextSupportedActorHeadersLabel(context);
+          if (supportedActorHeaders) {
+            detailsMeta.append(createElement('span', '', supportedActorHeaders));
+          }
+          detailsMeta.append(createElement('span', operatorContextActorProvenanceClass(context), operatorContextActorProvenanceLabel(context)));
+          detailsMeta.append(createElement('span', operatorContextActorClass(context), operatorContextActorLabel(context)));
+          detailsMeta.append(createElement('span', operatorContextActorAttributionClass(context), operatorContextActorAttributionLabel(context)));
           detailsMeta.append(createElement('span', operatorContextRoleProvenanceClass(context), operatorContextRoleProvenanceLabel(context)));
           const supportedRoles = operatorContextSupportedRolesLabel(context);
           if (supportedRoles) {

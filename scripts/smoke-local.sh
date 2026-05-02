@@ -1006,6 +1006,12 @@ assert 'operatorContextSupportedRolesLabel(context)' in ui, ui
 assert "const operatorContextSupportedIdentityHeadersLabel = (context) => {" in ui, ui
 assert "Supported identity headers: canonical ${canonicalText}; compatibility aliases ${aliasText}. Canonical X-Tenet-Authenticated-* identity headers are preferred when both canonical and alias values are present." in ui, ui
 assert 'operatorContextSupportedIdentityHeadersLabel(context)' in ui, ui
+assert "const operatorContextSupportedActorHeadersLabel = (context) => {" in ui, ui
+assert "Supported actor attribution headers: canonical ${canonicalText}; compatibility aliases ${aliasText}. Explicit X-Tenet-Actor-* actor headers win over X-User-* actor aliases; trusted authenticated identity is projected only when explicit actor context is absent; actor attribution records persisted plan/apply/audit metadata and does not authorize routes." in ui, ui
+assert 'operatorContextSupportedActorHeadersLabel(context)' in ui, ui
+assert "Actor header sources: ${entries.join('; ')}" in ui, ui
+assert 'Actor attribution: ${status}. ${summary}' in ui, ui
+assert 'operatorContextActorAttributionLabel(context)' in ui, ui
 assert "const operatorContextSupportedRoleHeadersLabel = (context) => {" in ui, ui
 assert "Supported role headers: ${supportedHeaders.join(', ')} (role forwarding has no X-User-* alias)" in ui, ui
 assert 'operatorContextSupportedRoleHeadersLabel(context)' in ui, ui
