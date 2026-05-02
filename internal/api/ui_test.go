@@ -2689,7 +2689,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"API health, representative endpoints, deployment-events/resource-logs/audit-log JSON shapes, including the compose-backed `codeDeployApplication` recent-log envelope, `testListener` backing-resource metadata, weighted `activeTargetGroup` / `candidateTargetGroup` `no_log_source` recent-log payloads, and representative `Request-Id` response headers",
 			"The full `GET /v1/audit-logs` collection with expected `plan.created` and `apply.requested` actions present",
 			"The same smoke-created `POST /v1/applies/{applyId}/transitions` route boundaries: `400` malformed JSON, `404` unknown apply, and `409` invalid terminal move with operator-facing text.",
-			"The same actor-header precedence check used by direct-process smoke, plus the default disabled immutable apply contract.",
+			"The same actor-header precedence check used by direct-process smoke, including `actorAttribution.precedence`, plus the default disabled immutable apply contract.",
 			"Trusted front-door auth by restarting the Compose `api` service",
 			"controller-authored `managedDrift[]` evidence in `GET /v1/overview/deployments/payments-api-prod` with stable `field` / `desired` / `actual` / `severity` rows, additive detail-level `managedDriftSummary` severity counts, validates `resourceRef` shape when backend-authored metadata is present, and keeps the local-friendly no-resourceRef fallback explicit while aligned `runtimeSummary.managedDrift` remains present",
 			"survive the Compose `api` service restart",
