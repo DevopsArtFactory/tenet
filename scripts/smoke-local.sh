@@ -2237,9 +2237,14 @@ def assert_operator_context_common(payload):
     assert enforcement.get('collectionReadsFiltered') is True, payload
     access_verdicts = payload.get('accessVerdicts') or {}
     identity_headers = ['X-Tenet-Authenticated-Id', 'X-User-ID']
+    canonical_identity_headers = ['X-Tenet-Authenticated-Id', 'X-Tenet-Authenticated-Name', 'X-Tenet-Authenticated-Email']
+    alias_identity_headers = ['X-User-ID', 'X-User-Name', 'X-User-Email']
     role_headers = ['X-Tenet-Authenticated-Roles']
     access_headers = ['X-Tenet-Authorized-Deployments', 'X-Tenet-Authorized-Projects', 'X-Tenet-Authorized-Environments']
     allowlist_headers = ['X-Tenet-Authorized-Deployments']
+    identity_header_support = payload.get('identityHeaderSupport') or {}
+    assert identity_header_support.get('canonical') == canonical_identity_headers, payload
+    assert identity_header_support.get('aliases') == alias_identity_headers, payload
     assert (payload.get('deploymentAccess') or {}).get('supportedHeaderNames') == access_headers, payload
     assert access_verdicts.get('operatorRead', {}).get('requiresAuthenticatedIdentity') is True, payload
     assert access_verdicts.get('operatorRead', {}).get('requiresViewerCapableRole') is True, payload
