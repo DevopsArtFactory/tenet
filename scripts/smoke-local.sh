@@ -1189,8 +1189,11 @@ operator_read_auth_fragments = (
     "const operatorReadForbiddenMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.`;",
     "const currentBookmarkableURL = (hashOverride) => {",
     "const createOperatorReadFailureActions = (error) => {",
+    "if (operatorReadAuthRequiredState(error)) {",
     "Retry current page after front-door sign-in",
+    "if (operatorReadForbiddenState(error)) {",
     "Open Operator context details",
+    "Retry current page after access update",
     "currentBookmarkableURL(operatorContextAccessDetailsPanelID)",
 )
 assert_fragments("application_ui", application_ui, operator_read_auth_fragments + (
