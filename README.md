@@ -215,6 +215,11 @@ Example diagnostic summary shape (including identity and role source provenance,
     }
   },
   "deploymentAccess": {
+    "supportedHeaderNames": [
+      "X-Tenet-Authorized-Deployments",
+      "X-Tenet-Authorized-Projects",
+      "X-Tenet-Authorized-Environments"
+    ],
     "summary": {
       "available": true,
       "forwardedCount": 2,
@@ -255,6 +260,8 @@ Example diagnostic summary shape (including identity and role source provenance,
   }
 }
 ```
+
+`deploymentAccess.supportedHeaderNames` (`supportedHeaderNames`) lists the exact trusted front-door deployment access headers Tenet recognizes so RBAC operators can compare their proxy/header-forwarding configuration with the active diagnostic payload.
 
 If a front door forwards stale project/environment scopes, the same summary keeps the response diagnostic rather than silently widening access. Operators should look for the stale scope fields before debugging individual routes:
 

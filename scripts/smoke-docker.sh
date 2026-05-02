@@ -1812,6 +1812,7 @@ def assert_operator_context_common(payload):
     role_headers = ["X-Tenet-Authenticated-Roles"]
     allowlist_headers = ["X-Tenet-Authorized-Deployments"]
     project_environment_scope_headers = ["X-Tenet-Authorized-Projects", "X-Tenet-Authorized-Environments"]
+    assert (payload.get("deploymentAccess") or {}).get("supportedHeaderNames") == allowlist_headers + project_environment_scope_headers, payload
     assert access_verdicts.get("operatorRead", {}).get("requiresAuthenticatedIdentity") is True, payload
     assert access_verdicts.get("operatorRead", {}).get("requiresViewerCapableRole") is True, payload
     assert access_verdicts.get("operatorRead", {}).get("exampleRoutes") == ["GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/catalog/deployments", "GET /v1/audit-logs"], payload

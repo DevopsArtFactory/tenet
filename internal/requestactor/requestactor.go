@@ -324,6 +324,12 @@ func SupportedAuthenticatedIdentityAliasHeaderNames() []string {
 	return []string{HeaderAliasID, HeaderAliasName, HeaderAliasEmail}
 }
 
+// SupportedDeploymentAccessHeaderNames returns the trusted front-door access-scope
+// headers Tenet accepts when deployment read authorization is enforced.
+func SupportedDeploymentAccessHeaderNames() []string {
+	return []string{AuthorizedDeploymentsHeader, AuthorizedProjectsHeader, AuthorizedEnvironmentsHeader}
+}
+
 // Allows reports whether the deployment is present in the exact trusted allowlist.
 func (deployments AuthorizedDeployments) Allows(deploymentName string) bool {
 	for _, authorized := range NormalizeAuthorizedDeployments(deployments).Names {

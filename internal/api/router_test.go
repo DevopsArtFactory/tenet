@@ -180,6 +180,9 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if deploymentAccess["enforced"] != true || deploymentAccess["forwarded"] != true || !reflect.DeepEqual(deploymentAccess["names"], []any{"payments-api-prod", "worker-prod"}) {
 		t.Fatalf("unexpected deploymentAccess payload: %#v", deploymentAccess)
 	}
+	if !reflect.DeepEqual(deploymentAccess["supportedHeaderNames"], []any{"X-Tenet-Authorized-Deployments", "X-Tenet-Authorized-Projects", "X-Tenet-Authorized-Environments"}) {
+		t.Fatalf("unexpected deployment access header support: %#v", deploymentAccess["supportedHeaderNames"])
+	}
 	scopes, ok := deploymentAccess["scopes"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected deploymentAccess scopes object, got %#v", deploymentAccess["scopes"])
