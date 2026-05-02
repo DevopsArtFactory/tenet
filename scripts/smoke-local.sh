@@ -1532,12 +1532,18 @@ operator_context_no_allowlist=$(curl -fsS \
   -H "X-Tenet-Authenticated-Name: No Allowlist Operator" \
   -H "X-Tenet-Authenticated-Roles: viewer" \
   "http://$HOST:$PORT/v1/operator/context")
+operator_context_no_roles=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: no-roles-321" \
+  -H "X-Tenet-Authenticated-Name: Missing Role Operator" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-prod" \
+  "http://$HOST:$PORT/v1/operator/context")
 operator_context_trusted_path=$(write_payload operator-context-trusted.json "$operator_context_trusted")
 operator_context_combined_access_path=$(write_payload operator-context-combined-access.json "$operator_context_combined_access")
 operator_context_unmatched_path=$(write_payload operator-context-unmatched.json "$operator_context_unmatched")
 operator_context_stale_scopes_path=$(write_payload operator-context-stale-scopes.json "$operator_context_stale_scopes")
 operator_context_alias_path=$(write_payload operator-context-alias.json "$operator_context_alias")
 operator_context_no_allowlist_path=$(write_payload operator-context-no-allowlist.json "$operator_context_no_allowlist")
+operator_context_no_roles_path=$(write_payload operator-context-no-roles.json "$operator_context_no_roles")
 auth_role_required_collection_status=$(curl -sS -o "$AUTH_ROLE_REQUIRED_COLLECTION_BODY" -w "%{http_code}" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
@@ -1957,6 +1963,7 @@ OPERATOR_CONTEXT_UNMATCHED_PATH="$operator_context_unmatched_path" \
 OPERATOR_CONTEXT_STALE_SCOPES_PATH="$operator_context_stale_scopes_path" \
 OPERATOR_CONTEXT_ALIAS_PATH="$operator_context_alias_path" \
 OPERATOR_CONTEXT_NO_ALLOWLIST_PATH="$operator_context_no_allowlist_path" \
+OPERATOR_CONTEXT_NO_ROLES_PATH="$operator_context_no_roles_path" \
 ALLOWED_GUARDED_READ_PATH="$allowed_guarded_read_path" \
 ALLOWED_STATUS_READ_PATH="$allowed_status_read_path" \
 ALLOWED_PLAN_READ_PATH="$allowed_plan_read_path" \
@@ -2063,6 +2070,8 @@ with open(os.environ['OPERATOR_CONTEXT_ALIAS_PATH'], encoding='utf-8') as fh:
     operator_context_alias = json.load(fh)
 with open(os.environ['OPERATOR_CONTEXT_NO_ALLOWLIST_PATH'], encoding='utf-8') as fh:
     operator_context_no_allowlist = json.load(fh)
+with open(os.environ['OPERATOR_CONTEXT_NO_ROLES_PATH'], encoding='utf-8') as fh:
+    operator_context_no_roles = json.load(fh)
 with open(os.environ['ALLOWED_GUARDED_READ_PATH'], encoding='utf-8') as fh:
     allowed_guarded_read = json.load(fh)
 with open(os.environ['ALLOWED_STATUS_READ_PATH'], encoding='utf-8') as fh:
@@ -2352,6 +2361,7 @@ assert operator_context_no_allowlist['identity']['name'] == 'No Allowlist Operat
 assert operator_context_no_allowlist['roles']['names'] == ['viewer'], operator_context_no_allowlist
 assert operator_context_no_allowlist['roles']['canRead'] is True, operator_context_no_allowlist
 assert operator_context_no_allowlist['roles']['canWrite'] is False, operator_context_no_allowlist
+assert operator_context_no_allowlist['roles']['provenance']['source'] == 'canonical', operator_context_no_allowlist
 assert operator_context_no_allowlist['deploymentAccess']['enforced'] is True, operator_context_no_allowlist
 assert operator_context_no_allowlist['deploymentAccess']['forwarded'] is False, operator_context_no_allowlist
 assert 'names' not in operator_context_no_allowlist['deploymentAccess'], operator_context_no_allowlist
@@ -2359,6 +2369,20 @@ no_allowlist_verdicts = operator_context_no_allowlist['accessVerdicts']
 assert no_allowlist_verdicts['deploymentScopedRead']['allowed'] is False, operator_context_no_allowlist
 assert no_allowlist_verdicts['collectionRead']['allowed'] is True, operator_context_no_allowlist
 assert no_allowlist_verdicts['collectionRead']['emptyCollectionLikely'] is True, operator_context_no_allowlist
+
+assert_operator_context_common(operator_context_no_roles)
+assert operator_context_no_roles['identity']['authenticated'] is True, operator_context_no_roles
+assert operator_context_no_roles['identity']['id'] == 'no-roles-321', operator_context_no_roles
+assert operator_context_no_roles['identity']['name'] == 'Missing Role Operator', operator_context_no_roles
+assert operator_context_no_roles['roles'].get('names', []) == [], operator_context_no_roles
+assert operator_context_no_roles['roles']['canRead'] is False, operator_context_no_roles
+assert operator_context_no_roles['roles']['canWrite'] is False, operator_context_no_roles
+assert operator_context_no_roles['roles']['provenance']['source'] == 'absent', operator_context_no_roles
+no_roles_verdicts = operator_context_no_roles['accessVerdicts']
+assert no_roles_verdicts['operatorRead']['allowed'] is False, operator_context_no_roles
+assert no_roles_verdicts['operatorRead']['reason'] == 'authenticated viewer-capable role is required for guarded operator read routes', operator_context_no_roles
+assert no_roles_verdicts['operatorWrite']['allowed'] is False, operator_context_no_roles
+assert no_roles_verdicts['operatorWrite']['reason'] == 'authenticated operator role is required for guarded operator write routes', operator_context_no_roles
 assert allowed_guarded_read['name'] == 'payments-api-staging', allowed_guarded_read
 assert allowed_status_read['deploymentName'] == 'payments-api-staging', allowed_status_read
 assert allowed_plan_read['id'] == os.environ['FRONTDOOR_PLAN_ID'], allowed_plan_read
