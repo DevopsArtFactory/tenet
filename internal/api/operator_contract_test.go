@@ -84,6 +84,7 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 		"When any setting is absent the runtime stays disabled",
 		"OIDC/SAML provider selection, provider-token refresh/revocation, and long-lived token lifecycle management remain future work",
 		"non-secret `requiredSettings` and `missingSettings`",
+		"`sessionCookieSecureOverride`, `sessionCookieSecureForRequest`, and `sessionCookieSecureSources`",
 		"Treat managed-login release coverage as two complementary checks",
 		"without live GitHub credentials",
 	} {

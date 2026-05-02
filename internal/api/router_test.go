@@ -125,6 +125,9 @@ func TestRouterOperatorContextReportsManagedLoginRuntimeDisabledByDefault(t *tes
 	if managedLogin["unavailableReason"] != "tenet-managed login is disabled because OAuth runtime configuration is incomplete or absent" {
 		t.Fatalf("unexpected managed-login unavailable reason: %#v", managedLogin)
 	}
+	if managedLogin["sessionCookieSecureOverride"] != false || managedLogin["sessionCookieSecureForRequest"] != false {
+		t.Fatalf("expected disabled managed-login cookie security diagnostics to stay false, got %#v", managedLogin)
+	}
 	if !reflect.DeepEqual(jsonStringSlice(t, managedLogin["requiredSettings"]), RequiredTenetManagedLoginSettings()) || !reflect.DeepEqual(jsonStringSlice(t, managedLogin["missingSettings"]), RequiredTenetManagedLoginSettings()) {
 		t.Fatalf("unexpected managed-login required/missing settings: %#v", managedLogin)
 	}
@@ -168,6 +171,9 @@ func TestRouterOperatorContextReportsConfiguredManagedLoginRuntimeGroundwork(t *
 	}
 	if managedLogin["stateStoreConfigured"] != true || managedLogin["identityStoreConfigured"] != true || managedLogin["sessionSecretConfigured"] != true {
 		t.Fatalf("expected store/secret diagnostics, got %#v", managedLogin)
+	}
+	if managedLogin["sessionCookieSecureOverride"] != false || managedLogin["sessionCookieSecureForRequest"] != false {
+		t.Fatalf("expected configured inactive local request to report non-secure cookie mode, got %#v", managedLogin)
 	}
 	if managedLogin["unavailableReason"] != "tenet-managed login configuration is present, but login/callback/session routes are not active for this API instance" {
 		t.Fatalf("unexpected configured managed-login unavailable reason: %#v", managedLogin)

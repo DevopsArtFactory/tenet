@@ -83,19 +83,25 @@ func (cfg authSessionConfig) now() time.Time {
 }
 
 func (cfg authSessionConfig) secureCookie(r *http.Request) bool {
+	return len(cfg.secureCookieSources(r)) > 0
+}
+
+func (cfg authSessionConfig) secureCookieSources(r *http.Request) []string {
+	sources := []string{}
 	if cfg.CookieSecure {
-		return true
+		sources = append(sources, "configured_override")
 	}
 	if r != nil && r.TLS != nil {
-		return true
+		sources = append(sources, "https_request")
 	}
 	if r == nil {
-		return false
+		return sources
 	}
 	for _, value := range r.Header.Values("X-Forwarded-Proto") {
 		for _, part := range strings.Split(value, ",") {
 			if strings.EqualFold(strings.TrimSpace(part), "https") {
-				return true
+				sources = append(sources, "x_forwarded_proto_https")
+				break
 			}
 		}
 	}
@@ -103,11 +109,12 @@ func (cfg authSessionConfig) secureCookie(r *http.Request) bool {
 		for _, part := range strings.Split(value, ";") {
 			name, proto, ok := strings.Cut(strings.TrimSpace(part), "=")
 			if ok && strings.EqualFold(strings.TrimSpace(name), "proto") && strings.EqualFold(strings.Trim(strings.TrimSpace(proto), "\""), "https") {
-				return true
+				sources = append(sources, "forwarded_proto_https")
+				break
 			}
 		}
 	}
-	return false
+	return sources
 }
 
 type authSessionClaims struct {
