@@ -367,22 +367,31 @@ type AuthRuntimeDiagnostic struct {
 // Active is true only when the current API process has complete non-secret runtime
 // settings, provider/session wiring, and no missing settings for the login routes.
 type TenetManagedLoginDiagnostic struct {
-	Configured                    bool     `json:"configured"`
-	Active                        bool     `json:"active"`
-	Provider                      string   `json:"provider"`
-	RequiredSettings              []string `json:"requiredSettings"`
-	MissingSettings               []string `json:"missingSettings"`
-	LoginRoute                    string   `json:"loginRoute,omitempty"`
-	CallbackRoute                 string   `json:"callbackRoute,omitempty"`
-	LogoutRoute                   string   `json:"logoutRoute,omitempty"`
-	SessionCookieName             string   `json:"sessionCookieName,omitempty"`
-	SessionCookieSecureOverride   bool     `json:"sessionCookieSecureOverride"`
-	SessionCookieSecureForRequest bool     `json:"sessionCookieSecureForRequest"`
-	SessionCookieSecureSources    []string `json:"sessionCookieSecureSources,omitempty"`
-	StateStoreConfigured          bool     `json:"stateStoreConfigured"`
-	IdentityStoreConfigured       bool     `json:"identityStoreConfigured"`
-	SessionSecretConfigured       bool     `json:"sessionSecretConfigured"`
-	UnavailableReason             string   `json:"unavailableReason,omitempty"`
+	Configured                       bool     `json:"configured"`
+	Active                           bool     `json:"active"`
+	Provider                         string   `json:"provider"`
+	RequiredSettings                 []string `json:"requiredSettings"`
+	MissingSettings                  []string `json:"missingSettings"`
+	LoginRoute                       string   `json:"loginRoute,omitempty"`
+	CallbackRoute                    string   `json:"callbackRoute,omitempty"`
+	LogoutRoute                      string   `json:"logoutRoute,omitempty"`
+	SessionCookieName                string   `json:"sessionCookieName,omitempty"`
+	SessionCookieSecureOverride      bool     `json:"sessionCookieSecureOverride"`
+	SessionCookieSecureForRequest    bool     `json:"sessionCookieSecureForRequest"`
+	SessionCookieSecureSources       []string `json:"sessionCookieSecureSources,omitempty"`
+	OAuthStateTTLSeconds             int64    `json:"oauthStateTtlSeconds"`
+	SessionTTLSeconds                int64    `json:"sessionTtlSeconds"`
+	SessionExpiryEnforced            bool     `json:"sessionExpiryEnforced"`
+	ProviderAccessTokenStored        bool     `json:"providerAccessTokenStored"`
+	ProviderAccessTokenReturned      bool     `json:"providerAccessTokenReturned"`
+	ProviderTokenRefreshSupported    bool     `json:"providerTokenRefreshSupported"`
+	ProviderTokenRevocationSupported bool     `json:"providerTokenRevocationSupported"`
+	LogoutClearsSessionCookie        bool     `json:"logoutClearsSessionCookie"`
+	LogoutRevokesProviderToken       bool     `json:"logoutRevokesProviderToken"`
+	StateStoreConfigured             bool     `json:"stateStoreConfigured"`
+	IdentityStoreConfigured          bool     `json:"identityStoreConfigured"`
+	SessionSecretConfigured          bool     `json:"sessionSecretConfigured"`
+	UnavailableReason                string   `json:"unavailableReason,omitempty"`
 }
 
 type operatorContextTrustedHeaders struct {
@@ -577,6 +586,15 @@ func buildAuthRuntimeDiagnosticForRequest(r *http.Request, options Options) Auth
 	managedLogin := diagnostic.TenetManagedLogin
 	authSession := authSessionConfigFromOptions(options)
 	managedLogin.SessionCookieSecureOverride = authSession.CookieSecure
+	managedLogin.OAuthStateTTLSeconds = int64(authSession.stateTTL().Seconds())
+	managedLogin.SessionTTLSeconds = int64(authSession.sessionTTL().Seconds())
+	managedLogin.SessionExpiryEnforced = true
+	managedLogin.ProviderAccessTokenStored = false
+	managedLogin.ProviderAccessTokenReturned = false
+	managedLogin.ProviderTokenRefreshSupported = false
+	managedLogin.ProviderTokenRevocationSupported = false
+	managedLogin.LogoutClearsSessionCookie = authSession.active() || managedLogin.Active
+	managedLogin.LogoutRevokesProviderToken = false
 	if authSession.active() || managedLogin.Configured {
 		secureSources := authSession.secureCookieSources(r)
 		managedLogin.SessionCookieSecureForRequest = len(secureSources) > 0
@@ -588,6 +606,18 @@ func buildAuthRuntimeDiagnosticForRequest(r *http.Request, options Options) Auth
 
 func normalizeAuthRuntimeDiagnostic(diagnostic AuthRuntimeDiagnostic) AuthRuntimeDiagnostic {
 	managedLogin := diagnostic.TenetManagedLogin
+	if managedLogin.OAuthStateTTLSeconds <= 0 {
+		managedLogin.OAuthStateTTLSeconds = int64(defaultAuthStateTTL.Seconds())
+	}
+	if managedLogin.SessionTTLSeconds <= 0 {
+		managedLogin.SessionTTLSeconds = int64(defaultAuthSessionTTL.Seconds())
+	}
+	managedLogin.SessionExpiryEnforced = true
+	managedLogin.ProviderAccessTokenStored = false
+	managedLogin.ProviderAccessTokenReturned = false
+	managedLogin.ProviderTokenRefreshSupported = false
+	managedLogin.ProviderTokenRevocationSupported = false
+	managedLogin.LogoutRevokesProviderToken = false
 	if len(managedLogin.RequiredSettings) == 0 {
 		managedLogin.RequiredSettings = RequiredTenetManagedLoginSettings()
 	}
@@ -641,6 +671,18 @@ func RequiredTenetManagedLoginSettings() []string {
 		"TENET_AUTH_IDENTITY_STORE_PATH",
 		"TENET_AUTH_SESSION_SECRET",
 	}
+}
+
+// DefaultTenetManagedLoginOAuthStateTTLSeconds returns the public diagnostic TTL
+// for one-time OAuth callback state records created by Tenet-managed login.
+func DefaultTenetManagedLoginOAuthStateTTLSeconds() int64 {
+	return int64(defaultAuthStateTTL.Seconds())
+}
+
+// DefaultTenetManagedLoginSessionTTLSeconds returns the public diagnostic TTL
+// for signed Tenet-managed browser session cookies.
+func DefaultTenetManagedLoginSessionTTLSeconds() int64 {
+	return int64(defaultAuthSessionTTL.Seconds())
 }
 
 func buildOperatorContextEnforcement(options Options) operatorContextEnforcement {

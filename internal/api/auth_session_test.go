@@ -159,12 +159,22 @@ func TestManagedGitHubLoginCallbackCreatesSessionAndAuthenticatedContext(t *test
 	if len(provider.exchangedCodes) != 1 || provider.exchangedCodes[0] != "code-123" {
 		t.Fatalf("expected provider exchange for callback code, got %#v", provider.exchangedCodes)
 	}
+	if len(provider.userTokens) != 1 || provider.userTokens[0] != "token-for-code-123" {
+		t.Fatalf("expected provider token to be used only for profile lookup, got %#v", provider.userTokens)
+	}
 	identities, err := authidentity.Load(identityPath)
 	if err != nil {
 		t.Fatalf("load identities: %v", err)
 	}
 	if len(identities) != 1 || identities[0].Provider != "github" || identities[0].Subject != "12345" {
 		t.Fatalf("expected persisted GitHub identity, got %#v", identities)
+	}
+	identityJSON, err := json.Marshal(identities)
+	if err != nil {
+		t.Fatalf("marshal persisted identities: %v", err)
+	}
+	if strings.Contains(string(identityJSON), "token-for-code-123") || strings.Contains(string(identityJSON), "accessToken") {
+		t.Fatalf("provider access token leaked into persisted identity JSON: %s", identityJSON)
 	}
 
 	reuseReq := httptest.NewRequest(http.MethodGet, "/auth/callback/github?state="+url.QueryEscape(state)+"&code=code-456", nil)
@@ -191,6 +201,10 @@ func TestManagedGitHubLoginCallbackCreatesSessionAndAuthenticatedContext(t *test
 	}
 	if !body.AuthRuntime.TenetManagedLogin.Active || body.AuthRuntime.TenetManagedLogin.UnavailableReason != "" {
 		t.Fatalf("expected active managed login diagnostic, got %#v", body.AuthRuntime.TenetManagedLogin)
+	}
+	assertManagedLoginLifecycleDiagnostics(t, body.AuthRuntime.TenetManagedLogin, true)
+	if strings.Contains(contextResp.Body.String(), "token-for-code-123") || strings.Contains(contextResp.Body.String(), "accessToken") {
+		t.Fatalf("operator context leaked provider access token material: %s", contextResp.Body.String())
 	}
 	if body.AuthRuntime.TenetManagedLogin.SessionCookieSecureOverride || body.AuthRuntime.TenetManagedLogin.SessionCookieSecureForRequest || len(body.AuthRuntime.TenetManagedLogin.SessionCookieSecureSources) != 0 {
 		t.Fatalf("expected local HTTP operator context to report non-secure managed-session cookie mode, got %#v", body.AuthRuntime.TenetManagedLogin)
@@ -244,6 +258,43 @@ func TestManagedGitHubLoginCallbackSecureCookieModes(t *testing.T) {
 			t.Fatalf("expected forced secure cookie option to set Secure=true, got %#v", cookie)
 		}
 	})
+}
+
+func assertManagedLoginLifecycleDiagnostics(t *testing.T, managedLogin TenetManagedLoginDiagnostic, expectLogout bool) {
+	t.Helper()
+	if managedLogin.OAuthStateTTLSeconds != int64(defaultAuthStateTTL.Seconds()) {
+		t.Fatalf("expected default OAuth state TTL diagnostic, got %#v", managedLogin)
+	}
+	if managedLogin.SessionTTLSeconds != int64(defaultAuthSessionTTL.Seconds()) || !managedLogin.SessionExpiryEnforced {
+		t.Fatalf("expected signed session TTL/expiry diagnostics, got %#v", managedLogin)
+	}
+	if managedLogin.ProviderAccessTokenStored || managedLogin.ProviderAccessTokenReturned || managedLogin.ProviderTokenRefreshSupported || managedLogin.ProviderTokenRevocationSupported {
+		t.Fatalf("expected provider-token diagnostics to remain non-secret/non-refreshing/non-revoking, got %#v", managedLogin)
+	}
+	if managedLogin.LogoutClearsSessionCookie != expectLogout || managedLogin.LogoutRevokesProviderToken {
+		t.Fatalf("unexpected logout lifecycle diagnostics: %#v", managedLogin)
+	}
+}
+
+func TestManagedLoginOperatorContextReportsDisabledLifecycleDefaults(t *testing.T) {
+	router := NewRouter(Options{})
+	req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected operator context 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var body struct {
+		AuthRuntime AuthRuntimeDiagnostic `json:"authRuntime"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode operator context: %v", err)
+	}
+	managedLogin := body.AuthRuntime.TenetManagedLogin
+	if managedLogin.Configured || managedLogin.Active {
+		t.Fatalf("expected disabled managed-login runtime, got %#v", managedLogin)
+	}
+	assertManagedLoginLifecycleDiagnostics(t, managedLogin, false)
 }
 
 func TestManagedLoginOperatorContextReportsSessionCookieSecurityDiagnostics(t *testing.T) {

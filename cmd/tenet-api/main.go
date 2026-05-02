@@ -392,13 +392,22 @@ func authRuntimeDiagnosticFromEnv() api.AuthRuntimeDiagnostic {
 
 	configured := provider == "github" && len(missingSettings) == 0
 	managedLogin := api.TenetManagedLoginDiagnostic{
-		Configured:              configured,
-		Provider:                provider,
-		RequiredSettings:        requiredSettings,
-		MissingSettings:         missingSettings,
-		StateStoreConfigured:    settings["TENET_AUTH_STATE_STORE_PATH"] != "",
-		IdentityStoreConfigured: settings["TENET_AUTH_IDENTITY_STORE_PATH"] != "",
-		SessionSecretConfigured: settings["TENET_AUTH_SESSION_SECRET"] != "",
+		Configured:                       configured,
+		Provider:                         provider,
+		RequiredSettings:                 requiredSettings,
+		MissingSettings:                  missingSettings,
+		OAuthStateTTLSeconds:             api.DefaultTenetManagedLoginOAuthStateTTLSeconds(),
+		SessionTTLSeconds:                api.DefaultTenetManagedLoginSessionTTLSeconds(),
+		SessionExpiryEnforced:            true,
+		ProviderAccessTokenStored:        false,
+		ProviderAccessTokenReturned:      false,
+		ProviderTokenRefreshSupported:    false,
+		ProviderTokenRevocationSupported: false,
+		LogoutClearsSessionCookie:        configured,
+		LogoutRevokesProviderToken:       false,
+		StateStoreConfigured:             settings["TENET_AUTH_STATE_STORE_PATH"] != "",
+		IdentityStoreConfigured:          settings["TENET_AUTH_IDENTITY_STORE_PATH"] != "",
+		SessionSecretConfigured:          settings["TENET_AUTH_SESSION_SECRET"] != "",
 	}
 	if configured {
 		managedLogin.Provider = "github"

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DevopsArtFactory/tenet/internal/api"
 	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
 	"github.com/DevopsArtFactory/tenet/internal/auditlog"
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
@@ -318,6 +319,7 @@ func TestNewAPIOptionsIncludesManagedLoginRuntimeDiagnosticFromEnv(t *testing.T)
 	if !reflect.DeepEqual(managedLogin.RequiredSettings, expectedManagedLoginRequiredSettings()) || len(managedLogin.MissingSettings) != 0 {
 		t.Fatalf("unexpected managed-login required/missing settings: %+v", managedLogin)
 	}
+	assertManagedLoginEnvLifecycleDiagnostic(t, managedLogin, true)
 }
 
 func TestNewAPIOptionsCanForceManagedLoginSecureSessionCookie(t *testing.T) {
@@ -362,6 +364,7 @@ func TestNewAPIOptionsReportsManagedLoginRuntimeMissingSettings(t *testing.T) {
 	if !managedLogin.SessionSecretConfigured || managedLogin.StateStoreConfigured || managedLogin.IdentityStoreConfigured {
 		t.Fatalf("unexpected managed-login store/session booleans for partial config: %+v", managedLogin)
 	}
+	assertManagedLoginEnvLifecycleDiagnostic(t, managedLogin, false)
 }
 
 func TestNewAPIOptionsReportsUnsupportedManagedLoginProviderMissingProviderSpecificSettings(t *testing.T) {
@@ -394,6 +397,23 @@ func TestNewAPIOptionsLeavesManagedLoginRuntimeDiagnosticDisabledByDefault(t *te
 	}
 	if !reflect.DeepEqual(managedLogin.RequiredSettings, expectedManagedLoginRequiredSettings()) || !reflect.DeepEqual(managedLogin.MissingSettings, expectedManagedLoginRequiredSettings()) {
 		t.Fatalf("unexpected managed-login required/missing settings by default: %+v", managedLogin)
+	}
+	assertManagedLoginEnvLifecycleDiagnostic(t, managedLogin, false)
+}
+
+func assertManagedLoginEnvLifecycleDiagnostic(t *testing.T, managedLogin api.TenetManagedLoginDiagnostic, expectLogout bool) {
+	t.Helper()
+	if managedLogin.OAuthStateTTLSeconds != api.DefaultTenetManagedLoginOAuthStateTTLSeconds() {
+		t.Fatalf("unexpected managed-login OAuth state TTL diagnostic: %+v", managedLogin)
+	}
+	if managedLogin.SessionTTLSeconds != api.DefaultTenetManagedLoginSessionTTLSeconds() || !managedLogin.SessionExpiryEnforced {
+		t.Fatalf("unexpected managed-login session expiry diagnostic: %+v", managedLogin)
+	}
+	if managedLogin.ProviderAccessTokenStored || managedLogin.ProviderAccessTokenReturned || managedLogin.ProviderTokenRefreshSupported || managedLogin.ProviderTokenRevocationSupported {
+		t.Fatalf("managed-login provider token diagnostics must stay non-secret/non-refreshing/non-revoking: %+v", managedLogin)
+	}
+	if managedLogin.LogoutClearsSessionCookie != expectLogout || managedLogin.LogoutRevokesProviderToken {
+		t.Fatalf("unexpected managed-login logout lifecycle diagnostic: %+v", managedLogin)
 	}
 }
 
