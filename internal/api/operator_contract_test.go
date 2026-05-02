@@ -1028,6 +1028,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"Unsupported forwarded values appear under `unrecognizedNames`",
 		"Tenet does not start a built-in GitHub OAuth login or browser session from the page",
 		"`deploymentAccess.summary`: `matchedCount=0`, `emptyReason`, or non-empty `unmatchedNames` explains `200 OK` empty collections",
+		"`exactDeploymentMatchedCount` and `projectEnvironmentMatchedCount` summarize how many visible deployments were proven by exact `X-Tenet-Authorized-Deployments` grants versus project/environment scope matches",
 		"`visibleDeploymentExamples` names a bounded set of concrete visible deployments",
 		"`projectEnvironmentExamples` shows which visible project/environment groups",
 		"additive `requiredTrustedHeaders` (`X-Tenet-Authenticated-Id` or `X-User-ID`, `X-Tenet-Authenticated-Roles`, and the exact `X-Tenet-Authorized-Deployments` allowlist and/or matching `X-Tenet-Authorized-Projects` plus `X-Tenet-Authorized-Environments` scopes depending on the route class)",

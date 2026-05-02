@@ -1913,6 +1913,8 @@ trusted_summary = operator_context_trusted["deploymentAccess"]["summary"]
 assert trusted_summary["available"] is True, operator_context_trusted
 assert trusted_summary["forwardedCount"] == 2, operator_context_trusted
 assert trusted_summary["matchedCount"] == 2, operator_context_trusted
+assert trusted_summary["exactDeploymentMatchedCount"] == 2, operator_context_trusted
+assert trusted_summary.get("projectEnvironmentMatchedCount", 0) == 0, operator_context_trusted
 assert trusted_summary.get("unmatchedNames", []) == [], operator_context_trusted
 assert trusted_summary["accountCount"] >= 1, operator_context_trusted
 assert trusted_summary["projectCount"] >= 1, operator_context_trusted
@@ -1947,6 +1949,8 @@ assert combined_summary["forwardedCount"] == 2, operator_context_combined_access
 assert combined_summary["forwardedProjectCount"] == 1, operator_context_combined_access
 assert combined_summary["forwardedEnvironmentCount"] == 1, operator_context_combined_access
 assert combined_summary["matchedCount"] >= 2, operator_context_combined_access
+assert combined_summary["exactDeploymentMatchedCount"] >= 2, operator_context_combined_access
+assert combined_summary["projectEnvironmentMatchedCount"] >= 1, operator_context_combined_access
 assert combined_summary.get("unmatchedNames", []) == [], operator_context_combined_access
 assert combined_summary.get("unmatchedProjects", []) == [], operator_context_combined_access
 assert combined_summary.get("unmatchedEnvironments", []) == [], operator_context_combined_access
@@ -1967,6 +1971,7 @@ unmatched_summary = operator_context_unmatched["deploymentAccess"]["summary"]
 assert unmatched_summary["available"] is True, operator_context_unmatched
 assert unmatched_summary["forwardedCount"] == 3, operator_context_unmatched
 assert unmatched_summary["matchedCount"] == 2, operator_context_unmatched
+assert unmatched_summary["exactDeploymentMatchedCount"] == 2, operator_context_unmatched
 assert unmatched_summary["unmatchedNames"] == ["stale-api"], operator_context_unmatched
 assert unmatched_summary["accountCount"] >= 1, operator_context_unmatched
 assert unmatched_summary["projectCount"] >= 1, operator_context_unmatched
@@ -1991,6 +1996,8 @@ assert stale_scopes_summary["forwardedCount"] == 0, operator_context_stale_scope
 assert stale_scopes_summary["forwardedProjectCount"] == 2, operator_context_stale_scopes
 assert stale_scopes_summary["forwardedEnvironmentCount"] == 2, operator_context_stale_scopes
 assert stale_scopes_summary["matchedCount"] == 1, operator_context_stale_scopes
+assert stale_scopes_summary["projectEnvironmentMatchedCount"] == 1, operator_context_stale_scopes
+assert stale_scopes_summary.get("exactDeploymentMatchedCount", 0) == 0, operator_context_stale_scopes
 assert stale_scopes_summary.get("unmatchedNames", []) == [], operator_context_stale_scopes
 assert stale_scopes_summary["unmatchedProjects"] == ["archived-payments"], operator_context_stale_scopes
 assert stale_scopes_summary["unmatchedProjectCount"] == 1, operator_context_stale_scopes

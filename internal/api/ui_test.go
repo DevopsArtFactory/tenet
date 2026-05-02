@@ -2672,7 +2672,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"roles.provenance.source",
 			"whether the request used canonical `X-Tenet-Authenticated-*` fields or compatibility `X-User-*` aliases",
 			"the canonical supported role-header list from `roles.supportedHeaderNames` (`X-Tenet-Authenticated-Roles`, with no `X-User-*` role alias)",
-			"`deploymentAccess.summary` also reports forwarded, matched/visible, and total unmatched deployment-name counts",
+			"When placement data is available, `deploymentAccess.summary` reports both `exactDeploymentMatchedCount` and `projectEnvironmentMatchedCount`",
 			"deterministic `projectEnvironmentExamples`",
 			"If a front door forwards stale project/environment scopes",
 			"Those fields are troubleshooting evidence only: stale project/environment scope diagnostics do not authorize deployment-scoped routes, mint a session, or replace the guarded route checks.",

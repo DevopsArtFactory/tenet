@@ -414,6 +414,8 @@ type operatorContextAccessSummary struct {
 	ForwardedProjectCount          int                                        `json:"forwardedProjectCount,omitempty"`
 	ForwardedEnvironmentCount      int                                        `json:"forwardedEnvironmentCount,omitempty"`
 	MatchedCount                   int                                        `json:"matchedCount"`
+	ExactDeploymentMatchedCount    int                                        `json:"exactDeploymentMatchedCount,omitempty"`
+	ProjectEnvironmentMatchedCount int                                        `json:"projectEnvironmentMatchedCount,omitempty"`
 	UnmatchedCount                 int                                        `json:"unmatchedCount"`
 	UnmatchedNames                 []string                                   `json:"unmatchedNames,omitempty"`
 	UnmatchedNamesTruncated        bool                                       `json:"unmatchedNamesTruncated,omitempty"`
@@ -903,6 +905,16 @@ func buildOperatorContextAccessSummary(ctx context.Context, options Options, dep
 	}
 	summary.Available = true
 	summary.MatchedCount = len(matched)
+	for _, sources := range matchSources {
+		for _, source := range sources {
+			switch source {
+			case "exactDeployment":
+				summary.ExactDeploymentMatchedCount++
+			case "projectEnvironment":
+				summary.ProjectEnvironmentMatchedCount++
+			}
+		}
+	}
 	summary.UnmatchedNames = unmatched
 	summary.AccountCount = len(accounts)
 	summary.ProjectCount = len(projects)

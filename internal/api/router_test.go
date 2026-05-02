@@ -681,12 +681,14 @@ func TestRouterOperatorContextSummarizesMatchedAndUnmatchedDeploymentAccess(t *t
 		t.Fatalf("expected available summary, got %#v", summary)
 	}
 	expected := map[string]any{
-		"forwardedCount":   float64(4),
-		"matchedCount":     float64(2),
-		"unmatchedCount":   float64(2),
-		"accountCount":     float64(1),
-		"projectCount":     float64(1),
-		"environmentCount": float64(1),
+		"forwardedCount":                 float64(4),
+		"matchedCount":                   float64(2),
+		"exactDeploymentMatchedCount":    float64(2),
+		"projectEnvironmentMatchedCount": float64(2),
+		"unmatchedCount":                 float64(2),
+		"accountCount":                   float64(1),
+		"projectCount":                   float64(1),
+		"environmentCount":               float64(1),
 	}
 	for key, want := range expected {
 		if summary[key] != want {
@@ -767,8 +769,11 @@ func TestRouterOperatorContextSummarizesProjectEnvironmentScopedAccess(t *testin
 		t.Fatalf("unexpected forwarded project/environment scopes: %#v", scopes)
 	}
 	summary := deploymentAccess["summary"].(map[string]any)
-	if summary["available"] != true || summary["forwardedCount"] != float64(0) || summary["matchedCount"] != float64(2) || summary["projectCount"] != float64(1) || summary["environmentCount"] != float64(2) {
+	if summary["available"] != true || summary["forwardedCount"] != float64(0) || summary["matchedCount"] != float64(2) || summary["projectEnvironmentMatchedCount"] != float64(2) || summary["projectCount"] != float64(1) || summary["environmentCount"] != float64(2) {
 		t.Fatalf("unexpected project/environment access summary: %#v", summary)
+	}
+	if _, ok := summary["exactDeploymentMatchedCount"]; ok {
+		t.Fatalf("expected exact-deployment match count to be omitted when no exact deployment grants matched, got %#v", summary)
 	}
 	examples := summary["projectEnvironmentExamples"].([]any)
 	if len(examples) != 2 {
@@ -814,13 +819,14 @@ func TestRouterOperatorContextSummaryReportsUnmatchedProjectEnvironmentScopes(t 
 	deploymentAccess := body["deploymentAccess"].(map[string]any)
 	summary := deploymentAccess["summary"].(map[string]any)
 	expected := map[string]any{
-		"forwardedProjectCount":     float64(2),
-		"forwardedEnvironmentCount": float64(2),
-		"matchedCount":              float64(1),
-		"unmatchedProjectCount":     float64(1),
-		"unmatchedEnvironmentCount": float64(1),
-		"projectCount":              float64(1),
-		"environmentCount":          float64(1),
+		"forwardedProjectCount":          float64(2),
+		"forwardedEnvironmentCount":      float64(2),
+		"matchedCount":                   float64(1),
+		"projectEnvironmentMatchedCount": float64(1),
+		"unmatchedProjectCount":          float64(1),
+		"unmatchedEnvironmentCount":      float64(1),
+		"projectCount":                   float64(1),
+		"environmentCount":               float64(1),
 	}
 	for key, want := range expected {
 		if summary[key] != want {
