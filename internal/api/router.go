@@ -387,11 +387,12 @@ type operatorContextRoles struct {
 }
 
 type operatorContextDeploymentAccess struct {
-	Enforced  bool                          `json:"enforced"`
-	Forwarded bool                          `json:"forwarded"`
-	Names     []string                      `json:"names,omitempty"`
-	Scopes    operatorContextAccessScopes   `json:"scopes"`
-	Summary   *operatorContextAccessSummary `json:"summary,omitempty"`
+	Enforced             bool                          `json:"enforced"`
+	Forwarded            bool                          `json:"forwarded"`
+	SupportedHeaderNames []string                      `json:"supportedHeaderNames"`
+	Names                []string                      `json:"names,omitempty"`
+	Scopes               operatorContextAccessScopes   `json:"scopes"`
+	Summary              *operatorContextAccessSummary `json:"summary,omitempty"`
 }
 
 type operatorContextAccessScopes struct {
@@ -504,9 +505,10 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 			Provenance:        rolesProvenance,
 		},
 		DeploymentAccess: operatorContextDeploymentAccess{
-			Enforced:  options.RequireDeploymentReadAuthorization,
-			Forwarded: len(deployments.Names) > 0 || len(scopes.Projects) > 0 || len(scopes.Environments) > 0,
-			Names:     deployments.Names,
+			Enforced:             options.RequireDeploymentReadAuthorization,
+			Forwarded:            len(deployments.Names) > 0 || len(scopes.Projects) > 0 || len(scopes.Environments) > 0,
+			SupportedHeaderNames: requestactor.SupportedDeploymentAccessHeaderNames(),
+			Names:                deployments.Names,
 			Scopes: operatorContextAccessScopes{
 				Forwarded:    len(scopes.Projects) > 0 || len(scopes.Environments) > 0,
 				Projects:     scopes.Projects,
