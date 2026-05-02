@@ -811,7 +811,7 @@
         const supportedText = supported.length > 1
           ? `${supported.slice(0, -1).join(', ')}, or ${supported[supported.length - 1]}`
           : (supported[0] || 'viewer, operator, or admin');
-        return `Unsupported forwarded roles ignored for capability checks: ${unsupported.join(', ')}. Forward ${supportedText} to grant Tenet read/write capabilities.`;
+        return `Unsupported forwarded roles ignored for capability checks: ${unsupported.join(', ')}. Forward ${supportedText} for read capability; forward operator or admin for write capability.`;
       };
       const operatorContextUnsupportedRolesClass = (context) => operatorContextUnsupportedRolesLabel(context) ? 'operator-context-warning' : '';
       const operatorContextRoleProvenanceLabel = (context) => {
