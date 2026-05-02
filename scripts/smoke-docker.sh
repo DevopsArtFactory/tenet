@@ -1027,6 +1027,8 @@ assert_fragments("ui", ui, (
     "Hide access details",
     "Role header source: ${labels[source] || labels.absent}",
     "canonical X-Tenet-Authenticated-Roles",
+    "Recognized capability roles:",
+    "Unsupported forwarded roles ignored for capability checks:",
     "operatorContextRoleProvenanceClass",
     "operator-context-details",
     "Last refresh failed:",
@@ -1403,6 +1405,12 @@ operator_context_no_roles=$(curl -fsS \
   -H "X-Tenet-Authenticated-Name: Missing Role Operator" \
   -H "X-Tenet-Authorized-Deployments: payments-api-prod" \
   "$API_BASE_URL/v1/operator/context")
+operator_context_unsupported_roles=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: mixed-roles-654" \
+  -H "X-Tenet-Authenticated-Name: Mixed Role Operator" \
+  -H "X-Tenet-Authenticated-Roles: viewer, auditor" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-prod" \
+  "$API_BASE_URL/v1/operator/context")
 auth_unauthenticated_plan_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" -w "%{http_code}" \
   "$API_BASE_URL/v1/plans/$plan_id")
 auth_unauthenticated_apply_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" -w "%{http_code}" \
@@ -1580,6 +1588,7 @@ operator_context_stale_scopes_path=$(write_payload operator-context-stale-scopes
 operator_context_alias_path=$(write_payload operator-context-alias.json "$operator_context_alias")
 operator_context_no_allowlist_path=$(write_payload operator-context-no-allowlist.json "$operator_context_no_allowlist")
 operator_context_no_roles_path=$(write_payload operator-context-no-roles.json "$operator_context_no_roles")
+operator_context_unsupported_roles_path=$(write_payload operator-context-unsupported-roles.json "$operator_context_unsupported_roles")
 
 PLAN_ID="$plan_id" \
 APPLY_ID="$apply_id" \
@@ -1630,6 +1639,7 @@ OPERATOR_CONTEXT_STALE_SCOPES_PATH="$operator_context_stale_scopes_path" \
 OPERATOR_CONTEXT_ALIAS_PATH="$operator_context_alias_path" \
 OPERATOR_CONTEXT_NO_ALLOWLIST_PATH="$operator_context_no_allowlist_path" \
 OPERATOR_CONTEXT_NO_ROLES_PATH="$operator_context_no_roles_path" \
+OPERATOR_CONTEXT_UNSUPPORTED_ROLES_PATH="$operator_context_unsupported_roles_path" \
 ALLOWED_STATUS_READ_PATH="$allowed_status_read_path" \
 ALLOWED_EVENTS_READ_PATH="$allowed_events_read_path" \
 ALLOWED_RESOURCE_LOGS_PATH="$allowed_resource_logs_path" \
@@ -1700,6 +1710,8 @@ with open(os.environ["OPERATOR_CONTEXT_NO_ALLOWLIST_PATH"], encoding="utf-8") as
     operator_context_no_allowlist = json.load(fh)
 with open(os.environ["OPERATOR_CONTEXT_NO_ROLES_PATH"], encoding="utf-8") as fh:
     operator_context_no_roles = json.load(fh)
+with open(os.environ["OPERATOR_CONTEXT_UNSUPPORTED_ROLES_PATH"], encoding="utf-8") as fh:
+    operator_context_unsupported_roles = json.load(fh)
 with open(os.environ["ALLOWED_STATUS_READ_PATH"], encoding="utf-8") as fh:
     allowed_status_read = json.load(fh)
 with open(os.environ["ALLOWED_EVENTS_READ_PATH"], encoding="utf-8") as fh:
@@ -1969,6 +1981,21 @@ assert no_roles_verdicts["operatorRead"]["allowed"] is False, operator_context_n
 assert no_roles_verdicts["operatorRead"]["reason"] == "authenticated viewer-capable role is required for guarded operator read routes", operator_context_no_roles
 assert no_roles_verdicts["operatorWrite"]["allowed"] is False, operator_context_no_roles
 assert no_roles_verdicts["operatorWrite"]["reason"] == "authenticated operator role is required for guarded operator write routes", operator_context_no_roles
+
+assert_operator_context_common(operator_context_unsupported_roles)
+assert operator_context_unsupported_roles["identity"]["authenticated"] is True, operator_context_unsupported_roles
+assert operator_context_unsupported_roles["identity"]["id"] == "mixed-roles-654", operator_context_unsupported_roles
+assert operator_context_unsupported_roles["identity"]["name"] == "Mixed Role Operator", operator_context_unsupported_roles
+assert operator_context_unsupported_roles["roles"]["names"] == ["viewer", "auditor"], operator_context_unsupported_roles
+assert operator_context_unsupported_roles["roles"]["canRead"] is True, operator_context_unsupported_roles
+assert operator_context_unsupported_roles["roles"]["canWrite"] is False, operator_context_unsupported_roles
+assert operator_context_unsupported_roles["roles"]["provenance"]["source"] == "canonical", operator_context_unsupported_roles
+assert operator_context_unsupported_roles["roles"]["recognizedNames"] == ["viewer"], operator_context_unsupported_roles
+assert operator_context_unsupported_roles["roles"]["unrecognizedNames"] == ["auditor"], operator_context_unsupported_roles
+unsupported_roles_verdicts = operator_context_unsupported_roles["accessVerdicts"]
+assert unsupported_roles_verdicts["operatorRead"]["allowed"] is True, operator_context_unsupported_roles
+assert unsupported_roles_verdicts["operatorWrite"]["allowed"] is False, operator_context_unsupported_roles
+assert unsupported_roles_verdicts["operatorWrite"]["reason"] == "authenticated operator role is required for guarded operator write routes", operator_context_unsupported_roles
 assert os.environ["AUTH_FORBIDDEN_EVENTS_STATUS"] == "403", os.environ["AUTH_FORBIDDEN_EVENTS_STATUS"]
 assert forbidden_events_body.strip() == "forbidden: operator does not have access to this deployment", forbidden_events_body
 assert os.environ["AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS"] == "403", os.environ["AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS"]
