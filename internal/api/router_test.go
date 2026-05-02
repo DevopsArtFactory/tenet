@@ -125,6 +125,9 @@ func TestRouterOperatorContextReportsManagedLoginRuntimeDisabledByDefault(t *tes
 	if managedLogin["unavailableReason"] != "tenet-managed login is disabled because OAuth runtime configuration is incomplete or absent" {
 		t.Fatalf("unexpected managed-login unavailable reason: %#v", managedLogin)
 	}
+	if !reflect.DeepEqual(jsonStringSlice(t, managedLogin["requiredSettings"]), RequiredTenetManagedLoginSettings()) || !reflect.DeepEqual(jsonStringSlice(t, managedLogin["missingSettings"]), RequiredTenetManagedLoginSettings()) {
+		t.Fatalf("unexpected managed-login required/missing settings: %#v", managedLogin)
+	}
 }
 
 func TestRouterOperatorContextReportsConfiguredManagedLoginRuntimeGroundwork(t *testing.T) {
@@ -168,6 +171,9 @@ func TestRouterOperatorContextReportsConfiguredManagedLoginRuntimeGroundwork(t *
 	if managedLogin["unavailableReason"] != "tenet-managed login configuration is present, but login/callback/session routes are not active in this API build yet" {
 		t.Fatalf("unexpected configured managed-login unavailable reason: %#v", managedLogin)
 	}
+	if !reflect.DeepEqual(jsonStringSlice(t, managedLogin["requiredSettings"]), RequiredTenetManagedLoginSettings()) || len(jsonStringSlice(t, managedLogin["missingSettings"])) != 0 {
+		t.Fatalf("unexpected configured managed-login required/missing settings: %#v", managedLogin)
+	}
 }
 
 func TestRouterDoesNotExposeManagedLoginRoutesWhenRuntimeDiagnosticConfigured(t *testing.T) {
@@ -198,6 +204,23 @@ func TestRouterDoesNotExposeManagedLoginRoutesWhenRuntimeDiagnosticConfigured(t 
 			}
 		})
 	}
+}
+
+func jsonStringSlice(t *testing.T, value any) []string {
+	t.Helper()
+	items, ok := value.([]any)
+	if !ok {
+		t.Fatalf("expected JSON string array, got %#v", value)
+	}
+	result := make([]string, 0, len(items))
+	for _, item := range items {
+		text, ok := item.(string)
+		if !ok {
+			t.Fatalf("expected JSON string array item, got %#v", item)
+		}
+		result = append(result, text)
+	}
+	return result
 }
 
 func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {

@@ -2744,6 +2744,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"Do not create local identity/state JSON files expecting `tenet-api` to load them until a later wiring slice documents that contract.",
 			"The runtime now has diagnostic-only optional OAuth settings",
 			"that only populate `GET /v1/operator/context.authRuntime.tenetManagedLogin`",
+			"non-secret `requiredSettings` and `missingSettings` arrays",
 			"they do not load identity/state files, create sessions, or activate browser-login routes in this build.",
 			"Reviewer verification for the internal auth groundwork is currently unit-test scoped: use `go test ./internal/authprovider ./internal/authidentity ./internal/authstate`",
 			"Local and Docker smoke intentionally remain route/runtime release guards; they should not be treated as proof of those internal packages until a future browser-auth route or runtime wiring slice makes them observable through `tenet-api`.",

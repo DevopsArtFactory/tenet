@@ -82,6 +82,7 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 		"there is no `/auth/login`, `/auth/callback`, or `/api/v1/auth/*` route",
 		"The runtime now has diagnostic-only optional OAuth settings",
 		"that only populate `GET /v1/operator/context.authRuntime.tenetManagedLogin`",
+		"non-secret `requiredSettings` and `missingSettings` arrays",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
 			t.Fatalf("expected local runtime auth groundwork boundary to include %q", fragment)

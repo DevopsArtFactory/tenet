@@ -296,6 +296,55 @@ func TestNewAPIOptionsIncludesManagedLoginRuntimeDiagnosticFromEnv(t *testing.T)
 	if managedLogin.SessionCookieName != "tenet_session" || !managedLogin.StateStoreConfigured || !managedLogin.IdentityStoreConfigured || !managedLogin.SessionSecretConfigured {
 		t.Fatalf("unexpected managed-login store/session diagnostic: %+v", managedLogin)
 	}
+	if !reflect.DeepEqual(managedLogin.RequiredSettings, expectedManagedLoginRequiredSettings()) || len(managedLogin.MissingSettings) != 0 {
+		t.Fatalf("unexpected managed-login required/missing settings: %+v", managedLogin)
+	}
+}
+
+func TestNewAPIOptionsReportsManagedLoginRuntimeMissingSettings(t *testing.T) {
+	t.Setenv("TENET_AUTH_PROVIDER", "github")
+	t.Setenv("TENET_GITHUB_OAUTH_CLIENT_ID", "client-id")
+	t.Setenv("TENET_AUTH_SESSION_SECRET", "session-secret")
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, writeRepositoryFixture(t), nil)
+	managedLogin := options.AuthRuntime.TenetManagedLogin
+
+	if managedLogin.Configured || managedLogin.Active || managedLogin.Provider != "github" {
+		t.Fatalf("expected disabled partial managed-login diagnostic, got %+v", managedLogin)
+	}
+	expectedMissing := []string{
+		"TENET_GITHUB_OAUTH_CLIENT_SECRET",
+		"TENET_GITHUB_OAUTH_REDIRECT_URL",
+		"TENET_AUTH_STATE_STORE_PATH",
+		"TENET_AUTH_IDENTITY_STORE_PATH",
+	}
+	if !reflect.DeepEqual(managedLogin.RequiredSettings, expectedManagedLoginRequiredSettings()) || !reflect.DeepEqual(managedLogin.MissingSettings, expectedMissing) {
+		t.Fatalf("unexpected managed-login required/missing settings: %+v", managedLogin)
+	}
+	if !managedLogin.SessionSecretConfigured || managedLogin.StateStoreConfigured || managedLogin.IdentityStoreConfigured {
+		t.Fatalf("unexpected managed-login store/session booleans for partial config: %+v", managedLogin)
+	}
+}
+
+func TestNewAPIOptionsReportsUnsupportedManagedLoginProviderMissingProviderSpecificSettings(t *testing.T) {
+	t.Setenv("TENET_AUTH_PROVIDER", "gitlab")
+	t.Setenv("TENET_GITHUB_OAUTH_CLIENT_ID", "client-id")
+	t.Setenv("TENET_GITHUB_OAUTH_CLIENT_SECRET", "client-secret")
+	t.Setenv("TENET_GITHUB_OAUTH_REDIRECT_URL", "https://tenet.example.com/auth/callback/github")
+	t.Setenv("TENET_AUTH_STATE_STORE_PATH", filepath.Join(t.TempDir(), "oauth-state.json"))
+	t.Setenv("TENET_AUTH_IDENTITY_STORE_PATH", filepath.Join(t.TempDir(), "oauth-identities.json"))
+	t.Setenv("TENET_AUTH_SESSION_SECRET", "session-secret")
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, writeRepositoryFixture(t), nil)
+	managedLogin := options.AuthRuntime.TenetManagedLogin
+
+	if managedLogin.Configured || managedLogin.Active || managedLogin.Provider != "gitlab" {
+		t.Fatalf("expected disabled unsupported-provider managed-login diagnostic, got %+v", managedLogin)
+	}
+	expectedMissing := expectedManagedLoginRequiredSettings()[1:]
+	if !reflect.DeepEqual(managedLogin.MissingSettings, expectedMissing) {
+		t.Fatalf("expected provider-specific settings to be reported missing for unsupported provider, got %+v", managedLogin.MissingSettings)
+	}
 }
 
 func TestNewAPIOptionsLeavesManagedLoginRuntimeDiagnosticDisabledByDefault(t *testing.T) {
@@ -304,6 +353,21 @@ func TestNewAPIOptionsLeavesManagedLoginRuntimeDiagnosticDisabledByDefault(t *te
 
 	if managedLogin.Configured || managedLogin.Active || managedLogin.Provider != "" {
 		t.Fatalf("expected disabled unconfigured managed-login diagnostic, got %+v", managedLogin)
+	}
+	if !reflect.DeepEqual(managedLogin.RequiredSettings, expectedManagedLoginRequiredSettings()) || !reflect.DeepEqual(managedLogin.MissingSettings, expectedManagedLoginRequiredSettings()) {
+		t.Fatalf("unexpected managed-login required/missing settings by default: %+v", managedLogin)
+	}
+}
+
+func expectedManagedLoginRequiredSettings() []string {
+	return []string{
+		"TENET_AUTH_PROVIDER",
+		"TENET_GITHUB_OAUTH_CLIENT_ID",
+		"TENET_GITHUB_OAUTH_CLIENT_SECRET",
+		"TENET_GITHUB_OAUTH_REDIRECT_URL",
+		"TENET_AUTH_STATE_STORE_PATH",
+		"TENET_AUTH_IDENTITY_STORE_PATH",
+		"TENET_AUTH_SESSION_SECRET",
 	}
 }
 
