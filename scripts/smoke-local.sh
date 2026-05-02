@@ -1491,6 +1491,15 @@ operator_context_trusted=$(curl -fsS \
   -H "X-Tenet-Authenticated-Roles: viewer, operator" \
   -H "X-Tenet-Authorized-Deployments: payments-api-prod, worker-prod" \
   "http://$HOST:$PORT/v1/operator/context")
+operator_context_combined_access=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer, operator" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-prod, worker-prod" \
+  -H "X-Tenet-Authorized-Projects: payments-api" \
+  -H "X-Tenet-Authorized-Environments: prod-apne2" \
+  "http://$HOST:$PORT/v1/operator/context")
 operator_context_unmatched=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
@@ -1518,6 +1527,7 @@ operator_context_no_allowlist=$(curl -fsS \
   -H "X-Tenet-Authenticated-Roles: viewer" \
   "http://$HOST:$PORT/v1/operator/context")
 operator_context_trusted_path=$(write_payload operator-context-trusted.json "$operator_context_trusted")
+operator_context_combined_access_path=$(write_payload operator-context-combined-access.json "$operator_context_combined_access")
 operator_context_unmatched_path=$(write_payload operator-context-unmatched.json "$operator_context_unmatched")
 operator_context_stale_scopes_path=$(write_payload operator-context-stale-scopes.json "$operator_context_stale_scopes")
 operator_context_alias_path=$(write_payload operator-context-alias.json "$operator_context_alias")
@@ -1936,6 +1946,7 @@ AUTH_FORBIDDEN_APPLY_READ_BODY_PATH="$AUTH_FORBIDDEN_APPLY_READ_BODY" \
 AUTH_FORBIDDEN_AUDIT_STATUS="$auth_forbidden_audit_status" \
 AUTH_FORBIDDEN_AUDIT_BODY_PATH="$AUTH_FORBIDDEN_AUDIT_BODY" \
 OPERATOR_CONTEXT_TRUSTED_PATH="$operator_context_trusted_path" \
+OPERATOR_CONTEXT_COMBINED_ACCESS_PATH="$operator_context_combined_access_path" \
 OPERATOR_CONTEXT_UNMATCHED_PATH="$operator_context_unmatched_path" \
 OPERATOR_CONTEXT_STALE_SCOPES_PATH="$operator_context_stale_scopes_path" \
 OPERATOR_CONTEXT_ALIAS_PATH="$operator_context_alias_path" \
@@ -2037,6 +2048,8 @@ with open(os.environ['AUTH_FORBIDDEN_AUDIT_BODY_PATH'], encoding='utf-8') as fh:
     forbidden_audit_body = fh.read()
 with open(os.environ['OPERATOR_CONTEXT_TRUSTED_PATH'], encoding='utf-8') as fh:
     operator_context_trusted = json.load(fh)
+with open(os.environ['OPERATOR_CONTEXT_COMBINED_ACCESS_PATH'], encoding='utf-8') as fh:
+    operator_context_combined_access = json.load(fh)
 with open(os.environ['OPERATOR_CONTEXT_UNMATCHED_PATH'], encoding='utf-8') as fh:
     operator_context_unmatched = json.load(fh)
 operator_context_stale_scopes = read_json('OPERATOR_CONTEXT_STALE_SCOPES_PATH')
@@ -2240,6 +2253,32 @@ assert trusted_verdicts['operatorRead']['allowed'] is True, operator_context_tru
 assert trusted_verdicts['operatorWrite']['allowed'] is True, operator_context_trusted
 assert trusted_verdicts['deploymentScopedRead']['reason'] == 'deployment-scoped reads can pass for deployments named in X-Tenet-Authorized-Deployments or matched by X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments', operator_context_trusted
 assert trusted_verdicts['collectionRead']['allowed'] is True, operator_context_trusted
+assert_operator_context_common(operator_context_combined_access)
+assert operator_context_combined_access['deploymentAccess']['enforced'] is True, operator_context_combined_access
+assert operator_context_combined_access['deploymentAccess']['forwarded'] is True, operator_context_combined_access
+assert operator_context_combined_access['deploymentAccess']['names'] == ['payments-api-prod', 'worker-prod'], operator_context_combined_access
+combined_scopes = operator_context_combined_access['deploymentAccess']['scopes']
+assert combined_scopes['forwarded'] is True, operator_context_combined_access
+assert combined_scopes['projects'] == ['payments-api'], operator_context_combined_access
+assert combined_scopes['environments'] == ['prod-apne2'], operator_context_combined_access
+combined_summary = operator_context_combined_access['deploymentAccess']['summary']
+assert combined_summary['available'] is True, operator_context_combined_access
+assert combined_summary['forwardedCount'] == 2, operator_context_combined_access
+assert combined_summary['forwardedProjectCount'] == 1, operator_context_combined_access
+assert combined_summary['forwardedEnvironmentCount'] == 1, operator_context_combined_access
+assert combined_summary['matchedCount'] >= 2, operator_context_combined_access
+assert combined_summary.get('unmatchedNames', []) == [], operator_context_combined_access
+assert combined_summary.get('unmatchedProjects', []) == [], operator_context_combined_access
+assert combined_summary.get('unmatchedEnvironments', []) == [], operator_context_combined_access
+combined_visible = {row['deploymentName']: row for row in combined_summary['visibleDeploymentExamples']}
+combined_payment = combined_visible['payments-api-prod']
+assert combined_payment['deploymentName'] == 'payments-api-prod', operator_context_combined_access
+assert combined_payment['appRef'] == 'payments-api', operator_context_combined_access
+assert combined_payment['environmentRef'] == 'prod-apne2', operator_context_combined_access
+assert combined_payment['region'], operator_context_combined_access
+assert combined_payment['awsAccountId'], operator_context_combined_access
+assert combined_payment['matchSources'] == ['exactDeployment', 'projectEnvironment'], operator_context_combined_access
+assert_operator_context_project_environment_examples(combined_summary['projectEnvironmentExamples'], operator_context_combined_access)
 assert_operator_context_common(operator_context_unmatched)
 assert operator_context_unmatched['deploymentAccess']['enforced'] is True, operator_context_unmatched
 assert operator_context_unmatched['deploymentAccess']['forwarded'] is True, operator_context_unmatched
