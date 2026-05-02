@@ -340,6 +340,7 @@ var (
 
 type operatorContextResponse struct {
 	TrustedHeaders        operatorContextTrustedHeaders                `json:"trustedHeaders"`
+	AuthRuntime           AuthRuntimeDiagnostic                        `json:"authRuntime"`
 	Enforcement           operatorContextEnforcement                   `json:"enforcement"`
 	Identity              requestactor.AuthenticatedIdentity           `json:"identity"`
 	IdentityHeaderSupport operatorContextIdentityHeaderSupport         `json:"identityHeaderSupport"`
@@ -351,6 +352,27 @@ type operatorContextResponse struct {
 	Roles                 operatorContextRoles                         `json:"roles"`
 	DeploymentAccess      operatorContextDeploymentAccess              `json:"deploymentAccess"`
 	AccessVerdicts        operatorContextAccessVerdicts                `json:"accessVerdicts"`
+}
+
+// AuthRuntimeDiagnostic describes optional Tenet-managed authentication runtime capability.
+// It intentionally reports only non-secret configuration/capability state for operator diagnostics.
+type AuthRuntimeDiagnostic struct {
+	TenetManagedLogin TenetManagedLoginDiagnostic `json:"tenetManagedLogin"`
+}
+
+// TenetManagedLoginDiagnostic reports whether opt-in Tenet-managed browser login is configured.
+// Active remains false until login/callback/session routes are wired in a later slice.
+type TenetManagedLoginDiagnostic struct {
+	Configured              bool   `json:"configured"`
+	Active                  bool   `json:"active"`
+	Provider                string `json:"provider"`
+	LoginRoute              string `json:"loginRoute,omitempty"`
+	CallbackRoute           string `json:"callbackRoute,omitempty"`
+	SessionCookieName       string `json:"sessionCookieName,omitempty"`
+	StateStoreConfigured    bool   `json:"stateStoreConfigured"`
+	IdentityStoreConfigured bool   `json:"identityStoreConfigured"`
+	SessionSecretConfigured bool   `json:"sessionSecretConfigured"`
+	UnavailableReason       string `json:"unavailableReason,omitempty"`
 }
 
 type operatorContextTrustedHeaders struct {
@@ -499,6 +521,7 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 			OperatorReadRoleEnforced:            options.RequireOperatorRoleForRead,
 			OperatorWriteRoleEnforced:           options.RequireOperatorRoleForWrite,
 		},
+		AuthRuntime: normalizeAuthRuntimeDiagnostic(options.AuthRuntime),
 		Enforcement: buildOperatorContextEnforcement(options),
 		Identity:    identity,
 		IdentityHeaderSupport: operatorContextIdentityHeaderSupport{
@@ -537,6 +560,34 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 		},
 		AccessVerdicts: buildOperatorContextAccessVerdicts(options, identity, roles, deployments, scopes, summary),
 	}
+}
+
+func normalizeAuthRuntimeDiagnostic(diagnostic AuthRuntimeDiagnostic) AuthRuntimeDiagnostic {
+	managedLogin := diagnostic.TenetManagedLogin
+	managedLogin.Active = false
+	if managedLogin.Configured {
+		managedLogin.Provider = strings.TrimSpace(managedLogin.Provider)
+		if managedLogin.Provider == "" {
+			managedLogin.Provider = "github"
+		}
+		if managedLogin.LoginRoute == "" {
+			managedLogin.LoginRoute = "/auth/login/github"
+		}
+		if managedLogin.CallbackRoute == "" {
+			managedLogin.CallbackRoute = "/auth/callback/github"
+		}
+		if managedLogin.SessionCookieName == "" {
+			managedLogin.SessionCookieName = "tenet_session"
+		}
+		managedLogin.UnavailableReason = "tenet-managed login configuration is present, but login/callback/session routes are not active in this API build yet"
+		return AuthRuntimeDiagnostic{TenetManagedLogin: managedLogin}
+	}
+	managedLogin = TenetManagedLoginDiagnostic{
+		Configured:        false,
+		Active:            false,
+		UnavailableReason: "tenet-managed login is disabled because OAuth runtime configuration is incomplete or absent",
+	}
+	return AuthRuntimeDiagnostic{TenetManagedLogin: managedLogin}
 }
 
 func buildOperatorContextEnforcement(options Options) operatorContextEnforcement {
@@ -1285,6 +1336,7 @@ type Options struct {
 	Logger                               *slog.Logger
 	RequestTimeout                       time.Duration
 	GitHubWebhookSecret                  string
+	AuthRuntime                          AuthRuntimeDiagnostic
 	TrustAuthenticatedHeaders            bool
 	RequireAuthenticatedIdentity         bool
 	RequireOperatorRoleForRead           bool
