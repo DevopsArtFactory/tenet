@@ -363,16 +363,18 @@ type AuthRuntimeDiagnostic struct {
 // TenetManagedLoginDiagnostic reports whether opt-in Tenet-managed browser login is configured.
 // Active remains false until login/callback/session routes are wired in a later slice.
 type TenetManagedLoginDiagnostic struct {
-	Configured              bool   `json:"configured"`
-	Active                  bool   `json:"active"`
-	Provider                string `json:"provider"`
-	LoginRoute              string `json:"loginRoute,omitempty"`
-	CallbackRoute           string `json:"callbackRoute,omitempty"`
-	SessionCookieName       string `json:"sessionCookieName,omitempty"`
-	StateStoreConfigured    bool   `json:"stateStoreConfigured"`
-	IdentityStoreConfigured bool   `json:"identityStoreConfigured"`
-	SessionSecretConfigured bool   `json:"sessionSecretConfigured"`
-	UnavailableReason       string `json:"unavailableReason,omitempty"`
+	Configured              bool     `json:"configured"`
+	Active                  bool     `json:"active"`
+	Provider                string   `json:"provider"`
+	RequiredSettings        []string `json:"requiredSettings"`
+	MissingSettings         []string `json:"missingSettings"`
+	LoginRoute              string   `json:"loginRoute,omitempty"`
+	CallbackRoute           string   `json:"callbackRoute,omitempty"`
+	SessionCookieName       string   `json:"sessionCookieName,omitempty"`
+	StateStoreConfigured    bool     `json:"stateStoreConfigured"`
+	IdentityStoreConfigured bool     `json:"identityStoreConfigured"`
+	SessionSecretConfigured bool     `json:"sessionSecretConfigured"`
+	UnavailableReason       string   `json:"unavailableReason,omitempty"`
 }
 
 type operatorContextTrustedHeaders struct {
@@ -565,7 +567,13 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 func normalizeAuthRuntimeDiagnostic(diagnostic AuthRuntimeDiagnostic) AuthRuntimeDiagnostic {
 	managedLogin := diagnostic.TenetManagedLogin
 	managedLogin.Active = false
+	if len(managedLogin.RequiredSettings) == 0 {
+		managedLogin.RequiredSettings = RequiredTenetManagedLoginSettings()
+	}
 	if managedLogin.Configured {
+		if managedLogin.MissingSettings == nil {
+			managedLogin.MissingSettings = []string{}
+		}
 		managedLogin.Provider = strings.TrimSpace(managedLogin.Provider)
 		if managedLogin.Provider == "" {
 			managedLogin.Provider = "github"
@@ -582,12 +590,28 @@ func normalizeAuthRuntimeDiagnostic(diagnostic AuthRuntimeDiagnostic) AuthRuntim
 		managedLogin.UnavailableReason = "tenet-managed login configuration is present, but login/callback/session routes are not active in this API build yet"
 		return AuthRuntimeDiagnostic{TenetManagedLogin: managedLogin}
 	}
-	managedLogin = TenetManagedLoginDiagnostic{
-		Configured:        false,
-		Active:            false,
-		UnavailableReason: "tenet-managed login is disabled because OAuth runtime configuration is incomplete or absent",
+	managedLogin.Configured = false
+	if len(managedLogin.MissingSettings) == 0 {
+		managedLogin.MissingSettings = RequiredTenetManagedLoginSettings()
+	}
+	if managedLogin.UnavailableReason == "" {
+		managedLogin.UnavailableReason = "tenet-managed login is disabled because OAuth runtime configuration is incomplete or absent"
 	}
 	return AuthRuntimeDiagnostic{TenetManagedLogin: managedLogin}
+}
+
+// RequiredTenetManagedLoginSettings returns the stable non-secret runtime settings
+// needed before Tenet-managed GitHub login can become active in a later slice.
+func RequiredTenetManagedLoginSettings() []string {
+	return []string{
+		"TENET_AUTH_PROVIDER",
+		"TENET_GITHUB_OAUTH_CLIENT_ID",
+		"TENET_GITHUB_OAUTH_CLIENT_SECRET",
+		"TENET_GITHUB_OAUTH_REDIRECT_URL",
+		"TENET_AUTH_STATE_STORE_PATH",
+		"TENET_AUTH_IDENTITY_STORE_PATH",
+		"TENET_AUTH_SESSION_SECRET",
+	}
 }
 
 func buildOperatorContextEnforcement(options Options) operatorContextEnforcement {

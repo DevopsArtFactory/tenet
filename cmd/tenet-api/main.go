@@ -358,29 +358,56 @@ func operatorDeploymentReadAuthorizationEnforced() bool {
 
 func authRuntimeDiagnosticFromEnv() api.AuthRuntimeDiagnostic {
 	provider := strings.ToLower(strings.TrimSpace(os.Getenv("TENET_AUTH_PROVIDER")))
-	clientID := strings.TrimSpace(os.Getenv("TENET_GITHUB_OAUTH_CLIENT_ID"))
-	clientSecret := strings.TrimSpace(os.Getenv("TENET_GITHUB_OAUTH_CLIENT_SECRET"))
-	redirectURL := strings.TrimSpace(os.Getenv("TENET_GITHUB_OAUTH_REDIRECT_URL"))
-	stateStorePath := strings.TrimSpace(os.Getenv("TENET_AUTH_STATE_STORE_PATH"))
-	identityStorePath := strings.TrimSpace(os.Getenv("TENET_AUTH_IDENTITY_STORE_PATH"))
-	sessionSecret := strings.TrimSpace(os.Getenv("TENET_AUTH_SESSION_SECRET"))
+	settings := map[string]string{
+		"TENET_AUTH_PROVIDER":              provider,
+		"TENET_GITHUB_OAUTH_CLIENT_ID":     strings.TrimSpace(os.Getenv("TENET_GITHUB_OAUTH_CLIENT_ID")),
+		"TENET_GITHUB_OAUTH_CLIENT_SECRET": strings.TrimSpace(os.Getenv("TENET_GITHUB_OAUTH_CLIENT_SECRET")),
+		"TENET_GITHUB_OAUTH_REDIRECT_URL":  strings.TrimSpace(os.Getenv("TENET_GITHUB_OAUTH_REDIRECT_URL")),
+		"TENET_AUTH_STATE_STORE_PATH":      strings.TrimSpace(os.Getenv("TENET_AUTH_STATE_STORE_PATH")),
+		"TENET_AUTH_IDENTITY_STORE_PATH":   strings.TrimSpace(os.Getenv("TENET_AUTH_IDENTITY_STORE_PATH")),
+		"TENET_AUTH_SESSION_SECRET":        strings.TrimSpace(os.Getenv("TENET_AUTH_SESSION_SECRET")),
+	}
+	requiredSettings := api.RequiredTenetManagedLoginSettings()
+	missingSettings := make([]string, 0, len(requiredSettings))
+	for _, setting := range requiredSettings {
+		if strings.TrimSpace(settings[setting]) == "" {
+			missingSettings = append(missingSettings, setting)
+		}
+	}
+	if provider != "" && provider != "github" {
+		for _, setting := range requiredSettings[1:] {
+			if !containsString(missingSettings, setting) {
+				missingSettings = append(missingSettings, setting)
+			}
+		}
+	}
 
-	configured := provider == "github" && clientID != "" && clientSecret != "" && redirectURL != "" && stateStorePath != "" && identityStorePath != "" && sessionSecret != ""
-	if !configured {
-		return api.AuthRuntimeDiagnostic{}
+	configured := provider == "github" && len(missingSettings) == 0
+	managedLogin := api.TenetManagedLoginDiagnostic{
+		Configured:              configured,
+		Provider:                provider,
+		RequiredSettings:        requiredSettings,
+		MissingSettings:         missingSettings,
+		StateStoreConfigured:    settings["TENET_AUTH_STATE_STORE_PATH"] != "",
+		IdentityStoreConfigured: settings["TENET_AUTH_IDENTITY_STORE_PATH"] != "",
+		SessionSecretConfigured: settings["TENET_AUTH_SESSION_SECRET"] != "",
 	}
-	return api.AuthRuntimeDiagnostic{
-		TenetManagedLogin: api.TenetManagedLoginDiagnostic{
-			Configured:              true,
-			Provider:                "github",
-			LoginRoute:              "/auth/login/github",
-			CallbackRoute:           "/auth/callback/github",
-			SessionCookieName:       "tenet_session",
-			StateStoreConfigured:    true,
-			IdentityStoreConfigured: true,
-			SessionSecretConfigured: true,
-		},
+	if configured {
+		managedLogin.Provider = "github"
+		managedLogin.LoginRoute = "/auth/login/github"
+		managedLogin.CallbackRoute = "/auth/callback/github"
+		managedLogin.SessionCookieName = "tenet_session"
 	}
+	return api.AuthRuntimeDiagnostic{TenetManagedLogin: managedLogin}
+}
+
+func containsString(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
 }
 
 func newApplyRequestFingerprintProvider(loadDetail func(context.Context, string) (catalog.DeploymentOverviewDetail, error)) applyrequest.CurrentFingerprintProvider {
