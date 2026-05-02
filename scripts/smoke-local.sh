@@ -1005,9 +1005,11 @@ assert 'Supported Tenet roles: ${supported.join(\', \')}' in ui, ui
 assert 'operatorContextSupportedRolesLabel(context)' in ui, ui
 assert "const operatorContextSupportedIdentityHeadersLabel = (context) => {" in ui, ui
 assert "Supported identity headers: canonical ${canonicalText}; compatibility aliases ${aliasText}. Canonical X-Tenet-Authenticated-* identity headers are preferred when both canonical and alias values are present." in ui, ui
-assert "const operatorContextAuthenticationBoundaryLabel = () => 'Authentication boundary: this embedded shell consumes trusted front-door headers only; it does not start an in-page GitHub OAuth login or Tenet-managed browser session from this page. Managed-login runtime diagnostics below are read-only until the optional login/callback/session routes are active.';" in ui, ui
-assert 'operatorContextAuthenticationBoundaryLabel()' in ui, ui
 assert "const operatorContextManagedLogin = (context) => context?.authRuntime?.tenetManagedLogin || {};" in ui, ui
+assert "const operatorContextManagedLoginActive = (context = operatorContextState.context) => {" in ui, ui
+assert 'Authentication boundary: Tenet-managed browser login is active for this API instance; guarded read recovery may offer a same-shell sign-in handoff while trusted front-door headers still take precedence when present.' in ui, ui
+assert 'Authentication boundary: this embedded shell consumes trusted front-door headers only; it does not start an in-page GitHub OAuth login or Tenet-managed browser session from this page unless the optional login/callback/session routes report active.' in ui, ui
+assert 'operatorContextAuthenticationBoundaryLabel(context)' in ui, ui
 assert "const operatorContextManagedLoginStateLabel = (context) => {" in ui, ui
 assert "Managed login runtime:" in ui, ui
 assert "Managed login missing settings:" in ui, ui
@@ -1190,10 +1192,15 @@ operator_read_auth_fragments = (
     "const operatorReadAuthRequiredState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 401;",
     "const operatorReadForbiddenState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 403;",
     "const operatorReadRoleRequiredState = (error) => operatorReadForbiddenState(error) && String(error?.message || '').includes('authenticated viewer-capable role is required for this operator read route');",
-    "const operatorReadAuthRequiredMessage = (route) => `Tenet rejected ${route} because authenticated identity is required on this operator read route. Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page; reopen this same bookmarkable URL through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.`;",
+    "const operatorReadAuthRequiredMessage = (route, context = operatorContextState.context) => {",
+    "Tenet-managed GitHub login is active for this API instance; use the sign-in handoff below to authenticate through ${loginRoute} and return to this same bookmarkable URL.",
+    "Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page; reopen this same bookmarkable URL through the trusted front door",
     "const operatorReadRoleRequiredMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity because this operator read route requires a trusted forwarded viewer/operator/admin role. Open Operator context details (#operator-context-access-details-panel) and check roles.provenance.source, roles.canRead, and the forwarded X-Tenet-Authenticated-Roles value; ask the front-door/RBAC admin to forward viewer, operator, or admin, then retry this same bookmarkable page.`;",
     "const operatorReadForbiddenMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.`;",
     "const currentBookmarkableURL = (hashOverride) => {",
+    "const operatorContextManagedLoginSignInURL = (context = operatorContextState.context) => {",
+    "params.set('returnUrl', currentBookmarkableURL());",
+    "Sign in with Tenet-managed GitHub login",
     "const createOperatorReadFailureActions = (error) => {",
     "if (operatorReadAuthRequiredState(error)) {",
     "Retry current page after front-door sign-in",
