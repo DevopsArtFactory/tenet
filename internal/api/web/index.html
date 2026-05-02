@@ -186,6 +186,7 @@
       const resourceInspectionStateByKey = new Map();
       let auditLogsPageState = { status: 'idle', route: '', result: null, error: null, promise: null, requestId: 0 };
       let operatorContextState = { status: 'idle', context: null, error: null, refreshing: false };
+      let operatorContextDetailsOpen = false;
       let allAccounts = [];
       let allApplications = [];
       let applicationsOverviewState = null;
@@ -1103,11 +1104,13 @@
           });
           if (detailsMeta.children.length) {
             const details = createElement('details', 'operator-context-details');
-            const summaryToggle = createElement('summary', '', 'Show access details');
-            summaryToggle.setAttribute('aria-label', 'Show access details for forwarded trusted front-door context');
+            details.open = operatorContextDetailsOpen;
+            const summaryToggle = createElement('summary', '', operatorContextDetailsOpen ? 'Hide access details' : 'Show access details');
+            summaryToggle.setAttribute('aria-label', operatorContextDetailsOpen ? 'Hide access details for forwarded trusted front-door context' : 'Show access details for forwarded trusted front-door context');
             details.addEventListener('toggle', () => {
-              summaryToggle.textContent = details.open ? 'Hide access details' : 'Show access details';
-              summaryToggle.setAttribute('aria-label', details.open ? 'Hide access details for forwarded trusted front-door context' : 'Show access details for forwarded trusted front-door context');
+              operatorContextDetailsOpen = Boolean(details.open);
+              summaryToggle.textContent = operatorContextDetailsOpen ? 'Hide access details' : 'Show access details';
+              summaryToggle.setAttribute('aria-label', operatorContextDetailsOpen ? 'Hide access details for forwarded trusted front-door context' : 'Show access details for forwarded trusted front-door context');
             });
             details.append(summaryToggle, detailsMeta);
             detailNodes.push(details);

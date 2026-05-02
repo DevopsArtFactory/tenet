@@ -469,12 +469,17 @@ async function render(operatorResponses) {
     { ok: true, json: () => Promise.resolve(firstContext) },
     { ok: true, json: () => Promise.resolve({ ...firstContext, identity: { authenticated: true, name: 'Refreshed Operator' }, roles: { names: ['viewer'], canRead: true, canWrite: false } }) },
   ]);
+  refreshed.details().open = true;
+  refreshed.details().dispatch('toggle');
+  if (!refreshed.detailsText().includes('Hide access details')) throw new Error('expected access details to be expanded before refresh');
   refreshed.refresh().dispatch('click');
   await settle();
   if (refreshed.fetchCalls.filter((url) => url === '/v1/operator/context').length !== 2) throw new Error('expected refresh to re-fetch operator context');
   if (refreshed.window.location.search !== '') throw new Error('refresh should not change bookmarkable URL state');
   if (!refreshed.text().includes('Refreshed Operator')) throw new Error('expected refreshed operator identity');
   if (!refreshed.text().includes('Read-capable roles: viewer')) throw new Error('expected refreshed role capability');
+  if (!refreshed.details().open) throw new Error('expanded access details should stay open after context refresh rerender');
+  if (!refreshed.detailsText().includes('Hide access details')) throw new Error('expected expanded access details summary to survive context refresh');
 
   const failedRefresh = await render([
     { ok: true, json: () => Promise.resolve(firstContext) },
