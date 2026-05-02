@@ -168,7 +168,7 @@ Keep that split intact when integrating GitHub OAuth or another identity provide
 
 Operator troubleshooting checklist for guarded reads and writes:
 1. Start in the embedded `Operator context` banner, or call `GET /v1/operator/context` directly, before changing role or deployment headers. If that banner fetch is itself rejected with `401` / `403`, the shell reuses the same guarded-read recovery copy as the rest of the drill-down UI: `401` now makes clear that Tenet will not start a built-in GitHub OAuth login or Tenet-managed browser session from the page, so operators must reopen the same bookmarkable URL through the trusted front door; role and deployment `403`s still ask for a read-capable `viewer` / `operator` / `admin` role or the matching deployment/project/environment scope.
-2. Inspect `identity.authenticated`, `roles.canRead` / `roles.canWrite`, and `deploymentAccess.summary` first; these explain `401`, viewer-role `403`, and likely-empty collection reads before route-specific debugging.
+2. Inspect `identity.authenticated`, `roles.canRead` / `roles.canWrite`, and `deploymentAccess.summary` first; these explain `401`, viewer-role `403`, and likely-empty collection reads before route-specific debugging. When placement data is available, `visibleDeploymentExamples` under `deploymentAccess.summary` gives a bounded set of concrete visible deployments with `matchSources` (`exactDeployment`, `projectEnvironment`, or both) so operators can see whether exact grants or project/environment scopes are actually responsible for access.
 3. Inspect the `accessVerdicts` chips and their bounded route examples to map the blocked or likely-empty verdict to the concrete guarded route family, such as applications collections, raw catalog reads, deployment drill-downs, immutable plan/apply writes, or audit reads. Collection-read chips show `Collection scope: filtered to visible deployments` when Tenet will return only rows visible through the forwarded deployment/project/environment grants, add `Collection result: likely empty` when those grants are expected to produce an empty collection, and deployment-scoped read/write chips show `Scope grants: exact deployments or matching project/environment scopes` when either grant shape can satisfy that route class.
 4. Debug the specific guarded route class by checking the banner's full `Required trusted headers:` fragment: identity, read/write role, and/or exact `X-Tenet-Authorized-Deployments` membership or matching `X-Tenet-Authorized-Projects` plus `X-Tenet-Authorized-Environments` scopes. For project/environment-scoped reads and deployment-scoped plan/apply writes, both project and environment headers must be forwarded and must match catalog placement data; partial, stale, or unavailable placement data intentionally diagnose as likely `403`/empty instead of widening access.
 5. If an operator write returns `403 Forbidden`, confirm `roles.canWrite=true` (`operator` or `admin`) plus either exact deployment membership or matching project/environment catalog placement; writes fail before plan/apply lookup when either prerequisite is missing.
@@ -197,6 +197,24 @@ Example diagnostic summary shape:
       "matchedCount": 2,
       "projectCount": 2,
       "environmentCount": 1,
+      "visibleDeploymentExamples": [
+        {
+          "deploymentName": "payments-api-prod",
+          "appRef": "payments-api",
+          "environmentRef": "prod-apne2",
+          "region": "ap-northeast-2",
+          "awsAccountId": "123456789012",
+          "matchSources": ["exactDeployment", "projectEnvironment"]
+        },
+        {
+          "deploymentName": "worker-prod",
+          "appRef": "worker",
+          "environmentRef": "prod-apne2",
+          "region": "ap-northeast-2",
+          "awsAccountId": "123456789012",
+          "matchSources": ["exactDeployment"]
+        }
+      ],
       "projectEnvironmentExamples": [
         {
           "appRef": "payments-api",

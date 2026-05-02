@@ -261,6 +261,8 @@ func TestRouterOperatorContextSummarizesMatchedAndUnmatchedDeploymentAccess(t *t
 	req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
 	req.Header.Add(requestactor.AuthorizedDeploymentsHeader, "payments-api-prod, stale-api")
 	req.Header.Add(requestactor.AuthorizedDeploymentsHeader, "payments-worker-prod, archived-api")
+	req.Header.Set(requestactor.AuthorizedProjectsHeader, "payments")
+	req.Header.Set(requestactor.AuthorizedEnvironmentsHeader, "prod")
 	resp := httptest.NewRecorder()
 
 	router.ServeHTTP(resp, req)
@@ -312,6 +314,17 @@ func TestRouterOperatorContextSummarizesMatchedAndUnmatchedDeploymentAccess(t *t
 	}
 	if !reflect.DeepEqual(example["exampleDeployments"], []any{"payments-api-prod", "payments-worker-prod"}) {
 		t.Fatalf("expected deterministic visible deployment examples, got %#v", example["exampleDeployments"])
+	}
+	visibleDeployments, ok := summary["visibleDeploymentExamples"].([]any)
+	if !ok || len(visibleDeployments) != 2 {
+		t.Fatalf("expected two visible deployment examples, got %#v", summary["visibleDeploymentExamples"])
+	}
+	firstVisible := visibleDeployments[0].(map[string]any)
+	if firstVisible["deploymentName"] != "payments-api-prod" || firstVisible["appRef"] != "payments" || firstVisible["environmentRef"] != "prod" || firstVisible["region"] != "us-west-2" || firstVisible["awsAccountId"] != "123456789012" {
+		t.Fatalf("unexpected first visible deployment example metadata: %#v", firstVisible)
+	}
+	if !reflect.DeepEqual(firstVisible["matchSources"], []any{"exactDeployment", "projectEnvironment"}) {
+		t.Fatalf("expected combined exact deployment and project/environment match sources, got %#v", firstVisible["matchSources"])
 	}
 	if _, ok := summary["emptyReason"]; ok {
 		t.Fatalf("expected no empty reason when forwarded deployments match, got %#v", summary)
@@ -365,6 +378,14 @@ func TestRouterOperatorContextSummarizesProjectEnvironmentScopedAccess(t *testin
 	examples := summary["projectEnvironmentExamples"].([]any)
 	if len(examples) != 2 {
 		t.Fatalf("expected two scoped project/environment examples, got %#v", examples)
+	}
+	visibleDeployments := summary["visibleDeploymentExamples"].([]any)
+	if len(visibleDeployments) != 2 {
+		t.Fatalf("expected two scoped visible deployment examples, got %#v", visibleDeployments)
+	}
+	firstVisible := visibleDeployments[0].(map[string]any)
+	if firstVisible["deploymentName"] != "payments-api-prod" || !reflect.DeepEqual(firstVisible["matchSources"], []any{"projectEnvironment"}) {
+		t.Fatalf("expected project/environment match source for scoped deployment, got %#v", firstVisible)
 	}
 }
 
