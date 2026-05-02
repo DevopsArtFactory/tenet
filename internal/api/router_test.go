@@ -128,6 +128,7 @@ func TestRouterOperatorContextReportsManagedLoginRuntimeDisabledByDefault(t *tes
 	if managedLogin["sessionCookieSecureOverride"] != false || managedLogin["sessionCookieSecureForRequest"] != false {
 		t.Fatalf("expected disabled managed-login cookie security diagnostics to stay false, got %#v", managedLogin)
 	}
+	assertManagedLoginRawLifecycleDiagnostics(t, managedLogin, false)
 	if !reflect.DeepEqual(jsonStringSlice(t, managedLogin["requiredSettings"]), RequiredTenetManagedLoginSettings()) || !reflect.DeepEqual(jsonStringSlice(t, managedLogin["missingSettings"]), RequiredTenetManagedLoginSettings()) {
 		t.Fatalf("unexpected managed-login required/missing settings: %#v", managedLogin)
 	}
@@ -175,6 +176,7 @@ func TestRouterOperatorContextReportsConfiguredManagedLoginRuntimeGroundwork(t *
 	if managedLogin["sessionCookieSecureOverride"] != false || managedLogin["sessionCookieSecureForRequest"] != false {
 		t.Fatalf("expected configured inactive local request to report non-secure cookie mode, got %#v", managedLogin)
 	}
+	assertManagedLoginRawLifecycleDiagnostics(t, managedLogin, false)
 	if managedLogin["unavailableReason"] != "tenet-managed login configuration is present, but login/callback/session routes are not active for this API instance" {
 		t.Fatalf("unexpected configured managed-login unavailable reason: %#v", managedLogin)
 	}
@@ -242,6 +244,22 @@ func jsonStringSlice(t *testing.T, value any) []string {
 		result = append(result, text)
 	}
 	return result
+}
+
+func assertManagedLoginRawLifecycleDiagnostics(t *testing.T, managedLogin map[string]any, expectLogout bool) {
+	t.Helper()
+	if managedLogin["oauthStateTtlSeconds"] != float64(DefaultTenetManagedLoginOAuthStateTTLSeconds()) {
+		t.Fatalf("expected default OAuth state TTL diagnostic, got %#v", managedLogin)
+	}
+	if managedLogin["sessionTtlSeconds"] != float64(DefaultTenetManagedLoginSessionTTLSeconds()) || managedLogin["sessionExpiryEnforced"] != true {
+		t.Fatalf("expected signed session TTL/expiry diagnostics, got %#v", managedLogin)
+	}
+	if managedLogin["providerAccessTokenStored"] != false || managedLogin["providerAccessTokenReturned"] != false || managedLogin["providerTokenRefreshSupported"] != false || managedLogin["providerTokenRevocationSupported"] != false {
+		t.Fatalf("expected provider-token diagnostics to remain non-secret/non-refreshing/non-revoking, got %#v", managedLogin)
+	}
+	if managedLogin["logoutClearsSessionCookie"] != expectLogout || managedLogin["logoutRevokesProviderToken"] != false {
+		t.Fatalf("unexpected logout lifecycle diagnostics: %#v", managedLogin)
+	}
 }
 
 func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
