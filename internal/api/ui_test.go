@@ -73,6 +73,8 @@ func TestEmbeddedUIRendersOperatorContextBannerSafely(t *testing.T) {
 		"operator-context-denied",
 		"Operator reads",
 		"Collection reads",
+		"Raw catalog reads",
+		"verdicts.catalogRead",
 		"emptyCollectionLikely",
 		"Deployment access summary unavailable for this response",
 		"Deployment access summary unavailable:",
