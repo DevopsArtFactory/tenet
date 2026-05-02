@@ -1398,6 +1398,11 @@ operator_context_no_allowlist=$(curl -fsS \
   -H "X-Tenet-Authenticated-Name: No Allowlist Operator" \
   -H "X-Tenet-Authenticated-Roles: viewer" \
   "$API_BASE_URL/v1/operator/context")
+operator_context_no_roles=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: no-roles-321" \
+  -H "X-Tenet-Authenticated-Name: Missing Role Operator" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-prod" \
+  "$API_BASE_URL/v1/operator/context")
 auth_unauthenticated_plan_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" -w "%{http_code}" \
   "$API_BASE_URL/v1/plans/$plan_id")
 auth_unauthenticated_apply_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" -w "%{http_code}" \
@@ -1574,6 +1579,7 @@ operator_context_unmatched_path=$(write_payload operator-context-unmatched.json 
 operator_context_stale_scopes_path=$(write_payload operator-context-stale-scopes.json "$operator_context_stale_scopes")
 operator_context_alias_path=$(write_payload operator-context-alias.json "$operator_context_alias")
 operator_context_no_allowlist_path=$(write_payload operator-context-no-allowlist.json "$operator_context_no_allowlist")
+operator_context_no_roles_path=$(write_payload operator-context-no-roles.json "$operator_context_no_roles")
 
 PLAN_ID="$plan_id" \
 APPLY_ID="$apply_id" \
@@ -1811,6 +1817,7 @@ assert operator_context_trusted["identity"]["email"] == "frontdoor@example.com",
 assert operator_context_trusted["roles"]["names"] == ["viewer", "operator"], operator_context_trusted
 assert operator_context_trusted["roles"]["canRead"] is True, operator_context_trusted
 assert operator_context_trusted["roles"]["canWrite"] is True, operator_context_trusted
+assert operator_context_trusted["roles"]["provenance"]["source"] == "canonical", operator_context_trusted
 assert operator_context_trusted["deploymentAccess"]["enforced"] is True, operator_context_trusted
 assert operator_context_trusted["deploymentAccess"]["forwarded"] is True, operator_context_trusted
 assert operator_context_trusted["deploymentAccess"]["names"] == ["payments-api-prod", "worker-prod"], operator_context_trusted
@@ -1917,6 +1924,7 @@ assert operator_context_alias["identity"]["email"] == "alias@example.com", opera
 assert operator_context_alias["roles"]["names"] == ["viewer"], operator_context_alias
 assert operator_context_alias["roles"]["canRead"] is True, operator_context_alias
 assert operator_context_alias["roles"]["canWrite"] is False, operator_context_alias
+assert operator_context_alias["roles"]["provenance"]["source"] == "canonical", operator_context_alias
 assert operator_context_alias["deploymentAccess"]["enforced"] is True, operator_context_alias
 assert operator_context_alias["deploymentAccess"]["forwarded"] is False, operator_context_alias
 assert "names" not in operator_context_alias["deploymentAccess"], operator_context_alias
@@ -1927,6 +1935,7 @@ assert operator_context_no_allowlist["identity"]["name"] == "No Allowlist Operat
 assert operator_context_no_allowlist["roles"]["names"] == ["viewer"], operator_context_no_allowlist
 assert operator_context_no_allowlist["roles"]["canRead"] is True, operator_context_no_allowlist
 assert operator_context_no_allowlist["roles"]["canWrite"] is False, operator_context_no_allowlist
+assert operator_context_no_allowlist["roles"]["provenance"]["source"] == "canonical", operator_context_no_allowlist
 assert operator_context_no_allowlist["deploymentAccess"]["enforced"] is True, operator_context_no_allowlist
 assert operator_context_no_allowlist["deploymentAccess"]["forwarded"] is False, operator_context_no_allowlist
 assert "names" not in operator_context_no_allowlist["deploymentAccess"], operator_context_no_allowlist
@@ -1934,6 +1943,20 @@ no_allowlist_verdicts = operator_context_no_allowlist["accessVerdicts"]
 assert no_allowlist_verdicts["deploymentScopedRead"]["allowed"] is False, operator_context_no_allowlist
 assert no_allowlist_verdicts["collectionRead"]["allowed"] is True, operator_context_no_allowlist
 assert no_allowlist_verdicts["collectionRead"]["emptyCollectionLikely"] is True, operator_context_no_allowlist
+
+assert_operator_context_common(operator_context_no_roles)
+assert operator_context_no_roles["identity"]["authenticated"] is True, operator_context_no_roles
+assert operator_context_no_roles["identity"]["id"] == "no-roles-321", operator_context_no_roles
+assert operator_context_no_roles["identity"]["name"] == "Missing Role Operator", operator_context_no_roles
+assert operator_context_no_roles["roles"].get("names", []) == [], operator_context_no_roles
+assert operator_context_no_roles["roles"]["canRead"] is False, operator_context_no_roles
+assert operator_context_no_roles["roles"]["canWrite"] is False, operator_context_no_roles
+assert operator_context_no_roles["roles"]["provenance"]["source"] == "absent", operator_context_no_roles
+no_roles_verdicts = operator_context_no_roles["accessVerdicts"]
+assert no_roles_verdicts["operatorRead"]["allowed"] is False, operator_context_no_roles
+assert no_roles_verdicts["operatorRead"]["reason"] == "authenticated viewer-capable role is required for guarded operator read routes", operator_context_no_roles
+assert no_roles_verdicts["operatorWrite"]["allowed"] is False, operator_context_no_roles
+assert no_roles_verdicts["operatorWrite"]["reason"] == "authenticated operator role is required for guarded operator write routes", operator_context_no_roles
 assert os.environ["AUTH_FORBIDDEN_EVENTS_STATUS"] == "403", os.environ["AUTH_FORBIDDEN_EVENTS_STATUS"]
 assert forbidden_events_body.strip() == "forbidden: operator does not have access to this deployment", forbidden_events_body
 assert os.environ["AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS"] == "403", os.environ["AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS"]
