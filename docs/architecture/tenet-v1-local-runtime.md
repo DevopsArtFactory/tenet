@@ -28,7 +28,7 @@ For `tenet-api`, the local runtime also enables request-scoped JSON logs for eve
 
 ## Trusted front-door auth
 
-Front-door auth remains additive and opt-in. Tenet still expects a real authentication layer to run before requests reach the API. The local runtime consumes trusted forwarded identity headers only; it does not ship a GitHub OAuth browser login, Tenet-managed browser sessions, or a pluggable OAuth/OIDC provider lifecycle.
+Front-door auth remains additive and opt-in. Tenet still expects a real authentication layer to run before requests reach the API. The local runtime consumes trusted forwarded identity headers only; it does not ship a GitHub OAuth browser login, Tenet-managed browser sessions, or a pluggable OAuth/OIDC provider lifecycle. The internal `authprovider` package now contains GitHub OAuth authorization-code client primitives for future front-door/session integration, but those primitives are not wired to local runtime routes, persistent identities, or route authorization yet.
 
 Use these settings only when every request reaches Tenet through a front door that authenticates callers and strips any client-supplied `X-Tenet-Authenticated-*`, `X-Tenet-Authenticated-Roles`, `X-Tenet-Authorized-Deployments`, `X-Tenet-Authorized-Projects`, `X-Tenet-Authorized-Environments`, and trusted-alias `X-User-*` headers before forwarding trusted values. Do not expose a header-trusting `tenet-api` instance directly to untrusted clients.
 
