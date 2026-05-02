@@ -14,6 +14,9 @@ import (
 
 	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
 	"github.com/DevopsArtFactory/tenet/internal/auditlog"
+	"github.com/DevopsArtFactory/tenet/internal/authidentity"
+	"github.com/DevopsArtFactory/tenet/internal/authprovider"
+	"github.com/DevopsArtFactory/tenet/internal/authstate"
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/controllerrefresh"
@@ -566,11 +569,11 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 
 func normalizeAuthRuntimeDiagnostic(diagnostic AuthRuntimeDiagnostic) AuthRuntimeDiagnostic {
 	managedLogin := diagnostic.TenetManagedLogin
-	managedLogin.Active = false
 	if len(managedLogin.RequiredSettings) == 0 {
 		managedLogin.RequiredSettings = RequiredTenetManagedLoginSettings()
 	}
 	if managedLogin.Configured {
+		managedLogin.Active = managedLogin.Active && managedLogin.Provider != "" && len(managedLogin.MissingSettings) == 0
 		if managedLogin.MissingSettings == nil {
 			managedLogin.MissingSettings = []string{}
 		}
@@ -587,7 +590,11 @@ func normalizeAuthRuntimeDiagnostic(diagnostic AuthRuntimeDiagnostic) AuthRuntim
 		if managedLogin.SessionCookieName == "" {
 			managedLogin.SessionCookieName = "tenet_session"
 		}
-		managedLogin.UnavailableReason = "tenet-managed login configuration is present, but login/callback/session routes are not active in this API build yet"
+		if managedLogin.Active {
+			managedLogin.UnavailableReason = ""
+		} else if managedLogin.UnavailableReason == "" {
+			managedLogin.UnavailableReason = "tenet-managed login configuration is present, but login/callback/session routes are not active for this API instance"
+		}
 		return AuthRuntimeDiagnostic{TenetManagedLogin: managedLogin}
 	}
 	managedLogin.Configured = false
@@ -1361,6 +1368,11 @@ type Options struct {
 	RequestTimeout                       time.Duration
 	GitHubWebhookSecret                  string
 	AuthRuntime                          AuthRuntimeDiagnostic
+	AuthProvider                         authprovider.Provider
+	AuthStateStore                       authstate.Store
+	AuthIdentityStore                    authidentity.Store
+	AuthSessionSecret                    string
+	AuthSessionCookieName                string
 	TrustAuthenticatedHeaders            bool
 	RequireAuthenticatedIdentity         bool
 	RequireOperatorRoleForRead           bool
@@ -1400,6 +1412,17 @@ func NewRouter(options Options) http.Handler {
 		logger = slog.Default()
 	}
 
+	authSession := authSessionConfigFromOptions(options)
+	options.AuthRuntime.TenetManagedLogin.Active = authSession.active()
+	if authSession.active() {
+		options.AuthRuntime.TenetManagedLogin.Configured = true
+		options.AuthRuntime.TenetManagedLogin.Provider = authSession.Provider.Name()
+		options.AuthRuntime.TenetManagedLogin.LoginRoute = "/auth/login/github"
+		options.AuthRuntime.TenetManagedLogin.CallbackRoute = "/auth/callback/github"
+		options.AuthRuntime.TenetManagedLogin.SessionCookieName = authSession.cookieName()
+		options.AuthRuntime.TenetManagedLogin.MissingSettings = []string{}
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
@@ -1410,6 +1433,12 @@ func NewRouter(options Options) http.Handler {
 			return
 		}
 		serveUI(w)
+	})
+	mux.HandleFunc("/auth/login/github", func(w http.ResponseWriter, r *http.Request) {
+		handleGitHubLogin(w, r, authSession)
+	})
+	mux.HandleFunc("/auth/callback/github", func(w http.ResponseWriter, r *http.Request) {
+		handleGitHubCallback(w, r, authSession)
 	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodGet) {
@@ -2163,7 +2192,7 @@ func NewRouter(options Options) http.Handler {
 	handler = panicRecoveryMiddleware(logger, handler)
 	handler = requestTimeoutMiddleware(options.RequestTimeout, handler)
 	handler = requestLoggingMiddleware(logger, handler)
-	handler = requestActorMiddleware(options.TrustAuthenticatedHeaders || options.RequireAuthenticatedIdentity || options.RequireOperatorRoleForRead || options.RequireOperatorRoleForWrite || options.RequireDeploymentReadAuthorization, handler)
+	handler = requestActorMiddleware(options.TrustAuthenticatedHeaders || options.RequireAuthenticatedIdentity || options.RequireOperatorRoleForRead || options.RequireOperatorRoleForWrite || options.RequireDeploymentReadAuthorization, authSession, handler)
 	handler = requestIDMiddleware(handler)
 	return handler
 }

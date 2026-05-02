@@ -15,6 +15,9 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/api"
 	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
 	"github.com/DevopsArtFactory/tenet/internal/auditlog"
+	"github.com/DevopsArtFactory/tenet/internal/authidentity"
+	"github.com/DevopsArtFactory/tenet/internal/authprovider"
+	"github.com/DevopsArtFactory/tenet/internal/authstate"
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/controllerrefresh"
@@ -133,6 +136,7 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 		GitHubWebhookDesiredStateSource:    source.webhookDesiredStateSource(),
 		GitHubWebhookRefreshPublisher:      newGitHubWebhookRefreshPublisher(store),
 	}
+	configureManagedLoginRuntime(&options)
 	if source.configured() {
 		loadCatalog := source.loadCatalog
 		resourceLogService := newResourceLogProvider()
@@ -408,6 +412,34 @@ func containsString(values []string, wanted string) bool {
 		}
 	}
 	return false
+}
+
+func configureManagedLoginRuntime(options *api.Options) {
+	if options == nil {
+		return
+	}
+	managedLogin := options.AuthRuntime.TenetManagedLogin
+	if !managedLogin.Configured || len(managedLogin.MissingSettings) > 0 || strings.ToLower(strings.TrimSpace(managedLogin.Provider)) != "github" {
+		return
+	}
+	provider, err := authprovider.NewGitHubProvider(authprovider.GitHubConfig{
+		ClientID:     strings.TrimSpace(os.Getenv("TENET_GITHUB_OAUTH_CLIENT_ID")),
+		ClientSecret: strings.TrimSpace(os.Getenv("TENET_GITHUB_OAUTH_CLIENT_SECRET")),
+		RedirectURL:  strings.TrimSpace(os.Getenv("TENET_GITHUB_OAUTH_REDIRECT_URL")),
+	})
+	if err != nil {
+		options.AuthRuntime.TenetManagedLogin.Active = false
+		options.AuthRuntime.TenetManagedLogin.UnavailableReason = "tenet-managed GitHub login is configured but provider initialization failed"
+		return
+	}
+	options.AuthProvider = provider
+	options.AuthStateStore = authstate.NewFileStore(strings.TrimSpace(os.Getenv("TENET_AUTH_STATE_STORE_PATH")))
+	options.AuthIdentityStore = authidentity.NewFileStore(strings.TrimSpace(os.Getenv("TENET_AUTH_IDENTITY_STORE_PATH")))
+	options.AuthSessionSecret = strings.TrimSpace(os.Getenv("TENET_AUTH_SESSION_SECRET"))
+	options.AuthSessionCookieName = "tenet_session"
+	options.AuthRuntime.TenetManagedLogin.Active = true
+	options.AuthRuntime.TenetManagedLogin.SessionCookieName = options.AuthSessionCookieName
+	options.AuthRuntime.TenetManagedLogin.UnavailableReason = ""
 }
 
 func newApplyRequestFingerprintProvider(loadDetail func(context.Context, string) (catalog.DeploymentOverviewDetail, error)) applyrequest.CurrentFingerprintProvider {

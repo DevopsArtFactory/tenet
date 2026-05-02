@@ -163,12 +163,12 @@ func TestRouterOperatorContextReportsConfiguredManagedLoginRuntimeGroundwork(t *
 		t.Fatalf("expected configured but inactive managed-login diagnostic, got %#v", managedLogin)
 	}
 	if managedLogin["loginRoute"] != "/auth/login/github" || managedLogin["callbackRoute"] != "/auth/callback/github" || managedLogin["sessionCookieName"] != "tenet_session" {
-		t.Fatalf("expected stable future-route/session diagnostics, got %#v", managedLogin)
+		t.Fatalf("expected stable route/session diagnostics, got %#v", managedLogin)
 	}
 	if managedLogin["stateStoreConfigured"] != true || managedLogin["identityStoreConfigured"] != true || managedLogin["sessionSecretConfigured"] != true {
 		t.Fatalf("expected store/secret diagnostics, got %#v", managedLogin)
 	}
-	if managedLogin["unavailableReason"] != "tenet-managed login configuration is present, but login/callback/session routes are not active in this API build yet" {
+	if managedLogin["unavailableReason"] != "tenet-managed login configuration is present, but login/callback/session routes are not active for this API instance" {
 		t.Fatalf("unexpected configured managed-login unavailable reason: %#v", managedLogin)
 	}
 	if !reflect.DeepEqual(jsonStringSlice(t, managedLogin["requiredSettings"]), RequiredTenetManagedLoginSettings()) || len(jsonStringSlice(t, managedLogin["missingSettings"])) != 0 {
@@ -176,7 +176,7 @@ func TestRouterOperatorContextReportsConfiguredManagedLoginRuntimeGroundwork(t *
 	}
 }
 
-func TestRouterDoesNotExposeManagedLoginRoutesWhenRuntimeDiagnosticConfigured(t *testing.T) {
+func TestRouterManagedLoginRoutesRequireActiveRuntime(t *testing.T) {
 	router := NewRouter(Options{
 		AuthRuntime: AuthRuntimeDiagnostic{
 			TenetManagedLogin: TenetManagedLoginDiagnostic{
@@ -192,17 +192,24 @@ func TestRouterDoesNotExposeManagedLoginRoutesWhenRuntimeDiagnosticConfigured(t 
 		},
 	})
 
-	for _, path := range []string{"/auth/login/github", "/auth/callback/github", "/api/v1/auth/login"} {
+	for _, path := range []string{"/auth/login/github", "/auth/callback/github"} {
 		t.Run(path, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, path, nil)
 			resp := httptest.NewRecorder()
 
 			router.ServeHTTP(resp, req)
 
-			if resp.Code != http.StatusNotFound {
-				t.Fatalf("expected managed-login diagnostic config to leave %s unregistered, got %d: %s", path, resp.Code, resp.Body.String())
+			if resp.Code != http.StatusServiceUnavailable || !strings.Contains(resp.Body.String(), "tenet-managed GitHub login is not configured") {
+				t.Fatalf("expected inactive managed-login runtime to return 503 for %s, got %d: %s", path, resp.Code, resp.Body.String())
 			}
 		})
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/login", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("expected legacy auth route to remain unregistered, got %d: %s", resp.Code, resp.Body.String())
 	}
 }
 
