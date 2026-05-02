@@ -371,9 +371,10 @@ type operatorContextEnforcement struct {
 }
 
 type operatorContextRoles struct {
-	Names    []string `json:"names,omitempty"`
-	CanRead  bool     `json:"canRead"`
-	CanWrite bool     `json:"canWrite"`
+	Names      []string                                  `json:"names,omitempty"`
+	CanRead    bool                                      `json:"canRead"`
+	CanWrite   bool                                      `json:"canWrite"`
+	Provenance requestactor.AuthenticatedRolesProvenance `json:"provenance"`
 }
 
 type operatorContextDeploymentAccess struct {
@@ -462,6 +463,10 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 		identityProvenance = requestactor.AuthenticatedIdentityProvenanceFromHeaders(r.Header)
 	}
 	roles := requestactor.AuthenticatedRolesFromContext(r.Context())
+	rolesProvenance := requestactor.NormalizeAuthenticatedRolesProvenance(requestactor.AuthenticatedRolesProvenance{})
+	if options.TrustAuthenticatedHeaders {
+		rolesProvenance = requestactor.AuthenticatedRolesProvenanceFromHeaders(r.Header)
+	}
 	deployments := requestactor.AuthorizedDeploymentsFromContext(r.Context())
 	scopes := requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context())
 	summary := buildOperatorContextAccessSummary(r.Context(), options, deployments, scopes)
@@ -477,9 +482,10 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 		Identity:           identity,
 		IdentityProvenance: identityProvenance,
 		Roles: operatorContextRoles{
-			Names:    roles.Names,
-			CanRead:  roles.AllowsOperatorRead(),
-			CanWrite: roles.AllowsOperatorWrite(),
+			Names:      roles.Names,
+			CanRead:    roles.AllowsOperatorRead(),
+			CanWrite:   roles.AllowsOperatorWrite(),
+			Provenance: rolesProvenance,
 		},
 		DeploymentAccess: operatorContextDeploymentAccess{
 			Enforced:  options.RequireDeploymentReadAuthorization,

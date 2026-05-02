@@ -76,6 +76,12 @@ type AuthenticatedRoles struct {
 	Names []string `json:"names,omitempty"`
 }
 
+// AuthenticatedRolesProvenance reports whether trusted role data came from the
+// X-Tenet-Authenticated-Roles header or was absent from the request.
+type AuthenticatedRolesProvenance struct {
+	Source string `json:"source"`
+}
+
 // AuthorizedDeployments captures the trusted front-door deployment allowlist for one request.
 type AuthorizedDeployments struct {
 	Names []string `json:"names,omitempty"`
@@ -246,6 +252,15 @@ func AuthenticatedRolesFromHeaders(header http.Header) AuthenticatedRoles {
 	return NormalizeAuthenticatedRoles(AuthenticatedRoles{Names: names})
 }
 
+// AuthenticatedRolesProvenanceFromHeaders reports whether X-Tenet-Authenticated-Roles
+// supplied at least one normalized trusted role value.
+func AuthenticatedRolesProvenanceFromHeaders(header http.Header) AuthenticatedRolesProvenance {
+	if len(AuthenticatedRolesFromHeaders(header).Names) == 0 {
+		return NormalizeAuthenticatedRolesProvenance(AuthenticatedRolesProvenance{})
+	}
+	return AuthenticatedRolesProvenance{Source: AuthenticatedIdentitySourceCanonical}
+}
+
 // AuthorizedDeploymentsFromHeaders derives one normalized deployment allowlist from trusted
 // forwarded front-door headers.
 func AuthorizedDeploymentsFromHeaders(header http.Header) AuthorizedDeployments {
@@ -393,6 +408,15 @@ func NormalizeAuthenticatedIdentityProvenance(provenance AuthenticatedIdentityPr
 	provenance.IDSource = normalizeAuthenticatedIdentitySource(provenance.IDSource)
 	provenance.NameSource = normalizeAuthenticatedIdentitySource(provenance.NameSource)
 	provenance.EmailSource = normalizeAuthenticatedIdentitySource(provenance.EmailSource)
+	return provenance
+}
+
+// NormalizeAuthenticatedRolesProvenance keeps role source strings explicit and stable.
+func NormalizeAuthenticatedRolesProvenance(provenance AuthenticatedRolesProvenance) AuthenticatedRolesProvenance {
+	provenance.Source = normalizeAuthenticatedIdentitySource(provenance.Source)
+	if provenance.Source == AuthenticatedIdentitySourceAlias {
+		provenance.Source = AuthenticatedIdentitySourceAbsent
+	}
 	return provenance
 }
 
