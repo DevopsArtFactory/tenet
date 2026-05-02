@@ -253,6 +253,22 @@ func TestOperatorDeploymentReadAuthorizationEnforced(t *testing.T) {
 	})
 }
 
+func TestAuthSessionCookieSecureEnabled(t *testing.T) {
+	t.Run("defaults to false", func(t *testing.T) {
+		t.Setenv("TENET_AUTH_SESSION_COOKIE_SECURE", "")
+		if authSessionCookieSecureEnabled() {
+			t.Fatal("expected secure session cookie override to be disabled by default")
+		}
+	})
+
+	t.Run("accepts true", func(t *testing.T) {
+		t.Setenv("TENET_AUTH_SESSION_COOKIE_SECURE", "true")
+		if !authSessionCookieSecureEnabled() {
+			t.Fatal("expected secure session cookie override to be enabled")
+		}
+	})
+}
+
 func TestNewAPIOptionsIncludesGitHubWebhookSecretFromEnv(t *testing.T) {
 	t.Setenv("TENET_GITHUB_WEBHOOK_SECRET", "top-secret")
 
@@ -296,8 +312,30 @@ func TestNewAPIOptionsIncludesManagedLoginRuntimeDiagnosticFromEnv(t *testing.T)
 	if managedLogin.SessionCookieName != "tenet_session" || !managedLogin.StateStoreConfigured || !managedLogin.IdentityStoreConfigured || !managedLogin.SessionSecretConfigured {
 		t.Fatalf("unexpected managed-login store/session diagnostic: %+v", managedLogin)
 	}
+	if options.AuthSessionCookieSecure {
+		t.Fatalf("expected managed-login session cookie secure override to default off for local HTTP development")
+	}
 	if !reflect.DeepEqual(managedLogin.RequiredSettings, expectedManagedLoginRequiredSettings()) || len(managedLogin.MissingSettings) != 0 {
 		t.Fatalf("unexpected managed-login required/missing settings: %+v", managedLogin)
+	}
+}
+
+func TestNewAPIOptionsCanForceManagedLoginSecureSessionCookie(t *testing.T) {
+	t.Setenv("TENET_AUTH_PROVIDER", "github")
+	t.Setenv("TENET_GITHUB_OAUTH_CLIENT_ID", "client-id")
+	t.Setenv("TENET_GITHUB_OAUTH_CLIENT_SECRET", "client-secret")
+	t.Setenv("TENET_GITHUB_OAUTH_REDIRECT_URL", "https://tenet.example.com/auth/callback/github")
+	t.Setenv("TENET_AUTH_STATE_STORE_PATH", filepath.Join(t.TempDir(), "oauth-state.json"))
+	t.Setenv("TENET_AUTH_IDENTITY_STORE_PATH", filepath.Join(t.TempDir(), "oauth-identities.json"))
+	t.Setenv("TENET_AUTH_SESSION_SECRET", "session-secret")
+	t.Setenv("TENET_AUTH_SESSION_COOKIE_SECURE", "true")
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, writeRepositoryFixture(t), nil)
+	if !options.AuthRuntime.TenetManagedLogin.Active {
+		t.Fatalf("expected active managed-login runtime, got %+v", options.AuthRuntime.TenetManagedLogin)
+	}
+	if !options.AuthSessionCookieSecure {
+		t.Fatalf("expected TENET_AUTH_SESSION_COOKIE_SECURE=true to force secure managed-login cookies")
 	}
 }
 

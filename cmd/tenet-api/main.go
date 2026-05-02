@@ -360,6 +360,10 @@ func operatorDeploymentReadAuthorizationEnforced() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION")), "true")
 }
 
+func authSessionCookieSecureEnabled() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("TENET_AUTH_SESSION_COOKIE_SECURE")), "true")
+}
+
 func authRuntimeDiagnosticFromEnv() api.AuthRuntimeDiagnostic {
 	provider := strings.ToLower(strings.TrimSpace(os.Getenv("TENET_AUTH_PROVIDER")))
 	settings := map[string]string{
@@ -437,6 +441,7 @@ func configureManagedLoginRuntime(options *api.Options) {
 	options.AuthIdentityStore = authidentity.NewFileStore(strings.TrimSpace(os.Getenv("TENET_AUTH_IDENTITY_STORE_PATH")))
 	options.AuthSessionSecret = strings.TrimSpace(os.Getenv("TENET_AUTH_SESSION_SECRET"))
 	options.AuthSessionCookieName = "tenet_session"
+	options.AuthSessionCookieSecure = authSessionCookieSecureEnabled()
 	options.AuthRuntime.TenetManagedLogin.Active = true
 	options.AuthRuntime.TenetManagedLogin.SessionCookieName = options.AuthSessionCookieName
 	options.AuthRuntime.TenetManagedLogin.UnavailableReason = ""

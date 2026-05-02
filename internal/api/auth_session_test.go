@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -83,6 +84,39 @@ func managedLoginTestOptions(t *testing.T, provider authprovider.Provider) (Opti
 	}, identityPath
 }
 
+func managedLoginCallbackCookie(t *testing.T, router http.Handler, mutateCallback func(*http.Request)) *http.Cookie {
+	t.Helper()
+	loginReq := httptest.NewRequest(http.MethodGet, "/auth/login/github?returnUrl=/", nil)
+	loginResp := httptest.NewRecorder()
+	router.ServeHTTP(loginResp, loginReq)
+	if loginResp.Code != http.StatusFound {
+		t.Fatalf("expected login 302, got %d: %s", loginResp.Code, loginResp.Body.String())
+	}
+	location, err := url.Parse(loginResp.Header().Get("Location"))
+	if err != nil {
+		t.Fatalf("parse login redirect: %v", err)
+	}
+	state := location.Query().Get("state")
+	if state == "" {
+		t.Fatalf("expected login redirect state, got %q", loginResp.Header().Get("Location"))
+	}
+	callbackURL := "/auth/callback/github?state=" + url.QueryEscape(state) + "&code=code-123"
+	callbackReq := httptest.NewRequest(http.MethodGet, callbackURL, nil)
+	if mutateCallback != nil {
+		mutateCallback(callbackReq)
+	}
+	callbackResp := httptest.NewRecorder()
+	router.ServeHTTP(callbackResp, callbackReq)
+	if callbackResp.Code != http.StatusFound {
+		t.Fatalf("expected callback 302, got %d: %s", callbackResp.Code, callbackResp.Body.String())
+	}
+	cookies := callbackResp.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Name != "tenet_session" {
+		t.Fatalf("expected one tenet_session cookie, got %#v", cookies)
+	}
+	return cookies[0]
+}
+
 func TestManagedGitHubLoginCallbackCreatesSessionAndAuthenticatedContext(t *testing.T) {
 	provider := &fakeAuthProvider{}
 	options, identityPath := managedLoginTestOptions(t, provider)
@@ -117,8 +151,8 @@ func TestManagedGitHubLoginCallbackCreatesSessionAndAuthenticatedContext(t *test
 		t.Fatalf("expected safe in-app redirect, got %q", got)
 	}
 	cookies := callbackResp.Result().Cookies()
-	if len(cookies) != 1 || cookies[0].Name != "tenet_session" || !cookies[0].HttpOnly {
-		t.Fatalf("expected one HttpOnly tenet_session cookie, got %#v", cookies)
+	if len(cookies) != 1 || cookies[0].Name != "tenet_session" || !cookies[0].HttpOnly || cookies[0].SameSite != http.SameSiteLaxMode {
+		t.Fatalf("expected one HttpOnly SameSite=Lax tenet_session cookie, got %#v", cookies)
 	}
 	if len(provider.exchangedCodes) != 1 || provider.exchangedCodes[0] != "code-123" {
 		t.Fatalf("expected provider exchange for callback code, got %#v", provider.exchangedCodes)
@@ -162,6 +196,49 @@ func TestManagedGitHubLoginCallbackCreatesSessionAndAuthenticatedContext(t *test
 	if !body.Actor.Available || body.Actor.ID != "github:12345" {
 		t.Fatalf("expected actor projection from session identity, got %#v", body.Actor)
 	}
+}
+
+func TestManagedGitHubLoginCallbackSecureCookieModes(t *testing.T) {
+	t.Run("local http remains usable without secure cookie", func(t *testing.T) {
+		options, _ := managedLoginTestOptions(t, &fakeAuthProvider{})
+		cookie := managedLoginCallbackCookie(t, NewRouter(options), nil)
+		if cookie.Secure {
+			t.Fatalf("expected local HTTP callback to leave cookie Secure=false, got %#v", cookie)
+		}
+		if !cookie.HttpOnly || cookie.SameSite != http.SameSiteLaxMode {
+			t.Fatalf("expected HttpOnly SameSite=Lax cookie, got %#v", cookie)
+		}
+	})
+
+	t.Run("direct https request sets secure cookie", func(t *testing.T) {
+		options, _ := managedLoginTestOptions(t, &fakeAuthProvider{})
+		cookie := managedLoginCallbackCookie(t, NewRouter(options), func(req *http.Request) {
+			req.URL.Scheme = "https"
+			req.TLS = &tls.ConnectionState{}
+		})
+		if !cookie.Secure {
+			t.Fatalf("expected HTTPS callback to set cookie Secure=true, got %#v", cookie)
+		}
+	})
+
+	t.Run("forwarded https request sets secure cookie", func(t *testing.T) {
+		options, _ := managedLoginTestOptions(t, &fakeAuthProvider{})
+		cookie := managedLoginCallbackCookie(t, NewRouter(options), func(req *http.Request) {
+			req.Header.Set("X-Forwarded-Proto", "https")
+		})
+		if !cookie.Secure {
+			t.Fatalf("expected HTTPS front-door callback to set cookie Secure=true, got %#v", cookie)
+		}
+	})
+
+	t.Run("explicit secure option sets secure cookie behind front door", func(t *testing.T) {
+		options, _ := managedLoginTestOptions(t, &fakeAuthProvider{})
+		options.AuthSessionCookieSecure = true
+		cookie := managedLoginCallbackCookie(t, NewRouter(options), nil)
+		if !cookie.Secure {
+			t.Fatalf("expected forced secure cookie option to set Secure=true, got %#v", cookie)
+		}
+	})
 }
 
 func TestManagedGitHubLoginRejectsUnsafeReturnURL(t *testing.T) {
