@@ -993,6 +993,9 @@ assert "loadOperatorContextBanner({ refresh: true });" in ui, ui
 assert 'Refresh context' in ui, ui
 assert 'Show access details' in ui, ui
 assert 'Hide access details' in ui, ui
+assert 'Role header source: ${labels[source] || labels.absent}' in ui, ui
+assert 'canonical X-Tenet-Authenticated-Roles' in ui, ui
+assert 'operatorContextRoleProvenanceClass' in ui, ui
 assert 'operator-context-details' in ui, ui
 assert 'Last refresh failed:' in ui, ui
 assert "const operatorContextFailureHeading = (error) => operatorReadFailureHeading(error);" in ui, ui
