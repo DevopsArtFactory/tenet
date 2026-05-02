@@ -1983,11 +1983,33 @@ func TestSmokeDockerScriptLocksOperatorContextRoleDiagnostics(t *testing.T) {
 		"operator_context_unsupported_roles_path=$(write_payload operator-context-unsupported-roles.json \"$operator_context_unsupported_roles\")",
 		"assert operator_context_unsupported_roles[\"roles\"][\"recognizedNames\"] == [\"viewer\"], operator_context_unsupported_roles",
 		"assert operator_context_unsupported_roles[\"roles\"][\"unrecognizedNames\"] == [\"auditor\"], operator_context_unsupported_roles",
+		"\"const operatorContextSupportedRoleHeadersLabel = (context) => {\"",
+		"\"Supported role headers: ${supportedHeaders.join(', ')} (role forwarding has no X-User-* alias)\"",
+		"\"operatorContextSupportedRoleHeadersLabel(context)\"",
 		"\"Recognized capability roles:\"",
 		"\"Unsupported forwarded roles ignored for capability checks:\"",
 	} {
 		if !strings.Contains(text, fragment) {
 			t.Fatalf("expected smoke-docker.sh to lock operator-context role diagnostic fragment %q", fragment)
+		}
+	}
+}
+
+func TestSmokeLocalScriptLocksOperatorContextRoleDiagnostics(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/smoke-local.sh")
+	if err != nil {
+		t.Fatalf("read smoke-local.sh: %v", err)
+	}
+
+	text := string(body)
+	for _, fragment := range []string{
+		"assert \"const operatorContextSupportedRoleHeadersLabel = (context) => {\" in ui, ui",
+		"assert \"Supported role headers: ${supportedHeaders.join(', ')} (role forwarding has no X-User-* alias)\" in ui, ui",
+		"assert 'operatorContextSupportedRoleHeadersLabel(context)' in ui, ui",
+		"assert 'canonical X-Tenet-Authenticated-Roles' in ui, ui",
+	} {
+		if !strings.Contains(text, fragment) {
+			t.Fatalf("expected smoke-local.sh to lock operator-context role diagnostic fragment %q", fragment)
 		}
 	}
 }
@@ -2596,6 +2618,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"additive `identityProvenance` header-source metadata",
 			"roles.provenance.source",
 			"whether the request used canonical `X-Tenet-Authenticated-*` fields or compatibility `X-User-*` aliases",
+			"the canonical supported role-header list from `roles.supportedHeaderNames` (`X-Tenet-Authenticated-Roles`, with no `X-User-*` role alias)",
 			"`deploymentAccess.summary` also reports forwarded, matched/visible, and total unmatched deployment-name counts",
 			"deterministic `projectEnvironmentExamples`",
 			"If a front door forwards stale project/environment scopes",
@@ -2712,6 +2735,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		"../../docs/features/overview-dashboard.md": {
 			"diagnostic identity header provenance (`identityProvenance.idSource` / `nameSource` / `emailSource`)",
 			"roles.provenance.source",
+			"the canonical role header list from `roles.supportedHeaderNames` in expanded `Show access details` (`X-Tenet-Authenticated-Roles`; no `X-User-*` role alias)",
 			"trusted identity header-source wiring (`canonical` for `X-Tenet-Authenticated-*`, `alias` for compatibility `X-User-*`, `absent` for missing fields)",
 			"when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION` is enabled, `GET /v1/overview/applications` requires trusted `X-Tenet-Authenticated-*` identity",
 			"diagnostic `deploymentAccess.summary` JSON that reports matched visible deployments from exact names or project/environment scopes plus total unmatched forwarded deployment-name counts",
