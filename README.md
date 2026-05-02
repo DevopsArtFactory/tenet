@@ -144,7 +144,7 @@ In `compose.yaml`, the local `api` service pins `TENET_PLAN_STORE_PATH` and `TEN
 
 ### Trusted front-door auth
 
-Front-door auth remains additive and opt-in. Tenet still expects your real authentication layer to run before requests reach the API. The shipped product currently consumes trusted forwarded identity headers; it does not run a built-in GitHub OAuth browser login, issue Tenet-managed browser sessions, or provide a pluggable OAuth/OIDC provider lifecycle yet.
+Front-door auth remains additive and opt-in. Tenet still expects your real authentication layer to run before requests reach the API. The shipped product currently consumes trusted forwarded identity headers; it does not run a built-in GitHub OAuth browser login, issue Tenet-managed browser sessions, or provide a pluggable OAuth/OIDC provider lifecycle yet. The internal `authprovider` package now provides GitHub OAuth authorization-code primitives for future integration work, but it is intentionally not wired to HTTP routes, sessions, persistent identities, or route authorization.
 
 Use these settings only when every request reaches Tenet through a front door that authenticates the caller and strips any client-supplied `X-Tenet-Authenticated-*`, `X-Tenet-Authenticated-Roles`, `X-Tenet-Authorized-Deployments`, `X-Tenet-Authorized-Projects`, `X-Tenet-Authorized-Environments`, and trusted-alias `X-User-*` headers before forwarding trusted values. Do not expose a header-trusting `tenet-api` instance directly to untrusted clients.
 

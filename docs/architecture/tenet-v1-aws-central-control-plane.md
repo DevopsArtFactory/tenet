@@ -89,7 +89,7 @@ Recommended pattern:
 - TLS termination at the ALB
 - authentication handled by your chosen front door or identity layer before the request reaches Tenet
 
-Tenet's shipped control-plane runtime consumes trusted forwarded identity headers from that layer. It does not currently run a built-in GitHub OAuth browser login, issue Tenet-managed browser sessions, or manage an OAuth/OIDC provider lifecycle inside `tenet-api`.
+Tenet's shipped control-plane runtime consumes trusted forwarded identity headers from that layer. It does not currently run a built-in GitHub OAuth browser login, issue Tenet-managed browser sessions, or manage an OAuth/OIDC provider lifecycle inside `tenet-api`. The internal `authprovider` package provides GitHub OAuth authorization-code client primitives for future integration, but the Terraform/bootstrap runtime does not expose those primitives as routes or sessions yet.
 
 The UI is embedded in `tenet-api`, so you do not need a separate frontend service.
 
