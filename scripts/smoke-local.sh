@@ -1005,8 +1005,14 @@ assert 'Supported Tenet roles: ${supported.join(\', \')}' in ui, ui
 assert 'operatorContextSupportedRolesLabel(context)' in ui, ui
 assert "const operatorContextSupportedIdentityHeadersLabel = (context) => {" in ui, ui
 assert "Supported identity headers: canonical ${canonicalText}; compatibility aliases ${aliasText}. Canonical X-Tenet-Authenticated-* identity headers are preferred when both canonical and alias values are present." in ui, ui
-assert "const operatorContextAuthenticationBoundaryLabel = () => 'Authentication boundary: this embedded shell consumes trusted front-door headers only; it does not start an in-page GitHub OAuth login, Tenet-managed browser session, or load the internal authprovider/authidentity/authstate groundwork yet.';" in ui, ui
+assert "const operatorContextAuthenticationBoundaryLabel = () => 'Authentication boundary: this embedded shell consumes trusted front-door headers only; it does not start an in-page GitHub OAuth login or Tenet-managed browser session from this page. Managed-login runtime diagnostics below are read-only until the optional login/callback/session routes are active.';" in ui, ui
 assert 'operatorContextAuthenticationBoundaryLabel()' in ui, ui
+assert "const operatorContextManagedLogin = (context) => context?.authRuntime?.tenetManagedLogin || {};" in ui, ui
+assert "const operatorContextManagedLoginStateLabel = (context) => {" in ui, ui
+assert "Managed login runtime:" in ui, ui
+assert "Managed login missing settings:" in ui, ui
+assert "Managed login storage/session:" in ui, ui
+assert "operatorContextManagedLoginClass(context)" in ui, ui
 assert 'operatorContextSupportedIdentityHeadersLabel(context)' in ui, ui
 assert "const operatorContextSupportedActorHeadersLabel = (context) => {" in ui, ui
 assert "Supported actor attribution headers: canonical ${canonicalText}; compatibility aliases ${aliasText}. Explicit X-Tenet-Actor-* actor headers win over X-User-* actor aliases; trusted authenticated identity is projected only when explicit actor context is absent; actor attribution records persisted plan/apply/audit metadata and does not authorize routes." in ui, ui

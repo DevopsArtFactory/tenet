@@ -1112,7 +1112,48 @@
         const summary = context?.enforcement?.summary || '';
         return summary ? `Enforcement summary: ${summary}` : null;
       };
-      const operatorContextAuthenticationBoundaryLabel = () => 'Authentication boundary: this embedded shell consumes trusted front-door headers only; it does not start an in-page GitHub OAuth login, Tenet-managed browser session, or load the internal authprovider/authidentity/authstate groundwork yet.';
+      const operatorContextAuthenticationBoundaryLabel = () => 'Authentication boundary: this embedded shell consumes trusted front-door headers only; it does not start an in-page GitHub OAuth login or Tenet-managed browser session from this page. Managed-login runtime diagnostics below are read-only until the optional login/callback/session routes are active.';
+      const operatorContextManagedLogin = (context) => context?.authRuntime?.tenetManagedLogin || {};
+      const operatorContextManagedLoginStateLabel = (context) => {
+        const managedLogin = operatorContextManagedLogin(context);
+        const provider = managedLogin.provider || 'unconfigured';
+        if (managedLogin.active) {
+          const route = managedLogin.loginRoute ? ` via ${managedLogin.loginRoute}` : '';
+          return `Managed login runtime: active ${provider} Tenet-managed browser login${route}`;
+        }
+        if (managedLogin.configured) {
+          return `Managed login runtime: configured for ${provider} but inactive; Tenet still expects trusted front-door recovery until login/callback/session routes are wired.`;
+        }
+        if (provider !== 'unconfigured') {
+          return `Managed login runtime: not configured for ${provider}; Tenet still expects trusted front-door recovery.`;
+        }
+        return 'Managed login runtime: not configured; Tenet still expects trusted front-door recovery.';
+      };
+      const operatorContextManagedLoginSettingsLabel = (context) => {
+        const managedLogin = operatorContextManagedLogin(context);
+        const missing = Array.isArray(managedLogin.missingSettings) ? managedLogin.missingSettings.filter(Boolean) : [];
+        const required = Array.isArray(managedLogin.requiredSettings) ? managedLogin.requiredSettings.filter(Boolean) : [];
+        if (missing.length) return `Managed login missing settings: ${missing.join(', ')}`;
+        if (required.length) return `Managed login required settings present: ${required.join(', ')}`;
+        return 'Managed login required settings: not reported';
+      };
+      const operatorContextManagedLoginStorageLabel = (context) => {
+        const managedLogin = operatorContextManagedLogin(context);
+        const parts = [
+          `state store ${managedLogin.stateStoreConfigured ? 'configured' : 'missing'}`,
+          `identity store ${managedLogin.identityStoreConfigured ? 'configured' : 'missing'}`,
+          `session secret ${managedLogin.sessionSecretConfigured ? 'configured' : 'missing'}`,
+        ];
+        if (managedLogin.callbackRoute) parts.push(`callback ${managedLogin.callbackRoute}`);
+        if (managedLogin.sessionCookieName) parts.push(`cookie ${managedLogin.sessionCookieName}`);
+        if (managedLogin.unavailableReason) parts.push(`reason ${managedLogin.unavailableReason}`);
+        return `Managed login storage/session: ${parts.join('; ')}`;
+      };
+      const operatorContextManagedLoginClass = (context) => {
+        const managedLogin = operatorContextManagedLogin(context);
+        const missing = Array.isArray(managedLogin.missingSettings) ? managedLogin.missingSettings.filter(Boolean) : [];
+        return managedLogin.active && !missing.length ? '' : 'operator-context-warning';
+      };
       const operatorContextEnforcementClass = (context) => {
         const mode = context?.enforcement?.mode || '';
         if (mode === 'trusted_front_door_read_write') return '';
@@ -1230,6 +1271,9 @@
             detailsMeta.append(createElement('span', operatorContextEnforcementClass(context), enforcementSummary));
           }
           detailsMeta.append(createElement('span', '', operatorContextAuthenticationBoundaryLabel()));
+          detailsMeta.append(createElement('span', operatorContextManagedLoginClass(context), operatorContextManagedLoginStateLabel(context)));
+          detailsMeta.append(createElement('span', operatorContextManagedLoginClass(context), operatorContextManagedLoginSettingsLabel(context)));
+          detailsMeta.append(createElement('span', operatorContextManagedLoginClass(context), operatorContextManagedLoginStorageLabel(context)));
           detailsMeta.append(createElement('span', operatorContextIdentityProvenanceClass(context), operatorContextIdentityProvenanceLabel(context)));
           const supportedIdentityHeaders = operatorContextSupportedIdentityHeadersLabel(context);
           if (supportedIdentityHeaders) {
