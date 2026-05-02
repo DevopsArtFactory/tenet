@@ -67,7 +67,7 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` trusts `X-Tenet-Authorized-Deployments`",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
-			t.Fatalf("expected local runtime trusted-front-door docs to include readable closed inline-code example %q", fragment)
+			t.Fatalf("expected local runtime trusted-front-door docs to include copyable boolean example %q", fragment)
 		}
 	}
 
@@ -82,6 +82,7 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 		"`GET /auth/login/github` creates one-time callback state",
 		"reports `GET /v1/operator/context.authRuntime.tenetManagedLogin.active=true`",
 		"When any setting is absent the runtime stays disabled",
+		"OIDC/SAML provider selection, provider-token refresh/revocation, and long-lived token lifecycle management remain future work",
 		"non-secret `requiredSettings` and `missingSettings`",
 		"Treat managed-login release coverage as two complementary checks",
 		"without live GitHub credentials",
@@ -1453,6 +1454,7 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 		"`HttpOnly`, `SameSite=Lax`",
 		"`TENET_AUTH_SESSION_COOKIE_SECURE` override",
 		"local HTTP development keeps the cookie non-`Secure`",
+		"OIDC/SAML provider selection, provider-token refresh/revocation, and long-lived token lifecycle management remain future work",
 		"The legacy `/api/v1/auth/*` route family remains unregistered.",
 		"Reviewer verification for managed-login changes should include `go test ./internal/api ./cmd/tenet-api`",
 		"go test ./internal/authprovider ./internal/authidentity ./internal/authstate",
