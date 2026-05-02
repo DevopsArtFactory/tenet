@@ -8310,6 +8310,57 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
 		runNodeHarness(t, nodeProgram)
 	})
 
+	t.Run("create plan unauthorized explains managed login handoff when active", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('operator-context', document.createElement('section'));
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const managedContext = { authRuntime: { tenetManagedLogin: { configured: true, active: true, provider: 'github', requiredSettings: ['TENET_AUTH_PROVIDER'], missingSettings: [], loginRoute: '/auth/login/github', callbackRoute: '/auth/callback/github', stateStoreConfigured: true, identityStoreConfigured: true, sessionSecretConfigured: true, sessionCookieName: 'tenet_session' } }, trustedHeaders: { enabled: true }, enforcement: { mode: 'trusted_front_door_read_write' }, identity: { authenticated: false }, roles: { canRead: false, canWrite: false }, deploymentAccess: { enforced: true, forwarded: false } };
+const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url, options = {}) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/operator/context') return Promise.resolve({ ok: true, json: () => Promise.resolve(managedContext) });
+  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/plans/deployments/api-prod') {
+    if (options.method !== 'POST') throw new Error('expected create plan POST');
+    return Promise.resolve({
+      ok: false,
+      status: 401,
+      text: () => Promise.resolve('unauthenticated: authenticated identity is required for this operator write route'),
+    });
+  }
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  await settle();
+  const root = document.getElementById('accounts');
+  const createPlan = collectNodes(root, (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Create Plan');
+  if (!createPlan) throw new Error('expected Create Plan button before managed-login unauthorized create');
+  createPlan.dispatch('click');
+  await waitForFetchCount(fetchCalls, 3);
+  if (fetchCalls.join(', ') !== '/v1/operator/context, /v1/overview/deployments/api-prod, /v1/plans/deployments/api-prod') throw new Error('unexpected fetch sequence after managed-login unauthorized create: ' + fetchCalls.join(', '));
+  if (window.location.search !== '?page=plan&deployment=api-prod') throw new Error('expected managed-login unauthorized create to preserve workspace URL, got ' + window.location.search);
+  const text = collectText(root).join(' | ');
+  if (!text.includes('Authenticated operator required')) throw new Error('expected operator-auth heading for managed-login unauthorized create');
+  if (!text.includes('Tenet-managed GitHub login is active for this API instance; sign in through /auth/login/github, then return to this same bookmarkable workspace and retry Create Plan.')) throw new Error('expected active managed-login create guidance: ' + text);
+  if (!text.includes('Trusted front-door X-Tenet-Authenticated-* identity headers still take precedence when present, and Tenet will not send the write until authenticated identity is available.')) throw new Error('expected trusted-front-door precedence reminder for managed-login create');
+  if (text.includes('Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page')) throw new Error('did not expect disabled-mode OAuth copy when managed login is active');
+  if (text.includes('Failed to create a plan preview')) throw new Error('expected managed-login unauthorized create to avoid generic fetch-error copy');
+})();
+`
+		runNodeHarness(t, nodeProgram)
+	})
+
 	t.Run("create plan forbidden explains deployment access denial", func(t *testing.T) {
 		nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;
@@ -8459,6 +8510,61 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!createPlan || !applyPlanAfter || !refreshPlan || !refreshApply) throw new Error('expected plan workspace action buttons after unauthorized apply create');
   if (createPlan.disabled || applyPlanAfter.disabled) throw new Error('expected create/apply actions to stay enabled after unauthorized apply create');
   if (refreshPlan.disabled || !refreshApply.disabled) throw new Error('expected only plan refresh enabled after unauthorized apply create');
+})();
+`
+		runNodeHarness(t, nodeProgram)
+	})
+
+	t.Run("apply create unauthorized explains managed login handoff when active", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+const planPreview = ` + string(planPreviewReadyJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('operator-context', document.createElement('section'));
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const managedContext = { authRuntime: { tenetManagedLogin: { configured: true, active: true, provider: 'github', requiredSettings: ['TENET_AUTH_PROVIDER'], missingSettings: [], loginRoute: '/auth/login/github', callbackRoute: '/auth/callback/github', stateStoreConfigured: true, identityStoreConfigured: true, sessionSecretConfigured: true, sessionCookieName: 'tenet_session' } }, trustedHeaders: { enabled: true }, enforcement: { mode: 'trusted_front_door_read_write' }, identity: { authenticated: false }, roles: { canRead: false, canWrite: false }, deploymentAccess: { enforced: true, forwarded: false } };
+const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod&planId=plan_ready_123', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url, options = {}) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/operator/context') return Promise.resolve({ ok: true, json: () => Promise.resolve(managedContext) });
+  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/plans/plan_ready_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+  if (url === '/v1/applies/plans/plan_ready_123') {
+    if (options.method !== 'POST') throw new Error('expected apply create POST');
+    return Promise.resolve({
+      ok: false,
+      status: 401,
+      text: () => Promise.resolve('unauthenticated: authenticated identity is required for this operator write route'),
+    });
+  }
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  await settle();
+  const root = document.getElementById('accounts');
+  const applyPlan = collectNodes(root, (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Apply Plan');
+  if (!applyPlan || applyPlan.disabled) throw new Error('expected Apply Plan enabled before managed-login unauthorized apply create');
+  applyPlan.dispatch('click');
+  await settle();
+  await settle();
+  await waitForFetchCount(fetchCalls, 4);
+  if (fetchCalls.join(', ') !== '/v1/operator/context, /v1/overview/deployments/api-prod, /v1/plans/plan_ready_123, /v1/applies/plans/plan_ready_123') throw new Error('unexpected fetch sequence after managed-login unauthorized apply create: ' + fetchCalls.join(', '));
+  if (window.location.search !== '?page=plan&deployment=api-prod&planId=plan_ready_123') throw new Error('expected managed-login unauthorized apply create to preserve workspace URL, got ' + window.location.search);
+  const text = collectText(root).join(' | ');
+  if (!text.includes('Authenticated operator required')) throw new Error('expected operator-auth heading for managed-login unauthorized apply create');
+  if (!text.includes('Tenet-managed GitHub login is active for this API instance; sign in through /auth/login/github, then return to this same bookmarkable workspace and retry Apply Plan.')) throw new Error('expected active managed-login apply guidance: ' + text);
+  if (!text.includes('Trusted front-door X-Tenet-Authenticated-* identity headers still take precedence when present, and Tenet will not send the write until authenticated identity is available.')) throw new Error('expected trusted-front-door precedence reminder for managed-login apply');
+  if (text.includes('Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page')) throw new Error('did not expect disabled-mode OAuth copy when managed login is active');
+  if (text.includes('Failed to create an apply request')) throw new Error('expected managed-login unauthorized apply create to avoid generic fetch-error copy');
 })();
 `
 		runNodeHarness(t, nodeProgram)

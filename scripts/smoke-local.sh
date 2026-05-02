@@ -1396,7 +1396,10 @@ assert 'Apply request actions' in ui, ui
 assert 'Plan preview approval guidance' in ui, ui
 assert 'Create Plan will POST /v1/plans/deployments/${deploymentName}, store an immutable server-authored preview, and update this workspace URL with a shareable planId.' in ui, ui
 assert 'Authenticated operator required' in ui, ui
-assert 'const operatorWriteAuthRequiredMessage = (route, action) => `Tenet rejected ${route} because authenticated identity is required on operator write routes. Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page; retry ${action} for this same bookmarkable workspace through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet sends the write.`;' in ui, ui
+assert 'const operatorWriteAuthRequiredMessage = (route, action, context = operatorContextState.context) => {' in ui, ui
+assert 'Tenet-managed GitHub login is active for this API instance; sign in through ${loginRoute}, then return to this same bookmarkable workspace and retry ${action}.' in ui, ui
+assert 'Trusted front-door X-Tenet-Authenticated-* identity headers still take precedence when present, and Tenet will not send the write until authenticated identity is available.' in ui, ui
+assert 'Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page; retry ${action} for this same bookmarkable workspace through the trusted front door' in ui, ui
 assert 'const operatorWriteForbiddenMessage = (route, action) => `Tenet rejected ${route} after recognizing the caller\x27s identity, but this operator is not authorized to ${action.toLowerCase()} for that deployment through this route. Ask a front-door/RBAC admin to authorize this deployment through either X-Tenet-Authorized-Deployments or matching X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments catalog placement, then retry ${action}. Partial, stale, or unavailable project/environment placement still fails closed, so use the Operator context banner to confirm the forwarded scopes match this deployment.`;' in ui, ui
 assert 'Operator access denied' in ui, ui
 assert "const operatorPlanPreviewReadRoute = (planId) => `GET /v1/plans/${planId || 'planId'}`;" in ui, ui
