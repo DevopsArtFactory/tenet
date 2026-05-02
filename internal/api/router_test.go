@@ -214,6 +214,9 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if !reflect.DeepEqual(operatorRead["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles"}) {
 		t.Fatalf("expected operator read trusted headers, got %#v", operatorRead["requiredTrustedHeaders"])
 	}
+	if !reflect.DeepEqual(operatorRead["acceptedRoleNames"], []any{"viewer", "operator", "admin"}) {
+		t.Fatalf("expected operator read accepted roles, got %#v", operatorRead["acceptedRoleNames"])
+	}
 	operatorWrite := accessVerdicts["operatorWrite"].(map[string]any)
 	if operatorWrite["allowed"] != true || operatorWrite["requiresOperatorRole"] != true || operatorWrite["reason"] != "guarded operator write prerequisites are satisfied for this request" {
 		t.Fatalf("expected allowed write verdict, got %#v", operatorWrite)
@@ -223,6 +226,9 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	}
 	if !reflect.DeepEqual(operatorWrite["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles"}) {
 		t.Fatalf("expected operator write trusted headers, got %#v", operatorWrite["requiredTrustedHeaders"])
+	}
+	if !reflect.DeepEqual(operatorWrite["acceptedRoleNames"], []any{"operator", "admin"}) {
+		t.Fatalf("expected operator write accepted roles, got %#v", operatorWrite["acceptedRoleNames"])
 	}
 	deploymentScopedRead := accessVerdicts["deploymentScopedRead"].(map[string]any)
 	if deploymentScopedRead["allowed"] != true || deploymentScopedRead["requiresExactDeploymentAllowlistMatch"] != true || deploymentScopedRead["acceptsProjectEnvironmentScopes"] != true || deploymentScopedRead["reason"] != "deployment-scoped reads can pass for deployments named in X-Tenet-Authorized-Deployments or matched by X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments" {

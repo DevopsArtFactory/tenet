@@ -462,6 +462,7 @@ type operatorContextAccessVerdict struct {
 	Reason                                string   `json:"reason"`
 	ExampleRoutes                         []string `json:"exampleRoutes"`
 	RequiredTrustedHeaders                []string `json:"requiredTrustedHeaders,omitempty"`
+	AcceptedRoleNames                     []string `json:"acceptedRoleNames,omitempty"`
 	RequiresAuthenticatedIdentity         bool     `json:"requiresAuthenticatedIdentity"`
 	RequiresViewerCapableRole             bool     `json:"requiresViewerCapableRole,omitempty"`
 	RequiresOperatorRole                  bool     `json:"requiresOperatorRole,omitempty"`
@@ -593,6 +594,7 @@ func operatorContextReadVerdict(options Options, identity requestactor.Authentic
 		Allowed:                       true,
 		Reason:                        "operator read routes are not enforcing trusted front-door identity for this API instance",
 		ExampleRoutes:                 cloneOperatorContextExampleRoutes(operatorContextOperatorReadExampleRoutes),
+		AcceptedRoleNames:             requestactor.AcceptedOperatorReadRoleNames(),
 		RequiresAuthenticatedIdentity: options.RequireDeploymentReadAuthorization,
 		RequiresViewerCapableRole:     options.RequireDeploymentReadAuthorization && options.RequireOperatorRoleForRead,
 	}
@@ -625,6 +627,7 @@ func operatorContextWriteVerdict(options Options, identity requestactor.Authenti
 		Allowed:                       true,
 		Reason:                        "operator write routes are not enforcing trusted front-door identity for this API instance",
 		ExampleRoutes:                 cloneOperatorContextExampleRoutes(operatorContextOperatorWriteExampleRoutes),
+		AcceptedRoleNames:             requestactor.AcceptedOperatorWriteRoleNames(),
 		RequiresAuthenticatedIdentity: identityRequired,
 		RequiresOperatorRole:          options.RequireOperatorRoleForWrite,
 	}

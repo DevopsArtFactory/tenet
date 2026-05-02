@@ -381,6 +381,18 @@ func SupportedOperatorRoleNames() []string {
 	return []string{RoleViewer, RoleOperator, RoleAdmin}
 }
 
+// AcceptedOperatorReadRoleNames returns the stable role names that satisfy
+// guarded operator read capability checks.
+func AcceptedOperatorReadRoleNames() []string {
+	return []string{RoleViewer, RoleOperator, RoleAdmin}
+}
+
+// AcceptedOperatorWriteRoleNames returns the stable role names that satisfy
+// guarded operator write capability checks.
+func AcceptedOperatorWriteRoleNames() []string {
+	return []string{RoleOperator, RoleAdmin}
+}
+
 // SupportedActorHeaderNames returns the canonical explicit actor-attribution
 // headers Tenet accepts for persisted plan/apply/audit records.
 func SupportedActorHeaderNames() []string {
