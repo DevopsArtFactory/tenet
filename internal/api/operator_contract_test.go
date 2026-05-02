@@ -70,6 +70,22 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 			t.Fatalf("expected local runtime trusted-front-door docs to include readable closed inline-code example %q", fragment)
 		}
 	}
+
+	readme := readRepoFile(t, "README.md")
+	if !strings.Contains(readme, "there is no `/auth/login`, `/auth/callback`, or `/api/v1/auth/*` route") {
+		t.Fatal("expected README auth groundwork boundary to state public auth routes are not shipped")
+	}
+	if !strings.Contains(readme, "no supported `TENET_AUTH_PROVIDER`, `TENET_GITHUB_OAUTH_CLIENT_ID`, or identity/state store path settings for the running API yet") {
+		t.Fatal("expected README auth groundwork boundary to state auth-provider runtime settings are not shipped")
+	}
+	for _, fragment := range []string{
+		"there is no `/auth/login`, `/auth/callback`, or `/api/v1/auth/*` route",
+		"runtime has no supported `TENET_AUTH_PROVIDER`, `TENET_GITHUB_OAUTH_CLIENT_ID`, or identity/state store path settings yet",
+	} {
+		if !strings.Contains(localRuntimeDoc, fragment) {
+			t.Fatalf("expected local runtime auth groundwork boundary to include %q", fragment)
+		}
+	}
 }
 
 func TestDockerUpOperatorContract(t *testing.T) {
@@ -1422,6 +1438,8 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 		"internal `authstate` package provides JSON-backed OAuth callback state groundwork with expiry and one-time consume semantics for future CSRF/state validation",
 		"does not expose those primitives as routes, sessions, trusted-front-door authorization, `TENET_*` environment settings, or a database-backed identity/session layer yet",
 		"Do not provision identity/state JSON files expecting the deployed API service to load them until a later auth-provider wiring slice documents that contract.",
+		"there is no `/auth/login`, `/auth/callback`, or `/api/v1/auth/*` endpoint",
+		"no supported `TENET_AUTH_PROVIDER`, `TENET_GITHUB_OAUTH_CLIENT_ID`, or identity/state store path settings yet",
 		"`TENET_GITHUB_WEBHOOK_SECRET`",
 		"`POST /api/v1/github/webhook`",
 		"`smoke-webhook-secret`",
