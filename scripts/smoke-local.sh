@@ -1007,6 +1007,9 @@ assert "const operatorContextSupportedIdentityHeadersLabel = (context) => {" in 
 assert "Supported identity headers: canonical ${canonicalText}; compatibility aliases ${aliasText}. Canonical X-Tenet-Authenticated-* identity headers are preferred when both canonical and alias values are present." in ui, ui
 assert "const operatorContextManagedLogin = (context) => context?.authRuntime?.tenetManagedLogin || {};" in ui, ui
 assert "const operatorContextManagedLoginActive = (context = operatorContextState.context) => {" in ui, ui
+assert 'Managed login lifecycle: OAuth callback state TTL' in ui, ui
+assert 'Managed login provider token boundary: access token stored' in ui, ui
+assert 'Managed login logout boundary: clears Tenet session cookie' in ui, ui
 assert 'Authentication boundary: Tenet-managed browser login is active for this API instance; guarded read recovery may offer a same-shell sign-in handoff while trusted front-door headers still take precedence when present.' in ui, ui
 assert 'Authentication boundary: this embedded shell consumes trusted front-door headers only; it does not start an in-page GitHub OAuth login or Tenet-managed browser session from this page unless the optional login/callback/session routes report active.' in ui, ui
 assert 'operatorContextAuthenticationBoundaryLabel(context)' in ui, ui

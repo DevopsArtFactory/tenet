@@ -1168,6 +1168,24 @@
         if (managedLogin.unavailableReason) parts.push(`reason ${managedLogin.unavailableReason}`);
         return `Managed login storage/session: ${parts.join('; ')}`;
       };
+      const operatorContextSecondsLabel = (value) => {
+        if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+          return `${value} seconds`;
+        }
+        return 'not reported';
+      };
+      const operatorContextManagedLoginLifecycleLabel = (context) => {
+        const managedLogin = operatorContextManagedLogin(context);
+        return `Managed login lifecycle: OAuth callback state TTL ${operatorContextSecondsLabel(managedLogin.oauthStateTtlSeconds)}; session cookie TTL ${operatorContextSecondsLabel(managedLogin.sessionTtlSeconds)}; session expiry ${managedLogin.sessionExpiryEnforced ? 'enforced' : 'not enforced'}`;
+      };
+      const operatorContextManagedLoginProviderTokenLabel = (context) => {
+        const managedLogin = operatorContextManagedLogin(context);
+        return `Managed login provider token boundary: access token stored ${managedLogin.providerAccessTokenStored ? 'yes' : 'no'}; access token returned ${managedLogin.providerAccessTokenReturned ? 'yes' : 'no'}; provider token refresh ${managedLogin.providerTokenRefreshSupported ? 'supported' : 'not supported'}; provider token revocation ${managedLogin.providerTokenRevocationSupported ? 'supported' : 'not supported'}`;
+      };
+      const operatorContextManagedLoginLogoutBoundaryLabel = (context) => {
+        const managedLogin = operatorContextManagedLogin(context);
+        return `Managed login logout boundary: clears Tenet session cookie ${managedLogin.logoutClearsSessionCookie ? 'yes' : 'no'}; revokes provider token ${managedLogin.logoutRevokesProviderToken ? 'yes' : 'no'}`;
+      };
       const operatorContextManagedLoginClass = (context) => {
         const managedLogin = operatorContextManagedLogin(context);
         const missing = Array.isArray(managedLogin.missingSettings) ? managedLogin.missingSettings.filter(Boolean) : [];
@@ -1293,6 +1311,9 @@
           detailsMeta.append(createElement('span', operatorContextManagedLoginClass(context), operatorContextManagedLoginStateLabel(context)));
           detailsMeta.append(createElement('span', operatorContextManagedLoginClass(context), operatorContextManagedLoginSettingsLabel(context)));
           detailsMeta.append(createElement('span', operatorContextManagedLoginClass(context), operatorContextManagedLoginStorageLabel(context)));
+          detailsMeta.append(createElement('span', '', operatorContextManagedLoginLifecycleLabel(context)));
+          detailsMeta.append(createElement('span', '', operatorContextManagedLoginProviderTokenLabel(context)));
+          detailsMeta.append(createElement('span', '', operatorContextManagedLoginLogoutBoundaryLabel(context)));
           if (operatorContextManagedLoginLogoutActive(context)) {
             detailsMeta.append(createElement('span', '', 'Tenet-managed sign-out handoff: clears only the Tenet session cookie and returns to this bookmarkable page; sign out of upstream GitHub or front-door sessions separately if needed.'));
             detailsMeta.append(createNavLink(operatorContextManagedLoginSignOutURL(context), 'Sign out of Tenet-managed browser session', '_self'));
