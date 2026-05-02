@@ -2822,6 +2822,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"the canonical role header list from `roles.supportedHeaderNames` in expanded `Show access details` / `#operator-context-access-details-panel` (`X-Tenet-Authenticated-Roles`; no `X-User-*` role alias)",
 			"trusted identity header-source wiring (`canonical` for `X-Tenet-Authenticated-*`, `alias` for compatibility `X-User-*`, `absent` for missing fields)",
 			"when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION` is enabled, `GET /v1/overview/applications` requires trusted `X-Tenet-Authenticated-*` identity",
+			"When `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION` is enabled, the same narrow read gate also applies to `GET /v1/overview/deployments/{deploymentName}/events`, `GET /v1/overview/deployments/{deploymentName}/resource-logs`, and `GET /v1/overview/deployments/{deploymentName}/resource-inspection`",
 			"Recognized-identity read `403` cards instead offer `Open Operator context details` plus `Retry current page after access update`",
 			"diagnostic `deploymentAccess.summary` JSON that reports matched visible deployments from exact names or project/environment scopes plus total unmatched forwarded deployment-name counts",
 			"deterministic project/environment examples",
