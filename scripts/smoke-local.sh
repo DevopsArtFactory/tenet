@@ -2374,6 +2374,7 @@ assert_operator_context_common(operator_context_no_roles)
 assert operator_context_no_roles['identity']['authenticated'] is True, operator_context_no_roles
 assert operator_context_no_roles['identity']['id'] == 'no-roles-321', operator_context_no_roles
 assert operator_context_no_roles['identity']['name'] == 'Missing Role Operator', operator_context_no_roles
+assert operator_context_no_roles['identityProvenance'] == {'idSource': 'canonical', 'nameSource': 'canonical', 'emailSource': 'absent'}, operator_context_no_roles
 assert operator_context_no_roles['roles'].get('names', []) == [], operator_context_no_roles
 assert operator_context_no_roles['roles']['canRead'] is False, operator_context_no_roles
 assert operator_context_no_roles['roles']['canWrite'] is False, operator_context_no_roles
