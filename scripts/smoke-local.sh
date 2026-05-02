@@ -991,6 +991,13 @@ assert 'unmatched' in ui, ui
 assert "loadOperatorContextBanner().catch(() => {});" in ui, ui
 assert "loadOperatorContextBanner({ refresh: true });" in ui, ui
 assert 'Refresh context' in ui, ui
+assert 'id="operator-context-status" role="status" aria-live="polite" aria-atomic="true"' in ui, ui
+assert '.operator-context-live { position: absolute;' in ui, ui
+assert "liveStatus.setAttribute('aria-live', 'polite');" in ui, ui
+assert "statusAnnouncement = `Operator context ready: ${summary.textContent}`;" in ui, ui
+assert "statusAnnouncement = 'Refreshing trusted front-door context…';" in ui, ui
+assert "statusAnnouncement = `Operator context refresh failed: ${failureMessage}`;" in ui, ui
+assert '<section class="operator-context" id="operator-context" aria-live="polite"' not in ui, ui
 assert 'Show access details' in ui, ui
 assert 'Hide access details' in ui, ui
 assert 'Role header source: ${labels[source] || labels.absent}' in ui, ui

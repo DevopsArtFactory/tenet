@@ -20,6 +20,14 @@ func TestEmbeddedUIRendersOperatorContextBannerSafely(t *testing.T) {
 
 	for _, fragment := range []string{
 		"id=\"operator-context\"",
+		"id=\"operator-context-status\" role=\"status\" aria-live=\"polite\" aria-atomic=\"true\"",
+		".operator-context-live { position: absolute;",
+		"liveStatus.setAttribute('role', 'status');",
+		"liveStatus.setAttribute('aria-live', 'polite');",
+		"liveStatus.setAttribute('aria-atomic', 'true');",
+		"statusAnnouncement = `Operator context ready: ${summary.textContent}`;",
+		"statusAnnouncement = 'Refreshing trusted front-door context…';",
+		"statusAnnouncement = `Operator context refresh failed: ${failureMessage}`;",
 		"const operatorContextRoute = () => '/v1/operator/context';",
 		"const operatorContextReadRoute = () => 'GET /v1/operator/context';",
 		"const operatorContextIdentityProvenanceLabel = (context) =>",
@@ -159,6 +167,7 @@ func TestEmbeddedUIRendersOperatorContextBannerSafely(t *testing.T) {
 	}
 
 	for _, unsafe := range []string{
+		"<section class=\"operator-context\" id=\"operator-context\" aria-live=\"polite\"",
 		"operatorContext.innerHTML",
 		"operator-context.innerHTML",
 	} {
