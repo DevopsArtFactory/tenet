@@ -287,8 +287,8 @@ func TestNewAPIOptionsIncludesManagedLoginRuntimeDiagnosticFromEnv(t *testing.T)
 	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, writeRepositoryFixture(t), nil)
 	managedLogin := options.AuthRuntime.TenetManagedLogin
 
-	if !managedLogin.Configured || managedLogin.Active {
-		t.Fatalf("expected configured but inactive managed-login diagnostic, got %+v", managedLogin)
+	if !managedLogin.Configured || !managedLogin.Active {
+		t.Fatalf("expected configured and active managed-login diagnostic, got %+v", managedLogin)
 	}
 	if managedLogin.Provider != "github" || managedLogin.LoginRoute != "/auth/login/github" || managedLogin.CallbackRoute != "/auth/callback/github" {
 		t.Fatalf("unexpected managed-login route/provider diagnostic: %+v", managedLogin)

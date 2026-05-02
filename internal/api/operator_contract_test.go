@@ -72,17 +72,17 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 	}
 
 	readme := readRepoFile(t, "README.md")
-	if !strings.Contains(readme, "there is no `/auth/login`, `/auth/callback`, or `/api/v1/auth/*` route") {
-		t.Fatal("expected README auth groundwork boundary to state public auth routes are not shipped")
+	if !strings.Contains(readme, "`GET /auth/login/github` creates one-time callback state") {
+		t.Fatal("expected README auth runtime boundary to state public GitHub login route is shipped")
 	}
-	if !strings.Contains(readme, "The running API now accepts an intentionally small diagnostic-only OAuth runtime configuration") {
-		t.Fatal("expected README auth groundwork boundary to state auth-provider runtime settings are diagnostic-only")
+	if !strings.Contains(readme, "reports `authRuntime.tenetManagedLogin.active=true` from `GET /v1/operator/context`") {
+		t.Fatal("expected README auth runtime boundary to state auth-provider runtime settings activate the diagnostic")
 	}
 	for _, fragment := range []string{
-		"there is no `/auth/login`, `/auth/callback`, or `/api/v1/auth/*` route",
-		"The runtime now has diagnostic-only optional OAuth settings",
-		"that only populate `GET /v1/operator/context.authRuntime.tenetManagedLogin`",
-		"non-secret `requiredSettings` and `missingSettings` arrays",
+		"`GET /auth/login/github` creates one-time callback state",
+		"reports `GET /v1/operator/context.authRuntime.tenetManagedLogin.active=true`",
+		"When any setting is absent the runtime stays disabled",
+		"non-secret `requiredSettings` and `missingSettings`",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
 			t.Fatalf("expected local runtime auth groundwork boundary to include %q", fragment)
@@ -1439,17 +1439,16 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 		"`X-Tenet-Authorized-Deployments`",
 		"strip any inbound `X-Tenet-Authenticated-*`, `X-Tenet-Authorized-Deployments`, `X-Tenet-Authorized-Projects`, `X-Tenet-Authorized-Environments`, and trusted-alias `X-User-*` headers from untrusted clients",
 		"callers can spoof operator identity or deployment access by sending those headers directly",
-		"does not currently run a built-in GitHub OAuth browser login, issue Tenet-managed browser sessions, or manage an OAuth/OIDC provider lifecycle inside `tenet-api`",
+		"can now also run an explicitly configured Tenet-managed GitHub OAuth browser login inside `tenet-api`",
 		"internal `authidentity` package provides JSON-backed normalized identity-store groundwork toward a future durable `auth_identities` table",
 		"internal `authstate` package provides JSON-backed OAuth callback state groundwork with expiry and one-time consume semantics for future CSRF/state validation",
-		"does not expose those primitives as routes, sessions, trusted-front-door authorization, or a database-backed identity/session layer yet",
-		"The deployed API can now accept diagnostic-only optional OAuth environment settings",
-		"solely so `GET /v1/operator/context` reports whether future Tenet-managed login wiring is configured",
-		"Do not provision identity/state JSON files expecting the deployed API service to load them or create sessions until a later auth-provider wiring slice documents that active route/session contract.",
-		"there is no `/auth/login`, `/auth/callback`, or `/api/v1/auth/*` endpoint",
-		"Reviewer verification for that internal OAuth/authidentity/authstate groundwork remains unit-test scoped in the central-control-plane context too",
-		"run `go test ./internal/authprovider ./internal/authidentity ./internal/authstate` when reviewing those primitives",
-		"Do not treat Terraform validation, `make smoke-docker`, or ALB/front-door smoke as coverage for the internal auth packages",
+		"exposes `GET /auth/login/github` and `GET /auth/callback/github`",
+		"reports `GET /v1/operator/context.authRuntime.tenetManagedLogin.active=true`",
+		"issues a signed `tenet_session` cookie",
+		"The legacy `/api/v1/auth/*` route family remains unregistered.",
+		"Reviewer verification for managed-login changes should include `go test ./internal/api ./cmd/tenet-api`",
+		"go test ./internal/authprovider ./internal/authidentity ./internal/authstate",
+		"unless those OAuth environment variables are supplied",
 		"`TENET_GITHUB_WEBHOOK_SECRET`",
 		"`POST /api/v1/github/webhook`",
 		"`smoke-webhook-secret`",
