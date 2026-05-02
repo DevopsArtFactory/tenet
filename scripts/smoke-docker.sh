@@ -1845,6 +1845,8 @@ def assert_operator_context_common(payload):
     canonical_actor_headers = ["X-Tenet-Actor-Id", "X-Tenet-Actor-Name", "X-Tenet-Actor-Email"]
     alias_actor_headers = ["X-User-ID", "X-User-Name", "X-User-Email"]
     role_headers = ["X-Tenet-Authenticated-Roles"]
+    read_roles = ["viewer", "operator", "admin"]
+    write_roles = ["operator", "admin"]
     allowlist_headers = ["X-Tenet-Authorized-Deployments"]
     project_environment_scope_headers = ["X-Tenet-Authorized-Projects", "X-Tenet-Authorized-Environments"]
     identity_header_support = payload.get("identityHeaderSupport") or {}
@@ -1858,22 +1860,28 @@ def assert_operator_context_common(payload):
     assert access_verdicts.get("operatorRead", {}).get("requiresViewerCapableRole") is True, payload
     assert access_verdicts.get("operatorRead", {}).get("exampleRoutes") == ["GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/catalog/deployments", "GET /v1/audit-logs"], payload
     assert access_verdicts.get("operatorRead", {}).get("requiredTrustedHeaders") == identity_headers + role_headers, payload
+    assert access_verdicts.get("operatorRead", {}).get("acceptedRoleNames") == read_roles, payload
     assert access_verdicts.get("operatorWrite", {}).get("requiresOperatorRole") is True, payload
     assert access_verdicts.get("operatorWrite", {}).get("exampleRoutes") == ["POST /v1/plans/deployments/{deploymentName}", "POST /v1/applies/plans/{planId}", "POST /v1/applies/{applyId}/transitions"], payload
     assert access_verdicts.get("operatorWrite", {}).get("requiredTrustedHeaders") == identity_headers + role_headers, payload
+    assert access_verdicts.get("operatorWrite", {}).get("acceptedRoleNames") == write_roles, payload
     assert access_verdicts.get("deploymentScopedRead", {}).get("requiresExactDeploymentAllowlistMatch") is True, payload
     assert access_verdicts.get("deploymentScopedRead", {}).get("acceptsProjectEnvironmentScopes") is True, payload
     assert access_verdicts.get("deploymentScopedRead", {}).get("exampleRoutes") == ["GET /v1/overview/deployments/{deploymentName}", "GET /v1/status/deployments/{deploymentName}", "GET /v1/audit-logs?deployment={deploymentName}"], payload
     assert access_verdicts.get("deploymentScopedRead", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers + project_environment_scope_headers, payload
+    assert access_verdicts.get("deploymentScopedRead", {}).get("acceptedRoleNames") == read_roles, payload
     assert access_verdicts.get("deploymentScopedWrite", {}).get("requiresExactDeploymentAllowlistMatch") is True, payload
     assert access_verdicts.get("deploymentScopedWrite", {}).get("acceptsProjectEnvironmentScopes") is True, payload
     assert access_verdicts.get("deploymentScopedWrite", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers + project_environment_scope_headers, payload
+    assert access_verdicts.get("deploymentScopedWrite", {}).get("acceptedRoleNames") == write_roles, payload
     assert access_verdicts.get("collectionRead", {}).get("filtersCollectionsByDeploymentAccess") is True, payload
     assert access_verdicts.get("collectionRead", {}).get("exampleRoutes") == ["GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/catalog/deployments", "GET /v1/overview/accounts", "GET /v1/audit-logs"], payload
     assert access_verdicts.get("collectionRead", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers + project_environment_scope_headers, payload
+    assert access_verdicts.get("collectionRead", {}).get("acceptedRoleNames") == read_roles, payload
     assert access_verdicts.get("catalogRead", {}).get("filtersCollectionsByDeploymentAccess") is True, payload
     assert access_verdicts.get("catalogRead", {}).get("exampleRoutes") == ["GET /v1/catalog/deployments", "GET /v1/catalog/accounts", "GET /v1/catalog/placements", "GET /v1/catalog/topology", "GET /v1/catalog/summary"], payload
     assert access_verdicts.get("catalogRead", {}).get("requiredTrustedHeaders") == identity_headers + role_headers + allowlist_headers + project_environment_scope_headers, payload
+    assert access_verdicts.get("catalogRead", {}).get("acceptedRoleNames") == read_roles, payload
 
 assert_operator_context_common(operator_context_trusted)
 assert operator_context_trusted["identity"]["authenticated"] is True, operator_context_trusted
