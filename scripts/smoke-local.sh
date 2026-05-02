@@ -1555,6 +1555,18 @@ operator_context_alias=$(curl -fsS \
   -H "X-User-Email: alias@example.com" \
   -H "X-Tenet-Authenticated-Roles: viewer" \
   "http://$HOST:$PORT/v1/operator/context")
+operator_context_actor_precedence=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-actor-789" \
+  -H "X-Tenet-Authenticated-Name: Front Door Actor" \
+  -H "X-Tenet-Authenticated-Email: frontdoor.actor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
+  -H "X-Tenet-Actor-Id: explicit-789" \
+  -H "X-Tenet-Actor-Name: Explicit Actor" \
+  -H "X-Tenet-Actor-Email: explicit.actor@example.com" \
+  -H "X-User-ID: alias-789" \
+  -H "X-User-Name: Alias Should Not Win" \
+  -H "X-User-Email: alias-should-not-win@example.com" \
+  "http://$HOST:$PORT/v1/operator/context")
 operator_context_no_allowlist=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: no-allowlist-789" \
   -H "X-Tenet-Authenticated-Name: No Allowlist Operator" \
@@ -1571,6 +1583,7 @@ operator_context_combined_access_path=$(write_payload operator-context-combined-
 operator_context_unmatched_path=$(write_payload operator-context-unmatched.json "$operator_context_unmatched")
 operator_context_stale_scopes_path=$(write_payload operator-context-stale-scopes.json "$operator_context_stale_scopes")
 operator_context_alias_path=$(write_payload operator-context-alias.json "$operator_context_alias")
+operator_context_actor_precedence_path=$(write_payload operator-context-actor-precedence.json "$operator_context_actor_precedence")
 operator_context_no_allowlist_path=$(write_payload operator-context-no-allowlist.json "$operator_context_no_allowlist")
 operator_context_no_roles_path=$(write_payload operator-context-no-roles.json "$operator_context_no_roles")
 auth_role_required_collection_status=$(curl -sS -o "$AUTH_ROLE_REQUIRED_COLLECTION_BODY" -w "%{http_code}" \
@@ -1992,6 +2005,7 @@ OPERATOR_CONTEXT_COMBINED_ACCESS_PATH="$operator_context_combined_access_path" \
 OPERATOR_CONTEXT_UNMATCHED_PATH="$operator_context_unmatched_path" \
 OPERATOR_CONTEXT_STALE_SCOPES_PATH="$operator_context_stale_scopes_path" \
 OPERATOR_CONTEXT_ALIAS_PATH="$operator_context_alias_path" \
+OPERATOR_CONTEXT_ACTOR_PRECEDENCE_PATH="$operator_context_actor_precedence_path" \
 OPERATOR_CONTEXT_NO_ALLOWLIST_PATH="$operator_context_no_allowlist_path" \
 OPERATOR_CONTEXT_NO_ROLES_PATH="$operator_context_no_roles_path" \
 ALLOWED_GUARDED_READ_PATH="$allowed_guarded_read_path" \
@@ -2099,6 +2113,8 @@ with open(os.environ['OPERATOR_CONTEXT_UNMATCHED_PATH'], encoding='utf-8') as fh
 operator_context_stale_scopes = read_json('OPERATOR_CONTEXT_STALE_SCOPES_PATH')
 with open(os.environ['OPERATOR_CONTEXT_ALIAS_PATH'], encoding='utf-8') as fh:
     operator_context_alias = json.load(fh)
+with open(os.environ['OPERATOR_CONTEXT_ACTOR_PRECEDENCE_PATH'], encoding='utf-8') as fh:
+    operator_context_actor_precedence = json.load(fh)
 with open(os.environ['OPERATOR_CONTEXT_NO_ALLOWLIST_PATH'], encoding='utf-8') as fh:
     operator_context_no_allowlist = json.load(fh)
 with open(os.environ['OPERATOR_CONTEXT_NO_ROLES_PATH'], encoding='utf-8') as fh:
@@ -2242,12 +2258,17 @@ def assert_operator_context_common(payload):
     identity_headers = ['X-Tenet-Authenticated-Id', 'X-User-ID']
     canonical_identity_headers = ['X-Tenet-Authenticated-Id', 'X-Tenet-Authenticated-Name', 'X-Tenet-Authenticated-Email']
     alias_identity_headers = ['X-User-ID', 'X-User-Name', 'X-User-Email']
+    canonical_actor_headers = ['X-Tenet-Actor-Id', 'X-Tenet-Actor-Name', 'X-Tenet-Actor-Email']
+    alias_actor_headers = ['X-User-ID', 'X-User-Name', 'X-User-Email']
     role_headers = ['X-Tenet-Authenticated-Roles']
     access_headers = ['X-Tenet-Authorized-Deployments', 'X-Tenet-Authorized-Projects', 'X-Tenet-Authorized-Environments']
     allowlist_headers = ['X-Tenet-Authorized-Deployments']
     identity_header_support = payload.get('identityHeaderSupport') or {}
+    actor_header_support = payload.get('actorHeaderSupport') or {}
     assert identity_header_support.get('canonical') == canonical_identity_headers, payload
     assert identity_header_support.get('aliases') == alias_identity_headers, payload
+    assert actor_header_support.get('canonical') == canonical_actor_headers, payload
+    assert actor_header_support.get('aliases') == alias_actor_headers, payload
     assert (payload.get('deploymentAccess') or {}).get('supportedHeaderNames') == access_headers, payload
     assert access_verdicts.get('operatorRead', {}).get('requiresAuthenticatedIdentity') is True, payload
     assert access_verdicts.get('operatorRead', {}).get('requiresViewerCapableRole') is True, payload
@@ -2276,6 +2297,14 @@ assert operator_context_trusted['identity']['id'] == 'front-door-123', operator_
 assert operator_context_trusted['identity']['name'] == 'Front Door Operator', operator_context_trusted
 assert operator_context_trusted['identity']['email'] == 'frontdoor@example.com', operator_context_trusted
 assert operator_context_trusted['identityProvenance'] == {'idSource': 'canonical', 'nameSource': 'canonical', 'emailSource': 'canonical'}, operator_context_trusted
+assert operator_context_trusted['actor']['available'] is True, operator_context_trusted
+assert operator_context_trusted['actor']['id'] == 'front-door-123', operator_context_trusted
+assert operator_context_trusted['actor']['name'] == 'Front Door Operator', operator_context_trusted
+assert operator_context_trusted['actor']['email'] == 'frontdoor@example.com', operator_context_trusted
+assert operator_context_trusted['actorProvenance'] == {'idSource': 'absent', 'nameSource': 'absent', 'emailSource': 'absent'}, operator_context_trusted
+assert operator_context_trusted['actorAttribution']['available'] is True, operator_context_trusted
+assert operator_context_trusted['actorAttribution']['source'] == 'trusted_authenticated_identity', operator_context_trusted
+assert 'trusted authenticated identity' in operator_context_trusted['actorAttribution']['summary'], operator_context_trusted
 assert operator_context_trusted['roles']['names'] == ['viewer', 'operator'], operator_context_trusted
 assert operator_context_trusted['roles']['canRead'] is True, operator_context_trusted
 assert operator_context_trusted['roles']['canWrite'] is True, operator_context_trusted
@@ -2403,6 +2432,27 @@ assert operator_context_alias['identity']['id'] == 'alias-456', operator_context
 assert operator_context_alias['identity']['name'] == 'Alias Operator', operator_context_alias
 assert operator_context_alias['identity']['email'] == 'alias@example.com', operator_context_alias
 assert operator_context_alias['identityProvenance'] == {'idSource': 'alias', 'nameSource': 'alias', 'emailSource': 'alias'}, operator_context_alias
+assert operator_context_alias['actor']['available'] is True, operator_context_alias
+assert operator_context_alias['actor']['id'] == 'alias-456', operator_context_alias
+assert operator_context_alias['actor']['name'] == 'Alias Operator', operator_context_alias
+assert operator_context_alias['actor']['email'] == 'alias@example.com', operator_context_alias
+assert operator_context_alias['actorProvenance'] == {'idSource': 'alias', 'nameSource': 'alias', 'emailSource': 'alias'}, operator_context_alias
+assert operator_context_alias['actorAttribution']['available'] is True, operator_context_alias
+assert operator_context_alias['actorAttribution']['source'] == 'explicit_actor_headers', operator_context_alias
+assert 'explicit X-Tenet-Actor-* headers' in operator_context_alias['actorAttribution']['summary'], operator_context_alias
+assert_operator_context_common(operator_context_actor_precedence)
+assert operator_context_actor_precedence['identity']['id'] == 'front-door-actor-789', operator_context_actor_precedence
+assert operator_context_actor_precedence['identity']['name'] == 'Front Door Actor', operator_context_actor_precedence
+assert operator_context_actor_precedence['identity']['email'] == 'frontdoor.actor@example.com', operator_context_actor_precedence
+assert operator_context_actor_precedence['identityProvenance'] == {'idSource': 'canonical', 'nameSource': 'canonical', 'emailSource': 'canonical'}, operator_context_actor_precedence
+assert operator_context_actor_precedence['actor']['available'] is True, operator_context_actor_precedence
+assert operator_context_actor_precedence['actor']['id'] == 'explicit-789', operator_context_actor_precedence
+assert operator_context_actor_precedence['actor']['name'] == 'Explicit Actor', operator_context_actor_precedence
+assert operator_context_actor_precedence['actor']['email'] == 'explicit.actor@example.com', operator_context_actor_precedence
+assert operator_context_actor_precedence['actorProvenance'] == {'idSource': 'canonical', 'nameSource': 'canonical', 'emailSource': 'canonical'}, operator_context_actor_precedence
+assert operator_context_actor_precedence['actorAttribution']['available'] is True, operator_context_actor_precedence
+assert operator_context_actor_precedence['actorAttribution']['source'] == 'explicit_actor_headers', operator_context_actor_precedence
+assert 'explicit X-Tenet-Actor-* headers' in operator_context_actor_precedence['actorAttribution']['summary'], operator_context_actor_precedence
 assert operator_context_alias['roles']['names'] == ['viewer'], operator_context_alias
 assert operator_context_alias['roles']['canRead'] is True, operator_context_alias
 assert operator_context_alias['roles']['canWrite'] is False, operator_context_alias
