@@ -1930,6 +1930,27 @@ func TestCISmokeWorkflowSyntaxChecksBothSmokeScriptsInFastLane(t *testing.T) {
 	}
 }
 
+func TestSmokeDockerScriptLocksOperatorContextRoleDiagnostics(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/smoke-docker.sh")
+	if err != nil {
+		t.Fatalf("read smoke-docker.sh: %v", err)
+	}
+
+	text := string(body)
+	for _, fragment := range []string{
+		"-H \"X-Tenet-Authenticated-Roles: viewer, auditor\"",
+		"operator_context_unsupported_roles_path=$(write_payload operator-context-unsupported-roles.json \"$operator_context_unsupported_roles\")",
+		"assert operator_context_unsupported_roles[\"roles\"][\"recognizedNames\"] == [\"viewer\"], operator_context_unsupported_roles",
+		"assert operator_context_unsupported_roles[\"roles\"][\"unrecognizedNames\"] == [\"auditor\"], operator_context_unsupported_roles",
+		"\"Recognized capability roles:\"",
+		"\"Unsupported forwarded roles ignored for capability checks:\"",
+	} {
+		if !strings.Contains(text, fragment) {
+			t.Fatalf("expected smoke-docker.sh to lock operator-context role diagnostic fragment %q", fragment)
+		}
+	}
+}
+
 func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	body, err := os.ReadFile("../../scripts/smoke-local.sh")
 	if err != nil {
