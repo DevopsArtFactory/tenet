@@ -151,6 +151,13 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if identity["authenticated"] != true || identity["id"] != "front-door-123" || identity["name"] != "Front Door Operator" || identity["email"] != "frontdoor@example.com" {
 		t.Fatalf("unexpected identity payload: %#v", identity)
 	}
+	identityProvenance, ok := body["identityProvenance"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected identityProvenance object, got %#v", body["identityProvenance"])
+	}
+	if identityProvenance["idSource"] != "canonical" || identityProvenance["nameSource"] != "canonical" || identityProvenance["emailSource"] != "canonical" {
+		t.Fatalf("expected canonical identity provenance, got %#v", identityProvenance)
+	}
 	roles, ok := body["roles"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected roles object, got %#v", body["roles"])
@@ -242,6 +249,107 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	}
 	if !reflect.DeepEqual(catalogRead["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles", "X-Tenet-Authorized-Deployments", "X-Tenet-Authorized-Projects", "X-Tenet-Authorized-Environments"}) {
 		t.Fatalf("expected raw catalog read trusted headers, got %#v", catalogRead["requiredTrustedHeaders"])
+	}
+}
+
+func TestRouterOperatorContextReportsIdentityProvenanceSources(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		headers         map[string]string
+		wantIDSource    string
+		wantNameSource  string
+		wantEmailSource string
+		wantIdentity    map[string]any
+	}{
+		{
+			name: "canonical only",
+			headers: map[string]string{
+				requestactor.AuthenticatedHeaderID:    "front-door-123",
+				requestactor.AuthenticatedHeaderName:  "Front Door Operator",
+				requestactor.AuthenticatedHeaderEmail: "frontdoor@example.com",
+			},
+			wantIDSource:    "canonical",
+			wantNameSource:  "canonical",
+			wantEmailSource: "canonical",
+			wantIdentity: map[string]any{
+				"authenticated": true,
+				"id":            "front-door-123",
+				"name":          "Front Door Operator",
+				"email":         "frontdoor@example.com",
+			},
+		},
+		{
+			name: "alias only",
+			headers: map[string]string{
+				requestactor.HeaderAliasID:    "alias-456",
+				requestactor.HeaderAliasName:  "Alias Operator",
+				requestactor.HeaderAliasEmail: "alias@example.com",
+			},
+			wantIDSource:    "alias",
+			wantNameSource:  "alias",
+			wantEmailSource: "alias",
+			wantIdentity: map[string]any{
+				"authenticated": true,
+				"id":            "alias-456",
+				"name":          "Alias Operator",
+				"email":         "alias@example.com",
+			},
+		},
+		{
+			name: "canonical wins over alias per field",
+			headers: map[string]string{
+				requestactor.AuthenticatedHeaderID: "front-door-123",
+				requestactor.HeaderAliasID:         "alias-456",
+				requestactor.HeaderAliasName:       "Alias Operator",
+			},
+			wantIDSource:    "canonical",
+			wantNameSource:  "alias",
+			wantEmailSource: "absent",
+			wantIdentity: map[string]any{
+				"authenticated": true,
+				"id":            "front-door-123",
+				"name":          "Alias Operator",
+			},
+		},
+		{
+			name:            "absent",
+			wantIDSource:    "absent",
+			wantNameSource:  "absent",
+			wantEmailSource: "absent",
+			wantIdentity: map[string]any{
+				"authenticated": false,
+				"reason":        requestactor.AuthenticatedIdentityUnavailableReason,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			router := NewRouter(Options{TrustAuthenticatedHeaders: true})
+			req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+			for name, value := range tc.headers {
+				req.Header.Set(name, value)
+			}
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+			}
+			var body map[string]any
+			if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode operator context response: %v", err)
+			}
+			identity := body["identity"].(map[string]any)
+			for key, want := range tc.wantIdentity {
+				if identity[key] != want {
+					t.Fatalf("identity[%s] = %#v, want %#v in %#v", key, identity[key], want, identity)
+				}
+			}
+			provenance := body["identityProvenance"].(map[string]any)
+			if provenance["idSource"] != tc.wantIDSource || provenance["nameSource"] != tc.wantNameSource || provenance["emailSource"] != tc.wantEmailSource {
+				t.Fatalf("unexpected identity provenance: %#v", provenance)
+			}
+		})
 	}
 }
 

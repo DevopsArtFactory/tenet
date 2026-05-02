@@ -339,12 +339,13 @@ var (
 )
 
 type operatorContextResponse struct {
-	TrustedHeaders   operatorContextTrustedHeaders      `json:"trustedHeaders"`
-	Enforcement      operatorContextEnforcement         `json:"enforcement"`
-	Identity         requestactor.AuthenticatedIdentity `json:"identity"`
-	Roles            operatorContextRoles               `json:"roles"`
-	DeploymentAccess operatorContextDeploymentAccess    `json:"deploymentAccess"`
-	AccessVerdicts   operatorContextAccessVerdicts      `json:"accessVerdicts"`
+	TrustedHeaders     operatorContextTrustedHeaders                `json:"trustedHeaders"`
+	Enforcement        operatorContextEnforcement                   `json:"enforcement"`
+	Identity           requestactor.AuthenticatedIdentity           `json:"identity"`
+	IdentityProvenance requestactor.AuthenticatedIdentityProvenance `json:"identityProvenance"`
+	Roles              operatorContextRoles                         `json:"roles"`
+	DeploymentAccess   operatorContextDeploymentAccess              `json:"deploymentAccess"`
+	AccessVerdicts     operatorContextAccessVerdicts                `json:"accessVerdicts"`
 }
 
 type operatorContextTrustedHeaders struct {
@@ -456,6 +457,10 @@ type operatorContextAccessVerdict struct {
 
 func buildOperatorContextResponse(r *http.Request, options Options) operatorContextResponse {
 	identity := requestactor.AuthenticatedIdentityFromContext(r.Context())
+	identityProvenance := requestactor.NormalizeAuthenticatedIdentityProvenance(requestactor.AuthenticatedIdentityProvenance{})
+	if options.TrustAuthenticatedHeaders {
+		identityProvenance = requestactor.AuthenticatedIdentityProvenanceFromHeaders(r.Header)
+	}
 	roles := requestactor.AuthenticatedRolesFromContext(r.Context())
 	deployments := requestactor.AuthorizedDeploymentsFromContext(r.Context())
 	scopes := requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context())
@@ -468,8 +473,9 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 			OperatorReadRoleEnforced:            options.RequireOperatorRoleForRead,
 			OperatorWriteRoleEnforced:           options.RequireOperatorRoleForWrite,
 		},
-		Enforcement: buildOperatorContextEnforcement(options),
-		Identity:    identity,
+		Enforcement:        buildOperatorContextEnforcement(options),
+		Identity:           identity,
+		IdentityProvenance: identityProvenance,
 		Roles: operatorContextRoles{
 			Names:    roles.Names,
 			CanRead:  roles.AllowsOperatorRead(),

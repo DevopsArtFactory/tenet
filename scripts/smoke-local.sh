@@ -2226,6 +2226,7 @@ assert operator_context_trusted['identity']['authenticated'] is True, operator_c
 assert operator_context_trusted['identity']['id'] == 'front-door-123', operator_context_trusted
 assert operator_context_trusted['identity']['name'] == 'Front Door Operator', operator_context_trusted
 assert operator_context_trusted['identity']['email'] == 'frontdoor@example.com', operator_context_trusted
+assert operator_context_trusted['identityProvenance'] == {'idSource': 'canonical', 'nameSource': 'canonical', 'emailSource': 'canonical'}, operator_context_trusted
 assert operator_context_trusted['roles']['names'] == ['viewer', 'operator'], operator_context_trusted
 assert operator_context_trusted['roles']['canRead'] is True, operator_context_trusted
 assert operator_context_trusted['roles']['canWrite'] is True, operator_context_trusted
@@ -2332,6 +2333,7 @@ assert operator_context_alias['identity']['authenticated'] is True, operator_con
 assert operator_context_alias['identity']['id'] == 'alias-456', operator_context_alias
 assert operator_context_alias['identity']['name'] == 'Alias Operator', operator_context_alias
 assert operator_context_alias['identity']['email'] == 'alias@example.com', operator_context_alias
+assert operator_context_alias['identityProvenance'] == {'idSource': 'alias', 'nameSource': 'alias', 'emailSource': 'alias'}, operator_context_alias
 assert operator_context_alias['roles']['names'] == ['viewer'], operator_context_alias
 assert operator_context_alias['roles']['canRead'] is True, operator_context_alias
 assert operator_context_alias['roles']['canWrite'] is False, operator_context_alias
