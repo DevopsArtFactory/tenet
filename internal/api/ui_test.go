@@ -1920,12 +1920,38 @@ func TestCISmokeWorkflowSyntaxChecksBothSmokeScriptsInFastLane(t *testing.T) {
 
 	dockerJob := text[dockerStart:]
 	for _, fragment := range []string{
-		"if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')",
+		"needs: docker-smoke-scope",
+		"if: needs.docker-smoke-scope.outputs.should-run == 'true'",
 		"run: bash -n scripts/smoke-docker.sh",
 		"run: make smoke-docker",
 	} {
 		if !strings.Contains(dockerJob, fragment) {
 			t.Fatalf("expected docker-smoke job to include %q", fragment)
+		}
+	}
+
+	scopeStart := strings.Index(text, "  docker-smoke-scope:")
+	if scopeStart < 0 || scopeStart <= fastStart || scopeStart >= dockerStart {
+		t.Fatalf("expected docker-smoke-scope job between fast-smoke and docker-smoke")
+	}
+	scopeJob := text[scopeStart:dockerStart]
+	for _, fragment := range []string{
+		"Docker smoke scope",
+		"fetch-depth: 0",
+		"git diff --name-only \"$BASE_SHA\" \"$HEAD_SHA\"",
+		".github/workflows/ci-smoke.yml",
+		"scripts/smoke-docker.sh",
+		"scripts/docker-up.sh",
+		"compose.yaml",
+		"cmd/tenet-api/*|cmd/tenet-api/**",
+		"cmd/tenet-controller/*|cmd/tenet-controller/**",
+		"internal/api/*|internal/api/**",
+		"internal/requestactor/*|internal/requestactor/**",
+		"internal/statusstore/*|internal/statusstore/**",
+		"Docker smoke skipped because this PR does not touch a Compose/front-door/auth/API/controller smoke surface.",
+	} {
+		if !strings.Contains(scopeJob, fragment) {
+			t.Fatalf("expected docker-smoke-scope job to include %q", fragment)
 		}
 	}
 }
@@ -2568,7 +2594,9 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"valid drill-down target but has no independent recent-log stream yet",
 			"Linux CI runners",
 			"syntax-checks both `scripts/smoke-local.sh` and `scripts/smoke-docker.sh` with `bash -n`, then runs `make smoke-local`",
-			"syntax-checks `scripts/smoke-docker.sh` with `bash -n` again before running the full `make smoke-docker` container stack",
+			"on pull requests, a cheap `docker-smoke-scope` job first checks changed paths",
+			"runs the full `make smoke-docker` container stack only when the PR touches Compose/front-door/auth/API/controller smoke surfaces",
+			"Unrelated docs-only PRs keep the cheap fast lane without the Docker stack",
 			"make smoke-docker",
 		},
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
@@ -2625,7 +2653,9 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"`aws_unavailable` / `no_log_source` unavailable payloads as expected local-runtime outcomes, including route-stable weighted target-group resources that have no independent recent-log stream",
 			"Linux CI runners with tighter environment-size limits",
 			"syntax-checks both `scripts/smoke-local.sh` and `scripts/smoke-docker.sh` with `bash -n`, then runs `make smoke-local`",
-			"syntax-checks `scripts/smoke-docker.sh` with `bash -n` again, then runs `make smoke-docker`",
+			"Pull requests first pass through a cheap `docker-smoke-scope` path filter",
+			"only PRs that touch Compose/front-door/auth/API/controller smoke surfaces",
+			"unrelated docs-only PRs on the cheap fast lane",
 			"`docker compose down --remove-orphans` even on failure",
 		},
 		"../../docs/architecture/tenet-v1-overview-ui.md": {

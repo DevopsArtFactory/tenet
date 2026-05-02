@@ -37,11 +37,75 @@ jobs:
       - name: Run local smoke test
         run: make smoke-local
 
+  docker-smoke-scope:
+    name: Docker smoke scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      should-run: ${{ steps.scope.outputs.should-run }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether Docker smoke is required
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" || ("$EVENT_NAME" == "push" && "$REF" == "refs/heads/main") ]]; then
+            echo "should-run=true" >> "$GITHUB_OUTPUT"
+            echo "Docker smoke required for $EVENT_NAME on $REF."
+            exit 0
+          fi
+
+          if [[ "$EVENT_NAME" != "pull_request" ]]; then
+            echo "should-run=false" >> "$GITHUB_OUTPUT"
+            echo "Docker smoke skipped for unsupported event $EVENT_NAME."
+            exit 0
+          fi
+
+          git diff --name-only "$BASE_SHA" "$HEAD_SHA" | tee /tmp/tenet-docker-smoke-changed-files.txt
+          should_run=false
+          while IFS= read -r changed_path; do
+            case "$changed_path" in
+              .github/workflows/ci-smoke.yml|\
+              Makefile|\
+              Dockerfile|\
+              compose.yaml|\
+              scripts/smoke-docker.sh|\
+              scripts/docker-up.sh|\
+              cmd/tenet-api/*|cmd/tenet-api/**|\
+              cmd/tenet-controller/*|cmd/tenet-controller/**|\
+              internal/api/*|internal/api/**|\
+              internal/requestactor/*|internal/requestactor/**|\
+              internal/statusstore/*|internal/statusstore/**)
+                should_run=true
+                break
+                ;;
+            esac
+          done < /tmp/tenet-docker-smoke-changed-files.txt
+
+          echo "should-run=$should_run" >> "$GITHUB_OUTPUT"
+          if [[ "$should_run" == "true" ]]; then
+            echo "Docker smoke required because this PR touches a Compose/front-door/auth/API/controller smoke surface."
+          else
+            echo "Docker smoke skipped because this PR does not touch a Compose/front-door/auth/API/controller smoke surface."
+          fi
+
   docker-smoke:
     name: Docker smoke
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    needs: docker-smoke-scope
+    if: needs.docker-smoke-scope.outputs.should-run == 'true'
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
