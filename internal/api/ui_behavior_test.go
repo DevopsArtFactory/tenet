@@ -381,6 +381,7 @@ async function render(operatorResponses) {
   if (!ready.text().includes('Project/environment scopes: projects payments, worker; environments prod')) throw new Error('expected project/environment scope summary');
   if (!ready.text().includes('Deployment access: all 2 forwarded deployments match catalog across 1 account, 1 project, 2 environments')) throw new Error('expected matched deployment access diagnostic summary');
   if (!ready.text().includes('Project/environment visibility: payments / prod / us-west-2 / 123456789012 (1 deployment) e.g. payments-api-prod; worker / prod / us-west-2 / 123456789012 (1 deployment) e.g. worker-prod')) throw new Error('expected project/environment examples in operator context banner');
+  if (!ready.text().includes('Visible deployment examples: payments-api-prod (payments / prod / us-west-2 / 123456789012, via exact deployment grant + project/environment scope); worker-prod (worker / prod / us-west-2 / 123456789012, via exact deployment grant + project/environment scope)')) throw new Error('expected visible deployment examples with placement and combined grant source');
   if (!ready.text().includes('Enforcement mode: read/write guarded')) throw new Error('expected read/write enforcement mode');
   if (!ready.text().includes('Enforcement summary: trusted front-door identity, roles, and deployment allowlists are enforcing guarded operator read/write routes')) throw new Error('expected enforcement summary');
   if (!ready.text().includes('Operator reads allowed: guarded operator read prerequisites are satisfied for this request Examples: GET /v1/overview/applications; GET /v1/status/deployments; +2 more Required trusted headers: X-Tenet-Authenticated-Id; X-User-ID; X-Tenet-Authenticated-Roles')) throw new Error('expected operator read access verdict with route examples and required headers');
@@ -436,6 +437,7 @@ async function render(operatorResponses) {
   const scopedReadOnly = await render({ ok: true, json: () => Promise.resolve(scopedReadOnlyContext) });
   if (!scopedReadOnly.text().includes('Exact deployment grants: none forwarded')) throw new Error('expected exact grants empty state when scoped reads are available without exact grants');
   if (!scopedReadOnly.text().includes('Project/environment scopes: projects payments; environments prod')) throw new Error('expected complete project/environment scope summary');
+  if (!scopedReadOnly.text().includes('Visible deployment examples: payments-api-prod (payments / prod / us-west-2 / 123456789012, via project/environment scope)')) throw new Error('expected visible deployment example to identify project/environment grant source');
   if (!scopedReadOnly.text().includes('Write scope reminder: deployment-scoped writes can pass with an exact X-Tenet-Authorized-Deployments grant or matching X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments catalog placement.')) throw new Error('expected scoped write reminder');
   const writeReminderPill = findFirst(scopedReadOnly.document.getElementById('operator-context'), (node) => String(node.className || '').includes('operator-context-warning') && node.textContent.includes('matching X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments catalog placement'));
   if (!writeReminderPill) throw new Error('expected scoped write reminder warning pill');
@@ -443,9 +445,11 @@ async function render(operatorResponses) {
   const unavailableSummary = await render({ ok: true, json: () => Promise.resolve(unavailableSummaryContext) });
   if (!unavailableSummary.text().includes('Deployment access summary unavailable: catalog placement provider is unavailable (1 forwarded)')) throw new Error('expected unavailable summary diagnostic copy');
   if (!unavailableSummary.text().includes('Project/environment visibility unavailable: catalog placement provider is unavailable')) throw new Error('expected unavailable project/environment diagnostic copy');
+  if (unavailableSummary.text().includes('Visible deployment examples:')) throw new Error('unavailable placement summary should not render visible deployment examples');
 
   const absentSummary = await render({ ok: true, json: () => Promise.resolve(absentSummaryContext) });
   if (!absentSummary.text().includes('Deployment access summary unavailable for this response')) throw new Error('expected summary-absent fallback copy');
+  if (absentSummary.text().includes('Visible deployment examples:')) throw new Error('absent placement summary should not render visible deployment examples');
 
   const refreshed = await render([
     { ok: true, json: () => Promise.resolve(firstContext) },
