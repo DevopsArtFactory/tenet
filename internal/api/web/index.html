@@ -3185,9 +3185,14 @@
       };
       const createOperatorReadFailureActions = (error) => {
         const actionBar = createElement('div', 'detail-section-actions operator-read-recovery-actions');
-        actionBar.append(createNavLink(currentBookmarkableURL(), 'Retry current page after front-door sign-in', '_self'));
+        if (operatorReadAuthRequiredState(error)) {
+          actionBar.append(createNavLink(currentBookmarkableURL(), 'Retry current page after front-door sign-in', '_self'));
+        }
         if (operatorReadForbiddenState(error)) {
-          actionBar.append(createNavLink(currentBookmarkableURL(operatorContextAccessDetailsPanelID), 'Open Operator context details', '_self'));
+          actionBar.append(
+            createNavLink(currentBookmarkableURL(operatorContextAccessDetailsPanelID), 'Open Operator context details', '_self'),
+            createNavLink(currentBookmarkableURL(), 'Retry current page after access update', '_self'),
+          );
         }
         return actionBar;
       };

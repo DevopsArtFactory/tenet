@@ -298,16 +298,25 @@ const scenarios = [
       ...collectLinks(document.getElementById('summary')),
       ...collectLinks(document.getElementById('accounts')),
     ];
-    const retryLink = links.find((link) => link.text.includes('Retry current page after front-door sign-in'));
-    if (!retryLink) throw new Error('expected retry recovery link for ' + scenario.name + ': ' + JSON.stringify(links));
-    if (retryLink.href !== '/' + initialSearch) throw new Error('expected retry link to preserve bookmarkable URL for ' + scenario.name + ', got ' + retryLink.href);
-    if (retryLink.target !== '_self') throw new Error('expected retry link to stay in same shell for ' + scenario.name);
+    const signInRetryLink = links.find((link) => link.text.includes('Retry current page after front-door sign-in'));
+    const accessRetryLink = links.find((link) => link.text.includes('Retry current page after access update'));
     const operatorContextLink = links.find((link) => link.text.includes('Open Operator context details'));
+    if (scenario.status === 401) {
+      if (!signInRetryLink) throw new Error('expected front-door sign-in retry recovery link for ' + scenario.name + ': ' + JSON.stringify(links));
+      if (signInRetryLink.href !== '/' + initialSearch) throw new Error('expected sign-in retry link to preserve bookmarkable URL for ' + scenario.name + ', got ' + signInRetryLink.href);
+      if (signInRetryLink.target !== '_self') throw new Error('expected sign-in retry link to stay in same shell for ' + scenario.name);
+      if (accessRetryLink) throw new Error('did not expect access-update retry link for auth-required scenario ' + scenario.name);
+    } else if (signInRetryLink) {
+      throw new Error('did not expect front-door sign-in retry link for recognized-identity scenario ' + scenario.name);
+    }
     if (scenario.status === 403) {
       const expectedContextHref = '/' + initialSearch + '#operator-context-access-details-panel';
       if (!operatorContextLink) throw new Error('expected operator-context recovery link for ' + scenario.name + ': ' + JSON.stringify(links));
       if (operatorContextLink.href !== expectedContextHref) throw new Error('expected operator-context recovery link for ' + scenario.name + ' to preserve query and add details hash, got ' + operatorContextLink.href);
       if (operatorContextLink.target !== '_self') throw new Error('expected operator-context recovery link to stay in same shell for ' + scenario.name);
+      if (!accessRetryLink) throw new Error('expected access-update retry link for ' + scenario.name + ': ' + JSON.stringify(links));
+      if (accessRetryLink.href !== '/' + initialSearch) throw new Error('expected access-update retry link to preserve bookmarkable URL for ' + scenario.name + ', got ' + accessRetryLink.href);
+      if (accessRetryLink.target !== '_self') throw new Error('expected access-update retry link to stay in same shell for ' + scenario.name);
     } else if (operatorContextLink) {
       throw new Error('did not expect operator-context recovery link for auth-required scenario ' + scenario.name);
     }
