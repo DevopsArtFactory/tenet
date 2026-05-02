@@ -2243,6 +2243,8 @@ assert operator_context_trusted['roles']['names'] == ['viewer', 'operator'], ope
 assert operator_context_trusted['roles']['canRead'] is True, operator_context_trusted
 assert operator_context_trusted['roles']['canWrite'] is True, operator_context_trusted
 assert operator_context_trusted['roles']['provenance']['source'] == 'canonical', operator_context_trusted
+assert operator_context_trusted['roles']['recognizedNames'] == ['viewer', 'operator'], operator_context_trusted
+assert operator_context_trusted['roles']['unrecognizedNames'] == [], operator_context_trusted
 assert operator_context_trusted['deploymentAccess']['enforced'] is True, operator_context_trusted
 assert operator_context_trusted['deploymentAccess']['forwarded'] is True, operator_context_trusted
 assert operator_context_trusted['deploymentAccess']['names'] == ['payments-api-prod', 'worker-prod'], operator_context_trusted
@@ -2351,6 +2353,8 @@ assert operator_context_alias['roles']['names'] == ['viewer'], operator_context_
 assert operator_context_alias['roles']['canRead'] is True, operator_context_alias
 assert operator_context_alias['roles']['canWrite'] is False, operator_context_alias
 assert operator_context_alias['roles']['provenance']['source'] == 'canonical', operator_context_alias
+assert operator_context_alias['roles']['recognizedNames'] == ['viewer'], operator_context_alias
+assert operator_context_alias['roles']['unrecognizedNames'] == [], operator_context_alias
 assert operator_context_alias['deploymentAccess']['enforced'] is True, operator_context_alias
 assert operator_context_alias['deploymentAccess']['forwarded'] is False, operator_context_alias
 assert 'names' not in operator_context_alias['deploymentAccess'], operator_context_alias
@@ -2362,6 +2366,8 @@ assert operator_context_no_allowlist['roles']['names'] == ['viewer'], operator_c
 assert operator_context_no_allowlist['roles']['canRead'] is True, operator_context_no_allowlist
 assert operator_context_no_allowlist['roles']['canWrite'] is False, operator_context_no_allowlist
 assert operator_context_no_allowlist['roles']['provenance']['source'] == 'canonical', operator_context_no_allowlist
+assert operator_context_no_allowlist['roles']['recognizedNames'] == ['viewer'], operator_context_no_allowlist
+assert operator_context_no_allowlist['roles']['unrecognizedNames'] == [], operator_context_no_allowlist
 assert operator_context_no_allowlist['deploymentAccess']['enforced'] is True, operator_context_no_allowlist
 assert operator_context_no_allowlist['deploymentAccess']['forwarded'] is False, operator_context_no_allowlist
 assert 'names' not in operator_context_no_allowlist['deploymentAccess'], operator_context_no_allowlist
@@ -2379,6 +2385,8 @@ assert operator_context_no_roles['roles'].get('names', []) == [], operator_conte
 assert operator_context_no_roles['roles']['canRead'] is False, operator_context_no_roles
 assert operator_context_no_roles['roles']['canWrite'] is False, operator_context_no_roles
 assert operator_context_no_roles['roles']['provenance']['source'] == 'absent', operator_context_no_roles
+assert operator_context_no_roles['roles']['recognizedNames'] == [], operator_context_no_roles
+assert operator_context_no_roles['roles']['unrecognizedNames'] == [], operator_context_no_roles
 no_roles_verdicts = operator_context_no_roles['accessVerdicts']
 assert no_roles_verdicts['operatorRead']['allowed'] is False, operator_context_no_roles
 assert no_roles_verdicts['operatorRead']['reason'] == 'authenticated viewer-capable role is required for guarded operator read routes', operator_context_no_roles
