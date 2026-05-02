@@ -189,6 +189,9 @@
       let auditLogsPageState = { status: 'idle', route: '', result: null, error: null, promise: null, requestId: 0 };
       let operatorContextState = { status: 'idle', context: null, error: null, refreshing: false };
       let operatorContextDetailsOpen = false;
+      let operatorContextDetailsDeepLinkAppliedForHash = '';
+      const operatorContextSectionID = 'operator-context';
+      const operatorContextAccessDetailsPanelID = 'operator-context-access-details-panel';
       let allAccounts = [];
       let allApplications = [];
       let applicationsOverviewState = null;
@@ -760,6 +763,31 @@
       };
       const operatorContextRoute = () => '/v1/operator/context';
       const operatorContextReadRoute = () => 'GET /v1/operator/context';
+      const operatorContextAccessDetailsHashTarget = () => {
+        const targetID = currentHashTargetID();
+        return targetID === operatorContextAccessDetailsPanelID || targetID === operatorContextSectionID ? targetID : '';
+      };
+      const applyOperatorContextAccessDetailsDeepLink = ({ force = false } = {}) => {
+        const targetID = operatorContextAccessDetailsHashTarget();
+        if (!targetID) return false;
+        if (!force && operatorContextDetailsDeepLinkAppliedForHash === targetID) return false;
+        operatorContextDetailsOpen = true;
+        operatorContextDetailsDeepLinkAppliedForHash = targetID;
+        return true;
+      };
+      const focusOperatorContextAccessDetailsDeepLink = () => {
+        const targetID = operatorContextAccessDetailsHashTarget();
+        if (!targetID) return;
+        const focusTarget = document.getElementById(targetID === operatorContextSectionID ? operatorContextSectionID : operatorContextAccessDetailsPanelID);
+        if (!(focusTarget instanceof HTMLElement)) return;
+        if (targetID === operatorContextAccessDetailsPanelID && !focusTarget.getAttribute('tabindex')) {
+          focusTarget.setAttribute('tabindex', '-1');
+        }
+        if (typeof focusTarget.focus === 'function') {
+          focusTarget.focus({ preventScroll: true });
+        }
+        scrollToCurrentHashTarget();
+      };
       const operatorContextIdentityLabel = (context) => {
         const identity = context?.identity || {};
         if (!identity.authenticated) return 'No trusted operator identity forwarded';
@@ -1254,7 +1282,8 @@
           });
           if (detailsMeta.children.length) {
             const details = createElement('details', 'operator-context-details');
-            const detailsPanelID = 'operator-context-access-details-panel';
+            const detailsPanelID = operatorContextAccessDetailsPanelID;
+            applyOperatorContextAccessDetailsDeepLink();
             const summaryToggle = createElement('summary', '', '');
             const syncAccessDetailsSummary = () => {
               summaryToggle.textContent = operatorContextDetailsOpen ? 'Hide access details' : 'Show access details';
@@ -1288,6 +1317,9 @@
         liveStatus.textContent = statusAnnouncement;
         head.append(summary);
         root.replaceChildren(head, liveStatus, meta, ...detailNodes);
+        if (operatorContextAccessDetailsHashTarget()) {
+          focusOperatorContextAccessDetailsDeepLink();
+        }
       };
       const loadOperatorContextBanner = ({ refresh = false } = {}) => {
         if (!document.getElementById('operator-context')) return Promise.resolve(null);
@@ -1815,6 +1847,11 @@
       };
       if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
         window.addEventListener('hashchange', () => {
+          if (operatorContextAccessDetailsHashTarget()) {
+            applyOperatorContextAccessDetailsDeepLink({ force: true });
+            renderOperatorContextBanner();
+            return;
+          }
           if (currentPageState.page !== 'application' && currentPageState.page !== 'account' && currentPageState.page !== 'resource' && currentPageState.page !== 'drift' && currentPageState.page !== 'plan' && currentPageState.page !== 'audit') return;
           syncActiveResourceQuickNav();
           scrollToCurrentHashTarget();
@@ -5018,8 +5055,8 @@
       const operatorReadForbiddenState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 403;
       const operatorReadRoleRequiredState = (error) => operatorReadForbiddenState(error) && String(error?.message || '').includes('authenticated viewer-capable role is required for this operator read route');
       const operatorReadAuthRequiredMessage = (route) => `Tenet rejected ${route} because authenticated identity is required on this operator read route. Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page; reopen or sign in through the trusted front door for this same bookmarkable URL so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.`;
-      const operatorReadRoleRequiredMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity because this operator read route requires a trusted forwarded viewer/operator/admin role. Open Operator context, expand Show access details, and check roles.provenance.source, roles.canRead, and the forwarded X-Tenet-Authenticated-Roles value; ask the front-door/RBAC admin to forward viewer, operator, or admin, then retry this same bookmarkable page.`;
-      const operatorReadForbiddenMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized for that route or deployment. Open Operator context, expand Show access details, and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.`;
+      const operatorReadRoleRequiredMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity because this operator read route requires a trusted forwarded viewer/operator/admin role. Open Operator context details (#operator-context-access-details-panel) and check roles.provenance.source, roles.canRead, and the forwarded X-Tenet-Authenticated-Roles value; ask the front-door/RBAC admin to forward viewer, operator, or admin, then retry this same bookmarkable page.`;
+      const operatorReadForbiddenMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.`;
       const operatorReadFailureHeading = (error) => {
         if (operatorReadAuthRequiredState(error)) {
           return 'Authenticated operator required';
