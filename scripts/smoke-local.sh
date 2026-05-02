@@ -1007,7 +1007,7 @@ assert 'canonical X-Tenet-Authenticated-Roles' in ui, ui
 assert 'operatorContextRoleProvenanceClass' in ui, ui
 assert 'Recognized capability roles:' in ui, ui
 assert 'Unsupported forwarded roles ignored for capability checks:' in ui, ui
-assert 'to grant Tenet read/write capabilities.' in ui, ui
+assert 'for read capability; forward operator or admin for write capability.' in ui, ui
 assert 'operatorContextUnsupportedRolesClass' in ui, ui
 assert 'operator-context-details' in ui, ui
 assert 'Last refresh failed:' in ui, ui
