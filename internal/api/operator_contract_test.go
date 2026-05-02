@@ -83,6 +83,8 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 		"reports `GET /v1/operator/context.authRuntime.tenetManagedLogin.active=true`",
 		"When any setting is absent the runtime stays disabled",
 		"non-secret `requiredSettings` and `missingSettings`",
+		"Treat managed-login release coverage as two complementary checks",
+		"without live GitHub credentials",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
 			t.Fatalf("expected local runtime auth groundwork boundary to include %q", fragment)

@@ -364,7 +364,8 @@ type AuthRuntimeDiagnostic struct {
 }
 
 // TenetManagedLoginDiagnostic reports whether opt-in Tenet-managed browser login is configured.
-// Active remains false until login/callback/session routes are wired in a later slice.
+// Active is true only when the current API process has complete non-secret runtime
+// settings, provider/session wiring, and no missing settings for the login routes.
 type TenetManagedLoginDiagnostic struct {
 	Configured              bool     `json:"configured"`
 	Active                  bool     `json:"active"`
@@ -608,7 +609,7 @@ func normalizeAuthRuntimeDiagnostic(diagnostic AuthRuntimeDiagnostic) AuthRuntim
 }
 
 // RequiredTenetManagedLoginSettings returns the stable non-secret runtime settings
-// needed before Tenet-managed GitHub login can become active in a later slice.
+// needed before Tenet-managed GitHub login can become active for this API process.
 func RequiredTenetManagedLoginSettings() []string {
 	return []string{
 		"TENET_AUTH_PROVIDER",
