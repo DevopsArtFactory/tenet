@@ -8,3 +8,5 @@ It deliberately returns only the desired-state identity and placement guardrail 
 - allowed regions
 
 This keeps the API useful for early account topology and placement views while richer account health and credential-status endpoints are still being built.
+
+When `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION` is enabled, this collection uses the same trusted front-door read contract as the operator overview routes. Accounts are derived from visible deployment placements only, so stale or unmatched forwarded allowlists fail closed with an empty `[]` rather than exposing every account in the raw catalog.

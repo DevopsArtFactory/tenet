@@ -286,6 +286,7 @@ var (
 	operatorContextOperatorReadExampleRoutes = []string{
 		"GET /v1/overview/applications",
 		"GET /v1/status/deployments",
+		"GET /v1/catalog/deployments",
 		"GET /v1/audit-logs",
 	}
 	operatorContextOperatorWriteExampleRoutes = []string{
@@ -306,6 +307,7 @@ var (
 	operatorContextCollectionReadExampleRoutes = []string{
 		"GET /v1/overview/applications",
 		"GET /v1/status/deployments",
+		"GET /v1/catalog/deployments",
 		"GET /v1/overview/accounts",
 		"GET /v1/audit-logs",
 	}
@@ -905,6 +907,111 @@ func filterAuthorizedDeploymentOverviews(deployments []catalog.DeploymentOvervie
 	return filtered
 }
 
+func filterAuthorizedCatalogDeployments(deployments []catalog.DeploymentView, visible map[string]struct{}, enabled bool) []catalog.DeploymentView {
+	if !enabled {
+		return deployments
+	}
+	filtered := make([]catalog.DeploymentView, 0, len(deployments))
+	for _, deployment := range deployments {
+		if _, ok := visible[deployment.Name]; ok {
+			filtered = append(filtered, deployment)
+		}
+	}
+	return filtered
+}
+
+func filterAuthorizedCatalogPlacements(placements []catalog.PlacementView, visible map[string]struct{}, enabled bool) []catalog.PlacementView {
+	if !enabled {
+		return placements
+	}
+	filtered := make([]catalog.PlacementView, 0, len(placements))
+	for _, placement := range placements {
+		if _, ok := visible[placement.DeploymentName]; ok {
+			filtered = append(filtered, placement)
+		}
+	}
+	return filtered
+}
+
+func filterAuthorizedCatalogAccounts(accounts []catalog.AccountView, placements []catalog.PlacementView, visible map[string]struct{}, enabled bool) []catalog.AccountView {
+	if !enabled {
+		return accounts
+	}
+	visibleAccounts := make(map[string]struct{})
+	for _, placement := range filterAuthorizedCatalogPlacements(placements, visible, enabled) {
+		if placement.AccountName != "" {
+			visibleAccounts[placement.AccountName] = struct{}{}
+		}
+		if placement.AWSAccountID != "" {
+			visibleAccounts[placement.AWSAccountID] = struct{}{}
+		}
+	}
+	filtered := make([]catalog.AccountView, 0, len(accounts))
+	for _, account := range accounts {
+		if _, ok := visibleAccounts[account.Name]; ok {
+			filtered = append(filtered, account)
+			continue
+		}
+		if _, ok := visibleAccounts[account.AWSAccountID]; ok {
+			filtered = append(filtered, account)
+		}
+	}
+	return filtered
+}
+
+func filterAuthorizedCatalogEnvironments(environments []catalog.EnvironmentView, placements []catalog.PlacementView, visible map[string]struct{}, enabled bool) []catalog.EnvironmentView {
+	if !enabled {
+		return environments
+	}
+	visibleEnvironments := make(map[string]struct{})
+	for _, placement := range filterAuthorizedCatalogPlacements(placements, visible, enabled) {
+		if placement.EnvironmentRef != "" {
+			visibleEnvironments[placement.EnvironmentRef] = struct{}{}
+		}
+	}
+	filtered := make([]catalog.EnvironmentView, 0, len(environments))
+	for _, environment := range environments {
+		if _, ok := visibleEnvironments[environment.Name]; ok {
+			filtered = append(filtered, environment)
+		}
+	}
+	return filtered
+}
+
+func summarizeCatalogTopology(topology catalog.TopologySnapshot) catalog.Summary {
+	return catalog.Summary{
+		AccountCount:     len(topology.Accounts),
+		EnvironmentCount: len(topology.Environments),
+		DeploymentCount:  len(topology.Deployments),
+	}
+}
+
+func filterAuthorizedCatalogTopology(topology catalog.TopologySnapshot, visible map[string]struct{}, enabled bool) catalog.TopologySnapshot {
+	if !enabled {
+		return topology
+	}
+	topology.Deployments = filterAuthorizedCatalogDeployments(topology.Deployments, visible, enabled)
+	topology.Placements = filterAuthorizedCatalogPlacements(topology.Placements, visible, enabled)
+	topology.Accounts = filterAuthorizedCatalogAccounts(topology.Accounts, topology.Placements, visible, enabled)
+	topology.Environments = filterAuthorizedCatalogEnvironments(topology.Environments, topology.Placements, visible, enabled)
+	topology.Summary = summarizeCatalogTopology(topology)
+	return topology
+}
+
+func filteredCatalogPlacementsForAuthorization(ctx context.Context, options Options, visible map[string]struct{}) ([]catalog.PlacementView, bool) {
+	if !options.RequireDeploymentReadAuthorization {
+		return nil, false
+	}
+	if options.CatalogPlacements == nil {
+		return nil, true
+	}
+	placements, err := options.CatalogPlacements(ctx)
+	if err != nil {
+		return nil, true
+	}
+	return filterAuthorizedCatalogPlacements(placements, visible, true), true
+}
+
 func filterAuthorizedStatusSnapshots(snapshots []statusstore.Snapshot, visible map[string]struct{}, enabled bool) []statusstore.Snapshot {
 	if !enabled {
 		return snapshots
@@ -1148,6 +1255,29 @@ func NewRouter(options Options) http.Handler {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
+		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
+			return
+		}
+		if options.RequireDeploymentReadAuthorization {
+			if options.CatalogTopology == nil {
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(catalog.Summary{})
+				return
+			}
+			topology, err := options.CatalogTopology(r.Context())
+			if err != nil {
+				respondReadProviderError(w, err, "catalog summary unavailable")
+				return
+			}
+			topology = filterAuthorizedCatalogTopology(
+				topology,
+				authorizedDeploymentNameSet(r.Context(), options, requestactor.AuthorizedDeploymentsFromContext(r.Context()), requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context())),
+				true,
+			)
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(topology.Summary)
+			return
+		}
 		if options.CatalogSummary == nil {
 			http.Error(w, "catalog summary unavailable", http.StatusServiceUnavailable)
 			return
@@ -1164,6 +1294,9 @@ func NewRouter(options Options) http.Handler {
 		if !requireMethod(w, r, http.MethodGet) {
 			return
 		}
+		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
+			return
+		}
 		if options.CatalogDeployments == nil {
 			http.Error(w, "catalog deployments unavailable", http.StatusServiceUnavailable)
 			return
@@ -1173,11 +1306,19 @@ func NewRouter(options Options) http.Handler {
 			respondReadProviderError(w, err, "catalog deployments unavailable")
 			return
 		}
+		deployments = filterAuthorizedCatalogDeployments(
+			deployments,
+			authorizedDeploymentNameSet(r.Context(), options, requestactor.AuthorizedDeploymentsFromContext(r.Context()), requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context())),
+			options.RequireDeploymentReadAuthorization,
+		)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(deployments)
 	})
 	mux.HandleFunc("/v1/catalog/environments", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
 			return
 		}
 		if options.CatalogEnvironments == nil {
@@ -1189,11 +1330,18 @@ func NewRouter(options Options) http.Handler {
 			respondReadProviderError(w, err, "catalog environments unavailable")
 			return
 		}
+		visible := authorizedDeploymentNameSet(r.Context(), options, requestactor.AuthorizedDeploymentsFromContext(r.Context()), requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context()))
+		if placements, ok := filteredCatalogPlacementsForAuthorization(r.Context(), options, visible); ok {
+			environments = filterAuthorizedCatalogEnvironments(environments, placements, visible, true)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(environments)
 	})
 	mux.HandleFunc("/v1/catalog/accounts", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
 			return
 		}
 		if options.CatalogAccounts == nil {
@@ -1205,11 +1353,18 @@ func NewRouter(options Options) http.Handler {
 			respondReadProviderError(w, err, "catalog accounts unavailable")
 			return
 		}
+		visible := authorizedDeploymentNameSet(r.Context(), options, requestactor.AuthorizedDeploymentsFromContext(r.Context()), requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context()))
+		if placements, ok := filteredCatalogPlacementsForAuthorization(r.Context(), options, visible); ok {
+			accounts = filterAuthorizedCatalogAccounts(accounts, placements, visible, true)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(accounts)
 	})
 	mux.HandleFunc("/v1/catalog/placements", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
 			return
 		}
 		if options.CatalogPlacements == nil {
@@ -1221,11 +1376,19 @@ func NewRouter(options Options) http.Handler {
 			respondReadProviderError(w, err, "catalog placements unavailable")
 			return
 		}
+		placements = filterAuthorizedCatalogPlacements(
+			placements,
+			authorizedDeploymentNameSet(r.Context(), options, requestactor.AuthorizedDeploymentsFromContext(r.Context()), requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context())),
+			options.RequireDeploymentReadAuthorization,
+		)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(placements)
 	})
 	mux.HandleFunc("/v1/catalog/topology", func(w http.ResponseWriter, r *http.Request) {
 		if !requireMethod(w, r, http.MethodGet) {
+			return
+		}
+		if !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
 			return
 		}
 		if options.CatalogTopology == nil {
@@ -1237,6 +1400,11 @@ func NewRouter(options Options) http.Handler {
 			respondReadProviderError(w, err, "catalog topology unavailable")
 			return
 		}
+		topology = filterAuthorizedCatalogTopology(
+			topology,
+			authorizedDeploymentNameSet(r.Context(), options, requestactor.AuthorizedDeploymentsFromContext(r.Context()), requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context())),
+			options.RequireDeploymentReadAuthorization,
+		)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(topology)
 	})
