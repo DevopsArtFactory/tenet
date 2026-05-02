@@ -157,7 +157,7 @@ const scenarios = [
     expected: [
       'Applications overview',
       'Operator access denied',
-      'Tenet rejected GET /v1/overview/applications after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context, expand Show access details, and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.',
+      'Tenet rejected GET /v1/overview/applications after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.',
     ],
     unexpected: 'Failed to load overview:',
   },
@@ -171,7 +171,7 @@ const scenarios = [
       'Applications overview',
       'Viewer role required',
       'Tenet rejected GET /v1/overview/applications after recognizing the caller\'s identity because this operator read route requires a trusted forwarded viewer/operator/admin role.',
-      'Open Operator context, expand Show access details, and check roles.provenance.source, roles.canRead, and the forwarded X-Tenet-Authenticated-Roles value; ask the front-door/RBAC admin to forward viewer, operator, or admin, then retry this same bookmarkable page.',
+      'Open Operator context details (#operator-context-access-details-panel) and check roles.provenance.source, roles.canRead, and the forwarded X-Tenet-Authenticated-Roles value; ask the front-door/RBAC admin to forward viewer, operator, or admin, then retry this same bookmarkable page.',
     ],
     unexpected: 'Failed to load overview:',
   },
@@ -198,7 +198,7 @@ const scenarios = [
     expected: [
       'Account detail',
       'Operator access denied',
-      'Tenet rejected GET /v1/overview/accounts/210987654321 after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context, expand Show access details, and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.',
+      'Tenet rejected GET /v1/overview/accounts/210987654321 after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.',
     ],
     unexpected: 'Failed to load overview:',
   },
@@ -223,7 +223,7 @@ const scenarios = [
     body: 'forbidden: operator does not have access to this deployment',
     expected: [
       'Operator access denied',
-      'Tenet rejected GET /v1/overview/deployments/api-prod after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context, expand Show access details, and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.',
+      'Tenet rejected GET /v1/overview/deployments/api-prod after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.',
     ],
     unexpected: 'Failed to load overview:',
   },
@@ -248,7 +248,7 @@ const scenarios = [
     body: 'forbidden: operator does not have access to this deployment',
     expected: [
       'Operator access denied',
-      'Tenet rejected GET /v1/audit-logs?deployment=api-prod&action=apply.requested&limit=2 after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context, expand Show access details, and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.',
+      'Tenet rejected GET /v1/audit-logs?deployment=api-prod&action=apply.requested&limit=2 after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.',
     ],
     unexpected: 'Failed to load audit log:',
   },
@@ -314,9 +314,10 @@ class Element {
   replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
   addEventListener(type, handler) { this.listeners[type] = handler; }
   dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
-  setAttribute(name, value) { this.attributes[name] = String(value); }
+  setAttribute(name, value) { this.attributes[name] = String(value); if (name === 'id') { this.id = String(value); if (this.ownerDocument?.byID) this.ownerDocument.byID.set(String(value), this); } }
   getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
   focus() { this.ownerDocument.activeElement = this; }
+  scrollIntoView() { this.scrolledIntoView = true; }
 }
 class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
 class Document {
@@ -336,7 +337,7 @@ const findFirst = (node, predicate) => {
   }
   return null;
 };
-async function render(operatorResponses) {
+async function render(operatorResponses, initialHash = '') {
   const document = new Document();
   document.byID.set('operator-context', document.createElement('section'));
   document.byID.set('toolbar', document.createElement('section'));
@@ -344,8 +345,13 @@ async function render(operatorResponses) {
   document.byID.set('accounts', document.createElement('section'));
   const fetchCalls = [];
   const responses = Array.isArray(operatorResponses) ? operatorResponses.slice() : [operatorResponses];
-  const window = { location: { pathname: '/', search: '', hash: '' } };
-  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  const window = {
+    location: { pathname: '/', search: '', hash: initialHash },
+    listeners: {},
+    addEventListener(type, handler) { this.listeners[type] = handler; },
+    dispatchHashChange() { if (this.listeners.hashchange) this.listeners.hashchange({ type: 'hashchange' }); },
+  };
+  const history = { replaceState(_state, _title, url) { const [pathAndQuery, hash = ''] = String(url).split('#'); const [pathname, query = ''] = pathAndQuery.split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; window.location.hash = hash ? '#' + hash : ''; } };
   const fetch = (url) => {
     fetchCalls.push(String(url));
     if (url === '/v1/operator/context') return Promise.resolve(responses.shift());
@@ -445,6 +451,32 @@ async function render(operatorResponses) {
   if (ready.compactText().includes('Required trusted headers:')) throw new Error('required trusted headers should stay inside expanded access details');
   if (!ready.detailsText().includes('Visible deployment examples: payments-api-prod')) throw new Error('expected visible deployment examples inside expanded access details');
   if (!ready.detailsText().includes('Required trusted headers: X-Tenet-Authenticated-Id')) throw new Error('expected required trusted headers inside expanded access details');
+
+  const deepLinked = await render({ ok: true, json: () => Promise.resolve(firstContext) }, '#operator-context-access-details-panel');
+  if (!deepLinked.details().open) throw new Error('operator context access details should open from #operator-context-access-details-panel');
+  if (!deepLinked.detailsText().includes('Hide access details')) throw new Error('expected deep-linked details summary copy to show expanded state');
+  const deepLinkedDetailsSummary = findFirst(deepLinked.details(), (node) => node.tagName === 'SUMMARY');
+  const deepLinkedDetailsPanel = findFirst(deepLinked.details(), (node) => node.getAttribute && node.getAttribute('id') === 'operator-context-access-details-panel');
+  if (!deepLinkedDetailsSummary || deepLinkedDetailsSummary.getAttribute('aria-expanded') !== 'true') throw new Error('expected deep-linked summary aria-expanded=true');
+  if (deepLinked.document.activeElement !== deepLinkedDetailsPanel) throw new Error('expected deep-linked access diagnostics panel to receive focus');
+  if (deepLinkedDetailsPanel.getAttribute('tabindex') !== '-1') throw new Error('expected deep-linked access diagnostics panel to be programmatically focusable');
+  deepLinked.details().open = false;
+  deepLinked.details().dispatch('toggle');
+  deepLinked.refresh().dispatch('click');
+  await settle();
+  if (deepLinked.details().open) throw new Error('manual collapse should survive refresh even when the access-details hash remains present');
+
+  const sectionDeepLinked = await render({ ok: true, json: () => Promise.resolve(firstContext) }, '#operator-context');
+  if (!sectionDeepLinked.details().open) throw new Error('operator context access details should also open from #operator-context');
+  if (sectionDeepLinked.document.activeElement !== sectionDeepLinked.document.getElementById('operator-context')) throw new Error('expected #operator-context deep link to focus the banner section');
+
+  const hashChanged = await render({ ok: true, json: () => Promise.resolve(firstContext) });
+  if (hashChanged.details().open) throw new Error('hash-change scenario should start compact without a details hash');
+  hashChanged.window.location.hash = '#operator-context-access-details-panel';
+  hashChanged.window.dispatchHashChange();
+  if (!hashChanged.details().open) throw new Error('hashchange should open operator context access details');
+  if (hashChanged.document.activeElement?.getAttribute('id') !== 'operator-context-access-details-panel') throw new Error('hashchange should focus operator context access diagnostics panel');
+
   ready.details().open = true;
   ready.details().dispatch('toggle');
   if (!ready.detailsText().includes('Hide access details')) throw new Error('expected expanded details summary copy');
@@ -571,11 +603,11 @@ async function render(operatorResponses) {
 
   const roleRequired = await render({ ok: false, status: 403, text: () => Promise.resolve('authenticated viewer-capable role is required for this operator read route') });
   if (!roleRequired.text().includes('Viewer role required')) throw new Error('expected role-required operator context heading');
-  if (!roleRequired.text().includes('Tenet rejected GET /v1/operator/context after recognizing the caller\'s identity because this operator read route requires a trusted forwarded viewer/operator/admin role. Open Operator context, expand Show access details, and check roles.provenance.source, roles.canRead, and the forwarded X-Tenet-Authenticated-Roles value; ask the front-door/RBAC admin to forward viewer, operator, or admin, then retry this same bookmarkable page.')) throw new Error('expected role-required operator context recovery guidance');
+  if (!roleRequired.text().includes('Tenet rejected GET /v1/operator/context after recognizing the caller\'s identity because this operator read route requires a trusted forwarded viewer/operator/admin role. Open Operator context details (#operator-context-access-details-panel) and check roles.provenance.source, roles.canRead, and the forwarded X-Tenet-Authenticated-Roles value; ask the front-door/RBAC admin to forward viewer, operator, or admin, then retry this same bookmarkable page.')) throw new Error('expected role-required operator context recovery guidance');
 
   const forbidden = await render({ ok: false, status: 403, text: () => Promise.resolve('deployment access denied') });
   if (!forbidden.text().includes('Operator access denied')) throw new Error('expected forbidden operator context heading');
-  if (!forbidden.text().includes('Tenet rejected GET /v1/operator/context after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context, expand Show access details, and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.')) throw new Error('expected forbidden operator context recovery guidance');
+  if (!forbidden.text().includes('Tenet rejected GET /v1/operator/context after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.')) throw new Error('expected forbidden operator context recovery guidance');
 
   const unavailable = await render({ ok: false, status: 503, text: () => Promise.resolve('operator context provider unavailable') });
   if (!unavailable.text().includes('Operator context unavailable')) throw new Error('expected unavailable operator context state');
@@ -3703,7 +3735,7 @@ async function render(fetchImpl) {
   });
   const forbiddenText = collectText(forbiddenView.document.getElementById('accounts')).join(' | ');
   if (!forbiddenText.includes('Operator access denied')) throw new Error('expected operator access-denied heading for deployment events');
-  if (!forbiddenText.includes('Tenet rejected GET /v1/overview/deployments/payments-api-staging/events after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context, expand Show access details, and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.')) throw new Error('expected operator access-denied guidance for deployment events 403');
+  if (!forbiddenText.includes('Tenet rejected GET /v1/overview/deployments/payments-api-staging/events after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.')) throw new Error('expected operator access-denied guidance for deployment events 403');
   if (forbiddenText.includes('Failed to load controller runtime events:')) throw new Error('expected deployment events 403 to replace generic fetch error copy');
   buttons = collectNodes(forbiddenView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
   refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
@@ -5600,7 +5632,7 @@ const scenarios = [
     status: 403,
     body: 'forbidden: operator does not have access to this deployment',
     expectedHeading: 'Operator access denied',
-    expectedMessage: 'Tenet rejected GET /v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context, expand Show access details, and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.',
+    expectedMessage: 'Tenet rejected GET /v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.',
     unexpectedText: 'Failed to load recent logs:',
     buttonLabel: 'Refresh recent logs',
   },
@@ -5620,7 +5652,7 @@ const scenarios = [
     status: 403,
     body: 'forbidden: operator does not have access to this deployment',
     expectedHeading: 'Operator access denied',
-    expectedMessage: 'Tenet rejected GET /v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context, expand Show access details, and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.',
+    expectedMessage: 'Tenet rejected GET /v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.',
     unexpectedText: 'Failed to load live inspection:',
     buttonLabel: 'Refresh live inspection',
   },
@@ -5893,7 +5925,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Operator access denied')) throw new Error('expected operator-read 403 heading after failed resource detail refresh');
   if (!text.includes('Current resource detail remains visible below.')) throw new Error('expected failed resource detail refresh to keep current detail visible');
   if (!text.includes('Updated deployment group description after refresh')) throw new Error('expected latest successful resource detail to remain visible after failed refresh');
-  if (!text.includes('Tenet rejected GET /v1/overview/deployments/payments-api-staging after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context, expand Show access details, and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.')) throw new Error('expected shared 403 operator-read guidance for resource detail refresh failures');
+  if (!text.includes('Tenet rejected GET /v1/overview/deployments/payments-api-staging after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.')) throw new Error('expected shared 403 operator-read guidance for resource detail refresh failures');
   if (window.location.search !== initialSearch) throw new Error('expected failed resource detail refresh to preserve bookmarkable URL');
   if (fetchCalls.filter((url) => url === deploymentURL).length !== 3) throw new Error('expected exactly three deployment-detail fetches');
 })();
@@ -8779,7 +8811,7 @@ const scenarios = [
     },
     expected: [
       'Operator access denied',
-      'Tenet rejected GET /v1/applies/apply_failed_123 after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context, expand Show access details, and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.',
+      'Tenet rejected GET /v1/applies/apply_failed_123 after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.',
       'Deployment and plan-derived context are still shown below.',
       'Stored plan preview',
       'Server-authored approval summary',
@@ -9059,7 +9091,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (applyFetchCount !== 2) throw new Error('expected apply refresh to retry GET /v1/applies/{applyId}');
   if (window.location.search !== initialSearch) throw new Error('expected apply refresh auth failure to preserve bookmarkable URL');
   if (!text.includes('Operator access denied')) throw new Error('expected apply refresh access-denied heading');
-  if (!text.includes('Tenet rejected GET /v1/applies/apply_refresh_123 after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context, expand Show access details, and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.')) throw new Error('expected apply refresh access-denied guidance');
+  if (!text.includes('Tenet rejected GET /v1/applies/apply_refresh_123 after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.')) throw new Error('expected apply refresh access-denied guidance');
   if (!text.includes('Stored apply request')) throw new Error('expected stored apply request to remain visible after apply refresh auth failure');
   if (!text.includes('Immutable apply request loaded from GET /v1/applies/apply_refresh_123.')) throw new Error('expected stored apply operations to remain visible after apply refresh auth failure');
   if (text.includes('Failed to load the selected apply request')) throw new Error('expected apply refresh auth failure to avoid generic load error copy');
