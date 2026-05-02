@@ -1036,6 +1036,8 @@ assert_fragments("ui", ui, (
     "operatorContextSupportedRolesLabel(context)",
     "const operatorContextSupportedIdentityHeadersLabel = (context) => {",
     "Supported identity headers: canonical ${canonicalText}; compatibility aliases ${aliasText}. Canonical X-Tenet-Authenticated-* identity headers are preferred when both canonical and alias values are present.",
+    "const operatorContextAuthenticationBoundaryLabel = () => 'Authentication boundary: this embedded shell consumes trusted front-door headers only; it does not start an in-page GitHub OAuth login, Tenet-managed browser session, or load the internal authprovider/authidentity/authstate groundwork yet.';",
+    "operatorContextAuthenticationBoundaryLabel()",
     "operatorContextSupportedIdentityHeadersLabel(context)",
     "const operatorContextSupportedActorHeadersLabel = (context) => {",
     "Supported actor attribution headers: canonical ${canonicalText}; compatibility aliases ${aliasText}. Explicit X-Tenet-Actor-* actor headers win over X-User-* actor aliases; trusted authenticated identity is projected only when explicit actor context is absent; actor attribution records persisted plan/apply/audit metadata and does not authorize routes.",

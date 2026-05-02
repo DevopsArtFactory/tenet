@@ -1112,6 +1112,7 @@
         const summary = context?.enforcement?.summary || '';
         return summary ? `Enforcement summary: ${summary}` : null;
       };
+      const operatorContextAuthenticationBoundaryLabel = () => 'Authentication boundary: this embedded shell consumes trusted front-door headers only; it does not start an in-page GitHub OAuth login, Tenet-managed browser session, or load the internal authprovider/authidentity/authstate groundwork yet.';
       const operatorContextEnforcementClass = (context) => {
         const mode = context?.enforcement?.mode || '';
         if (mode === 'trusted_front_door_read_write') return '';
@@ -1228,6 +1229,7 @@
           if (enforcementSummary) {
             detailsMeta.append(createElement('span', operatorContextEnforcementClass(context), enforcementSummary));
           }
+          detailsMeta.append(createElement('span', '', operatorContextAuthenticationBoundaryLabel()));
           detailsMeta.append(createElement('span', operatorContextIdentityProvenanceClass(context), operatorContextIdentityProvenanceLabel(context)));
           const supportedIdentityHeaders = operatorContextSupportedIdentityHeadersLabel(context);
           if (supportedIdentityHeaders) {
