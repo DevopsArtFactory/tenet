@@ -4,7 +4,15 @@ Tenet now exposes a read-only recent-log slice for resource-detail drill-down pa
 
 ## Route
 
-`GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}`
+`GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}[&limit={positiveInteger}]`
+
+`limit` is optional. When present, Tenet applies it after the provider lookup by truncating `entries[]` while preserving the provider's order; invalid, zero, or negative values return `400 Bad Request` with `invalid limit query`.
+
+Example limited request:
+
+```bash
+curl 'http://localhost:8080/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&limit=5'
+```
 
 Response fields:
 - `deploymentName`
