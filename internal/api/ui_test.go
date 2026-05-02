@@ -2640,7 +2640,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"The same trusted front-door read contract also covers `GET /v1/overview/accounts/{awsAccountId}`",
 			"additive `identityProvenance` header-source metadata",
 			"roles.provenance.source",
-			"compatibility `X-User-*` aliases, or was absent",
+			"compatibility `X-User-*` aliases accepted by this Tenet build",
 			"`deploymentAccess.summary` additively reports how many forwarded deployment names or project/environment scopes matched catalog deployments",
 			"`projectEnvironmentExamples` shows which visible project/environment groups",
 			"including the region, AWS account, deployment count, and bounded example deployments for each diagnostic group",

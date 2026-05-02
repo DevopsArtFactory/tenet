@@ -898,7 +898,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`forbidden: authenticated viewer-capable role is required for this operator read route`",
 		"`operator` / `admin`",
 		"`GET /v1/operator/context` is a read-only diagnostic endpoint",
-		"reports the normalized trusted identity, additive `identityProvenance` header-source metadata",
+		"reports the normalized trusted identity, additive `identityHeaderSupport.canonical` / `identityHeaderSupport.aliases` lists",
 		"roles.supportedNames",
 		"roles.recognizedNames` / `roles.unrecognizedNames` diagnostics",
 		"`X-Tenet-Authenticated-Roles: viewer,auditor`",

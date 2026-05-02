@@ -339,13 +339,14 @@ var (
 )
 
 type operatorContextResponse struct {
-	TrustedHeaders     operatorContextTrustedHeaders                `json:"trustedHeaders"`
-	Enforcement        operatorContextEnforcement                   `json:"enforcement"`
-	Identity           requestactor.AuthenticatedIdentity           `json:"identity"`
-	IdentityProvenance requestactor.AuthenticatedIdentityProvenance `json:"identityProvenance"`
-	Roles              operatorContextRoles                         `json:"roles"`
-	DeploymentAccess   operatorContextDeploymentAccess              `json:"deploymentAccess"`
-	AccessVerdicts     operatorContextAccessVerdicts                `json:"accessVerdicts"`
+	TrustedHeaders        operatorContextTrustedHeaders                `json:"trustedHeaders"`
+	Enforcement           operatorContextEnforcement                   `json:"enforcement"`
+	Identity              requestactor.AuthenticatedIdentity           `json:"identity"`
+	IdentityHeaderSupport operatorContextIdentityHeaderSupport         `json:"identityHeaderSupport"`
+	IdentityProvenance    requestactor.AuthenticatedIdentityProvenance `json:"identityProvenance"`
+	Roles                 operatorContextRoles                         `json:"roles"`
+	DeploymentAccess      operatorContextDeploymentAccess              `json:"deploymentAccess"`
+	AccessVerdicts        operatorContextAccessVerdicts                `json:"accessVerdicts"`
 }
 
 type operatorContextTrustedHeaders struct {
@@ -354,6 +355,11 @@ type operatorContextTrustedHeaders struct {
 	DeploymentReadAuthorizationEnforced bool `json:"deploymentReadAuthorizationEnforced"`
 	OperatorReadRoleEnforced            bool `json:"operatorReadRoleEnforced"`
 	OperatorWriteRoleEnforced           bool `json:"operatorWriteRoleEnforced"`
+}
+
+type operatorContextIdentityHeaderSupport struct {
+	Canonical []string `json:"canonical"`
+	Aliases   []string `json:"aliases"`
 }
 
 type operatorContextEnforcement struct {
@@ -481,8 +487,12 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 			OperatorReadRoleEnforced:            options.RequireOperatorRoleForRead,
 			OperatorWriteRoleEnforced:           options.RequireOperatorRoleForWrite,
 		},
-		Enforcement:        buildOperatorContextEnforcement(options),
-		Identity:           identity,
+		Enforcement: buildOperatorContextEnforcement(options),
+		Identity:    identity,
+		IdentityHeaderSupport: operatorContextIdentityHeaderSupport{
+			Canonical: requestactor.SupportedAuthenticatedIdentityHeaderNames(),
+			Aliases:   requestactor.SupportedAuthenticatedIdentityAliasHeaderNames(),
+		},
 		IdentityProvenance: identityProvenance,
 		Roles: operatorContextRoles{
 			Names:             roles.Names,

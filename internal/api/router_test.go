@@ -134,6 +134,7 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if trustedHeaders["deploymentReadAuthorizationEnforced"] != true || trustedHeaders["operatorReadRoleEnforced"] != true || trustedHeaders["operatorWriteRoleEnforced"] != true {
 		t.Fatalf("expected auth enforcement flags to be present, got %#v", trustedHeaders)
 	}
+	assertOperatorContextIdentityHeaderSupport(t, body)
 	enforcement, ok := body["enforcement"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected enforcement object, got %#v", body["enforcement"])
@@ -356,7 +357,22 @@ func TestRouterOperatorContextReportsIdentityProvenanceSources(t *testing.T) {
 			if provenance["idSource"] != tc.wantIDSource || provenance["nameSource"] != tc.wantNameSource || provenance["emailSource"] != tc.wantEmailSource {
 				t.Fatalf("unexpected identity provenance: %#v", provenance)
 			}
+			assertOperatorContextIdentityHeaderSupport(t, body)
 		})
+	}
+}
+
+func assertOperatorContextIdentityHeaderSupport(t *testing.T, body map[string]any) {
+	t.Helper()
+	support, ok := body["identityHeaderSupport"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected identityHeaderSupport object, got %#v", body["identityHeaderSupport"])
+	}
+	if !reflect.DeepEqual(support["canonical"], []any{"X-Tenet-Authenticated-Id", "X-Tenet-Authenticated-Name", "X-Tenet-Authenticated-Email"}) {
+		t.Fatalf("unexpected canonical identity header support: %#v", support["canonical"])
+	}
+	if !reflect.DeepEqual(support["aliases"], []any{"X-User-ID", "X-User-Name", "X-User-Email"}) {
+		t.Fatalf("unexpected alias identity header support: %#v", support["aliases"])
 	}
 }
 
@@ -1062,6 +1078,7 @@ func TestRouterOperatorContextIsExplicitWhenTrustedHeadersAreUnavailable(t *test
 	if trustedHeaders["enabled"] != false || trustedHeaders["deploymentReadAuthorizationEnforced"] != false {
 		t.Fatalf("expected disabled trusted-header flags, got %#v", trustedHeaders)
 	}
+	assertOperatorContextIdentityHeaderSupport(t, body)
 	enforcement := body["enforcement"].(map[string]any)
 	if enforcement["mode"] != "local_unrestricted" || enforcement["trustedHeadersEnabled"] != false || enforcement["readRoutesGuarded"] != false || enforcement["writeRoutesGuarded"] != false {
 		t.Fatalf("expected local unrestricted enforcement summary, got %#v", enforcement)
