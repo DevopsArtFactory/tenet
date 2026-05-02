@@ -33,7 +33,7 @@ func TestEmbeddedUIRendersOperatorContextBannerSafely(t *testing.T) {
 		"supported roles are ${supportedText}",
 		"const operatorContextUnsupportedRolesLabel = (context) => {",
 		"Unsupported forwarded roles ignored for capability checks:",
-		"to grant Tenet read/write capabilities.",
+		"for read capability; forward operator or admin for write capability.",
 		"const operatorContextUnsupportedRolesClass = (context) =>",
 		"const operatorContextDeploymentAccessLabel = (context) => {",
 		"const operatorContextProjectEnvironmentScopesLabel = (context) => {",

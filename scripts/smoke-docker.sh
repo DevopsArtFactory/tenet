@@ -1031,6 +1031,7 @@ assert_fragments("ui", ui, (
     "canonical X-Tenet-Authenticated-Roles",
     "Recognized capability roles:",
     "Unsupported forwarded roles ignored for capability checks:",
+    "for read capability; forward operator or admin for write capability.",
     "operatorContextRoleProvenanceClass",
     "operator-context-details",
     "Last refresh failed:",
