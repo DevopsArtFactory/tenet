@@ -237,6 +237,37 @@ func handleGitHubCallback(w http.ResponseWriter, r *http.Request, cfg authSessio
 	http.Redirect(w, r, state.ReturnURL, http.StatusFound)
 }
 
+func handleManagedLoginLogout(w http.ResponseWriter, r *http.Request, cfg authSessionConfig) {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodGet+", "+http.MethodPost)
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		return
+	}
+	if !cfg.active() {
+		http.NotFound(w, r)
+		return
+	}
+	returnURL := strings.TrimSpace(r.URL.Query().Get("returnUrl"))
+	if returnURL == "" {
+		returnURL = "/"
+	}
+	if !safeInAppReturnURL(returnURL) {
+		http.Error(w, "returnUrl must be a safe in-app path", http.StatusBadRequest)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     cfg.cookieName(),
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Unix(0, 0).UTC(),
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   cfg.secureCookie(r),
+	})
+	http.Redirect(w, r, returnURL, http.StatusFound)
+}
+
 func respondAuthStateConsumeError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, authstate.ErrNotFound):

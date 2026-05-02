@@ -70,6 +70,7 @@ func managedLoginTestOptions(t *testing.T, provider authprovider.Provider) (Opti
 			MissingSettings:         []string{},
 			LoginRoute:              "/auth/login/github",
 			CallbackRoute:           "/auth/callback/github",
+			LogoutRoute:             "/auth/logout",
 			SessionCookieName:       "tenet_session",
 			StateStoreConfigured:    true,
 			IdentityStoreConfigured: true,
@@ -252,6 +253,80 @@ func TestManagedGitHubLoginRejectsUnsafeReturnURL(t *testing.T) {
 		if resp.Code != http.StatusBadRequest {
 			t.Fatalf("expected unsafe return URL %q to fail with 400, got %d", returnURL, resp.Code)
 		}
+	}
+}
+
+func TestManagedLoginLogoutClearsSessionCookieAndRedirectsToSafeReturnURL(t *testing.T) {
+	options, _ := managedLoginTestOptions(t, &fakeAuthProvider{})
+	router := NewRouter(options)
+	cookie := managedLoginCallbackCookie(t, router, func(req *http.Request) {
+		req.Header.Set("X-Forwarded-Proto", "https")
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/auth/logout?returnUrl="+url.QueryEscape("/?page=plan&deployment=payments-api#apply"), nil)
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.AddCookie(cookie)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusFound {
+		t.Fatalf("expected logout 302, got %d: %s", resp.Code, resp.Body.String())
+	}
+	if got := resp.Header().Get("Location"); got != "/?page=plan&deployment=payments-api#apply" {
+		t.Fatalf("expected safe in-app logout redirect, got %q", got)
+	}
+	cookies := resp.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Name != "tenet_session" {
+		t.Fatalf("expected one clearing tenet_session cookie, got %#v", cookies)
+	}
+	cleared := cookies[0]
+	if cleared.Value != "" || cleared.MaxAge >= 0 || !cleared.HttpOnly || cleared.SameSite != http.SameSiteLaxMode || !cleared.Secure || cleared.Path != "/" {
+		t.Fatalf("expected secure HttpOnly SameSite=Lax clearing cookie, got %#v", cleared)
+	}
+}
+
+func TestManagedLoginLogoutDefaultsReturnURLAndRejectsUnsafeReturnURL(t *testing.T) {
+	options, _ := managedLoginTestOptions(t, &fakeAuthProvider{})
+	router := NewRouter(options)
+
+	defaultReq := httptest.NewRequest(http.MethodGet, "/auth/logout", nil)
+	defaultResp := httptest.NewRecorder()
+	router.ServeHTTP(defaultResp, defaultReq)
+	if defaultResp.Code != http.StatusFound || defaultResp.Header().Get("Location") != "/" {
+		t.Fatalf("expected default logout redirect to /, got %d %q", defaultResp.Code, defaultResp.Header().Get("Location"))
+	}
+
+	for _, returnURL := range []string{"https://evil.example/", "//evil.example/path", "settings"} {
+		req := httptest.NewRequest(http.MethodGet, "/auth/logout?returnUrl="+url.QueryEscape(returnURL), nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+		if resp.Code != http.StatusBadRequest {
+			t.Fatalf("expected unsafe logout return URL %q to fail with 400, got %d", returnURL, resp.Code)
+		}
+	}
+}
+
+func TestManagedLoginLogoutRejectsUnsupportedMethods(t *testing.T) {
+	options, _ := managedLoginTestOptions(t, &fakeAuthProvider{})
+	router := NewRouter(options)
+
+	req := httptest.NewRequest(http.MethodPut, "/auth/logout", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected unsupported logout method to fail with 405, got %d", resp.Code)
+	}
+	if got := resp.Header().Get("Allow"); got != "GET, POST" {
+		t.Fatalf("expected Allow header to list GET, POST, got %q", got)
+	}
+}
+
+func TestManagedLoginLogoutUnavailableWhenRuntimeInactive(t *testing.T) {
+	router := NewRouter(Options{})
+	req := httptest.NewRequest(http.MethodGet, "/auth/logout?returnUrl=/", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("expected inactive managed-login logout route to be unregistered, got %d: %s", resp.Code, resp.Body.String())
 	}
 }
 
