@@ -685,6 +685,74 @@ func TestRouterOperatorContextSummaryReportsCatalogLookupFailure(t *testing.T) {
 	if summary["available"] != false || summary["unavailableReason"] != "catalog placement lookup failed" || summary["forwardedCount"] != float64(1) {
 		t.Fatalf("unexpected catalog failure summary: %#v", summary)
 	}
+	accessVerdicts := body["accessVerdicts"].(map[string]any)
+	collectionRead := accessVerdicts["collectionRead"].(map[string]any)
+	if collectionRead["emptyCollectionLikely"] != nil {
+		t.Fatalf("exact deployment grant should keep collection verdict from claiming empty despite catalog lookup failure, got %#v", collectionRead)
+	}
+}
+
+func TestRouterOperatorContextVerdictsReportProjectEnvironmentScopesWithoutCatalogPlacementData(t *testing.T) {
+	tests := []struct {
+		name                  string
+		catalogPlacements     func(context.Context) ([]catalog.PlacementView, error)
+		wantUnavailableReason string
+	}{
+		{
+			name:                  "missing catalog placement provider",
+			wantUnavailableReason: "catalog placement provider is unavailable",
+		},
+		{
+			name: "catalog placement provider fails",
+			catalogPlacements: func(context.Context) ([]catalog.PlacementView, error) {
+				return nil, errors.New("catalog unavailable")
+			},
+			wantUnavailableReason: "catalog placement lookup failed",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := NewRouter(Options{
+				TrustAuthenticatedHeaders:          true,
+				RequireDeploymentReadAuthorization: true,
+				RequireOperatorRoleForRead:         true,
+				CatalogPlacements:                  tt.catalogPlacements,
+			})
+			req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+			req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+			req.Header.Set(requestactor.AuthenticatedRolesHeader, "viewer")
+			req.Header.Set(requestactor.AuthorizedProjectsHeader, "payments")
+			req.Header.Set(requestactor.AuthorizedEnvironmentsHeader, "prod")
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+			}
+			var body map[string]any
+			if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode operator context response: %v", err)
+			}
+			deploymentAccess := body["deploymentAccess"].(map[string]any)
+			summary, ok := deploymentAccess["summary"].(map[string]any)
+			if !ok {
+				t.Fatalf("expected deploymentAccess summary object, got %#v", deploymentAccess["summary"])
+			}
+			if summary["available"] != false || summary["unavailableReason"] != tt.wantUnavailableReason || summary["forwardedProjectCount"] != float64(1) || summary["forwardedEnvironmentCount"] != float64(1) {
+				t.Fatalf("unexpected unavailable project/environment summary: %#v", summary)
+			}
+			accessVerdicts := body["accessVerdicts"].(map[string]any)
+			collectionRead := accessVerdicts["collectionRead"].(map[string]any)
+			if collectionRead["allowed"] != true || collectionRead["filtersCollectionsByDeploymentAccess"] != true || collectionRead["emptyCollectionLikely"] != true || collectionRead["reason"] != "collection reads will be allowed but likely empty because catalog placement data is unavailable to match the forwarded project/environment scopes" {
+				t.Fatalf("expected collection verdict to report likely-empty unavailable placement data, got %#v", collectionRead)
+			}
+			catalogRead := accessVerdicts["catalogRead"].(map[string]any)
+			if catalogRead["allowed"] != true || catalogRead["filtersCollectionsByDeploymentAccess"] != true || catalogRead["emptyCollectionLikely"] != true || catalogRead["reason"] != "collection reads will be allowed but likely empty because catalog placement data is unavailable to match the forwarded project/environment scopes" {
+				t.Fatalf("expected catalog verdict to report likely-empty unavailable placement data, got %#v", catalogRead)
+			}
+		})
+	}
 }
 
 func TestRouterOperatorContextEnforcementReportsTrustedHeaderModes(t *testing.T) {

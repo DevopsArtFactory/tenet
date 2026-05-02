@@ -704,6 +704,11 @@ func operatorContextCollectionReadVerdict(options Options, identity requestactor
 		verdict.Reason = "collection reads will be allowed but return empty collections until deployment or project/environment scopes forward at least one visible deployment"
 		return verdict
 	}
+	if len(deployments.Names) == 0 && len(scopes.Projects) > 0 && len(scopes.Environments) > 0 && summary != nil && !summary.Available {
+		verdict.EmptyCollectionLikely = true
+		verdict.Reason = "collection reads will be allowed but likely empty because catalog placement data is unavailable to match the forwarded project/environment scopes"
+		return verdict
+	}
 	if summary != nil && summary.Available && summary.MatchedCount == 0 {
 		verdict.EmptyCollectionLikely = true
 		verdict.Reason = "collection reads will be allowed but likely empty because the forwarded deployment grants or project/environment scopes do not match catalog deployments"
@@ -747,7 +752,11 @@ func buildOperatorContextAccessSummary(ctx context.Context, options Options, dep
 	if !options.RequireDeploymentReadAuthorization || (len(deployments.Names) == 0 && len(scopes.Projects) == 0 && len(scopes.Environments) == 0) {
 		return nil
 	}
-	summary := &operatorContextAccessSummary{ForwardedCount: len(deployments.Names)}
+	summary := &operatorContextAccessSummary{
+		ForwardedCount:            len(deployments.Names),
+		ForwardedProjectCount:     len(scopes.Projects),
+		ForwardedEnvironmentCount: len(scopes.Environments),
+	}
 	if options.CatalogPlacements == nil {
 		summary.UnavailableReason = "catalog placement provider is unavailable"
 		return summary
