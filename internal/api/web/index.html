@@ -39,6 +39,10 @@
       .operator-context-meta span { padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); }
       .operator-context-meta span.operator-context-warning { color: #fde68a; background: rgba(244,201,93,.12); border-color: rgba(244,201,93,.35); }
       .operator-context-meta span.operator-context-denied { color: #ffd0d0; background: rgba(255,123,123,.12); border-color: rgba(255,123,123,.32); }
+      .operator-context-details { display:grid; gap: 8px; }
+      .operator-context-details summary { width: fit-content; color: var(--muted); font-size: 12px; font-weight: 800; cursor: pointer; text-transform: uppercase; letter-spacing: .08em; }
+      .operator-context-details summary:hover, .operator-context-details summary:focus-visible { color: var(--text); }
+      .operator-context-details .operator-context-meta { padding-top: 2px; }
       .operator-context-action { appearance:none; border: 1px solid rgba(134,239,172,.24); background: rgba(34,197,94,.10); color: var(--text); border-radius: 999px; padding: 6px 11px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
       .operator-context-action:hover:not(:disabled), .operator-context-action:focus-visible:not(:disabled) { border-color: rgba(134,239,172,.45); background: rgba(34,197,94,.18); }
       .operator-context-action:disabled { cursor: progress; opacity: .62; }
@@ -1033,6 +1037,7 @@
         head.append(titleRow);
         const summary = createElement('div', 'operator-context-summary');
         const meta = createElement('div', 'operator-context-meta');
+        const detailNodes = [];
         const hasLastContext = Boolean(operatorContextState.context);
         if (operatorContextState.status === 'loading' || operatorContextState.status === 'idle') {
           summary.textContent = 'Checking trusted front-door context…';
@@ -1047,38 +1052,50 @@
             createElement('span', operatorContextEnforcementClass(context), operatorContextEnforcementModeLabel(context)),
             createElement('span', '', context?.trustedHeaders?.enabled ? 'Trusted headers enabled' : 'Trusted headers disabled'),
           );
-          const enforcementSummary = operatorContextEnforcementSummaryLabel(context);
-          if (enforcementSummary) {
-            meta.append(createElement('span', operatorContextEnforcementClass(context), enforcementSummary));
-          }
-          const scopedWriteReminder = operatorContextScopedWriteReminderLabel(context);
-          if (scopedWriteReminder) {
-            meta.append(createElement('span', operatorContextScopedWriteReminderClass(context), scopedWriteReminder));
-          }
           const deploymentAccessSummary = operatorContextDeploymentAccessSummaryLabel(context);
           if (deploymentAccessSummary) {
             meta.append(createElement('span', operatorContextDeploymentAccessSummaryClass(context), deploymentAccessSummary));
           }
-          const staleScopeDiagnostics = operatorContextStaleScopeDiagnosticsLabel(context);
-          if (staleScopeDiagnostics) {
-            meta.append(createElement('span', operatorContextStaleScopeDiagnosticsClass(context), staleScopeDiagnostics));
-          }
-          const projectEnvironmentExamples = operatorContextProjectEnvironmentExamplesLabel(context);
-          if (projectEnvironmentExamples) {
-            meta.append(createElement('span', operatorContextProjectEnvironmentExamplesClass(context), projectEnvironmentExamples));
-          }
-          const visibleDeploymentExamples = operatorContextVisibleDeploymentExamplesLabel(context);
-          if (visibleDeploymentExamples) {
-            meta.append(createElement('span', '', visibleDeploymentExamples));
-          }
-          operatorContextAccessVerdictEntries(context).forEach((entry) => {
-            meta.append(createElement('span', entry.className, entry.label));
-          });
           if (operatorContextState.refreshing) {
             meta.append(createElement('span', '', 'Refreshing trusted front-door context…'));
           } else if (operatorContextState.error) {
             root.classList.add(operatorContextState.status === 'unavailable' ? 'unavailable' : 'error');
             meta.append(createElement('span', '', `Last refresh failed: ${operatorContextFailureMessage(operatorContextState.error)}`));
+          }
+          const detailsMeta = createElement('div', 'operator-context-meta');
+          const enforcementSummary = operatorContextEnforcementSummaryLabel(context);
+          if (enforcementSummary) {
+            detailsMeta.append(createElement('span', operatorContextEnforcementClass(context), enforcementSummary));
+          }
+          const scopedWriteReminder = operatorContextScopedWriteReminderLabel(context);
+          if (scopedWriteReminder) {
+            detailsMeta.append(createElement('span', operatorContextScopedWriteReminderClass(context), scopedWriteReminder));
+          }
+          const staleScopeDiagnostics = operatorContextStaleScopeDiagnosticsLabel(context);
+          if (staleScopeDiagnostics) {
+            detailsMeta.append(createElement('span', operatorContextStaleScopeDiagnosticsClass(context), staleScopeDiagnostics));
+          }
+          const projectEnvironmentExamples = operatorContextProjectEnvironmentExamplesLabel(context);
+          if (projectEnvironmentExamples) {
+            detailsMeta.append(createElement('span', operatorContextProjectEnvironmentExamplesClass(context), projectEnvironmentExamples));
+          }
+          const visibleDeploymentExamples = operatorContextVisibleDeploymentExamplesLabel(context);
+          if (visibleDeploymentExamples) {
+            detailsMeta.append(createElement('span', '', visibleDeploymentExamples));
+          }
+          operatorContextAccessVerdictEntries(context).forEach((entry) => {
+            detailsMeta.append(createElement('span', entry.className, entry.label));
+          });
+          if (detailsMeta.children.length) {
+            const details = createElement('details', 'operator-context-details');
+            const summaryToggle = createElement('summary', '', 'Show access details');
+            summaryToggle.setAttribute('aria-label', 'Show access details for forwarded trusted front-door context');
+            details.addEventListener('toggle', () => {
+              summaryToggle.textContent = details.open ? 'Hide access details' : 'Show access details';
+              summaryToggle.setAttribute('aria-label', details.open ? 'Hide access details for forwarded trusted front-door context' : 'Show access details for forwarded trusted front-door context');
+            });
+            details.append(summaryToggle, detailsMeta);
+            detailNodes.push(details);
           }
         } else {
           root.classList.add(operatorContextState.status === 'unavailable' ? 'unavailable' : 'error');
@@ -1089,7 +1106,7 @@
           );
         }
         head.append(summary);
-        root.replaceChildren(head, meta);
+        root.replaceChildren(head, meta, ...detailNodes);
       };
       const loadOperatorContextBanner = ({ refresh = false } = {}) => {
         if (!document.getElementById('operator-context')) return Promise.resolve(null);

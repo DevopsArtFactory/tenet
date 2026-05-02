@@ -7,6 +7,14 @@ import (
 	"testing"
 )
 
+func TestEmbeddedUIAvoidsInlineEventHandlers(t *testing.T) {
+	body := string(indexHTML)
+	inlineHandler := regexp.MustCompile(`(?i)<[a-z][^>]*\son[a-z]+\s*=`)
+	if match := inlineHandler.FindString(body); match != "" {
+		t.Fatalf("embedded UI must not use inline event handlers; found %q", match)
+	}
+}
+
 func TestEmbeddedUIRendersOperatorContextBannerSafely(t *testing.T) {
 	body := string(indexHTML)
 
@@ -104,6 +112,11 @@ func TestEmbeddedUIRendersOperatorContextBannerSafely(t *testing.T) {
 		"Refresh context",
 		"Refreshing trusted front-door context…",
 		"Last refresh failed:",
+		"operator-context-details",
+		"Show access details",
+		"Hide access details",
+		"summaryToggle.textContent = details.open ? 'Hide access details' : 'Show access details';",
+		"details.append(summaryToggle, detailsMeta);",
 		"const operatorContextFailureHeading = (error) => operatorReadFailureHeading(error);",
 		"const operatorContextFailureMessage = (error) => {",
 		"const message = operatorReadFailureMessage(operatorContextReadRoute(), error);",

@@ -991,6 +991,9 @@ assert 'unmatched' in ui, ui
 assert "loadOperatorContextBanner().catch(() => {});" in ui, ui
 assert "loadOperatorContextBanner({ refresh: true });" in ui, ui
 assert 'Refresh context' in ui, ui
+assert 'Show access details' in ui, ui
+assert 'Hide access details' in ui, ui
+assert 'operator-context-details' in ui, ui
 assert 'Last refresh failed:' in ui, ui
 assert "const operatorContextFailureHeading = (error) => operatorReadFailureHeading(error);" in ui, ui
 assert "const operatorContextFailureMessage = (error) => {" in ui, ui
