@@ -131,6 +131,11 @@ class Document {
   querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
 }
 const collectText = (node) => node ? [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean) : [];
+const collectLinks = (node) => {
+  if (!node) return [];
+  const here = node.tagName === 'A' ? [{ text: collectText(node).join(' '), href: node.href || '', target: node.target || '' }] : [];
+  return [...here, ...(node.children || []).flatMap((child) => collectLinks(child))];
+};
 async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
 
 const scenarios = [
@@ -288,6 +293,24 @@ const scenarios = [
       if (!text.includes(fragment)) throw new Error('expected fragment for ' + scenario.name + ': ' + fragment + '\nUI text: ' + text);
     });
     if (scenario.unexpected && text.includes(scenario.unexpected)) throw new Error('unexpected generic failure copy for ' + scenario.name + ': ' + text);
+    const links = [
+      ...collectLinks(document.getElementById('toolbar')),
+      ...collectLinks(document.getElementById('summary')),
+      ...collectLinks(document.getElementById('accounts')),
+    ];
+    const retryLink = links.find((link) => link.text.includes('Retry current page after front-door sign-in'));
+    if (!retryLink) throw new Error('expected retry recovery link for ' + scenario.name + ': ' + JSON.stringify(links));
+    if (retryLink.href !== '/' + initialSearch) throw new Error('expected retry link to preserve bookmarkable URL for ' + scenario.name + ', got ' + retryLink.href);
+    if (retryLink.target !== '_self') throw new Error('expected retry link to stay in same shell for ' + scenario.name);
+    const operatorContextLink = links.find((link) => link.text.includes('Open Operator context details'));
+    if (scenario.status === 403) {
+      const expectedContextHref = '/' + initialSearch + '#operator-context-access-details-panel';
+      if (!operatorContextLink) throw new Error('expected operator-context recovery link for ' + scenario.name + ': ' + JSON.stringify(links));
+      if (operatorContextLink.href !== expectedContextHref) throw new Error('expected operator-context recovery link for ' + scenario.name + ' to preserve query and add details hash, got ' + operatorContextLink.href);
+      if (operatorContextLink.target !== '_self') throw new Error('expected operator-context recovery link to stay in same shell for ' + scenario.name);
+    } else if (operatorContextLink) {
+      throw new Error('did not expect operator-context recovery link for auth-required scenario ' + scenario.name);
+    }
   }
 })();
 `

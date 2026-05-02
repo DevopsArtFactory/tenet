@@ -1187,6 +1187,11 @@ operator_read_auth_fragments = (
     "const operatorReadAuthRequiredMessage = (route) => `Tenet rejected ${route} because authenticated identity is required on this operator read route. Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page; reopen or sign in through the trusted front door for this same bookmarkable URL so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.`;",
     "const operatorReadRoleRequiredMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity because this operator read route requires a trusted forwarded viewer/operator/admin role. Open Operator context details (#operator-context-access-details-panel) and check roles.provenance.source, roles.canRead, and the forwarded X-Tenet-Authenticated-Roles value; ask the front-door/RBAC admin to forward viewer, operator, or admin, then retry this same bookmarkable page.`;",
     "const operatorReadForbiddenMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.`;",
+    "const currentBookmarkableURL = (hashOverride) => {",
+    "const createOperatorReadFailureActions = (error) => {",
+    "Retry current page after front-door sign-in",
+    "Open Operator context details",
+    "currentBookmarkableURL(operatorContextAccessDetailsPanelID)",
 )
 assert_fragments("application_ui", application_ui, operator_read_auth_fragments + (
     "return 'Application detail';",
@@ -1217,7 +1222,7 @@ for label, body in (("resource_ui", resource_ui), ("ecs_resource_ui", ecs_resour
     ))
 assert_fragments("audit_ui", audit_ui, operator_read_auth_fragments + (
     "return `GET ${buildAuditLogsRoute({",
-    "renderAuditLogsState(operatorReadFailureHeading(error), 'error', operatorReadFailureMessage(buildEmbeddedPageReadRoute(currentPageState), error));",
+    "renderAuditLogsState(operatorReadFailureHeading(error), 'error', operatorReadFailureMessage(buildEmbeddedPageReadRoute(currentPageState), error), [createOperatorReadFailureActions(error)]);",
 ))
 assert "fetchApplicationsOverview()" in ui, ui
 assert "const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {" in application_ui, application_ui

@@ -954,6 +954,11 @@ operator_read_auth_fragments = (
     "const operatorReadAuthRequiredMessage = (route) => `Tenet rejected ${route} because authenticated identity is required on this operator read route. Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page; reopen or sign in through the trusted front door for this same bookmarkable URL so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.`;",
     "const operatorReadRoleRequiredMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity because this operator read route requires a trusted forwarded viewer/operator/admin role. Open Operator context details (#operator-context-access-details-panel) and check roles.provenance.source, roles.canRead, and the forwarded X-Tenet-Authenticated-Roles value; ask the front-door/RBAC admin to forward viewer, operator, or admin, then retry this same bookmarkable page.`;",
     "const operatorReadForbiddenMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.`;",
+    "const currentBookmarkableURL = (hashOverride) => {",
+    "const createOperatorReadFailureActions = (error) => {",
+    "Retry current page after front-door sign-in",
+    "Open Operator context details",
+    "currentBookmarkableURL(operatorContextAccessDetailsPanelID)",
 )
 assert_fragments("ui", ui, (
     "const setEmbeddedBrowserTitle = (...parts) => {",
@@ -1113,7 +1118,7 @@ assert_fragments("audit_ui", audit_ui, operator_read_auth_fragments + (
     "{ value: 'plan.created', label: 'Plan preview created (plan.created)' },",
     "{ value: 'apply.requested', label: 'Apply requested (apply.requested)' },",
     "const auditActionLabel = (value) => {",
-    "renderAuditLogsState(operatorReadFailureHeading(error), 'error', operatorReadFailureMessage(buildEmbeddedPageReadRoute(currentPageState), error));",
+    "renderAuditLogsState(operatorReadFailureHeading(error), 'error', operatorReadFailureMessage(buildEmbeddedPageReadRoute(currentPageState), error), [createOperatorReadFailureActions(error)]);",
 ))
 
 for fragment in (
