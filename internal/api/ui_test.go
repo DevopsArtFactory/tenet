@@ -157,6 +157,9 @@ func TestEmbeddedUIRendersOperatorContextBannerSafely(t *testing.T) {
 		"Supported role headers: ${supportedHeaders.join(', ')} (role forwarding has no X-User-* alias)",
 		"operatorContextSupportedRoleHeadersLabel(context)",
 		"operatorContextSupportedRolesLabel(context)",
+		"const operatorContextSupportedDeploymentAccessHeadersLabel = (context) => {",
+		"Supported deployment access headers: ${supportedHeaders.join(', ')}",
+		"operatorContextSupportedDeploymentAccessHeadersLabel(context)",
 		"canonical X-Tenet-Authenticated-Roles",
 		"operatorContextRoleProvenanceClass",
 		"No viewer/operator/admin role forwarded",
@@ -1983,10 +1986,14 @@ func TestSmokeDockerScriptLocksOperatorContextRoleDiagnostics(t *testing.T) {
 		"operator_context_unsupported_roles_path=$(write_payload operator-context-unsupported-roles.json \"$operator_context_unsupported_roles\")",
 		"assert operator_context_unsupported_roles[\"roles\"][\"recognizedNames\"] == [\"viewer\"], operator_context_unsupported_roles",
 		"assert operator_context_unsupported_roles[\"roles\"][\"unrecognizedNames\"] == [\"auditor\"], operator_context_unsupported_roles",
-		"\"const operatorContextSupportedRoleHeadersLabel = (context) => {\"",
-		"\"Supported role headers: ${supportedHeaders.join(', ')} (role forwarding has no X-User-* alias)\"",
-		"\"operatorContextSupportedRoleHeadersLabel(context)\"",
-		"\"Recognized capability roles:\"",
+		"operatorContextSupportedRolesLabel(context)",
+		"const operatorContextSupportedRoleHeadersLabel = (context) => {",
+		"Supported role headers: ${supportedHeaders.join(', ')} (role forwarding has no X-User-* alias)",
+		"operatorContextSupportedRoleHeadersLabel(context)",
+		"const operatorContextSupportedDeploymentAccessHeadersLabel = (context) => {",
+		"Supported deployment access headers: ${supportedHeaders.join(', ')}",
+		"operatorContextSupportedDeploymentAccessHeadersLabel(context)",
+		"canonical X-Tenet-Authenticated-Roles",
 		"\"Unsupported forwarded roles ignored for capability checks:\"",
 	} {
 		if !strings.Contains(text, fragment) {
@@ -2006,6 +2013,9 @@ func TestSmokeLocalScriptLocksOperatorContextRoleDiagnostics(t *testing.T) {
 		"assert \"const operatorContextSupportedRoleHeadersLabel = (context) => {\" in ui, ui",
 		"assert \"Supported role headers: ${supportedHeaders.join(', ')} (role forwarding has no X-User-* alias)\" in ui, ui",
 		"assert 'operatorContextSupportedRoleHeadersLabel(context)' in ui, ui",
+		"assert \"const operatorContextSupportedDeploymentAccessHeadersLabel = (context) => {\" in ui, ui",
+		"assert \"Supported deployment access headers: ${supportedHeaders.join(', ')}\" in ui, ui",
+		"assert 'operatorContextSupportedDeploymentAccessHeadersLabel(context)' in ui, ui",
 		"assert 'canonical X-Tenet-Authenticated-Roles' in ui, ui",
 	} {
 		if !strings.Contains(text, fragment) {

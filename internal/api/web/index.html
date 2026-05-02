@@ -800,6 +800,11 @@
         if (!supportedHeaders.length) return null;
         return `Supported role headers: ${supportedHeaders.join(', ')} (role forwarding has no X-User-* alias)`;
       };
+      const operatorContextSupportedDeploymentAccessHeadersLabel = (context) => {
+        const supportedHeaders = Array.isArray(context?.deploymentAccess?.supportedHeaderNames) ? context.deploymentAccess.supportedHeaderNames.filter(Boolean) : [];
+        if (!supportedHeaders.length) return null;
+        return `Supported deployment access headers: ${supportedHeaders.join(', ')}`;
+      };
       const operatorContextRecognizedRolesLabel = (context) => {
         const roles = context?.roles || {};
         const recognized = operatorContextRoleNames(roles, 'recognizedNames');
@@ -1148,6 +1153,10 @@
           const supportedRoleHeaders = operatorContextSupportedRoleHeadersLabel(context);
           if (supportedRoleHeaders) {
             detailsMeta.append(createElement('span', '', supportedRoleHeaders));
+          }
+          const supportedDeploymentAccessHeaders = operatorContextSupportedDeploymentAccessHeadersLabel(context);
+          if (supportedDeploymentAccessHeaders) {
+            detailsMeta.append(createElement('span', '', supportedDeploymentAccessHeaders));
           }
           const recognizedRoles = operatorContextRecognizedRolesLabel(context);
           if (recognizedRoles) {
