@@ -1833,6 +1833,7 @@ assert operator_context_trusted["roles"]["names"] == ["viewer", "operator"], ope
 assert operator_context_trusted["roles"]["canRead"] is True, operator_context_trusted
 assert operator_context_trusted["roles"]["canWrite"] is True, operator_context_trusted
 assert operator_context_trusted["roles"]["provenance"]["source"] == "canonical", operator_context_trusted
+assert operator_context_trusted["roles"]["supportedNames"] == ["viewer", "operator", "admin"], operator_context_trusted
 assert operator_context_trusted["roles"]["recognizedNames"] == ["viewer", "operator"], operator_context_trusted
 assert operator_context_trusted["roles"]["unrecognizedNames"] == [], operator_context_trusted
 assert operator_context_trusted["deploymentAccess"]["enforced"] is True, operator_context_trusted
@@ -1942,6 +1943,7 @@ assert operator_context_alias["roles"]["names"] == ["viewer"], operator_context_
 assert operator_context_alias["roles"]["canRead"] is True, operator_context_alias
 assert operator_context_alias["roles"]["canWrite"] is False, operator_context_alias
 assert operator_context_alias["roles"]["provenance"]["source"] == "canonical", operator_context_alias
+assert operator_context_alias["roles"]["supportedNames"] == ["viewer", "operator", "admin"], operator_context_alias
 assert operator_context_alias["roles"]["recognizedNames"] == ["viewer"], operator_context_alias
 assert operator_context_alias["roles"]["unrecognizedNames"] == [], operator_context_alias
 assert operator_context_alias["deploymentAccess"]["enforced"] is True, operator_context_alias
@@ -1955,6 +1957,7 @@ assert operator_context_no_allowlist["roles"]["names"] == ["viewer"], operator_c
 assert operator_context_no_allowlist["roles"]["canRead"] is True, operator_context_no_allowlist
 assert operator_context_no_allowlist["roles"]["canWrite"] is False, operator_context_no_allowlist
 assert operator_context_no_allowlist["roles"]["provenance"]["source"] == "canonical", operator_context_no_allowlist
+assert operator_context_no_allowlist["roles"]["supportedNames"] == ["viewer", "operator", "admin"], operator_context_no_allowlist
 assert operator_context_no_allowlist["roles"]["recognizedNames"] == ["viewer"], operator_context_no_allowlist
 assert operator_context_no_allowlist["roles"]["unrecognizedNames"] == [], operator_context_no_allowlist
 assert operator_context_no_allowlist["deploymentAccess"]["enforced"] is True, operator_context_no_allowlist
@@ -1974,6 +1977,7 @@ assert operator_context_no_roles["roles"].get("names", []) == [], operator_conte
 assert operator_context_no_roles["roles"]["canRead"] is False, operator_context_no_roles
 assert operator_context_no_roles["roles"]["canWrite"] is False, operator_context_no_roles
 assert operator_context_no_roles["roles"]["provenance"]["source"] == "absent", operator_context_no_roles
+assert operator_context_no_roles["roles"]["supportedNames"] == ["viewer", "operator", "admin"], operator_context_no_roles
 assert operator_context_no_roles["roles"]["recognizedNames"] == [], operator_context_no_roles
 assert operator_context_no_roles["roles"]["unrecognizedNames"] == [], operator_context_no_roles
 no_roles_verdicts = operator_context_no_roles["accessVerdicts"]
@@ -1990,6 +1994,7 @@ assert operator_context_unsupported_roles["roles"]["names"] == ["viewer", "audit
 assert operator_context_unsupported_roles["roles"]["canRead"] is True, operator_context_unsupported_roles
 assert operator_context_unsupported_roles["roles"]["canWrite"] is False, operator_context_unsupported_roles
 assert operator_context_unsupported_roles["roles"]["provenance"]["source"] == "canonical", operator_context_unsupported_roles
+assert operator_context_unsupported_roles["roles"]["supportedNames"] == ["viewer", "operator", "admin"], operator_context_unsupported_roles
 assert operator_context_unsupported_roles["roles"]["recognizedNames"] == ["viewer"], operator_context_unsupported_roles
 assert operator_context_unsupported_roles["roles"]["unrecognizedNames"] == ["auditor"], operator_context_unsupported_roles
 unsupported_roles_verdicts = operator_context_unsupported_roles["accessVerdicts"]

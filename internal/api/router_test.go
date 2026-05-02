@@ -165,7 +165,7 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if !reflect.DeepEqual(roles["names"], []any{"operator", "admin"}) || roles["canRead"] != true || roles["canWrite"] != true {
 		t.Fatalf("unexpected roles payload: %#v", roles)
 	}
-	if !reflect.DeepEqual(roles["recognizedNames"], []any{"operator", "admin"}) || !reflect.DeepEqual(roles["unrecognizedNames"], []any{}) {
+	if !reflect.DeepEqual(roles["supportedNames"], []any{"viewer", "operator", "admin"}) || !reflect.DeepEqual(roles["recognizedNames"], []any{"operator", "admin"}) || !reflect.DeepEqual(roles["unrecognizedNames"], []any{}) {
 		t.Fatalf("unexpected role diagnostics: %#v", roles)
 	}
 	rolesProvenance, ok := roles["provenance"].(map[string]any)
@@ -444,6 +444,9 @@ func TestRouterOperatorContextReportsRoleProvenance(t *testing.T) {
 				}
 			} else if !reflect.DeepEqual(roles["names"], tc.wantRoles) {
 				t.Fatalf("unexpected role names: got %#v want %#v", roles["names"], tc.wantRoles)
+			}
+			if !reflect.DeepEqual(roles["supportedNames"], []any{"viewer", "operator", "admin"}) {
+				t.Fatalf("unexpected supported role names: %#v", roles["supportedNames"])
 			}
 			if !reflect.DeepEqual(roles["recognizedNames"], tc.wantRecognized) {
 				t.Fatalf("unexpected recognized role names: got %#v want %#v", roles["recognizedNames"], tc.wantRecognized)

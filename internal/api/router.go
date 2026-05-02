@@ -374,6 +374,7 @@ type operatorContextRoles struct {
 	Names             []string                                  `json:"names,omitempty"`
 	CanRead           bool                                      `json:"canRead"`
 	CanWrite          bool                                      `json:"canWrite"`
+	SupportedNames    []string                                  `json:"supportedNames"`
 	RecognizedNames   []string                                  `json:"recognizedNames"`
 	UnrecognizedNames []string                                  `json:"unrecognizedNames"`
 	Provenance        requestactor.AuthenticatedRolesProvenance `json:"provenance"`
@@ -487,6 +488,7 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 			Names:             roles.Names,
 			CanRead:           roles.AllowsOperatorRead(),
 			CanWrite:          roles.AllowsOperatorWrite(),
+			SupportedNames:    requestactor.SupportedOperatorRoleNames(),
 			RecognizedNames:   roles.RecognizedNames(),
 			UnrecognizedNames: roles.UnrecognizedNames(),
 			Provenance:        rolesProvenance,
