@@ -165,6 +165,10 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if !reflect.DeepEqual(roles["names"], []any{"operator", "admin"}) || roles["canRead"] != true || roles["canWrite"] != true {
 		t.Fatalf("unexpected roles payload: %#v", roles)
 	}
+	rolesProvenance, ok := roles["provenance"].(map[string]any)
+	if !ok || rolesProvenance["source"] != "canonical" {
+		t.Fatalf("expected canonical role provenance, got %#v", roles["provenance"])
+	}
 	deploymentAccess, ok := body["deploymentAccess"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected deploymentAccess object, got %#v", body["deploymentAccess"])
@@ -348,6 +352,46 @@ func TestRouterOperatorContextReportsIdentityProvenanceSources(t *testing.T) {
 			provenance := body["identityProvenance"].(map[string]any)
 			if provenance["idSource"] != tc.wantIDSource || provenance["nameSource"] != tc.wantNameSource || provenance["emailSource"] != tc.wantEmailSource {
 				t.Fatalf("unexpected identity provenance: %#v", provenance)
+			}
+		})
+	}
+}
+
+func TestRouterOperatorContextReportsRoleProvenance(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		header     string
+		wantSource string
+		wantRoles  []any
+	}{
+		{name: "canonical roles", header: "viewer, operator", wantSource: "canonical", wantRoles: []any{"viewer", "operator"}},
+		{name: "empty roles", header: " , ", wantSource: "absent"},
+		{name: "absent roles", wantSource: "absent"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			router := NewRouter(Options{TrustAuthenticatedHeaders: true})
+			req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+			if tc.header != "" {
+				req.Header.Set(requestactor.AuthenticatedRolesHeader, tc.header)
+			}
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+			}
+			var body map[string]any
+			if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode operator context response: %v", err)
+			}
+			roles := body["roles"].(map[string]any)
+			provenance := roles["provenance"].(map[string]any)
+			if provenance["source"] != tc.wantSource {
+				t.Fatalf("unexpected role provenance: %#v", provenance)
+			}
+			if tc.wantRoles != nil && !reflect.DeepEqual(roles["names"], tc.wantRoles) {
+				t.Fatalf("unexpected role names: got %#v want %#v", roles["names"], tc.wantRoles)
 			}
 		})
 	}

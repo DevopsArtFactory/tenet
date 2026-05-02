@@ -2230,6 +2230,7 @@ assert operator_context_trusted['identityProvenance'] == {'idSource': 'canonical
 assert operator_context_trusted['roles']['names'] == ['viewer', 'operator'], operator_context_trusted
 assert operator_context_trusted['roles']['canRead'] is True, operator_context_trusted
 assert operator_context_trusted['roles']['canWrite'] is True, operator_context_trusted
+assert operator_context_trusted['roles']['provenance']['source'] == 'canonical', operator_context_trusted
 assert operator_context_trusted['deploymentAccess']['enforced'] is True, operator_context_trusted
 assert operator_context_trusted['deploymentAccess']['forwarded'] is True, operator_context_trusted
 assert operator_context_trusted['deploymentAccess']['names'] == ['payments-api-prod', 'worker-prod'], operator_context_trusted
@@ -2337,6 +2338,7 @@ assert operator_context_alias['identityProvenance'] == {'idSource': 'alias', 'na
 assert operator_context_alias['roles']['names'] == ['viewer'], operator_context_alias
 assert operator_context_alias['roles']['canRead'] is True, operator_context_alias
 assert operator_context_alias['roles']['canWrite'] is False, operator_context_alias
+assert operator_context_alias['roles']['provenance']['source'] == 'canonical', operator_context_alias
 assert operator_context_alias['deploymentAccess']['enforced'] is True, operator_context_alias
 assert operator_context_alias['deploymentAccess']['forwarded'] is False, operator_context_alias
 assert 'names' not in operator_context_alias['deploymentAccess'], operator_context_alias

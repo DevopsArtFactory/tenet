@@ -2521,6 +2521,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"Tenet does not treat raw browser-supplied `X-User-*` headers as a login session",
 			"The same trusted front-door read contract covers `GET /v1/overview/accounts/{awsAccountId}`",
 			"additive `identityProvenance` header-source metadata",
+			"roles.provenance.source",
 			"whether the request used canonical `X-Tenet-Authenticated-*` fields or compatibility `X-User-*` aliases",
 			"`deploymentAccess.summary` also reports forwarded, matched/visible, and total unmatched deployment-name counts",
 			"deterministic `projectEnvironmentExamples`",
@@ -2575,6 +2576,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"Tenet does not treat raw browser-supplied `X-User-*` headers as a login session",
 			"The same trusted front-door read contract also covers `GET /v1/overview/accounts/{awsAccountId}`",
 			"additive `identityProvenance` header-source metadata",
+			"roles.provenance.source",
 			"compatibility `X-User-*` aliases, or was absent",
 			"`deploymentAccess.summary` additively reports how many forwarded deployment names or project/environment scopes matched catalog deployments",
 			"`projectEnvironmentExamples` shows which visible project/environment groups",
@@ -2632,6 +2634,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		},
 		"../../docs/features/overview-dashboard.md": {
 			"diagnostic identity header provenance (`identityProvenance.idSource` / `nameSource` / `emailSource`)",
+			"roles.provenance.source",
 			"trusted identity header-source wiring (`canonical` for `X-Tenet-Authenticated-*`, `alias` for compatibility `X-User-*`, `absent` for missing fields)",
 			"when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION` is enabled, `GET /v1/overview/applications` requires trusted `X-Tenet-Authenticated-*` identity",
 			"diagnostic `deploymentAccess.summary` JSON that reports matched visible deployments from exact names or project/environment scopes plus total unmatched forwarded deployment-name counts",

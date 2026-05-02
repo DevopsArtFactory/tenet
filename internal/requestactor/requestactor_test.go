@@ -164,6 +164,31 @@ func TestAuthenticatedRolesFromHeadersReturnsNormalizedRoles(t *testing.T) {
 	}
 }
 
+func TestAuthenticatedRolesProvenanceFromHeadersReportsCanonicalOrAbsent(t *testing.T) {
+	header := http.Header{}
+	header.Add(AuthenticatedRolesHeader, "operator, admin")
+	if got := AuthenticatedRolesProvenanceFromHeaders(header); got.Source != AuthenticatedIdentitySourceCanonical {
+		t.Fatalf("expected canonical role source, got %+v", got)
+	}
+
+	header = http.Header{}
+	header.Add(AuthenticatedRolesHeader, " , ")
+	if got := AuthenticatedRolesProvenanceFromHeaders(header); got.Source != AuthenticatedIdentitySourceAbsent {
+		t.Fatalf("expected absent role source for empty forwarded header, got %+v", got)
+	}
+}
+
+func TestNormalizeAuthenticatedRolesProvenanceDefaultsUnsupportedSourcesToAbsent(t *testing.T) {
+	for _, source := range []string{"", "alias", "surprise"} {
+		if got := NormalizeAuthenticatedRolesProvenance(AuthenticatedRolesProvenance{Source: source}); got.Source != AuthenticatedIdentitySourceAbsent {
+			t.Fatalf("expected %q to normalize to absent, got %+v", source, got)
+		}
+	}
+	if got := NormalizeAuthenticatedRolesProvenance(AuthenticatedRolesProvenance{Source: " canonical "}); got.Source != AuthenticatedIdentitySourceCanonical {
+		t.Fatalf("expected canonical role source to stay canonical, got %+v", got)
+	}
+}
+
 func TestAuthenticatedRolesAllowsAnyRole(t *testing.T) {
 	roles := AuthenticatedRoles{Names: []string{"viewer", "operator"}}
 	if !roles.AllowsAny("admin", "operator") {

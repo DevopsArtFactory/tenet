@@ -879,6 +879,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`operator` / `admin`",
 		"`GET /v1/operator/context` is a read-only diagnostic endpoint",
 		"reports the normalized trusted identity, additive `identityProvenance` header-source metadata",
+		"roles.provenance.source",
 		"whether the request used canonical `X-Tenet-Authenticated-*` fields or compatibility `X-User-*` aliases",
 		"When deployment-read authorization is enforced and a catalog placement provider is available, `deploymentAccess.summary` also reports forwarded, matched/visible, and total unmatched deployment-name counts",
 		"`visibleDeploymentExamples`",
@@ -1079,7 +1080,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"Guarded-read troubleshooting from the embedded dashboard follows the same diagnostic order as the API docs",
 		"start with the `Operator context` banner",
 		"inspect `identity.authenticated` and `identityProvenance` first",
-		"then inspect `roles.canRead` before allowlist debugging for viewer-role `403`",
+		"then inspect `roles.provenance.source` and `roles.canRead` before allowlist debugging for viewer-role `403`",
 		"then inspect `accessVerdicts`, their bounded route examples, any collection-read `Collection scope: filtered to visible deployments` cue, any likely-empty `Collection result: likely empty` cue, any deployment-scoped `Scope grants: exact deployments or matching project/environment scopes` cue, and the `Required trusted headers:` fragment to choose the exact guarded route class",
 		"it does not authorize routes client-side",
 	} {
