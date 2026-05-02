@@ -123,6 +123,35 @@ func TestAuthenticatedIdentityFromHeadersPrefersExplicitTrustedHeadersOverAliase
 	}
 }
 
+func TestAuthenticatedIdentityProvenanceFromHeadersReportsCanonicalAliasAndAbsentSources(t *testing.T) {
+	header := http.Header{}
+	header.Set(AuthenticatedHeaderID, "front-door-123")
+	header.Set(HeaderAliasID, "alias-456")
+	header.Set(HeaderAliasName, "Alias Operator")
+
+	provenance := AuthenticatedIdentityProvenanceFromHeaders(header)
+	if provenance.IDSource != AuthenticatedIdentitySourceCanonical {
+		t.Fatalf("expected canonical id source, got %+v", provenance)
+	}
+	if provenance.NameSource != AuthenticatedIdentitySourceAlias {
+		t.Fatalf("expected alias name source, got %+v", provenance)
+	}
+	if provenance.EmailSource != AuthenticatedIdentitySourceAbsent {
+		t.Fatalf("expected absent email source, got %+v", provenance)
+	}
+}
+
+func TestNormalizeAuthenticatedIdentityProvenanceDefaultsUnknownSourcesToAbsent(t *testing.T) {
+	provenance := NormalizeAuthenticatedIdentityProvenance(AuthenticatedIdentityProvenance{
+		IDSource:    " canonical ",
+		NameSource:  "surprise",
+		EmailSource: "alias",
+	})
+	if provenance.IDSource != AuthenticatedIdentitySourceCanonical || provenance.NameSource != AuthenticatedIdentitySourceAbsent || provenance.EmailSource != AuthenticatedIdentitySourceAlias {
+		t.Fatalf("unexpected normalized provenance: %+v", provenance)
+	}
+}
+
 func TestAuthenticatedRolesFromHeadersReturnsNormalizedRoles(t *testing.T) {
 	header := http.Header{}
 	header.Add(AuthenticatedRolesHeader, "operator, admin ,,operator")

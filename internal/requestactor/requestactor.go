@@ -7,6 +7,10 @@ import (
 )
 
 const (
+	AuthenticatedIdentitySourceCanonical = "canonical"
+	AuthenticatedIdentitySourceAlias     = "alias"
+	AuthenticatedIdentitySourceAbsent    = "absent"
+
 	HeaderID    = "X-Tenet-Actor-Id"
 	HeaderName  = "X-Tenet-Actor-Name"
 	HeaderEmail = "X-Tenet-Actor-Email"
@@ -54,6 +58,16 @@ type AuthenticatedIdentity struct {
 	Name          string `json:"name,omitempty"`
 	Email         string `json:"email,omitempty"`
 	Reason        string `json:"reason,omitempty"`
+}
+
+// AuthenticatedIdentityProvenance reports which trusted header family supplied each
+// authenticated identity field. Source values are "canonical" for
+// X-Tenet-Authenticated-* headers, "alias" for X-User-* compatibility headers,
+// and "absent" when neither trusted header family supplied that field.
+type AuthenticatedIdentityProvenance struct {
+	IDSource    string `json:"idSource"`
+	NameSource  string `json:"nameSource"`
+	EmailSource string `json:"emailSource"`
 }
 
 // AuthenticatedRoles captures the front-door-authenticated roles Tenet can trust
@@ -202,6 +216,20 @@ func AuthenticatedIdentityFromHeaders(header http.Header) AuthenticatedIdentity 
 	return NormalizeAuthenticatedIdentity(identity)
 }
 
+// AuthenticatedIdentityProvenanceFromHeaders reports the source header family used
+// for each trusted authenticated identity field. Canonical X-Tenet-Authenticated-*
+// headers win over X-User-* compatibility aliases, matching AuthenticatedIdentityFromHeaders.
+func AuthenticatedIdentityProvenanceFromHeaders(header http.Header) AuthenticatedIdentityProvenance {
+	if header == nil {
+		return NormalizeAuthenticatedIdentityProvenance(AuthenticatedIdentityProvenance{})
+	}
+	return NormalizeAuthenticatedIdentityProvenance(AuthenticatedIdentityProvenance{
+		IDSource:    headerSource(header, AuthenticatedHeaderID, HeaderAliasID),
+		NameSource:  headerSource(header, AuthenticatedHeaderName, HeaderAliasName),
+		EmailSource: headerSource(header, AuthenticatedHeaderEmail, HeaderAliasEmail),
+	})
+}
+
 // AuthenticatedRolesFromHeaders derives one normalized trusted role set from forwarded front-door headers.
 func AuthenticatedRolesFromHeaders(header http.Header) AuthenticatedRoles {
 	if header == nil {
@@ -317,6 +345,18 @@ func headerValue(header http.Header, primary string, aliases ...string) string {
 	return ""
 }
 
+func headerSource(header http.Header, primary string, aliases ...string) string {
+	if value := strings.TrimSpace(header.Get(primary)); value != "" {
+		return AuthenticatedIdentitySourceCanonical
+	}
+	for _, alias := range aliases {
+		if value := strings.TrimSpace(header.Get(alias)); value != "" {
+			return AuthenticatedIdentitySourceAlias
+		}
+	}
+	return AuthenticatedIdentitySourceAbsent
+}
+
 // Normalize keeps unavailable actors explicit and strips fallback fields from available actors.
 func Normalize(actor Actor) Actor {
 	if actor.Available {
@@ -346,6 +386,25 @@ func NormalizeAuthenticatedIdentity(identity AuthenticatedIdentity) Authenticate
 		identity.Reason = AuthenticatedIdentityUnavailableReason
 	}
 	return identity
+}
+
+// NormalizeAuthenticatedIdentityProvenance keeps source strings explicit and stable.
+func NormalizeAuthenticatedIdentityProvenance(provenance AuthenticatedIdentityProvenance) AuthenticatedIdentityProvenance {
+	provenance.IDSource = normalizeAuthenticatedIdentitySource(provenance.IDSource)
+	provenance.NameSource = normalizeAuthenticatedIdentitySource(provenance.NameSource)
+	provenance.EmailSource = normalizeAuthenticatedIdentitySource(provenance.EmailSource)
+	return provenance
+}
+
+func normalizeAuthenticatedIdentitySource(source string) string {
+	switch strings.TrimSpace(source) {
+	case AuthenticatedIdentitySourceCanonical:
+		return AuthenticatedIdentitySourceCanonical
+	case AuthenticatedIdentitySourceAlias:
+		return AuthenticatedIdentitySourceAlias
+	default:
+		return AuthenticatedIdentitySourceAbsent
+	}
 }
 
 // NormalizeAuthenticatedRoles trims whitespace, drops empties, and keeps the role set stable.

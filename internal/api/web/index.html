@@ -762,6 +762,20 @@
         if (!identity.authenticated) return 'No trusted operator identity forwarded';
         return identity.name || identity.email || identity.id || 'Authenticated operator';
       };
+      const operatorContextIdentityProvenanceLabel = (context) => {
+        const provenance = context?.identityProvenance || {};
+        const labels = { canonical: 'canonical X-Tenet-Authenticated-*', alias: 'compatibility X-User-*', absent: 'absent' };
+        const entries = [
+          ['id', provenance.idSource],
+          ['name', provenance.nameSource],
+          ['email', provenance.emailSource],
+        ].map(([field, source]) => `${field}: ${labels[source] || labels.absent}`);
+        return `Identity header sources: ${entries.join('; ')}`;
+      };
+      const operatorContextIdentityProvenanceClass = (context) => {
+        const provenance = context?.identityProvenance || {};
+        return [provenance.idSource, provenance.nameSource, provenance.emailSource].includes('alias') ? 'operator-context-warning' : '';
+      };
       const operatorContextRoleLabel = (context) => {
         const roles = context?.roles || {};
         const names = Array.isArray(roles.names) ? roles.names.filter(Boolean) : [];
@@ -1067,6 +1081,7 @@
           if (enforcementSummary) {
             detailsMeta.append(createElement('span', operatorContextEnforcementClass(context), enforcementSummary));
           }
+          detailsMeta.append(createElement('span', operatorContextIdentityProvenanceClass(context), operatorContextIdentityProvenanceLabel(context)));
           const scopedWriteReminder = operatorContextScopedWriteReminderLabel(context);
           if (scopedWriteReminder) {
             detailsMeta.append(createElement('span', operatorContextScopedWriteReminderClass(context), scopedWriteReminder));
