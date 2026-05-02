@@ -11,6 +11,10 @@ const (
 	AuthenticatedIdentitySourceAlias     = "alias"
 	AuthenticatedIdentitySourceAbsent    = "absent"
 
+	ActorAttributionSourceExplicitActorHeaders         = "explicit_actor_headers"
+	ActorAttributionSourceTrustedAuthenticatedIdentity = "trusted_authenticated_identity"
+	ActorAttributionSourceUnavailable                  = "unavailable"
+
 	HeaderID    = "X-Tenet-Actor-Id"
 	HeaderName  = "X-Tenet-Actor-Name"
 	HeaderEmail = "X-Tenet-Actor-Email"
@@ -68,6 +72,24 @@ type AuthenticatedIdentityProvenance struct {
 	IDSource    string `json:"idSource"`
 	NameSource  string `json:"nameSource"`
 	EmailSource string `json:"emailSource"`
+}
+
+// ActorProvenance reports which request actor header family supplied each
+// persisted actor-attribution field. Source values are "canonical" for
+// X-Tenet-Actor-* headers, "alias" for X-User-* compatibility headers, and
+// "absent" when neither actor header family supplied that field.
+type ActorProvenance struct {
+	IDSource    string `json:"idSource"`
+	NameSource  string `json:"nameSource"`
+	EmailSource string `json:"emailSource"`
+}
+
+// ActorAttribution explains which request evidence will be used for persisted
+// plan/apply/audit actor fields. It is diagnostic-only and never authorizes routes.
+type ActorAttribution struct {
+	Available bool   `json:"available"`
+	Source    string `json:"source"`
+	Summary   string `json:"summary"`
 }
 
 // AuthenticatedRoles captures the front-door-authenticated roles Tenet can trust
@@ -222,6 +244,47 @@ func AuthenticatedIdentityFromHeaders(header http.Header) AuthenticatedIdentity 
 	return NormalizeAuthenticatedIdentity(identity)
 }
 
+// ActorProvenanceFromHeaders reports the source header family used for each
+// persisted actor field. Canonical X-Tenet-Actor-* headers win over X-User-*
+// compatibility aliases, matching FromHeaders.
+func ActorProvenanceFromHeaders(header http.Header) ActorProvenance {
+	if header == nil {
+		return NormalizeActorProvenance(ActorProvenance{})
+	}
+	return NormalizeActorProvenance(ActorProvenance{
+		IDSource:    headerSource(header, HeaderID, HeaderAliasID),
+		NameSource:  headerSource(header, HeaderName, HeaderAliasName),
+		EmailSource: headerSource(header, HeaderEmail, HeaderAliasEmail),
+	})
+}
+
+// Attribution explains whether persisted actor fields came from explicit actor
+// headers, trusted authenticated identity projection, or no available evidence.
+func Attribution(actor Actor, explicitActor Actor, identity AuthenticatedIdentity) ActorAttribution {
+	actor = Normalize(actor)
+	explicitActor = Normalize(explicitActor)
+	identity = NormalizeAuthenticatedIdentity(identity)
+	if explicitActor.Available {
+		return ActorAttribution{
+			Available: true,
+			Source:    ActorAttributionSourceExplicitActorHeaders,
+			Summary:   "persisted plan/apply/audit actor fields will use explicit X-Tenet-Actor-* headers, with X-User-* actor aliases only filling missing actor fields",
+		}
+	}
+	if identity.Authenticated && actor.Available {
+		return ActorAttribution{
+			Available: true,
+			Source:    ActorAttributionSourceTrustedAuthenticatedIdentity,
+			Summary:   "persisted plan/apply/audit actor fields will project from trusted authenticated identity because no explicit actor headers were supplied",
+		}
+	}
+	return ActorAttribution{
+		Available: false,
+		Source:    ActorAttributionSourceUnavailable,
+		Summary:   "persisted plan/apply/audit actor fields will remain unavailable until explicit actor headers or trusted authenticated identity are supplied; actor attribution does not authorize routes",
+	}
+}
+
 // AuthenticatedIdentityProvenanceFromHeaders reports the source header family used
 // for each trusted authenticated identity field. Canonical X-Tenet-Authenticated-*
 // headers win over X-User-* compatibility aliases, matching AuthenticatedIdentityFromHeaders.
@@ -310,6 +373,18 @@ func ProjectAuthenticatedIdentity(identity AuthenticatedIdentity) Actor {
 // trusted front-door operator capabilities.
 func SupportedOperatorRoleNames() []string {
 	return []string{RoleViewer, RoleOperator, RoleAdmin}
+}
+
+// SupportedActorHeaderNames returns the canonical explicit actor-attribution
+// headers Tenet accepts for persisted plan/apply/audit records.
+func SupportedActorHeaderNames() []string {
+	return []string{HeaderID, HeaderName, HeaderEmail}
+}
+
+// SupportedActorAliasHeaderNames returns the compatible actor-attribution aliases
+// Tenet accepts when the matching canonical actor field is absent.
+func SupportedActorAliasHeaderNames() []string {
+	return []string{HeaderAliasID, HeaderAliasName, HeaderAliasEmail}
 }
 
 // SupportedAuthenticatedRoleHeaderNames returns the canonical trusted
@@ -463,6 +538,14 @@ func NormalizeAuthenticatedIdentity(identity AuthenticatedIdentity) Authenticate
 		identity.Reason = AuthenticatedIdentityUnavailableReason
 	}
 	return identity
+}
+
+// NormalizeActorProvenance keeps actor-attribution source strings explicit and stable.
+func NormalizeActorProvenance(provenance ActorProvenance) ActorProvenance {
+	provenance.IDSource = normalizeAuthenticatedIdentitySource(provenance.IDSource)
+	provenance.NameSource = normalizeAuthenticatedIdentitySource(provenance.NameSource)
+	provenance.EmailSource = normalizeAuthenticatedIdentitySource(provenance.EmailSource)
+	return provenance
 }
 
 // NormalizeAuthenticatedIdentityProvenance keeps source strings explicit and stable.

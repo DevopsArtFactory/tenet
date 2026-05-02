@@ -344,6 +344,10 @@ type operatorContextResponse struct {
 	Identity              requestactor.AuthenticatedIdentity           `json:"identity"`
 	IdentityHeaderSupport operatorContextIdentityHeaderSupport         `json:"identityHeaderSupport"`
 	IdentityProvenance    requestactor.AuthenticatedIdentityProvenance `json:"identityProvenance"`
+	Actor                 requestactor.Actor                           `json:"actor"`
+	ActorHeaderSupport    operatorContextIdentityHeaderSupport         `json:"actorHeaderSupport"`
+	ActorProvenance       requestactor.ActorProvenance                 `json:"actorProvenance"`
+	ActorAttribution      requestactor.ActorAttribution                `json:"actorAttribution"`
 	Roles                 operatorContextRoles                         `json:"roles"`
 	DeploymentAccess      operatorContextDeploymentAccess              `json:"deploymentAccess"`
 	AccessVerdicts        operatorContextAccessVerdicts                `json:"accessVerdicts"`
@@ -469,6 +473,9 @@ type operatorContextAccessVerdict struct {
 
 func buildOperatorContextResponse(r *http.Request, options Options) operatorContextResponse {
 	identity := requestactor.AuthenticatedIdentityFromContext(r.Context())
+	actor := requestactor.FromContext(r.Context())
+	actorHeaders := requestactor.FromHeaders(r.Header)
+	actorProvenance := requestactor.ActorProvenanceFromHeaders(r.Header)
 	identityProvenance := requestactor.NormalizeAuthenticatedIdentityProvenance(requestactor.AuthenticatedIdentityProvenance{})
 	if options.TrustAuthenticatedHeaders {
 		identityProvenance = requestactor.AuthenticatedIdentityProvenanceFromHeaders(r.Header)
@@ -496,6 +503,13 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 			Aliases:   requestactor.SupportedAuthenticatedIdentityAliasHeaderNames(),
 		},
 		IdentityProvenance: identityProvenance,
+		Actor:              actor,
+		ActorHeaderSupport: operatorContextIdentityHeaderSupport{
+			Canonical: requestactor.SupportedActorHeaderNames(),
+			Aliases:   requestactor.SupportedActorAliasHeaderNames(),
+		},
+		ActorProvenance:  actorProvenance,
+		ActorAttribution: requestactor.Attribution(actor, actorHeaders, identity),
 		Roles: operatorContextRoles{
 			Names:                roles.Names,
 			CanRead:              roles.AllowsOperatorRead(),

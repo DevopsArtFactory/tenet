@@ -368,6 +368,150 @@ func TestRouterOperatorContextReportsIdentityProvenanceSources(t *testing.T) {
 	}
 }
 
+func TestRouterOperatorContextReportsActorAttributionDiagnostics(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		trustHeaders       bool
+		headers            map[string]string
+		wantActor          map[string]any
+		wantIDSource       string
+		wantNameSource     string
+		wantEmailSource    string
+		wantSource         string
+		wantAvailable      bool
+		wantSummarySnippet string
+	}{
+		{
+			name: "no actor or trusted identity",
+			wantActor: map[string]any{
+				"available": false,
+				"reason":    requestactor.UnavailableReason,
+			},
+			wantIDSource:       "absent",
+			wantNameSource:     "absent",
+			wantEmailSource:    "absent",
+			wantSource:         "unavailable",
+			wantAvailable:      false,
+			wantSummarySnippet: "actor attribution does not authorize routes",
+		},
+		{
+			name: "explicit actor headers win over aliases",
+			headers: map[string]string{
+				requestactor.HeaderID:         "operator-123",
+				requestactor.HeaderName:       "Jane Operator",
+				requestactor.HeaderEmail:      "jane@example.com",
+				requestactor.HeaderAliasID:    "alias-456",
+				requestactor.HeaderAliasName:  "Alias Operator",
+				requestactor.HeaderAliasEmail: "alias@example.com",
+			},
+			wantActor: map[string]any{
+				"available": true,
+				"id":        "operator-123",
+				"name":      "Jane Operator",
+				"email":     "jane@example.com",
+			},
+			wantIDSource:       "canonical",
+			wantNameSource:     "canonical",
+			wantEmailSource:    "canonical",
+			wantSource:         "explicit_actor_headers",
+			wantAvailable:      true,
+			wantSummarySnippet: "X-User-* actor aliases only filling missing actor fields",
+		},
+		{
+			name: "alias actor headers",
+			headers: map[string]string{
+				requestactor.HeaderAliasID:    "alias-456",
+				requestactor.HeaderAliasName:  "Alias Operator",
+				requestactor.HeaderAliasEmail: "alias@example.com",
+			},
+			wantActor: map[string]any{
+				"available": true,
+				"id":        "alias-456",
+				"name":      "Alias Operator",
+				"email":     "alias@example.com",
+			},
+			wantIDSource:       "alias",
+			wantNameSource:     "alias",
+			wantEmailSource:    "alias",
+			wantSource:         "explicit_actor_headers",
+			wantAvailable:      true,
+			wantSummarySnippet: "explicit X-Tenet-Actor-* headers",
+		},
+		{
+			name:         "trusted authenticated identity projection",
+			trustHeaders: true,
+			headers: map[string]string{
+				requestactor.AuthenticatedHeaderID:    "front-door-123",
+				requestactor.AuthenticatedHeaderName:  "Front Door Operator",
+				requestactor.AuthenticatedHeaderEmail: "frontdoor@example.com",
+			},
+			wantActor: map[string]any{
+				"available": true,
+				"id":        "front-door-123",
+				"name":      "Front Door Operator",
+				"email":     "frontdoor@example.com",
+			},
+			wantIDSource:       "absent",
+			wantNameSource:     "absent",
+			wantEmailSource:    "absent",
+			wantSource:         "trusted_authenticated_identity",
+			wantAvailable:      true,
+			wantSummarySnippet: "project from trusted authenticated identity",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			router := NewRouter(Options{TrustAuthenticatedHeaders: tc.trustHeaders})
+			req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+			for name, value := range tc.headers {
+				req.Header.Set(name, value)
+			}
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+			}
+			var body map[string]any
+			if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode operator context response: %v", err)
+			}
+			actor := body["actor"].(map[string]any)
+			for key, want := range tc.wantActor {
+				if actor[key] != want {
+					t.Fatalf("actor[%s] = %#v, want %#v in %#v", key, actor[key], want, actor)
+				}
+			}
+			assertOperatorContextActorHeaderSupport(t, body)
+			provenance := body["actorProvenance"].(map[string]any)
+			if provenance["idSource"] != tc.wantIDSource || provenance["nameSource"] != tc.wantNameSource || provenance["emailSource"] != tc.wantEmailSource {
+				t.Fatalf("unexpected actor provenance: %#v", provenance)
+			}
+			attribution := body["actorAttribution"].(map[string]any)
+			if attribution["available"] != tc.wantAvailable || attribution["source"] != tc.wantSource {
+				t.Fatalf("unexpected actor attribution: %#v", attribution)
+			}
+			if summary, _ := attribution["summary"].(string); !strings.Contains(summary, tc.wantSummarySnippet) {
+				t.Fatalf("expected actor attribution summary to contain %q, got %#v", tc.wantSummarySnippet, attribution)
+			}
+		})
+	}
+}
+
+func assertOperatorContextActorHeaderSupport(t *testing.T, body map[string]any) {
+	t.Helper()
+	support, ok := body["actorHeaderSupport"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected actorHeaderSupport object, got %#v", body["actorHeaderSupport"])
+	}
+	if !reflect.DeepEqual(support["canonical"], []any{"X-Tenet-Actor-Id", "X-Tenet-Actor-Name", "X-Tenet-Actor-Email"}) {
+		t.Fatalf("unexpected canonical actor header support: %#v", support["canonical"])
+	}
+	if !reflect.DeepEqual(support["aliases"], []any{"X-User-ID", "X-User-Name", "X-User-Email"}) {
+		t.Fatalf("unexpected alias actor header support: %#v", support["aliases"])
+	}
+}
+
 func assertOperatorContextIdentityHeaderSupport(t *testing.T, body map[string]any) {
 	t.Helper()
 	support, ok := body["identityHeaderSupport"].(map[string]any)
