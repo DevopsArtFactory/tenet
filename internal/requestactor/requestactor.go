@@ -306,6 +306,12 @@ func ProjectAuthenticatedIdentity(identity AuthenticatedIdentity) Actor {
 	})
 }
 
+// SupportedOperatorRoleNames returns the stable role names that Tenet recognizes for
+// trusted front-door operator capabilities.
+func SupportedOperatorRoleNames() []string {
+	return []string{RoleViewer, RoleOperator, RoleAdmin}
+}
+
 // Allows reports whether the deployment is present in the exact trusted allowlist.
 func (deployments AuthorizedDeployments) Allows(deploymentName string) bool {
 	for _, authorized := range NormalizeAuthorizedDeployments(deployments).Names {
@@ -314,6 +320,37 @@ func (deployments AuthorizedDeployments) Allows(deploymentName string) bool {
 		}
 	}
 	return false
+}
+
+// RecognizedNames returns the normalized forwarded roles that Tenet recognizes as
+// supported operator capability roles.
+func (roles AuthenticatedRoles) RecognizedNames() []string {
+	return roles.partitionSupportedNames(true)
+}
+
+// UnrecognizedNames returns the normalized forwarded roles that are not part of
+// Tenet's supported operator capability role set.
+func (roles AuthenticatedRoles) UnrecognizedNames() []string {
+	return roles.partitionSupportedNames(false)
+}
+
+func (roles AuthenticatedRoles) partitionSupportedNames(wantSupported bool) []string {
+	normalized := NormalizeAuthenticatedRoles(roles)
+	if len(normalized.Names) == 0 {
+		return []string{}
+	}
+	supported := make(map[string]struct{}, 3)
+	for _, name := range SupportedOperatorRoleNames() {
+		supported[name] = struct{}{}
+	}
+	matches := make([]string, 0, len(normalized.Names))
+	for _, name := range normalized.Names {
+		_, ok := supported[name]
+		if ok == wantSupported {
+			matches = append(matches, name)
+		}
+	}
+	return matches
 }
 
 // AllowsAny reports whether any requested role matches one trusted forwarded role exactly.

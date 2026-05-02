@@ -189,6 +189,24 @@ func TestNormalizeAuthenticatedRolesProvenanceDefaultsUnsupportedSourcesToAbsent
 	}
 }
 
+func TestAuthenticatedRolesReportsRecognizedAndUnrecognizedNames(t *testing.T) {
+	roles := AuthenticatedRoles{Names: []string{"viewer", "auditor", "operator", "unknown", "admin", "auditor"}}
+	if got, want := roles.RecognizedNames(), []string{"viewer", "operator", "admin"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("recognized names = %#v, want %#v", got, want)
+	}
+	if got, want := roles.UnrecognizedNames(), []string{"auditor", "unknown"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("unrecognized names = %#v, want %#v", got, want)
+	}
+
+	roles = AuthenticatedRoles{}
+	if got := roles.RecognizedNames(); got == nil || len(got) != 0 {
+		t.Fatalf("expected explicit empty recognized names, got %#v", got)
+	}
+	if got := roles.UnrecognizedNames(); got == nil || len(got) != 0 {
+		t.Fatalf("expected explicit empty unrecognized names, got %#v", got)
+	}
+}
+
 func TestAuthenticatedRolesAllowsAnyRole(t *testing.T) {
 	roles := AuthenticatedRoles{Names: []string{"viewer", "operator"}}
 	if !roles.AllowsAny("admin", "operator") {

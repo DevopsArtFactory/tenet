@@ -165,6 +165,9 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if !reflect.DeepEqual(roles["names"], []any{"operator", "admin"}) || roles["canRead"] != true || roles["canWrite"] != true {
 		t.Fatalf("unexpected roles payload: %#v", roles)
 	}
+	if !reflect.DeepEqual(roles["recognizedNames"], []any{"operator", "admin"}) || !reflect.DeepEqual(roles["unrecognizedNames"], []any{}) {
+		t.Fatalf("unexpected role diagnostics: %#v", roles)
+	}
 	rolesProvenance, ok := roles["provenance"].(map[string]any)
 	if !ok || rolesProvenance["source"] != "canonical" {
 		t.Fatalf("expected canonical role provenance, got %#v", roles["provenance"])
@@ -359,14 +362,59 @@ func TestRouterOperatorContextReportsIdentityProvenanceSources(t *testing.T) {
 
 func TestRouterOperatorContextReportsRoleProvenance(t *testing.T) {
 	for _, tc := range []struct {
-		name       string
-		header     string
-		wantSource string
-		wantRoles  []any
+		name             string
+		header           string
+		wantSource       string
+		wantRoles        []any
+		wantRecognized   []any
+		wantUnrecognized []any
+		wantCanRead      bool
+		wantCanWrite     bool
+		wantNamesOmitted bool
 	}{
-		{name: "canonical roles", header: "viewer, operator", wantSource: "canonical", wantRoles: []any{"viewer", "operator"}},
-		{name: "empty roles", header: " , ", wantSource: "absent"},
-		{name: "absent roles", wantSource: "absent"},
+		{
+			name:             "only supported roles",
+			header:           "viewer, operator",
+			wantSource:       "canonical",
+			wantRoles:        []any{"viewer", "operator"},
+			wantRecognized:   []any{"viewer", "operator"},
+			wantUnrecognized: []any{},
+			wantCanRead:      true,
+			wantCanWrite:     true,
+		},
+		{
+			name:             "only unsupported roles",
+			header:           "auditor, security-reviewer",
+			wantSource:       "canonical",
+			wantRoles:        []any{"auditor", "security-reviewer"},
+			wantRecognized:   []any{},
+			wantUnrecognized: []any{"auditor", "security-reviewer"},
+		},
+		{
+			name:             "mixed supported and unsupported roles",
+			header:           "viewer, auditor, admin",
+			wantSource:       "canonical",
+			wantRoles:        []any{"viewer", "auditor", "admin"},
+			wantRecognized:   []any{"viewer", "admin"},
+			wantUnrecognized: []any{"auditor"},
+			wantCanRead:      true,
+			wantCanWrite:     true,
+		},
+		{
+			name:             "empty roles",
+			header:           " , ",
+			wantSource:       "absent",
+			wantRecognized:   []any{},
+			wantUnrecognized: []any{},
+			wantNamesOmitted: true,
+		},
+		{
+			name:             "absent roles",
+			wantSource:       "absent",
+			wantRecognized:   []any{},
+			wantUnrecognized: []any{},
+			wantNamesOmitted: true,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			router := NewRouter(Options{TrustAuthenticatedHeaders: true})
@@ -390,8 +438,21 @@ func TestRouterOperatorContextReportsRoleProvenance(t *testing.T) {
 			if provenance["source"] != tc.wantSource {
 				t.Fatalf("unexpected role provenance: %#v", provenance)
 			}
-			if tc.wantRoles != nil && !reflect.DeepEqual(roles["names"], tc.wantRoles) {
+			if tc.wantNamesOmitted {
+				if _, ok := roles["names"]; ok {
+					t.Fatalf("expected role names to be omitted, got %#v", roles["names"])
+				}
+			} else if !reflect.DeepEqual(roles["names"], tc.wantRoles) {
 				t.Fatalf("unexpected role names: got %#v want %#v", roles["names"], tc.wantRoles)
+			}
+			if !reflect.DeepEqual(roles["recognizedNames"], tc.wantRecognized) {
+				t.Fatalf("unexpected recognized role names: got %#v want %#v", roles["recognizedNames"], tc.wantRecognized)
+			}
+			if !reflect.DeepEqual(roles["unrecognizedNames"], tc.wantUnrecognized) {
+				t.Fatalf("unexpected unrecognized role names: got %#v want %#v", roles["unrecognizedNames"], tc.wantUnrecognized)
+			}
+			if roles["canRead"] != tc.wantCanRead || roles["canWrite"] != tc.wantCanWrite {
+				t.Fatalf("unexpected role capability booleans: %#v", roles)
 			}
 		})
 	}
