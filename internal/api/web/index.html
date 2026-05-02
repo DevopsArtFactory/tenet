@@ -1131,7 +1131,7 @@
           return `Managed login runtime: active ${provider} Tenet-managed browser login${route}`;
         }
         if (managedLogin.configured) {
-          return `Managed login runtime: configured for ${provider} but inactive; Tenet still expects trusted front-door recovery until login/callback/session routes are wired.`;
+          return `Managed login runtime: configured for ${provider} but inactive; Tenet still expects trusted front-door recovery until this API process reports active login/callback/session routes.`;
         }
         if (provider !== 'unconfigured') {
           return `Managed login runtime: not configured for ${provider}; Tenet still expects trusted front-door recovery.`;
