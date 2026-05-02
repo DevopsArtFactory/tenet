@@ -2310,6 +2310,8 @@ assert operator_context_trusted['actor']['email'] == 'frontdoor@example.com', op
 assert operator_context_trusted['actorProvenance'] == {'idSource': 'absent', 'nameSource': 'absent', 'emailSource': 'absent'}, operator_context_trusted
 assert operator_context_trusted['actorAttribution']['available'] is True, operator_context_trusted
 assert operator_context_trusted['actorAttribution']['source'] == 'trusted_authenticated_identity', operator_context_trusted
+actor_precedence = ['explicit_actor_headers', 'actor_alias_headers', 'trusted_authenticated_identity', 'unavailable']
+assert operator_context_trusted['actorAttribution']['precedence'] == actor_precedence, operator_context_trusted
 assert 'trusted authenticated identity' in operator_context_trusted['actorAttribution']['summary'], operator_context_trusted
 assert operator_context_trusted['roles']['names'] == ['viewer', 'operator'], operator_context_trusted
 assert operator_context_trusted['roles']['canRead'] is True, operator_context_trusted
@@ -2445,6 +2447,7 @@ assert operator_context_alias['actor']['email'] == 'alias@example.com', operator
 assert operator_context_alias['actorProvenance'] == {'idSource': 'alias', 'nameSource': 'alias', 'emailSource': 'alias'}, operator_context_alias
 assert operator_context_alias['actorAttribution']['available'] is True, operator_context_alias
 assert operator_context_alias['actorAttribution']['source'] == 'explicit_actor_headers', operator_context_alias
+assert operator_context_alias['actorAttribution']['precedence'] == actor_precedence, operator_context_alias
 assert 'explicit X-Tenet-Actor-* headers' in operator_context_alias['actorAttribution']['summary'], operator_context_alias
 assert_operator_context_common(operator_context_actor_precedence)
 assert operator_context_actor_precedence['identity']['id'] == 'front-door-actor-789', operator_context_actor_precedence
@@ -2458,6 +2461,7 @@ assert operator_context_actor_precedence['actor']['email'] == 'explicit.actor@ex
 assert operator_context_actor_precedence['actorProvenance'] == {'idSource': 'canonical', 'nameSource': 'canonical', 'emailSource': 'canonical'}, operator_context_actor_precedence
 assert operator_context_actor_precedence['actorAttribution']['available'] is True, operator_context_actor_precedence
 assert operator_context_actor_precedence['actorAttribution']['source'] == 'explicit_actor_headers', operator_context_actor_precedence
+assert operator_context_actor_precedence['actorAttribution']['precedence'] == actor_precedence, operator_context_actor_precedence
 assert 'explicit X-Tenet-Actor-* headers' in operator_context_actor_precedence['actorAttribution']['summary'], operator_context_actor_precedence
 assert operator_context_alias['roles']['names'] == ['viewer'], operator_context_alias
 assert operator_context_alias['roles']['canRead'] is True, operator_context_alias

@@ -149,6 +149,9 @@ func TestSupportedActorHeaderNamesReportCanonicalAndAliasFamilies(t *testing.T) 
 	if got, want := SupportedActorAliasHeaderNames(), []string{HeaderAliasID, HeaderAliasName, HeaderAliasEmail}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("supported actor alias headers = %#v, want %#v", got, want)
 	}
+	if got, want := SupportedActorAttributionPrecedence(), []string{ActorAttributionSourceExplicitActorHeaders, ActorAttributionSourceActorAliasHeaders, ActorAttributionSourceTrustedAuthenticatedIdentity, ActorAttributionSourceUnavailable}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("supported actor attribution precedence = %#v, want %#v", got, want)
+	}
 }
 
 func TestNormalizeActorProvenanceDefaultsUnknownSourcesToAbsent(t *testing.T) {
@@ -199,6 +202,9 @@ func TestAttributionReportsActorSourceWithoutAuthorizingRoutes(t *testing.T) {
 			got := Attribution(tc.actor, tc.explicitActor, tc.identity)
 			if got.Available != tc.wantAvailable || got.Source != tc.wantSource || !strings.Contains(got.Summary, tc.wantSummary) {
 				t.Fatalf("unexpected attribution: %+v", got)
+			}
+			if want := SupportedActorAttributionPrecedence(); !reflect.DeepEqual(got.Precedence, want) {
+				t.Fatalf("unexpected attribution precedence: got %#v, want %#v", got.Precedence, want)
 			}
 		})
 	}

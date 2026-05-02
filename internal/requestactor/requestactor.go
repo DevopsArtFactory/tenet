@@ -12,6 +12,7 @@ const (
 	AuthenticatedIdentitySourceAbsent    = "absent"
 
 	ActorAttributionSourceExplicitActorHeaders         = "explicit_actor_headers"
+	ActorAttributionSourceActorAliasHeaders            = "actor_alias_headers"
 	ActorAttributionSourceTrustedAuthenticatedIdentity = "trusted_authenticated_identity"
 	ActorAttributionSourceUnavailable                  = "unavailable"
 
@@ -87,9 +88,10 @@ type ActorProvenance struct {
 // ActorAttribution explains which request evidence will be used for persisted
 // plan/apply/audit actor fields. It is diagnostic-only and never authorizes routes.
 type ActorAttribution struct {
-	Available bool   `json:"available"`
-	Source    string `json:"source"`
-	Summary   string `json:"summary"`
+	Available  bool     `json:"available"`
+	Source     string   `json:"source"`
+	Precedence []string `json:"precedence"`
+	Summary    string   `json:"summary"`
 }
 
 // AuthenticatedRoles captures the front-door-authenticated roles Tenet can trust
@@ -264,24 +266,28 @@ func Attribution(actor Actor, explicitActor Actor, identity AuthenticatedIdentit
 	actor = Normalize(actor)
 	explicitActor = Normalize(explicitActor)
 	identity = NormalizeAuthenticatedIdentity(identity)
+	precedence := SupportedActorAttributionPrecedence()
 	if explicitActor.Available {
 		return ActorAttribution{
-			Available: true,
-			Source:    ActorAttributionSourceExplicitActorHeaders,
-			Summary:   "persisted plan/apply/audit actor fields will use explicit X-Tenet-Actor-* headers, with X-User-* actor aliases only filling missing actor fields",
+			Available:  true,
+			Source:     ActorAttributionSourceExplicitActorHeaders,
+			Precedence: precedence,
+			Summary:    "persisted plan/apply/audit actor fields will use explicit X-Tenet-Actor-* headers, with X-User-* actor aliases only filling missing actor fields",
 		}
 	}
 	if identity.Authenticated && actor.Available {
 		return ActorAttribution{
-			Available: true,
-			Source:    ActorAttributionSourceTrustedAuthenticatedIdentity,
-			Summary:   "persisted plan/apply/audit actor fields will project from trusted authenticated identity because no explicit actor headers were supplied",
+			Available:  true,
+			Source:     ActorAttributionSourceTrustedAuthenticatedIdentity,
+			Precedence: precedence,
+			Summary:    "persisted plan/apply/audit actor fields will project from trusted authenticated identity because no explicit actor headers were supplied",
 		}
 	}
 	return ActorAttribution{
-		Available: false,
-		Source:    ActorAttributionSourceUnavailable,
-		Summary:   "persisted plan/apply/audit actor fields will remain unavailable until explicit actor headers or trusted authenticated identity are supplied; actor attribution does not authorize routes",
+		Available:  false,
+		Source:     ActorAttributionSourceUnavailable,
+		Precedence: precedence,
+		Summary:    "persisted plan/apply/audit actor fields will remain unavailable until explicit actor headers or trusted authenticated identity are supplied; actor attribution does not authorize routes",
 	}
 }
 
@@ -385,6 +391,12 @@ func SupportedActorHeaderNames() []string {
 // Tenet accepts when the matching canonical actor field is absent.
 func SupportedActorAliasHeaderNames() []string {
 	return []string{HeaderAliasID, HeaderAliasName, HeaderAliasEmail}
+}
+
+// SupportedActorAttributionPrecedence returns the stable evidence order Tenet uses
+// when choosing actor fields persisted on immutable plan/apply/audit records.
+func SupportedActorAttributionPrecedence() []string {
+	return []string{ActorAttributionSourceExplicitActorHeaders, ActorAttributionSourceActorAliasHeaders, ActorAttributionSourceTrustedAuthenticatedIdentity, ActorAttributionSourceUnavailable}
 }
 
 // SupportedAuthenticatedRoleHeaderNames returns the canonical trusted
