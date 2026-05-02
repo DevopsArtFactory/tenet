@@ -947,6 +947,9 @@
       const operatorContextAccessVerdictCollectionFilterLabel = (verdict) => verdict?.filtersCollectionsByDeploymentAccess
         ? ' Collection scope: filtered to visible deployments'
         : '';
+      const operatorContextAccessVerdictEmptyCollectionLabel = (verdict) => verdict?.emptyCollectionLikely
+        ? ' Collection result: likely empty'
+        : '';
       const operatorContextAccessVerdictLabel = (label, verdict) => {
         if (!verdict || typeof verdict !== 'object') return null;
         const state = verdict.allowed ? 'allowed' : 'blocked';
@@ -954,8 +957,9 @@
         const examples = operatorContextAccessVerdictExampleRoutesLabel(verdict);
         const headers = operatorContextAccessVerdictRequiredHeadersLabel(verdict);
         const collectionFilter = operatorContextAccessVerdictCollectionFilterLabel(verdict);
+        const emptyCollection = operatorContextAccessVerdictEmptyCollectionLabel(verdict);
         const scopeGrants = operatorContextAccessVerdictScopeGrantLabel(verdict);
-        return `${label} ${state}${reason}${examples}${headers}${collectionFilter}${scopeGrants}`;
+        return `${label} ${state}${reason}${examples}${headers}${collectionFilter}${emptyCollection}${scopeGrants}`;
       };
       const operatorContextAccessVerdictClass = (verdict) => {
         if (!verdict || typeof verdict !== 'object') return '';
