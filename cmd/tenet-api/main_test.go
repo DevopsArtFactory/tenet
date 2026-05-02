@@ -275,6 +275,38 @@ func TestNewAPIOptionsIncludesGitHubWebhookSecretFromEnv(t *testing.T) {
 	}
 }
 
+func TestNewAPIOptionsIncludesManagedLoginRuntimeDiagnosticFromEnv(t *testing.T) {
+	t.Setenv("TENET_AUTH_PROVIDER", "github")
+	t.Setenv("TENET_GITHUB_OAUTH_CLIENT_ID", "client-id")
+	t.Setenv("TENET_GITHUB_OAUTH_CLIENT_SECRET", "client-secret")
+	t.Setenv("TENET_GITHUB_OAUTH_REDIRECT_URL", "https://tenet.example.com/auth/callback/github")
+	t.Setenv("TENET_AUTH_STATE_STORE_PATH", filepath.Join(t.TempDir(), "oauth-state.json"))
+	t.Setenv("TENET_AUTH_IDENTITY_STORE_PATH", filepath.Join(t.TempDir(), "oauth-identities.json"))
+	t.Setenv("TENET_AUTH_SESSION_SECRET", "session-secret")
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, writeRepositoryFixture(t), nil)
+	managedLogin := options.AuthRuntime.TenetManagedLogin
+
+	if !managedLogin.Configured || managedLogin.Active {
+		t.Fatalf("expected configured but inactive managed-login diagnostic, got %+v", managedLogin)
+	}
+	if managedLogin.Provider != "github" || managedLogin.LoginRoute != "/auth/login/github" || managedLogin.CallbackRoute != "/auth/callback/github" {
+		t.Fatalf("unexpected managed-login route/provider diagnostic: %+v", managedLogin)
+	}
+	if managedLogin.SessionCookieName != "tenet_session" || !managedLogin.StateStoreConfigured || !managedLogin.IdentityStoreConfigured || !managedLogin.SessionSecretConfigured {
+		t.Fatalf("unexpected managed-login store/session diagnostic: %+v", managedLogin)
+	}
+}
+
+func TestNewAPIOptionsLeavesManagedLoginRuntimeDiagnosticDisabledByDefault(t *testing.T) {
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, writeRepositoryFixture(t), nil)
+	managedLogin := options.AuthRuntime.TenetManagedLogin
+
+	if managedLogin.Configured || managedLogin.Active || managedLogin.Provider != "" {
+		t.Fatalf("expected disabled unconfigured managed-login diagnostic, got %+v", managedLogin)
+	}
+}
+
 func TestNewAPIOptionsIncludesAuthenticatedIdentityConfigFromEnv(t *testing.T) {
 	t.Setenv("TENET_API_TRUST_AUTHENTICATED_HEADERS", "true")
 	t.Setenv("TENET_API_ENFORCE_AUTHENTICATED_IDENTITY", "true")

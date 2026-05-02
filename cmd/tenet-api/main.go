@@ -56,6 +56,7 @@ func main() {
 	enforceDeploymentReadAuthorization := operatorDeploymentReadAuthorizationEnforced()
 	trustAuthenticatedHeaders := trustedAuthenticatedHeadersEnabled() || enforceAuthenticatedIdentity || enforceOperatorRoleAuthorization || enforceDeploymentReadAuthorization
 	webhookConfigured := strings.TrimSpace(os.Getenv("TENET_GITHUB_WEBHOOK_SECRET")) != ""
+	authRuntime := authRuntimeDiagnosticFromEnv()
 	redisAddr := os.Getenv("TENET_REDIS_ADDR")
 	statusSeedPath := os.Getenv("TENET_STATUS_SEED_PATH")
 	catalogSource, err := loadCatalogSourceFromEnv()
@@ -73,7 +74,7 @@ func main() {
 
 	info := buildinfo.Current(version, commit)
 	catalogSourceKind, repoRoot, githubRepository, githubRef, githubPath, githubBaseURL := catalogSource.logFields()
-	log.Printf("starting tenet-api version=%s commit=%s addr=%s catalog_source=%s repo_root=%s github_repository=%s github_ref=%s github_path=%s github_base_url=%s status_backend=%s status_path=%s plan_store_path=%s apply_store_path=%s apply_enabled=%t trust_authenticated_headers=%t require_authenticated_identity=%t require_operator_role_for_write=%t require_deployment_read_authorization=%t github_webhook_configured=%t redis_addr=%s request_timeout=%s", info.Version, info.Commit, addr, catalogSourceKind, repoRoot, githubRepository, githubRef, githubPath, githubBaseURL, statusBackend, statusPath, planStorePath, applyStorePath, applyEnabled, trustAuthenticatedHeaders, enforceAuthenticatedIdentity, enforceOperatorRoleAuthorization, enforceDeploymentReadAuthorization, webhookConfigured, redisAddr, requestTimeout)
+	log.Printf("starting tenet-api version=%s commit=%s addr=%s catalog_source=%s repo_root=%s github_repository=%s github_ref=%s github_path=%s github_base_url=%s status_backend=%s status_path=%s plan_store_path=%s apply_store_path=%s apply_enabled=%t trust_authenticated_headers=%t require_authenticated_identity=%t require_operator_role_for_write=%t require_deployment_read_authorization=%t github_webhook_configured=%t tenet_managed_login_configured=%t redis_addr=%s request_timeout=%s", info.Version, info.Commit, addr, catalogSourceKind, repoRoot, githubRepository, githubRef, githubPath, githubBaseURL, statusBackend, statusPath, planStorePath, applyStorePath, applyEnabled, trustAuthenticatedHeaders, enforceAuthenticatedIdentity, enforceOperatorRoleAuthorization, enforceDeploymentReadAuthorization, webhookConfigured, authRuntime.TenetManagedLogin.Configured, redisAddr, requestTimeout)
 
 	store := mustOpenStatusStore(statusBackend, statusPath, redisAddr)
 	if store != nil {
@@ -128,6 +129,7 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 		RequireOperatorRoleForWrite:        operatorWriteRoleAuthorizationEnforced(),
 		RequireDeploymentReadAuthorization: operatorDeploymentReadAuthorizationEnforced(),
 		GitHubWebhookSecret:                strings.TrimSpace(os.Getenv("TENET_GITHUB_WEBHOOK_SECRET")),
+		AuthRuntime:                        authRuntimeDiagnosticFromEnv(),
 		GitHubWebhookDesiredStateSource:    source.webhookDesiredStateSource(),
 		GitHubWebhookRefreshPublisher:      newGitHubWebhookRefreshPublisher(store),
 	}
@@ -352,6 +354,33 @@ func operatorWriteRoleAuthorizationEnforced() bool {
 
 func operatorDeploymentReadAuthorizationEnforced() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION")), "true")
+}
+
+func authRuntimeDiagnosticFromEnv() api.AuthRuntimeDiagnostic {
+	provider := strings.ToLower(strings.TrimSpace(os.Getenv("TENET_AUTH_PROVIDER")))
+	clientID := strings.TrimSpace(os.Getenv("TENET_GITHUB_OAUTH_CLIENT_ID"))
+	clientSecret := strings.TrimSpace(os.Getenv("TENET_GITHUB_OAUTH_CLIENT_SECRET"))
+	redirectURL := strings.TrimSpace(os.Getenv("TENET_GITHUB_OAUTH_REDIRECT_URL"))
+	stateStorePath := strings.TrimSpace(os.Getenv("TENET_AUTH_STATE_STORE_PATH"))
+	identityStorePath := strings.TrimSpace(os.Getenv("TENET_AUTH_IDENTITY_STORE_PATH"))
+	sessionSecret := strings.TrimSpace(os.Getenv("TENET_AUTH_SESSION_SECRET"))
+
+	configured := provider == "github" && clientID != "" && clientSecret != "" && redirectURL != "" && stateStorePath != "" && identityStorePath != "" && sessionSecret != ""
+	if !configured {
+		return api.AuthRuntimeDiagnostic{}
+	}
+	return api.AuthRuntimeDiagnostic{
+		TenetManagedLogin: api.TenetManagedLoginDiagnostic{
+			Configured:              true,
+			Provider:                "github",
+			LoginRoute:              "/auth/login/github",
+			CallbackRoute:           "/auth/callback/github",
+			SessionCookieName:       "tenet_session",
+			StateStoreConfigured:    true,
+			IdentityStoreConfigured: true,
+			SessionSecretConfigured: true,
+		},
+	}
 }
 
 func newApplyRequestFingerprintProvider(loadDetail func(context.Context, string) (catalog.DeploymentOverviewDetail, error)) applyrequest.CurrentFingerprintProvider {
