@@ -994,11 +994,13 @@ assert 'Refresh context' in ui, ui
 assert 'Show access details' in ui, ui
 assert 'Hide access details' in ui, ui
 assert 'Role header source: ${labels[source] || labels.absent}' in ui, ui
+assert 'Supported Tenet roles: ${supported.join(\', \')}' in ui, ui
+assert 'operatorContextSupportedRolesLabel(context)' in ui, ui
 assert 'canonical X-Tenet-Authenticated-Roles' in ui, ui
 assert 'operatorContextRoleProvenanceClass' in ui, ui
 assert 'Recognized capability roles:' in ui, ui
 assert 'Unsupported forwarded roles ignored for capability checks:' in ui, ui
-assert 'Forward viewer, operator, or admin to grant Tenet read/write capabilities.' in ui, ui
+assert 'to grant Tenet read/write capabilities.' in ui, ui
 assert 'operatorContextUnsupportedRolesClass' in ui, ui
 assert 'operator-context-details' in ui, ui
 assert 'Last refresh failed:' in ui, ui
