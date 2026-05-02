@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -191,6 +192,9 @@ func TestManagedGitHubLoginCallbackCreatesSessionAndAuthenticatedContext(t *test
 	if !body.AuthRuntime.TenetManagedLogin.Active || body.AuthRuntime.TenetManagedLogin.UnavailableReason != "" {
 		t.Fatalf("expected active managed login diagnostic, got %#v", body.AuthRuntime.TenetManagedLogin)
 	}
+	if body.AuthRuntime.TenetManagedLogin.SessionCookieSecureOverride || body.AuthRuntime.TenetManagedLogin.SessionCookieSecureForRequest || len(body.AuthRuntime.TenetManagedLogin.SessionCookieSecureSources) != 0 {
+		t.Fatalf("expected local HTTP operator context to report non-secure managed-session cookie mode, got %#v", body.AuthRuntime.TenetManagedLogin)
+	}
 	if !body.Identity.Authenticated || body.Identity.ID != "github:12345" || body.Identity.Name != "Octo Operator" || body.Identity.Email != "octo@example.com" {
 		t.Fatalf("expected session-derived authenticated identity, got %#v", body.Identity)
 	}
@@ -238,6 +242,58 @@ func TestManagedGitHubLoginCallbackSecureCookieModes(t *testing.T) {
 		cookie := managedLoginCallbackCookie(t, NewRouter(options), nil)
 		if !cookie.Secure {
 			t.Fatalf("expected forced secure cookie option to set Secure=true, got %#v", cookie)
+		}
+	})
+}
+
+func TestManagedLoginOperatorContextReportsSessionCookieSecurityDiagnostics(t *testing.T) {
+	t.Run("forwarded https request reports secure source", func(t *testing.T) {
+		options, _ := managedLoginTestOptions(t, &fakeAuthProvider{})
+		router := NewRouter(options)
+		req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+		req.Header.Set("X-Forwarded-Proto", "https")
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected operator context 200, got %d: %s", resp.Code, resp.Body.String())
+		}
+		var body struct {
+			AuthRuntime AuthRuntimeDiagnostic `json:"authRuntime"`
+		}
+		if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode operator context: %v", err)
+		}
+		managedLogin := body.AuthRuntime.TenetManagedLogin
+		if !managedLogin.SessionCookieSecureForRequest || managedLogin.SessionCookieSecureOverride {
+			t.Fatalf("expected forwarded HTTPS secure-cookie diagnostics without override, got %#v", managedLogin)
+		}
+		if !reflect.DeepEqual(managedLogin.SessionCookieSecureSources, []string{"x_forwarded_proto_https"}) {
+			t.Fatalf("expected forwarded HTTPS source evidence, got %#v", managedLogin.SessionCookieSecureSources)
+		}
+	})
+
+	t.Run("configured override reports explicit secure source", func(t *testing.T) {
+		options, _ := managedLoginTestOptions(t, &fakeAuthProvider{})
+		options.AuthSessionCookieSecure = true
+		router := NewRouter(options)
+		req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected operator context 200, got %d: %s", resp.Code, resp.Body.String())
+		}
+		var body struct {
+			AuthRuntime AuthRuntimeDiagnostic `json:"authRuntime"`
+		}
+		if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode operator context: %v", err)
+		}
+		managedLogin := body.AuthRuntime.TenetManagedLogin
+		if !managedLogin.SessionCookieSecureOverride || !managedLogin.SessionCookieSecureForRequest {
+			t.Fatalf("expected secure override diagnostics, got %#v", managedLogin)
+		}
+		if !reflect.DeepEqual(managedLogin.SessionCookieSecureSources, []string{"configured_override"}) {
+			t.Fatalf("expected configured override source evidence, got %#v", managedLogin.SessionCookieSecureSources)
 		}
 	})
 }

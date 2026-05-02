@@ -367,19 +367,22 @@ type AuthRuntimeDiagnostic struct {
 // Active is true only when the current API process has complete non-secret runtime
 // settings, provider/session wiring, and no missing settings for the login routes.
 type TenetManagedLoginDiagnostic struct {
-	Configured              bool     `json:"configured"`
-	Active                  bool     `json:"active"`
-	Provider                string   `json:"provider"`
-	RequiredSettings        []string `json:"requiredSettings"`
-	MissingSettings         []string `json:"missingSettings"`
-	LoginRoute              string   `json:"loginRoute,omitempty"`
-	CallbackRoute           string   `json:"callbackRoute,omitempty"`
-	LogoutRoute             string   `json:"logoutRoute,omitempty"`
-	SessionCookieName       string   `json:"sessionCookieName,omitempty"`
-	StateStoreConfigured    bool     `json:"stateStoreConfigured"`
-	IdentityStoreConfigured bool     `json:"identityStoreConfigured"`
-	SessionSecretConfigured bool     `json:"sessionSecretConfigured"`
-	UnavailableReason       string   `json:"unavailableReason,omitempty"`
+	Configured                    bool     `json:"configured"`
+	Active                        bool     `json:"active"`
+	Provider                      string   `json:"provider"`
+	RequiredSettings              []string `json:"requiredSettings"`
+	MissingSettings               []string `json:"missingSettings"`
+	LoginRoute                    string   `json:"loginRoute,omitempty"`
+	CallbackRoute                 string   `json:"callbackRoute,omitempty"`
+	LogoutRoute                   string   `json:"logoutRoute,omitempty"`
+	SessionCookieName             string   `json:"sessionCookieName,omitempty"`
+	SessionCookieSecureOverride   bool     `json:"sessionCookieSecureOverride"`
+	SessionCookieSecureForRequest bool     `json:"sessionCookieSecureForRequest"`
+	SessionCookieSecureSources    []string `json:"sessionCookieSecureSources,omitempty"`
+	StateStoreConfigured          bool     `json:"stateStoreConfigured"`
+	IdentityStoreConfigured       bool     `json:"identityStoreConfigured"`
+	SessionSecretConfigured       bool     `json:"sessionSecretConfigured"`
+	UnavailableReason             string   `json:"unavailableReason,omitempty"`
 }
 
 type operatorContextTrustedHeaders struct {
@@ -528,7 +531,7 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 			OperatorReadRoleEnforced:            options.RequireOperatorRoleForRead,
 			OperatorWriteRoleEnforced:           options.RequireOperatorRoleForWrite,
 		},
-		AuthRuntime: normalizeAuthRuntimeDiagnostic(options.AuthRuntime),
+		AuthRuntime: buildAuthRuntimeDiagnosticForRequest(r, options),
 		Enforcement: buildOperatorContextEnforcement(options),
 		Identity:    identity,
 		IdentityHeaderSupport: operatorContextIdentityHeaderSupport{
@@ -567,6 +570,20 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 		},
 		AccessVerdicts: buildOperatorContextAccessVerdicts(options, identity, roles, deployments, scopes, summary),
 	}
+}
+
+func buildAuthRuntimeDiagnosticForRequest(r *http.Request, options Options) AuthRuntimeDiagnostic {
+	diagnostic := options.AuthRuntime
+	managedLogin := diagnostic.TenetManagedLogin
+	authSession := authSessionConfigFromOptions(options)
+	managedLogin.SessionCookieSecureOverride = authSession.CookieSecure
+	if authSession.active() || managedLogin.Configured {
+		secureSources := authSession.secureCookieSources(r)
+		managedLogin.SessionCookieSecureForRequest = len(secureSources) > 0
+		managedLogin.SessionCookieSecureSources = secureSources
+	}
+	diagnostic.TenetManagedLogin = managedLogin
+	return normalizeAuthRuntimeDiagnostic(diagnostic)
 }
 
 func normalizeAuthRuntimeDiagnostic(diagnostic AuthRuntimeDiagnostic) AuthRuntimeDiagnostic {
