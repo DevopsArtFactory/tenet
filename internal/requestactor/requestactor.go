@@ -312,6 +312,18 @@ func SupportedOperatorRoleNames() []string {
 	return []string{RoleViewer, RoleOperator, RoleAdmin}
 }
 
+// SupportedAuthenticatedIdentityHeaderNames returns the canonical trusted
+// front-door identity headers Tenet accepts when authenticated headers are trusted.
+func SupportedAuthenticatedIdentityHeaderNames() []string {
+	return []string{AuthenticatedHeaderID, AuthenticatedHeaderName, AuthenticatedHeaderEmail}
+}
+
+// SupportedAuthenticatedIdentityAliasHeaderNames returns the compatibility
+// trusted identity aliases Tenet accepts when the matching canonical field is absent.
+func SupportedAuthenticatedIdentityAliasHeaderNames() []string {
+	return []string{HeaderAliasID, HeaderAliasName, HeaderAliasEmail}
+}
+
 // Allows reports whether the deployment is present in the exact trusted allowlist.
 func (deployments AuthorizedDeployments) Allows(deploymentName string) bool {
 	for _, authorized := range NormalizeAuthorizedDeployments(deployments).Names {
