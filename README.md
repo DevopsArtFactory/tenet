@@ -184,6 +184,8 @@ curl -fsS http://localhost:8080/v1/operator/context \
   -H 'X-Tenet-Authorized-Environments: prod-apne2'
 ```
 
+To test whether a front door is forwarding unsupported role labels, send the same request with `X-Tenet-Authenticated-Roles: viewer,auditor`. The diagnostic should show `roles.recognizedNames=["viewer"]`, `roles.unrecognizedNames=["auditor"]`, `roles.canRead=true`, and `roles.canWrite=false`; `auditor` is reported so operators can fix the front-door/RBAC mapping, but it does not grant Tenet read or write capability.
+
 Example diagnostic summary shape (including identity and role source provenance, where identity `canonical` means `X-Tenet-Authenticated-*`, identity `alias` means compatibility `X-User-*`, and role `canonical` means a normalized `X-Tenet-Authenticated-Roles` value was forwarded):
 
 ```json
