@@ -1003,6 +1003,9 @@ assert 'Hide access details' in ui, ui
 assert 'Role header source: ${labels[source] || labels.absent}' in ui, ui
 assert 'Supported Tenet roles: ${supported.join(\', \')}' in ui, ui
 assert 'operatorContextSupportedRolesLabel(context)' in ui, ui
+assert "const operatorContextSupportedIdentityHeadersLabel = (context) => {" in ui, ui
+assert "Supported identity headers: canonical ${canonicalText}; compatibility aliases ${aliasText}. Canonical X-Tenet-Authenticated-* identity headers are preferred when both canonical and alias values are present." in ui, ui
+assert 'operatorContextSupportedIdentityHeadersLabel(context)' in ui, ui
 assert "const operatorContextSupportedRoleHeadersLabel = (context) => {" in ui, ui
 assert "Supported role headers: ${supportedHeaders.join(', ')} (role forwarding has no X-User-* alias)" in ui, ui
 assert 'operatorContextSupportedRoleHeadersLabel(context)' in ui, ui

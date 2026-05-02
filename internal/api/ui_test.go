@@ -33,6 +33,10 @@ func TestEmbeddedUIRendersOperatorContextBannerSafely(t *testing.T) {
 		"const operatorContextIdentityProvenanceLabel = (context) =>",
 		"Identity header sources:",
 		"compatibility X-User-*",
+		"const operatorContextSupportedIdentityHeadersLabel = (context) => {",
+		"identityHeaderSupport",
+		"Supported identity headers: canonical ${canonicalText}; compatibility aliases ${aliasText}. Canonical X-Tenet-Authenticated-* identity headers are preferred when both canonical and alias values are present.",
+		"operatorContextSupportedIdentityHeadersLabel(context)",
 		"const operatorContextIdentityLabel = (context) => {",
 		"const operatorContextRoleNames = (roles, field) => Array.isArray(roles?.[field]) ? roles[field].filter(Boolean) : [];",
 		"const operatorContextRoleLabel = (context) => {",
@@ -1987,6 +1991,9 @@ func TestSmokeDockerScriptLocksOperatorContextRoleDiagnostics(t *testing.T) {
 		"assert operator_context_unsupported_roles[\"roles\"][\"recognizedNames\"] == [\"viewer\"], operator_context_unsupported_roles",
 		"assert operator_context_unsupported_roles[\"roles\"][\"unrecognizedNames\"] == [\"auditor\"], operator_context_unsupported_roles",
 		"operatorContextSupportedRolesLabel(context)",
+		"const operatorContextSupportedIdentityHeadersLabel = (context) => {",
+		"Supported identity headers: canonical ${canonicalText}; compatibility aliases ${aliasText}. Canonical X-Tenet-Authenticated-* identity headers are preferred when both canonical and alias values are present.",
+		"operatorContextSupportedIdentityHeadersLabel(context)",
 		"const operatorContextSupportedRoleHeadersLabel = (context) => {",
 		"Supported role headers: ${supportedHeaders.join(', ')} (role forwarding has no X-User-* alias)",
 		"operatorContextSupportedRoleHeadersLabel(context)",
@@ -2010,6 +2017,9 @@ func TestSmokeLocalScriptLocksOperatorContextRoleDiagnostics(t *testing.T) {
 
 	text := string(body)
 	for _, fragment := range []string{
+		"assert \"const operatorContextSupportedIdentityHeadersLabel = (context) => {\" in ui, ui",
+		"assert \"Supported identity headers: canonical ${canonicalText}; compatibility aliases ${aliasText}. Canonical X-Tenet-Authenticated-* identity headers are preferred when both canonical and alias values are present.\" in ui, ui",
+		"assert 'operatorContextSupportedIdentityHeadersLabel(context)' in ui, ui",
 		"assert \"const operatorContextSupportedRoleHeadersLabel = (context) => {\" in ui, ui",
 		"assert \"Supported role headers: ${supportedHeaders.join(', ')} (role forwarding has no X-User-* alias)\" in ui, ui",
 		"assert 'operatorContextSupportedRoleHeadersLabel(context)' in ui, ui",

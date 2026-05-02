@@ -779,6 +779,15 @@
         const provenance = context?.identityProvenance || {};
         return [provenance.idSource, provenance.nameSource, provenance.emailSource].includes('alias') ? 'operator-context-warning' : '';
       };
+      const operatorContextSupportedIdentityHeadersLabel = (context) => {
+        const support = context?.identityHeaderSupport || {};
+        const canonical = Array.isArray(support.canonical) ? support.canonical.filter(Boolean) : [];
+        const aliases = Array.isArray(support.aliases) ? support.aliases.filter(Boolean) : [];
+        if (!canonical.length && !aliases.length) return null;
+        const canonicalText = canonical.length ? canonical.join(', ') : 'none reported';
+        const aliasText = aliases.length ? aliases.join(', ') : 'none reported';
+        return `Supported identity headers: canonical ${canonicalText}; compatibility aliases ${aliasText}. Canonical X-Tenet-Authenticated-* identity headers are preferred when both canonical and alias values are present.`;
+      };
       const operatorContextRoleNames = (roles, field) => Array.isArray(roles?.[field]) ? roles[field].filter(Boolean) : [];
       const operatorContextRoleLabel = (context) => {
         const roles = context?.roles || {};
@@ -1145,6 +1154,10 @@
             detailsMeta.append(createElement('span', operatorContextEnforcementClass(context), enforcementSummary));
           }
           detailsMeta.append(createElement('span', operatorContextIdentityProvenanceClass(context), operatorContextIdentityProvenanceLabel(context)));
+          const supportedIdentityHeaders = operatorContextSupportedIdentityHeadersLabel(context);
+          if (supportedIdentityHeaders) {
+            detailsMeta.append(createElement('span', '', supportedIdentityHeaders));
+          }
           detailsMeta.append(createElement('span', operatorContextRoleProvenanceClass(context), operatorContextRoleProvenanceLabel(context)));
           const supportedRoles = operatorContextSupportedRolesLabel(context);
           if (supportedRoles) {
