@@ -154,6 +154,22 @@ const scenarios = [
     unexpected: 'Failed to load overview:',
   },
   {
+    name: 'applications overview 401 offers managed login when operator context reports active route',
+    search: '?q=payments&sync=OutOfSync&account=210987654321',
+    route: '/v1/overview/applications',
+    status: 401,
+    body: 'unauthenticated: operator identity missing',
+    operatorContext: { authRuntime: { tenetManagedLogin: { configured: true, active: true, provider: 'github', requiredSettings: ['TENET_AUTH_PROVIDER'], missingSettings: [], loginRoute: '/auth/login/github', callbackRoute: '/auth/callback/github', stateStoreConfigured: true, identityStoreConfigured: true, sessionSecretConfigured: true, sessionCookieName: 'tenet_session' } }, trustedHeaders: { enabled: true }, enforcement: { mode: 'trusted_front_door_read_write' }, identity: { authenticated: false }, roles: { canRead: false, canWrite: false }, deploymentAccess: { enforced: true, forwarded: false } },
+    expected: [
+      'Applications overview',
+      'Authenticated operator required',
+      'Tenet rejected GET /v1/overview/applications because authenticated identity is required on this operator read route.',
+      'Tenet-managed GitHub login is active for this API instance; use the sign-in handoff below to authenticate through /auth/login/github and return to this same bookmarkable URL. Trusted front-door X-Tenet-Authenticated-* identity headers still take precedence when present.',
+      'Sign in with Tenet-managed GitHub login',
+    ],
+    unexpected: 'Failed to load overview:',
+  },
+  {
     name: 'applications overview 403 explains operator authorization failure',
     search: '?q=payments',
     route: '/v1/overview/applications',
@@ -262,6 +278,7 @@ const scenarios = [
 (async () => {
   for (const scenario of scenarios) {
     const document = new Document();
+    if (scenario.operatorContext) document.byID.set('operator-context', document.createElement('section'));
     document.byID.set('toolbar', document.createElement('section'));
     document.byID.set('summary', document.createElement('section'));
     document.byID.set('accounts', document.createElement('section'));
@@ -271,6 +288,9 @@ const scenarios = [
     let fetchCount = 0;
     const fetch = (url) => {
       fetchCount += 1;
+      if (String(url) === '/v1/operator/context' && scenario.operatorContext) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(scenario.operatorContext) });
+      }
       if (String(url) !== scenario.route) throw new Error('unexpected fetch url for ' + scenario.name + ': ' + url);
       return Promise.resolve({
         ok: false,
@@ -282,7 +302,8 @@ const scenarios = [
     await settle();
     await settle();
     await settle();
-    if (fetchCount !== 1) throw new Error('expected one fetch for ' + scenario.name + ', got ' + fetchCount);
+    const expectedFetchCount = scenario.operatorContext ? 2 : 1;
+    if (fetchCount !== expectedFetchCount) throw new Error('expected ' + expectedFetchCount + ' fetches for ' + scenario.name + ', got ' + fetchCount);
     if (window.location.search !== initialSearch) throw new Error('expected bookmarkable URL to stay unchanged for ' + scenario.name + ', got ' + window.location.search);
     const text = [
       ...collectText(document.getElementById('toolbar')),
@@ -299,9 +320,17 @@ const scenarios = [
       ...collectLinks(document.getElementById('accounts')),
     ];
     const signInRetryLink = links.find((link) => link.text.includes('Retry current page after front-door sign-in'));
+    const managedSignInLink = links.find((link) => link.text.includes('Sign in with Tenet-managed GitHub login'));
     const accessRetryLink = links.find((link) => link.text.includes('Retry current page after access update'));
     const operatorContextLink = links.find((link) => link.text.includes('Open Operator context details'));
-    if (scenario.status === 401) {
+    if (scenario.status === 401 && scenario.operatorContext?.authRuntime?.tenetManagedLogin?.active) {
+      if (!managedSignInLink) throw new Error('expected managed sign-in recovery link for ' + scenario.name + ': ' + JSON.stringify(links));
+      const expectedReturn = encodeURIComponent('/' + initialSearch);
+      if (managedSignInLink.href !== '/auth/login/github?returnUrl=' + expectedReturn) throw new Error('expected managed sign-in link to preserve returnUrl for ' + scenario.name + ', got ' + managedSignInLink.href);
+      if (managedSignInLink.target !== '_self') throw new Error('expected managed sign-in link to stay in same shell for ' + scenario.name);
+      if (signInRetryLink) throw new Error('did not expect front-door retry link when managed login is active for ' + scenario.name);
+      if (accessRetryLink) throw new Error('did not expect access-update retry link for auth-required scenario ' + scenario.name);
+    } else if (scenario.status === 401) {
       if (!signInRetryLink) throw new Error('expected front-door sign-in retry recovery link for ' + scenario.name + ': ' + JSON.stringify(links));
       if (signInRetryLink.href !== '/' + initialSearch) throw new Error('expected sign-in retry link to preserve bookmarkable URL for ' + scenario.name + ', got ' + signInRetryLink.href);
       if (signInRetryLink.target !== '_self') throw new Error('expected sign-in retry link to stay in same shell for ' + scenario.name);
@@ -443,7 +472,7 @@ async function render(operatorResponses, initialHash = '') {
   if (ready.compactText().includes('Role header source:')) throw new Error('role provenance should stay inside expanded access details');
   if (!ready.detailsText().includes('Role header source: canonical X-Tenet-Authenticated-Roles')) throw new Error('expected role provenance inside expanded access details');
   if (!ready.detailsText().includes('Supported identity headers: canonical X-Tenet-Authenticated-Id, X-Tenet-Authenticated-Name, X-Tenet-Authenticated-Email; compatibility aliases X-User-ID, X-User-Name, X-User-Email. Canonical X-Tenet-Authenticated-* identity headers are preferred when both canonical and alias values are present.')) throw new Error('expected supported identity headers inside expanded access details');
-  if (!ready.detailsText().includes('Authentication boundary: this embedded shell consumes trusted front-door headers only; it does not start an in-page GitHub OAuth login or Tenet-managed browser session from this page. Managed-login runtime diagnostics below are read-only until the optional login/callback/session routes are active.')) throw new Error('expected authentication boundary inside expanded access details');
+  if (!ready.detailsText().includes('Authentication boundary: this embedded shell consumes trusted front-door headers only; it does not start an in-page GitHub OAuth login or Tenet-managed browser session from this page unless the optional login/callback/session routes report active.')) throw new Error('expected authentication boundary inside expanded access details');
   if (!ready.detailsText().includes('Managed login runtime: configured for github but inactive; Tenet still expects trusted front-door recovery until login/callback/session routes are wired.')) throw new Error('expected managed-login runtime status inside expanded access details');
   if (!ready.detailsText().includes('Managed login required settings present: TENET_AUTH_PROVIDER, TENET_GITHUB_OAUTH_CLIENT_ID, TENET_GITHUB_OAUTH_CLIENT_SECRET, TENET_AUTH_STATE_STORE_PATH, TENET_AUTH_IDENTITY_STORE_PATH, TENET_AUTH_SESSION_SECRET')) throw new Error('expected managed-login required settings diagnostic inside expanded access details');
   if (!ready.detailsText().includes('Managed login storage/session: state store configured; identity store configured; session secret configured; callback /auth/callback; cookie tenet_session; reason login/callback/session routes are not wired yet')) throw new Error('expected managed-login storage/session diagnostic inside expanded access details');

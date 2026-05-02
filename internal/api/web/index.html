@@ -188,6 +188,7 @@
       const resourceInspectionStateByKey = new Map();
       let auditLogsPageState = { status: 'idle', route: '', result: null, error: null, promise: null, requestId: 0 };
       let operatorContextState = { status: 'idle', context: null, error: null, refreshing: false };
+      let activeOperatorReadFailurePage = null;
       let operatorContextDetailsOpen = false;
       let operatorContextDetailsDeepLinkAppliedForHash = '';
       const operatorContextSectionID = 'operator-context';
@@ -1112,8 +1113,16 @@
         const summary = context?.enforcement?.summary || '';
         return summary ? `Enforcement summary: ${summary}` : null;
       };
-      const operatorContextAuthenticationBoundaryLabel = () => 'Authentication boundary: this embedded shell consumes trusted front-door headers only; it does not start an in-page GitHub OAuth login or Tenet-managed browser session from this page. Managed-login runtime diagnostics below are read-only until the optional login/callback/session routes are active.';
       const operatorContextManagedLogin = (context) => context?.authRuntime?.tenetManagedLogin || {};
+      const operatorContextManagedLoginActive = (context = operatorContextState.context) => {
+        const managedLogin = operatorContextManagedLogin(context);
+        const missing = Array.isArray(managedLogin.missingSettings) ? managedLogin.missingSettings.filter(Boolean) : [];
+        const loginRoute = String(managedLogin.loginRoute || '');
+        return Boolean(managedLogin.active && loginRoute.startsWith('/') && !loginRoute.startsWith('//') && missing.length === 0);
+      };
+      const operatorContextAuthenticationBoundaryLabel = (context) => operatorContextManagedLoginActive(context)
+        ? 'Authentication boundary: Tenet-managed browser login is active for this API instance; guarded read recovery may offer a same-shell sign-in handoff while trusted front-door headers still take precedence when present.'
+        : 'Authentication boundary: this embedded shell consumes trusted front-door headers only; it does not start an in-page GitHub OAuth login or Tenet-managed browser session from this page unless the optional login/callback/session routes report active.';
       const operatorContextManagedLoginStateLabel = (context) => {
         const managedLogin = operatorContextManagedLogin(context);
         const provider = managedLogin.provider || 'unconfigured';
@@ -1270,7 +1279,7 @@
           if (enforcementSummary) {
             detailsMeta.append(createElement('span', operatorContextEnforcementClass(context), enforcementSummary));
           }
-          detailsMeta.append(createElement('span', '', operatorContextAuthenticationBoundaryLabel()));
+          detailsMeta.append(createElement('span', '', operatorContextAuthenticationBoundaryLabel(context)));
           detailsMeta.append(createElement('span', operatorContextManagedLoginClass(context), operatorContextManagedLoginStateLabel(context)));
           detailsMeta.append(createElement('span', operatorContextManagedLoginClass(context), operatorContextManagedLoginSettingsLabel(context)));
           detailsMeta.append(createElement('span', operatorContextManagedLoginClass(context), operatorContextManagedLoginStorageLabel(context)));
@@ -1381,6 +1390,9 @@
           .then((context) => {
             operatorContextState = { status: 'ready', context, error: null, refreshing: false };
             renderOperatorContextBanner();
+            if (activeOperatorReadFailurePage && operatorReadAuthRequiredState(activeOperatorReadFailurePage.error)) {
+              renderOperatorReadFailurePage(activeOperatorReadFailurePage.pageLabel, activeOperatorReadFailurePage.route, activeOperatorReadFailurePage.error);
+            }
             return context;
           })
           .catch((error) => {
@@ -3227,10 +3239,22 @@
         if (hashOverride) return `${pathname}${search}#${hashOverride}`;
         return `${pathname}${search}${window.location.hash || ''}`;
       };
+      const operatorContextManagedLoginSignInURL = (context = operatorContextState.context) => {
+        if (!operatorContextManagedLoginActive(context)) return '';
+        const loginRoute = String(operatorContextManagedLogin(context).loginRoute || '');
+        const params = new URLSearchParams();
+        params.set('returnUrl', currentBookmarkableURL());
+        return `${loginRoute}${loginRoute.includes('?') ? '&' : '?'}${params.toString()}`;
+      };
       const createOperatorReadFailureActions = (error) => {
         const actionBar = createElement('div', 'detail-section-actions operator-read-recovery-actions');
         if (operatorReadAuthRequiredState(error)) {
-          actionBar.append(createNavLink(currentBookmarkableURL(), 'Retry current page after front-door sign-in', '_self'));
+          const managedSignInURL = operatorContextManagedLoginSignInURL();
+          if (managedSignInURL) {
+            actionBar.append(createNavLink(managedSignInURL, 'Sign in with Tenet-managed GitHub login', '_self'));
+          } else {
+            actionBar.append(createNavLink(currentBookmarkableURL(), 'Retry current page after front-door sign-in', '_self'));
+          }
         }
         if (operatorReadForbiddenState(error)) {
           actionBar.append(
@@ -3243,9 +3267,11 @@
       const renderOperatorReadFailurePage = (pageLabel, route, error) => {
         const heading = operatorReadFailureHeading(error);
         if (!heading) {
+          activeOperatorReadFailurePage = null;
           renderEmptyState(`Failed to load overview: ${error?.message || 'unknown error'}`);
           return;
         }
+        activeOperatorReadFailurePage = { pageLabel, route, error };
         const page = createElement('article', 'account');
         page.append(
           createElement('div', 'label', pageLabel),
@@ -5121,7 +5147,13 @@
       const operatorReadAuthRequiredState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 401;
       const operatorReadForbiddenState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 403;
       const operatorReadRoleRequiredState = (error) => operatorReadForbiddenState(error) && String(error?.message || '').includes('authenticated viewer-capable role is required for this operator read route');
-      const operatorReadAuthRequiredMessage = (route) => `Tenet rejected ${route} because authenticated identity is required on this operator read route. Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page; reopen this same bookmarkable URL through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.`;
+      const operatorReadAuthRequiredMessage = (route, context = operatorContextState.context) => {
+        if (operatorContextManagedLoginActive(context)) {
+          const loginRoute = String(operatorContextManagedLogin(context).loginRoute || '/auth/login');
+          return `Tenet rejected ${route} because authenticated identity is required on this operator read route. Tenet-managed GitHub login is active for this API instance; use the sign-in handoff below to authenticate through ${loginRoute} and return to this same bookmarkable URL. Trusted front-door X-Tenet-Authenticated-* identity headers still take precedence when present.`;
+        }
+        return `Tenet rejected ${route} because authenticated identity is required on this operator read route. Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page; reopen this same bookmarkable URL through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.`;
+      };
       const operatorReadRoleRequiredMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity because this operator read route requires a trusted forwarded viewer/operator/admin role. Open Operator context details (#operator-context-access-details-panel) and check roles.provenance.source, roles.canRead, and the forwarded X-Tenet-Authenticated-Roles value; ask the front-door/RBAC admin to forward viewer, operator, or admin, then retry this same bookmarkable page.`;
       const operatorReadForbiddenMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.`;
       const operatorReadFailureHeading = (error) => {
