@@ -491,6 +491,10 @@ func TestRouterOperatorContextReportsActorAttributionDiagnostics(t *testing.T) {
 			if attribution["available"] != tc.wantAvailable || attribution["source"] != tc.wantSource {
 				t.Fatalf("unexpected actor attribution: %#v", attribution)
 			}
+			wantPrecedence := []any{"explicit_actor_headers", "actor_alias_headers", "trusted_authenticated_identity", "unavailable"}
+			if !reflect.DeepEqual(attribution["precedence"], wantPrecedence) {
+				t.Fatalf("unexpected actor attribution precedence: %#v", attribution)
+			}
 			if summary, _ := attribution["summary"].(string); !strings.Contains(summary, tc.wantSummarySnippet) {
 				t.Fatalf("expected actor attribution summary to contain %q, got %#v", tc.wantSummarySnippet, attribution)
 			}
