@@ -7643,6 +7643,33 @@ func TestRouterCreateDeploymentPlanPreviewStatusCodes(t *testing.T) {
 		}
 	})
 
+	t.Run("write role requirement enables trusted role parsing", func(t *testing.T) {
+		providerCalls := 0
+		router := NewRouter(Options{
+			BuildInfo:                   buildinfo.Info{Version: "dev", Commit: "abc123"},
+			RequireOperatorRoleForWrite: true,
+			CreateDeploymentPlanPreview: func(_ context.Context, deploymentName string, req planpreview.CreateRequest) (planpreview.CreateResult, error) {
+				providerCalls++
+				return planpreview.CreateResult{Created: true, Record: planpreview.Record{ID: "plan_1234abcd", DeploymentName: deploymentName, Status: planpreview.StatusReady, CreatedAt: "2026-04-17T08:00:00Z", Source: planpreview.SourceContext{DeploymentName: deploymentName, Fingerprint: req.IfMatch}}}, nil
+			},
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/plans/deployments/api-prod", strings.NewReader(`{"ifMatch":"plan_input"}`))
+		req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+		req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+		req.Header.Set(requestactor.AuthenticatedHeaderEmail, "operator@example.com")
+		req.Header.Set(requestactor.AuthenticatedRolesHeader, "operator")
+		resp := httptest.NewRecorder()
+
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if providerCalls != 1 {
+			t.Fatalf("expected create provider to run once, got %d calls", providerCalls)
+		}
+	})
+
 	t.Run("admin trusted role is operator-capable for create", func(t *testing.T) {
 		providerCalls := 0
 		router := NewRouter(Options{
