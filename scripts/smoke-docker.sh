@@ -1799,6 +1799,12 @@ assert trusted_summary["accountCount"] >= 1, operator_context_trusted
 assert trusted_summary["projectCount"] >= 1, operator_context_trusted
 assert trusted_summary["environmentCount"] >= 1, operator_context_trusted
 assert trusted_summary.get("emptyReason") is None, operator_context_trusted
+assert trusted_summary["visibleDeploymentExamples"], operator_context_trusted
+trusted_visible = {row["deploymentName"]: row for row in trusted_summary["visibleDeploymentExamples"]}
+assert trusted_visible["payments-api-prod"]["matchSources"] == ["exactDeployment"], operator_context_trusted
+assert trusted_visible["payments-api-prod"]["appRef"] == "payments-api", operator_context_trusted
+assert trusted_visible["payments-api-prod"]["environmentRef"] == "prod-apne2", operator_context_trusted
+assert trusted_visible["payments-api-prod"]["awsAccountId"], operator_context_trusted
 assert trusted_summary["projectEnvironmentExamples"], operator_context_trusted
 assert_operator_context_project_environment_examples(trusted_summary["projectEnvironmentExamples"], operator_context_trusted)
 trusted_project_envs = {(row["appRef"], row["environmentRef"]) for row in trusted_summary["projectEnvironmentExamples"]}
@@ -1821,6 +1827,10 @@ assert unmatched_summary["accountCount"] >= 1, operator_context_unmatched
 assert unmatched_summary["projectCount"] >= 1, operator_context_unmatched
 assert unmatched_summary["environmentCount"] >= 1, operator_context_unmatched
 assert unmatched_summary.get("emptyReason") is None, operator_context_unmatched
+assert unmatched_summary["visibleDeploymentExamples"], operator_context_unmatched
+unmatched_visible = {row["deploymentName"]: row for row in unmatched_summary["visibleDeploymentExamples"]}
+assert "stale-api" not in unmatched_visible, operator_context_unmatched
+assert unmatched_visible["payments-api-prod"]["matchSources"] == ["exactDeployment"], operator_context_unmatched
 assert unmatched_summary["projectEnvironmentExamples"], operator_context_unmatched
 assert_operator_context_common(operator_context_stale_scopes)
 assert operator_context_stale_scopes["deploymentAccess"]["enforced"] is True, operator_context_stale_scopes
@@ -1841,6 +1851,9 @@ assert stale_scopes_summary["unmatchedProjects"] == ["archived-payments"], opera
 assert stale_scopes_summary["unmatchedProjectCount"] == 1, operator_context_stale_scopes
 assert stale_scopes_summary["unmatchedEnvironments"] == ["stale-env"], operator_context_stale_scopes
 assert stale_scopes_summary["unmatchedEnvironmentCount"] == 1, operator_context_stale_scopes
+assert stale_scopes_summary["visibleDeploymentExamples"], operator_context_stale_scopes
+assert stale_scopes_summary["visibleDeploymentExamples"][0]["deploymentName"] == "payments-api-staging", operator_context_stale_scopes
+assert stale_scopes_summary["visibleDeploymentExamples"][0]["matchSources"] == ["projectEnvironment"], operator_context_stale_scopes
 assert stale_scopes_summary["projectEnvironmentExamples"], operator_context_stale_scopes
 stale_scope_project_envs = {(row["appRef"], row["environmentRef"]) for row in stale_scopes_summary["projectEnvironmentExamples"]}
 assert stale_scope_project_envs == {("payments-api", "staging-apne2")}, operator_context_stale_scopes

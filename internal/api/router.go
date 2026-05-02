@@ -279,6 +279,7 @@ func filterAuthorizedApplicationOverviews(applications []catalog.ApplicationOver
 const (
 	operatorContextUnmatchedDeploymentLimit                 = 25
 	operatorContextProjectEnvironmentExampleLimit           = 10
+	operatorContextVisibleDeploymentExampleLimit            = 10
 	operatorContextProjectEnvironmentExampleDeploymentLimit = 5
 )
 
@@ -408,7 +409,17 @@ type operatorContextAccessSummary struct {
 	AccountCount                   int                                        `json:"accountCount,omitempty"`
 	ProjectCount                   int                                        `json:"projectCount,omitempty"`
 	EnvironmentCount               int                                        `json:"environmentCount,omitempty"`
+	VisibleDeploymentExamples      []operatorContextVisibleDeploymentExample  `json:"visibleDeploymentExamples,omitempty"`
 	ProjectEnvironmentExamples     []operatorContextProjectEnvironmentExample `json:"projectEnvironmentExamples,omitempty"`
+}
+
+type operatorContextVisibleDeploymentExample struct {
+	DeploymentName string   `json:"deploymentName"`
+	AppRef         string   `json:"appRef,omitempty"`
+	EnvironmentRef string   `json:"environmentRef,omitempty"`
+	Region         string   `json:"region,omitempty"`
+	AWSAccountID   string   `json:"awsAccountId,omitempty"`
+	MatchSources   []string `json:"matchSources"`
 }
 
 type operatorContextProjectEnvironmentExample struct {
@@ -775,21 +786,30 @@ func buildOperatorContextAccessSummary(ctx context.Context, options Options, dep
 	environmentsScope := stringSet(scopes.Environments)
 	hasProjectEnvironmentScope := len(projectsScope) > 0 && len(environmentsScope) > 0
 	matched := make(map[string]catalog.PlacementView)
+	matchSources := make(map[string][]string)
 	for _, placement := range placements {
-		if _, ok := forwarded[placement.DeploymentName]; ok {
-			matched[placement.DeploymentName] = placement
+		if placement.DeploymentName == "" {
 			continue
 		}
-		if !hasProjectEnvironmentScope || placement.DeploymentName == "" || placement.AppRef == "" || placement.EnvironmentRef == "" {
-			continue
+		_, exactMatch := forwarded[placement.DeploymentName]
+		projectEnvironmentMatch := false
+		if hasProjectEnvironmentScope && placement.AppRef != "" && placement.EnvironmentRef != "" {
+			if _, ok := projectsScope[placement.AppRef]; ok {
+				if _, ok := environmentsScope[placement.EnvironmentRef]; ok {
+					projectEnvironmentMatch = true
+				}
+			}
 		}
-		if _, ok := projectsScope[placement.AppRef]; !ok {
-			continue
-		}
-		if _, ok := environmentsScope[placement.EnvironmentRef]; !ok {
+		if !exactMatch && !projectEnvironmentMatch {
 			continue
 		}
 		matched[placement.DeploymentName] = placement
+		if exactMatch {
+			matchSources[placement.DeploymentName] = append(matchSources[placement.DeploymentName], "exactDeployment")
+		}
+		if projectEnvironmentMatch {
+			matchSources[placement.DeploymentName] = append(matchSources[placement.DeploymentName], "projectEnvironment")
+		}
 	}
 	unmatched := make([]string, 0, len(deployments.Names))
 	for _, name := range deployments.Names {
@@ -838,6 +858,7 @@ func buildOperatorContextAccessSummary(ctx context.Context, options Options, dep
 	summary.AccountCount = len(accounts)
 	summary.ProjectCount = len(projects)
 	summary.EnvironmentCount = len(environments)
+	summary.VisibleDeploymentExamples = buildOperatorContextVisibleDeploymentExamples(matched, matchSources)
 	summary.ProjectEnvironmentExamples = buildOperatorContextProjectEnvironmentExamples(matched)
 	if len(matched) == 0 {
 		summary.EmptyReason = "no forwarded deployment names or project/environment scopes match catalog placements"
@@ -861,6 +882,30 @@ func boundedOperatorContextUnmatchedValues(forwarded []string, matched map[strin
 		unmatched = unmatched[:limit]
 	}
 	return unmatched, count, truncated
+}
+
+func buildOperatorContextVisibleDeploymentExamples(matched map[string]catalog.PlacementView, matchSources map[string][]string) []operatorContextVisibleDeploymentExample {
+	deploymentNames := make([]string, 0, len(matched))
+	for deploymentName := range matched {
+		deploymentNames = append(deploymentNames, deploymentName)
+	}
+	sort.Strings(deploymentNames)
+	if len(deploymentNames) > operatorContextVisibleDeploymentExampleLimit {
+		deploymentNames = deploymentNames[:operatorContextVisibleDeploymentExampleLimit]
+	}
+	examples := make([]operatorContextVisibleDeploymentExample, 0, len(deploymentNames))
+	for _, deploymentName := range deploymentNames {
+		placement := matched[deploymentName]
+		examples = append(examples, operatorContextVisibleDeploymentExample{
+			DeploymentName: deploymentName,
+			AppRef:         placement.AppRef,
+			EnvironmentRef: placement.EnvironmentRef,
+			Region:         placement.Region,
+			AWSAccountID:   placement.AWSAccountID,
+			MatchSources:   append([]string(nil), matchSources[deploymentName]...),
+		})
+	}
+	return examples
 }
 
 func buildOperatorContextProjectEnvironmentExamples(matched map[string]catalog.PlacementView) []operatorContextProjectEnvironmentExample {
