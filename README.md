@@ -630,6 +630,9 @@ When fixture-backed or early controller payloads have not yet persisted `rollout
 For the ECS rolling fallback service, the recent-log drill-down stays on the same operator workflow. Example route:
 - `GET /v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service`
 
+Operators can add an optional positive `limit` query parameter when they need a smaller, shareable recent-log envelope; Tenet applies it after the backend lookup while preserving the provider's newest-first order and returns `400 Bad Request` for non-positive or non-numeric values. Example limited route:
+- `GET /v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&limit=5`
+
 Resource-log responses now include an additive `lookupContext` object so the payload stays self-describing during AWS troubleshooting:
 - `lookupContext.region`
 - `lookupContext.controlAccountId`

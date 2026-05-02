@@ -5916,6 +5916,96 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		}
 	})
 
+	t.Run("applies optional entry limit after provider lookup", func(t *testing.T) {
+		provided := resourcelogs.Result{
+			DeploymentName: "api-prod",
+			ResourceType:   "ecsService",
+			ResourceName:   "payments-api-prod-service",
+			Available:      true,
+			Source:         resourcelogs.SourceCloudWatch,
+			Entries: []resourcelogs.Entry{
+				{Timestamp: "2026-04-16T07:10:00Z", Message: "newest", Stream: "ecs/payments-api/service/newest"},
+				{Timestamp: "2026-04-16T07:09:00Z", Message: "middle", Stream: "ecs/payments-api/service/middle"},
+				{Timestamp: "2026-04-16T07:08:00Z", Message: "oldest", Stream: "ecs/payments-api/service/oldest"},
+			},
+		}
+
+		var providerCalls int
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "api-prod" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceLogs: func(_ context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+				providerCalls++
+				if deploymentName != "api-prod" || resourceType != "ecsService" || resourceName != "payments-api-prod-service" {
+					t.Fatalf("unexpected provider request: deployment=%q type=%q name=%q", deploymentName, resourceType, resourceName)
+				}
+				return provided, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service&limit=2", nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if providerCalls != 1 {
+			t.Fatalf("expected provider to be called once, got %d", providerCalls)
+		}
+
+		var got resourcelogs.Result
+		if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+			t.Fatalf("failed to decode limited resource logs payload: %v", err)
+		}
+		if len(got.Entries) != 2 {
+			t.Fatalf("expected two entries after limit, got %+v", got.Entries)
+		}
+		if got.Entries[0].Message != "newest" || got.Entries[1].Message != "middle" {
+			t.Fatalf("expected limit to preserve provider entry order, got %+v", got.Entries)
+		}
+		if len(provided.Entries) != 3 {
+			t.Fatalf("expected provider result slice to remain unchanged, got %+v", provided.Entries)
+		}
+	})
+
+	t.Run("rejects invalid limit before provider lookup", func(t *testing.T) {
+		var overviewCalls int
+		var providerCalls int
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				overviewCalls++
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceLogs: func(_ context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+				providerCalls++
+				return resourcelogs.Result{}, nil
+			},
+		})
+
+		for _, rawLimit := range []string{"0", "-1", "many"} {
+			t.Run(rawLimit, func(t *testing.T) {
+				resp := httptest.NewRecorder()
+				router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service&limit="+rawLimit, nil))
+				if resp.Code != http.StatusBadRequest {
+					t.Fatalf("expected 400 for limit=%s, got %d with body %q", rawLimit, resp.Code, resp.Body.String())
+				}
+				if body := resp.Body.String(); body != "invalid limit query\n" {
+					t.Fatalf("unexpected invalid limit response: %q", body)
+				}
+			})
+		}
+		if overviewCalls != 0 || providerCalls != 0 {
+			t.Fatalf("expected invalid limit to short-circuit providers, got overview=%d resourceLogs=%d", overviewCalls, providerCalls)
+		}
+	})
+
 	t.Run("returns codeDeploy deployment-group resource log payload", func(t *testing.T) {
 		expected := resourcelogs.Result{
 			DeploymentName: "payments-api-staging",

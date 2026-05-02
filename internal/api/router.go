@@ -115,6 +115,26 @@ func parseResourceQuery(w http.ResponseWriter, r *http.Request) (resourceType st
 	return resourceType, resourceName, true
 }
 
+func parseOptionalPositiveLimit(w http.ResponseWriter, r *http.Request) (limit int, ok bool) {
+	raw := strings.TrimSpace(r.URL.Query().Get("limit"))
+	if raw == "" {
+		return 0, true
+	}
+	limit, err := strconv.Atoi(raw)
+	if err != nil || limit < 1 {
+		http.Error(w, "invalid limit query", http.StatusBadRequest)
+		return 0, false
+	}
+	return limit, true
+}
+
+func applyResourceLogLimit(result resourcelogs.Result, limit int) resourcelogs.Result {
+	if limit > 0 && len(result.Entries) > limit {
+		result.Entries = append([]resourcelogs.Entry(nil), result.Entries[:limit]...)
+	}
+	return result
+}
+
 func requireAuthenticatedIdentity(w http.ResponseWriter, r *http.Request) bool {
 	identity := requestactor.AuthenticatedIdentityFromContext(r.Context())
 	if identity.Authenticated {
@@ -1903,6 +1923,10 @@ func NewRouter(options Options) http.Handler {
 			if !ok {
 				return
 			}
+			resourceLimit, ok := parseOptionalPositiveLimit(w, r)
+			if !ok {
+				return
+			}
 			if _, err := options.OverviewDeployment(r.Context(), name); err != nil {
 				respondReadLookupError(w, err, "overview deployment unavailable")
 				return
@@ -1912,6 +1936,7 @@ func NewRouter(options Options) http.Handler {
 				respondReadLookupError(w, err, "overview deployment resource logs unavailable")
 				return
 			}
+			result = applyResourceLogLimit(result, resourceLimit)
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(result)
 		case strings.HasSuffix(path, "/resource-inspection"):
