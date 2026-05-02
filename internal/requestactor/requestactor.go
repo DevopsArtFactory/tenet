@@ -312,6 +312,13 @@ func SupportedOperatorRoleNames() []string {
 	return []string{RoleViewer, RoleOperator, RoleAdmin}
 }
 
+// SupportedAuthenticatedRoleHeaderNames returns the canonical trusted
+// front-door role headers Tenet accepts when authenticated headers are trusted.
+// Role forwarding intentionally has no X-User-* compatibility alias.
+func SupportedAuthenticatedRoleHeaderNames() []string {
+	return []string{AuthenticatedRolesHeader}
+}
+
 // SupportedAuthenticatedIdentityHeaderNames returns the canonical trusted
 // front-door identity headers Tenet accepts when authenticated headers are trusted.
 func SupportedAuthenticatedIdentityHeaderNames() []string {

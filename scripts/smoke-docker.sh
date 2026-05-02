@@ -1844,6 +1844,7 @@ assert operator_context_trusted["roles"]["canRead"] is True, operator_context_tr
 assert operator_context_trusted["roles"]["canWrite"] is True, operator_context_trusted
 assert operator_context_trusted["roles"]["provenance"]["source"] == "canonical", operator_context_trusted
 assert operator_context_trusted["roles"]["supportedNames"] == ["viewer", "operator", "admin"], operator_context_trusted
+assert operator_context_trusted["roles"]["supportedHeaderNames"] == ["X-Tenet-Authenticated-Roles"], operator_context_trusted
 assert operator_context_trusted["roles"]["recognizedNames"] == ["viewer", "operator"], operator_context_trusted
 assert operator_context_trusted["roles"]["unrecognizedNames"] == [], operator_context_trusted
 assert operator_context_trusted["deploymentAccess"]["enforced"] is True, operator_context_trusted

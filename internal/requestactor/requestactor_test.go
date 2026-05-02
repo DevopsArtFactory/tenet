@@ -178,6 +178,13 @@ func TestAuthenticatedRolesProvenanceFromHeadersReportsCanonicalOrAbsent(t *test
 	}
 }
 
+func TestSupportedAuthenticatedRoleHeaderNamesReportsCanonicalRoleHeaderOnly(t *testing.T) {
+	want := []string{AuthenticatedRolesHeader}
+	if got := SupportedAuthenticatedRoleHeaderNames(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("supported role headers = %#v, want %#v", got, want)
+	}
+}
+
 func TestNormalizeAuthenticatedRolesProvenanceDefaultsUnsupportedSourcesToAbsent(t *testing.T) {
 	for _, source := range []string{"", "alias", "surprise"} {
 		if got := NormalizeAuthenticatedRolesProvenance(AuthenticatedRolesProvenance{Source: source}); got.Source != AuthenticatedIdentitySourceAbsent {
