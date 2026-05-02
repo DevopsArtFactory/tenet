@@ -1026,6 +1026,8 @@ assert_fragments("ui", ui, (
     "Show access details",
     "Hide access details",
     "Role header source: ${labels[source] || labels.absent}",
+    "Supported Tenet roles: ${supported.join(', ')}",
+    "operatorContextSupportedRolesLabel(context)",
     "canonical X-Tenet-Authenticated-Roles",
     "Recognized capability roles:",
     "Unsupported forwarded roles ignored for capability checks:",

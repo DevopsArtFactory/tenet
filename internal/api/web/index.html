@@ -788,18 +788,30 @@
         if (names.length) return `Roles forwarded: ${names.join(', ')}`;
         return 'No viewer/operator/admin role forwarded';
       };
+      const operatorContextSupportedRolesLabel = (context) => {
+        const supported = operatorContextRoleNames(context?.roles || {}, 'supportedNames');
+        if (!supported.length) return null;
+        return `Supported Tenet roles: ${supported.join(', ')}`;
+      };
       const operatorContextRecognizedRolesLabel = (context) => {
         const roles = context?.roles || {};
         const recognized = operatorContextRoleNames(roles, 'recognizedNames');
         const names = operatorContextRoleNames(roles, 'names');
+        const supported = operatorContextRoleNames(roles, 'supportedNames');
+        const supportedText = supported.length ? supported.join(', ') : 'viewer, operator, admin';
         if (recognized.length) return `Recognized capability roles: ${recognized.join(', ')}`;
-        if (names.length) return 'Recognized capability roles: none; supported roles are viewer, operator, admin';
+        if (names.length) return `Recognized capability roles: none; supported roles are ${supportedText}`;
         return null;
       };
       const operatorContextUnsupportedRolesLabel = (context) => {
-        const unsupported = operatorContextRoleNames(context?.roles || {}, 'unrecognizedNames');
+        const roles = context?.roles || {};
+        const unsupported = operatorContextRoleNames(roles, 'unrecognizedNames');
         if (!unsupported.length) return null;
-        return `Unsupported forwarded roles ignored for capability checks: ${unsupported.join(', ')}. Forward viewer, operator, or admin to grant Tenet read/write capabilities.`;
+        const supported = operatorContextRoleNames(roles, 'supportedNames');
+        const supportedText = supported.length > 1
+          ? `${supported.slice(0, -1).join(', ')}, or ${supported[supported.length - 1]}`
+          : (supported[0] || 'viewer, operator, or admin');
+        return `Unsupported forwarded roles ignored for capability checks: ${unsupported.join(', ')}. Forward ${supportedText} to grant Tenet read/write capabilities.`;
       };
       const operatorContextUnsupportedRolesClass = (context) => operatorContextUnsupportedRolesLabel(context) ? 'operator-context-warning' : '';
       const operatorContextRoleProvenanceLabel = (context) => {
@@ -1110,6 +1122,10 @@
           }
           detailsMeta.append(createElement('span', operatorContextIdentityProvenanceClass(context), operatorContextIdentityProvenanceLabel(context)));
           detailsMeta.append(createElement('span', operatorContextRoleProvenanceClass(context), operatorContextRoleProvenanceLabel(context)));
+          const supportedRoles = operatorContextSupportedRolesLabel(context);
+          if (supportedRoles) {
+            detailsMeta.append(createElement('span', '', supportedRoles));
+          }
           const recognizedRoles = operatorContextRecognizedRolesLabel(context);
           if (recognizedRoles) {
             detailsMeta.append(createElement('span', '', recognizedRoles));
