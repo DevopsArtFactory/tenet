@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -120,6 +121,86 @@ func TestAuthenticatedIdentityFromHeadersPrefersExplicitTrustedHeadersOverAliase
 	identity := AuthenticatedIdentityFromHeaders(header)
 	if identity.ID != "front-door-123" || identity.Name != "Front Door Operator" || identity.Email != "frontdoor@example.com" {
 		t.Fatalf("expected explicit trusted headers to win, got %+v", identity)
+	}
+}
+
+func TestActorProvenanceFromHeadersReportsCanonicalAliasAndAbsentSources(t *testing.T) {
+	header := http.Header{}
+	header.Set(HeaderID, "operator-123")
+	header.Set(HeaderAliasID, "alias-456")
+	header.Set(HeaderAliasName, "Alias Operator")
+
+	provenance := ActorProvenanceFromHeaders(header)
+	if provenance.IDSource != AuthenticatedIdentitySourceCanonical {
+		t.Fatalf("expected canonical id source, got %+v", provenance)
+	}
+	if provenance.NameSource != AuthenticatedIdentitySourceAlias {
+		t.Fatalf("expected alias name source, got %+v", provenance)
+	}
+	if provenance.EmailSource != AuthenticatedIdentitySourceAbsent {
+		t.Fatalf("expected absent email source, got %+v", provenance)
+	}
+}
+
+func TestSupportedActorHeaderNamesReportCanonicalAndAliasFamilies(t *testing.T) {
+	if got, want := SupportedActorHeaderNames(), []string{HeaderID, HeaderName, HeaderEmail}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("supported actor headers = %#v, want %#v", got, want)
+	}
+	if got, want := SupportedActorAliasHeaderNames(), []string{HeaderAliasID, HeaderAliasName, HeaderAliasEmail}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("supported actor alias headers = %#v, want %#v", got, want)
+	}
+}
+
+func TestNormalizeActorProvenanceDefaultsUnknownSourcesToAbsent(t *testing.T) {
+	provenance := NormalizeActorProvenance(ActorProvenance{
+		IDSource:    " canonical ",
+		NameSource:  "surprise",
+		EmailSource: "alias",
+	})
+	if provenance.IDSource != AuthenticatedIdentitySourceCanonical || provenance.NameSource != AuthenticatedIdentitySourceAbsent || provenance.EmailSource != AuthenticatedIdentitySourceAlias {
+		t.Fatalf("unexpected normalized actor provenance: %+v", provenance)
+	}
+}
+
+func TestAttributionReportsActorSourceWithoutAuthorizingRoutes(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		actor         Actor
+		explicitActor Actor
+		identity      AuthenticatedIdentity
+		wantAvailable bool
+		wantSource    string
+		wantSummary   string
+	}{
+		{
+			name:          "explicit actor headers",
+			actor:         Actor{Available: true, ID: "operator-123"},
+			explicitActor: Actor{Available: true, ID: "operator-123"},
+			wantAvailable: true,
+			wantSource:    ActorAttributionSourceExplicitActorHeaders,
+			wantSummary:   "X-User-* actor aliases only filling missing actor fields",
+		},
+		{
+			name:          "trusted authenticated identity projection",
+			actor:         Actor{Available: true, ID: "front-door-123"},
+			identity:      AuthenticatedIdentity{Authenticated: true, ID: "front-door-123"},
+			wantAvailable: true,
+			wantSource:    ActorAttributionSourceTrustedAuthenticatedIdentity,
+			wantSummary:   "project from trusted authenticated identity",
+		},
+		{
+			name:          "unavailable",
+			wantAvailable: false,
+			wantSource:    ActorAttributionSourceUnavailable,
+			wantSummary:   "actor attribution does not authorize routes",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := Attribution(tc.actor, tc.explicitActor, tc.identity)
+			if got.Available != tc.wantAvailable || got.Source != tc.wantSource || !strings.Contains(got.Summary, tc.wantSummary) {
+				t.Fatalf("unexpected attribution: %+v", got)
+			}
+		})
 	}
 }
 
