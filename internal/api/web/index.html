@@ -908,6 +908,42 @@
         const examples = Array.isArray(summary.projectEnvironmentExamples) ? summary.projectEnvironmentExamples.filter(Boolean) : [];
         return examples.length ? '' : 'operator-context-warning';
       };
+      const operatorContextVisibleDeploymentSourceLabel = (deploymentName, example, access) => {
+        const exactNames = new Set(Array.isArray(access.names) ? access.names.filter(Boolean) : []);
+        const scopes = access.scopes || {};
+        const projects = new Set(Array.isArray(scopes.projects) ? scopes.projects.filter(Boolean) : []);
+        const environments = new Set(Array.isArray(scopes.environments) ? scopes.environments.filter(Boolean) : []);
+        const exactMatch = deploymentName && exactNames.has(deploymentName);
+        const scopedMatch = example?.appRef && example?.environmentRef && projects.has(example.appRef) && environments.has(example.environmentRef);
+        if (exactMatch && scopedMatch) return 'via exact deployment grant + project/environment scope';
+        if (exactMatch) return 'via exact deployment grant';
+        if (scopedMatch) return 'via project/environment scope';
+        return 'via catalog placement diagnostic';
+      };
+      const operatorContextVisibleDeploymentExamplesLabel = (context) => {
+        const access = context?.deploymentAccess || {};
+        if (!access.enforced || !access.forwarded) return null;
+        const summary = access.summary || null;
+        if (!summary || summary.available === false) return null;
+        const groups = Array.isArray(summary.projectEnvironmentExamples) ? summary.projectEnvironmentExamples.filter(Boolean) : [];
+        if (!groups.length) return null;
+        const visible = [];
+        let total = 0;
+        groups.forEach((example) => {
+          const deploymentNames = Array.isArray(example.exampleDeployments) ? example.exampleDeployments.filter(Boolean) : [];
+          total += deploymentNames.length;
+          const placementParts = [example.appRef, example.environmentRef, example.region, example.awsAccountId].filter(Boolean);
+          const placement = placementParts.length ? placementParts.join(' / ') : 'unknown placement';
+          deploymentNames.forEach((deploymentName) => {
+            if (visible.length >= 4) return;
+            const source = operatorContextVisibleDeploymentSourceLabel(deploymentName, example, access);
+            visible.push(`${deploymentName} (${placement}, ${source})`);
+          });
+        });
+        if (!visible.length) return null;
+        const hiddenCount = Math.max(0, total - visible.length);
+        return `Visible deployment examples: ${visible.join('; ')}${hiddenCount > 0 ? `; +${hiddenCount} more` : ''}`;
+      };
       const operatorContextEnforcementModeLabel = (context) => {
         const mode = context?.enforcement?.mode || '';
         const labels = {
@@ -1030,6 +1066,10 @@
           const projectEnvironmentExamples = operatorContextProjectEnvironmentExamplesLabel(context);
           if (projectEnvironmentExamples) {
             meta.append(createElement('span', operatorContextProjectEnvironmentExamplesClass(context), projectEnvironmentExamples));
+          }
+          const visibleDeploymentExamples = operatorContextVisibleDeploymentExamplesLabel(context);
+          if (visibleDeploymentExamples) {
+            meta.append(createElement('span', '', visibleDeploymentExamples));
           }
           operatorContextAccessVerdictEntries(context).forEach((entry) => {
             meta.append(createElement('span', entry.className, entry.label));

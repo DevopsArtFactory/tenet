@@ -949,6 +949,11 @@ assert "X-Tenet-Authorized-Projects and X-Tenet-Authorized-Environments" in ui, 
 assert "const operatorContextProjectEnvironmentExamplesLabel = (context) => {" in ui, ui
 assert "Project/environment visibility:" in ui, ui
 assert "projectEnvironmentExamples" in ui, ui
+assert "const operatorContextVisibleDeploymentSourceLabel = (deploymentName, example, access) => {" in ui, ui
+assert "const operatorContextVisibleDeploymentExamplesLabel = (context) => {" in ui, ui
+assert "Visible deployment examples:" in ui, ui
+assert "via exact deployment grant + project/environment scope" in ui, ui
+assert "via project/environment scope" in ui, ui
 assert "const operatorContextEnforcementModeLabel = (context) => {" in ui, ui
 assert "Enforcement mode:" in ui, ui
 assert "read/write guarded" in ui, ui
