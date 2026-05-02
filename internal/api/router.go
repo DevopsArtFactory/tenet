@@ -377,13 +377,14 @@ type operatorContextEnforcement struct {
 }
 
 type operatorContextRoles struct {
-	Names             []string                                  `json:"names,omitempty"`
-	CanRead           bool                                      `json:"canRead"`
-	CanWrite          bool                                      `json:"canWrite"`
-	SupportedNames    []string                                  `json:"supportedNames"`
-	RecognizedNames   []string                                  `json:"recognizedNames"`
-	UnrecognizedNames []string                                  `json:"unrecognizedNames"`
-	Provenance        requestactor.AuthenticatedRolesProvenance `json:"provenance"`
+	Names                []string                                  `json:"names,omitempty"`
+	CanRead              bool                                      `json:"canRead"`
+	CanWrite             bool                                      `json:"canWrite"`
+	SupportedNames       []string                                  `json:"supportedNames"`
+	SupportedHeaderNames []string                                  `json:"supportedHeaderNames"`
+	RecognizedNames      []string                                  `json:"recognizedNames"`
+	UnrecognizedNames    []string                                  `json:"unrecognizedNames"`
+	Provenance           requestactor.AuthenticatedRolesProvenance `json:"provenance"`
 }
 
 type operatorContextDeploymentAccess struct {
@@ -496,13 +497,14 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 		},
 		IdentityProvenance: identityProvenance,
 		Roles: operatorContextRoles{
-			Names:             roles.Names,
-			CanRead:           roles.AllowsOperatorRead(),
-			CanWrite:          roles.AllowsOperatorWrite(),
-			SupportedNames:    requestactor.SupportedOperatorRoleNames(),
-			RecognizedNames:   roles.RecognizedNames(),
-			UnrecognizedNames: roles.UnrecognizedNames(),
-			Provenance:        rolesProvenance,
+			Names:                roles.Names,
+			CanRead:              roles.AllowsOperatorRead(),
+			CanWrite:             roles.AllowsOperatorWrite(),
+			SupportedNames:       requestactor.SupportedOperatorRoleNames(),
+			SupportedHeaderNames: requestactor.SupportedAuthenticatedRoleHeaderNames(),
+			RecognizedNames:      roles.RecognizedNames(),
+			UnrecognizedNames:    roles.UnrecognizedNames(),
+			Provenance:           rolesProvenance,
 		},
 		DeploymentAccess: operatorContextDeploymentAccess{
 			Enforced:             options.RequireDeploymentReadAuthorization,
