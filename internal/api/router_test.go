@@ -187,7 +187,7 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if operatorRead["allowed"] != true || operatorRead["requiresAuthenticatedIdentity"] != true || operatorRead["requiresViewerCapableRole"] != true {
 		t.Fatalf("expected allowed read verdict with identity/read-role requirements, got %#v", operatorRead)
 	}
-	if !reflect.DeepEqual(operatorRead["exampleRoutes"], []any{"GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/audit-logs"}) {
+	if !reflect.DeepEqual(operatorRead["exampleRoutes"], []any{"GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/catalog/deployments", "GET /v1/audit-logs"}) {
 		t.Fatalf("expected operator read route examples, got %#v", operatorRead["exampleRoutes"])
 	}
 	if !reflect.DeepEqual(operatorRead["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles"}) {
@@ -227,7 +227,7 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	if collectionRead["allowed"] != true || collectionRead["filtersCollectionsByDeploymentAccess"] != true {
 		t.Fatalf("expected collection read verdict, got %#v", collectionRead)
 	}
-	if !reflect.DeepEqual(collectionRead["exampleRoutes"], []any{"GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/overview/accounts", "GET /v1/audit-logs"}) {
+	if !reflect.DeepEqual(collectionRead["exampleRoutes"], []any{"GET /v1/overview/applications", "GET /v1/status/deployments", "GET /v1/catalog/deployments", "GET /v1/overview/accounts", "GET /v1/audit-logs"}) {
 		t.Fatalf("expected collection read route examples, got %#v", collectionRead["exampleRoutes"])
 	}
 	if !reflect.DeepEqual(collectionRead["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles", "X-Tenet-Authorized-Deployments", "X-Tenet-Authorized-Projects", "X-Tenet-Authorized-Environments"}) {
@@ -1774,6 +1774,173 @@ func TestRouterCatalogTopologyPropagatesErrors(t *testing.T) {
 
 	if resp.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d", resp.Code)
+	}
+}
+
+func TestRouterCatalogRoutesRequireTrustedReadIdentity(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+		TrustAuthenticatedHeaders:          true,
+		RequireDeploymentReadAuthorization: true,
+		CatalogDeployments: func(_ context.Context) ([]catalog.DeploymentView, error) {
+			t.Fatal("catalog provider should not be called without trusted identity")
+			return nil, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/deployments", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d: %s", resp.Code, resp.Body.String())
+	}
+	if !strings.Contains(resp.Body.String(), "authenticated identity is required for this operator read route") {
+		t.Fatalf("expected trusted read identity guidance, got %q", resp.Body.String())
+	}
+}
+
+func TestRouterCatalogRoutesRequireViewerCapableRole(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+		TrustAuthenticatedHeaders:          true,
+		RequireDeploymentReadAuthorization: true,
+		RequireOperatorRoleForRead:         true,
+		CatalogDeployments: func(_ context.Context) ([]catalog.DeploymentView, error) {
+			t.Fatal("catalog provider should not be called without viewer-capable role")
+			return nil, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/deployments", nil)
+	req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+	req.Header.Set(requestactor.AuthenticatedRolesHeader, "auditor")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", resp.Code, resp.Body.String())
+	}
+	if !strings.Contains(resp.Body.String(), "authenticated viewer-capable role is required for this operator read route") {
+		t.Fatalf("expected viewer role guidance, got %q", resp.Body.String())
+	}
+}
+
+func TestRouterCatalogDeploymentCollectionFiltersExactAllowlist(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+		TrustAuthenticatedHeaders:          true,
+		RequireDeploymentReadAuthorization: true,
+		RequireOperatorRoleForRead:         true,
+		CatalogDeployments: func(_ context.Context) ([]catalog.DeploymentView, error) {
+			return []catalog.DeploymentView{
+				{Name: "api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"},
+				{Name: "worker-prod", AppRef: "worker", EnvironmentRef: "prod-apne2"},
+			}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/deployments", nil)
+	req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+	req.Header.Set(requestactor.AuthenticatedRolesHeader, "viewer")
+	req.Header.Set(requestactor.AuthorizedDeploymentsHeader, "api-prod")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var deployments []catalog.DeploymentView
+	if err := json.Unmarshal(resp.Body.Bytes(), &deployments); err != nil {
+		t.Fatalf("decode catalog deployments: %v", err)
+	}
+	if len(deployments) != 1 || deployments[0].Name != "api-prod" {
+		t.Fatalf("expected only exact allowlisted deployment, got %+v", deployments)
+	}
+}
+
+func TestRouterCatalogTopologyFiltersProjectEnvironmentScopes(t *testing.T) {
+	topology := catalog.TopologySnapshot{
+		Summary: catalog.Summary{AccountCount: 2, EnvironmentCount: 2, DeploymentCount: 2},
+		Accounts: []catalog.AccountView{
+			{Name: "prod-core", AWSAccountID: "111111111111"},
+			{Name: "stage-core", AWSAccountID: "222222222222"},
+		},
+		Environments: []catalog.EnvironmentView{
+			{Name: "prod-apne2", AccountRef: "prod-core"},
+			{Name: "staging-apne2", AccountRef: "stage-core"},
+		},
+		Deployments: []catalog.DeploymentView{
+			{Name: "api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"},
+			{Name: "api-staging", AppRef: "payments-api", EnvironmentRef: "staging-apne2"},
+		},
+		Placements: []catalog.PlacementView{
+			{DeploymentName: "api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2", AccountName: "prod-core", AWSAccountID: "111111111111", Region: "ap-northeast-2"},
+			{DeploymentName: "api-staging", AppRef: "payments-api", EnvironmentRef: "staging-apne2", AccountName: "stage-core", AWSAccountID: "222222222222", Region: "ap-northeast-2"},
+		},
+	}
+	router := NewRouter(Options{
+		BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+		TrustAuthenticatedHeaders:          true,
+		RequireDeploymentReadAuthorization: true,
+		CatalogPlacements: func(_ context.Context) ([]catalog.PlacementView, error) {
+			return topology.Placements, nil
+		},
+		CatalogTopology: func(_ context.Context) (catalog.TopologySnapshot, error) {
+			return topology, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/topology", nil)
+	req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+	req.Header.Set(requestactor.AuthorizedProjectsHeader, "payments-api")
+	req.Header.Set(requestactor.AuthorizedEnvironmentsHeader, "staging-apne2")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var filtered catalog.TopologySnapshot
+	if err := json.Unmarshal(resp.Body.Bytes(), &filtered); err != nil {
+		t.Fatalf("decode catalog topology: %v", err)
+	}
+	if filtered.Summary.DeploymentCount != 1 || filtered.Summary.AccountCount != 1 || filtered.Summary.EnvironmentCount != 1 {
+		t.Fatalf("expected filtered topology summary, got %+v", filtered.Summary)
+	}
+	if len(filtered.Deployments) != 1 || filtered.Deployments[0].Name != "api-staging" {
+		t.Fatalf("expected project/environment-scoped deployment only, got %+v", filtered.Deployments)
+	}
+	if len(filtered.Accounts) != 1 || filtered.Accounts[0].Name != "stage-core" {
+		t.Fatalf("expected account tied to visible placement only, got %+v", filtered.Accounts)
+	}
+}
+
+func TestRouterCatalogAccountsFailClosedWhenPlacementsUnavailable(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+		TrustAuthenticatedHeaders:          true,
+		RequireDeploymentReadAuthorization: true,
+		CatalogAccounts: func(_ context.Context) ([]catalog.AccountView, error) {
+			return []catalog.AccountView{{Name: "prod-core", AWSAccountID: "111111111111"}}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/catalog/accounts", nil)
+	req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+	req.Header.Set(requestactor.AuthorizedDeploymentsHeader, "api-prod")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var accounts []catalog.AccountView
+	if err := json.Unmarshal(resp.Body.Bytes(), &accounts); err != nil {
+		t.Fatalf("decode catalog accounts: %v", err)
+	}
+	if len(accounts) != 0 {
+		t.Fatalf("expected catalog accounts to fail closed without placement data, got %+v", accounts)
 	}
 }
 

@@ -40,6 +40,7 @@ AUTH_UNAUTHENTICATED_TRANSITION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_COLLECTION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY=$(mktemp)
+AUTH_UNAUTHENTICATED_CATALOG_COLLECTION_BODY=$(mktemp)
 AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY=$(mktemp)
 AUTH_ROLE_REQUIRED_COLLECTION_BODY=$(mktemp)
 AUTH_ROLE_REQUIRED_STATUS_READ_BODY=$(mktemp)
@@ -76,7 +77,7 @@ cleanup() {
     kill "$API_PID" 2>/dev/null || true
     wait "$API_PID" 2>/dev/null || true
   fi
-  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$INVALID_WEBHOOK_BODY" "$AUTH_UNAUTHENTICATED_PLAN_BODY" "$AUTH_UNAUTHENTICATED_APPLY_BODY" "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY" "$AUTH_ROLE_REQUIRED_COLLECTION_BODY" "$AUTH_ROLE_REQUIRED_STATUS_READ_BODY" "$AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_READ_BODY" "$AUTH_UNAUTHENTICATED_STATUS_READ_BODY" "$AUTH_UNAUTHENTICATED_EVENTS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY" "$AUTH_FORBIDDEN_GROUP_DETAIL_BODY" "$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" "$AUTH_FORBIDDEN_READ_BODY" "$AUTH_FORBIDDEN_STATUS_READ_BODY" "$AUTH_FORBIDDEN_EVENTS_BODY" "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_PLAN_WRITE_BODY" "$AUTH_FORBIDDEN_APPLY_WRITE_BODY" "$AUTH_FORBIDDEN_TRANSITION_BODY" "$AUTH_FORBIDDEN_PLAN_READ_BODY" "$AUTH_FORBIDDEN_APPLY_READ_BODY" "$AUTH_FORBIDDEN_AUDIT_BODY" "$AUTH_ROLE_REQUIRED_PLAN_READ_BODY" "$AUTH_ROLE_REQUIRED_APPLY_READ_BODY"
+  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$INVALID_WEBHOOK_BODY" "$AUTH_UNAUTHENTICATED_PLAN_BODY" "$AUTH_UNAUTHENTICATED_APPLY_BODY" "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_CATALOG_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY" "$AUTH_ROLE_REQUIRED_COLLECTION_BODY" "$AUTH_ROLE_REQUIRED_STATUS_READ_BODY" "$AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_READ_BODY" "$AUTH_UNAUTHENTICATED_STATUS_READ_BODY" "$AUTH_UNAUTHENTICATED_EVENTS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY" "$AUTH_FORBIDDEN_GROUP_DETAIL_BODY" "$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" "$AUTH_FORBIDDEN_READ_BODY" "$AUTH_FORBIDDEN_STATUS_READ_BODY" "$AUTH_FORBIDDEN_EVENTS_BODY" "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_PLAN_WRITE_BODY" "$AUTH_FORBIDDEN_APPLY_WRITE_BODY" "$AUTH_FORBIDDEN_TRANSITION_BODY" "$AUTH_FORBIDDEN_PLAN_READ_BODY" "$AUTH_FORBIDDEN_APPLY_READ_BODY" "$AUTH_FORBIDDEN_AUDIT_BODY" "$AUTH_ROLE_REQUIRED_PLAN_READ_BODY" "$AUTH_ROLE_REQUIRED_APPLY_READ_BODY"
   rm -rf "$PAYLOAD_DIR" "$REPO_ROOT"
 }
 trap cleanup EXIT
@@ -1471,6 +1472,8 @@ auth_unauthenticated_status_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICAT
   "http://$HOST:$PORT/v1/status/deployments")
 auth_unauthenticated_account_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" -w "%{http_code}" \
   "http://$HOST:$PORT/v1/overview/accounts")
+auth_unauthenticated_catalog_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_CATALOG_COLLECTION_BODY" -w "%{http_code}" \
+  "http://$HOST:$PORT/v1/catalog/deployments")
 auth_unauthenticated_audit_collection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY" -w "%{http_code}" \
   "http://$HOST:$PORT/v1/audit-logs?action=apply.requested")
 operator_context_trusted=$(curl -fsS \
@@ -1753,6 +1756,13 @@ filtered_status_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-prod, worker-prod" \
   "http://$HOST:$PORT/v1/status/deployments")
+filtered_catalog_deployments=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
+  -H "X-Tenet-Authorized-Deployments: payments-api-prod, worker-prod" \
+  "http://$HOST:$PORT/v1/catalog/deployments")
 filtered_accounts_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
@@ -1790,6 +1800,14 @@ empty_status_collection=$(curl -fsS \
   -H "X-Tenet-Authorized-Projects: archived-payments" \
   -H "X-Tenet-Authorized-Environments: staging-apne2" \
   "http://$HOST:$PORT/v1/status/deployments")
+empty_catalog_deployments=$(curl -fsS \
+  -H "X-Tenet-Authenticated-Id: front-door-123" \
+  -H "X-Tenet-Authenticated-Name: Front Door Operator" \
+  -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
+  -H "X-Tenet-Authenticated-Roles: viewer" \
+  -H "X-Tenet-Authorized-Projects: archived-payments" \
+  -H "X-Tenet-Authorized-Environments: staging-apne2" \
+  "http://$HOST:$PORT/v1/catalog/deployments")
 empty_accounts_collection=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
@@ -1843,6 +1861,8 @@ empty_audit_collection_path=$(write_payload empty-audit-collection.json "$empty_
 allowed_scoped_audit_path=$(write_payload allowed-scoped-audit.json "$allowed_scoped_audit")
 allowed_status_read_path=$(write_payload allowed-status-read.json "$allowed_status_read")
 filtered_status_collection_path=$(write_payload filtered-status-collection.json "$filtered_status_collection")
+filtered_catalog_deployments_path=$(write_payload filtered-catalog-deployments.json "$filtered_catalog_deployments")
+empty_catalog_deployments_path=$(write_payload empty-catalog-deployments.json "$empty_catalog_deployments")
 empty_status_collection_path=$(write_payload empty-status-collection.json "$empty_status_collection")
 
 AUTH_UNAUTHENTICATED_COLLECTION_STATUS="$auth_unauthenticated_collection_status" \
@@ -1851,6 +1871,8 @@ AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS="$auth_unauthenticated_status_coll
 AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" \
 AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_STATUS="$auth_unauthenticated_account_collection_status" \
 AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" \
+AUTH_UNAUTHENTICATED_CATALOG_COLLECTION_STATUS="$auth_unauthenticated_catalog_collection_status" \
+AUTH_UNAUTHENTICATED_CATALOG_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_CATALOG_COLLECTION_BODY" \
 AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_STATUS="$auth_unauthenticated_audit_collection_status" \
 AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY" \
 AUTH_ROLE_REQUIRED_COLLECTION_STATUS="$auth_role_required_collection_status" \
@@ -1923,12 +1945,14 @@ ALLOWED_RESOURCE_LOGS_PATH="$allowed_resource_logs_path" \
 ALLOWED_RESOURCE_INSPECTION_PATH="$allowed_resource_inspection_path" \
 FILTERED_APPLICATIONS_COLLECTION_PATH="$filtered_applications_collection_path" \
 FILTERED_STATUS_COLLECTION_PATH="$filtered_status_collection_path" \
+FILTERED_CATALOG_DEPLOYMENTS_PATH="$filtered_catalog_deployments_path" \
 FILTERED_ACCOUNTS_COLLECTION_PATH="$filtered_accounts_collection_path" \
 FILTERED_ACCOUNT_DETAIL_PATH="$filtered_account_detail_path" \
 FILTERED_GROUP_DETAIL_PATH="$filtered_group_detail_path" \
 FILTERED_AUDIT_COLLECTION_PATH="$filtered_audit_collection_path" \
 EMPTY_APPLICATIONS_COLLECTION_PATH="$empty_applications_collection_path" \
 EMPTY_STATUS_COLLECTION_PATH="$empty_status_collection_path" \
+EMPTY_CATALOG_DEPLOYMENTS_PATH="$empty_catalog_deployments_path" \
 EMPTY_ACCOUNTS_COLLECTION_PATH="$empty_accounts_collection_path" \
 EMPTY_AUDIT_COLLECTION_PATH="$empty_audit_collection_path" \
 ALLOWED_SCOPED_AUDIT_PATH="$allowed_scoped_audit_path" \
@@ -1947,6 +1971,8 @@ with open(os.environ['AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY_PATH'], encodi
     unauthenticated_status_collection_body = fh.read()
 with open(os.environ['AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY_PATH'], encoding='utf-8') as fh:
     unauthenticated_account_collection_body = fh.read()
+with open(os.environ['AUTH_UNAUTHENTICATED_CATALOG_COLLECTION_BODY_PATH'], encoding='utf-8') as fh:
+    unauthenticated_catalog_collection_body = fh.read()
 with open(os.environ['AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY_PATH'], encoding='utf-8') as fh:
     unauthenticated_audit_collection_body = fh.read()
 with open(os.environ['AUTH_ROLE_REQUIRED_COLLECTION_BODY_PATH'], encoding='utf-8') as fh:
@@ -2034,6 +2060,8 @@ with open(os.environ['FILTERED_APPLICATIONS_COLLECTION_PATH'], encoding='utf-8')
     filtered_applications_collection = json.load(fh)
 with open(os.environ['FILTERED_STATUS_COLLECTION_PATH'], encoding='utf-8') as fh:
     filtered_status_collection = json.load(fh)
+with open(os.environ['FILTERED_CATALOG_DEPLOYMENTS_PATH'], encoding='utf-8') as fh:
+    filtered_catalog_deployments = json.load(fh)
 with open(os.environ['FILTERED_ACCOUNTS_COLLECTION_PATH'], encoding='utf-8') as fh:
     filtered_accounts_collection = json.load(fh)
 with open(os.environ['FILTERED_ACCOUNT_DETAIL_PATH'], encoding='utf-8') as fh:
@@ -2046,6 +2074,8 @@ with open(os.environ['EMPTY_APPLICATIONS_COLLECTION_PATH'], encoding='utf-8') as
     empty_applications_collection = json.load(fh)
 with open(os.environ['EMPTY_STATUS_COLLECTION_PATH'], encoding='utf-8') as fh:
     empty_status_collection = json.load(fh)
+with open(os.environ['EMPTY_CATALOG_DEPLOYMENTS_PATH'], encoding='utf-8') as fh:
+    empty_catalog_deployments = json.load(fh)
 with open(os.environ['EMPTY_ACCOUNTS_COLLECTION_PATH'], encoding='utf-8') as fh:
     empty_accounts_collection = json.load(fh)
 with open(os.environ['EMPTY_AUDIT_COLLECTION_PATH'], encoding='utf-8') as fh:
@@ -2059,6 +2089,8 @@ assert os.environ['AUTH_UNAUTHENTICATED_STATUS_COLLECTION_STATUS'] == '401', os.
 assert unauthenticated_status_collection_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_status_collection_body
 assert os.environ['AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_STATUS']
 assert unauthenticated_account_collection_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_account_collection_body
+assert os.environ['AUTH_UNAUTHENTICATED_CATALOG_COLLECTION_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_CATALOG_COLLECTION_STATUS']
+assert unauthenticated_catalog_collection_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_catalog_collection_body
 assert os.environ['AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_STATUS']
 assert unauthenticated_audit_collection_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_audit_collection_body
 assert os.environ['AUTH_ROLE_REQUIRED_COLLECTION_STATUS'] == '403', os.environ['AUTH_ROLE_REQUIRED_COLLECTION_STATUS']
@@ -2146,7 +2178,7 @@ def assert_operator_context_common(payload):
     allowlist_headers = ['X-Tenet-Authorized-Deployments']
     assert access_verdicts.get('operatorRead', {}).get('requiresAuthenticatedIdentity') is True, payload
     assert access_verdicts.get('operatorRead', {}).get('requiresViewerCapableRole') is True, payload
-    assert access_verdicts.get('operatorRead', {}).get('exampleRoutes') == ['GET /v1/overview/applications', 'GET /v1/status/deployments', 'GET /v1/audit-logs'], payload
+    assert access_verdicts.get('operatorRead', {}).get('exampleRoutes') == ['GET /v1/overview/applications', 'GET /v1/status/deployments', 'GET /v1/catalog/deployments', 'GET /v1/audit-logs'], payload
     assert access_verdicts.get('operatorRead', {}).get('requiredTrustedHeaders') == identity_headers + role_headers, payload
     assert access_verdicts.get('operatorWrite', {}).get('requiresOperatorRole') is True, payload
     assert access_verdicts.get('operatorWrite', {}).get('exampleRoutes') == ['POST /v1/plans/deployments/{deploymentName}', 'POST /v1/applies/plans/{planId}', 'POST /v1/applies/{applyId}/transitions'], payload
@@ -2159,7 +2191,7 @@ def assert_operator_context_common(payload):
     assert access_verdicts.get('deploymentScopedWrite', {}).get('acceptsProjectEnvironmentScopes') is True, payload
     assert access_verdicts.get('deploymentScopedWrite', {}).get('requiredTrustedHeaders') == identity_headers + role_headers + access_headers, payload
     assert access_verdicts.get('collectionRead', {}).get('filtersCollectionsByDeploymentAccess') is True, payload
-    assert access_verdicts.get('collectionRead', {}).get('exampleRoutes') == ['GET /v1/overview/applications', 'GET /v1/status/deployments', 'GET /v1/overview/accounts', 'GET /v1/audit-logs'], payload
+    assert access_verdicts.get('collectionRead', {}).get('exampleRoutes') == ['GET /v1/overview/applications', 'GET /v1/status/deployments', 'GET /v1/catalog/deployments', 'GET /v1/overview/accounts', 'GET /v1/audit-logs'], payload
     assert access_verdicts.get('collectionRead', {}).get('requiredTrustedHeaders') == identity_headers + role_headers + access_headers, payload
 
 assert_operator_context_common(operator_context_trusted)
@@ -2283,6 +2315,9 @@ assert 'worker-prod' in filtered_application_names, filtered_applications_collec
 assert filtered_application_names == {'payments-api-prod', 'worker-prod'}, filtered_applications_collection
 filtered_status_deployment_names = {row['deploymentName'] for row in filtered_status_collection}
 assert filtered_status_deployment_names == {'payments-api-prod'}, filtered_status_collection
+filtered_catalog_deployment_names = {row['name'] for row in filtered_catalog_deployments}
+assert filtered_catalog_deployment_names == {'payments-api-prod', 'worker-prod'}, filtered_catalog_deployments
+assert all(row['name'] != 'payments-api-staging' for row in filtered_catalog_deployments), filtered_catalog_deployments
 filtered_audit_deployment_names = {row['deploymentName'] for row in filtered_audit_collection['entries']}
 assert filtered_audit_deployment_names, filtered_audit_collection
 assert filtered_audit_deployment_names <= {'payments-api-prod', 'payments-api-staging'}, filtered_audit_collection
@@ -2315,6 +2350,7 @@ assert filtered_group_detail['pausedCount'] == 0, filtered_group_detail
 assert [row['name'] for row in filtered_group_detail['deployments']] == ['payments-api-prod'], filtered_group_detail
 assert empty_applications_collection == [], empty_applications_collection
 assert empty_status_collection == [], empty_status_collection
+assert empty_catalog_deployments == [], empty_catalog_deployments
 assert empty_accounts_collection == [], empty_accounts_collection
 assert empty_audit_collection == {'entries': []}, empty_audit_collection
 assert os.environ['AUTH_FORBIDDEN_AUDIT_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_AUDIT_STATUS']
