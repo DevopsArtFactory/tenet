@@ -7,6 +7,14 @@ import (
 	"testing"
 )
 
+func TestEmbeddedUIAvoidsInlineEventHandlers(t *testing.T) {
+	body := string(indexHTML)
+	inlineHandler := regexp.MustCompile(`(?i)<[a-z][^>]*\son[a-z]+\s*=`)
+	if match := inlineHandler.FindString(body); match != "" {
+		t.Fatalf("embedded UI must not use inline event handlers; found %q", match)
+	}
+}
+
 func TestEmbeddedUIRendersOperatorContextBannerSafely(t *testing.T) {
 	body := string(indexHTML)
 
