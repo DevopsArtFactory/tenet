@@ -1342,6 +1342,11 @@ assert 'Linked resources' in ui, ui
 assert 'No linked resources are available in this drift workspace yet.' in ui, ui
 assert 'Audit timeline' in audit_ui, audit_ui
 assert 'Deployment audit timeline' in audit_ui, audit_ui
+assert 'Visible audit entries' in audit_ui, audit_ui
+assert 'Plan previews' in audit_ui, audit_ui
+assert 'Apply requests' in audit_ui, audit_ui
+assert 'Actor recorded' in audit_ui, audit_ui
+assert 'Actor unavailable/unknown' in audit_ui, audit_ui
 assert 'Active deployment context' in audit_ui, audit_ui
 assert 'Breadcrumbs' in audit_ui, audit_ui
 assert 'Quick navigation' in audit_ui, audit_ui

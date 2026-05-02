@@ -435,6 +435,7 @@ The page is backed directly by `GET /v1/audit-logs` and currently focuses on:
 - active filter copy such as `Audit filters: action Apply requested (apply.requested) · Limit cap: latest 2` when you reopen `/?page=audit&action=apply.requested&limit=2`
 - deployment-scoped filter copy such as `Audit filters: deployment payments-api-prod · action Apply requested (apply.requested) · Limit cap: latest 2` when you reopen `/?page=audit&deployment=payments-api-prod&action=apply.requested&limit=2`
 - deployment / app / environment context
+- a compact visible-entry summary that counts total visible audit rows, `plan.created` rows, `apply.requested` rows, recorded actors, and unavailable/unknown actors for the current deployment/action/limit result set
 - deployment-scoped chrome/body copy plus a deployment-specific empty state when `deployment={deploymentName}` is present and no persisted audit entries match
 - deployment-scoped quick navigation that keeps `Applications overview`, `Back to application`, the current non-click `Audit log` destination, sibling `Drift view` / `Plan/apply` workspace links, and a hash-aware `Current section` / `On this page` pair for `Deployment context` and `Audit timeline` fragments such as `/?page=audit&deployment=payments-api-prod&limit=2#audit-timeline`
 - the current audit section becomes a non-click chip when that hash is active, while the remaining audit sections stay as `_self` fragment links and otherwise fall back to `No section is currently targeted.`

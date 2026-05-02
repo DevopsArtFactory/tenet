@@ -9670,6 +9670,11 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!accountsText.includes('payments-api-prod')) throw new Error('expected deployment context value');
   if (!accountsText.includes('Apply requested (apply.requested)')) throw new Error('expected newest audit entry label');
   if (!accountsText.includes('Plan preview created (plan.created)')) throw new Error('expected older audit entry label');
+  if (!accountsText.includes('Visible audit entries | 2 entries')) throw new Error('expected visible audit summary count label/value');
+  if (!accountsText.includes('Plan previews | 1')) throw new Error('expected plan-created audit summary count');
+  if (!accountsText.includes('Apply requests | 1')) throw new Error('expected apply-requested audit summary count');
+  if (!accountsText.includes('Actor recorded | 1')) throw new Error('expected recorded actor audit summary count');
+  if (!accountsText.includes('Actor unavailable/unknown | 1')) throw new Error('expected unavailable actor audit summary count');
   if (!accountsText.includes('2 entries')) throw new Error('expected audit entry count copy');
   if (!accountsText.includes('deployment payments-api-prod')) throw new Error('expected audit deployment copy');
   if (!accountsText.includes('Limit cap: latest 2')) throw new Error('expected audit limit cap copy');

@@ -315,6 +315,7 @@ Current deployment-scoped audit behavior:
 - adds breadcrumb chrome that keeps the applications overview and deployment detail as bookmarkable `_self` steps when the deployment is known, while leaving the current audit destination as a non-click chip
 - adds the same compact quick-navigation strip as the drift/plan workspaces when `deployment={name}` is present
 - keeps that strip bookmarkable by routing through `buildPageURL(...)`, so `q`, `sync`, `account`, `deployment`, and current audit `action` / `limit` state survive `_self` navigation
+- adds a compact visible-entry summary above the timeline rows so operators can immediately see total visible audit rows, `plan.created` rows, `apply.requested` rows, recorded actors, and unavailable/unknown actors for the current deployment/action/limit result set
 
 ### Plan/apply workspace
 
