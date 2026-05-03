@@ -2736,6 +2736,93 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 }
 
+func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
+	statusVocabulary := []string{"truncated", "not_truncated", "unknown", "not_applicable"}
+	fieldFragments := []string{"requestedLimit", "effectiveLimit", "returnedEntryCount", "truncationStatus"}
+
+	docs := map[string][]string{
+		"../../README.md": {
+			"bounded `resource-logs?limit=1` truncation/resultScope metadata plus `limit=0` rejection",
+			"Operators can add an optional positive `limit` query parameter",
+			"Successful responses include additive `resultScope` metadata",
+			"Tenet does not issue extra provider calls solely to prove exact totals beyond the bounded read",
+		},
+		"../../docs/features/resource-recent-logs.md": {
+			"Both local and compose smoke coverage lock a representative `ecsService` bounded read (`limit=1`) plus the invalid `limit=0` rejection",
+			"shape-focused: it verifies the `resultScope` fields and conservative status vocabulary without requiring live AWS totals",
+			"not a pagination cursor or full log-total guarantee",
+			"Tenet does not issue extra AWS calls just to prove total rows beyond the bounded read",
+			"unavailable/no-log-source responses use `returnedEntryCount=0` and `truncationStatus=not_applicable`",
+			"the UI also recognizes the compatibility aliases `capped` and `at_cap_unknown_total`",
+		},
+		"../../docs/architecture/tenet-v1-local-runtime.md": {
+			"bounded `resource-logs?limit=1` provider cap plus router fallback truncation/resultScope metadata and `limit=0` rejection",
+			"weighted target-group `no_log_source` recent-log payloads",
+			"the `ecsService` bounded `resource-logs?limit=1` resultScope / invalid `limit=0` contract",
+		},
+	}
+	for path, fragments := range docs {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
+		for _, fragment := range fieldFragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to document resultScope field %q", path, fragment)
+			}
+		}
+	}
+
+	featureDoc, err := os.ReadFile("../../docs/features/resource-recent-logs.md")
+	if err != nil {
+		t.Fatalf("read resource recent-log feature doc: %v", err)
+	}
+	for _, status := range statusVocabulary {
+		if !strings.Contains(string(featureDoc), "`"+status+"`") {
+			t.Fatalf("expected resource recent-log feature doc to include truncation status %q", status)
+		}
+	}
+
+	smokeScripts := map[string][]string{
+		"../../scripts/smoke-local.sh": {
+			"limited_worker_resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&limit=1\")",
+			"invalid_resource_log_limit_status=$(curl -sS -o \"$INVALID_RESOURCE_LOG_LIMIT_BODY\" -w \"%{http_code}\" \"http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&limit=0\")",
+			"assert limited_scope.get('requestedLimit') == 1",
+			"assert limited_scope.get('effectiveLimit') == 1",
+			"assert limited_scope.get('returnedEntryCount') == len(limited_worker_resource_logs.get('entries') or [])",
+			"assert limited_scope.get('truncationStatus') in ('truncated', 'not_truncated', 'unknown', 'not_applicable')",
+			"assert no_log_source.get('truncationStatus') == 'not_applicable'",
+		},
+		"../../scripts/smoke-docker.sh": {
+			"limited_worker_resource_logs=$(curl -fsS \"$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&limit=1\")",
+			"invalid_resource_log_limit_status=$(curl -sS -o \"$INVALID_RESOURCE_LOG_LIMIT_BODY\" -w \"%{http_code}\" \"$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&limit=0\")",
+			"assert limited_scope.get(\"requestedLimit\") == 1",
+			"assert limited_scope.get(\"effectiveLimit\") == 1",
+			"assert limited_scope.get(\"returnedEntryCount\") == len(limited_worker_resource_logs.get(\"entries\") or [])",
+			"assert limited_scope.get(\"truncationStatus\") in (\"truncated\", \"not_truncated\", \"unknown\", \"not_applicable\")",
+			"assert no_log_source.get(\"truncationStatus\") == \"not_applicable\"",
+		},
+	}
+	for path, fragments := range smokeScripts {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
+	}
+}
+
 func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 	files := map[string][]string{
 		"../../README.md": {
