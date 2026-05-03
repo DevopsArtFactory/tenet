@@ -5720,8 +5720,13 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 				CrossAccount:           false,
 				ObserverRoleConfigured: false,
 			},
-			Available:         false,
-			Entries:           []resourcelogs.Entry{},
+			Available: false,
+			Entries:   []resourcelogs.Entry{},
+			ResultScope: &resourcelogs.ResultScope{
+				EffectiveLimit:     resourcelogs.DefaultMaxEntries,
+				ReturnedEntryCount: 0,
+				TruncationStatus:   resourcelogs.ScopeTruncationStatusNotApplicable,
+			},
 			UnavailableReason: unavailableReason,
 		}
 
@@ -5832,6 +5837,11 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 				{Timestamp: "2026-04-16T07:10:00Z", Message: "service became healthy", Stream: "ecs/payments-api/service/abc123"},
 				{Timestamp: "2026-04-16T07:09:00Z", Message: "registered 2/2 targets"},
 			},
+			ResultScope: &resourcelogs.ResultScope{
+				EffectiveLimit:     resourcelogs.DefaultMaxEntries,
+				ReturnedEntryCount: 2,
+				TruncationStatus:   resourcelogs.ScopeTruncationStatusNotTruncated,
+			},
 			UnavailableReason: "",
 		}
 
@@ -5891,7 +5901,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
 			t.Fatalf("failed to decode raw resource logs payload: %v", err)
 		}
-		for _, key := range []string{"deploymentName", "resourceType", "resourceName", "lookupContext", "available", "source", "entries", "unavailableReason"} {
+		for _, key := range []string{"deploymentName", "resourceType", "resourceName", "lookupContext", "available", "source", "entries", "resultScope", "unavailableReason"} {
 			if _, ok := raw[key]; !ok {
 				t.Fatalf("expected %q field in payload, got %#v", key, raw)
 			}
@@ -5973,6 +5983,15 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		}
 		if len(got.Entries) != 2 {
 			t.Fatalf("expected two entries after limit, got %+v", got.Entries)
+		}
+		if got.ResultScope == nil {
+			t.Fatalf("expected resultScope in limited resource logs payload")
+		}
+		if got.ResultScope.RequestedLimit == nil || *got.ResultScope.RequestedLimit != 2 {
+			t.Fatalf("expected requestedLimit 2, got %+v", got.ResultScope)
+		}
+		if got.ResultScope.EffectiveLimit != 2 || got.ResultScope.ReturnedEntryCount != 2 || got.ResultScope.TruncationStatus != resourcelogs.ScopeTruncationStatusTruncated {
+			t.Fatalf("unexpected limited resultScope: %+v", got.ResultScope)
 		}
 		if got.Entries[0].Message != "newest" || got.Entries[1].Message != "middle" {
 			t.Fatalf("expected limit to preserve provider entry order, got %+v", got.Entries)
@@ -6113,6 +6132,11 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 				Timestamp: "2026-04-16T07:11:45Z",
 				Message:   "bootstrap complete",
 			}},
+			ResultScope: &resourcelogs.ResultScope{
+				EffectiveLimit:     resourcelogs.DefaultMaxEntries,
+				ReturnedEntryCount: 2,
+				TruncationStatus:   resourcelogs.ScopeTruncationStatusNotTruncated,
+			},
 		}
 
 		var gotRequest struct {

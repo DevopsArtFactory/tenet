@@ -35,6 +35,13 @@ const (
 	SourceEC2Console = "ec2_console"
 	SourceCodeDeploy = "codedeploy"
 
+	DefaultMaxEntries = 50
+
+	ScopeTruncationStatusTruncated     = "truncated"
+	ScopeTruncationStatusNotTruncated  = "not_truncated"
+	ScopeTruncationStatusUnknown       = "unknown"
+	ScopeTruncationStatusNotApplicable = "not_applicable"
+
 	UnavailableReasonUnsupportedResourceType   = resourceaws.UnavailableReasonUnsupportedResourceType
 	UnavailableReasonCrossAccountNotConfigured = resourceaws.UnavailableReasonCrossAccountNotConfigured
 	UnavailableReasonNoLogSource               = resourceaws.UnavailableReasonNoLogSource
@@ -69,7 +76,18 @@ type Result struct {
 	Available           bool          `json:"available"`
 	Source              string        `json:"source"`
 	Entries             []Entry       `json:"entries"`
+	ResultScope         *ResultScope  `json:"resultScope,omitempty"`
 	UnavailableReason   string        `json:"unavailableReason"`
+}
+
+// ResultScope is additive operator-facing metadata for bounded recent-log reads.
+// It describes the cap Tenet applied to this response without promising an
+// expensive provider-wide total count.
+type ResultScope struct {
+	RequestedLimit     *int   `json:"requestedLimit,omitempty"`
+	EffectiveLimit     int    `json:"effectiveLimit"`
+	ReturnedEntryCount int    `json:"returnedEntryCount"`
+	TruncationStatus   string `json:"truncationStatus"`
 }
 
 type LookupContext = resourceaws.LookupContext
@@ -322,7 +340,7 @@ func (s Service) maxEntries() int {
 	if s.options.MaxEntries > 0 {
 		return s.options.MaxEntries
 	}
-	return 50
+	return DefaultMaxEntries
 }
 
 func (s Service) effectiveLimit(requested int) int {

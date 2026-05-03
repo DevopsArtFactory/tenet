@@ -8,6 +8,8 @@ Tenet now exposes a read-only recent-log slice for resource-detail drill-down pa
 
 `limit` is optional. When present, Tenet threads the positive cap into the resource-log provider request and still applies router-level truncation to `entries[]` as a safety fallback while preserving the provider's order; invalid, zero, or negative values return `400 Bad Request` with `invalid limit query`. The built-in CloudWatch-backed `ecsService` provider passes that cap to `GetLogEvents` for each resolved task/container stream, and the CodeDeploy history provider uses it while listing deployment IDs; providers without a meaningful native cap can return their normal bounded result and rely on the router fallback. Both local and compose smoke coverage lock a representative `ecsService` bounded read (`limit=1`) plus the invalid `limit=0` rejection so the operator-facing contract does not drift.
 
+Every successful route response also includes additive `resultScope` metadata. This is bounded-read evidence for operators and UI clients, not a pagination cursor or full log-total guarantee: Tenet reports the requested cap when one was provided, the effective cap it applied after defaulting, the number of entries returned in this response, and a conservative `truncationStatus` (`truncated`, `not_truncated`, `unknown`, or `not_applicable`). Tenet does not issue extra AWS calls just to prove total rows beyond the bounded read.
+
 Example limited request:
 
 ```bash
@@ -32,6 +34,11 @@ Response fields:
   - `timestamp`
   - `message`
   - optional `stream`
+- `resultScope`
+  - optional `requestedLimit`
+  - `effectiveLimit`
+  - `returnedEntryCount`
+  - `truncationStatus` (`truncated`, `not_truncated`, `unknown`, or `not_applicable`)
 - optional `unavailableReason`
 
 ## Supported resource types
@@ -70,7 +77,7 @@ Unsupported resource types do not hard-fail the API. They return `available=fals
 
 When a bootstrap-source resource has no resolved backing Auto Scaling Group yet, the route stays read-only and returns `available=false` with `unavailableReason=no_log_source`. When AWS lookup fails for that backing group, the route preserves the existing explicit unavailable path such as `aws_unavailable`. When Tenet did resolve a backing resource before the downstream lookup failed, the same optional `backingResourceType` and `backingResourceName` fields remain present so operators can see which backing resource Tenet tried to inspect.
 
-The additive `lookupContext` object is always present, including unavailable responses, so operators can see which region/account path Tenet tried to inspect before AWS troubleshooting continues elsewhere.
+The additive `lookupContext` object is always present, including unavailable responses, so operators can see which region/account path Tenet tried to inspect before AWS troubleshooting continues elsewhere. `resultScope` is also present on the route response: unavailable/no-log-source responses use `returnedEntryCount=0` and `truncationStatus=not_applicable`, while available responses use `truncated` only when Tenet's router actually trimmed provider output, `not_truncated` when the bounded response is below the effective cap, and `unknown` when the response exactly meets the cap and Tenet deliberately avoids extra provider calls to prove whether more rows exist.
 
 ## Embedded UI behavior
 
