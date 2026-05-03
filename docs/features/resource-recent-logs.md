@@ -4,17 +4,27 @@ Tenet now exposes a read-only recent-log slice for resource-detail drill-down pa
 
 ## Route
 
-`GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}[&limit={positiveInteger}]`
+`GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}[&limit={positiveInteger}][&containerName={container}]`
 
-`limit` is optional. When present, Tenet threads the positive cap into the resource-log provider request and still applies router-level truncation to `entries[]` as a safety fallback while preserving the provider's order; invalid, zero, or negative values return `400 Bad Request` with `invalid limit query`. The built-in CloudWatch-backed `ecsService` provider passes that cap to `GetLogEvents` for each resolved task/container stream, and the CodeDeploy history provider uses it while listing deployment IDs; providers without a meaningful native cap can return their normal bounded result and rely on the router fallback. Both local and compose smoke coverage lock a representative `ecsService` bounded read (`limit=1`) plus the invalid `limit=0` rejection so the operator-facing contract does not drift. That release guard is intentionally shape-focused: it verifies the `resultScope` fields and conservative status vocabulary without requiring live AWS totals or a specific number of returned log lines.
+`limit` is optional. When present, Tenet threads the positive cap into the resource-log provider request and still applies router-level truncation to `entries[]` as a safety fallback while preserving the provider's order; invalid, zero, or negative values return `400 Bad Request` with `invalid limit query`. The built-in CloudWatch-backed `ecsService` provider passes that cap to `GetLogEvents` for each resolved task/container stream, the `ecsTask` provider uses it for the exact task stream(s) it resolves, and the CodeDeploy history provider uses it while listing deployment IDs; providers without a meaningful native cap can return their normal bounded result and rely on the router fallback. Both local and compose smoke coverage lock a representative `ecsService` bounded read (`limit=1`), an ECS task/container read (`resourceType=ecsTask&containerName=worker&limit=1`), plus the invalid `limit=0` rejection so the operator-facing contract does not drift. That release guard is intentionally shape-focused: it verifies the `resultScope` fields and conservative status vocabulary without requiring live AWS totals or a specific number of returned log lines.
+
+`containerName` is optional and only meaningful for `resourceType=ecsTask`. When present, Tenet narrows the task lookup to one awslogs-backed container inside the selected ECS task; omit it to read all awslogs-backed containers Tenet can resolve for that exact task.
 
 Every successful route response also includes additive `resultScope` metadata. This is bounded-read evidence for operators and UI clients, not a pagination cursor or full log-total guarantee: Tenet reports the requested cap when one was provided, the effective cap it applied after defaulting, the number of entries returned in this response, and a conservative `truncationStatus` (`truncated`, `not_truncated`, `unknown`, or `not_applicable`). Tenet does not issue extra AWS calls just to prove total rows beyond the bounded read.
 
-Example limited request:
+Example limited service request:
 
 ```bash
 curl 'http://localhost:8080/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&limit=5'
 ```
+
+Example ECS task/container-scoped request:
+
+```bash
+curl 'http://localhost:8080/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsTask&resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Atask%2Fworker%2Fabc123&containerName=worker&limit=1'
+```
+
+The `resourceName` for `ecsTask` should be the exact task ARN or task identifier Tenet surfaced from the ECS service/task drill-down; URL-encode full ARNs when calling the route from a shell.
 
 Response fields:
 - `deploymentName`
@@ -53,6 +63,7 @@ Use the three response shapes below when deciding whether an empty log card is e
 
 Current provider-backed resource types:
 - `ecsService`
+- `ecsTask`
 - `candidateAutoScalingGroup`
 - `serviceAutoScalingGroup`
 - `userDataBootstrapSource`
@@ -71,6 +82,7 @@ Current route-stable rollout resources with explicit no-log-source responses:
 
 Behavior by type:
 - `ecsService` reads recent CloudWatch log events from the newest running and recently stopped service task/container streams when the ECS task definition and awslogs configuration can be resolved. Recently stopped tasks are included in the same bounded newest-first result so failed rollouts and crash loops can still surface useful logs when running tasks are absent or older.
+- `ecsTask` reads recent CloudWatch log events for the exact ECS task ARN or task identifier selected from an ECS service/task drill-down. When `containerName` is present, Tenet narrows the read to that one awslogs-backed container; when it is omitted, Tenet reads the awslogs-backed containers it can resolve for the task and returns the bounded newest-first result. Local and smoke environments may still return explicit unavailable states such as `aws_unavailable`, `resource_not_found`, `cross_account_not_configured`, or `no_log_source` when credentials, task visibility, account/role wiring, or awslogs configuration are unavailable.
 - `candidateAutoScalingGroup` and `serviceAutoScalingGroup` read recent EC2 instance console/bootstrap output from the newest instance in the Auto Scaling Group.
 - `userDataBootstrapSource` reuses the backing Auto Scaling Group Tenet already resolved for bootstrap-source inspection and returns the newest EC2 instance console/bootstrap output for that backing group.
 - `codeDeployApplication` reads the newest deployment records across the selected CodeDeploy application without narrowing to one deployment group, returns them newest-first, and projects each deployment into one operator-facing recent-log row with the deployment ID in `entries[].stream`.
