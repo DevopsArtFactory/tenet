@@ -1343,7 +1343,7 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
         "`Failed to load recent logs: ${error.message}`",
         "renderOperatorReadFailurePanel(",
         "'Recent logs'",
-        "resourceLogsReadRoute(deploymentName, resource, limit = 0)",
+        "resourceLogsReadRoute(deploymentName, resource, target?.limit ?? selectedLimit)",
         "const createResourceInspectionActions = (section, detail, resource, isLoading = false) => {",
         "'Refresh live inspection'",
         "const buildResourceInspectionRoute = (deploymentName, resource) => {",
