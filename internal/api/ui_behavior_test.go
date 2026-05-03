@@ -4624,7 +4624,7 @@ async function renderScenario(hash, fetchImpl) {
     recentLogsFetchCalls.push(String(url));
     if (url === deploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
     if (url === logsURL) return new Promise((resolve) => { resolveLogs = resolve; });
-    if (url === logsURL + '&limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, entries: [{ timestamp: '2026-05-03T00:00:00Z', stream: 'svc/task/1', message: 'limited log row' }] }) });
+    if (url === logsURL + '&limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, resultScope: { requestedLimit: 10, effectiveLimit: 10, returnedEntryCount: 1, truncationStatus: 'not_truncated' }, entries: [{ timestamp: '2026-05-03T00:00:00Z', stream: 'svc/task/1', message: 'limited log row' }] }) });
     if (url === inspectionURL) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'ecs_service', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn: 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-staging', serviceArn: 'arn:aws:ecs:ap-northeast-2:210987654321:service/payments-staging/payments-api-staging-service', serviceName: 'payments-api-staging-service', status: 'ACTIVE', launchType: 'FARGATE', desiredCount: 2, runningCount: 2, pendingCount: 0, minimumHealthyPercent: 100, maximumPercent: 200, healthCheckGracePeriodSeconds: 45, taskDefinition: 'payments-api:42', deployments: [], events: [] } }) });
     }
@@ -4662,7 +4662,7 @@ async function renderScenario(hash, fetchImpl) {
   if (sectionLinks.find((node) => node.textContent === 'Recent logs')) throw new Error('expected active current section to be removed from On this page links');
   const recentLogsScrollsBefore = recentLogsRun.document.scrollEvents.filter((event) => event.id === 'resource-recent-logs').length;
   if (recentLogsScrollsBefore < 1) throw new Error('expected initial recent logs hash to scroll the matching section into view');
-  resolveLogs({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, entries: [] }) });
+  resolveLogs({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, resultScope: { effectiveLimit: 100, returnedEntryCount: 0, truncationStatus: 'not_truncated' }, entries: [] }) });
   await settle();
   await settle();
   const recentLogsScrollsAfter = recentLogsRun.document.scrollEvents.filter((event) => event.id === 'resource-recent-logs').length;
@@ -4670,6 +4670,9 @@ async function renderScenario(hash, fetchImpl) {
   if (!recentLogsRun.document.lastScrolledTarget || recentLogsRun.document.lastScrolledTarget.id !== 'resource-recent-logs') throw new Error('expected recent logs hash to remain the active scroll target after lazy panel load');
   const recentLogsText = collectText(recentLogsRoot).join(' | ');
   if (!recentLogsText.includes('Log entry cap · All available entries')) throw new Error('expected recent logs panel to render the default active cap copy');
+  ['Requested cap | All available entries', 'Effective cap | 100 entries', 'Returned entries | 0 entries', 'Scope status | Below cap; no router truncation'].forEach((fragment) => {
+    if (!recentLogsText.includes(fragment)) throw new Error('expected recent logs result-scope evidence ' + fragment + ', got ' + recentLogsText);
+  });
   const limitSelect = collectNodes(recentLogsRoot, (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'Log limit')[0];
   if (!limitSelect) throw new Error('expected recent logs panel to expose a log limit select');
   const optionsText = (limitSelect.children || []).map((node) => node.textContent).join(' | ');
@@ -4687,6 +4690,9 @@ async function renderScenario(hash, fetchImpl) {
   if (recentLogsFetchCalls.filter((url) => url === inspectionURL).length !== inspectionsBeforeLimit) throw new Error('expected log limit select not to refetch live inspection panel');
   const limitedLogsText = collectText(recentLogsRoot).join(' | ');
   if (!limitedLogsText.includes('Log entry cap · 10 entries')) throw new Error('expected recent logs panel to render selected cap copy');
+  ['Requested cap | 10 entries', 'Effective cap | 10 entries', 'Returned entries | 1 entry', 'Scope status | Below cap; no router truncation'].forEach((fragment) => {
+    if (!limitedLogsText.includes(fragment)) throw new Error('expected limited recent logs result-scope evidence ' + fragment + ', got ' + limitedLogsText);
+  });
   if (!limitedLogsText.includes('limited log row')) throw new Error('expected limited recent logs payload to render');
   const refreshLogsButton = collectNodes(recentLogsRoot, (node) => node.tagName === 'BUTTON' && node.textContent === 'Refresh recent logs')[0];
   if (!refreshLogsButton) throw new Error('expected refresh recent logs button');
@@ -5062,7 +5068,7 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
 
   const unavailableRun = await renderWithFetch((url) => {
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: false }, unavailableReason: 'cross_account_not_configured', entries: [] }) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: false }, unavailableReason: 'cross_account_not_configured', resultScope: { requestedLimit: 5, effectiveLimit: 5, returnedEntryCount: 0, truncationStatus: 'not_applicable' }, entries: [] }) });
     throw new Error('unexpected unavailable fetch url: ' + url);
   });
   const unavailableText = collectText(unavailableRun.document.getElementById('accounts')).join(' | ');
@@ -5077,10 +5083,13 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   if (!unavailableText.includes('Cross-account lookup')) throw new Error('expected unavailable recent logs state to label cross-account lookup');
   if (!unavailableText.includes('Observer role configured')) throw new Error('expected unavailable recent logs state to label observer role configuration');
   if (!unavailableText.includes('False')) throw new Error('expected unavailable recent logs state to show observer role not configured');
+  ['Requested cap | 5 entries', 'Effective cap | 5 entries', 'Returned entries | 0 entries', 'Scope status | Not applicable for this response'].forEach((fragment) => {
+    if (!unavailableText.includes(fragment)) throw new Error('expected unavailable recent logs scope evidence ' + fragment + ', got ' + unavailableText);
+  });
 
   const emptyRun = await renderWithFetch((url) => {
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, entries: [] }) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, resultScope: { effectiveLimit: 100, returnedEntryCount: 0, truncationStatus: 'not_truncated' }, entries: [] }) });
     throw new Error('unexpected empty fetch url: ' + url);
   });
   const emptyText = collectText(emptyRun.document.getElementById('accounts')).join(' | ');
@@ -5090,6 +5099,9 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   if (!emptyText.includes('Observer role configured')) throw new Error('expected empty recent logs state to label observer role configuration');
   if (!emptyText.includes('False')) throw new Error('expected empty recent logs state to show same-account lookup');
   if (!emptyText.includes('True')) throw new Error('expected empty recent logs state to show observer role configured');
+  ['Requested cap | All available entries', 'Effective cap | 100 entries', 'Returned entries | 0 entries', 'Scope status | Below cap; no router truncation'].forEach((fragment) => {
+    if (!emptyText.includes(fragment)) throw new Error('expected empty recent logs scope evidence ' + fragment + ', got ' + emptyText);
+  });
 
   const failedStatusRun = await renderWithFetch((url) => {
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
@@ -5113,7 +5125,7 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
 
   const populatedRun = await renderWithFetch((url) => {
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, entries: [{ timestamp: '2026-04-16T07:11:00Z', stream: 'codedeploy/bluegreen/1', message: '<img src=x onerror=1> rollback check passed' }] }) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, resultScope: { requestedLimit: 5, effectiveLimit: 5, returnedEntryCount: 5, truncationStatus: 'unknown' }, entries: [{ timestamp: '2026-04-16T07:11:00Z', stream: 'codedeploy/bluegreen/1', message: '<img src=x onerror=1> rollback check passed' }] }) });
     throw new Error('unexpected populated fetch url: ' + url);
   });
   await settle();
@@ -5125,6 +5137,9 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   if (!populatedText.includes('Target account ID')) throw new Error('expected populated recent logs section to label target account');
   if (!populatedText.includes('Cross-account lookup')) throw new Error('expected populated recent logs section to label cross-account lookup');
   if (!populatedText.includes('Observer role configured')) throw new Error('expected populated recent logs section to label observer role configuration');
+  ['Requested cap | 5 entries', 'Effective cap | 5 entries', 'Returned entries | 5 entries', 'Scope status | At cap; provider totals unknown'].forEach((fragment) => {
+    if (!populatedText.includes(fragment)) throw new Error('expected populated recent logs scope evidence ' + fragment + ', got ' + populatedText);
+  });
   if (populatedText.includes('Backing resource type')) throw new Error('expected direct recent-log sources to avoid backing resource metadata labels');
   if (populatedText.includes('Backing resource name')) throw new Error('expected direct recent-log sources to avoid backing resource metadata values');
   if (!populatedText.includes('Log stream · codedeploy/bluegreen/1')) throw new Error('expected populated recent logs section to show stream');

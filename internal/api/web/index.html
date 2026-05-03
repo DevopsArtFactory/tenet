@@ -1583,6 +1583,39 @@
         return normalized > 0 ? `${normalized} entries` : 'All available entries';
       };
       const createResourceLogsLimitNote = (limit) => createElement('div', 'detail-condition-meta', `Log entry cap · ${resourceLogsLimitText(limit)}`);
+      const resourceLogsCountText = (value) => {
+        const count = Number(value);
+        return Number.isFinite(count) && count >= 0 ? `${count} ${count === 1 ? 'entry' : 'entries'}` : '—';
+      };
+      const resourceLogsScopeLimitText = (value) => {
+        const limit = Number(value);
+        return Number.isFinite(limit) && limit > 0 ? `${limit} entries` : 'All available entries';
+      };
+      const resourceLogsTruncationStatusText = (status) => {
+        switch (status) {
+          case 'truncated':
+          case 'capped':
+            return 'Capped response; more rows may exist';
+          case 'not_truncated':
+            return 'Below cap; no router truncation';
+          case 'unknown':
+          case 'at_cap_unknown_total':
+            return 'At cap; provider totals unknown';
+          case 'not_applicable':
+            return 'Not applicable for this response';
+          default:
+            return status ? String(status) : '—';
+        }
+      };
+      const resourceLogsResultScopeFields = (scope) => {
+        if (!scope) return [];
+        return [
+          ['Requested cap', scope.requestedLimit == null ? 'All available entries' : resourceLogsScopeLimitText(scope.requestedLimit)],
+          ['Effective cap', resourceLogsScopeLimitText(scope.effectiveLimit)],
+          ['Returned entries', resourceLogsCountText(scope.returnedEntryCount)],
+          ['Scope status', resourceLogsTruncationStatusText(scope.truncationStatus)],
+        ];
+      };
       const canonicalUserDataBootstrapSource = (userData) => {
         if (!userData || (!userData.type && !userData.path)) return 'unspecified';
         if (!userData.path) return userData.type || 'unspecified';
@@ -3512,8 +3545,9 @@
         const backingResourceFields = resourceLogsBackingResourceFields(result);
         const handoffSection = createResourceLogsBackingResourceHandoffSection(detail, result);
         const beforeNodes = (metadata) => handoffSection ? [capNote, metadata, handoffSection] : [capNote, metadata];
+        const scopeFields = resourceLogsResultScopeFields(result?.resultScope);
         if (!result?.available) {
-          const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, backingResourceFields);
+          const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, [...backingResourceFields, ...scopeFields]);
           const unavailableReason = resourceLogsUnavailableReasonText(result?.unavailableReason);
           const details = unavailableReason
             ? [createElement('div', 'detail-condition-meta', unavailableReason)]
@@ -3524,7 +3558,7 @@
 
         const entries = result.entries || [];
         if (!entries.length) {
-          const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, backingResourceFields);
+          const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, [...backingResourceFields, ...scopeFields]);
           renderResourceLogsState(section, 'No recent logs are available for this resource.', '', beforeNodes(metadata), [], actions);
           return;
         }
@@ -3532,6 +3566,7 @@
         const fragment = [];
         const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, [
           ['Logs source', metricValue(result.source)],
+          ...scopeFields,
           ...backingResourceFields,
         ]);
         fragment.push(...beforeNodes(metadata));
