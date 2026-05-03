@@ -41,6 +41,14 @@ Response fields:
   - `truncationStatus` (`truncated`, `not_truncated`, `unknown`, or `not_applicable`)
 - optional `unavailableReason`
 
+## Operator troubleshooting examples
+
+Use the three response shapes below when deciding whether an empty log card is expected or needs AWS follow-up:
+
+- Bounded successful read: `available=true`, `entries[]` may still be empty, and `resultScope.requestedLimit=5` / `effectiveLimit=5` / `returnedEntryCount={len(entries)}` / `truncationStatus=not_truncated|unknown|truncated` tells the operator which capped envelope Tenet returned. Treat `unknown` as "Tenet reached the cap and intentionally did not ask the provider for a total," not as an API failure.
+- Supported resource, AWS lookup unavailable: `available=false`, `unavailableReason=aws_unavailable` (or another explicit provider reason) plus populated `lookupContext.region`, `lookupContext.targetAccountId`, `lookupContext.crossAccount`, and `lookupContext.observerRoleConfigured` means the route was valid but the API process could not complete the live lookup. Operators should check credentials, observer-role reachability, region/account placement, and CloudWatch/ECS/EC2 access rather than changing the bookmarkable resource URL.
+- Route-stable resource with no independent stream: `available=false`, `unavailableReason=no_log_source`, `entries=[]`, and `resultScope.truncationStatus=not_applicable` means the resource is a valid drill-down target but Tenet does not have a separate log stream for it yet. This is expected today for weighted-target-group traffic-routing resources such as `trafficShiftPlan`, `productionListenerRule`, `activeTargetGroup`, and `candidateTargetGroup`.
+
 ## Supported resource types
 
 Current provider-backed resource types:

@@ -2749,12 +2749,17 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"Operators can add an optional positive `limit` query parameter",
 			"Successful responses include additive `resultScope` metadata",
 			"Tenet does not issue extra provider calls solely to prove exact totals beyond the bounded read",
+			"operator troubleshooting examples that distinguish bounded successful reads, AWS-unavailable supported-resource lookups, and route-stable no-log-source resources",
 		},
 		"../../docs/features/resource-recent-logs.md": {
 			"Both local and compose smoke coverage lock a representative `ecsService` bounded read (`limit=1`) plus the invalid `limit=0` rejection",
 			"shape-focused: it verifies the `resultScope` fields and conservative status vocabulary without requiring live AWS totals",
 			"not a pagination cursor or full log-total guarantee",
 			"Tenet does not issue extra AWS calls just to prove total rows beyond the bounded read",
+			"Operator troubleshooting examples",
+			"Bounded successful read: `available=true`",
+			"Supported resource, AWS lookup unavailable: `available=false`, `unavailableReason=aws_unavailable`",
+			"Route-stable resource with no independent stream: `available=false`, `unavailableReason=no_log_source`",
 			"unavailable/no-log-source responses use `returnedEntryCount=0` and `truncationStatus=not_applicable`",
 			"the UI also recognizes the compatibility aliases `capped` and `at_cap_unknown_total`",
 		},
@@ -2780,6 +2785,14 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 				t.Fatalf("expected %s to document resultScope field %q", path, fragment)
 			}
 		}
+	}
+
+	overviewDoc, err := os.ReadFile("../../docs/features/overview-dashboard.md")
+	if err != nil {
+		t.Fatalf("read overview dashboard feature doc: %v", err)
+	}
+	if !strings.Contains(string(overviewDoc), "operator troubleshooting examples for bounded successful reads, AWS-unavailable supported-resource lookups, and route-stable no-log-source resources") {
+		t.Fatalf("expected overview dashboard feature doc to point operators at the recent-log troubleshooting examples")
 	}
 
 	featureDoc, err := os.ReadFile("../../docs/features/resource-recent-logs.md")
