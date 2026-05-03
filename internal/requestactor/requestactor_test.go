@@ -251,6 +251,18 @@ func TestAuthenticatedRolesFromHeadersReturnsNormalizedRoles(t *testing.T) {
 	}
 }
 
+func TestAuthenticatedGroupsFromHeadersReturnsNormalizedGroups(t *testing.T) {
+	header := http.Header{}
+	header.Add(AuthenticatedGroupsHeader, "platform-admins, sre ,,platform-admins")
+	header.Add(AuthenticatedGroupsHeader, "release-managers")
+
+	groups := AuthenticatedGroupsFromHeaders(header)
+	want := []string{"platform-admins", "sre", "release-managers"}
+	if !reflect.DeepEqual(groups.Names, want) {
+		t.Fatalf("unexpected authenticated groups: got %#v want %#v", groups.Names, want)
+	}
+}
+
 func TestAuthenticatedRolesProvenanceFromHeadersReportsCanonicalOrAbsent(t *testing.T) {
 	header := http.Header{}
 	header.Add(AuthenticatedRolesHeader, "operator, admin")
@@ -269,6 +281,13 @@ func TestSupportedAuthenticatedRoleHeaderNamesReportsCanonicalRoleHeaderOnly(t *
 	want := []string{AuthenticatedRolesHeader}
 	if got := SupportedAuthenticatedRoleHeaderNames(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("supported role headers = %#v, want %#v", got, want)
+	}
+}
+
+func TestSupportedAuthenticatedGroupHeaderNamesReportsCanonicalGroupHeaderOnly(t *testing.T) {
+	want := []string{AuthenticatedGroupsHeader}
+	if got := SupportedAuthenticatedGroupHeaderNames(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("supported group headers = %#v, want %#v", got, want)
 	}
 }
 
