@@ -23,6 +23,8 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/controllerrefresh"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
+	"github.com/DevopsArtFactory/tenet/internal/rbacpolicy"
+	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 	"github.com/DevopsArtFactory/tenet/internal/resourceinspection"
 	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
@@ -137,6 +139,19 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 		GitHubWebhookRefreshPublisher:      newGitHubWebhookRefreshPublisher(store),
 	}
 	configureManagedLoginRuntime(&options)
+	if source.kind == apiCatalogSourceFilesystem {
+		root := source.filesystemRoot
+		options.RepositoryPolicy = func(_ context.Context, identity requestactor.AuthenticatedIdentity, groups requestactor.AuthenticatedGroups) (rbacpolicy.Evaluation, error) {
+			policy, err := rbacpolicy.LoadFromRepository(root)
+			if err != nil {
+				if errors.Is(err, rbacpolicy.ErrNotConfigured) {
+					return rbacpolicy.Evaluate(rbacpolicy.Policy{}, identity, groups)
+				}
+				return rbacpolicy.Evaluation{Configured: true, Available: false, Source: rbacpolicy.SourceRepository, Summary: "repository RBAC policy evaluation failed", UnavailableReason: err.Error()}, err
+			}
+			return rbacpolicy.Evaluate(policy, identity, groups)
+		}
+	}
 	if source.configured() {
 		loadCatalog := source.loadCatalog
 		resourceLogService := newResourceLogProvider()

@@ -22,6 +22,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/controllerrefresh"
 	"github.com/DevopsArtFactory/tenet/internal/githubwebhook"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
+	"github.com/DevopsArtFactory/tenet/internal/rbacpolicy"
 	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 	"github.com/DevopsArtFactory/tenet/internal/resourceinspection"
 	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
@@ -397,6 +398,7 @@ type operatorContextResponse struct {
 	Roles                 operatorContextRoles                         `json:"roles"`
 	DeploymentAccess      operatorContextDeploymentAccess              `json:"deploymentAccess"`
 	AccessVerdicts        operatorContextAccessVerdicts                `json:"accessVerdicts"`
+	RepositoryPolicy      operatorContextRepositoryPolicy              `json:"repositoryPolicy"`
 }
 
 // AuthRuntimeDiagnostic describes optional Tenet-managed authentication runtime capability.
@@ -542,6 +544,12 @@ type operatorContextAccessVerdicts struct {
 	CatalogRead           operatorContextAccessVerdict `json:"catalogRead"`
 }
 
+type operatorContextRepositoryPolicy struct {
+	rbacpolicy.Evaluation
+	SupportedGroupHeaderNames []string `json:"supportedGroupHeaderNames"`
+	DiagnosticOnly            bool     `json:"diagnosticOnly"`
+}
+
 type operatorContextAccessVerdict struct {
 	Allowed                               bool     `json:"allowed"`
 	Reason                                string   `json:"reason"`
@@ -574,6 +582,7 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 	deployments := requestactor.AuthorizedDeploymentsFromContext(r.Context())
 	scopes := requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context())
 	summary := buildOperatorContextAccessSummary(r.Context(), options, deployments, scopes)
+	repositoryPolicy := buildOperatorContextRepositoryPolicy(r.Context(), options, identity, requestactor.AuthenticatedGroupsFromContext(r.Context()))
 	return operatorContextResponse{
 		TrustedHeaders: operatorContextTrustedHeaders{
 			Enabled:                             options.TrustAuthenticatedHeaders,
@@ -619,7 +628,35 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 			},
 			Summary: summary,
 		},
-		AccessVerdicts: buildOperatorContextAccessVerdicts(options, identity, roles, deployments, scopes, summary),
+		AccessVerdicts:   buildOperatorContextAccessVerdicts(options, identity, roles, deployments, scopes, summary),
+		RepositoryPolicy: repositoryPolicy,
+	}
+}
+
+func buildOperatorContextRepositoryPolicy(ctx context.Context, options Options, identity requestactor.AuthenticatedIdentity, groups requestactor.AuthenticatedGroups) operatorContextRepositoryPolicy {
+	evaluation := rbacpolicy.Evaluation{
+		Configured:        false,
+		Available:         false,
+		Summary:           "repository RBAC policy evaluation is not configured for this API instance",
+		UnavailableReason: "repository RBAC policy provider is not configured",
+	}
+	if options.RepositoryPolicy != nil {
+		if resolved, err := options.RepositoryPolicy(ctx, identity, groups); err != nil {
+			evaluation = resolved
+			if evaluation.Summary == "" {
+				evaluation.Summary = "repository RBAC policy evaluation failed"
+			}
+			if evaluation.UnavailableReason == "" {
+				evaluation.UnavailableReason = err.Error()
+			}
+		} else {
+			evaluation = resolved
+		}
+	}
+	return operatorContextRepositoryPolicy{
+		Evaluation:                evaluation,
+		SupportedGroupHeaderNames: requestactor.SupportedAuthenticatedGroupHeaderNames(),
+		DiagnosticOnly:            true,
 	}
 }
 
@@ -1485,6 +1522,7 @@ type Options struct {
 	RequireOperatorRoleForRead           bool
 	RequireOperatorRoleForWrite          bool
 	RequireDeploymentReadAuthorization   bool
+	RepositoryPolicy                     func(context.Context, requestactor.AuthenticatedIdentity, requestactor.AuthenticatedGroups) (rbacpolicy.Evaluation, error)
 	GitHubWebhookDesiredStateSource      githubwebhook.DesiredStateSourceConfig
 	GitHubWebhookRefreshPublisher        controllerrefresh.Publisher
 	CatalogSummary                       func(context.Context) (catalog.Summary, error)

@@ -28,6 +28,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/githubwebhook"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
+	"github.com/DevopsArtFactory/tenet/internal/rbacpolicy"
 	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 	"github.com/DevopsArtFactory/tenet/internal/resourceinspection"
 	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
@@ -434,6 +435,70 @@ func TestRouterOperatorContextReportsTrustedFrontDoorState(t *testing.T) {
 	}
 	if !reflect.DeepEqual(catalogRead["requiredTrustedHeaders"], []any{"X-Tenet-Authenticated-Id", "X-User-ID", "X-Tenet-Authenticated-Roles", "X-Tenet-Authorized-Deployments", "X-Tenet-Authorized-Projects", "X-Tenet-Authorized-Environments"}) {
 		t.Fatalf("expected raw catalog read trusted headers, got %#v", catalogRead["requiredTrustedHeaders"])
+	}
+}
+
+func TestRouterOperatorContextReportsRepositoryPolicyEvaluation(t *testing.T) {
+	called := false
+	router := NewRouter(Options{
+		TrustAuthenticatedHeaders: true,
+		RepositoryPolicy: func(_ context.Context, identity requestactor.AuthenticatedIdentity, groups requestactor.AuthenticatedGroups) (rbacpolicy.Evaluation, error) {
+			called = true
+			if identity.ID != "operator-123" || !reflect.DeepEqual(groups.Names, []string{"platform-admins", "sre"}) {
+				t.Fatalf("unexpected repository-policy inputs: identity=%+v groups=%+v", identity, groups)
+			}
+			return rbacpolicy.Evaluate(rbacpolicy.Policy{
+				Version: rbacpolicy.VersionV1,
+				Users:   []rbacpolicy.Subject{{ID: "operator-123", Roles: []string{"viewer"}, Deployments: []string{"payments-api-prod"}}},
+				Groups:  []rbacpolicy.GroupGrant{{Name: "platform-admins", Roles: []string{"operator"}, Projects: []string{"payments"}, Environments: []string{"prod"}}},
+			}, identity, groups)
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+	req.Header.Set(requestactor.AuthenticatedHeaderID, "operator-123")
+	req.Header.Set(requestactor.AuthenticatedHeaderEmail, "operator@example.com")
+	req.Header.Add(requestactor.AuthenticatedGroupsHeader, "platform-admins, sre, platform-admins")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	if !called {
+		t.Fatalf("expected repository policy provider to be called")
+	}
+	var body map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode operator context response: %v", err)
+	}
+	repositoryPolicy, ok := body["repositoryPolicy"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected repositoryPolicy object, got %#v", body["repositoryPolicy"])
+	}
+	if repositoryPolicy["configured"] != true || repositoryPolicy["available"] != true || repositoryPolicy["source"] != "repository" || repositoryPolicy["diagnosticOnly"] != true || repositoryPolicy["canRead"] != true || repositoryPolicy["canWrite"] != true {
+		t.Fatalf("unexpected repositoryPolicy flags: %#v", repositoryPolicy)
+	}
+	if !reflect.DeepEqual(repositoryPolicy["supportedGroupHeaderNames"], []any{"X-Tenet-Authenticated-Groups"}) {
+		t.Fatalf("unexpected supported group header names: %#v", repositoryPolicy["supportedGroupHeaderNames"])
+	}
+	rolesPayload, ok := repositoryPolicy["roles"].(map[string]any)
+	if !ok || !reflect.DeepEqual(rolesPayload["names"], []any{"viewer", "operator"}) {
+		t.Fatalf("unexpected repositoryPolicy roles: %#v", repositoryPolicy["roles"])
+	}
+	deploymentAccess, ok := repositoryPolicy["deploymentAccess"].(map[string]any)
+	if !ok || !reflect.DeepEqual(deploymentAccess["names"], []any{"payments-api-prod"}) {
+		t.Fatalf("unexpected repositoryPolicy deployment access: %#v", repositoryPolicy["deploymentAccess"])
+	}
+	scopes, ok := repositoryPolicy["projectEnvironmentScopes"].(map[string]any)
+	if !ok || !reflect.DeepEqual(scopes["projects"], []any{"payments"}) || !reflect.DeepEqual(scopes["environments"], []any{"prod"}) {
+		t.Fatalf("unexpected repositoryPolicy scopes: %#v", repositoryPolicy["projectEnvironmentScopes"])
+	}
+	if matchedUsers, ok := repositoryPolicy["matchedUsers"].([]any); !ok || len(matchedUsers) != 1 {
+		t.Fatalf("expected one matched user, got %#v", repositoryPolicy["matchedUsers"])
+	}
+	if matchedGroups, ok := repositoryPolicy["matchedGroups"].([]any); !ok || len(matchedGroups) != 1 {
+		t.Fatalf("expected one matched group, got %#v", repositoryPolicy["matchedGroups"])
 	}
 }
 

@@ -13,6 +13,7 @@ func requestActorMiddleware(trustAuthenticatedHeaders bool, authSession authSess
 			identity := requestactor.AuthenticatedIdentityFromHeaders(r.Header)
 			ctx = requestactor.WithAuthenticatedIdentityContext(ctx, identity)
 			ctx = requestactor.WithAuthenticatedRolesContext(ctx, requestactor.AuthenticatedRolesFromHeaders(r.Header))
+			ctx = requestactor.WithAuthenticatedGroupsContext(ctx, requestactor.AuthenticatedGroupsFromHeaders(r.Header))
 			ctx = requestactor.WithAuthorizedDeploymentsContext(ctx, requestactor.AuthorizedDeploymentsFromHeaders(r.Header))
 			ctx = requestactor.WithAuthorizedProjectEnvironmentScopesContext(ctx, requestactor.AuthorizedProjectEnvironmentScopesFromHeaders(r.Header))
 			if !identity.Authenticated {
