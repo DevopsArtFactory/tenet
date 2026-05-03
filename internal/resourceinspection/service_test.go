@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
@@ -1270,7 +1271,7 @@ func TestECSInspectionFromServiceSortsDeploymentsAndEvents(t *testing.T) {
 		},
 	}
 
-	got := ecsInspectionFromService(service, "arn:cluster", "ghcr.io/devopsartfactory/payments-api:2026-04-18.2")
+	got := ecsInspectionFromService(service, "arn:cluster", "ghcr.io/devopsartfactory/payments-api:2026-04-18.2", []ECSTaskSummary{{TaskARN: "arn:task/one", TaskID: "one"}})
 	if len(got.Deployments) != 2 || got.Deployments[0].ID != "primary" {
 		t.Fatalf("expected deployments sorted newest-first, got %+v", got.Deployments)
 	}
@@ -1288,6 +1289,113 @@ func TestECSInspectionFromServiceSortsDeploymentsAndEvents(t *testing.T) {
 	}
 	if got.HealthCheckGracePeriodSeconds == nil || *got.HealthCheckGracePeriodSeconds != 30 {
 		t.Fatalf("expected health check grace period in ECS inspection payload, got %+v", got)
+	}
+	if len(got.Tasks) != 1 || got.Tasks[0].TaskID != "one" {
+		t.Fatalf("expected ECS service task summaries to pass through, got %+v", got.Tasks)
+	}
+}
+
+func TestECSServiceTaskSummariesDiscoversBoundedTasksWithContainerLogs(t *testing.T) {
+	const (
+		clusterARN  = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker"
+		serviceName = "worker-prod-service"
+		taskDefARN  = "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/worker:42"
+	)
+	base := time.Date(2026, 5, 3, 4, 0, 0, 0, time.UTC)
+	tasks := map[string]ecstypes.Task{}
+	stoppedARNs := make([]string, 0, 11)
+	for i := 0; i < 11; i++ {
+		taskARN := "arn:aws:ecs:ap-northeast-2:123456789012:task/worker/task-" + strconv.Itoa(i)
+		stoppedARNs = append(stoppedARNs, taskARN)
+		tasks[taskARN] = ecstypes.Task{
+			TaskArn:           stringPtr(taskARN),
+			ClusterArn:        stringPtr(clusterARN),
+			TaskDefinitionArn: stringPtr(taskDefARN),
+			LastStatus:        stringPtr("STOPPED"),
+			DesiredStatus:     stringPtr("STOPPED"),
+			StoppedAt:         timePtr(base.Add(time.Duration(i) * time.Minute)),
+			StoppedReason:     stringPtr("Essential container in task exited"),
+			Containers: []ecstypes.Container{
+				{Name: stringPtr("sidecar"), Image: stringPtr("collector:latest"), LastStatus: stringPtr("STOPPED")},
+				{Name: stringPtr("worker"), Image: stringPtr("worker:latest"), LastStatus: stringPtr("STOPPED"), ExitCode: int32Ptr(1), Reason: stringPtr("Error")},
+			},
+		}
+	}
+	runningARN := "arn:aws:ecs:ap-northeast-2:123456789012:task/worker/task-11"
+	tasks[runningARN] = ecstypes.Task{
+		TaskArn:           stringPtr(runningARN),
+		ClusterArn:        stringPtr(clusterARN),
+		TaskDefinitionArn: stringPtr(taskDefARN),
+		LastStatus:        stringPtr("RUNNING"),
+		DesiredStatus:     stringPtr("RUNNING"),
+		LaunchType:        ecstypes.LaunchTypeFargate,
+		StartedAt:         timePtr(base.Add(20 * time.Minute)),
+		Containers: []ecstypes.Container{
+			{Name: stringPtr("sidecar"), Image: stringPtr("collector:latest"), LastStatus: stringPtr("RUNNING")},
+			{Name: stringPtr("worker"), Image: stringPtr("worker:latest"), LastStatus: stringPtr("RUNNING")},
+		},
+	}
+	client := &fakeECSServiceAPI{
+		taskARNsByDesired: map[ecstypes.DesiredStatus][]string{
+			ecstypes.DesiredStatusRunning: {runningARN, stoppedARNs[10]},
+			ecstypes.DesiredStatusStopped: stoppedARNs,
+		},
+		tasksByARN: tasks,
+		taskDefinitions: map[string]ecstypes.TaskDefinition{
+			taskDefARN: {ContainerDefinitions: []ecstypes.ContainerDefinition{
+				{Name: stringPtr("worker"), LogConfiguration: &ecstypes.LogConfiguration{LogDriver: ecstypes.LogDriverAwslogs, Options: map[string]string{"awslogs-group": "/ecs/worker", "awslogs-stream-prefix": "ecs"}}},
+			}},
+		},
+	}
+
+	got, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName)
+	if err != nil {
+		t.Fatalf("ecsServiceTaskSummaries returned error: %v", err)
+	}
+	if len(got) != maxECSServiceTaskSummaries {
+		t.Fatalf("expected bounded task summaries, got %d: %+v", len(got), got)
+	}
+	if got[0].TaskID != "task-11" || got[len(got)-1].TaskID != "task-2" {
+		t.Fatalf("expected newest task summaries first and capped to 10, got %+v", got)
+	}
+	if !reflect.DeepEqual(client.listTaskCalls, []ecstypes.DesiredStatus{ecstypes.DesiredStatusRunning, ecstypes.DesiredStatusStopped}) {
+		t.Fatalf("expected running then stopped task discovery, got %+v", client.listTaskCalls)
+	}
+	if len(got[0].Containers) != 2 || got[0].Containers[0].Name != "sidecar" || got[0].Containers[1].Name != "worker" {
+		t.Fatalf("expected deterministic container summaries, got %+v", got[0].Containers)
+	}
+	if got[0].Containers[1].AWSLogs == nil || got[0].Containers[1].AWSLogs.Stream != "ecs/worker/task-11" {
+		t.Fatalf("expected awslogs metadata from task definition, got %+v", got[0].Containers[1])
+	}
+}
+
+func TestECSServiceTaskSummariesOmitLogMetadataWhenTaskDefinitionLookupFails(t *testing.T) {
+	const (
+		clusterARN  = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker"
+		serviceName = "worker-prod-service"
+		taskDefARN  = "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/worker:42"
+		taskARN     = "arn:aws:ecs:ap-northeast-2:123456789012:task/worker/task-1"
+	)
+	client := &fakeECSServiceAPI{
+		taskARNsByDesired: map[ecstypes.DesiredStatus][]string{ecstypes.DesiredStatusRunning: {taskARN}},
+		tasksByARN: map[string]ecstypes.Task{taskARN: {
+			TaskArn:           stringPtr(taskARN),
+			TaskDefinitionArn: stringPtr(taskDefARN),
+			LastStatus:        stringPtr("RUNNING"),
+			Containers:        []ecstypes.Container{{Name: stringPtr("worker"), Image: stringPtr("worker:latest")}},
+		}},
+		describeTaskDefinitionErr: errors.New("access denied to task definition"),
+	}
+
+	got, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName)
+	if err != nil {
+		t.Fatalf("ecsServiceTaskSummaries returned error: %v", err)
+	}
+	if len(got) != 1 || len(got[0].Containers) != 1 {
+		t.Fatalf("expected task/container summary despite task definition error, got %+v", got)
+	}
+	if got[0].Containers[0].AWSLogs != nil {
+		t.Fatalf("expected missing task definition metadata to omit awslogs, got %+v", got[0].Containers[0])
 	}
 }
 
@@ -1547,10 +1655,16 @@ func TestFindECSServiceClearsStaleClusterHintAndRecovers(t *testing.T) {
 }
 
 type fakeECSServiceAPI struct {
-	clusterARNs       []string
-	servicesByCluster map[string][]ecstypes.Service
-	listCalls         int
-	describeCalls     []string
+	clusterARNs               []string
+	servicesByCluster         map[string][]ecstypes.Service
+	taskARNsByDesired         map[ecstypes.DesiredStatus][]string
+	tasksByARN                map[string]ecstypes.Task
+	taskDefinitions           map[string]ecstypes.TaskDefinition
+	describeTaskDefinitionErr error
+	listCalls                 int
+	describeCalls             []string
+	listTaskCalls             []ecstypes.DesiredStatus
+	describeTaskInputs        [][]string
 }
 
 type fakeEC2LaunchTemplateAPI struct {
@@ -1569,6 +1683,34 @@ func (f *fakeECSServiceAPI) DescribeServices(_ context.Context, input *ecs.Descr
 	f.describeCalls = append(f.describeCalls, clusterARN)
 	services := append([]ecstypes.Service(nil), f.servicesByCluster[clusterARN]...)
 	return &ecs.DescribeServicesOutput{Services: services}, nil
+}
+
+func (f *fakeECSServiceAPI) ListTasks(_ context.Context, input *ecs.ListTasksInput, _ ...func(*ecs.Options)) (*ecs.ListTasksOutput, error) {
+	f.listTaskCalls = append(f.listTaskCalls, input.DesiredStatus)
+	return &ecs.ListTasksOutput{TaskArns: append([]string(nil), f.taskARNsByDesired[input.DesiredStatus]...)}, nil
+}
+
+func (f *fakeECSServiceAPI) DescribeTasks(_ context.Context, input *ecs.DescribeTasksInput, _ ...func(*ecs.Options)) (*ecs.DescribeTasksOutput, error) {
+	tasks := make([]ecstypes.Task, 0, len(input.Tasks))
+	f.describeTaskInputs = append(f.describeTaskInputs, append([]string(nil), input.Tasks...))
+	for _, taskARN := range input.Tasks {
+		if task, ok := f.tasksByARN[taskARN]; ok {
+			tasks = append(tasks, task)
+		}
+	}
+	return &ecs.DescribeTasksOutput{Tasks: tasks}, nil
+}
+
+func (f *fakeECSServiceAPI) DescribeTaskDefinition(_ context.Context, input *ecs.DescribeTaskDefinitionInput, _ ...func(*ecs.Options)) (*ecs.DescribeTaskDefinitionOutput, error) {
+	if f.describeTaskDefinitionErr != nil {
+		return nil, f.describeTaskDefinitionErr
+	}
+	definitionARN := aws.ToString(input.TaskDefinition)
+	if definition, ok := f.taskDefinitions[definitionARN]; ok {
+		copy := definition
+		return &ecs.DescribeTaskDefinitionOutput{TaskDefinition: &copy}, nil
+	}
+	return &ecs.DescribeTaskDefinitionOutput{}, nil
 }
 
 func (f *fakeEC2LaunchTemplateAPI) DescribeLaunchTemplateVersions(_ context.Context, input *ec2.DescribeLaunchTemplateVersionsInput, _ ...func(*ec2.Options)) (*ec2.DescribeLaunchTemplateVersionsOutput, error) {

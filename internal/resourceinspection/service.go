@@ -22,12 +22,14 @@ import (
 )
 
 const (
-	SourceECSService        = "ecs_service"
-	SourceAutoScalingGroup  = "auto_scaling_group"
-	SourceTrafficRoutingAWS = "traffic_routing_aws"
-	SourceRolloutSummary    = "rollout_execution_summary"
-	ecsServiceHintCacheCap  = 256
-	trafficRoutingCacheCap  = 128
+	SourceECSService            = "ecs_service"
+	SourceAutoScalingGroup      = "auto_scaling_group"
+	SourceTrafficRoutingAWS     = "traffic_routing_aws"
+	SourceRolloutSummary        = "rollout_execution_summary"
+	ecsServiceHintCacheCap      = 256
+	trafficRoutingCacheCap      = 128
+	maxECSServiceTaskSummaries  = 10
+	ecsServiceTaskListPageLimit = 10
 )
 
 var launchTemplateBootstrapSourcePatterns = []*regexp.Regexp{
@@ -317,6 +319,9 @@ func NewService(options Options) Service {
 type ecsServiceAPI interface {
 	ListClusters(context.Context, *ecs.ListClustersInput, ...func(*ecs.Options)) (*ecs.ListClustersOutput, error)
 	DescribeServices(context.Context, *ecs.DescribeServicesInput, ...func(*ecs.Options)) (*ecs.DescribeServicesOutput, error)
+	ListTasks(context.Context, *ecs.ListTasksInput, ...func(*ecs.Options)) (*ecs.ListTasksOutput, error)
+	DescribeTasks(context.Context, *ecs.DescribeTasksInput, ...func(*ecs.Options)) (*ecs.DescribeTasksOutput, error)
+	DescribeTaskDefinition(context.Context, *ecs.DescribeTaskDefinitionInput, ...func(*ecs.Options)) (*ecs.DescribeTaskDefinitionOutput, error)
 }
 
 type ec2LaunchTemplateAPI interface {
@@ -982,7 +987,8 @@ func (s Service) inspectECSServiceFromAWS(ctx context.Context, req ECSRequest) (
 			taskDefinitionImage = ecsTaskDefinitionImage(out.TaskDefinition)
 		}
 	}
-	return ecsInspectionFromService(*service, aws.ToString(clusterARN), taskDefinitionImage), nil
+	tasks, _ := ecsServiceTaskSummaries(ctx, clients.ECS, aws.ToString(clusterARN), aws.ToString(service.ServiceName))
+	return ecsInspectionFromService(*service, aws.ToString(clusterARN), taskDefinitionImage, tasks), nil
 }
 
 func (s Service) inspectECSTaskFromAWS(ctx context.Context, req ECSTaskRequest) (ECSTaskInspection, error) {
@@ -1087,6 +1093,99 @@ func ecsTaskSummaryFromTask(task ecstypes.Task, clusterARN string, definitions m
 	return ECSTaskSummary{TaskARN: strings.TrimSpace(aws.ToString(task.TaskArn)), TaskID: taskID, ClusterARN: strings.TrimSpace(clusterARN), LastStatus: strings.TrimSpace(aws.ToString(task.LastStatus)), DesiredStatus: strings.TrimSpace(aws.ToString(task.DesiredStatus)), HealthStatus: string(task.HealthStatus), LaunchType: string(task.LaunchType), StartedAt: formatTime(aws.ToTime(task.StartedAt)), StoppedAt: formatTime(aws.ToTime(task.StoppedAt)), StoppedReason: strings.TrimSpace(aws.ToString(task.StoppedReason)), Containers: containers}
 }
 
+func ecsServiceTaskSummaries(ctx context.Context, client ecsServiceAPI, clusterARN, serviceName string) ([]ECSTaskSummary, error) {
+	clusterARN = strings.TrimSpace(clusterARN)
+	serviceName = strings.TrimSpace(serviceName)
+	if client == nil || clusterARN == "" || serviceName == "" {
+		return nil, nil
+	}
+
+	taskARNs := make([]string, 0, maxECSServiceTaskSummaries*2)
+	seen := make(map[string]struct{})
+	for _, desiredStatus := range []ecstypes.DesiredStatus{ecstypes.DesiredStatusRunning, ecstypes.DesiredStatusStopped} {
+		out, err := client.ListTasks(ctx, &ecs.ListTasksInput{
+			Cluster:       aws.String(clusterARN),
+			ServiceName:   aws.String(serviceName),
+			DesiredStatus: desiredStatus,
+			MaxResults:    aws.Int32(ecsServiceTaskListPageLimit),
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, taskARN := range out.TaskArns {
+			taskARN = strings.TrimSpace(taskARN)
+			if taskARN == "" {
+				continue
+			}
+			if _, ok := seen[taskARN]; ok {
+				continue
+			}
+			seen[taskARN] = struct{}{}
+			taskARNs = append(taskARNs, taskARN)
+		}
+	}
+	if len(taskARNs) == 0 {
+		return nil, nil
+	}
+
+	out, err := client.DescribeTasks(ctx, &ecs.DescribeTasksInput{Cluster: aws.String(clusterARN), Tasks: taskARNs})
+	if err != nil {
+		return nil, err
+	}
+	definitions := ecsTaskDefinitionsByARN(ctx, client, out.Tasks)
+	summaries := make([]ECSTaskSummary, 0, len(out.Tasks))
+	for _, task := range out.Tasks {
+		summary := ecsTaskSummaryFromTask(task, clusterARN, definitions)
+		if summary.TaskARN == "" {
+			continue
+		}
+		summaries = append(summaries, summary)
+	}
+	sort.SliceStable(summaries, func(i, j int) bool {
+		left := ecsTaskSummarySortTime(summaries[i])
+		right := ecsTaskSummarySortTime(summaries[j])
+		if left.Equal(right) {
+			return summaries[i].TaskARN < summaries[j].TaskARN
+		}
+		return left.After(right)
+	})
+	if len(summaries) > maxECSServiceTaskSummaries {
+		summaries = summaries[:maxECSServiceTaskSummaries]
+	}
+	return summaries, nil
+}
+
+func ecsTaskDefinitionsByARN(ctx context.Context, client ecsServiceAPI, tasks []ecstypes.Task) map[string]ecstypes.TaskDefinition {
+	definitions := make(map[string]ecstypes.TaskDefinition)
+	for _, task := range tasks {
+		arn := strings.TrimSpace(aws.ToString(task.TaskDefinitionArn))
+		if arn == "" {
+			continue
+		}
+		if _, ok := definitions[arn]; ok {
+			continue
+		}
+		out, err := client.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{TaskDefinition: aws.String(arn)})
+		if err != nil || out.TaskDefinition == nil {
+			continue
+		}
+		definitions[arn] = *out.TaskDefinition
+	}
+	return definitions
+}
+
+func ecsTaskSummarySortTime(summary ECSTaskSummary) time.Time {
+	for _, value := range []string{summary.StoppedAt, summary.StartedAt} {
+		if value == "" {
+			continue
+		}
+		if parsed, err := time.Parse(time.RFC3339, value); err == nil {
+			return parsed
+		}
+	}
+	return time.Time{}
+}
+
 func (s Service) inspectAutoScalingGroupFromAWS(ctx context.Context, req AutoScalingGroupRequest) (AutoScalingInspection, error) {
 	clients, err := s.awsClients(ctx, req.Region, req.TargetAccountID, req.ObserverRoleARN)
 	if err != nil {
@@ -1115,7 +1214,7 @@ func (s Service) inspectAutoScalingGroupFromAWS(ctx context.Context, req AutoSca
 	return inspection, nil
 }
 
-func ecsInspectionFromService(service ecstypes.Service, clusterARN string, taskDefinitionImage string) ECSServiceInspection {
+func ecsInspectionFromService(service ecstypes.Service, clusterARN string, taskDefinitionImage string, tasks []ECSTaskSummary) ECSServiceInspection {
 	var minimumHealthyPercent *int32
 	var maximumPercent *int32
 	if service.DeploymentConfiguration != nil {
@@ -1188,6 +1287,7 @@ func ecsInspectionFromService(service ecstypes.Service, clusterARN string, taskD
 		TaskDefinitionImage:           strings.TrimSpace(taskDefinitionImage),
 		Deployments:                   deploymentSummaries,
 		Events:                        eventSummaries,
+		Tasks:                         append([]ECSTaskSummary(nil), tasks...),
 	}
 }
 
