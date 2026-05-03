@@ -94,6 +94,37 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 	}
 }
 
+func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
+	readme := readRepoFile(t, "README.md")
+	for _, fragment := range []string{
+		"`docs/architecture/tenet-v1-enterprise-sso.md`",
+		"full enterprise SSO providers for Google Workspace or Okta",
+		"repository-backed RBAC policy evaluation for users/groups",
+	} {
+		if !strings.Contains(readme, fragment) {
+			t.Fatalf("expected README enterprise SSO boundary to include %q", fragment)
+		}
+	}
+
+	doc := readRepoFile(t, "docs/architecture/tenet-v1-enterprise-sso.md")
+	for _, fragment := range []string{
+		"Google Workspace/Gmail means identity login only",
+		"It does not grant Tenet Gmail mailbox, Drive, Calendar, or other Google API access.",
+		"Google Workspace identity through Google OIDC profile claims",
+		"Okta identity through SAML assertions or OIDC profile claims",
+		"local fake provider/assertion/profile tests instead of live Google or Okta calls",
+		"Trusted front-door identity remains authoritative",
+		"Diagnostics must not expose client secrets, raw ID/access/refresh tokens, SAML assertions, authorization codes, private keys, or provider cookies.",
+		"Group claims are identity input only.",
+		"This issue is not the RBAC policy redesign.",
+		"Repository-backed policy mapping for users/groups, Tenet roles, and deployment/project/environment scopes belongs to issue #663",
+	} {
+		if !strings.Contains(doc, fragment) {
+			t.Fatalf("expected enterprise SSO docs to include %q", fragment)
+		}
+	}
+}
+
 func TestDockerUpOperatorContract(t *testing.T) {
 	compose := readRepoFile(t, "compose.yaml")
 	if !strings.Contains(compose, `TENET_AWS_ENABLE_APPLY: ${TENET_AWS_ENABLE_APPLY:-false}`) {
