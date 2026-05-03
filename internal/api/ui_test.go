@@ -3057,7 +3057,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		"\"params.set('limit', String(normalizedLimit));\",",
 		"\"`Failed to load recent logs: ${error.message}`\",",
 		"\"'Recent logs'\",",
-		"\"resourceLogsReadRoute(deploymentName, resource)\",",
+		"\"resourceLogsReadRoute(deploymentName, resource, limit = 0)\",",
 		"\"const createResourceInspectionActions = (section, detail, resource, isLoading = false) => {\",",
 		"\"'Refresh live inspection'\",",
 		"\"const buildResourceInspectionRoute = (deploymentName, resource) => {\",",
