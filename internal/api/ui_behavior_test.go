@@ -4624,7 +4624,7 @@ async function renderScenario(hash, fetchImpl) {
     recentLogsFetchCalls.push(String(url));
     if (url === deploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
     if (url === logsURL) return new Promise((resolve) => { resolveLogs = resolve; });
-    if (url === logsURL + '&limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, entries: [{ timestamp: '2026-05-03T00:00:00Z', stream: 'svc/task/1', message: 'limited log row' }] }) });
+    if (url === logsURL + '&limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, resultScope: { requestedLimit: 10, effectiveLimit: 10, returnedEntryCount: 1, truncationStatus: 'unknown' }, entries: [{ timestamp: '2026-05-03T00:00:00Z', stream: 'svc/task/1', message: 'limited log row' }] }) });
     if (url === inspectionURL) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'ecs_service', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn: 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-staging', serviceArn: 'arn:aws:ecs:ap-northeast-2:210987654321:service/payments-staging/payments-api-staging-service', serviceName: 'payments-api-staging-service', status: 'ACTIVE', launchType: 'FARGATE', desiredCount: 2, runningCount: 2, pendingCount: 0, minimumHealthyPercent: 100, maximumPercent: 200, healthCheckGracePeriodSeconds: 45, taskDefinition: 'payments-api:42', deployments: [], events: [] } }) });
     }
@@ -4662,7 +4662,7 @@ async function renderScenario(hash, fetchImpl) {
   if (sectionLinks.find((node) => node.textContent === 'Recent logs')) throw new Error('expected active current section to be removed from On this page links');
   const recentLogsScrollsBefore = recentLogsRun.document.scrollEvents.filter((event) => event.id === 'resource-recent-logs').length;
   if (recentLogsScrollsBefore < 1) throw new Error('expected initial recent logs hash to scroll the matching section into view');
-  resolveLogs({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, entries: [] }) });
+  resolveLogs({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, resultScope: { effectiveLimit: 50, returnedEntryCount: 0, truncationStatus: 'not_truncated' }, entries: [] }) });
   await settle();
   await settle();
   const recentLogsScrollsAfter = recentLogsRun.document.scrollEvents.filter((event) => event.id === 'resource-recent-logs').length;
@@ -4670,6 +4670,7 @@ async function renderScenario(hash, fetchImpl) {
   if (!recentLogsRun.document.lastScrolledTarget || recentLogsRun.document.lastScrolledTarget.id !== 'resource-recent-logs') throw new Error('expected recent logs hash to remain the active scroll target after lazy panel load');
   const recentLogsText = collectText(recentLogsRoot).join(' | ');
   if (!recentLogsText.includes('Log entry cap · All available entries')) throw new Error('expected recent logs panel to render the default active cap copy');
+  if (!recentLogsText.includes('Result scope · All entries requested · 50 effective cap · 0 entries returned · Provider reported no truncation for this request')) throw new Error('expected recent logs panel to render not-truncated result scope copy, got ' + recentLogsText);
   const limitSelect = collectNodes(recentLogsRoot, (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'Log limit')[0];
   if (!limitSelect) throw new Error('expected recent logs panel to expose a log limit select');
   const optionsText = (limitSelect.children || []).map((node) => node.textContent).join(' | ');
@@ -4687,6 +4688,7 @@ async function renderScenario(hash, fetchImpl) {
   if (recentLogsFetchCalls.filter((url) => url === inspectionURL).length !== inspectionsBeforeLimit) throw new Error('expected log limit select not to refetch live inspection panel');
   const limitedLogsText = collectText(recentLogsRoot).join(' | ');
   if (!limitedLogsText.includes('Log entry cap · 10 entries')) throw new Error('expected recent logs panel to render selected cap copy');
+  if (!limitedLogsText.includes('Result scope · 10 requested · 10 effective cap · 1 entry returned · Provider cannot confirm whether more entries exist')) throw new Error('expected limited recent logs panel to render unknown truncation scope copy, got ' + limitedLogsText);
   if (!limitedLogsText.includes('limited log row')) throw new Error('expected limited recent logs payload to render');
   const refreshLogsButton = collectNodes(recentLogsRoot, (node) => node.tagName === 'BUTTON' && node.textContent === 'Refresh recent logs')[0];
   if (!refreshLogsButton) throw new Error('expected refresh recent logs button');
@@ -4711,13 +4713,16 @@ async function renderScenario(hash, fetchImpl) {
   let resolveInspection;
   const inspectionRun = await renderScenario('#resource-live-inspection', (url) => {
     if (url === deploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', resultScope: { effectiveLimit: 50, returnedEntryCount: 0, truncationStatus: 'not_applicable' }, entries: [] }) });
     if (url === inspectionURL) return new Promise((resolve) => { resolveInspection = resolve; });
     throw new Error('unexpected live-inspection fetch url: ' + url);
   });
   if (inspectionRun.window.location.hash !== '#resource-live-inspection') throw new Error('expected live inspection hash to stay stable, got ' + inspectionRun.window.location.hash);
   const inspectionChip = collectNodes(inspectionRun.document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip').find((node) => node.getAttribute('aria-label') === 'Current section: Live inspection');
   if (!inspectionChip) throw new Error('expected live inspection hash to render the current-section chip');
+  const inspectionText = collectText(inspectionRun.document.getElementById('accounts')).join(' | ');
+  if (!inspectionText.includes('Result scope · All entries requested · 50 effective cap · 0 entries returned · Scope does not apply to this unavailable lookup')) throw new Error('expected unavailable recent logs panel to render not-applicable result scope copy, got ' + inspectionText);
+  if (!inspectionText.includes('Recent logs are not supported for this resource type.')) throw new Error('expected unavailable recent logs panel to render friendly unsupported-resource copy');
   const inspectionScrollsBefore = inspectionRun.document.scrollEvents.filter((event) => event.id === 'resource-live-inspection').length;
   if (inspectionScrollsBefore < 1) throw new Error('expected initial live inspection hash to scroll the matching section into view');
   resolveInspection({ ok: true, json: () => Promise.resolve({ available: true, source: 'ecs_service', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn: 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-staging', serviceArn: 'arn:aws:ecs:ap-northeast-2:210987654321:service/payments-staging/payments-api-staging-service', serviceName: 'payments-api-staging-service', status: 'ACTIVE', launchType: 'FARGATE', desiredCount: 2, runningCount: 2, pendingCount: 0, minimumHealthyPercent: 100, maximumPercent: 200, healthCheckGracePeriodSeconds: 45, taskDefinition: 'payments-api:42', deployments: [], events: [] } }) });

@@ -1218,6 +1218,9 @@ assert "pushResourceSection(inspectionSection, 'resource-live-inspection', 'Live
 assert "pushResourceSection(logsSection, 'resource-recent-logs', 'Recent logs');" in ui, ui
 assert "const resourceLogsLimitOptions = [" in ui, ui
 assert "Log entry cap · ${resourceLogsLimitText(limit)}" in ui, ui
+assert "Result scope · ${summary}" in ui, ui
+assert "Provider cannot confirm whether more entries exist" in ui, ui
+assert "Scope does not apply to this unavailable lookup" in ui, ui
 assert "'Log limit'" in ui, ui
 assert "params.set('limit', String(normalizedLimit));" in ui, ui
 assert "Refresh recent logs" in ui, ui
@@ -1368,6 +1371,9 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "const resourceLogsReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceLogsRoute(deploymentName, resource, limit)}`;" in body, body
     assert "const resourceLogsLimitOptions = [" in body, body
     assert "Log entry cap · ${resourceLogsLimitText(limit)}" in body, body
+    assert "Result scope · ${summary}" in body, body
+    assert "Provider cannot confirm whether more entries exist" in body, body
+    assert "Scope does not apply to this unavailable lookup" in body, body
     assert "'Log limit'" in body, body
     assert "const resourceInspectionReadRoute = (deploymentName, resource) => `GET ${buildResourceInspectionRoute(deploymentName, resource)}`;" in body, body
     assert "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')" in body, body

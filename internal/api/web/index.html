@@ -1582,7 +1582,41 @@
         const normalized = normalizeResourceLogsLimit(limit);
         return normalized > 0 ? `${normalized} entries` : 'All available entries';
       };
+      const resourceLogsRequestedLimitText = (value) => normalizeResourceLogsLimit(value) > 0 ? `${normalizeResourceLogsLimit(value)} requested` : 'All entries requested';
+      const resourceLogsEffectiveLimitText = (value) => normalizeResourceLogsLimit(value) > 0 ? `${normalizeResourceLogsLimit(value)} effective cap` : 'No provider cap reported';
+      const resourceLogsReturnedCountText = (value) => {
+        if (!Number.isFinite(value)) return 'Returned count unavailable';
+        return `${value} ${value === 1 ? 'entry' : 'entries'} returned`;
+      };
+      const resourceLogsTruncationText = (status) => {
+        switch (status) {
+          case 'truncated':
+            return 'Response may be truncated at the effective cap';
+          case 'not_truncated':
+            return 'Provider reported no truncation for this request';
+          case 'unknown':
+            return 'Provider cannot confirm whether more entries exist';
+          case 'not_applicable':
+            return 'Scope does not apply to this unavailable lookup';
+          default:
+            return 'Truncation status unavailable';
+        }
+      };
       const createResourceLogsLimitNote = (limit) => createElement('div', 'detail-condition-meta', `Log entry cap · ${resourceLogsLimitText(limit)}`);
+      const createResourceLogsScopeNote = (result) => {
+        const scope = result?.resultScope;
+        if (!scope || typeof scope !== 'object') return null;
+        const requested = Object.prototype.hasOwnProperty.call(scope, 'requestedLimit') ? scope.requestedLimit : 0;
+        const effective = scope.effectiveLimit;
+        const returned = scope.returnedEntryCount;
+        const summary = [
+          resourceLogsRequestedLimitText(requested),
+          resourceLogsEffectiveLimitText(effective),
+          resourceLogsReturnedCountText(returned),
+          resourceLogsTruncationText(scope.truncationStatus),
+        ].join(' · ');
+        return createElement('div', 'detail-condition-meta', `Result scope · ${summary}`);
+      };
       const canonicalUserDataBootstrapSource = (userData) => {
         if (!userData || (!userData.type && !userData.path)) return 'unspecified';
         if (!userData.path) return userData.type || 'unspecified';
@@ -3509,9 +3543,11 @@
         const selectedLimit = normalizeResourceLogsLimit(limit);
         const actions = createResourceLogsActions(section, deploymentName, resource, false, detail);
         const capNote = createResourceLogsLimitNote(selectedLimit);
+        const scopeNote = createResourceLogsScopeNote(result);
+        const leadingNotes = scopeNote ? [capNote, scopeNote] : [capNote];
         const backingResourceFields = resourceLogsBackingResourceFields(result);
         const handoffSection = createResourceLogsBackingResourceHandoffSection(detail, result);
-        const beforeNodes = (metadata) => handoffSection ? [capNote, metadata, handoffSection] : [capNote, metadata];
+        const beforeNodes = (metadata) => handoffSection ? [...leadingNotes, metadata, handoffSection] : [...leadingNotes, metadata];
         if (!result?.available) {
           const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, backingResourceFields);
           const unavailableReason = resourceLogsUnavailableReasonText(result?.unavailableReason);
