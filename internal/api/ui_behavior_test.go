@@ -9828,6 +9828,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!summaryText.includes('Deployment audit timeline')) throw new Error('expected deployment-scoped audit summary label');
   if (!summaryText.includes('Immutable plan preview and apply-request activity for deployment payments-api-prod rendered from GET /v1/audit-logs.')) throw new Error('expected deployment-scoped audit summary copy');
   if (!accountsText.includes('Audit timeline')) throw new Error('expected audit page body title');
+  if (!accountsText.includes('Current audit read: GET /v1/audit-logs?deployment=payments-api-prod&limit=2')) throw new Error('expected scoped audit read route copy, got ' + accountsText);
   if (!accountsText.includes('Active deployment context')) throw new Error('expected deployment context callout');
   if (!accountsText.includes('payments-api-prod')) throw new Error('expected deployment context value');
   if (!accountsText.includes('Apply requested (apply.requested)')) throw new Error('expected newest audit entry label');
