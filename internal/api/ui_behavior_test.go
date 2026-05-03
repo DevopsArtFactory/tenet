@@ -3174,8 +3174,9 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!recentLogsLink.href.includes(resourceIDFragment) || !recentLogsLink.href.endsWith('#resource-recent-logs')) throw new Error('expected recent logs handoff to target the existing resource section');
   if (!codeDeployApplicationLiveInspectionLink) throw new Error('expected CodeDeploy application row to link directly to live inspection');
   if (!codeDeployApplicationLiveInspectionLink.href.includes('/?page=resource&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging') || !codeDeployApplicationLiveInspectionLink.href.endsWith('#resource-live-inspection')) throw new Error('expected CodeDeploy application live inspection link to preserve route state and target the live-inspection panel');
-  if (codeDeployApplicationRecentLogsLink) throw new Error('CodeDeploy application rows should not link to recent logs without backend support');
-  if (liveInspectionLink.target !== '_self' || recentLogsLink.target !== '_self' || codeDeployApplicationLiveInspectionLink.target !== '_self') throw new Error('expected direct evidence handoffs to stay in embedded UI flow');
+  if (!codeDeployApplicationRecentLogsLink) throw new Error('expected CodeDeploy application row to link directly to recent logs');
+  if (!codeDeployApplicationRecentLogsLink.href.includes('/?page=resource&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging') || !codeDeployApplicationRecentLogsLink.href.endsWith('#resource-recent-logs')) throw new Error('expected CodeDeploy application recent logs link to preserve route state and target the recent-logs panel');
+  if (liveInspectionLink.target !== '_self' || recentLogsLink.target !== '_self' || codeDeployApplicationLiveInspectionLink.target !== '_self' || codeDeployApplicationRecentLogsLink.target !== '_self') throw new Error('expected direct evidence handoffs to stay in embedded UI flow');
 })();
 `
 
@@ -4186,7 +4187,24 @@ const runUI = async (search, detailBody) => {
   const inspectionLink = liveInspectionLinks.find((node) => node.href === inspectionHref);
   if (!fallbackLink) throw new Error('expected fallback application page to synthesize canonical trafficShiftPlan resource link');
   if (!inspectionLink) throw new Error('expected fallback application page to expose direct live inspection handoff for trafficShiftPlan');
-  if (recentLogsLinks.some((node) => node.href === resourceHref + '#resource-recent-logs')) throw new Error('expected fallback application page to suppress unsupported recent logs handoff for trafficShiftPlan');
+  const expectedRecentLogHandoffs = [
+    ['trafficShiftPlan', 'payments-api-prod-weighted-routing', 'Weighted routing plan Tenet follows to shift a canary slice of production traffic from the active target group to the candidate target group before full promotion while respecting warmup 90s'],
+    ['productionListenerRule', 'payments-api-prod-prod-listener', 'Production listener rule operators inspect while Tenet updates weighted forwarding during rollout'],
+    ['activeTargetGroup', 'payments-api-prod-active', 'Currently active target group receiving production traffic'],
+    ['candidateTargetGroup', 'payments-api-prod-candidate', 'Candidate target group Tenet will register and warm before traffic shifting'],
+  ];
+  for (const [type, name, description] of expectedRecentLogHandoffs) {
+    const expectedID = type + '::' + name + '::' + description;
+    const expectedHref = '/?' + new URLSearchParams({
+      page: 'resource',
+      deployment: 'payments-api-prod',
+      resourceType: type,
+      resourceId: expectedID,
+    }).toString() + '#resource-recent-logs';
+    const expectedLink = recentLogsLinks.find((node) => node.href === expectedHref);
+    if (!expectedLink) throw new Error('expected fallback application page to expose direct recent logs handoff for ' + type);
+    if (expectedLink.target !== '_self') throw new Error('expected ' + type + ' recent logs handoff to stay in embedded UI flow');
+  }
   const canonicalRun = await runUI(fallbackLink.href.slice(1), canonicalDetailBody);
   if (!canonicalRun.fetchCalls.includes('/v1/overview/deployments/payments-api-prod')) throw new Error('expected canonical resource page to load deployment detail');
   if (!canonicalRun.fetchCalls.includes('/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing')) throw new Error('expected canonical resource page to load recent logs for the selected resource');

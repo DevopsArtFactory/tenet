@@ -733,6 +733,7 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')",
 		"const resourceSupportsLiveInspection = (resource) => {",
 		"'codeDeployApplication',\n          'codeDeployDeploymentGroup'",
+		"'trafficShiftPlan',\n          'productionListenerRule',\n          'activeTargetGroup',\n          'candidateTargetGroup'",
 		"const resourceSupportsRecentLogs = (resource) => {",
 		"createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open live inspection', '_self')",
 		"createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open recent logs', '_self')",
@@ -2347,8 +2348,8 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"const resourceSupportsLiveInspection = (resource) => {\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page live inspection support helper")
 	}
-	if !strings.Contains(text, "assert \"const resourceSupportsRecentLogs = (resource) => {\" in application_ui, application_ui") {
-		t.Fatalf("expected smoke-local.sh to assert application page recent logs support helper")
+	if !strings.Contains(text, "assert \"const resourceSupportsRecentLogs = (resource) => {\" in application_ui, application_ui") || !strings.Contains(text, "assert \"'codeDeployApplication',\\n          'codeDeployDeploymentGroup'\" in application_ui, application_ui") || !strings.Contains(text, "assert \"'trafficShiftPlan',\\n          'productionListenerRule',\\n          'activeTargetGroup',\\n          'candidateTargetGroup'\" in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert application page recent logs support helper and route-stable resource types")
 	}
 	if !strings.Contains(text, "assert \"createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open live inspection', '_self')\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page live inspection handoff contract")
