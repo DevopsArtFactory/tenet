@@ -206,7 +206,7 @@ The embedded UI now exposes a dedicated bookmarkable audit route:
 - `/?page=audit&limit={n}` to request a smaller newest-first window from `GET /v1/audit-logs`; the audit toolbar exposes the same bookmarkable limit through an explicit safe selector
 
 Current behavior:
-- fetches `GET /v1/audit-logs` directly
+- fetches `GET /v1/audit-logs` directly and renders the exact current audit read route (including `deployment`, `action`, and `limit` query params when present) near the timeline intro so operators can confirm what backend collection request is driving a bookmarked view
 - preserves optional `deployment`, `action`, and `limit` URL state when present
 - renders a safe action filter control for exactly `plan.created` and `apply.requested`
 - renders a safe limit selector in the audit toolbar with preset newest-first windows while still honoring bookmarked positive integers such as `limit=2`

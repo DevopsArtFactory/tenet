@@ -853,7 +853,8 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"return fetchEmbeddedReadRouteJSON(route, {",
 		"unavailable: 'audit log API unavailable',",
 		"failure: 'audit log request failed',",
-		"const createAuditLogsIntro = () => createElement('div', 'detail-section-copy', 'Immutable operator audit log from GET /v1/audit-logs. Newest entries first. Actor identity remains explicit when unavailable or unknown.');",
+		"const createAuditLogsIntro = () => {",
+		"Current audit read: ${buildEmbeddedPageReadRoute(currentPageState)}",
 		"const auditEntryCountLabel = (count) => `${count} entr${count === 1 ? 'y' : 'ies'}`;",
 		"const createAuditTimelineSummary = (entries) => {",
 		"['Visible audit entries', auditEntryCountLabel(visibleEntries.length)],",
@@ -2429,6 +2430,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert 'Audit timeline' in audit_ui, audit_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains audit timeline copy")
+	}
+	if !strings.Contains(text, "assert 'Current audit read: ${buildEmbeddedPageReadRoute(currentPageState)}' in audit_ui, audit_ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains current audit read route copy")
 	}
 	if !strings.Contains(text, "assert 'Refresh audit log' in audit_ui, audit_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh audit log")

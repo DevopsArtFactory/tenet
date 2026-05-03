@@ -4616,7 +4616,15 @@
         deploymentEventsStateByDeployment.set(deploymentName, { status: 'loading', promise, sections: [section] });
         return promise;
       };
-      const createAuditLogsIntro = () => createElement('div', 'detail-section-copy', 'Immutable operator audit log from GET /v1/audit-logs. Newest entries first. Actor identity remains explicit when unavailable or unknown.');
+      const createAuditLogsIntro = () => {
+        const intro = createElement('div', 'detail-section-copy');
+        intro.append(
+          createElement('span', '', 'Immutable operator audit log from GET /v1/audit-logs. Newest entries first. Actor identity remains explicit when unavailable or unknown.'),
+          createElement('br'),
+          createElement('span', '', `Current audit read: ${buildEmbeddedPageReadRoute(currentPageState)}`),
+        );
+        return intro;
+      };
       const auditDeploymentName = () => currentPageState.deployment || '';
       const createAuditLogsActions = (isLoading = false) => [
         createRefreshButton(

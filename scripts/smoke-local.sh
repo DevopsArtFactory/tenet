@@ -1452,6 +1452,7 @@ assert "timelineSection.setAttribute('id', timelineSectionID);" in audit_ui, aud
 assert "buildPageSectionURL('audit', sectionID, {" in audit_ui, audit_ui
 assert "createElement('div', 'quick-nav-current', `${deploymentName || 'Deployment'} · ${currentWorkspace}`)" in audit_ui, audit_ui
 assert 'Immutable plan preview and apply-request activity for deployment ${deploymentName} rendered from GET /v1/audit-logs.' in audit_ui, audit_ui
+assert 'Current audit read: ${buildEmbeddedPageReadRoute(currentPageState)}' in audit_ui, audit_ui
 assert 'No audit activity has been persisted yet.' in audit_ui, audit_ui
 assert "const auditFilterLabels = () => {" in audit_ui, audit_ui
 assert "labels.push(`action ${auditActionLabel(currentPageState.auditAction)}`);" in audit_ui, audit_ui
