@@ -2043,10 +2043,13 @@ func TestCISmokeWorkflowSyntaxChecksBothSmokeScriptsInFastLane(t *testing.T) {
 		"internal/api/*|internal/api/**",
 		"internal/requestactor/*|internal/requestactor/**",
 		"internal/statusstore/*|internal/statusstore/**",
+		"internal/resourcelogs/*|internal/resourcelogs/**",
+		"internal/resourceinspection/*|internal/resourceinspection/**",
 		"internal/planpreview/*|internal/planpreview/**",
 		"internal/applyrequest/*|internal/applyrequest/**",
 		"internal/auditlog/*|internal/auditlog/**",
-		"Docker smoke skipped because this PR does not touch a Compose/front-door/auth/API/controller or plan/apply/audit persistence smoke surface.",
+		"Docker smoke required because this PR touches a Compose/front-door/auth/API/controller, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface.",
+		"Docker smoke skipped because this PR does not touch a Compose/front-door/auth/API/controller, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface.",
 	} {
 		if !strings.Contains(scopeJob, fragment) {
 			t.Fatalf("expected docker-smoke-scope job to include %q", fragment)
@@ -2900,7 +2903,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"Linux CI runners",
 			"syntax-checks both `scripts/smoke-local.sh` and `scripts/smoke-docker.sh` with `bash -n`, then runs `make smoke-local`",
 			"on pull requests, a cheap `docker-smoke-scope` job first checks changed paths",
-			"runs the full `make smoke-docker` container stack only when the PR touches Compose/front-door/auth/API/controller or plan/apply/audit persistence smoke surfaces",
+			"runs the full `make smoke-docker` container stack only when the PR touches Compose/front-door/auth/API/controller, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surfaces",
 			"Unrelated docs-only PRs keep the cheap fast lane without the Docker stack",
 			"make smoke-docker",
 		},
@@ -2977,7 +2980,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"Linux CI runners with tighter environment-size limits",
 			"syntax-checks both `scripts/smoke-local.sh` and `scripts/smoke-docker.sh` with `bash -n`, then runs `make smoke-local`",
 			"Pull requests first pass through a cheap `docker-smoke-scope` path filter",
-			"only PRs that touch Compose/front-door/auth/API/controller or plan/apply/audit persistence smoke surfaces",
+			"only PRs that touch Compose/front-door/auth/API/controller, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surfaces",
 			"unrelated docs-only PRs on the cheap fast lane",
 			"`docker compose down --remove-orphans` even on failure",
 		},
