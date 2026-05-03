@@ -81,6 +81,58 @@ func TestServiceRecent(t *testing.T) {
 		}
 	})
 
+	t.Run("threads requested limit into providers and result formatting", func(t *testing.T) {
+		var gotECSLimit int
+		var gotASGLimit int
+		var gotCodeDeployLimit int
+		service := NewService(Options{
+			MaxEntries: 5,
+			ListECSLogEvents: func(ctx context.Context, req ECSRequest) ([]CloudWatchEvent, error) {
+				gotECSLimit = req.Limit
+				return []CloudWatchEvent{
+					{Timestamp: time.Date(2026, 4, 16, 7, 11, 0, 0, time.UTC), Message: "newest"},
+					{Timestamp: time.Date(2026, 4, 16, 7, 10, 0, 0, time.UTC), Message: "older"},
+				}, nil
+			},
+			ListASGInstanceConsoles: func(ctx context.Context, req ASGRequest) ([]InstanceConsole, error) {
+				gotASGLimit = req.Limit
+				return nil, nil
+			},
+			ListCodeDeployEvents: func(ctx context.Context, req CodeDeployRequest) ([]CodeDeployEvent, error) {
+				gotCodeDeployLimit = req.Limit
+				return nil, nil
+			},
+		})
+
+		result, err := service.Recent(context.Background(), Request{
+			DeploymentName:   "payments-api-prod",
+			ResourceType:     "ecsService",
+			ResourceName:     "payments-api-prod-service",
+			ControlAccountID: "123456789012",
+			TargetAccountID:  "123456789012",
+			Region:           "ap-northeast-2",
+			Limit:            1,
+		})
+		if err != nil {
+			t.Fatalf("Recent returned error: %v", err)
+		}
+		if gotECSLimit != 1 {
+			t.Fatalf("expected ECS request limit 1, got %d", gotECSLimit)
+		}
+		if len(result.Entries) != 1 || result.Entries[0].Message != "newest" {
+			t.Fatalf("expected requested limit to cap formatted entries, got %+v", result.Entries)
+		}
+
+		_, _ = service.Recent(context.Background(), Request{DeploymentName: "payments-api-prod", ResourceType: "candidateAutoScalingGroup", ResourceName: "payments-api-prod-candidate", Limit: 2})
+		_, _ = service.Recent(context.Background(), Request{DeploymentName: "payments-api-prod", ResourceType: "codeDeployDeploymentGroup", ResourceName: "payments-api-prod-codedeploy-group", Limit: 3})
+		if gotASGLimit != 2 {
+			t.Fatalf("expected ASG request limit 2, got %d", gotASGLimit)
+		}
+		if gotCodeDeployLimit != 3 {
+			t.Fatalf("expected CodeDeploy request limit 3, got %d", gotCodeDeployLimit)
+		}
+	})
+
 	t.Run("ecs service preserves source order for equal-timestamp cloudwatch events", func(t *testing.T) {
 		service := NewService(Options{
 			MaxEntries: 3,
@@ -1196,6 +1248,9 @@ func TestFetchRecentServiceTaskLogEventsSkipsMissingStoppedTaskStreams(t *testin
 	if events[0].Message != "stopped task failure" || events[0].Stream != "ecs/payments-api/app/stopped-good" {
 		t.Fatalf("unexpected stopped-task log event: %+v", events[0])
 	}
+	if got := logsClient.limitsByStream["ecs/payments-api/app/stopped-good"]; got != 5 {
+		t.Fatalf("expected CloudWatch log event limit 5, got %d", got)
+	}
 }
 
 func awsLogsTaskDefinition() ecstypes.TaskDefinition {
@@ -1247,10 +1302,15 @@ func (f *fakeECSTaskDefinitionClient) DescribeTaskDefinition(ctx context.Context
 type fakeCloudWatchLogEventsClient struct {
 	eventsByStream map[string][]cwtypes.OutputLogEvent
 	missingStreams map[string]bool
+	limitsByStream map[string]int32
 }
 
 func (f *fakeCloudWatchLogEventsClient) GetLogEvents(ctx context.Context, input *cloudwatchlogs.GetLogEventsInput, opts ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.GetLogEventsOutput, error) {
 	streamName := aws.ToString(input.LogStreamName)
+	if f.limitsByStream == nil {
+		f.limitsByStream = map[string]int32{}
+	}
+	f.limitsByStream[streamName] = aws.ToInt32(input.Limit)
 	if f.missingStreams[streamName] {
 		return nil, &cwtypes.ResourceNotFoundException{Message: aws.String("stream not found")}
 	}

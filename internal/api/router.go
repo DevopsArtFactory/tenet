@@ -1478,7 +1478,7 @@ type Options struct {
 	OverviewProjectEnvironment           func(context.Context, string, string, string) (catalog.ProjectEnvironmentOverviewDetail, error)
 	OverviewDeployment                   func(context.Context, string) (catalog.DeploymentOverviewDetail, error)
 	OverviewDeploymentEvents             func(context.Context, string) (catalog.DeploymentOverviewEvents, error)
-	OverviewDeploymentResourceLogs       func(context.Context, string, string, string) (resourcelogs.Result, error)
+	OverviewDeploymentResourceLogs       func(context.Context, string, string, string, int) (resourcelogs.Result, error)
 	OverviewDeploymentResourceInspection func(context.Context, string, string, string) (resourceinspection.Result, error)
 	AuditLogs                            func(context.Context, auditlog.Query) (auditlog.Result, error)
 	CreateDeploymentPlanPreview          func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error)
@@ -1931,7 +1931,7 @@ func NewRouter(options Options) http.Handler {
 				respondReadLookupError(w, err, "overview deployment unavailable")
 				return
 			}
-			result, err := options.OverviewDeploymentResourceLogs(r.Context(), name, resourceType, resourceName)
+			result, err := options.OverviewDeploymentResourceLogs(r.Context(), name, resourceType, resourceName, resourceLimit)
 			if err != nil {
 				respondReadLookupError(w, err, "overview deployment resource logs unavailable")
 				return
