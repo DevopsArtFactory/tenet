@@ -4464,6 +4464,25 @@
         );
         return callout;
       };
+      const auditEntryCountLabel = (count) => `${count} entr${count === 1 ? 'y' : 'ies'}`;
+      const createAuditTimelineSummary = (entries) => {
+        const visibleEntries = Array.isArray(entries) ? entries : [];
+        const planCount = visibleEntries.filter((entry) => entry?.action === 'plan.created').length;
+        const applyCount = visibleEntries.filter((entry) => entry?.action === 'apply.requested').length;
+        const actorRecordedCount = visibleEntries.filter((entry) => entry?.actor?.available === true).length;
+        const actorUnavailableCount = visibleEntries.length - actorRecordedCount;
+        const summary = createElement('div', 'metrics audit-summary-strip');
+        [
+          ['Visible audit entries', auditEntryCountLabel(visibleEntries.length)],
+          ['Plan previews', String(planCount)],
+          ['Apply requests', String(applyCount)],
+          ['Actor recorded', String(actorRecordedCount)],
+          ['Actor unavailable/unknown', String(actorUnavailableCount)],
+        ].forEach(([label, value]) => {
+          summary.append(createMetric(label, value));
+        });
+        return summary;
+      };
       const renderAuditPageChrome = () => {
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
@@ -4633,12 +4652,15 @@
         }
 
         const timelineMeta = [
-          `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}`,
+          auditEntryCountLabel(entries.length),
           'newest record first',
           ...auditFilterLabels(),
           auditLimitLabel(),
         ];
-        timelineSection.append(createElement('div', 'detail-condition-meta', timelineMeta.join(' · ')));
+        timelineSection.append(
+          createAuditTimelineSummary(entries),
+          createElement('div', 'detail-condition-meta', timelineMeta.join(' · ')),
+        );
         const rows = createElement('div', 'rows');
         entries.forEach((entry) => {
           const row = createElement('div', 'row');
