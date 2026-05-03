@@ -2778,7 +2778,10 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"operator troubleshooting examples that distinguish bounded successful reads, AWS-unavailable supported-resource lookups, and route-stable no-log-source resources",
 		},
 		"../../docs/features/resource-recent-logs.md": {
-			"Both local and compose smoke coverage lock a representative `ecsService` bounded read (`limit=1`) plus the invalid `limit=0` rejection",
+			"Both local and compose smoke coverage lock a representative `ecsService` bounded read (`limit=1`), an ECS task/container read (`resourceType=ecsTask&containerName=worker&limit=1`), plus the invalid `limit=0` rejection",
+			"`containerName` is optional and only meaningful for `resourceType=ecsTask`",
+			"`ecsTask` reads recent CloudWatch log events for the exact ECS task ARN or task identifier",
+			"Local and smoke environments may still return explicit unavailable states such as `aws_unavailable`, `resource_not_found`, `cross_account_not_configured`, or `no_log_source`",
 			"shape-focused: it verifies the `resultScope` fields and conservative status vocabulary without requiring live AWS totals",
 			"not a pagination cursor or full log-total guarantee",
 			"Tenet does not issue extra AWS calls just to prove total rows beyond the bounded read",
