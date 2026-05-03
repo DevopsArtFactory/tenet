@@ -185,6 +185,7 @@
       const detailStateByDeployment = new Map();
       const deploymentEventsStateByDeployment = new Map();
       const resourceLogStateByKey = new Map();
+      const resourceLogLimitByResourceKey = new Map();
       const resourceInspectionStateByKey = new Map();
       let auditLogsPageState = { status: 'idle', route: '', result: null, error: null, promise: null, requestId: 0 };
       let operatorContextState = { status: 'idle', context: null, error: null, refreshing: false };
@@ -1566,6 +1567,22 @@
         return Boolean(bookmarkedAlias && resolvedAlias && bookmarkedAlias === resolvedAlias);
       };
       const resourceLogCacheKey = (deploymentName, resource) => [deploymentName || '', resource.type || '', resource.name || '', resource.id || ''].join('::');
+      const resourceLogRequestCacheKey = (deploymentName, resource, limit = 0) => `${resourceLogCacheKey(deploymentName, resource)}::limit=${normalizeResourceLogsLimit(limit)}`;
+      const normalizeResourceLogsLimit = (value) => {
+        const limit = Number.parseInt(String(value || '').trim(), 10);
+        return Number.isInteger(limit) && limit > 0 ? limit : 0;
+      };
+      const resourceLogsLimitOptions = [
+        { value: '', label: 'All available logs' },
+        { value: '5', label: '5 entries' },
+        { value: '10', label: '10 entries' },
+        { value: '25', label: '25 entries' },
+      ];
+      const resourceLogsLimitText = (limit) => {
+        const normalized = normalizeResourceLogsLimit(limit);
+        return normalized > 0 ? `${normalized} entries` : 'All available entries';
+      };
+      const createResourceLogsLimitNote = (limit) => createElement('div', 'detail-condition-meta', `Log entry cap · ${resourceLogsLimitText(limit)}`);
       const canonicalUserDataBootstrapSource = (userData) => {
         if (!userData || (!userData.type && !userData.path)) return 'unspecified';
         if (!userData.path) return userData.type || 'unspecified';
@@ -3418,21 +3435,40 @@
         });
         return metadata;
       };
+      const selectedResourceLogsLimit = (deploymentName, resource) => normalizeResourceLogsLimit(resourceLogLimitByResourceKey.get(resourceLogCacheKey(deploymentName, resource)) || 0);
+      const createResourceLogsLimitControl = (section, deploymentName, resource, isLoading = false, detail = null) => {
+        const selectedLimit = selectedResourceLogsLimit(deploymentName, resource);
+        return createSelect(
+          'Log limit',
+          selectedLimit > 0 ? String(selectedLimit) : '',
+          resourceLogsLimitOptions,
+          (event) => {
+            const nextLimit = normalizeResourceLogsLimit(event.target.value);
+            resourceLogLimitByResourceKey.set(resourceLogCacheKey(deploymentName, resource), nextLimit);
+            renderResourceLogsSection(section, deploymentName, resource, { force: true, detail, limit: nextLimit }).catch(() => {});
+          },
+        );
+      };
       const createResourceLogsActions = (section, deploymentName, resource, isLoading = false, detail = null) => [
+        createResourceLogsLimitControl(section, deploymentName, resource, isLoading, detail),
         createRefreshButton(
           'Refresh recent logs',
           isLoading || !deploymentName || !resource?.type || !resource?.name,
           () => renderResourceLogsSection(section, deploymentName, resource, { force: true, detail }).catch(() => {}),
         ),
       ];
-      const buildResourceLogsRoute = (deploymentName, resource) => {
+      const buildResourceLogsRoute = (deploymentName, resource, limit = 0) => {
         const params = new URLSearchParams({
           resourceType: resource?.type || '',
           resourceName: resource?.name || '',
         });
+        const normalizedLimit = normalizeResourceLogsLimit(limit);
+        if (normalizedLimit > 0) {
+          params.set('limit', String(normalizedLimit));
+        }
         return `/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-logs?${params.toString()}`;
       };
-      const resourceLogsReadRoute = (deploymentName, resource) => `GET ${buildResourceLogsRoute(deploymentName, resource)}`;
+      const resourceLogsReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceLogsRoute(deploymentName, resource, limit)}`;
       const lookupContextFields = (lookupContext) => resourceLogsLookupContextFields(lookupContext);
       const createLookupContextGrid = (lookupContext, extraFields = []) => {
         const metadata = createElement('div', 'detail-grid');
@@ -3453,8 +3489,8 @@
         if (typeof value === 'number' && Number.isFinite(value)) return `${value} seconds`;
         return '—';
       };
-      const fetchResourceLogs = (deploymentName, resource) => {
-        return fetchResourcePanelJSON(buildResourceLogsRoute(deploymentName, resource), 'resource logs request failed');
+      const fetchResourceLogs = (deploymentName, resource, limit = 0) => {
+        return fetchResourcePanelJSON(buildResourceLogsRoute(deploymentName, resource, limit), 'resource logs request failed');
       };
       const createResourceLogsBackingResourceHandoffSection = (detail, result) => {
         const handoff = resolveBackingResourceDrillDown(detail, result);
@@ -3469,11 +3505,13 @@
         );
         return handoffSection;
       };
-      const renderResourceLogsPayload = (section, deploymentName, resource, result, detail = null) => {
+      const renderResourceLogsPayload = (section, deploymentName, resource, result, detail = null, limit = 0) => {
+        const selectedLimit = normalizeResourceLogsLimit(limit);
         const actions = createResourceLogsActions(section, deploymentName, resource, false, detail);
+        const capNote = createResourceLogsLimitNote(selectedLimit);
         const backingResourceFields = resourceLogsBackingResourceFields(result);
         const handoffSection = createResourceLogsBackingResourceHandoffSection(detail, result);
-        const beforeNodes = (metadata) => handoffSection ? [metadata, handoffSection] : [metadata];
+        const beforeNodes = (metadata) => handoffSection ? [capNote, metadata, handoffSection] : [capNote, metadata];
         if (!result?.available) {
           const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, backingResourceFields);
           const unavailableReason = resourceLogsUnavailableReasonText(result?.unavailableReason);
@@ -3517,32 +3555,35 @@
       const renderResourceLogsSection = (section, deploymentName, resource, options = {}) => {
         const force = Boolean(options?.force);
         const detail = options?.detail || null;
-        const logsKey = resourceLogCacheKey(deploymentName, resource);
+        const baseLogsKey = resourceLogCacheKey(deploymentName, resource);
+        const selectedLimit = normalizeResourceLogsLimit(options?.limit ?? resourceLogLimitByResourceKey.get(baseLogsKey) ?? 0);
+        resourceLogLimitByResourceKey.set(baseLogsKey, selectedLimit);
+        const logsKey = resourceLogRequestCacheKey(deploymentName, resource, selectedLimit);
         const cached = resourceLogStateByKey.get(logsKey);
         const loadingActions = createResourceLogsActions(section, deploymentName, resource, true, detail);
 
         if (!deploymentName || !resource?.type || !resource?.name) {
-          renderResourceLogsState(section, 'Recent logs are unavailable for this resource.', '', [], [], createResourceLogsActions(section, deploymentName, resource, false, detail));
+          renderResourceLogsState(section, 'Recent logs are unavailable for this resource.', '', [createResourceLogsLimitNote(selectedLimit)], [], createResourceLogsActions(section, deploymentName, resource, false, detail));
           return Promise.resolve(null);
         }
         if (!force && cached?.status === 'ready') {
-          renderResourceLogsPayload(section, deploymentName, resource, cached.result, detail);
+          renderResourceLogsPayload(section, deploymentName, resource, cached.result, detail, selectedLimit);
           return Promise.resolve(cached.result);
         }
         if (cached?.status === 'loading') {
-          resourceLogStateByKey.set(logsKey, { ...cached, sections: [...(cached.sections || []), { section, detail }] });
-          renderResourceLogsState(section, 'Loading recent logs…', '', [], [], loadingActions);
+          resourceLogStateByKey.set(logsKey, { ...cached, sections: [...(cached.sections || []), { section, detail, limit: selectedLimit }] });
+          renderResourceLogsState(section, 'Loading recent logs…', '', [createResourceLogsLimitNote(selectedLimit)], [], loadingActions);
           return cached.promise;
         }
 
-        renderResourceLogsState(section, 'Loading recent logs…', '', [], [], loadingActions);
-        const promise = fetchResourceLogs(deploymentName, resource)
+        renderResourceLogsState(section, 'Loading recent logs…', '', [createResourceLogsLimitNote(selectedLimit)], [], loadingActions);
+        const promise = fetchResourceLogs(deploymentName, resource, selectedLimit)
           .then((result) => {
             const current = resourceLogStateByKey.get(logsKey);
             resourceLogStateByKey.set(logsKey, { status: 'ready', result });
             (current?.sections || []).forEach((target) => {
               const container = target?.section || target;
-              renderResourceLogsPayload(container, deploymentName, resource, result, target?.detail || detail);
+              renderResourceLogsPayload(container, deploymentName, resource, result, target?.detail || detail, target?.limit ?? selectedLimit);
             });
             scrollToCurrentHashTarget();
             return result;
@@ -3556,7 +3597,7 @@
                 container,
                 'Recent logs',
                 createResourceLogsActions(container, deploymentName, resource, false, target?.detail || detail),
-                resourceLogsReadRoute(deploymentName, resource),
+                resourceLogsReadRoute(deploymentName, resource, target?.limit ?? selectedLimit),
                 error,
               )) {
                 return;
@@ -3574,7 +3615,7 @@
             throw error;
           });
 
-        resourceLogStateByKey.set(logsKey, { status: 'loading', promise, sections: [{ section, detail }] });
+        resourceLogStateByKey.set(logsKey, { status: 'loading', promise, sections: [{ section, detail, limit: selectedLimit }] });
         return promise;
       };
       const resourceInspectionCacheKey = (deploymentName, resource) => resourceLogCacheKey(deploymentName, resource);

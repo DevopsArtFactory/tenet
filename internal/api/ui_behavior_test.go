@@ -4594,6 +4594,7 @@ const collectNodes = (node, predicate) => {
   visit(node);
   return matches;
 };
+const collectText = (node) => node ? [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean) : [];
 async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
 const resourceID = 'ecsService::payments-api-staging-service::Primary ECS service';
 const deploymentURL = '/v1/overview/deployments/payments-api-staging';
@@ -4618,9 +4619,12 @@ async function renderScenario(hash, fetchImpl) {
 
 (async () => {
   let resolveLogs;
+  const recentLogsFetchCalls = [];
   const recentLogsRun = await renderScenario('#resource-recent-logs', (url) => {
+    recentLogsFetchCalls.push(String(url));
     if (url === deploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
     if (url === logsURL) return new Promise((resolve) => { resolveLogs = resolve; });
+    if (url === logsURL + '&limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, entries: [{ timestamp: '2026-05-03T00:00:00Z', stream: 'svc/task/1', message: 'limited log row' }] }) });
     if (url === inspectionURL) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'ecs_service', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn: 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-staging', serviceArn: 'arn:aws:ecs:ap-northeast-2:210987654321:service/payments-staging/payments-api-staging-service', serviceName: 'payments-api-staging-service', status: 'ACTIVE', launchType: 'FARGATE', desiredCount: 2, runningCount: 2, pendingCount: 0, minimumHealthyPercent: 100, maximumPercent: 200, healthCheckGracePeriodSeconds: 45, taskDefinition: 'payments-api:42', deployments: [], events: [] } }) });
     }
@@ -4664,6 +4668,35 @@ async function renderScenario(hash, fetchImpl) {
   const recentLogsScrollsAfter = recentLogsRun.document.scrollEvents.filter((event) => event.id === 'resource-recent-logs').length;
   if (recentLogsScrollsAfter <= recentLogsScrollsBefore) throw new Error('expected recent logs hash to re-scroll after lazy panel load');
   if (!recentLogsRun.document.lastScrolledTarget || recentLogsRun.document.lastScrolledTarget.id !== 'resource-recent-logs') throw new Error('expected recent logs hash to remain the active scroll target after lazy panel load');
+  const recentLogsText = collectText(recentLogsRoot).join(' | ');
+  if (!recentLogsText.includes('Log entry cap · All available entries')) throw new Error('expected recent logs panel to render the default active cap copy');
+  const limitSelect = collectNodes(recentLogsRoot, (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'Log limit')[0];
+  if (!limitSelect) throw new Error('expected recent logs panel to expose a log limit select');
+  const optionsText = (limitSelect.children || []).map((node) => node.textContent).join(' | ');
+  ['All available logs', '5 entries', '10 entries', '25 entries'].forEach((label) => {
+    if (!optionsText.includes(label)) throw new Error('expected log limit option ' + label + ', got ' + optionsText);
+  });
+  const fetchesBeforeLimit = recentLogsFetchCalls.length;
+  const inspectionsBeforeLimit = recentLogsFetchCalls.filter((url) => url === inspectionURL).length;
+  limitSelect.value = '10';
+  limitSelect.dispatch('change');
+  await settle();
+  await settle();
+  if (!recentLogsFetchCalls.includes(logsURL + '&limit=10')) throw new Error('expected selected log cap to be included in recent-log fetch URL, got ' + JSON.stringify(recentLogsFetchCalls));
+  if (recentLogsRun.window.location.search !== recentLogsRun.initialSearch) throw new Error('expected log limit select to preserve bookmarkable resource query, got ' + recentLogsRun.window.location.search);
+  if (recentLogsFetchCalls.filter((url) => url === inspectionURL).length !== inspectionsBeforeLimit) throw new Error('expected log limit select not to refetch live inspection panel');
+  const limitedLogsText = collectText(recentLogsRoot).join(' | ');
+  if (!limitedLogsText.includes('Log entry cap · 10 entries')) throw new Error('expected recent logs panel to render selected cap copy');
+  if (!limitedLogsText.includes('limited log row')) throw new Error('expected limited recent logs payload to render');
+  const refreshLogsButton = collectNodes(recentLogsRoot, (node) => node.tagName === 'BUTTON' && node.textContent === 'Refresh recent logs')[0];
+  if (!refreshLogsButton) throw new Error('expected refresh recent logs button');
+  refreshLogsButton.dispatch('click');
+  await settle();
+  await settle();
+  if (recentLogsFetchCalls.filter((url) => url === logsURL + '&limit=10').length < 2) throw new Error('expected refresh to reuse selected recent-log cap');
+  if (recentLogsRun.window.location.search !== recentLogsRun.initialSearch) throw new Error('expected refresh recent logs to preserve bookmarkable resource query, got ' + recentLogsRun.window.location.search);
+  if (recentLogsFetchCalls.filter((url) => url === inspectionURL).length !== inspectionsBeforeLimit) throw new Error('expected refresh recent logs not to refetch live inspection panel');
+  if (recentLogsFetchCalls.length <= fetchesBeforeLimit) throw new Error('expected log limit/refresh flow to issue additional recent-log fetches');
   recentLogsRun.window.location.hash = '#resource-status-conditions';
   recentLogsRun.window.dispatchHashChange();
   await settle();
