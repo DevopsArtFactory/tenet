@@ -84,6 +84,8 @@ Enterprise SSO must not weaken existing fail-safe behavior.
 `GET /v1/operator/context` should remain the first troubleshooting stop. Enterprise SSO additions should be additive and non-secret, for example:
 
 - configured provider type (`google_oidc`, `okta_saml`, `okta_oidc`)
+- human-readable provider labels in operator-facing UI (`Google Workspace OIDC`, `Okta SAML`, `Okta OIDC`) so operators do not need to decode raw enum values during 401/403 recovery
+- provider-boundary copy in the embedded Operator context details that keeps Google Workspace identity separate from Gmail/API access and keeps Okta SSO identity separate from Tenet role/deployment authorization
 - whether managed enterprise SSO is configured and active
 - required setting names and missing setting names
 - normalized identity provider/subject/email/name when an authenticated session exists
