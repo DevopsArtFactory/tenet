@@ -87,6 +87,7 @@ jobs:
               internal/api/*|internal/api/**|\
               internal/requestactor/*|internal/requestactor/**|\
               internal/statusstore/*|internal/statusstore/**|\
+              internal/resourceaws/*|internal/resourceaws/**|\
               internal/resourcelogs/*|internal/resourcelogs/**|\
               internal/resourceinspection/*|internal/resourceinspection/**|\
               internal/planpreview/*|internal/planpreview/**|\
