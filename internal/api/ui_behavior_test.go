@@ -4454,6 +4454,102 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 	runNodeHarness(t, nodeProgram)
 }
 
+func TestResourceDetailPageECSTaskInspectionWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+	detailJSON, err := json.Marshal(map[string]any{
+		"name":          "worker-prod",
+		"accountName":   "prod-core",
+		"awsAccountId":  "123456789012",
+		"region":        "ap-northeast-2",
+		"targetType":    "ecs",
+		"executionMode": "ecsRolling",
+		"sync":          map[string]any{"state": "Synced", "reason": "steady"},
+		"health":        map[string]any{"overall": "Healthy", "summary": "worker healthy"},
+		"rollout": map[string]any{
+			"phase":     "Completed",
+			"execution": []map[string]any{{"name": "worker-prod-service", "resource": "ecsService", "description": "Primary worker service"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal detail body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+const taskArn = 'arn:aws:ecs:ap-northeast-2:123456789012:task/worker/abc123';
+const taskResourceId = 'ecsTask::' + taskArn + '::ECS task abc123';
+const serviceResourceId = 'ecsService::worker-prod-service::Primary worker service';
+class Element {
+  constructor(tagName, ownerDocument) { this.tagName = String(tagName).toUpperCase(); this.ownerDocument = ownerDocument; this.children = []; this.parentNode = null; this.className = ''; this.textContent = ''; this.dataset = {}; this.listeners = {}; this.attributes = {}; this.hidden = false; this.value = ''; this.disabled = false; this.type = ''; this.placeholder = ''; this.autocomplete = ''; this.selectionStart = null; this.selectionEnd = null; this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } }; }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+  scrollIntoView() { this.ownerDocument.lastScrolledTarget = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); this.lastScrolledTarget = null; }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const collectText = (node) => node ? [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean) : [];
+const collectNodes = (node, predicate) => node ? [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat() : [];
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
+async function render(search, inspectionResult) {
+  const document = new Document();
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  const window = { location: { pathname: '/', search, hash: '' }, addEventListener() {} };
+  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  const fetchCalls = [];
+  const fetch = (url) => {
+    fetchCalls.push(String(url));
+    if (url === '/v1/overview/deployments/worker-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (String(url).startsWith('/v1/overview/deployments/worker-prod/resource-inspection?')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inspectionResult) });
+    if (String(url).startsWith('/v1/overview/deployments/worker-prod/resource-logs?')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'aws_unavailable', entries: [] }) });
+    throw new Error('unexpected fetch url: ' + url);
+  };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle(); await settle(); await settle();
+  return { document, window, fetchCalls, text: collectText(document.getElementById('accounts')).join(' | '), links: collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A') };
+}
+(async () => {
+  const taskResult = { available: true, source: 'ecs_task', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, ecsTask: { taskArn, taskId: 'abc123', clusterArn: 'arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', startedAt: '2026-05-03T04:00:00Z', taskDefinition: 'worker:42', containers: [{ name: 'worker', image: 'ghcr.io/example/worker:v2', lastStatus: 'RUNNING', healthStatus: 'HEALTHY', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] } };
+  const taskRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsTask&resourceId=' + encodeURIComponent(taskResourceId), taskResult);
+  if (!taskRun.fetchCalls.find((url) => url.includes('resourceType=ecsTask') && url.includes(encodeURIComponent(taskArn).replace(/%20/g, '+')))) throw new Error('expected ecsTask inspection fetch with task ARN resource name: ' + taskRun.fetchCalls.join(','));
+  if (!taskRun.text.includes('Live ECS task inspection')) throw new Error('expected ECS task inspection panel');
+  if (!taskRun.text.includes('Task containers')) throw new Error('expected ECS task container section');
+  if (!taskRun.text.includes('Container awslogs')) throw new Error('expected awslogs metadata');
+  if (!taskRun.text.includes('/aws/ecs/worker / worker/abc123')) throw new Error('expected task awslogs group/stream');
+
+  const serviceResult = { available: true, source: 'ecs_service', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, ecsService: { serviceName: 'worker-prod-service', status: 'ACTIVE', desiredCount: 1, runningCount: 1, pendingCount: 0, taskDefinition: 'worker:42', deployments: [], events: [], tasks: [{ taskArn, taskId: 'abc123', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containers: [{ name: 'worker', lastStatus: 'RUNNING', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] }] } };
+  const serviceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId), serviceResult);
+  if (!serviceRun.text.includes('Recent ECS tasks')) throw new Error('expected ECS service task list');
+  if (!serviceRun.text.includes('Task ARN · ' + taskArn)) throw new Error('expected ECS task ARN in service inspection');
+  const liveLink = serviceRun.links.find((node) => node.textContent === 'Open task live inspection');
+  const logsLink = serviceRun.links.find((node) => node.textContent === 'Open task recent logs');
+  if (!liveLink || liveLink.target !== '_self' || !liveLink.href.includes('resourceType=ecsTask') || !liveLink.href.endsWith('#resource-live-inspection')) throw new Error('expected task live-inspection handoff');
+  if (!logsLink || logsLink.target !== '_self' || !logsLink.href.includes('resourceType=ecsTask') || !logsLink.href.endsWith('#resource-recent-logs')) throw new Error('expected task recent-logs handoff');
+})();
+`
+
+	runNodeHarness(t, nodeProgram)
+}
+
 func TestResourceDetailPageHashNavigationWithNodeHarness(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not installed")
