@@ -186,6 +186,50 @@ func TestRouterOperatorContextReportsConfiguredManagedLoginRuntimeGroundwork(t *
 	}
 }
 
+func TestRouterOperatorContextReportsEnterpriseSSORuntimeDiagnostic(t *testing.T) {
+	router := NewRouter(Options{
+		AuthRuntime: AuthRuntimeDiagnostic{
+			EnterpriseSSO: EnterpriseSSODiagnostic{
+				Configured:              true,
+				Provider:                "google_oidc",
+				RequiredSettings:        []string{"TENET_AUTH_PROVIDER", "TENET_GOOGLE_OIDC_CLIENT_ID"},
+				MissingSettings:         []string{},
+				LoginRoute:              "/auth/login/google",
+				CallbackRoute:           "/auth/callback/google",
+				StateStoreConfigured:    true,
+				IdentityStoreConfigured: true,
+				SessionSecretConfigured: true,
+			},
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode operator context response: %v", err)
+	}
+	authRuntime := body["authRuntime"].(map[string]any)
+	enterpriseSSO := authRuntime["enterpriseSso"].(map[string]any)
+	if enterpriseSSO["configured"] != true || enterpriseSSO["active"] != false || enterpriseSSO["provider"] != "google_oidc" {
+		t.Fatalf("expected configured inactive enterprise SSO diagnostic, got %#v", enterpriseSSO)
+	}
+	if enterpriseSSO["loginRoute"] != "/auth/login/google" || enterpriseSSO["callbackRoute"] != "/auth/callback/google" {
+		t.Fatalf("expected enterprise SSO route diagnostics, got %#v", enterpriseSSO)
+	}
+	if enterpriseSSO["stateStoreConfigured"] != true || enterpriseSSO["identityStoreConfigured"] != true || enterpriseSSO["sessionSecretConfigured"] != true {
+		t.Fatalf("expected enterprise SSO shared session-store diagnostics, got %#v", enterpriseSSO)
+	}
+	if got := resp.Body.String(); strings.Contains(got, "client-secret") || strings.Contains(got, "assertion") || strings.Contains(got, "access_token") {
+		t.Fatalf("enterprise SSO diagnostic leaked secret/token-shaped data: %s", got)
+	}
+}
+
 func TestRouterManagedLoginRoutesRequireActiveRuntime(t *testing.T) {
 	router := NewRouter(Options{
 		AuthRuntime: AuthRuntimeDiagnostic{

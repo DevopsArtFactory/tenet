@@ -389,6 +389,16 @@ func authRuntimeDiagnosticFromEnv() api.AuthRuntimeDiagnostic {
 		"TENET_AUTH_STATE_STORE_PATH":      strings.TrimSpace(os.Getenv("TENET_AUTH_STATE_STORE_PATH")),
 		"TENET_AUTH_IDENTITY_STORE_PATH":   strings.TrimSpace(os.Getenv("TENET_AUTH_IDENTITY_STORE_PATH")),
 		"TENET_AUTH_SESSION_SECRET":        strings.TrimSpace(os.Getenv("TENET_AUTH_SESSION_SECRET")),
+		"TENET_GOOGLE_OIDC_CLIENT_ID":      strings.TrimSpace(os.Getenv("TENET_GOOGLE_OIDC_CLIENT_ID")),
+		"TENET_GOOGLE_OIDC_CLIENT_SECRET":  strings.TrimSpace(os.Getenv("TENET_GOOGLE_OIDC_CLIENT_SECRET")),
+		"TENET_GOOGLE_OIDC_ISSUER_URL":     strings.TrimSpace(os.Getenv("TENET_GOOGLE_OIDC_ISSUER_URL")),
+		"TENET_GOOGLE_OIDC_REDIRECT_URL":   strings.TrimSpace(os.Getenv("TENET_GOOGLE_OIDC_REDIRECT_URL")),
+		"TENET_OKTA_SAML_METADATA_URL":     strings.TrimSpace(os.Getenv("TENET_OKTA_SAML_METADATA_URL")),
+		"TENET_OKTA_SAML_ACS_URL":          strings.TrimSpace(os.Getenv("TENET_OKTA_SAML_ACS_URL")),
+		"TENET_OKTA_OIDC_ISSUER_URL":       strings.TrimSpace(os.Getenv("TENET_OKTA_OIDC_ISSUER_URL")),
+		"TENET_OKTA_OIDC_CLIENT_ID":        strings.TrimSpace(os.Getenv("TENET_OKTA_OIDC_CLIENT_ID")),
+		"TENET_OKTA_OIDC_CLIENT_SECRET":    strings.TrimSpace(os.Getenv("TENET_OKTA_OIDC_CLIENT_SECRET")),
+		"TENET_OKTA_OIDC_REDIRECT_URL":     strings.TrimSpace(os.Getenv("TENET_OKTA_OIDC_REDIRECT_URL")),
 	}
 	requiredSettings := api.RequiredTenetManagedLoginSettings()
 	missingSettings := make([]string, 0, len(requiredSettings))
@@ -430,7 +440,78 @@ func authRuntimeDiagnosticFromEnv() api.AuthRuntimeDiagnostic {
 		managedLogin.CallbackRoute = "/auth/callback/github"
 		managedLogin.SessionCookieName = "tenet_session"
 	}
-	return api.AuthRuntimeDiagnostic{TenetManagedLogin: managedLogin}
+	enterpriseSSO := enterpriseSSODiagnosticFromSettings(provider, settings)
+	return api.AuthRuntimeDiagnostic{TenetManagedLogin: managedLogin, EnterpriseSSO: enterpriseSSO}
+}
+
+func enterpriseSSODiagnosticFromSettings(provider string, settings map[string]string) api.EnterpriseSSODiagnostic {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	requiredSettings, loginRoute, callbackRoute := enterpriseSSORequiredSettingsAndRoutes(provider)
+	if len(requiredSettings) == 0 {
+		return api.EnterpriseSSODiagnostic{}
+	}
+	missingSettings := make([]string, 0, len(requiredSettings))
+	for _, setting := range requiredSettings {
+		if strings.TrimSpace(settings[setting]) == "" {
+			missingSettings = append(missingSettings, setting)
+		}
+	}
+	configured := len(missingSettings) == 0
+	diagnostic := api.EnterpriseSSODiagnostic{
+		Configured:              configured,
+		Active:                  false,
+		Provider:                provider,
+		RequiredSettings:        requiredSettings,
+		MissingSettings:         missingSettings,
+		LoginRoute:              loginRoute,
+		CallbackRoute:           callbackRoute,
+		StateStoreConfigured:    settings["TENET_AUTH_STATE_STORE_PATH"] != "",
+		IdentityStoreConfigured: settings["TENET_AUTH_IDENTITY_STORE_PATH"] != "",
+		SessionSecretConfigured: settings["TENET_AUTH_SESSION_SECRET"] != "",
+		UnavailableReason:       "enterprise SSO provider diagnostics are configured, but provider login/callback runtime is not active for this API instance",
+	}
+	if !configured {
+		diagnostic.UnavailableReason = "enterprise SSO provider configuration is incomplete or missing shared managed-session settings"
+	}
+	return diagnostic
+}
+
+func enterpriseSSORequiredSettingsAndRoutes(provider string) ([]string, string, string) {
+	switch provider {
+	case "google_oidc":
+		return []string{
+			"TENET_AUTH_PROVIDER",
+			"TENET_GOOGLE_OIDC_CLIENT_ID",
+			"TENET_GOOGLE_OIDC_CLIENT_SECRET",
+			"TENET_GOOGLE_OIDC_ISSUER_URL",
+			"TENET_GOOGLE_OIDC_REDIRECT_URL",
+			"TENET_AUTH_STATE_STORE_PATH",
+			"TENET_AUTH_IDENTITY_STORE_PATH",
+			"TENET_AUTH_SESSION_SECRET",
+		}, "/auth/login/google", "/auth/callback/google"
+	case "okta_saml":
+		return []string{
+			"TENET_AUTH_PROVIDER",
+			"TENET_OKTA_SAML_METADATA_URL",
+			"TENET_OKTA_SAML_ACS_URL",
+			"TENET_AUTH_STATE_STORE_PATH",
+			"TENET_AUTH_IDENTITY_STORE_PATH",
+			"TENET_AUTH_SESSION_SECRET",
+		}, "/auth/login/okta", "/auth/callback/okta/saml"
+	case "okta_oidc":
+		return []string{
+			"TENET_AUTH_PROVIDER",
+			"TENET_OKTA_OIDC_ISSUER_URL",
+			"TENET_OKTA_OIDC_CLIENT_ID",
+			"TENET_OKTA_OIDC_CLIENT_SECRET",
+			"TENET_OKTA_OIDC_REDIRECT_URL",
+			"TENET_AUTH_STATE_STORE_PATH",
+			"TENET_AUTH_IDENTITY_STORE_PATH",
+			"TENET_AUTH_SESSION_SECRET",
+		}, "/auth/login/okta", "/auth/callback/okta/oidc"
+	default:
+		return nil, "", ""
+	}
 }
 
 func containsString(values []string, wanted string) bool {

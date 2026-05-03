@@ -322,6 +322,66 @@ func TestNewAPIOptionsIncludesManagedLoginRuntimeDiagnosticFromEnv(t *testing.T)
 	assertManagedLoginEnvLifecycleDiagnostic(t, managedLogin, true)
 }
 
+func TestNewAPIOptionsReportsEnterpriseSSODiagnosticForGoogleOIDC(t *testing.T) {
+	t.Setenv("TENET_AUTH_PROVIDER", "google_oidc")
+	t.Setenv("TENET_GOOGLE_OIDC_CLIENT_ID", "google-client-id")
+	t.Setenv("TENET_GOOGLE_OIDC_CLIENT_SECRET", "google-client-secret")
+	t.Setenv("TENET_GOOGLE_OIDC_ISSUER_URL", "https://accounts.google.com")
+	t.Setenv("TENET_GOOGLE_OIDC_REDIRECT_URL", "https://tenet.example.com/auth/callback/google")
+	t.Setenv("TENET_AUTH_STATE_STORE_PATH", filepath.Join(t.TempDir(), "oauth-state.json"))
+	t.Setenv("TENET_AUTH_IDENTITY_STORE_PATH", filepath.Join(t.TempDir(), "oauth-identities.json"))
+	t.Setenv("TENET_AUTH_SESSION_SECRET", "session-secret")
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, writeRepositoryFixture(t), nil)
+	enterpriseSSO := options.AuthRuntime.EnterpriseSSO
+
+	if !enterpriseSSO.Configured || enterpriseSSO.Active || enterpriseSSO.Provider != "google_oidc" {
+		t.Fatalf("expected configured-but-inactive Google OIDC enterprise SSO diagnostic, got %+v", enterpriseSSO)
+	}
+	if enterpriseSSO.LoginRoute != "/auth/login/google" || enterpriseSSO.CallbackRoute != "/auth/callback/google" {
+		t.Fatalf("unexpected Google OIDC diagnostic routes: %+v", enterpriseSSO)
+	}
+	if !enterpriseSSO.StateStoreConfigured || !enterpriseSSO.IdentityStoreConfigured || !enterpriseSSO.SessionSecretConfigured {
+		t.Fatalf("expected shared managed-session stores to be reported configured: %+v", enterpriseSSO)
+	}
+	if len(enterpriseSSO.MissingSettings) != 0 {
+		t.Fatalf("expected no missing Google OIDC settings, got %+v", enterpriseSSO.MissingSettings)
+	}
+	if !reflect.DeepEqual(enterpriseSSO.RequiredSettings, []string{
+		"TENET_AUTH_PROVIDER",
+		"TENET_GOOGLE_OIDC_CLIENT_ID",
+		"TENET_GOOGLE_OIDC_CLIENT_SECRET",
+		"TENET_GOOGLE_OIDC_ISSUER_URL",
+		"TENET_GOOGLE_OIDC_REDIRECT_URL",
+		"TENET_AUTH_STATE_STORE_PATH",
+		"TENET_AUTH_IDENTITY_STORE_PATH",
+		"TENET_AUTH_SESSION_SECRET",
+	}) {
+		t.Fatalf("unexpected Google OIDC required settings: %+v", enterpriseSSO.RequiredSettings)
+	}
+}
+
+func TestNewAPIOptionsReportsEnterpriseSSOMissingSettingsForOktaSAML(t *testing.T) {
+	t.Setenv("TENET_AUTH_PROVIDER", "okta_saml")
+	t.Setenv("TENET_OKTA_SAML_METADATA_URL", "https://okta.example.com/app/metadata")
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, writeRepositoryFixture(t), nil)
+	enterpriseSSO := options.AuthRuntime.EnterpriseSSO
+
+	if enterpriseSSO.Configured || enterpriseSSO.Active || enterpriseSSO.Provider != "okta_saml" {
+		t.Fatalf("expected inactive Okta SAML enterprise SSO diagnostic, got %+v", enterpriseSSO)
+	}
+	expectedMissing := []string{
+		"TENET_OKTA_SAML_ACS_URL",
+		"TENET_AUTH_STATE_STORE_PATH",
+		"TENET_AUTH_IDENTITY_STORE_PATH",
+		"TENET_AUTH_SESSION_SECRET",
+	}
+	if !reflect.DeepEqual(enterpriseSSO.MissingSettings, expectedMissing) {
+		t.Fatalf("unexpected Okta SAML missing settings: %+v", enterpriseSSO.MissingSettings)
+	}
+}
+
 func TestNewAPIOptionsCanForceManagedLoginSecureSessionCookie(t *testing.T) {
 	t.Setenv("TENET_AUTH_PROVIDER", "github")
 	t.Setenv("TENET_GITHUB_OAUTH_CLIENT_ID", "client-id")

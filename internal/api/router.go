@@ -405,6 +405,25 @@ type operatorContextResponse struct {
 // It intentionally reports only non-secret configuration/capability state for operator diagnostics.
 type AuthRuntimeDiagnostic struct {
 	TenetManagedLogin TenetManagedLoginDiagnostic `json:"tenetManagedLogin"`
+	EnterpriseSSO     EnterpriseSSODiagnostic     `json:"enterpriseSso"`
+}
+
+// EnterpriseSSODiagnostic reports provider-neutral enterprise SSO configuration
+// state without exposing client secrets, raw tokens, SAML assertions, or private
+// provider metadata. Active remains false until a provider's login/callback
+// runtime is implemented and wired for this API process.
+type EnterpriseSSODiagnostic struct {
+	Configured              bool     `json:"configured"`
+	Active                  bool     `json:"active"`
+	Provider                string   `json:"provider,omitempty"`
+	RequiredSettings        []string `json:"requiredSettings,omitempty"`
+	MissingSettings         []string `json:"missingSettings,omitempty"`
+	LoginRoute              string   `json:"loginRoute,omitempty"`
+	CallbackRoute           string   `json:"callbackRoute,omitempty"`
+	StateStoreConfigured    bool     `json:"stateStoreConfigured"`
+	IdentityStoreConfigured bool     `json:"identityStoreConfigured"`
+	SessionSecretConfigured bool     `json:"sessionSecretConfigured"`
+	UnavailableReason       string   `json:"unavailableReason,omitempty"`
 }
 
 // TenetManagedLoginDiagnostic reports whether opt-in Tenet-managed browser login is configured.
@@ -680,6 +699,18 @@ func buildAuthRuntimeDiagnosticForRequest(r *http.Request, options Options) Auth
 		managedLogin.SessionCookieSecureSources = secureSources
 	}
 	diagnostic.TenetManagedLogin = managedLogin
+	enterpriseSSO := diagnostic.EnterpriseSSO
+	enterpriseSSO.Provider = strings.ToLower(strings.TrimSpace(enterpriseSSO.Provider))
+	if enterpriseSSO.Provider != "" {
+		if enterpriseSSO.MissingSettings == nil {
+			enterpriseSSO.MissingSettings = []string{}
+		}
+		enterpriseSSO.Active = false
+		if enterpriseSSO.UnavailableReason == "" {
+			enterpriseSSO.UnavailableReason = "enterprise SSO provider diagnostics are configured, but provider login/callback runtime is not active for this API instance"
+		}
+		diagnostic.EnterpriseSSO = enterpriseSSO
+	}
 	return normalizeAuthRuntimeDiagnostic(diagnostic)
 }
 
@@ -700,6 +731,19 @@ func normalizeAuthRuntimeDiagnostic(diagnostic AuthRuntimeDiagnostic) AuthRuntim
 	if len(managedLogin.RequiredSettings) == 0 {
 		managedLogin.RequiredSettings = RequiredTenetManagedLoginSettings()
 	}
+	enterpriseSSO := diagnostic.EnterpriseSSO
+	enterpriseSSO.Provider = strings.ToLower(strings.TrimSpace(enterpriseSSO.Provider))
+	if enterpriseSSO.Provider != "" {
+		if enterpriseSSO.MissingSettings == nil {
+			enterpriseSSO.MissingSettings = []string{}
+		}
+		enterpriseSSO.Active = false
+		enterpriseSSO.Configured = enterpriseSSO.Configured && len(enterpriseSSO.MissingSettings) == 0
+		if enterpriseSSO.UnavailableReason == "" {
+			enterpriseSSO.UnavailableReason = "enterprise SSO provider diagnostics are configured, but provider login/callback runtime is not active for this API instance"
+		}
+	}
+
 	if managedLogin.Configured {
 		managedLogin.Active = managedLogin.Active && managedLogin.Provider != "" && len(managedLogin.MissingSettings) == 0
 		if managedLogin.MissingSettings == nil {
@@ -726,7 +770,7 @@ func normalizeAuthRuntimeDiagnostic(diagnostic AuthRuntimeDiagnostic) AuthRuntim
 		} else if managedLogin.UnavailableReason == "" {
 			managedLogin.UnavailableReason = "tenet-managed login configuration is present, but login/callback/session routes are not active for this API instance"
 		}
-		return AuthRuntimeDiagnostic{TenetManagedLogin: managedLogin}
+		return AuthRuntimeDiagnostic{TenetManagedLogin: managedLogin, EnterpriseSSO: enterpriseSSO}
 	}
 	managedLogin.Configured = false
 	if len(managedLogin.MissingSettings) == 0 {
@@ -735,7 +779,7 @@ func normalizeAuthRuntimeDiagnostic(diagnostic AuthRuntimeDiagnostic) AuthRuntim
 	if managedLogin.UnavailableReason == "" {
 		managedLogin.UnavailableReason = "tenet-managed login is disabled because OAuth runtime configuration is incomplete or absent"
 	}
-	return AuthRuntimeDiagnostic{TenetManagedLogin: managedLogin}
+	return AuthRuntimeDiagnostic{TenetManagedLogin: managedLogin, EnterpriseSSO: enterpriseSSO}
 }
 
 // RequiredTenetManagedLoginSettings returns the stable non-secret runtime settings

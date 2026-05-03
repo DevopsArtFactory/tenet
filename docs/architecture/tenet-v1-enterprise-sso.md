@@ -27,20 +27,26 @@ Enterprise SSO should extend the second family as provider-neutral managed-login
 
 ## Provider-neutral configuration shape
 
-Provider work should be disabled by default. A future implementation can add settings similar to:
+Provider work is disabled by default. The first runtime slice now exposes provider-neutral diagnostics for `google_oidc`, `okta_saml`, and `okta_oidc` through `GET /v1/operator/context.authRuntime.enterpriseSso` without enabling live enterprise login routes yet. Configure the diagnostic with settings such as:
 
 ```text
-TENET_AUTH_PROVIDER=google_oidc|okta_saml|okta_oidc
-TENET_AUTH_GOOGLE_CLIENT_ID=...
-TENET_AUTH_GOOGLE_CLIENT_SECRET=...
-TENET_AUTH_OKTA_ISSUER=...
-TENET_AUTH_OKTA_CLIENT_ID=...
-TENET_AUTH_OKTA_CLIENT_SECRET=...
-TENET_AUTH_OKTA_SAML_METADATA_URL=...
-TENET_AUTH_OKTA_SAML_CERT_PATH=...
+TENET_AUTH_PROVIDER=google_oidc
+TENET_GOOGLE_OIDC_CLIENT_ID=***
+TENET_GOOGLE_OIDC_CLIENT_SECRET=***
+TENET_GOOGLE_OIDC_ISSUER_URL=https://accounts.google.com
+TENET_GOOGLE_OIDC_REDIRECT_URL=https://tenet.example.com/auth/callback/google
+TENET_OKTA_SAML_METADATA_URL=***
+TENET_OKTA_SAML_ACS_URL=https://tenet.example.com/auth/callback/okta/saml
+TENET_OKTA_OIDC_ISSUER_URL=***
+TENET_OKTA_OIDC_CLIENT_ID=***
+TENET_OKTA_OIDC_CLIENT_SECRET=***
+TENET_OKTA_OIDC_REDIRECT_URL=https://tenet.example.com/auth/callback/okta/oidc
+TENET_AUTH_STATE_STORE_PATH=/tmp/tenet/oauth-state.json
+TENET_AUTH_IDENTITY_STORE_PATH=/tmp/tenet/oauth-identities.json
+TENET_AUTH_SESSION_SECRET=***
 ```
 
-Exact names may change when the implementation lands, but the operator contract should not:
+The operator contract for these settings is:
 
 - unset or incomplete provider settings keep the provider inactive
 - diagnostics list required and missing setting names without returning secret values
