@@ -999,6 +999,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!summaryText.includes('Last update')) throw new Error('expected applications page last update column label');
   if (!summaryText.includes('2026-04-16T07:10:00Z')) throw new Error('expected applications page last update value');
   if (!accountsText.includes('payments-api-staging')) throw new Error('expected applications page row text');
+  if (!accountsText.includes('More actions')) throw new Error('expected applications page secondary actions disclosure');
   if (!accountsText.includes('Latest runtime signal')) throw new Error('expected applications page latest runtime signal label');
   if (!accountsText.includes('waiting for CodeDeploy bake window')) throw new Error('expected applications page latest runtime signal detail');
   if (accountsText.includes('Latest runtime signal · —')) throw new Error('applications page must not render placeholder-only runtime signals');
@@ -1015,6 +1016,13 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!appLink) throw new Error('expected applications page link to application detail route');
   if (appLink.target !== '_self') throw new Error('expected applications page link to stay in embedded UI flow');
   if (appLink.rel) throw new Error('expected applications page link to avoid new-tab rel attributes');
+  let parent = appLink.parentNode;
+  let primaryWrapperFound = false;
+  while (parent) {
+    if (String(parent.className || '').includes('row-primary-action')) primaryWrapperFound = true;
+    parent = parent.parentNode;
+  }
+  if (!primaryWrapperFound) throw new Error('expected Open application to be the primary visible row action');
   const runtimeEventsLink = links.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&health=Progressing&account=210987654321&deployment=payments-api-staging#application-runtime-events' && node.textContent === 'Open runtime events');
   if (!runtimeEventsLink) throw new Error('expected applications page latest runtime signal link to application runtime events');
   if (runtimeEventsLink.target !== '_self') throw new Error('expected runtime events link to stay in embedded UI flow');
@@ -1023,6 +1031,13 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!driftLink) throw new Error('expected applications page link to deployment-scoped drift view');
   if (driftLink.target !== '_self') throw new Error('expected applications page drift link to stay in embedded UI flow');
   if (driftLink.rel) throw new Error('expected applications page drift link to avoid new-tab rel attributes');
+  parent = driftLink.parentNode;
+  let secondaryWrapperFound = false;
+  while (parent) {
+    if (String(parent.className || '').includes('row-secondary-actions')) secondaryWrapperFound = true;
+    parent = parent.parentNode;
+  }
+  if (!secondaryWrapperFound) throw new Error('expected Drift view to stay inside the secondary actions disclosure');
   const planLink = links.find((node) => node.href === '/?page=plan&q=payments&sync=OutOfSync&health=Progressing&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Plan/apply');
   if (!planLink) throw new Error('expected applications page link to deployment-scoped plan/apply workspace');
   if (planLink.target !== '_self') throw new Error('expected applications page plan link to stay in embedded UI flow');
