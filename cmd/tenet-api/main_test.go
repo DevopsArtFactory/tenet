@@ -1265,7 +1265,7 @@ func TestAPIOptionsOverviewDeploymentResourceLogsWiresObserverRoleAndPlacement(t
 		t.Fatalf("expected overview deployment resource logs provider")
 	}
 
-	result, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", "ecsService", "api-prod-live-service")
+	result, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", "ecsService", "api-prod-live-service", 7)
 	if err != nil {
 		t.Fatalf("OverviewDeploymentResourceLogs returned error: %v", err)
 	}
@@ -1280,6 +1280,7 @@ func TestAPIOptionsOverviewDeploymentResourceLogsWiresObserverRoleAndPlacement(t
 		TargetAccountID:  "123456789012",
 		Region:           "ap-northeast-2",
 		ObserverRoleARN:  "arn:aws:iam::123456789012:role/TenetObserverRole",
+		Limit:            7,
 	}
 	if !reflect.DeepEqual(provider.lastRequest, want) {
 		t.Fatalf("unexpected resource log request: %+v", provider.lastRequest)
@@ -1308,7 +1309,7 @@ func TestAPIOptionsOverviewDeploymentResourceLogsPassesBootstrapSourceBackingRes
 		t.Fatalf("expected overview deployment resource logs provider")
 	}
 
-	_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", "userDataBootstrapSource", "file:userdata/api-prod.sh")
+	_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", "userDataBootstrapSource", "file:userdata/api-prod.sh", 0)
 	if err != nil {
 		t.Fatalf("OverviewDeploymentResourceLogs returned error: %v", err)
 	}
@@ -1336,7 +1337,7 @@ func TestAPIOptionsOverviewDeploymentResourceLogsResolvesFilesystemBootstrapRout
 
 	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, store)
 
-	_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", "userDataBootstrapSource", "file:userdata/api-prod.sh")
+	_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", "userDataBootstrapSource", "file:userdata/api-prod.sh", 0)
 	if err != nil {
 		t.Fatalf("expected filesystem bootstrap route to resolve against git userdata metadata, got %v", err)
 	}
@@ -1366,7 +1367,7 @@ func TestAPIOptionsOverviewDeploymentResourceLogsRejectsResourcesOutsideDeployme
 	defer restore()
 
 	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, store)
-	_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", "ecsService", "other-service")
+	_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", "ecsService", "other-service", 0)
 	if !errors.Is(err, statusstore.ErrNotFound) {
 		t.Fatalf("expected not found for unbound resource, got %v", err)
 	}
@@ -1382,7 +1383,7 @@ func TestAPIOptionsOverviewDeploymentResourceLogsUsesCanonicalFallbackWhenExecut
 	defer restore()
 
 	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
-	_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", "ecsService", "api-prod-service")
+	_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", "ecsService", "api-prod-service", 0)
 	if err != nil {
 		t.Fatalf("expected canonical fallback resource binding to work, got %v", err)
 	}
@@ -1447,7 +1448,7 @@ func TestAPIOptionsOverviewDeploymentResourceLogsUsesCodeDeployFallbackWhenExecu
 		provider.calls = 0
 		provider.lastRequest = resourcelogs.Request{}
 
-		_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", resource.resourceType, resource.resourceName)
+		_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", resource.resourceType, resource.resourceName, 0)
 		if err != nil {
 			t.Fatalf("expected CodeDeploy fallback resource binding to work for %s/%s, got %v", resource.resourceType, resource.resourceName, err)
 		}
@@ -1470,7 +1471,7 @@ func TestAPIOptionsOverviewDeploymentResourceLogsUsesECSRollingFallbackWhenExecu
 	defer restore()
 
 	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
-	_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", "ecsService", "api-prod-service")
+	_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", "ecsService", "api-prod-service", 0)
 	if err != nil {
 		t.Fatalf("expected ecs rolling fallback resource binding to work, got %v", err)
 	}
@@ -1500,7 +1501,7 @@ func TestAPIOptionsOverviewDeploymentResourceLogsUsesWeightedTargetGroupFallback
 		provider.calls = 0
 		provider.lastRequest = resourcelogs.Request{}
 
-		_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", resource.resourceType, resource.resourceName)
+		_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", resource.resourceType, resource.resourceName, 0)
 		if err != nil {
 			t.Fatalf("expected weighted target group fallback resource binding for %s/%s, got %v", resource.resourceType, resource.resourceName, err)
 		}
@@ -1653,7 +1654,7 @@ func TestAPIOptionsOverviewDeploymentResourceLogsUsesASGInstanceRefreshFallbackW
 		provider.calls = 0
 		provider.lastRequest = resourcelogs.Request{}
 
-		_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", resource.resourceType, resource.resourceName)
+		_, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", resource.resourceType, resource.resourceName, 0)
 		if err != nil {
 			t.Fatalf("expected asg instance refresh fallback resource binding for %s/%s, got %v", resource.resourceType, resource.resourceName, err)
 		}

@@ -577,8 +577,8 @@ func loadOverviewDeploymentResourceRequest(
 func newOverviewDeploymentResourceLogsProvider(
 	loadRequest overviewDeploymentResourceLookupProvider,
 	provider resourceLogProvider,
-) func(context.Context, string, string, string) (resourcelogs.Result, error) {
-	return func(ctx context.Context, name, resourceType, resourceName string) (resourcelogs.Result, error) {
+) func(context.Context, string, string, string, int) (resourcelogs.Result, error) {
+	return func(ctx context.Context, name, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
 		request, err := loadRequest(ctx, name, resourceType, resourceName)
 		if err != nil {
 			return resourcelogs.Result{}, err
@@ -593,6 +593,7 @@ func newOverviewDeploymentResourceLogsProvider(
 			TargetAccountID:     request.TargetAccountID,
 			Region:              request.Region,
 			ObserverRoleARN:     request.ObserverRoleARN,
+			Limit:               limit,
 		})
 	}
 }

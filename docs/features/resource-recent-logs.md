@@ -6,7 +6,7 @@ Tenet now exposes a read-only recent-log slice for resource-detail drill-down pa
 
 `GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}[&limit={positiveInteger}]`
 
-`limit` is optional. When present, Tenet applies it after the provider lookup by truncating `entries[]` while preserving the provider's order; invalid, zero, or negative values return `400 Bad Request` with `invalid limit query`. Both local and compose smoke coverage lock a representative `ecsService` bounded read (`limit=1`) plus the invalid `limit=0` rejection so the operator-facing contract does not drift.
+`limit` is optional. When present, Tenet threads the positive cap into the resource-log provider request and still applies router-level truncation to `entries[]` as a safety fallback while preserving the provider's order; invalid, zero, or negative values return `400 Bad Request` with `invalid limit query`. The built-in CloudWatch-backed `ecsService` provider passes that cap to `GetLogEvents` for each resolved task/container stream, and the CodeDeploy history provider uses it while listing deployment IDs; providers without a meaningful native cap can return their normal bounded result and rely on the router fallback. Both local and compose smoke coverage lock a representative `ecsService` bounded read (`limit=1`) plus the invalid `limit=0` rejection so the operator-facing contract does not drift.
 
 Example limited request:
 

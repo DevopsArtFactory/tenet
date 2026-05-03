@@ -56,6 +56,7 @@ type Request struct {
 	TargetAccountID     string
 	Region              string
 	ObserverRoleARN     string
+	Limit               int
 }
 
 type Result struct {
@@ -138,6 +139,7 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 			Region:          req.Region,
 			TargetAccountID: req.TargetAccountID,
 			ObserverRoleARN: req.ObserverRoleARN,
+			Limit:           req.Limit,
 		})
 		if err != nil {
 			if reason, ok := unavailableReasonForError(err); ok {
@@ -145,7 +147,7 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 			}
 			return Result{}, err
 		}
-		entries := formatCloudWatchEntries(events, s.maxEntries())
+		entries := formatCloudWatchEntries(events, s.effectiveLimit(req.Limit))
 		return availableResult(req, SourceCloudWatch, entries), nil
 	case "candidateAutoScalingGroup", "serviceAutoScalingGroup", "userDataBootstrapSource":
 		resourceName := req.ResourceName
@@ -168,6 +170,7 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 			Region:          req.Region,
 			TargetAccountID: req.TargetAccountID,
 			ObserverRoleARN: req.ObserverRoleARN,
+			Limit:           req.Limit,
 		})
 		if err != nil {
 			if reason, ok := unavailableReasonForError(err); ok {
@@ -175,7 +178,7 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 			}
 			return Result{}, err
 		}
-		entries := formatConsoleEntries(consoles, s.maxEntries())
+		entries := formatConsoleEntries(consoles, s.effectiveLimit(req.Limit))
 		return availableResult(req, SourceEC2Console, entries), nil
 	case "trafficShiftPlan", "productionListenerRule", "activeTargetGroup", "candidateTargetGroup":
 		return unavailableResult(req, UnavailableReasonNoLogSource), nil
@@ -201,6 +204,7 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 			Region:          req.Region,
 			TargetAccountID: req.TargetAccountID,
 			ObserverRoleARN: req.ObserverRoleARN,
+			Limit:           req.Limit,
 		})
 		if err != nil {
 			if reason, ok := unavailableReasonForError(err); ok {
@@ -208,7 +212,7 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 			}
 			return Result{}, err
 		}
-		entries := formatCodeDeployEntries(events, s.maxEntries())
+		entries := formatCodeDeployEntries(events, s.effectiveLimit(req.Limit))
 		return availableResult(req, SourceCodeDeploy, entries), nil
 	default:
 		return unavailableResult(req, UnavailableReasonUnsupportedResourceType), nil
@@ -221,6 +225,7 @@ type ECSRequest struct {
 	Region          string
 	TargetAccountID string
 	ObserverRoleARN string
+	Limit           int
 }
 
 type CloudWatchEvent struct {
@@ -235,6 +240,7 @@ type ASGRequest struct {
 	Region          string
 	TargetAccountID string
 	ObserverRoleARN string
+	Limit           int
 }
 
 type CodeDeployRequest struct {
@@ -244,6 +250,7 @@ type CodeDeployRequest struct {
 	Region          string
 	TargetAccountID string
 	ObserverRoleARN string
+	Limit           int
 }
 
 type CodeDeployEvent struct {
@@ -316,6 +323,13 @@ func (s Service) maxEntries() int {
 		return s.options.MaxEntries
 	}
 	return 50
+}
+
+func (s Service) effectiveLimit(requested int) int {
+	if requested > 0 {
+		return requested
+	}
+	return s.maxEntries()
 }
 
 func formatCloudWatchEntries(events []CloudWatchEvent, max int) []Entry {
@@ -405,7 +419,7 @@ func (s Service) listECSLogEventsFromAWS(ctx context.Context, req ECSRequest) ([
 		return nil, resourceaws.NewUnavailableError(UnavailableReasonNoRunningTasks)
 	}
 
-	events, err := fetchRecentServiceTaskLogEvents(ctx, clients.ECS, clients.Logs, tasks, s.maxEntries())
+	events, err := fetchRecentServiceTaskLogEvents(ctx, clients.ECS, clients.Logs, tasks, s.effectiveLimit(req.Limit))
 	if err != nil {
 		return nil, err
 	}
@@ -462,7 +476,7 @@ func (s Service) listCodeDeployEventsFromAWS(ctx context.Context, req CodeDeploy
 		applicationName = strings.TrimSpace(req.ResourceName)
 		deploymentGroupName = ""
 	}
-	infos, err := listCodeDeployDeploymentInfos(ctx, clients.Config, req.Region, applicationName, deploymentGroupName, s.maxEntries())
+	infos, err := listCodeDeployDeploymentInfos(ctx, clients.Config, req.Region, applicationName, deploymentGroupName, s.effectiveLimit(req.Limit))
 	if err != nil {
 		return nil, err
 	}

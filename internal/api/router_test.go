@@ -1553,7 +1553,7 @@ func TestRouterReturnsExplicitTimeoutResponseAndLogsCorrelation(t *testing.T) {
 		OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 			return catalog.DeploymentOverviewDetail{Name: name}, nil
 		},
-		OverviewDeploymentResourceLogs: func(ctx context.Context, name, resourceType, resourceName string) (resourcelogs.Result, error) {
+		OverviewDeploymentResourceLogs: func(ctx context.Context, name, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
 			<-ctx.Done()
 			return resourcelogs.Result{}, ctx.Err()
 		},
@@ -2819,7 +2819,7 @@ func TestRouterDeploymentReadAuthorization(t *testing.T) {
 				providerCalls++
 				return catalog.DeploymentOverviewEvents{DeploymentName: name}, nil
 			},
-			OverviewDeploymentResourceLogs: func(_ context.Context, name, resourceType, resourceName string) (resourcelogs.Result, error) {
+			OverviewDeploymentResourceLogs: func(_ context.Context, name, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
 				providerCalls++
 				return resourcelogs.Result{DeploymentName: name, ResourceType: resourceType, ResourceName: resourceName}, nil
 			},
@@ -3431,7 +3431,7 @@ func TestRouterOperatorReadRoleAuthorization(t *testing.T) {
 				providerCalls++
 				return catalog.DeploymentOverviewEvents{DeploymentName: name}, nil
 			},
-			OverviewDeploymentResourceLogs: func(_ context.Context, name, resourceType, resourceName string) (resourcelogs.Result, error) {
+			OverviewDeploymentResourceLogs: func(_ context.Context, name, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
 				providerCalls++
 				return resourcelogs.Result{DeploymentName: name, ResourceType: resourceType, ResourceName: resourceName, Available: true}, nil
 			},
@@ -5737,7 +5737,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceLogs: func(_ context.Context, gotDeploymentName, gotResourceType, gotResourceName string) (resourcelogs.Result, error) {
+			OverviewDeploymentResourceLogs: func(_ context.Context, gotDeploymentName, gotResourceType, gotResourceName string, limit int) (resourcelogs.Result, error) {
 				resourceLogCalls++
 				if gotDeploymentName != deploymentName || gotResourceType != resourceType || gotResourceName != resourceName {
 					t.Fatalf("unexpected resource logs request: deployment=%q type=%q name=%q", gotDeploymentName, gotResourceType, gotResourceName)
@@ -5840,6 +5840,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 			resourceType   string
 			resourceName   string
 			requestID      string
+			limit          int
 		}
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
@@ -5849,11 +5850,12 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
 				gotRequest.deploymentName = deploymentName
 				gotRequest.resourceType = resourceType
 				gotRequest.resourceName = resourceName
 				gotRequest.requestID = RequestIDFromContext(ctx)
+				gotRequest.limit = limit
 				return expected, nil
 			},
 		})
@@ -5872,6 +5874,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 			resourceType   string
 			resourceName   string
 			requestID      string
+			limit          int
 		}{deploymentName: "api-prod", resourceType: "ecsService", resourceName: "payments-api-prod-service", requestID: responseRequestID}) {
 			t.Fatalf("unexpected provider request: %+v", gotRequest)
 		}
@@ -5916,7 +5919,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		}
 	})
 
-	t.Run("applies optional entry limit after provider lookup", func(t *testing.T) {
+	t.Run("passes optional entry limit into provider and keeps router fallback truncation", func(t *testing.T) {
 		provided := resourcelogs.Result{
 			DeploymentName: "api-prod",
 			ResourceType:   "ecsService",
@@ -5931,6 +5934,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		}
 
 		var providerCalls int
+		var gotLimit int
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
@@ -5939,8 +5943,9 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceLogs: func(_ context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+			OverviewDeploymentResourceLogs: func(_ context.Context, deploymentName, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
 				providerCalls++
+				gotLimit = limit
 				if deploymentName != "api-prod" || resourceType != "ecsService" || resourceName != "payments-api-prod-service" {
 					t.Fatalf("unexpected provider request: deployment=%q type=%q name=%q", deploymentName, resourceType, resourceName)
 				}
@@ -5957,6 +5962,9 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		}
 		if providerCalls != 1 {
 			t.Fatalf("expected provider to be called once, got %d", providerCalls)
+		}
+		if gotLimit != 2 {
+			t.Fatalf("expected provider limit 2, got %d", gotLimit)
 		}
 
 		var got resourcelogs.Result
@@ -5983,7 +5991,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 				overviewCalls++
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceLogs: func(_ context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+			OverviewDeploymentResourceLogs: func(_ context.Context, deploymentName, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
 				providerCalls++
 				return resourcelogs.Result{}, nil
 			},
@@ -6040,7 +6048,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
 				_ = RequestIDFromContext(ctx)
 				gotRequest.deploymentName = deploymentName
 				gotRequest.resourceType = resourceType
@@ -6121,7 +6129,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
 				gotRequest.deploymentName = deploymentName
 				gotRequest.resourceType = resourceType
 				gotRequest.resourceName = resourceName
@@ -6188,7 +6196,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
 				providerRequestID = RequestIDFromContext(ctx)
 				return resourcelogs.Result{
 					DeploymentName: deploymentName,
@@ -6232,7 +6240,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 					t.Fatalf("overview deployment lookup should not run for invalid query")
 					return catalog.DeploymentOverviewDetail{}, nil
 				},
-				OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+				OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
 					t.Fatalf("resource logs provider should not run for invalid query")
 					return resourcelogs.Result{}, nil
 				},
@@ -6283,7 +6291,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{}, statusstore.ErrNotFound
 			},
-			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
 				t.Fatalf("resource logs provider should not run when deployment lookup fails")
 				return resourcelogs.Result{}, nil
 			},
@@ -6310,7 +6318,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
 				if deploymentName != "api-prod" || resourceType != "ecsService" || resourceName != "payments-api-prod-service" {
 					t.Fatalf("unexpected resource logs request: deployment=%q type=%q name=%q", deploymentName, resourceType, resourceName)
 				}
@@ -6340,7 +6348,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
 				if deploymentName != "api-prod" || resourceType != "ecsService" || resourceName != "payments-api-prod-service" {
 					t.Fatalf("unexpected resource logs request: deployment=%q type=%q name=%q", deploymentName, resourceType, resourceName)
 				}
@@ -6365,7 +6373,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{}, errors.New(providerErr)
 			},
-			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string) (resourcelogs.Result, error) {
+			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
 				t.Fatalf("resource logs provider should not run when deployment lookup errors")
 				return resourcelogs.Result{}, nil
 			},
@@ -9366,7 +9374,7 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 			return catalog.DeploymentOverviewDetail{}, nil
 		},
-		OverviewDeploymentResourceLogs: func(context.Context, string, string, string) (resourcelogs.Result, error) {
+		OverviewDeploymentResourceLogs: func(context.Context, string, string, string, int) (resourcelogs.Result, error) {
 			return resourcelogs.Result{}, nil
 		},
 		OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
