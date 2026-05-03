@@ -105,8 +105,9 @@
       .metric .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
       .metric .v { margin-top: 8px; font-size: 14px; font-weight: 650; word-break: break-word; }
       .metric.summary { grid-column: 1 / -1; }
-      .row-match-context { margin: 0 16px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(103,183,255,.18); background: rgba(103,183,255,.08); color: var(--muted); font-size: 13px; line-height: 1.45; }
-      .row-match-context strong { color: var(--blue); }
+      .row-match-context, .row-runtime-signal { margin: 0 16px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(103,183,255,.18); background: rgba(103,183,255,.08); color: var(--muted); font-size: 13px; line-height: 1.45; }
+      .row-match-context strong, .row-runtime-signal strong { color: var(--blue); }
+      .row-runtime-signal .row-link { margin-left: 8px; }
       .detail-panel { padding: 0 16px 16px; display:grid; gap: 12px; }
       .detail-state { padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.03); color: var(--muted); }
       .detail-state.error { border-color: rgba(255,123,123,.28); color: #ffd0d0; }
@@ -300,6 +301,41 @@
           Number.isFinite(runtimeSummary.historyCount) ? `history ${runtimeSummary.historyCount}` : '',
         ].filter(Boolean);
         return parts.length ? parts.join(' · ') : '—';
+      };
+      const latestRuntimeSignalParts = (deployment) => {
+        const runtimeSummary = deployment?.runtimeSummary || {};
+        const normalize = (value) => {
+          if (value == null) return '';
+          const text = String(value).trim();
+          return text && text !== '—' ? text : '';
+        };
+        const details = changeDetailLabels(runtimeSummary.changeDetails).map(normalize).filter(Boolean);
+        if (details.length) return details.slice(0, 2);
+        const summary = normalize(runtimeSummary.summary);
+        if (summary) return [summary];
+        const conditions = (runtimeSummary.conditions || [])
+          .map((condition) => normalize(runtimeConditionSummary(condition)))
+          .filter(Boolean);
+        if (conditions.length) return conditions.slice(0, 2);
+        const rolloutSignals = [
+          runtimeSummary.rolloutPhase ? `Rollout phase ${runtimeSummary.rolloutPhase}` : '',
+          runtimeSummary.currentStep ? `Current step ${runtimeSummary.currentStep}` : '',
+          deployment?.rollout?.phase ? `Rollout phase ${deployment.rollout.phase}` : '',
+          deployment?.rollout?.currentStep ? `Current step ${deployment.rollout.currentStep}` : '',
+        ].map(normalize).filter(Boolean);
+        return rolloutSignals.slice(0, 2);
+      };
+      const latestRuntimeSignalText = (deployment) => latestRuntimeSignalParts(deployment).join(' · ');
+      const createLatestRuntimeSignal = (deployment) => {
+        const signal = latestRuntimeSignalText(deployment);
+        if (!signal) return null;
+        const container = createElement('div', 'row-runtime-signal');
+        container.append(createElement('strong', '', 'Latest runtime signal'));
+        container.append(` · ${signal}`);
+        if (deployment?.name) {
+          container.append(createNavLink(buildPageSectionURL('application', 'application-runtime-events', { deployment: deployment.name }), 'Open runtime events', '_self'));
+        }
+        return container;
       };
       const plannedSteps = (rollout) => {
         const steps = (rollout?.steps || []).map((step) => step.kind).filter(Boolean);
@@ -2288,7 +2324,9 @@
             );
           }
           const matchContext = createApplicationMatchContext(deployment, currentViewState.query);
+          const latestSignal = createLatestRuntimeSignal(deployment);
           row.append(top, metrics);
+          if (latestSignal) row.append(latestSignal);
           if (matchContext) row.append(matchContext);
           row.append(detailLinks);
           rows.append(row);

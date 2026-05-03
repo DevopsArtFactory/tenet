@@ -765,6 +765,7 @@ func TestApplicationsOverviewPageWithNodeHarness(t *testing.T) {
 			"health":         map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy"},
 			"runtimeSummary": map[string]any{
 				"timestamp":        "2026-04-16T07:10:00Z",
+				"changeDetails":    []string{"waiting for CodeDeploy bake window"},
 				"deployedArtifact": map[string]any{"image": "ghcr.io/example/payments:v2"},
 				"conditions": []map[string]any{{
 					"type":    "Ready",
@@ -998,6 +999,9 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!summaryText.includes('Last update')) throw new Error('expected applications page last update column label');
   if (!summaryText.includes('2026-04-16T07:10:00Z')) throw new Error('expected applications page last update value');
   if (!accountsText.includes('payments-api-staging')) throw new Error('expected applications page row text');
+  if (!accountsText.includes('Latest runtime signal')) throw new Error('expected applications page latest runtime signal label');
+  if (!accountsText.includes('waiting for CodeDeploy bake window')) throw new Error('expected applications page latest runtime signal detail');
+  if (accountsText.includes('Latest runtime signal · —')) throw new Error('applications page must not render placeholder-only runtime signals');
   if (accountsText.includes('payments-api-prod')) throw new Error('expected health/sync/account filters to hide the prod row');
   if (accountsText.includes('Overview JSON')) throw new Error('applications page should not expose deployment read-model quick links');
   if (accountsText.includes('Status JSON')) throw new Error('applications page should not expose status quick links');
@@ -1011,6 +1015,10 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!appLink) throw new Error('expected applications page link to application detail route');
   if (appLink.target !== '_self') throw new Error('expected applications page link to stay in embedded UI flow');
   if (appLink.rel) throw new Error('expected applications page link to avoid new-tab rel attributes');
+  const runtimeEventsLink = links.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&health=Progressing&account=210987654321&deployment=payments-api-staging#application-runtime-events' && node.textContent === 'Open runtime events');
+  if (!runtimeEventsLink) throw new Error('expected applications page latest runtime signal link to application runtime events');
+  if (runtimeEventsLink.target !== '_self') throw new Error('expected runtime events link to stay in embedded UI flow');
+  if (runtimeEventsLink.rel) throw new Error('expected runtime events link to avoid new-tab rel attributes');
   const driftLink = links.find((node) => node.href === '/?page=drift&q=payments&sync=OutOfSync&health=Progressing&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Drift view');
   if (!driftLink) throw new Error('expected applications page link to deployment-scoped drift view');
   if (driftLink.target !== '_self') throw new Error('expected applications page drift link to stay in embedded UI flow');
@@ -1223,6 +1231,7 @@ async function render(fetchImpl) {
   refreshButton = toolbarButtons.find((node) => node.textContent === 'Refresh applications overview');
   if (!accountsText.includes('payments-api-canary')) throw new Error('expected refreshed applications overview to render in place');
   if (accountsText.includes('payments-api-staging')) throw new Error('expected refreshed applications overview to replace stale row content');
+  if (accountsText.includes('Latest runtime signal')) throw new Error('expected refreshed overview to omit latest runtime signal when only a timestamp is present');
   if (!refreshButton || refreshButton.disabled) throw new Error('expected applications overview refresh button re-enabled after refresh completes');
 
   let authFetchCount = 0;

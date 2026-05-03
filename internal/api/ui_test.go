@@ -710,6 +710,10 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"Open audit log",
 		"Open account",
 		"row-match-context",
+		"row-runtime-signal",
+		"const latestRuntimeSignalParts = (deployment) => {",
+		"Latest runtime signal",
+		"createNavLink(buildPageSectionURL('application', 'application-runtime-events', { deployment: deployment.name }), 'Open runtime events', '_self')",
 		"const createApplicationMatchContext = (deployment, query) => {",
 		"Matched ${label}: ${value}",
 		"createNavLink(buildPageURL('account', { accountId: deployment.awsAccountId }), 'Open account', '_self')",
@@ -2199,6 +2203,12 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert 'Refresh applications overview' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh applications overview")
+	}
+	if !strings.Contains(text, "assert 'Latest runtime signal' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains Latest runtime signal")
+	}
+	if !strings.Contains(text, "application-runtime-events") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains runtime-events handoff anchor")
 	}
 	if !strings.Contains(text, "assert 'Refreshing applications overview from GET /v1/overview/applications…' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains applications overview refresh loading copy")
