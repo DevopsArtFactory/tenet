@@ -1654,7 +1654,12 @@ func TestEmbeddedUIProvidesFilterControlsAndURLSyncedViewState(t *testing.T) {
 		"renderToolbar(allApplications, currentViewState);",
 		"currentViewState = normalizeViewState(applications, parseViewState());",
 		"renderApplicationsOverview(applications);",
-		"renderEmptyState('No applications match the current filters.');",
+		"const applicationsFilterLabels = (applications, state) => {",
+		"const resetApplicationsFilters = (focusState = null) => {",
+		"const renderApplicationsEmptyState = (visibleApplications, sourceApplications) => {",
+		"Filters hid every application",
+		"GET /v1/overview/applications returned no applications for this operator view.",
+		"Check catalog loading, runtime status snapshots, or trusted front-door authorization grants if deployments were expected.",
 		"Clear filters",
 	} {
 		if !strings.Contains(body, fragment) {

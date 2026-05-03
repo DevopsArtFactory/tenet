@@ -2191,6 +2191,22 @@
         }
         return null;
       };
+      const applicationsFilterLabels = (applications, state) => {
+        const active = [];
+        if (state.query) active.push(`search “${state.query}”`);
+        if (state.syncState !== 'all') active.push(`sync ${state.syncState}`);
+        if (state.healthState !== 'all') active.push(`health ${state.healthState}`);
+        if (state.account !== 'all') {
+          const activeAccount = applications.find((application) => application.awsAccountId === state.account);
+          active.push(`account ${activeAccount?.accountName || state.account}`);
+        }
+        return active;
+      };
+      const resetApplicationsFilters = (focusState = null) => {
+        currentViewState = { query: '', syncState: 'all', healthState: 'all', account: 'all' };
+        syncViewState(currentViewState);
+        renderApplicationsOverview(allApplications, focusState);
+      };
       const renderToolbar = (applications, state) => {
         const root = document.getElementById('toolbar');
         const accountOptions = [
@@ -2228,14 +2244,7 @@
             updateViewState({ account: event.target.value });
           }),
         );
-        const active = [];
-        if (state.query) active.push(`search “${state.query}”`);
-        if (state.syncState !== 'all') active.push(`sync ${state.syncState}`);
-        if (state.healthState !== 'all') active.push(`health ${state.healthState}`);
-        if (state.account !== 'all') {
-          const activeAccount = applications.find((application) => application.awsAccountId === state.account);
-          active.push(`account ${activeAccount?.accountName || state.account}`);
-        }
+        const active = applicationsFilterLabels(applications, state);
         const actions = createElement('div', 'toolbar-actions');
         actions.append(createElement('div', 'toolbar-active', active.length ? `Active filters: ${active.join(' · ')}` : 'Active filters: none'));
         actions.append(createNavLink(buildPageURL('audit'), 'Open audit log', '_self'));
@@ -2246,10 +2255,7 @@
         clearButton.type = 'button';
         clearButton.disabled = !active.length;
         clearButton.addEventListener('click', () => {
-          const focusState = captureToolbarFocus();
-          currentViewState = { query: '', syncState: 'all', healthState: 'all', account: 'all' };
-          syncViewState(currentViewState);
-          renderApplicationsOverview(allApplications, focusState);
+          resetApplicationsFilters(captureToolbarFocus());
         });
         actions.append(clearButton);
         root.replaceChildren(controls, actions);
@@ -2286,10 +2292,35 @@
         }
         summary.replaceChildren(...refreshNodes, header, statusCard);
       };
-      const renderApplicationsTable = (applications) => {
+      const renderApplicationsEmptyState = (visibleApplications, sourceApplications) => {
+        const root = document.getElementById('accounts');
+        const empty = createElement('div', 'empty');
+        const active = applicationsFilterLabels(sourceApplications, currentViewState);
+        if (sourceApplications.length && active.length && !visibleApplications.length) {
+          const clearButton = createElement('button', 'toolbar-button', 'Clear filters');
+          clearButton.type = 'button';
+          clearButton.addEventListener('click', () => {
+            resetApplicationsFilters(captureToolbarFocus());
+          });
+          empty.append(
+            createElement('h2', 'account-name', 'Filters hid every application'),
+            createElement('div', 'account-meta', `Active filters: ${active.join(' · ')}`),
+            createElement('div', 'account-meta', 'Clear filters to return to the full applications overview, or adjust search, sync, health, or account controls above.'),
+            clearButton,
+          );
+        } else {
+          empty.append(
+            createElement('h2', 'account-name', 'No visible applications'),
+            createElement('div', 'account-meta', 'GET /v1/overview/applications returned no applications for this operator view.'),
+            createElement('div', 'account-meta', 'Check catalog loading, runtime status snapshots, or trusted front-door authorization grants if deployments were expected.'),
+          );
+        }
+        root.replaceChildren(empty);
+      };
+      const renderApplicationsTable = (applications, sourceApplications = applications) => {
         const root = document.getElementById('accounts');
         if (!applications.length) {
-          renderEmptyState('No applications match the current filters.');
+          renderApplicationsEmptyState(applications, sourceApplications);
           return;
         }
         const table = createElement('article', 'account');
@@ -2360,7 +2391,7 @@
         renderToolbar(allApplications, currentViewState);
         const visibleApplications = applyViewState(applications, currentViewState);
         renderApplicationsSummary(visibleApplications);
-        renderApplicationsTable(visibleApplications);
+        renderApplicationsTable(visibleApplications, applications);
         restoreToolbarFocus(focusState);
       };
       const groupResourceSections = (detail) => {

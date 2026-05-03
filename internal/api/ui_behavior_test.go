@@ -1042,6 +1042,20 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!planLink) throw new Error('expected applications page link to deployment-scoped plan/apply workspace');
   if (planLink.target !== '_self') throw new Error('expected applications page plan link to stay in embedded UI flow');
   if (planLink.rel) throw new Error('expected applications page plan link to avoid new-tab rel attributes');
+  const searchInput = document.querySelector('[data-toolbar-field="Search applications"]');
+  if (!searchInput) throw new Error('expected applications search input for filtered-empty regression');
+  searchInput.value = 'does-not-exist';
+  searchInput.dispatch('input');
+  let filteredEmptyText = collectText(document.getElementById('accounts')).join(' | ');
+  if (!filteredEmptyText.includes('Filters hid every application')) throw new Error('expected filtered-empty heading when active filters hide all rows');
+  if (!filteredEmptyText.includes('Active filters: search “does-not-exist”')) throw new Error('expected filtered-empty active filter summary');
+  if (!filteredEmptyText.includes('Clear filters to return to the full applications overview')) throw new Error('expected filtered-empty recovery guidance');
+  const clearEmptyButton = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && node.textContent === 'Clear filters')[0];
+  if (!clearEmptyButton) throw new Error('expected filtered-empty Clear filters action');
+  clearEmptyButton.dispatch('click');
+  const resetText = collectText(document.getElementById('accounts')).join(' | ');
+  if (!resetText.includes('payments-api-staging') || !resetText.includes('payments-api-prod')) throw new Error('expected empty-state Clear filters action to restore all application rows');
+  if (window.location.search) throw new Error('expected empty-state Clear filters action to clear bookmarkable filter params');
 })();
 `
 
