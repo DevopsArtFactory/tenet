@@ -2486,12 +2486,14 @@
           'candidateTargetGroup',
           'blueTaskSetTargetGroup',
           'greenTaskSetTargetGroup',
+          'ecsTask',
         ]).has(type);
       };
       const resourceSupportsRecentLogs = (resource) => {
         const type = String(resource?.type || '').trim();
         return new Set([
           'ecsService',
+          'ecsTask',
           'candidateAutoScalingGroup',
           'serviceAutoScalingGroup',
           'userDataBootstrapSource',
@@ -3718,6 +3720,69 @@
         section.append(list);
         return section;
       };
+      const ecsTaskDisplayName = (task) => textOrDash(task?.taskId || task?.taskArn || 'ECS task');
+      const ecsTaskResource = (task) => {
+        const taskARN = String(task?.taskArn || '').trim();
+        const taskID = String(task?.taskId || '').trim();
+        const name = taskARN || taskID;
+        if (!name) return null;
+        const description = taskID ? `ECS task ${taskID}` : 'ECS task';
+        const id = stableResourceIdentity({ type: 'ecsTask', name, description });
+        return { id, type: 'ecsTask', name, description };
+      };
+      const createECSTaskHandoffLinks = (deploymentName, task) => {
+        const taskResource = ecsTaskResource(task);
+        if (!deploymentName || !taskResource) return null;
+        const links = createElement('div', 'row-links');
+        links.append(
+          createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: taskResource.type, resourceId: taskResource.id }), 'Open task live inspection', '_self'),
+          createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: taskResource.type, resourceId: taskResource.id }), 'Open task recent logs', '_self'),
+        );
+        return links;
+      };
+      const appendECSTaskContainerRows = (item, containers) => {
+        if (!Array.isArray(containers) || !containers.length) return;
+        const containerSection = createElement('div', 'detail-history-meta');
+        containers.forEach((container) => {
+          const name = textOrDash(container?.name || 'container');
+          containerSection.append(
+            createElement('span', 'detail-condition-meta', `Container ${name} · status ${textOrDash(container?.lastStatus)} · health ${textOrDash(container?.healthStatus)}`),
+          );
+          if (container?.image) {
+            containerSection.append(createElement('span', 'detail-condition-meta', `Container ${name} image · ${container.image}`));
+          }
+          if (container?.exitCode != null || container?.reason) {
+            containerSection.append(createElement('span', 'detail-condition-meta', `Container ${name} exit · code ${textOrDash(container?.exitCode)} · ${textOrDash(container?.reason)}`));
+          }
+          if (container?.awslogs?.group || container?.awslogs?.stream) {
+            containerSection.append(createElement('span', 'detail-condition-meta', `Container ${name} awslogs · ${textOrDash(container?.awslogs?.group)} / ${textOrDash(container?.awslogs?.stream)}`));
+          }
+        });
+        item.append(containerSection);
+      };
+      const createECSTaskListItem = (deploymentName, task, includeHandoffs = false) => {
+        const item = createElement('li');
+        item.append(createElement('strong', '', ecsTaskDisplayName(task)));
+        const meta = createElement('div', 'detail-history-meta');
+        meta.append(
+          createElement('span', 'detail-condition-meta', `Task ARN · ${textOrDash(task?.taskArn)}`),
+          createElement('span', 'detail-condition-meta', `Last/desired status · ${textOrDash(task?.lastStatus)} / ${textOrDash(task?.desiredStatus)}`),
+          createElement('span', 'detail-condition-meta', `Health status · ${textOrDash(task?.healthStatus)}`),
+          createElement('span', 'detail-condition-meta', `Launch type · ${textOrDash(task?.launchType)}`),
+        );
+        if (task?.startedAt) meta.append(createElement('span', 'detail-condition-meta', `Started at · ${task.startedAt}`));
+        if (task?.stoppedAt) meta.append(createElement('span', 'detail-condition-meta', `Stopped at · ${task.stoppedAt}`));
+        if (task?.stoppedReason) meta.append(createElement('span', 'detail-condition-meta', `Stopped reason · ${task.stoppedReason}`));
+        if (task?.clusterArn) meta.append(createElement('span', 'detail-condition-meta', `Cluster ARN · ${task.clusterArn}`));
+        if (task?.taskDefinition) meta.append(createElement('span', 'detail-condition-meta', `Task definition · ${task.taskDefinition}`));
+        item.append(meta);
+        appendECSTaskContainerRows(item, task?.containers);
+        if (includeHandoffs) {
+          const links = createECSTaskHandoffLinks(deploymentName, task);
+          if (links) item.append(links);
+        }
+        return item;
+      };
       const renderECSServiceInspection = (section, deploymentName, resource, result) => {
         const service = result?.ecsService;
         const actions = createResourceInspectionActions(section, deploymentName, resource);
@@ -3762,6 +3827,12 @@
           },
           'No active ECS deployments are reported for this service.',
         );
+        const tasksSection = createInspectionListSection(
+          'Recent ECS tasks',
+          service?.tasks || [],
+          (task) => createECSTaskListItem(deploymentName, task, true),
+          'No recent ECS tasks are reported for this service.',
+        );
         const eventsSection = createInspectionListSection(
           'Recent ECS service events',
           service?.events || [],
@@ -3778,6 +3849,7 @@
           createElement('p', 'detail-section-copy', 'Live ECS service inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
           metadata,
           deploymentsSection,
+          tasksSection,
           eventsSection,
         );
       };
@@ -4084,6 +4156,53 @@
         section.append(conditionsSection, actionsSection);
         return section;
       };
+      const renderECSTaskInspection = (section, deploymentName, resource, result) => {
+        const task = result?.ecsTask;
+        const actions = createResourceInspectionActions(section, deploymentName, resource);
+        const metadata = createLookupContextGrid(result?.lookupContext, [
+          ['Inspection source', metricValue(result?.source)],
+          ['Task ID', textOrDash(task?.taskId)],
+          ['Task ARN', textOrDash(task?.taskArn)],
+          ['Last status', textOrDash(task?.lastStatus)],
+          ['Desired status', textOrDash(task?.desiredStatus)],
+          ['Health status', textOrDash(task?.healthStatus)],
+          ['Launch type', textOrDash(task?.launchType)],
+          ['Started at', textOrDash(task?.startedAt)],
+          ['Stopped at', textOrDash(task?.stoppedAt)],
+          ['Stopped reason', textOrDash(task?.stoppedReason)],
+          ['Task definition', textOrDash(task?.taskDefinition)],
+          ['Cluster ARN', textOrDash(task?.clusterArn)],
+        ]);
+        const containersSection = createInspectionListSection(
+          'Task containers',
+          task?.containers || [],
+          (container) => {
+            const item = createElement('li');
+            item.append(createElement('strong', '', textOrDash(container?.name || 'Container')));
+            const meta = createElement('div', 'detail-history-meta');
+            meta.append(
+              createElement('span', 'detail-condition-meta', `Container status · ${textOrDash(container?.lastStatus)}`),
+              createElement('span', 'detail-condition-meta', `Container health · ${textOrDash(container?.healthStatus)}`),
+              createElement('span', 'detail-condition-meta', `Container image · ${textOrDash(container?.image)}`),
+            );
+            if (container?.exitCode != null || container?.reason) {
+              meta.append(createElement('span', 'detail-condition-meta', `Container exit · code ${textOrDash(container?.exitCode)} · ${textOrDash(container?.reason)}`));
+            }
+            if (container?.awslogs?.group || container?.awslogs?.stream) {
+              meta.append(createElement('span', 'detail-condition-meta', `Container awslogs · ${textOrDash(container?.awslogs?.group)} / ${textOrDash(container?.awslogs?.stream)}`));
+            }
+            item.append(meta);
+            return item;
+          },
+          'No container evidence is available for this ECS task.',
+        );
+        section.replaceChildren(
+          createDetailSectionHeader('Live inspection', actions),
+          createElement('p', 'detail-section-copy', 'Live ECS task inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
+          metadata,
+          containersSection,
+        );
+      };
       const renderTrafficRoutingInspection = (section, deploymentName, resource, result) => {
         const trafficRouting = result?.trafficRoutingResource;
         const actions = createResourceInspectionActions(section, deploymentName, resource);
@@ -4125,6 +4244,10 @@
         }
         if (result?.ecsService) {
           renderECSServiceInspection(section, deploymentName, resource, result);
+          return;
+        }
+        if (result?.ecsTask) {
+          renderECSTaskInspection(section, deploymentName, resource, result);
           return;
         }
         if (result?.autoScalingGroup) {
