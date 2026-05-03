@@ -111,6 +111,8 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 		"Google Workspace/Gmail means identity login only",
 		"It does not grant Tenet Gmail mailbox, Drive, Calendar, or other Google API access.",
 		"Google Workspace identity through Google OIDC profile claims",
+		"human-readable provider labels in operator-facing UI (`Google Workspace OIDC`, `Okta SAML`, `Okta OIDC`)",
+		"provider-boundary copy in the embedded Operator context details",
 		"Okta identity through SAML assertions or OIDC profile claims",
 		"local fake provider/assertion/profile tests instead of live Google or Okta calls",
 		"Trusted front-door identity remains authoritative",

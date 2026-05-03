@@ -1090,6 +1090,12 @@ assert "const operatorContextSupportedIdentityHeadersLabel = (context) => {" in 
 assert "Supported identity headers: canonical ${canonicalText}; compatibility aliases ${aliasText}. Canonical X-Tenet-Authenticated-* identity headers are preferred when both canonical and alias values are present." in ui, ui
 assert "const operatorContextManagedLogin = (context) => context?.authRuntime?.tenetManagedLogin || {};" in ui, ui
 assert "const operatorContextManagedLoginActive = (context = operatorContextState.context) => {" in ui, ui
+assert "const operatorContextManagedLoginProviderLabel = (provider) => {" in ui, ui
+assert "google_oidc: 'Google Workspace OIDC'" in ui, ui
+assert "okta_saml: 'Okta SAML'" in ui, ui
+assert "Managed login provider boundary:" in ui, ui
+assert "Gmail mailbox access is not requested or authorized by this runtime." in ui, ui
+assert "Tenet authorization still comes from trusted roles and deployment grants." in ui, ui
 assert 'Managed login lifecycle: OAuth callback state TTL' in ui, ui
 assert 'Managed login provider token boundary: access token stored' in ui, ui
 assert 'Managed login logout boundary: clears Tenet session cookie' in ui, ui
