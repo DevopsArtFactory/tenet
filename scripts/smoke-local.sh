@@ -1437,6 +1437,12 @@ assert "const fetchDeploymentEvents = (deploymentName) => fetchEmbeddedReadRoute
 assert "const ifMatch = detail.sourceFingerprint || await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;" in ui, ui
 assert 'Recent logs' in ui, ui
 assert 'Refresh recent logs' in ui, ui
+assert 'Requested cap' in ui, ui
+assert 'Effective cap' in ui, ui
+assert 'Returned entries' in ui, ui
+assert 'Scope status' in ui, ui
+assert 'Capped response; more rows may exist' in ui, ui
+assert 'At cap; provider totals unknown' in ui, ui
 assert 'Backing resource type' in ui, ui
 assert 'Backing resource name' in ui, ui
 assert 'Lookup region' in ui, ui
