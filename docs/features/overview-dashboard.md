@@ -82,10 +82,8 @@ Each row surfaces:
 - sync
 - health
 - last update
-- `_self` `Open audit log` link to `/?page=audit`
-- expanded deployment rows also add deployment-scoped `_self` `Drift view`, `Plan/apply`, and `Audit log` handoffs to `/?page=drift&deployment={deploymentName}`, `/?page=plan&deployment={deploymentName}`, and `/?page=audit&deployment={deploymentName}` beside `_self` `Open application`
-- `_self` `Open account` link to `/?page=account&accountId={awsAccountId}`
-- `_self` `Open application` link to `/?page=application&deployment={deploymentName}`
+- one primary `_self` `Open application` link to `/?page=application&deployment={deploymentName}`
+- a `More actions` disclosure containing `_self` `Open account`, deployment-scoped `_self` `Drift view`, `_self` `Plan/apply`, and `_self` `Audit log` links without making those secondary paths dominate the landing row
 
 The account drill-down page consumes `GET /v1/overview/accounts/{awsAccountId}` and keeps the denser account-oriented view available without making it the first page again. Current account-page behavior:
 - back-link to the applications overview while preserving current filters

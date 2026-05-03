@@ -1141,6 +1141,9 @@ assert "return 'GET /v1/overview/applications';" in ui, ui
 assert "return `GET /v1/overview/accounts/${accountID}`;" in ui, ui
 assert 'Open account' in ui, ui
 assert 'Open application' in ui, ui
+assert 'More actions' in ui, ui
+assert 'row-primary-action' in ui, ui
+assert 'row-secondary-actions' in ui, ui
 assert 'Open audit log' in ui, ui
 assert "buildPageURL('drift', { deployment: deployment.name })" in ui, ui
 assert "buildPageURL('plan', { deployment: deployment.name })" in ui, ui
