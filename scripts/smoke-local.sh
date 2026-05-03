@@ -1330,6 +1330,8 @@ assert "page.append(createApplicationStatusSummary(detail, resourceGroups));" in
 assert "createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')" in application_ui, application_ui
 assert "const resourceSupportsLiveInspection = (resource) => {" in application_ui, application_ui
 assert "const resourceSupportsRecentLogs = (resource) => {" in application_ui, application_ui
+assert "'codeDeployApplication',\n          'codeDeployDeploymentGroup'" in application_ui, application_ui
+assert "'trafficShiftPlan',\n          'productionListenerRule',\n          'activeTargetGroup',\n          'candidateTargetGroup'" in application_ui, application_ui
 assert "createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open live inspection', '_self')" in application_ui, application_ui
 assert "createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open recent logs', '_self')" in application_ui, application_ui
 assert 'Open live inspection' in application_ui, application_ui
