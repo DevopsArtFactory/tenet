@@ -709,6 +709,10 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"currentViewState = { query: '', syncState: 'all', healthState: 'all', account: 'all' };",
 		"Open audit log",
 		"Open account",
+		"More actions",
+		"row-primary-action",
+		"row-secondary-actions",
+		"application-row-core",
 		"row-match-context",
 		"row-runtime-signal",
 		"const latestRuntimeSignalParts = (deployment) => {",
@@ -2059,6 +2063,7 @@ func TestCISmokeWorkflowSyntaxChecksBothSmokeScriptsInFastLane(t *testing.T) {
 		"internal/api/*|internal/api/**",
 		"internal/requestactor/*|internal/requestactor/**",
 		"internal/statusstore/*|internal/statusstore/**",
+		"internal/resourceaws/*|internal/resourceaws/**",
 		"internal/resourcelogs/*|internal/resourcelogs/**",
 		"internal/resourceinspection/*|internal/resourceinspection/**",
 		"internal/planpreview/*|internal/planpreview/**",
@@ -2071,6 +2076,59 @@ func TestCISmokeWorkflowSyntaxChecksBothSmokeScriptsInFastLane(t *testing.T) {
 			t.Fatalf("expected docker-smoke-scope job to include %q", fragment)
 		}
 	}
+}
+
+func TestCISmokeWorkflowDockerScopeCoversSharedResourceAWSChanges(t *testing.T) {
+	body, err := os.ReadFile("../../.github/workflows/ci-smoke.yml")
+	if err != nil {
+		t.Fatalf("read ci-smoke workflow: %v", err)
+	}
+
+	patterns := dockerSmokeScopePatterns(t, string(body))
+	if !dockerSmokeScopeMatches(patterns, "internal/resourceaws/access.go") {
+		t.Fatalf("expected internal/resourceaws/access.go to trigger docker smoke scope; patterns=%v", patterns)
+	}
+	if dockerSmokeScopeMatches(patterns, "docs/features/resource-recent-logs.md") {
+		t.Fatalf("expected unrelated docs-only paths to skip docker smoke scope")
+	}
+}
+
+func dockerSmokeScopePatterns(t *testing.T, workflow string) []string {
+	t.Helper()
+
+	start := strings.Index(workflow, "case \"$changed_path\" in")
+	if start < 0 {
+		t.Fatalf("expected docker smoke scope case statement")
+	}
+	block := workflow[start:]
+	endMarker := ")\n                should_run=true"
+	end := strings.Index(block, endMarker)
+	if end < 0 {
+		t.Fatalf("expected docker smoke scope case body to set should_run")
+	}
+	block = block[:end]
+	block = strings.TrimPrefix(block, "case \"$changed_path\" in")
+	block = strings.NewReplacer("\\\n", "", "\n", "", "\t", "", " ", "").Replace(block)
+	block = strings.Trim(block, "|")
+	if block == "" {
+		t.Fatalf("expected docker smoke scope patterns")
+	}
+	return strings.Split(block, "|")
+}
+
+func dockerSmokeScopeMatches(patterns []string, changedPath string) bool {
+	for _, pattern := range patterns {
+		pattern = strings.TrimSpace(pattern)
+		if pattern == "" {
+			continue
+		}
+		matchPattern := "^" + regexp.QuoteMeta(pattern) + "$"
+		matchPattern = strings.ReplaceAll(matchPattern, "\\*", ".*")
+		if regexp.MustCompile(matchPattern).MatchString(changedPath) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestSmokeDockerScriptLocksOperatorContextRoleDiagnostics(t *testing.T) {
@@ -3045,6 +3103,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"syntax-checks both `scripts/smoke-local.sh` and `scripts/smoke-docker.sh` with `bash -n`, then runs `make smoke-local`",
 			"Pull requests first pass through a cheap `docker-smoke-scope` path filter",
 			"only PRs that touch Compose/front-door/auth/API/controller, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surfaces",
+			"`internal/resourceaws/**`",
 			"unrelated docs-only PRs on the cheap fast lane",
 			"`docker compose down --remove-orphans` even on failure",
 		},

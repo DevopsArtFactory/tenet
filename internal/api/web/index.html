@@ -88,6 +88,15 @@
       .row-links { display:flex; flex-wrap:wrap; gap: 10px; margin-top: 10px; }
       .account-links { margin-top: 0; align-self: center; }
       .row-links-shell { padding: 0 16px 16px; }
+      .row-primary-action { align-self: flex-start; margin-top: 0; }
+      .row-primary-action .row-link { display:inline-flex; align-items:center; border: 1px solid rgba(103,183,255,.36); background: rgba(103,183,255,.14); border-radius: 999px; padding: 8px 12px; color: var(--text); }
+      .row-secondary-actions { margin: 0 16px 16px; color: var(--muted); }
+      .row-secondary-actions summary { width: fit-content; cursor:pointer; color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+      .row-secondary-actions summary:hover, .row-secondary-actions summary:focus-visible { color: var(--text); }
+      .row-secondary-actions .row-links { margin-top: 8px; }
+      .application-row-core { padding: 0 16px; display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+      .application-core-item { color: var(--muted); font-size: 13px; line-height: 1.35; }
+      .application-core-item strong { display:block; margin-bottom: 3px; color: var(--text); font-size: 14px; }
       .row-link { color: var(--blue); font-size: 13px; font-weight: 600; text-decoration: none; }
       .row-link:hover, .row-link:focus-visible { text-decoration: underline; }
       .row-hint { margin-top: 10px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
@@ -108,6 +117,7 @@
       .row-match-context, .row-runtime-signal { margin: 0 16px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(103,183,255,.18); background: rgba(103,183,255,.08); color: var(--muted); font-size: 13px; line-height: 1.45; }
       .row-match-context strong, .row-runtime-signal strong { color: var(--blue); }
       .row-runtime-signal .row-link { margin-left: 8px; }
+      .row-runtime-signal { background: rgba(255,255,255,.035); border-color: rgba(255,255,255,.06); }
       .detail-panel { padding: 0 16px 16px; display:grid; gap: 12px; }
       .detail-state { padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.03); color: var(--muted); }
       .detail-state.error { border-color: rgba(255,123,123,.28); color: #ffd0d0; }
@@ -1319,17 +1329,8 @@
           const context = operatorContextState.context || {};
           summary.textContent = operatorContextIdentityLabel(context);
           statusAnnouncement = `Operator context ready: ${summary.textContent}`;
-          meta.append(
-            createElement('span', '', operatorContextRoleLabel(context)),
-            createElement('span', '', operatorContextDeploymentAccessLabel(context)),
-            createElement('span', operatorContextProjectEnvironmentScopesClass(context), operatorContextProjectEnvironmentScopesLabel(context)),
-            createElement('span', operatorContextEnforcementClass(context), operatorContextEnforcementModeLabel(context)),
-            createElement('span', '', context?.trustedHeaders?.enabled ? 'Trusted headers enabled' : 'Trusted headers disabled'),
-          );
+          meta.append(createElement('span', '', `${context?.trustedHeaders?.enabled ? 'Trusted headers enabled' : 'Trusted headers disabled'} · ${operatorContextRoleLabel(context)} · ${operatorContextDeploymentAccessLabel(context)}`));
           const deploymentAccessSummary = operatorContextDeploymentAccessSummaryLabel(context);
-          if (deploymentAccessSummary) {
-            meta.append(createElement('span', operatorContextDeploymentAccessSummaryClass(context), deploymentAccessSummary));
-          }
           if (operatorContextState.refreshing) {
             statusAnnouncement = 'Refreshing trusted front-door context…';
             meta.append(createElement('span', '', 'Refreshing trusted front-door context…'));
@@ -1340,6 +1341,16 @@
             meta.append(createElement('span', '', `Last refresh failed: ${failureMessage}`));
           }
           const detailsMeta = createElement('div', 'operator-context-meta');
+          detailsMeta.append(
+            createElement('span', '', operatorContextRoleLabel(context)),
+            createElement('span', '', operatorContextDeploymentAccessLabel(context)),
+            createElement('span', operatorContextProjectEnvironmentScopesClass(context), operatorContextProjectEnvironmentScopesLabel(context)),
+            createElement('span', operatorContextEnforcementClass(context), operatorContextEnforcementModeLabel(context)),
+            createElement('span', '', context?.trustedHeaders?.enabled ? 'Trusted headers enabled' : 'Trusted headers disabled'),
+          );
+          if (deploymentAccessSummary) {
+            detailsMeta.append(createElement('span', operatorContextDeploymentAccessSummaryClass(context), deploymentAccessSummary));
+          }
           const enforcementSummary = operatorContextEnforcementSummaryLabel(context);
           if (enforcementSummary) {
             detailsMeta.append(createElement('span', operatorContextEnforcementClass(context), enforcementSummary));
@@ -2302,33 +2313,43 @@
             createElement('span', `pill ${healthClass(deployment.health?.overall)}`, healthLabel(deployment.health)),
           );
           top.append(titleWrap, rowPills);
-          const metrics = createElement('div', 'metrics');
+          const primaryAction = createElement('div', 'row-links row-primary-action');
+          if (deployment.name) {
+            primaryAction.append(createNavLink(buildPageURL('application', { deployment: deployment.name }), 'Open application', '_self'));
+          }
+          if (primaryAction.children.length) {
+            top.append(primaryAction);
+          }
+          const core = createElement('div', 'application-row-core');
           [
-            ['Account', textOrDash(deployment.accountName)],
+            ['Account / environment', [textOrDash(deployment.accountName), textOrDash(deployment.environmentRef)].filter((part) => part !== '—').join(' · ') || '—'],
             ['Project', textOrDash(deployment.appRef)],
             ['Health', `${healthLabel(deployment.health)}${deployment.health?.summary ? ` · ${deployment.health.summary}` : ''}`],
             ['Last update', runtimeSummaryTimestamp(deployment.runtimeSummary)],
           ].forEach(([label, value]) => {
-            metrics.append(createMetric(label, value));
+            const item = createElement('div', 'application-core-item');
+            item.append(createElement('strong', '', label), createElement('span', '', value));
+            core.append(item);
           });
-          const detailLinks = createElement('div', 'row-links row-links-shell');
+          const secondaryLinks = createElement('div', 'row-links');
           if (deployment.awsAccountId) {
-            detailLinks.append(createNavLink(buildPageURL('account', { accountId: deployment.awsAccountId }), 'Open account', '_self'));
+            secondaryLinks.append(createNavLink(buildPageURL('account', { accountId: deployment.awsAccountId }), 'Open account', '_self'));
           }
           if (deployment.name) {
-            detailLinks.append(
-              createNavLink(buildPageURL('application', { deployment: deployment.name }), 'Open application', '_self'),
+            secondaryLinks.append(
               createNavLink(buildPageURL('drift', { deployment: deployment.name }), 'Drift view', '_self'),
               createNavLink(buildPageURL('plan', { deployment: deployment.name }), 'Plan/apply', '_self'),
               createNavLink(buildPageURL('audit', { deployment: deployment.name }), 'Audit log', '_self'),
             );
           }
+          const secondaryActions = createElement('details', 'row-secondary-actions');
+          secondaryActions.append(createElement('summary', '', 'More actions'), secondaryLinks);
           const matchContext = createApplicationMatchContext(deployment, currentViewState.query);
           const latestSignal = createLatestRuntimeSignal(deployment);
-          row.append(top, metrics);
+          row.append(top, core);
           if (latestSignal) row.append(latestSignal);
           if (matchContext) row.append(matchContext);
-          row.append(detailLinks);
+          if (secondaryLinks.children.length) row.append(secondaryActions);
           rows.append(row);
         });
         table.append(rows);
