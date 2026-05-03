@@ -1031,13 +1031,13 @@ func TestEmbeddedUIIncludesOperatorReadAuthGuidanceContract(t *testing.T) {
 		".then(() => fetch(route))",
 		"if (response.status === 401 || response.status === 403) {",
 		"throw requestError('fetch-error', message, response.status);",
-		"const buildResourceLogsRoute = (deploymentName, resource) => {",
-		"const resourceLogsReadRoute = (deploymentName, resource) => `GET ${buildResourceLogsRoute(deploymentName, resource)}`;",
+		"const buildResourceLogsRoute = (deploymentName, resource, limit = 0) => {",
+		"const resourceLogsReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceLogsRoute(deploymentName, resource, limit)}`;",
 		"const buildResourceInspectionRoute = (deploymentName, resource) => {",
 		"const resourceInspectionReadRoute = (deploymentName, resource) => `GET ${buildResourceInspectionRoute(deploymentName, resource)}`;",
 		"if (renderOperatorReadFailurePanel(",
 		"'Recent logs',",
-		"resourceLogsReadRoute(deploymentName, resource),",
+		"resourceLogsReadRoute(deploymentName, resource, target?.limit ?? selectedLimit),",
 		"'Live inspection',",
 		"resourceInspectionReadRoute(deploymentName, resource),",
 	} {
@@ -1696,13 +1696,23 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 	for _, fragment := range []string{
 		"const resourceLogStateByKey = new Map();",
 		"const resourceLogCacheKey = (deploymentName, resource) => [deploymentName || '', resource.type || '', resource.name || '', resource.id || ''].join('::');",
-		"const fetchResourceLogs = (deploymentName, resource) => {",
-		"const buildResourceLogsRoute = (deploymentName, resource) => {",
+		"const resourceLogLimitByResourceKey = new Map();",
+		"const normalizeResourceLogsLimit = (value) => {",
+		"const resourceLogsLimitOptions = [",
+		"{ value: '', label: 'All available logs' }",
+		"{ value: '5', label: '5 entries' }",
+		"{ value: '10', label: '10 entries' }",
+		"{ value: '25', label: '25 entries' }",
+		"const resourceLogsLimitText = (limit) => {",
+		"Log entry cap · ${resourceLogsLimitText(limit)}",
+		"const fetchResourceLogs = (deploymentName, resource, limit = 0) => {",
+		"const buildResourceLogsRoute = (deploymentName, resource, limit = 0) => {",
 		"resourceType: resource?.type || '',",
 		"resourceName: resource?.name || '',",
+		"params.set('limit', String(normalizedLimit));",
 		"return `/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-logs?${params.toString()}`;",
-		"const resourceLogsReadRoute = (deploymentName, resource) => `GET ${buildResourceLogsRoute(deploymentName, resource)}`;",
-		"return fetchResourcePanelJSON(buildResourceLogsRoute(deploymentName, resource), 'resource logs request failed');",
+		"const resourceLogsReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceLogsRoute(deploymentName, resource, limit)}`;",
+		"return fetchResourcePanelJSON(buildResourceLogsRoute(deploymentName, resource, limit), 'resource logs request failed');",
 		"const fetchResourcePanelJSON = (route, failureLabel) => Promise.resolve()",
 		".then(() => fetch(route))",
 		"const createDetailSectionHeader = (title, actions = []) => {",
@@ -1734,13 +1744,15 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 		"const backingResourceFields = resourceLogsBackingResourceFields(result);",
 		"const createResourceLogsLookupContextGrid = (lookupContext, extraFields = []) => {",
 		"const createResourceLogsActions = (section, deploymentName, resource, isLoading = false, detail = null) => [",
+		"createResourceLogsLimitControl(section, deploymentName, resource, isLoading, detail)",
+		"'Log limit'",
 		"'Refresh recent logs'",
 		"renderResourceLogsSection(section, deploymentName, resource, { force: true, detail }).catch(() => {})",
 		"[...extraFields, ...resourceLogsLookupContextFields(lookupContext)].forEach(([label, value]) => {",
 		"const createResourceLogsBackingResourceHandoffSection = (detail, result) => {",
 		"Open the resolved ${handoff.resource.type} drill-down Tenet used for this recent-log lookup.",
 		"const handoffSection = createResourceLogsBackingResourceHandoffSection(detail, result);",
-		"const beforeNodes = (metadata) => handoffSection ? [metadata, handoffSection] : [metadata];",
+		"const beforeNodes = (metadata) => handoffSection ? [capNote, metadata, handoffSection] : [capNote, metadata];",
 		"const unavailableReason = resourceLogsUnavailableReasonText(result?.unavailableReason);",
 		"const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, backingResourceFields);",
 		"const details = unavailableReason",
@@ -1750,10 +1762,12 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 		"const renderResourceLogsSection = (section, deploymentName, resource, options = {}) => {",
 		"const force = Boolean(options?.force);",
 		"const detail = options?.detail || null;",
-		"const logsKey = resourceLogCacheKey(deploymentName, resource);",
+		"const baseLogsKey = resourceLogCacheKey(deploymentName, resource);",
+		"const selectedLimit = normalizeResourceLogsLimit(options?.limit ?? resourceLogLimitByResourceKey.get(baseLogsKey) ?? 0);",
+		"const logsKey = resourceLogRequestCacheKey(deploymentName, resource, selectedLimit);",
 		"if (!force && cached?.status === 'ready') {",
-		"renderResourceLogsState(section, 'Loading recent logs…', '', [], [], loadingActions);",
-		"resourceLogsReadRoute(deploymentName, resource),",
+		"renderResourceLogsState(section, 'Loading recent logs…', '', [createResourceLogsLimitNote(selectedLimit)], [], loadingActions);",
+		"resourceLogsReadRoute(deploymentName, resource, target?.limit ?? selectedLimit),",
 		"renderResourceLogsState(",
 		"`Failed to load recent logs: ${error.message}`",
 		"createResourceLogsActions(container, deploymentName, resource, false, target?.detail || detail),",
@@ -2118,8 +2132,18 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Recent logs' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Recent logs")
 	}
-	if !strings.Contains(text, "assert 'Refresh recent logs' in ui, ui") {
+	if !strings.Contains(text, "assert 'Refresh recent logs' in ui, ui") && !strings.Contains(text, "assert \"Refresh recent logs\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh recent logs")
+	}
+	for _, fragment := range []string{
+		"assert \"const resourceLogsLimitOptions = [\" in ui, ui",
+		"assert \"Log entry cap · ${resourceLogsLimitText(limit)}\" in ui, ui",
+		"assert \"'Log limit'\" in ui, ui",
+		"assert \"params.set('limit', String(normalizedLimit));\" in ui, ui",
+	} {
+		if !strings.Contains(text, fragment) {
+			t.Fatalf("expected smoke-local.sh to assert recent-log limit shell fragment %q", fragment)
+		}
 	}
 	if !strings.Contains(text, "assert 'Backing resource type' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Backing resource type")
@@ -3023,10 +3047,14 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		"\"return fetchDeploymentDetail(deploymentName)\",",
 		"assert_fragments(\"resource_ui\", body, operator_read_auth_fragments + (",
 		"\"const createResourceLogsActions = (section, deploymentName, resource, isLoading = false, detail = null) => [\",",
+		"\"createResourceLogsLimitControl(section, deploymentName, resource, isLoading, detail)\",",
+		"\"'Log limit'\",",
 		"\"'Refresh recent logs'\",",
-		"\"const buildResourceLogsRoute = (deploymentName, resource) => {\",",
-		"\"const resourceLogsReadRoute = (deploymentName, resource) => `GET ${buildResourceLogsRoute(deploymentName, resource)}`;\",",
-		"\"renderResourceLogsState(section, 'Loading recent logs…', '', [], [], loadingActions);\",",
+		"\"const buildResourceLogsRoute = (deploymentName, resource, limit = 0) => {\",",
+		"\"const resourceLogsReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceLogsRoute(deploymentName, resource, limit)}`;\",",
+		"\"renderResourceLogsState(section, 'Loading recent logs…', '', [createResourceLogsLimitNote(selectedLimit)], [], loadingActions);\",",
+		"\"Log entry cap · ${resourceLogsLimitText(limit)}\",",
+		"\"params.set('limit', String(normalizedLimit));\",",
 		"\"`Failed to load recent logs: ${error.message}`\",",
 		"\"'Recent logs'\",",
 		"\"resourceLogsReadRoute(deploymentName, resource)\",",
