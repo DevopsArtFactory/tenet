@@ -6572,6 +6572,12 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 					CreatedAt: "2026-04-18T00:12:00Z",
 					Message:   "service reached steady state",
 				}},
+				Tasks: []resourceinspection.ECSTaskSummary{{TaskARN: "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/task-1", TaskID: "task-1"}},
+				TasksScope: &resourceinspection.ECSTaskSummaryScope{
+					EffectiveLimit:    10,
+					ReturnedTaskCount: 1,
+					TruncationStatus:  "not_truncated",
+				},
 			},
 		}
 
@@ -6637,10 +6643,17 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected ecsService object in payload, got %#v", raw["ecsService"])
 		}
-		for _, key := range []string{"minimumHealthyPercent", "maximumPercent", "healthCheckGracePeriodSeconds"} {
+		for _, key := range []string{"minimumHealthyPercent", "maximumPercent", "healthCheckGracePeriodSeconds", "tasks", "tasksScope"} {
 			if _, ok := ecsService[key]; !ok {
 				t.Fatalf("expected ECS service inspection field %q in payload, got %#v", key, ecsService)
 			}
+		}
+		tasksScope, ok := ecsService["tasksScope"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected tasksScope object in ECS service payload, got %#v", ecsService["tasksScope"])
+		}
+		if tasksScope["effectiveLimit"] != float64(10) || tasksScope["returnedTaskCount"] != float64(1) || tasksScope["truncationStatus"] != "not_truncated" {
+			t.Fatalf("unexpected tasksScope payload: %#v", tasksScope)
 		}
 	})
 

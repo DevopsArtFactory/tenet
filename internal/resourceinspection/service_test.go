@@ -1271,7 +1271,7 @@ func TestECSInspectionFromServiceSortsDeploymentsAndEvents(t *testing.T) {
 		},
 	}
 
-	got := ecsInspectionFromService(service, "arn:cluster", "ghcr.io/devopsartfactory/payments-api:2026-04-18.2", []ECSTaskSummary{{TaskARN: "arn:task/one", TaskID: "one"}})
+	got := ecsInspectionFromService(service, "arn:cluster", "ghcr.io/devopsartfactory/payments-api:2026-04-18.2", []ECSTaskSummary{{TaskARN: "arn:task/one", TaskID: "one"}}, &ECSTaskSummaryScope{EffectiveLimit: maxECSServiceTaskSummaries, ReturnedTaskCount: 1, TruncationStatus: "not_truncated"})
 	if len(got.Deployments) != 2 || got.Deployments[0].ID != "primary" {
 		t.Fatalf("expected deployments sorted newest-first, got %+v", got.Deployments)
 	}
@@ -1292,6 +1292,9 @@ func TestECSInspectionFromServiceSortsDeploymentsAndEvents(t *testing.T) {
 	}
 	if len(got.Tasks) != 1 || got.Tasks[0].TaskID != "one" {
 		t.Fatalf("expected ECS service task summaries to pass through, got %+v", got.Tasks)
+	}
+	if got.TasksScope == nil || got.TasksScope.EffectiveLimit != maxECSServiceTaskSummaries || got.TasksScope.ReturnedTaskCount != 1 || got.TasksScope.TruncationStatus != "not_truncated" {
+		t.Fatalf("expected ECS service task scope metadata to pass through, got %+v", got.TasksScope)
 	}
 }
 
@@ -1348,9 +1351,12 @@ func TestECSServiceTaskSummariesDiscoversBoundedTasksWithContainerLogs(t *testin
 		},
 	}
 
-	got, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName)
+	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName)
 	if err != nil {
 		t.Fatalf("ecsServiceTaskSummaries returned error: %v", err)
+	}
+	if scope == nil || scope.EffectiveLimit != maxECSServiceTaskSummaries || scope.ReturnedTaskCount != maxECSServiceTaskSummaries || scope.TruncationStatus != "truncated" {
+		t.Fatalf("expected truncated task-scope metadata, got %+v", scope)
 	}
 	if len(got) != maxECSServiceTaskSummaries {
 		t.Fatalf("expected bounded task summaries, got %d: %+v", len(got), got)
@@ -1366,6 +1372,35 @@ func TestECSServiceTaskSummariesDiscoversBoundedTasksWithContainerLogs(t *testin
 	}
 	if got[0].Containers[1].AWSLogs == nil || got[0].Containers[1].AWSLogs.Stream != "ecs/worker/task-11" {
 		t.Fatalf("expected awslogs metadata from task definition, got %+v", got[0].Containers[1])
+	}
+}
+
+func TestECSServiceTaskSummariesReportsUnknownWhenExactlyAtLimit(t *testing.T) {
+	const (
+		clusterARN  = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker"
+		serviceName = "worker-prod-service"
+	)
+	tasks := map[string]ecstypes.Task{}
+	taskARNs := make([]string, 0, maxECSServiceTaskSummaries)
+	for i := 0; i < maxECSServiceTaskSummaries; i++ {
+		taskARN := "arn:aws:ecs:ap-northeast-2:123456789012:task/worker/exact-" + strconv.Itoa(i)
+		taskARNs = append(taskARNs, taskARN)
+		tasks[taskARN] = ecstypes.Task{TaskArn: stringPtr(taskARN), LastStatus: stringPtr("RUNNING")}
+	}
+	client := &fakeECSServiceAPI{
+		taskARNsByDesired: map[ecstypes.DesiredStatus][]string{ecstypes.DesiredStatusRunning: taskARNs},
+		tasksByARN:        tasks,
+	}
+
+	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName)
+	if err != nil {
+		t.Fatalf("ecsServiceTaskSummaries returned error: %v", err)
+	}
+	if len(got) != maxECSServiceTaskSummaries {
+		t.Fatalf("expected exactly cap-sized task summaries, got %d", len(got))
+	}
+	if scope == nil || scope.EffectiveLimit != maxECSServiceTaskSummaries || scope.ReturnedTaskCount != maxECSServiceTaskSummaries || scope.TruncationStatus != "unknown" {
+		t.Fatalf("expected conservative cap-reached task-scope metadata, got %+v", scope)
 	}
 }
 
@@ -1387,9 +1422,12 @@ func TestECSServiceTaskSummariesOmitLogMetadataWhenTaskDefinitionLookupFails(t *
 		describeTaskDefinitionErr: errors.New("access denied to task definition"),
 	}
 
-	got, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName)
+	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName)
 	if err != nil {
 		t.Fatalf("ecsServiceTaskSummaries returned error: %v", err)
+	}
+	if scope == nil || scope.EffectiveLimit != maxECSServiceTaskSummaries || scope.ReturnedTaskCount != 1 || scope.TruncationStatus != "not_truncated" {
+		t.Fatalf("expected below-cap task-scope metadata, got %+v", scope)
 	}
 	if len(got) != 1 || len(got[0].Containers) != 1 {
 		t.Fatalf("expected task/container summary despite task definition error, got %+v", got)
