@@ -1953,7 +1953,11 @@ func NewRouter(options Options) http.Handler {
 				respondReadLookupError(w, err, "overview deployment unavailable")
 				return
 			}
-			result, err := options.OverviewDeploymentResourceLogs(r.Context(), name, resourceType, resourceName, resourceLimit)
+			ctx := r.Context()
+			if containerName := strings.TrimSpace(r.URL.Query().Get("containerName")); containerName != "" {
+				ctx = resourcelogs.ContextWithContainerName(ctx, containerName)
+			}
+			result, err := options.OverviewDeploymentResourceLogs(ctx, name, resourceType, resourceName, resourceLimit)
 			if err != nil {
 				respondReadLookupError(w, err, "overview deployment resource logs unavailable")
 				return

@@ -130,6 +130,55 @@ func TestServiceInspect(t *testing.T) {
 		}
 	})
 
+	t.Run("ecs task returns explicit task inspection payload", func(t *testing.T) {
+		var gotLookup ECSTaskRequest
+		service := NewService(Options{
+			InspectECSTask: func(ctx context.Context, req ECSTaskRequest) (ECSTaskInspection, error) {
+				gotLookup = req
+				return ECSTaskInspection{
+					ECSTaskSummary: ECSTaskSummary{
+						TaskARN:       "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123",
+						TaskID:        "abc123",
+						ClusterARN:    "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
+						LastStatus:    "STOPPED",
+						DesiredStatus: "STOPPED",
+						StoppedReason: "Essential container in task exited",
+						Containers: []ECSTaskContainerInfo{{
+							Name:       "api",
+							Image:      "ghcr.io/devopsartfactory/payments-api:broken",
+							LastStatus: "STOPPED",
+							ExitCode:   int32Ptr(1),
+							Reason:     "Error",
+							AWSLogs:    &AWSLogsInfo{Group: "/ecs/payments", Stream: "ecs/api/abc123"},
+						}},
+					},
+					TaskDefinition: "payments-api:42",
+				}, nil
+			},
+		})
+
+		result, err := service.Inspect(context.Background(), Request{
+			DeploymentName:   "payments-api-prod",
+			ResourceType:     "ecsTask",
+			ResourceName:     "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123",
+			ControlAccountID: "123456789012",
+			TargetAccountID:  "123456789012",
+			Region:           "ap-northeast-2",
+		})
+		if err != nil {
+			t.Fatalf("Inspect returned error: %v", err)
+		}
+		if gotLookup.ResourceName != "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123" || gotLookup.Region != "ap-northeast-2" {
+			t.Fatalf("unexpected ECS task lookup request: %+v", gotLookup)
+		}
+		if !result.Available || result.Source != SourceECSService || result.ECSTask == nil {
+			t.Fatalf("expected available ECS task inspection payload, got %+v", result)
+		}
+		if result.ECSTask.TaskID != "abc123" || len(result.ECSTask.Containers) != 1 || result.ECSTask.Containers[0].AWSLogs == nil {
+			t.Fatalf("expected task/container/awslogs evidence, got %+v", result.ECSTask)
+		}
+	})
+
 	t.Run("auto scaling group returns explicit inspection payload", func(t *testing.T) {
 		var gotLookup AutoScalingGroupRequest
 		service := NewService(Options{

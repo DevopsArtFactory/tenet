@@ -61,6 +61,7 @@ type Result struct {
 	Available               bool                               `json:"available"`
 	Source                  string                             `json:"source"`
 	ECSService              *ECSServiceInspection              `json:"ecsService,omitempty"`
+	ECSTask                 *ECSTaskInspection                 `json:"ecsTask,omitempty"`
 	AutoScalingGroup        *AutoScalingInspection             `json:"autoScalingGroup,omitempty"`
 	UserDataBootstrapSource *UserDataBootstrapSourceInspection `json:"userDataBootstrapSource,omitempty"`
 	TrafficRoutingResource  *TrafficRoutingInspection          `json:"trafficRoutingResource,omitempty"`
@@ -190,6 +191,41 @@ type ECSServiceInspection struct {
 	TaskDefinitionImage           string                 `json:"taskDefinitionImage,omitempty"`
 	Deployments                   []ECSDeploymentSummary `json:"deployments"`
 	Events                        []ECSServiceEvent      `json:"events"`
+	Tasks                         []ECSTaskSummary       `json:"tasks,omitempty"`
+}
+
+type ECSTaskSummary struct {
+	TaskARN       string                 `json:"taskArn"`
+	TaskID        string                 `json:"taskId"`
+	ClusterARN    string                 `json:"clusterArn,omitempty"`
+	LastStatus    string                 `json:"lastStatus,omitempty"`
+	DesiredStatus string                 `json:"desiredStatus,omitempty"`
+	HealthStatus  string                 `json:"healthStatus,omitempty"`
+	LaunchType    string                 `json:"launchType,omitempty"`
+	StartedAt     string                 `json:"startedAt,omitempty"`
+	StoppedAt     string                 `json:"stoppedAt,omitempty"`
+	StoppedReason string                 `json:"stoppedReason,omitempty"`
+	Containers    []ECSTaskContainerInfo `json:"containers,omitempty"`
+}
+
+type ECSTaskContainerInfo struct {
+	Name         string       `json:"name"`
+	Image        string       `json:"image,omitempty"`
+	LastStatus   string       `json:"lastStatus,omitempty"`
+	HealthStatus string       `json:"healthStatus,omitempty"`
+	ExitCode     *int32       `json:"exitCode,omitempty"`
+	Reason       string       `json:"reason,omitempty"`
+	AWSLogs      *AWSLogsInfo `json:"awslogs,omitempty"`
+}
+
+type AWSLogsInfo struct {
+	Group  string `json:"group"`
+	Stream string `json:"stream"`
+}
+
+type ECSTaskInspection struct {
+	ECSTaskSummary
+	TaskDefinition string `json:"taskDefinition,omitempty"`
 }
 
 type ECSDeploymentSummary struct {
@@ -257,6 +293,7 @@ type AutoScalingGroupInstanceSummary struct {
 type Options struct {
 	EnableAWS                     bool
 	InspectECSService             func(context.Context, ECSRequest) (ECSServiceInspection, error)
+	InspectECSTask                func(context.Context, ECSTaskRequest) (ECSTaskInspection, error)
 	InspectAutoScalingGroup       func(context.Context, AutoScalingGroupRequest) (AutoScalingInspection, error)
 	InspectTrafficRoutingResource func(context.Context, TrafficRoutingRequest) (TrafficRoutingInspection, error)
 }
@@ -474,6 +511,14 @@ type ECSRequest struct {
 	ObserverRoleARN string
 }
 
+type ECSTaskRequest struct {
+	DeploymentName  string
+	ResourceName    string
+	Region          string
+	TargetAccountID string
+	ObserverRoleARN string
+}
+
 type AutoScalingGroupRequest struct {
 	DeploymentName  string
 	ResourceName    string
@@ -562,6 +607,31 @@ func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
 			return Result{}, err
 		}
 		return availableECSResult(req, detail), nil
+	case "ecsTask":
+		if crossAccountWithoutObserverRole(req) {
+			return unavailableResult(req, resourceaws.UnavailableReasonCrossAccountNotConfigured), nil
+		}
+		inspect := s.options.InspectECSTask
+		if inspect == nil {
+			if !s.options.EnableAWS {
+				return Result{}, ErrNotImplemented
+			}
+			inspect = s.inspectECSTaskFromAWS
+		}
+		detail, err := inspect(ctx, ECSTaskRequest{
+			DeploymentName:  req.DeploymentName,
+			ResourceName:    req.ResourceName,
+			Region:          req.Region,
+			TargetAccountID: req.TargetAccountID,
+			ObserverRoleARN: req.ObserverRoleARN,
+		})
+		if err != nil {
+			if reason, ok := resourceaws.UnavailableReasonForError(err); ok {
+				return unavailableResult(req, reason), nil
+			}
+			return Result{}, err
+		}
+		return availableECSTaskResult(req, detail), nil
 	case "candidateAutoScalingGroup", "serviceAutoScalingGroup":
 		if crossAccountWithoutObserverRole(req) {
 			return unavailableResult(req, resourceaws.UnavailableReasonCrossAccountNotConfigured), nil
@@ -652,6 +722,19 @@ func availableECSResult(req Request, detail ECSServiceInspection) Result {
 		Available:         true,
 		Source:            SourceECSService,
 		ECSService:        &detail,
+		UnavailableReason: "",
+	}
+}
+
+func availableECSTaskResult(req Request, detail ECSTaskInspection) Result {
+	return Result{
+		DeploymentName:    req.DeploymentName,
+		ResourceType:      req.ResourceType,
+		ResourceName:      req.ResourceName,
+		LookupContext:     lookupContext(req),
+		Available:         true,
+		Source:            SourceECSService,
+		ECSTask:           &detail,
 		UnavailableReason: "",
 	}
 }
@@ -900,6 +983,108 @@ func (s Service) inspectECSServiceFromAWS(ctx context.Context, req ECSRequest) (
 		}
 	}
 	return ecsInspectionFromService(*service, aws.ToString(clusterARN), taskDefinitionImage), nil
+}
+
+func (s Service) inspectECSTaskFromAWS(ctx context.Context, req ECSTaskRequest) (ECSTaskInspection, error) {
+	clients, err := s.awsClients(ctx, req.Region, req.TargetAccountID, req.ObserverRoleARN)
+	if err != nil {
+		return ECSTaskInspection{}, err
+	}
+	task, clusterARN, err := findECSTask(ctx, clients.ECS, req.ResourceName)
+	if err != nil {
+		return ECSTaskInspection{}, err
+	}
+	if task == nil {
+		return ECSTaskInspection{}, resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
+	}
+	definitions := map[string]ecstypes.TaskDefinition{}
+	if arn := strings.TrimSpace(aws.ToString(task.TaskDefinitionArn)); arn != "" {
+		out, err := clients.ECS.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{TaskDefinition: aws.String(arn)})
+		if err == nil && out.TaskDefinition != nil {
+			definitions[arn] = *out.TaskDefinition
+		}
+	}
+	return ecsTaskInspectionFromTask(*task, clusterARN, definitions), nil
+}
+
+func findECSTask(ctx context.Context, client ecsTaskAPI, taskARN string) (*ecstypes.Task, string, error) {
+	taskARN = strings.TrimSpace(taskARN)
+	if taskARN == "" {
+		return nil, "", nil
+	}
+	clusters := candidateClustersFromTaskARN(taskARN)
+	if len(clusters) == 0 {
+		pages := ecs.NewListClustersPaginator(client, &ecs.ListClustersInput{})
+		for pages.HasMorePages() {
+			page, err := pages.NextPage(ctx)
+			if err != nil {
+				return nil, "", err
+			}
+			clusters = append(clusters, page.ClusterArns...)
+		}
+	}
+	for _, cluster := range clusters {
+		out, err := client.DescribeTasks(ctx, &ecs.DescribeTasksInput{Cluster: aws.String(cluster), Tasks: []string{taskARN}})
+		if err != nil {
+			return nil, "", err
+		}
+		for _, task := range out.Tasks {
+			if aws.ToString(task.TaskArn) == taskARN || taskIDFromARN(aws.ToString(task.TaskArn)) == taskIDFromARN(taskARN) {
+				copy := task
+				return &copy, cluster, nil
+			}
+		}
+	}
+	return nil, "", nil
+}
+
+func candidateClustersFromTaskARN(taskARN string) []string {
+	idx := strings.LastIndex(taskARN, ":task/")
+	if idx < 0 {
+		return nil
+	}
+	rest := taskARN[idx+len(":task/"):]
+	parts := strings.Split(rest, "/")
+	if len(parts) < 2 || strings.TrimSpace(parts[0]) == "" {
+		return nil
+	}
+	return []string{parts[0]}
+}
+
+type ecsTaskAPI interface {
+	ListClusters(context.Context, *ecs.ListClustersInput, ...func(*ecs.Options)) (*ecs.ListClustersOutput, error)
+	DescribeTasks(context.Context, *ecs.DescribeTasksInput, ...func(*ecs.Options)) (*ecs.DescribeTasksOutput, error)
+	DescribeTaskDefinition(context.Context, *ecs.DescribeTaskDefinitionInput, ...func(*ecs.Options)) (*ecs.DescribeTaskDefinitionOutput, error)
+}
+
+func ecsTaskInspectionFromTask(task ecstypes.Task, clusterARN string, definitions map[string]ecstypes.TaskDefinition) ECSTaskInspection {
+	return ECSTaskInspection{ECSTaskSummary: ecsTaskSummaryFromTask(task, clusterARN, definitions), TaskDefinition: strings.TrimSpace(aws.ToString(task.TaskDefinitionArn))}
+}
+
+func ecsTaskSummaryFromTask(task ecstypes.Task, clusterARN string, definitions map[string]ecstypes.TaskDefinition) ECSTaskSummary {
+	containerDefs := map[string]ecstypes.ContainerDefinition{}
+	if def, ok := definitions[strings.TrimSpace(aws.ToString(task.TaskDefinitionArn))]; ok {
+		for _, container := range def.ContainerDefinitions {
+			containerDefs[aws.ToString(container.Name)] = container
+		}
+	}
+	containers := make([]ECSTaskContainerInfo, 0, len(task.Containers))
+	taskID := taskIDFromARN(aws.ToString(task.TaskArn))
+	for _, container := range task.Containers {
+		info := ECSTaskContainerInfo{Name: strings.TrimSpace(aws.ToString(container.Name)), Image: strings.TrimSpace(aws.ToString(container.Image)), LastStatus: strings.TrimSpace(aws.ToString(container.LastStatus)), HealthStatus: string(container.HealthStatus), Reason: strings.TrimSpace(aws.ToString(container.Reason))}
+		if container.ExitCode != nil {
+			info.ExitCode = cloneInt32(container.ExitCode)
+		}
+		if def, ok := containerDefs[aws.ToString(container.Name)]; ok {
+			group, stream := awsLogsLocation(def, taskID)
+			if group != "" && stream != "" {
+				info.AWSLogs = &AWSLogsInfo{Group: group, Stream: stream}
+			}
+		}
+		containers = append(containers, info)
+	}
+	sort.SliceStable(containers, func(i, j int) bool { return containers[i].Name < containers[j].Name })
+	return ECSTaskSummary{TaskARN: strings.TrimSpace(aws.ToString(task.TaskArn)), TaskID: taskID, ClusterARN: strings.TrimSpace(clusterARN), LastStatus: strings.TrimSpace(aws.ToString(task.LastStatus)), DesiredStatus: strings.TrimSpace(aws.ToString(task.DesiredStatus)), HealthStatus: string(task.HealthStatus), LaunchType: string(task.LaunchType), StartedAt: formatTime(aws.ToTime(task.StartedAt)), StoppedAt: formatTime(aws.ToTime(task.StoppedAt)), StoppedReason: strings.TrimSpace(aws.ToString(task.StoppedReason)), Containers: containers}
 }
 
 func (s Service) inspectAutoScalingGroupFromAWS(ctx context.Context, req AutoScalingGroupRequest) (AutoScalingInspection, error) {
@@ -1254,4 +1439,26 @@ func formatTime(ts time.Time) string {
 		return ""
 	}
 	return ts.UTC().Format(time.RFC3339)
+}
+
+func awsLogsLocation(container ecstypes.ContainerDefinition, taskID string) (string, string) {
+	if container.LogConfiguration == nil || container.LogConfiguration.LogDriver != ecstypes.LogDriverAwslogs {
+		return "", ""
+	}
+	options := container.LogConfiguration.Options
+	groupName := options["awslogs-group"]
+	streamPrefix := options["awslogs-stream-prefix"]
+	containerName := aws.ToString(container.Name)
+	if groupName == "" || streamPrefix == "" || containerName == "" || taskID == "" {
+		return "", ""
+	}
+	return groupName, streamPrefix + "/" + containerName + "/" + taskID
+}
+
+func taskIDFromARN(arn string) string {
+	if arn == "" {
+		return ""
+	}
+	parts := strings.Split(arn, "/")
+	return parts[len(parts)-1]
 }

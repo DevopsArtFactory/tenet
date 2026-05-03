@@ -474,7 +474,8 @@ Canonical resource-log routes stay stable across rollout modes so operators can 
 Behind those routes, the built-in AWS-backed recent-log provider now reuses SDK config/client setup per `(region, target account, observer role)` key inside a running Tenet API process instead of rebuilding ECS / CloudWatch Logs / Auto Scaling / EC2 clients on every fetch, and it reuses that same AWS config for signed CodeDeploy deployment-history lookups. For `ecsService`, the provider inspects both newest running tasks and recently stopped service tasks, then returns the same bounded newest-first `entries[]` envelope so failed rollouts and crash loops can still expose container logs even when no task is currently running.
 
 Current provider-backed recent-log support includes:
-- `ecsService`
+- `ecsService` across newest running and recently stopped service tasks
+- `ecsTask` for an exact task ARN, with optional `containerName={container}` to narrow the bounded CloudWatch Logs read to one awslogs-backed container
 - `candidateAutoScalingGroup`
 - `serviceAutoScalingGroup`
 - `userDataBootstrapSource` via the resolved backing Auto Scaling Group
@@ -486,6 +487,7 @@ The same drill-down now has a parallel inspection route family:
 
 Supported always-live inspection currently starts with:
 - `ecsService`
+- `ecsTask` for an exact ECS task ARN or task identifier, returning task status plus container and awslogs stream metadata when ECS task-definition data is available
 - `candidateAutoScalingGroup`
 - `serviceAutoScalingGroup`
 
@@ -513,7 +515,8 @@ The embedded `Live inspection` panel renders operator-friendly summaries from th
 
 Resource-inspection responses keep the contract explicit for UI consumers:
 - common fields: `deploymentName`, `resourceType`, `resourceName`, `lookupContext`, `available`, `source`, `unavailableReason`
-- ECS payloads add `ecsService`, including additive deployment-configuration fields `minimumHealthyPercent`, `maximumPercent`, and `healthCheckGracePeriodSeconds` when `DescribeServices` returns them
+- ECS service payloads add `ecsService`, including additive deployment-configuration fields `minimumHealthyPercent`, `maximumPercent`, and `healthCheckGracePeriodSeconds` when `DescribeServices` returns them, plus additive `tasks[]` summaries for the newest inspected running/stopped tasks when available
+- ECS task payloads add `ecsTask`, including task ARN/id/status, launch/health/stopped context, task definition ARN, and container rows with optional `awslogs.group` / `awslogs.stream` metadata
 - Auto Scaling payloads add `autoScalingGroup`, including optional `launchTemplate` and `mixedInstancesPolicy` metadata when `DescribeAutoScalingGroups` returns launch-template details plus additive observed launch-template runtime fields such as `launchTemplate.imageId` and `launchTemplate.instanceType` when the live EC2 launch-template lookup resolves them
 - EC2 bootstrap-source payloads add `userDataBootstrapSource`, including `desiredBootstrapSource`, optional `observedBootstrapSource`, the backing Auto Scaling resource identity, and the observed launch template summary Tenet used for that comparison, including additive `launchTemplate.imageId` and `launchTemplate.instanceType` when live EC2 launch-template data is available
 - traffic-routing payloads add `trafficRoutingResource`; when live weighted or CodeDeploy task-set target-group metadata is present, the embedded UI reads it from `trafficRoutingResource.targetGroup` (or compatible `targetGroupInspection` / `loadBalancerTargetGroup` shapes) and renders the target group name/ARN, protocol/port, target type, health-check settings, load-balancer ARNs, target-health counts, and registered target rows without requiring operators to open raw JSON. Live production listener-rule payloads add `trafficRoutingResource.listenerRule` with `ruleArn`, `priority`, `isDefault`, `conditions`, `actions`; the embedded UI renders those fields as rule identity, condition values, action order/type, and weighted target-group ARNs so operators can verify the active traffic split without opening raw JSON.
@@ -630,6 +633,29 @@ When fixture-backed or early controller payloads have not yet persisted `rollout
 
 For the ECS rolling fallback service, the recent-log drill-down stays on the same operator workflow. Example route:
 - `GET /v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service`
+
+When a service inspection identifies a concrete ECS task, operators and UI consumers can reuse the same route families with `resourceType=ecsTask`. The task resource name may be an ECS task ARN, and recent-log reads accept optional `containerName` to narrow the CloudWatch Logs lookup to a single container stream:
+- `GET /v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsTask&resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Atask%2Fworker%2Fabc123`
+- `GET /v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsTask&resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Atask%2Fworker%2Fabc123&containerName=api&limit=5`
+
+The ECS task inspection payload keeps the same explicit envelope as other resource-inspection reads and adds an `ecsTask` object, for example:
+
+```json
+{
+  "deploymentName": "worker-prod",
+  "resourceType": "ecsTask",
+  "resourceName": "arn:aws:ecs:ap-northeast-2:123456789012:task/worker/abc123",
+  "available": true,
+  "source": "ecs_service",
+  "ecsTask": {
+    "taskArn": "arn:aws:ecs:ap-northeast-2:123456789012:task/worker/abc123",
+    "taskId": "abc123",
+    "lastStatus": "STOPPED",
+    "stoppedReason": "Essential container in task exited",
+    "containers": [{"name": "api", "lastStatus": "STOPPED", "awslogs": {"group": "/ecs/worker", "stream": "ecs/api/abc123"}}]
+  }
+}
+```
 
 Operators can add an optional positive `limit` query parameter when they need a smaller, shareable recent-log envelope; Tenet applies it after the backend lookup while preserving the provider's newest-first order and returns `400 Bad Request` for non-positive or non-numeric values. Successful responses include additive `resultScope` metadata with the optional `requestedLimit`, the `effectiveLimit`, `returnedEntryCount`, and conservative `truncationStatus` (`truncated`, `not_truncated`, `unknown`, or `not_applicable`) so operators can tell which bounded read Tenet actually returned. Tenet does not issue extra provider calls solely to prove exact totals beyond the bounded read. Example limited route:
 - `GET /v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&limit=5`
