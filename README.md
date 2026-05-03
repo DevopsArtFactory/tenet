@@ -167,6 +167,7 @@ Keep that split intact when integrating an external front door: the provider sho
 - `TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION` trusts `X-Tenet-Authenticated-Roles`, normalizes comma-separated roles, and requires one operator-capable `operator` / `admin` role on operator write routes. Role forwarding intentionally has no `X-User-*` compatibility alias; `roles.provenance.source=absent` means the front door must forward `X-Tenet-Authenticated-Roles` before role-gated reads or writes can pass. Authenticated callers without one of those roles get `403 Forbidden` plus `forbidden: authenticated operator role is required for this operator write route` before any plan/apply lookup.
 - `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION` trusts `X-Tenet-Authorized-Deployments` as a comma-separated exact deployment allowlist for existing exact grants. It also accepts additive `X-Tenet-Authorized-Projects` plus `X-Tenet-Authorized-Environments` scopes for guarded deployment reads and immutable writes; Tenet only widens access when it can prove the deployment's catalog placement matches both a forwarded project and environment. Exact deployment grants continue to win for deployment-specific access. Guarded collection reads (`GET /v1/overview/applications`, raw catalog collections such as `GET /v1/catalog/deployments`, `GET /v1/status/deployments`, `GET /v1/overview/accounts`, and unscoped `GET /v1/audit-logs`) filter to the union of exact deployment grants and project/environment catalog matches. Missing, stale, or non-matching grants return `200 OK` with `[]` or `{"entries":[]}` on collection routes, while scoped reads return the existing operator-read `403` unless exact deployment membership or project/environment placement proves access.
 - When both `TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION` and `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION` are enabled, guarded read routes additionally require one trusted forwarded read-capable `X-Tenet-Authenticated-Roles` value from `viewer`, `operator`, or `admin`. Authenticated callers without one now fail with `403 Forbidden` plus `forbidden: authenticated viewer-capable role is required for this operator read route` before Tenet evaluates deployment visibility.
+- For local filesystem desired-state repositories, Tenet now also looks for optional repository RBAC policy diagnostics at `rbac/policy.json`, `rbac/policy.yaml`, or `rbac/policy.yml`. Missing policy files do not block startup or change route enforcement. When present, `GET /v1/operator/context` evaluates the current trusted identity and `X-Tenet-Authenticated-Groups` group claims against that policy and returns a diagnostic-only `repositoryPolicy` object showing matched user/group grants, derived roles, deployment grants, project/environment scopes, and whether those derived grants would read or write. This is groundwork for repository-backed RBAC; route authorization still uses the trusted front-door role/deployment headers above until a later slice explicitly opts into policy-backed enforcement.
 - `GET /v1/operator/context` is a read-only diagnostic endpoint for trusted front-door troubleshooting. It reports the normalized trusted identity, additive `identityHeaderSupport.canonical` / `identityHeaderSupport.aliases` lists for the accepted trusted identity header families, additive `identityProvenance` header-source metadata for the `id`, `name`, and `email` identity fields (`canonical`, `alias`, or `absent`), additive persisted actor-attribution diagnostics (`actor`, `actorHeaderSupport`, `actorProvenance`, and `actorAttribution`) showing the effective plan/apply/audit actor, supported `X-Tenet-Actor-*` headers, compatible `X-User-*` actor aliases, and whether attribution came from explicit actor headers, trusted authenticated identity projection, or remained unavailable, plus the stable `actorAttribution.precedence` order (`explicit_actor_headers`, `actor_alias_headers`, `trusted_authenticated_identity`, `unavailable`) that explains how Tenet chooses persisted actor evidence, forwarded roles with read/write capability booleans, additive `roles.supportedNames` (currently `viewer`, `operator`, `admin`), additive `roles.supportedHeaderNames` (currently only `X-Tenet-Authenticated-Roles`, because role forwarding intentionally has no `X-User-*` compatibility alias), additive `roles.recognizedNames` / `roles.unrecognizedNames` diagnostics for forwarded values, and additive `roles.provenance.source` metadata (`canonical` for a normalized `X-Tenet-Authenticated-Roles` value, or `absent` when no trusted role value was forwarded), forwarded deployment allowlist, project/environment scopes, and which auth/RBAC enforcement toggles are active for the request. Its additive `enforcement` object summarizes the API process mode (for example `trusted_front_door_read_write`) plus whether guarded read/write routes, deployment-scoped exact allowlists, and collection filtering are active. Its additive `accessVerdicts.deploymentScopedRead.acceptsProjectEnvironmentScopes` and `accessVerdicts.deploymentScopedWrite.acceptsProjectEnvironmentScopes` fields explicitly tell UI clients when matching project/environment scopes can satisfy those route classes in addition to exact deployment grants. Its additive `accessVerdicts` block summarizes whether common operator read, operator write, deployment-scoped read/write, filtered collection-read, and raw catalog-read paths have the request ingredients they need, including concrete `exampleRoutes` such as `GET /v1/overview/applications`, `GET /v1/overview/deployments/{deploymentName}`, and `POST /v1/plans/deployments/{deploymentName}` plus `requiredTrustedHeaders` such as `X-Tenet-Authenticated-Id`, `X-User-ID`, `X-Tenet-Authenticated-Roles`, `X-Tenet-Authorized-Deployments`, `X-Tenet-Authorized-Projects`, and `X-Tenet-Authorized-Environments` so operators can map each verdict class to shipped routes and forwarded header prerequisites without guessing. The verdicts also include clear reason strings for missing identity, missing read/write roles, missing exact deployment allowlist membership, and collection reads that are likely empty because no visible deployments were forwarded or catalog placement data is unavailable to match project/environment scopes. When deployment-read authorization is enforced and a catalog placement provider is available, `deploymentAccess.summary` also reports forwarded, matched/visible, and total unmatched deployment-name counts plus bounded unmatched-name evidence (`unmatchedNames`, with `unmatchedNamesTruncated` when the sample is incomplete), forwarded project/environment scope counts, bounded stale scope evidence (`unmatchedProjects` / `unmatchedEnvironments`, with matching truncation flags), and deterministic `projectEnvironmentExamples` (project, environment, region, AWS account, deployment count, and bounded example deployment names) so operators can spot stale front-door allowlists and project/environment coverage gaps. If the forwarded allowlist is valid but no catalog deployments are visible, the summary stays available and includes `emptyReason`; if catalog placement data cannot be loaded, the summary stays present with `available=false` and `unavailableReason`. That summary is diagnostic-only: it does not mint sessions, replace OAuth/RBAC, or authorize routes by itself. The enforcement summary and access verdicts are troubleshooting-only too; guarded routes still evaluate the request-scoped identity, roles, and exact deployment allowlist independently.
 - The same trusted front-door read contract covers `GET /v1/overview/accounts/{awsAccountId}`, raw desired-state catalog reads under `/v1/catalog/*`, `GET /v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}`, `GET /v1/overview/applications/{deploymentName}`, `GET /v1/overview/deployments/{deploymentName}`, `GET /v1/overview/deployments/{deploymentName}/events`, `GET /v1/overview/deployments/{deploymentName}/resource-logs`, `GET /v1/overview/deployments/{deploymentName}/resource-inspection`, `GET /v1/status/deployments/{deploymentName}`, deployment-scoped `GET /v1/audit-logs`, and immutable stored reads `GET /v1/plans/{planId}` / `GET /v1/applies/{applyId}` using the persisted record deployment.
 
@@ -183,6 +184,41 @@ A minimal diagnostic request mirrors the headers your front door should forward:
 curl -fsS http://localhost:8080/v1/operator/context \
   -H 'X-Tenet-Authenticated-Id: operator-123' \
   -H 'X-Tenet-Authenticated-Roles: viewer,operator' \
+  -H 'X-Tenet-Authorized-Deployments: payments-api-prod,worker-prod' \
+  -H 'X-Tenet-Authorized-Projects: payments-api' \
+  -H 'X-Tenet-Authorized-Environments: prod-apne2'
+```
+
+To evaluate repository policy diagnostics during local filesystem runs, add an optional `rbac/policy.json` file to the desired-state repository root:
+
+```json
+{
+  "version": "v1",
+  "users": [
+    {
+      "id": "operator-123",
+      "roles": ["viewer"],
+      "deployments": ["payments-api-prod"]
+    }
+  ],
+  "groups": [
+    {
+      "name": "platform-admins",
+      "roles": ["operator"],
+      "projects": ["payments-api"],
+      "environments": ["prod-apne2"]
+    }
+  ]
+}
+```
+
+Then include the group claim alongside the normal front-door diagnostic headers:
+
+```bash
+curl -fsS http://localhost:8080/v1/operator/context \
+  -H 'X-Tenet-Authenticated-Id: operator-123' \
+  -H 'X-Tenet-Authenticated-Roles: viewer,operator' \
+  -H 'X-Tenet-Authenticated-Groups: platform-admins' \
   -H 'X-Tenet-Authorized-Deployments: payments-api-prod,worker-prod' \
   -H 'X-Tenet-Authorized-Projects: payments-api' \
   -H 'X-Tenet-Authorized-Environments: prod-apne2'
@@ -288,6 +324,22 @@ Example diagnostic summary shape (including identity and role source provenance,
         }
       ]
     }
+  },
+  "repositoryPolicy": {
+    "configured": true,
+    "available": true,
+    "source": "repository",
+    "version": "v1",
+    "diagnosticOnly": true,
+    "supportedGroupHeaderNames": ["X-Tenet-Authenticated-Groups"],
+    "matchedUsers": [{"kind": "user", "name": "operator-123", "match": "id"}],
+    "matchedGroups": [{"kind": "group", "name": "platform-admins", "match": "name"}],
+    "roles": {"names": ["viewer", "operator"]},
+    "deploymentAccess": {"names": ["payments-api-prod"]},
+    "projectEnvironmentScopes": {"projects": ["payments-api"], "environments": ["prod-apne2"]},
+    "canRead": true,
+    "canWrite": true,
+    "summary": "repository RBAC policy matched 2 subject grant(s): roles=2 deployments=1 projects=1 environments=1"
   },
   "accessVerdicts": {
     "operatorRead": {

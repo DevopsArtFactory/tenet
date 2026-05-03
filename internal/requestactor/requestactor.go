@@ -28,6 +28,7 @@ const (
 	AuthenticatedHeaderName      = "X-Tenet-Authenticated-Name"
 	AuthenticatedHeaderEmail     = "X-Tenet-Authenticated-Email"
 	AuthenticatedRolesHeader     = "X-Tenet-Authenticated-Roles"
+	AuthenticatedGroupsHeader    = "X-Tenet-Authenticated-Groups"
 	AuthorizedDeploymentsHeader  = "X-Tenet-Authorized-Deployments"
 	AuthorizedProjectsHeader     = "X-Tenet-Authorized-Projects"
 	AuthorizedEnvironmentsHeader = "X-Tenet-Authorized-Environments"
@@ -43,6 +44,7 @@ const (
 type actorContextKey struct{}
 type authenticatedIdentityContextKey struct{}
 type authenticatedRolesContextKey struct{}
+type authenticatedGroupsContextKey struct{}
 type authorizedDeploymentsContextKey struct{}
 type authorizedProjectEnvironmentScopesContextKey struct{}
 
@@ -100,6 +102,11 @@ type AuthenticatedRoles struct {
 	Names []string `json:"names,omitempty"`
 }
 
+// AuthenticatedGroups captures trusted group claims forwarded by an authenticating front door.
+type AuthenticatedGroups struct {
+	Names []string `json:"names,omitempty"`
+}
+
 // AuthenticatedRolesProvenance reports whether trusted role data came from the
 // X-Tenet-Authenticated-Roles header or was absent from the request.
 type AuthenticatedRolesProvenance struct {
@@ -141,6 +148,14 @@ func WithAuthenticatedRolesContext(ctx context.Context, roles AuthenticatedRoles
 		ctx = context.Background()
 	}
 	return context.WithValue(ctx, authenticatedRolesContextKey{}, NormalizeAuthenticatedRoles(roles))
+}
+
+// WithAuthenticatedGroupsContext stores one normalized authenticated group set on the context.
+func WithAuthenticatedGroupsContext(ctx context.Context, groups AuthenticatedGroups) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, authenticatedGroupsContextKey{}, NormalizeAuthenticatedGroups(groups))
 }
 
 // WithAuthorizedDeploymentsContext stores one normalized deployment allowlist on the context.
@@ -192,6 +207,15 @@ func AuthenticatedRolesFromContext(ctx context.Context) AuthenticatedRoles {
 	}
 	roles, _ := ctx.Value(authenticatedRolesContextKey{}).(AuthenticatedRoles)
 	return NormalizeAuthenticatedRoles(roles)
+}
+
+// AuthenticatedGroupsFromContext returns the normalized authenticated groups stored on the context.
+func AuthenticatedGroupsFromContext(ctx context.Context) AuthenticatedGroups {
+	if ctx == nil {
+		return NormalizeAuthenticatedGroups(AuthenticatedGroups{})
+	}
+	groups, _ := ctx.Value(authenticatedGroupsContextKey{}).(AuthenticatedGroups)
+	return NormalizeAuthenticatedGroups(groups)
 }
 
 // AuthorizedDeploymentsFromContext returns the normalized deployment allowlist stored on the context.
@@ -321,6 +345,14 @@ func AuthenticatedRolesFromHeaders(header http.Header) AuthenticatedRoles {
 	return NormalizeAuthenticatedRoles(AuthenticatedRoles{Names: names})
 }
 
+// AuthenticatedGroupsFromHeaders derives normalized trusted group claims from forwarded front-door headers.
+func AuthenticatedGroupsFromHeaders(header http.Header) AuthenticatedGroups {
+	if header == nil {
+		return NormalizeAuthenticatedGroups(AuthenticatedGroups{})
+	}
+	return NormalizeAuthenticatedGroups(AuthenticatedGroups{Names: valuesFromCommaHeaders(header, AuthenticatedGroupsHeader)})
+}
+
 // AuthenticatedRolesProvenanceFromHeaders reports whether X-Tenet-Authenticated-Roles
 // supplied at least one normalized trusted role value.
 func AuthenticatedRolesProvenanceFromHeaders(header http.Header) AuthenticatedRolesProvenance {
@@ -416,6 +448,12 @@ func SupportedActorAttributionPrecedence() []string {
 // Role forwarding intentionally has no X-User-* compatibility alias.
 func SupportedAuthenticatedRoleHeaderNames() []string {
 	return []string{AuthenticatedRolesHeader}
+}
+
+// SupportedAuthenticatedGroupHeaderNames returns the canonical trusted
+// front-door group claim headers Tenet accepts for repository policy diagnostics.
+func SupportedAuthenticatedGroupHeaderNames() []string {
+	return []string{AuthenticatedGroupsHeader}
 }
 
 // SupportedAuthenticatedIdentityHeaderNames returns the canonical trusted
@@ -625,6 +663,12 @@ func NormalizeAuthenticatedRoles(roles AuthenticatedRoles) AuthenticatedRoles {
 	}
 	roles.Names = names
 	return roles
+}
+
+// NormalizeAuthenticatedGroups trims whitespace, drops empties, and keeps the group set stable.
+func NormalizeAuthenticatedGroups(groups AuthenticatedGroups) AuthenticatedGroups {
+	groups.Names = normalizeStringSet(groups.Names)
+	return groups
 }
 
 // NormalizeAuthorizedDeployments trims whitespace, drops empties, and keeps the allowlist stable.
