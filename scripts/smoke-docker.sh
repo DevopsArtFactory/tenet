@@ -898,6 +898,10 @@ for payload, resource_type, resource_name in (
     assert payload["resourceName"] == resource_name, payload
     assert payload["available"] is False, payload
     assert payload.get("unavailableReason") == "no_log_source", payload
+    no_log_source = payload.get("resultScope")
+    assert isinstance(no_log_source, dict), payload
+    assert no_log_source.get("returnedEntryCount") == 0, payload
+    assert no_log_source.get("truncationStatus") == "not_applicable", payload
     assert isinstance(payload.get("lookupContext"), dict), payload
     assert isinstance(payload["lookupContext"].get("region"), str) and payload["lookupContext"]["region"], payload
     assert isinstance(payload["lookupContext"].get("controlAccountId"), str) and payload["lookupContext"]["controlAccountId"], payload

@@ -783,6 +783,10 @@ assert production_listener_rule_resource_logs['resourceType'] == 'productionList
 assert production_listener_rule_resource_logs['resourceName'] == 'payments-api-prod-prod-listener', production_listener_rule_resource_logs
 assert production_listener_rule_resource_logs['available'] is False, production_listener_rule_resource_logs
 assert production_listener_rule_resource_logs.get('unavailableReason') == 'no_log_source', production_listener_rule_resource_logs
+no_log_source = production_listener_rule_resource_logs.get('resultScope')
+assert isinstance(no_log_source, dict), production_listener_rule_resource_logs
+assert no_log_source.get('returnedEntryCount') == 0, production_listener_rule_resource_logs
+assert no_log_source.get('truncationStatus') == 'not_applicable', production_listener_rule_resource_logs
 assert isinstance(production_listener_rule_resource_logs.get('lookupContext'), dict), production_listener_rule_resource_logs
 assert production_listener_rule_resource_logs['lookupContext'].get('region') == 'ap-northeast-2', production_listener_rule_resource_logs
 assert isinstance(production_listener_rule_resource_logs['lookupContext'].get('controlAccountId'), str) and production_listener_rule_resource_logs['lookupContext']['controlAccountId'], production_listener_rule_resource_logs
