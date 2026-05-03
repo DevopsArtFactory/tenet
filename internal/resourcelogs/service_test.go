@@ -81,6 +81,37 @@ func TestServiceRecent(t *testing.T) {
 		}
 	})
 
+	t.Run("ecs task threads container filter into cloudwatch provider", func(t *testing.T) {
+		var gotLookup ECSRequest
+		service := NewService(Options{
+			MaxEntries: 5,
+			ListECSLogEvents: func(ctx context.Context, req ECSRequest) ([]CloudWatchEvent, error) {
+				gotLookup = req
+				return []CloudWatchEvent{{Timestamp: time.Date(2026, 4, 16, 7, 11, 0, 0, time.UTC), Message: "container crashed", Stream: "ecs/api/abc123"}}, nil
+			},
+		})
+
+		result, err := service.Recent(context.Background(), Request{
+			DeploymentName:   "payments-api-prod",
+			ResourceType:     "ecsTask",
+			ResourceName:     "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123",
+			ControlAccountID: "123456789012",
+			TargetAccountID:  "123456789012",
+			Region:           "ap-northeast-2",
+			ContainerName:    "api",
+			Limit:            2,
+		})
+		if err != nil {
+			t.Fatalf("Recent returned error: %v", err)
+		}
+		if gotLookup.ResourceName != "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123" || gotLookup.ContainerName != "api" || gotLookup.Limit != 2 {
+			t.Fatalf("unexpected ECS task log lookup request: %+v", gotLookup)
+		}
+		if !result.Available || result.Source != SourceCloudWatch || len(result.Entries) != 1 || result.Entries[0].Stream != "ecs/api/abc123" {
+			t.Fatalf("expected available ECS task logs, got %+v", result)
+		}
+	})
+
 	t.Run("threads requested limit into providers and result formatting", func(t *testing.T) {
 		var gotECSLimit int
 		var gotASGLimit int

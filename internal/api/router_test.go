@@ -5850,6 +5850,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 			resourceType   string
 			resourceName   string
 			requestID      string
+			containerName  string
 			limit          int
 		}
 		router := NewRouter(Options{
@@ -5865,12 +5866,13 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 				gotRequest.resourceType = resourceType
 				gotRequest.resourceName = resourceName
 				gotRequest.requestID = RequestIDFromContext(ctx)
+				gotRequest.containerName = resourcelogs.ContainerNameFromContext(ctx)
 				gotRequest.limit = limit
 				return expected, nil
 			},
 		})
 
-		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service", nil)
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsTask&resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Atask%2Fpayments%2Fabc123&containerName=api", nil)
 		resp := httptest.NewRecorder()
 
 		router.ServeHTTP(resp, req)
@@ -5884,8 +5886,9 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 			resourceType   string
 			resourceName   string
 			requestID      string
+			containerName  string
 			limit          int
-		}{deploymentName: "api-prod", resourceType: "ecsService", resourceName: "payments-api-prod-service", requestID: responseRequestID}) {
+		}{deploymentName: "api-prod", resourceType: "ecsTask", resourceName: "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123", requestID: responseRequestID, containerName: "api"}) {
 			t.Fatalf("unexpected provider request: %+v", gotRequest)
 		}
 

@@ -593,6 +593,7 @@ func newOverviewDeploymentResourceLogsProvider(
 			TargetAccountID:     request.TargetAccountID,
 			Region:              request.Region,
 			ObserverRoleARN:     request.ObserverRoleARN,
+			ContainerName:       resourcelogs.ContainerNameFromContext(ctx),
 			Limit:               limit,
 		})
 	}
@@ -630,6 +631,9 @@ func deploymentExecutionResource(detail catalog.DeploymentOverviewDetail, resour
 	}
 	if resourceType == "userDataBootstrapSource" {
 		return filesystemUserDataBootstrapExecutionResource(detail, resourceName)
+	}
+	if resourceType == "ecsTask" && strings.HasPrefix(strings.TrimSpace(detail.ExecutionMode), "ecs") {
+		return domain.RolloutExecutionDetail{Resource: resourceType, Name: resourceName, Description: "ECS task selected from live service inspection"}, true
 	}
 	return domain.RolloutExecutionDetail{}, false
 }

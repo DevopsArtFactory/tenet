@@ -53,6 +53,21 @@ const (
 
 var ErrNotImplemented = errors.New("resource log service not implemented")
 
+type containerNameContextKey struct{}
+
+func ContextWithContainerName(ctx context.Context, containerName string) context.Context {
+	containerName = strings.TrimSpace(containerName)
+	if containerName == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, containerNameContextKey{}, containerName)
+}
+
+func ContainerNameFromContext(ctx context.Context) string {
+	value, _ := ctx.Value(containerNameContextKey{}).(string)
+	return strings.TrimSpace(value)
+}
+
 type Request struct {
 	DeploymentName      string
 	ResourceType        string
@@ -63,6 +78,7 @@ type Request struct {
 	TargetAccountID     string
 	Region              string
 	ObserverRoleARN     string
+	ContainerName       string
 	Limit               int
 }
 
@@ -167,6 +183,31 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 		}
 		entries := formatCloudWatchEntries(events, s.effectiveLimit(req.Limit))
 		return availableResult(req, SourceCloudWatch, entries), nil
+	case "ecsTask":
+		list := s.options.ListECSLogEvents
+		if list == nil {
+			if !s.options.EnableAWS {
+				return Result{}, ErrNotImplemented
+			}
+			list = s.listECSTaskLogEventsFromAWS
+		}
+		events, err := list(ctx, ECSRequest{
+			DeploymentName:  req.DeploymentName,
+			ResourceName:    req.ResourceName,
+			Region:          req.Region,
+			TargetAccountID: req.TargetAccountID,
+			ObserverRoleARN: req.ObserverRoleARN,
+			ContainerName:   req.ContainerName,
+			Limit:           req.Limit,
+		})
+		if err != nil {
+			if reason, ok := unavailableReasonForError(err); ok {
+				return unavailableResult(req, reason), nil
+			}
+			return Result{}, err
+		}
+		entries := formatCloudWatchEntries(events, s.effectiveLimit(req.Limit))
+		return availableResult(req, SourceCloudWatch, entries), nil
 	case "candidateAutoScalingGroup", "serviceAutoScalingGroup", "userDataBootstrapSource":
 		resourceName := req.ResourceName
 		if req.ResourceType == "userDataBootstrapSource" {
@@ -243,6 +284,7 @@ type ECSRequest struct {
 	Region          string
 	TargetAccountID string
 	ObserverRoleARN string
+	ContainerName   string
 	Limit           int
 }
 
@@ -447,6 +489,39 @@ func (s Service) listECSLogEventsFromAWS(ctx context.Context, req ECSRequest) ([
 	return events, nil
 }
 
+func (s Service) listECSTaskLogEventsFromAWS(ctx context.Context, req ECSRequest) ([]CloudWatchEvent, error) {
+	clients, err := s.awsClients(ctx, req.Region, req.TargetAccountID, req.ObserverRoleARN)
+	if err != nil {
+		return nil, err
+	}
+	task, err := findTaskByARN(ctx, clients.ECS, req.ResourceName)
+	if err != nil {
+		return nil, err
+	}
+	if task == nil {
+		return nil, resourceaws.NewUnavailableError(UnavailableReasonResourceNotFound)
+	}
+	definitionARN := aws.ToString(task.TaskDefinitionArn)
+	if definitionARN == "" {
+		return nil, resourceaws.NewUnavailableError(UnavailableReasonNoLogSource)
+	}
+	out, err := clients.ECS.DescribeTaskDefinition(ctx, &ecs.DescribeTaskDefinitionInput{TaskDefinition: aws.String(definitionARN)})
+	if err != nil {
+		return nil, err
+	}
+	if out.TaskDefinition == nil {
+		return nil, resourceaws.NewUnavailableError(UnavailableReasonNoLogSource)
+	}
+	events, err := fetchTaskLogEventsForContainer(ctx, clients.Logs, *task, *out.TaskDefinition, s.effectiveLimit(req.Limit), req.ContainerName)
+	if err != nil {
+		return nil, err
+	}
+	if len(events) == 0 {
+		return nil, resourceaws.NewUnavailableError(UnavailableReasonNoLogSource)
+	}
+	return events, nil
+}
+
 func (s Service) listASGInstanceConsolesFromAWS(ctx context.Context, req ASGRequest) ([]InstanceConsole, error) {
 	clients, err := s.awsClients(ctx, req.Region, req.TargetAccountID, req.ObserverRoleARN)
 	if err != nil {
@@ -536,6 +611,11 @@ type ecsTaskClient interface {
 	DescribeTasks(context.Context, *ecs.DescribeTasksInput, ...func(*ecs.Options)) (*ecs.DescribeTasksOutput, error)
 }
 
+type ecsTaskLookupClient interface {
+	ListClusters(context.Context, *ecs.ListClustersInput, ...func(*ecs.Options)) (*ecs.ListClustersOutput, error)
+	DescribeTasks(context.Context, *ecs.DescribeTasksInput, ...func(*ecs.Options)) (*ecs.DescribeTasksOutput, error)
+}
+
 type ecsTaskDefinitionClient interface {
 	DescribeTaskDefinition(context.Context, *ecs.DescribeTaskDefinitionInput, ...func(*ecs.Options)) (*ecs.DescribeTaskDefinitionOutput, error)
 }
@@ -608,6 +688,50 @@ func taskRecency(task ecstypes.Task) time.Time {
 	return time.Time{}
 }
 
+func findTaskByARN(ctx context.Context, client ecsTaskLookupClient, taskARN string) (*ecstypes.Task, error) {
+	taskARN = strings.TrimSpace(taskARN)
+	if taskARN == "" {
+		return nil, nil
+	}
+	clusters := candidateClustersFromTaskARN(taskARN)
+	if len(clusters) == 0 {
+		pages := ecs.NewListClustersPaginator(client, &ecs.ListClustersInput{})
+		for pages.HasMorePages() {
+			page, err := pages.NextPage(ctx)
+			if err != nil {
+				return nil, err
+			}
+			clusters = append(clusters, page.ClusterArns...)
+		}
+	}
+	for _, cluster := range clusters {
+		out, err := client.DescribeTasks(ctx, &ecs.DescribeTasksInput{Cluster: aws.String(cluster), Tasks: []string{taskARN}})
+		if err != nil {
+			return nil, err
+		}
+		for _, task := range out.Tasks {
+			if aws.ToString(task.TaskArn) == taskARN || taskIDFromARN(aws.ToString(task.TaskArn)) == taskIDFromARN(taskARN) {
+				copy := task
+				return &copy, nil
+			}
+		}
+	}
+	return nil, nil
+}
+
+func candidateClustersFromTaskARN(taskARN string) []string {
+	idx := strings.LastIndex(taskARN, ":task/")
+	if idx < 0 {
+		return nil
+	}
+	rest := taskARN[idx+len(":task/"):]
+	parts := strings.Split(rest, "/")
+	if len(parts) < 2 || strings.TrimSpace(parts[0]) == "" {
+		return nil
+	}
+	return []string{parts[0]}
+}
+
 func fetchRecentServiceTaskLogEvents(ctx context.Context, ecsClient ecsTaskDefinitionClient, logsClient cloudWatchLogEventsClient, tasks []ecstypes.Task, limit int) ([]CloudWatchEvent, error) {
 	taskDefinitions := map[string]ecstypes.TaskDefinition{}
 	events := make([]CloudWatchEvent, 0)
@@ -672,6 +796,42 @@ func fetchTaskLogEvents(ctx context.Context, client cloudWatchLogEventsClient, t
 				Message:   aws.ToString(event.Message),
 				Stream:    streamName,
 			})
+		}
+	}
+	return events, nil
+}
+
+func fetchTaskLogEventsForContainer(ctx context.Context, client cloudWatchLogEventsClient, task ecstypes.Task, definition ecstypes.TaskDefinition, limit int, containerName string) ([]CloudWatchEvent, error) {
+	containerName = strings.TrimSpace(containerName)
+	containerByName := make(map[string]ecstypes.ContainerDefinition, len(definition.ContainerDefinitions))
+	for _, container := range definition.ContainerDefinitions {
+		containerByName[aws.ToString(container.Name)] = container
+	}
+	var events []CloudWatchEvent
+	taskID := taskIDFromARN(aws.ToString(task.TaskArn))
+	for _, container := range task.Containers {
+		name := aws.ToString(container.Name)
+		if containerName != "" && name != containerName {
+			continue
+		}
+		definition, ok := containerByName[name]
+		if !ok {
+			continue
+		}
+		groupName, streamName := awsLogsLocation(definition, taskID)
+		if groupName == "" || streamName == "" {
+			continue
+		}
+		out, err := client.GetLogEvents(ctx, &cloudwatchlogs.GetLogEventsInput{LogGroupName: aws.String(groupName), LogStreamName: aws.String(streamName), Limit: aws.Int32(int32(limit)), StartFromHead: aws.Bool(false)})
+		if err != nil {
+			var resourceMissing *cwtypes.ResourceNotFoundException
+			if errors.As(err, &resourceMissing) {
+				continue
+			}
+			return nil, err
+		}
+		for _, event := range out.Events {
+			events = append(events, CloudWatchEvent{Timestamp: time.UnixMilli(aws.ToInt64(event.Timestamp)).UTC(), Message: aws.ToString(event.Message), Stream: streamName})
 		}
 	}
 	return events, nil
