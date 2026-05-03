@@ -773,6 +773,12 @@ assert worker_resource_logs["resourceType"] == "ecsService", worker_resource_log
 assert worker_resource_logs["resourceName"] == "worker-prod-service", worker_resource_logs
 assert isinstance(worker_resource_logs["available"], bool), worker_resource_logs
 assert worker_resource_logs.get("entries") is None or isinstance(worker_resource_logs.get("entries"), list), worker_resource_logs
+worker_scope = worker_resource_logs.get("resultScope")
+assert isinstance(worker_scope, dict), worker_resource_logs
+assert "requestedLimit" not in worker_scope, worker_resource_logs
+assert worker_scope.get("effectiveLimit") == 50, worker_resource_logs
+assert worker_scope.get("returnedEntryCount") == len(worker_resource_logs.get("entries") or []), worker_resource_logs
+assert worker_scope.get("truncationStatus") in ("not_truncated", "unknown", "not_applicable"), worker_resource_logs
 if worker_resource_logs["available"]:
     assert isinstance(worker_resource_logs.get("source"), str) and worker_resource_logs["source"], worker_resource_logs
     for entry in worker_resource_logs.get("entries") or []:
@@ -789,6 +795,12 @@ assert isinstance(limited_worker_resource_logs["available"], bool), limited_work
 assert isinstance(limited_worker_resource_logs.get("lookupContext"), dict), limited_worker_resource_logs
 assert limited_worker_resource_logs.get("entries") is None or isinstance(limited_worker_resource_logs.get("entries"), list), limited_worker_resource_logs
 assert len(limited_worker_resource_logs.get("entries") or []) <= 1, limited_worker_resource_logs
+limited_scope = limited_worker_resource_logs.get("resultScope")
+assert isinstance(limited_scope, dict), limited_worker_resource_logs
+assert limited_scope.get("requestedLimit") == 1, limited_worker_resource_logs
+assert limited_scope.get("effectiveLimit") == 1, limited_worker_resource_logs
+assert limited_scope.get("returnedEntryCount") == len(limited_worker_resource_logs.get("entries") or []), limited_worker_resource_logs
+assert limited_scope.get("truncationStatus") in ("truncated", "not_truncated", "unknown", "not_applicable"), limited_worker_resource_logs
 if limited_worker_resource_logs["available"]:
     assert isinstance(limited_worker_resource_logs.get("source"), str) and limited_worker_resource_logs["source"], limited_worker_resource_logs
 else:

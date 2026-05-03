@@ -129,8 +129,30 @@ func parseOptionalPositiveLimit(w http.ResponseWriter, r *http.Request) (limit i
 }
 
 func applyResourceLogLimit(result resourcelogs.Result, limit int) resourcelogs.Result {
-	if limit > 0 && len(result.Entries) > limit {
-		result.Entries = append([]resourcelogs.Entry(nil), result.Entries[:limit]...)
+	effectiveLimit := resourcelogs.DefaultMaxEntries
+	var requestedLimit *int
+	if limit > 0 {
+		effectiveLimit = limit
+		requested := limit
+		requestedLimit = &requested
+	}
+
+	truncationStatus := resourcelogs.ScopeTruncationStatusNotApplicable
+	if result.Available {
+		truncationStatus = resourcelogs.ScopeTruncationStatusNotTruncated
+		if effectiveLimit > 0 && len(result.Entries) > effectiveLimit {
+			result.Entries = append([]resourcelogs.Entry(nil), result.Entries[:effectiveLimit]...)
+			truncationStatus = resourcelogs.ScopeTruncationStatusTruncated
+		} else if effectiveLimit > 0 && len(result.Entries) == effectiveLimit {
+			truncationStatus = resourcelogs.ScopeTruncationStatusUnknown
+		}
+	}
+
+	result.ResultScope = &resourcelogs.ResultScope{
+		RequestedLimit:     requestedLimit,
+		EffectiveLimit:     effectiveLimit,
+		ReturnedEntryCount: len(result.Entries),
+		TruncationStatus:   truncationStatus,
 	}
 	return result
 }
