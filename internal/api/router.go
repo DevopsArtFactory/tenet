@@ -116,6 +116,20 @@ func parseResourceQuery(w http.ResponseWriter, r *http.Request) (resourceType st
 	return resourceType, resourceName, true
 }
 
+func validEC2InstanceID(instanceID string) bool {
+	instanceID = strings.TrimSpace(instanceID)
+	if len(instanceID) < 3 || !strings.HasPrefix(instanceID, "i-") {
+		return false
+	}
+	for _, r := range instanceID[2:] {
+		if (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F') {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
 func parseOptionalPositiveLimit(w http.ResponseWriter, r *http.Request) (limit int, ok bool) {
 	raw := strings.TrimSpace(r.URL.Query().Get("limit"))
 	if raw == "" {
@@ -2195,13 +2209,20 @@ func NewRouter(options Options) http.Handler {
 			if !ok {
 				return
 			}
-			if _, err := options.OverviewDeployment(r.Context(), name); err != nil {
-				respondReadLookupError(w, err, "overview deployment unavailable")
-				return
-			}
 			ctx := r.Context()
 			if containerName := strings.TrimSpace(r.URL.Query().Get("containerName")); containerName != "" {
 				ctx = resourcelogs.ContextWithContainerName(ctx, containerName)
+			}
+			if instanceID := strings.TrimSpace(r.URL.Query().Get("instanceId")); instanceID != "" {
+				if !validEC2InstanceID(instanceID) {
+					http.Error(w, "invalid instanceId query", http.StatusBadRequest)
+					return
+				}
+				ctx = resourcelogs.ContextWithInstanceID(ctx, instanceID)
+			}
+			if _, err := options.OverviewDeployment(r.Context(), name); err != nil {
+				respondReadLookupError(w, err, "overview deployment unavailable")
+				return
 			}
 			result, err := options.OverviewDeploymentResourceLogs(ctx, name, resourceType, resourceName, resourceLimit)
 			if err != nil {

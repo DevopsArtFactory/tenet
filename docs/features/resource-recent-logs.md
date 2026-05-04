@@ -4,11 +4,13 @@ Tenet now exposes a read-only recent-log slice for resource-detail drill-down pa
 
 ## Route
 
-`GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}[&limit={positiveInteger}][&containerName={container}]`
+`GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}[&limit={positiveInteger}][&containerName={container}][&instanceId={ec2InstanceId}]`
 
 `limit` is optional. When present, Tenet threads the positive cap into the resource-log provider request and still applies router-level truncation to `entries[]` as a safety fallback while preserving the provider's order; invalid, zero, or negative values return `400 Bad Request` with `invalid limit query`. The built-in CloudWatch-backed `ecsService` provider passes that cap to `GetLogEvents` for each resolved task/container stream, the `ecsTask` provider uses it for the exact task stream(s) it resolves, and the CodeDeploy history provider uses it while listing deployment IDs; providers without a meaningful native cap can return their normal bounded result and rely on the router fallback. Both local and compose smoke coverage lock a representative `ecsService` bounded read (`limit=1`), an ECS task/container read (`resourceType=ecsTask&containerName=worker&limit=1`), plus the invalid `limit=0` rejection so the operator-facing contract does not drift. That release guard is intentionally shape-focused: it verifies the `resultScope` fields and conservative status vocabulary without requiring live AWS totals or a specific number of returned log lines.
 
 `containerName` is optional and only meaningful for `resourceType=ecsTask`. When present, Tenet narrows the task lookup to one awslogs-backed container inside the selected ECS task and echoes the trimmed selector as response-level `containerName`, including explicit unavailable payloads. Omit it to read all awslogs-backed containers Tenet can resolve for that exact task. Successful ECS task log rows may also carry per-entry `entries[].containerName`; that nested field is the resolved log source for that individual row, while the response-level `containerName` remains only the requested selector and is omitted for task-wide reads. The local and compose release guards intentionally lock the response-level selector separately from per-entry/source metadata and separately from rollout `resourceDescription`, so clients can render each operator clue in the right place.
+
+`instanceId` is optional and only meaningful for Auto Scaling Group-backed EC2 console-log reads (`candidateAutoScalingGroup`, `serviceAutoScalingGroup`, and `userDataBootstrapSource` after it resolves a backing ASG). When present, Tenet validates the selector as an EC2 instance ID (`i-...`) before provider lookups, narrows the read to that ASG member, and echoes the trimmed selector as response-level `instanceId`, including explicit unavailable payloads. If the selected instance is not currently part of the resolved ASG, the route stays successful and explicit with `available=false` / `unavailableReason=resource_not_found`; omit `instanceId` to preserve the default newest-instance console-log behavior.
 
 Every successful route response also includes additive `resultScope` metadata. This is bounded-read evidence for operators and UI clients, not a pagination cursor or full log-total guarantee: Tenet reports the requested cap when one was provided, the effective cap it applied after defaulting, the number of entries returned in this response, and a conservative `truncationStatus` (`truncated`, `not_truncated`, `unknown`, or `not_applicable`). Tenet does not issue extra AWS calls just to prove total rows beyond the bounded read.
 
@@ -34,6 +36,7 @@ Response fields:
 - optional `backingResourceType`
 - optional `backingResourceName`
 - optional `containerName` when an ECS task recent-log request supplied a container selector
+- optional `instanceId` when an Auto Scaling Group-backed EC2 console-log request supplied an instance selector
 - `lookupContext`
   - `region`
   - `controlAccountId`
@@ -86,8 +89,45 @@ Current route-stable rollout resources with explicit no-log-source responses:
 Behavior by type:
 - `ecsService` reads recent CloudWatch log events from the newest running and recently stopped service task/container streams when the ECS task definition and awslogs configuration can be resolved. Recently stopped tasks are included in the same bounded newest-first result so failed rollouts and crash loops can still surface useful logs when running tasks are absent or older.
 - `ecsTask` reads recent CloudWatch log events for the exact ECS task ARN or task identifier selected from an ECS service/task drill-down. When `containerName` is present, Tenet narrows the read to that one awslogs-backed container; when it is omitted, Tenet reads the awslogs-backed containers it can resolve for the task and returns the bounded newest-first result. For successful ECS task reads, `entries[].containerName` is additive per-row source metadata that lets operators and UI consumers distinguish merged multi-container output without parsing CloudWatch stream names. Local and smoke environments may still return explicit unavailable states such as `aws_unavailable`, `resource_not_found`, `cross_account_not_configured`, or `no_log_source` when credentials, task visibility, account/role wiring, or awslogs configuration are unavailable.
-- `candidateAutoScalingGroup` and `serviceAutoScalingGroup` read recent EC2 instance console/bootstrap output from the newest instance in the Auto Scaling Group.
-- `userDataBootstrapSource` reuses the backing Auto Scaling Group Tenet already resolved for bootstrap-source inspection and returns the newest EC2 instance console/bootstrap output for that backing group.
+- `candidateAutoScalingGroup` and `serviceAutoScalingGroup` read recent EC2 instance console/bootstrap output from the newest instance in the Auto Scaling Group by default. Add `instanceId={i-...}` to select a specific current ASG member; malformed IDs fail with `400 Bad Request`, and well-formed IDs that are not part of the resolved ASG return `available=false` / `unavailableReason=resource_not_found` instead of reading arbitrary instance console output.
+
+Example selected-instance ASG console request:
+
+```bash
+curl 'http://localhost:8080/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate&instanceId=i-0abc123def4567890'
+```
+
+Successful selected-instance responses echo the selector so operators can tell a narrow EC2 console lookup from the default newest-instance read:
+
+```json
+{
+  "deploymentName": "payments-api-prod",
+  "resourceType": "candidateAutoScalingGroup",
+  "resourceName": "payments-api-prod-candidate",
+  "instanceId": "i-0abc123def4567890",
+  "lookupContext": {
+    "region": "ap-northeast-2",
+    "controlAccountId": "123456789012",
+    "targetAccountId": "123456789012",
+    "crossAccount": false,
+    "observerRoleConfigured": false
+  },
+  "available": true,
+  "source": "ec2_console",
+  "entries": [
+    {
+      "timestamp": "2026-04-16T07:11:30Z",
+      "message": "selected instance bootstrap output"
+    }
+  ],
+  "resultScope": {
+    "effectiveLimit": 100,
+    "returnedEntryCount": 1,
+    "truncationStatus": "not_truncated"
+  }
+}
+```
+- `userDataBootstrapSource` reuses the backing Auto Scaling Group Tenet already resolved for bootstrap-source inspection and returns the newest EC2 instance console/bootstrap output for that backing group by default; the same optional `instanceId={i-...}` selector can narrow the backing-ASG console read to a specific current member.
 - `codeDeployApplication` reads the newest deployment records across the selected CodeDeploy application without narrowing to one deployment group, returns them newest-first, and projects each deployment into one operator-facing recent-log row with the deployment ID in `entries[].stream`.
 - `codeDeployDeploymentGroup` reads the newest deployment records for the selected CodeDeploy deployment group, returns them newest-first, and projects each deployment into one operator-facing recent-log row with the deployment ID in `entries[].stream`.
 - `productionListener`, `testListener`, `blueTaskSetTargetGroup`, and `greenTaskSetTargetGroup` now reuse that same CodeDeploy deployment-group history through additive `backingResourceType=codeDeployDeploymentGroup` and `backingResourceName={deployment}-codedeploy-group`, so the resource page can show rollout history for those drill-down siblings without inventing a second event route.
