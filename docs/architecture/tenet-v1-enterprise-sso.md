@@ -27,10 +27,10 @@ Enterprise SSO should extend the second family as provider-neutral managed-login
 
 ## Provider-neutral configuration shape
 
-Provider work is disabled by default. GitHub OAuth, Google Workspace OIDC, and Okta OIDC become active Tenet-managed login providers only when their configured provider mode and required non-secret state, identity, and session settings are complete. Google Workspace OIDC uses `TENET_AUTH_PROVIDER=***` (canonical diagnostic provider `google`; the legacy `google` alias is accepted), and Okta OIDC uses `TENET_AUTH_PROVIDER=***`; Okta SAML remains diagnostic-only and inactive. Configure the diagnostic/runtime with settings such as:
+Provider work is disabled by default. GitHub OAuth, Google Workspace OIDC, and Okta OIDC become active Tenet-managed login providers only when their configured provider mode and required non-secret state, identity, and session settings are complete. Google Workspace OIDC uses `TENET_AUTH_PROVIDER=google_oidc` (canonical diagnostic provider `google`; the legacy `google` alias is accepted), and Okta OIDC uses `TENET_AUTH_PROVIDER=okta_oidc`; Okta SAML remains diagnostic-only and inactive. Configure the diagnostic/runtime with settings such as:
 
 ```text
-TENET_AUTH_PROVIDER=okta_oidc          # google_oidc and okta_oidc activate runtime; okta_saml remains diagnostic-only
+TENET_AUTH_PROVIDER=google_oidc        # set okta_oidc for Okta OIDC; okta_saml remains diagnostic-only
 TENET_GOOGLE_OIDC_CLIENT_ID=google-client-id
 TENET_GOOGLE_OIDC_CLIENT_SECRET=<secret from Google Workspace>
 TENET_GOOGLE_OIDC_ISSUER_URL=https://accounts.google.com

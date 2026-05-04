@@ -119,6 +119,9 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 		"Google Workspace/Gmail means identity login only",
 		"It does not grant Tenet Gmail mailbox, Drive, Calendar, or other Google API access.",
 		"Google Workspace identity through Google OIDC profile claims",
+		"Google Workspace OIDC uses `TENET_AUTH_PROVIDER=google_oidc`",
+		"Okta OIDC uses `TENET_AUTH_PROVIDER=okta_oidc`",
+		"TENET_AUTH_PROVIDER=google_oidc        # set okta_oidc for Okta OIDC; okta_saml remains diagnostic-only",
 		"human-readable provider labels in operator-facing UI (`Google Workspace OIDC`, `Okta SAML`, `Okta OIDC`)",
 		"provider-boundary copy in the embedded Operator context details",
 		"Okta identity through SAML assertions or OIDC profile claims",
@@ -147,6 +150,13 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 	} {
 		if !strings.Contains(doc, fragment) {
 			t.Fatalf("expected enterprise SSO docs to include %q", fragment)
+		}
+	}
+	for _, forbidden := range []string{
+		"TENET_AUTH_PROVIDER=***",
+	} {
+		if strings.Contains(doc, forbidden) {
+			t.Fatalf("expected enterprise SSO docs to avoid placeholder provider examples %q", forbidden)
 		}
 	}
 }
