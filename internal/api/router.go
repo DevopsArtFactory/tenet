@@ -2233,7 +2233,7 @@ func NewRouter(options Options) http.Handler {
 				return
 			}
 			resourceLimit := 0
-			if resourceType == "ecsService" {
+			if resourceType == "ecsService" || resourceType == "candidateAutoScalingGroup" || resourceType == "serviceAutoScalingGroup" {
 				var limitOK bool
 				resourceLimit, limitOK = parseOptionalPositiveLimit(w, r)
 				if !limitOK {
