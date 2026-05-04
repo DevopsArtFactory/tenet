@@ -27,7 +27,7 @@ Enterprise SSO should extend the second family as provider-neutral managed-login
 
 ## Provider-neutral configuration shape
 
-Provider work is disabled by default. Google Workspace OIDC can be activated as a Tenet-managed login provider with `TENET_AUTH_PROVIDER=google_oidc` (canonical diagnostic provider `google`; the legacy `google` alias is accepted), and Okta OIDC can now be activated with `TENET_AUTH_PROVIDER=okta_oidc`. Okta SAML remains diagnostic-only and inactive. Configure the diagnostic/runtime with settings such as:
+Provider work is disabled by default. GitHub OAuth, Google Workspace OIDC, and Okta OIDC become active Tenet-managed login providers only when their configured provider mode and required non-secret state, identity, and session settings are complete. Google Workspace OIDC uses `TENET_AUTH_PROVIDER=***` (canonical diagnostic provider `google`; the legacy `google` alias is accepted), and Okta OIDC uses `TENET_AUTH_PROVIDER=***`; Okta SAML remains diagnostic-only and inactive. Configure the diagnostic/runtime with settings such as:
 
 ```text
 TENET_AUTH_PROVIDER=okta_oidc          # google_oidc and okta_oidc activate runtime; okta_saml remains diagnostic-only
@@ -71,7 +71,7 @@ Until a PR satisfies that checklist, Okta SAML should remain configured-but-inac
 
 ### Okta OIDC activation checklist
 
-Issue #713 should activate Okta OIDC only through the same managed-session/OIDC runtime shape used by Google Workspace OIDC, not through a separate session or token lifecycle. Reviewers should treat the following as the minimum activation checklist for any backend/API PR that flips Okta OIDC from diagnostic-only to active:
+Okta OIDC is now active only through the same managed-session/OIDC runtime shape used by Google Workspace OIDC, not through a separate session or token lifecycle. Reviewers should treat the following as the ongoing regression checklist for any backend/API PR that touches Okta OIDC runtime behavior:
 
 - `authRuntime.enterpriseSso.provider` stays `okta_oidc`, `configured=true`, and `active=false` until every required non-secret client/issuer/redirect setting and shared state, identity, and session-secret store is complete and the same-origin route wiring exists.
 - Complete Okta OIDC settings expose same-origin `loginRoute=/auth/login/okta`, `callbackRoute=/auth/callback/okta/oidc`, and `logoutRoute=/auth/logout`; incomplete settings keep login/callback routes diagnostic placeholders only, omit the logout/session-clear handoff, populate `missingSettings`, and must not advertise an active sign-in handoff.
