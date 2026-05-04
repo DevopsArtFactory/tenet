@@ -185,6 +185,14 @@ assert not enterprise_sso.get('missingSettings'), payload
 assert enterprise_sso.get('stateStoreConfigured') is True, payload
 assert enterprise_sso.get('identityStoreConfigured') is True, payload
 assert enterprise_sso.get('sessionSecretConfigured') is True, payload
+managed_login = (payload.get('authRuntime') or {}).get('tenetManagedLogin') or {}
+assert managed_login.get('logoutRevokesProviderToken') is False, payload
+assert managed_login.get('providerTokenRevocationSupported') is False, payload
+if expected_active:
+    assert managed_login.get('logoutRoute') == '/auth/logout', payload
+    assert managed_login.get('logoutClearsSessionCookie') is True, payload
+else:
+    assert managed_login.get('logoutClearsSessionCookie') is False, payload
 
 if expected_active:
     assert enterprise_sso.get('unavailableReason', '') == '', payload
@@ -193,6 +201,42 @@ else:
 serialized = json.dumps(enterprise_sso, sort_keys=True).lower()
 for forbidden in ('secret-value', 'google-client-secret', 'okta-private-key', 'saml assertion', 'authorization_code'):
     assert forbidden not in serialized, enterprise_sso
+PY
+}
+
+assert_enterprise_sso_logout_boundary() {
+  local method=$1
+  local return_url=$2
+  local encoded_return_url headers_path body_path status
+
+  encoded_return_url=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$return_url")
+  headers_path=$(mktemp "${TMPDIR:-/tmp}/enterprise-sso-logout-headers.XXXXXX")
+  body_path=$(mktemp "${TMPDIR:-/tmp}/enterprise-sso-logout-body.XXXXXX")
+  status=$(curl -sS -D "$headers_path" -o "$body_path" -w "%{http_code}" \
+    -X "$method" \
+    "http://$HOST:$PORT/auth/logout?returnUrl=$encoded_return_url")
+
+  python3 - "$headers_path" "$body_path" "$status" "$return_url" <<'PY'
+import sys
+from pathlib import Path
+
+headers = Path(sys.argv[1]).read_text(encoding='utf-8', errors='replace')
+body = Path(sys.argv[2]).read_text(encoding='utf-8', errors='replace')
+status = sys.argv[3]
+return_url = sys.argv[4]
+
+assert status == '302', (status, headers, body)
+assert f'Location: {return_url}' in headers, headers
+set_cookie_lines = [line for line in headers.splitlines() if line.lower().startswith('set-cookie:')]
+assert len(set_cookie_lines) == 1, headers
+cookie = set_cookie_lines[0].lower()
+assert 'tenet_session=' in cookie, set_cookie_lines[0]
+assert 'max-age=0' in cookie or 'max-age=-1' in cookie, set_cookie_lines[0]
+assert 'path=/' in cookie, set_cookie_lines[0]
+assert 'httponly' in cookie, set_cookie_lines[0]
+assert 'samesite=lax' in cookie, set_cookie_lines[0]
+for forbidden in ('google', 'okta', 'github', 'provider', 'token', 'revoke'):
+    assert forbidden not in body.lower(), body
 PY
 }
 
@@ -2859,6 +2903,8 @@ assert_enterprise_sso_diagnostic "$enterprise_sso_google_context_path" google /a
   TENET_AUTH_STATE_STORE_PATH \
   TENET_AUTH_IDENTITY_STORE_PATH \
   TENET_AUTH_SESSION_SECRET
+assert_enterprise_sso_logout_boundary GET "/?page=operator-context"
+assert_enterprise_sso_logout_boundary POST "/?page=operator-context&action=logout"
 
 stop_api
 TENET_AUTH_PROVIDER=okta_saml \
