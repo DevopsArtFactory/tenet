@@ -5748,9 +5748,11 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   const document = createDocument();
   const window = { location: { pathname: '/', search, hash: '' } };
   const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
-  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetchImpl, history, Element, InputElement);
+  const fetchCalls = [];
+  const trackedFetch = (url, ...args) => { fetchCalls.push(String(url)); return fetchImpl(url, ...args); };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, trackedFetch, history, Element, InputElement);
   for (let i = 0; i < settleCount; i += 1) await settle();
-  return { document, window };
+  return { document, window, fetchCalls };
 }
 
 (async () => {
@@ -5963,11 +5965,14 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
 
   const asgDeploymentURL = '/v1/overview/deployments/payments-api-prod';
   const asgLogsURL = '/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate';
-  const asgInspectionURL = '/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate';
+  const asgInspectionURL = '/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate&limit=10';
   const asgSupportedRun = await renderWithFetch('?page=resource&deployment=payments-api-prod&resourceType=candidateAutoScalingGroup&resourceId=' + encodeURIComponent(asgResourceID), (url) => {
     if (url === asgDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(asgDetailBody) });
     if (url === asgLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
-    if (url === asgInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({
+    if (String(url).startsWith('/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate')) {
+      const route = new URL(String(url), 'http://tenet.local');
+      const limit = Number(route.searchParams.get('limit') || '10');
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({
       available: true,
       source: 'auto_scaling_group',
       lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true },
@@ -6004,9 +6009,11 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
           }],
         },
         targetGroupArns: ['arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-prod-candidate/abc123'],
+        instancesScope: { requestedLimit: limit, effectiveLimit: limit, returnedInstanceCount: limit === 25 ? 1 : 10, truncationStatus: limit === 25 ? 'not_truncated' : 'truncated' },
         instances: [{ instanceId: 'i-abc123', availabilityZone: 'ap-northeast-2a', lifecycleState: 'InService', healthStatus: 'Healthy', protectedFromScaleIn: true, weightedCapacity: '1' }],
       },
     }) });
+    }
     throw new Error('unexpected asg supported fetch url: ' + url);
   });
   const asgSupportedText = collectText(asgSupportedRun.document.getElementById('accounts')).join(' | ');
@@ -6036,6 +6043,18 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (asgConsoleLogLink.target !== '_self') throw new Error('expected ASG console-log handoff to stay inside embedded UI');
   if (asgConsoleLogLink.rel) throw new Error('expected ASG console-log handoff to avoid new-tab rel attributes');
   if (asgConsoleLogLink.href !== '/?page=resource&deployment=payments-api-prod&resourceType=candidateAutoScalingGroup&resourceId=candidateAutoScalingGroup%3A%3Apayments-api-prod-candidate%3A%3ACandidate+capacity#resource-recent-logs') throw new Error('expected ASG console-log handoff to preserve resource route and target recent logs, got ' + asgConsoleLogLink.href);
+  if (!asgSupportedRun.fetchCalls.includes(asgInspectionURL)) throw new Error('expected default ASG inspection fetch to include sample limit, got ' + JSON.stringify(asgSupportedRun.fetchCalls));
+  if (!asgSupportedText.includes('ASG instance sample scope · requested 10 · effective 10 · returned 10 instance(s) · truncated')) throw new Error('expected ASG instance sample scope text: ' + asgSupportedText);
+  const asgLimitSelect = collectNodes(asgSupportedRun.document.getElementById('accounts'), (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'ASG instance sample limit')[0];
+  if (!asgLimitSelect || asgLimitSelect.disabled) throw new Error('expected ASG live inspection to expose usable instance sample limit select');
+  asgLimitSelect.value = '25';
+  asgLimitSelect.dispatch('change', { target: { value: '25' } });
+  await settle(); await settle(); await settle();
+  const limitedASGInspectionURL = asgInspectionURL.replace('&limit=10', '&limit=25');
+  if (!asgSupportedRun.fetchCalls.includes(limitedASGInspectionURL)) throw new Error('expected selected ASG instance sample limit in inspection fetch URL, got ' + JSON.stringify(asgSupportedRun.fetchCalls));
+  if (asgSupportedRun.window.location.search !== '?page=resource&deployment=payments-api-prod&resourceType=candidateAutoScalingGroup&resourceId=' + encodeURIComponent(asgResourceID)) throw new Error('expected ASG instance sample limit select to preserve bookmarkable resource query, got ' + asgSupportedRun.window.location.search);
+  const limitedASGInspectionText = collectText(asgSupportedRun.document.getElementById('accounts')).join(' | ');
+  if (!limitedASGInspectionText.includes('ASG instance sample scope · requested 25 · effective 25 · returned 1 instance(s) · not truncated')) throw new Error('expected selected ASG scope evidence to stay backend-sourced, got ' + limitedASGInspectionText);
 
   const genericASGLogsURL = '/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=autoScalingGroup&resourceName=payments-api-prod-generic';
   const genericASGInspectionURL = '/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=autoScalingGroup&resourceName=payments-api-prod-generic';
@@ -6047,6 +6066,21 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   });
   const genericASGText = collectText(genericASGRun.document.getElementById('accounts')).join(' | ');
   if (genericASGText.includes('Open EC2 console logs')) throw new Error('expected unsupported generic autoScalingGroup to omit ASG console-log handoff');
+  if (genericASGText.includes('ASG instance sample limit')) throw new Error('expected unsupported generic autoScalingGroup to omit ASG instance sample limit control');
+  const legacyASGRun = await renderWithFetch('?page=resource&deployment=payments-api-prod&resourceType=candidateAutoScalingGroup&resourceId=' + encodeURIComponent(asgResourceID), (url) => {
+    if (url === asgDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(asgDetailBody) });
+    if (url === asgLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === asgInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({
+      available: true,
+      source: 'auto_scaling_group',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true },
+      autoScalingGroup: { autoScalingGroupName: 'payments-api-prod-candidate', desiredCapacity: 4, instances: [] },
+    }) });
+    throw new Error('unexpected legacy asg fetch url: ' + url);
+  });
+  const legacyASGText = collectText(legacyASGRun.document.getElementById('accounts')).join(' | ');
+  if (legacyASGText.includes('ASG instance sample scope')) throw new Error('expected legacy ASG payload without instancesScope to stay quiet: ' + legacyASGText);
+  if (!legacyASGText.includes('No instances are currently reported for this Auto Scaling Group.')) throw new Error('expected missing instancesScope to keep normal empty-instance copy: ' + legacyASGText);
   const bootstrapLogsURL = '/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=userDataBootstrapSource&resourceName=file%3Auserdata%2Fpayments-api-prod.sh';
   const bootstrapInspectionURL = '/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=userDataBootstrapSource&resourceName=file%3Auserdata%2Fpayments-api-prod.sh';
   const bootstrapSupportedRun = await renderWithFetch('?page=resource&deployment=payments-api-prod&resourceType=userDataBootstrapSource&resourceId=' + encodeURIComponent(bootstrapResourceID), (url) => {
