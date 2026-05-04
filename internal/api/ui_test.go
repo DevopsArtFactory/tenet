@@ -996,9 +996,9 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"const renderDriftWorkspace = () => {",
 		"renderDeploymentWorkspace(currentPageState.page, workspaceState.detail, null, null, workspaceState);",
 		"if (currentPageState.page === 'plan') {",
-		"renderDeploymentWorkspace('plan', detail, {",
+		"renderDeploymentWorkspace('plan', workspaceDetail, {",
 		"syncPlanPageURL(record.id, '');",
-		"fetchDeploymentDetail(currentPageState.deployment)",
+		"fetchDeploymentDetail(deploymentName)",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include %q", fragment)
@@ -1227,9 +1227,9 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 
 	for _, fragment := range []string{
 		"const renderDeploymentWorkspace = (mode, detail, planState = null, applyState = null, workspaceState = null) => {",
-		"const driftWorkspaceRefreshStateText = (workspaceState) => {",
-		"return 'Refreshing drift workspace from GET /v1/overview/deployments/{deploymentName}…';",
-		"return `Failed to refresh drift workspace: ${workspaceState.error?.message || 'unknown error'}`;",
+		"const deploymentWorkspaceRefreshStateText = (mode, workspaceState) => {",
+		"return `Refreshing ${workspaceLabel} from GET /v1/overview/deployments/{deploymentName}…`;",
+		"return `Failed to refresh ${workspaceLabel}: ${workspaceState.error?.message || 'unknown error'}`;",
 		"const workspaceTitle = mode === 'drift' ? 'Drift viewer' : 'Plan and apply';",
 		"const runtimeSignalsSection = createDetailSection('Latest runtime signals');",
 		"['Runtime source', metricValue(detail.runtimeSummary?.source)]",
@@ -1319,7 +1319,7 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"createRefreshButton(",
 		"'Refresh drift workspace',",
 		"() => workspaceState?.onRefresh?.().catch(() => {}),",
-		"const driftRefreshState = driftWorkspaceRefreshStateText(workspaceState);",
+		"const driftRefreshState = deploymentWorkspaceRefreshStateText(mode, workspaceState);",
 		"workspaceState?.status === 'error' ? 'detail-state error' : 'detail-state'",
 		"const defaultDriftFilters = { query: '', severity: 'all', sort: 'field' };",
 		"const hasActiveDriftFilters = () => (",
@@ -1400,6 +1400,13 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"Apply Plan",
 		"Refresh plan preview",
 		"Refresh apply request",
+		"Refresh plan workspace",
+		"const workspaceLabel = mode === 'plan' ? 'plan workspace' : 'drift workspace';",
+		"return `Refreshing ${workspaceLabel} from GET /v1/overview/deployments/{deploymentName}…`;",
+		"return `Failed to refresh ${workspaceLabel}: ${workspaceState.error?.message || 'unknown error'}`;",
+		"renderDeploymentWorkspace('plan', workspaceDetail,",
+		"workspaceState.onRefresh = () => {",
+		"workspaceDetail = nextDetail;",
 		"Plan preview actions",
 		"createOperatorWriteAuthRequiredActions(planState)",
 		"Apply request actions",
@@ -1479,7 +1486,7 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"No derived plan operations are currently available.",
 		"No server-authored plan operations are stored for this preview.",
 		"const fallbackIfMatch = planState.record?.source?.fingerprint || '';",
-		"const ifMatch = detail.sourceFingerprint || await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;",
+		"const ifMatch = workspaceDetail.sourceFingerprint || await derivePlanSourceFingerprint(workspaceDetail).catch(() => '') || fallbackIfMatch;",
 		"createNavLink(buildPageURL('audit', { deployment: detail.name || currentPageState.deployment || '' }), 'Audit log', '_self')",
 		"let applyState = {",
 		"applyId: currentPageState.applyId,",
@@ -1502,8 +1509,8 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"const renderDriftWorkspace = () => {",
 		"renderDeploymentWorkspace(currentPageState.page, workspaceState.detail, null, null, workspaceState);",
 		"if (currentPageState.page === 'plan') {",
-		"renderDeploymentWorkspace('plan', detail, {",
-		"fetchDeploymentDetail(currentPageState.deployment)",
+		"renderDeploymentWorkspace('plan', workspaceDetail, {",
+		"fetchDeploymentDetail(deploymentName)",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include %q", fragment)
@@ -2403,11 +2410,14 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'No linked resources are available in this drift workspace yet.' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains drift linked-resources empty-state copy")
 	}
-	if !strings.Contains(text, "assert 'Refreshing drift workspace from GET /v1/overview/deployments/{deploymentName}…' in ui, ui") {
-		t.Fatalf("expected smoke-local.sh to assert embedded html contains drift refresh loading copy")
+	if !strings.Contains(text, "assert \"const workspaceLabel = mode === 'plan' ? 'plan workspace' : 'drift workspace';\" in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains shared workspace refresh label logic")
 	}
-	if !strings.Contains(text, "assert 'Failed to refresh drift workspace:' in ui, ui") {
-		t.Fatalf("expected smoke-local.sh to assert embedded html contains drift refresh error copy")
+	if !strings.Contains(text, "assert 'Refreshing ${workspaceLabel} from GET /v1/overview/deployments/{deploymentName}…' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains workspace refresh loading copy")
+	}
+	if !strings.Contains(text, "assert 'Failed to refresh ${workspaceLabel}:' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains workspace refresh error copy")
 	}
 	if !strings.Contains(text, "assert 'Refreshing account detail from GET /v1/overview/accounts/{awsAccountId}…' in account_ui, account_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains account refresh loading copy")

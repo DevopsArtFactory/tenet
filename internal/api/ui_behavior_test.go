@@ -8447,9 +8447,13 @@ let createRequestOptions = null;
 let createApplyRequestOptions = null;
 const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod', hash: '' } };
 const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+let detailFetchCount = 0;
 const fetch = (url, options = {}) => {
   fetchCalls.push(String(url));
-  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/overview/deployments/api-prod') {
+    detailFetchCount += 1;
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  }
   if (url === '/v1/plans/deployments/api-prod') {
     createRequestOptions = options;
     return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
@@ -8465,6 +8469,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   await settle();
   await settle();
   const root = document.getElementById('accounts');
+  const toolbarRoot = document.getElementById('toolbar');
   if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/deployments/api-prod') throw new Error('expected only deployment detail before create, got ' + fetchCalls.join(', '));
   let text = collectText(root).join(' | ');
   const linksBeforeCreate = collectNodes(root, (node) => node.tagName === 'A');
@@ -8530,14 +8535,33 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   let applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');
   let refreshPlan = buttons.find((node) => node.textContent === 'Refresh plan preview');
   let refreshApply = buttons.find((node) => node.textContent === 'Refresh apply request');
-  if (!createPlan || !applyPlan || !refreshPlan || !refreshApply) throw new Error('expected plan workspace action buttons before create');
+  let toolbarButtons = collectNodes(toolbarRoot, (node) => node.tagName === 'BUTTON');
+  let refreshWorkspace = toolbarButtons.find((node) => node.textContent === 'Refresh plan workspace');
+  if (!createPlan || !applyPlan || !refreshPlan || !refreshApply || !refreshWorkspace) throw new Error('expected plan workspace action buttons before create');
   if (createPlan.disabled || !applyPlan.disabled) throw new Error('expected Create Plan enabled and Apply Plan disabled before create');
-  if (!refreshPlan.disabled || !refreshApply.disabled) throw new Error('expected refresh buttons disabled before persisted records exist');
+  if (!refreshPlan.disabled || !refreshApply.disabled) throw new Error('expected record refresh buttons disabled before persisted records exist');
+  if (refreshWorkspace.disabled) throw new Error('expected plan workspace context refresh enabled before persisted records exist');
+  const initialPlanSearch = window.location.search;
+  refreshWorkspace.dispatch('click');
+  text = collectText(root).join(' | ');
+  toolbarButtons = collectNodes(toolbarRoot, (node) => node.tagName === 'BUTTON');
+  refreshWorkspace = toolbarButtons.find((node) => node.textContent === 'Refresh plan workspace');
+  if (!refreshWorkspace || !refreshWorkspace.disabled) throw new Error('expected plan workspace refresh disabled while deployment detail reload is in flight');
+  if (!text.includes('Refreshing plan workspace from GET /v1/overview/deployments/{deploymentName}…')) throw new Error('expected plan workspace refresh loading copy');
+  await settle();
+  await settle();
+  if (detailFetchCount !== 2) throw new Error('expected plan workspace refresh to re-fetch deployment detail in place');
+  if (window.location.search !== initialPlanSearch) throw new Error('expected plan workspace refresh to preserve bookmarkable plan route, got ' + window.location.search);
+  buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  toolbarButtons = collectNodes(toolbarRoot, (node) => node.tagName === 'BUTTON');
+  createPlan = buttons.find((node) => node.textContent === 'Create Plan');
+  refreshWorkspace = toolbarButtons.find((node) => node.textContent === 'Refresh plan workspace');
+  if (!refreshWorkspace || refreshWorkspace.disabled) throw new Error('expected plan workspace refresh re-enabled after deployment detail reload');
   createPlan.dispatch('click');
   await settle();
   await settle();
   await settle();
-  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/deployments/api-prod') throw new Error('unexpected fetch sequence after create: ' + fetchCalls.join(', '));
+  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/overview/deployments/api-prod, /v1/plans/deployments/api-prod') throw new Error('unexpected fetch sequence after create: ' + fetchCalls.join(', '));
   if (!createRequestOptions || createRequestOptions.method !== 'POST') throw new Error('expected Create Plan to POST');
   if (!createRequestOptions.headers || createRequestOptions.headers['Content-Type'] !== 'application/json') throw new Error('expected Create Plan content type header');
   const createBody = JSON.parse(createRequestOptions.body || '{}');
@@ -8618,7 +8642,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   await settle();
   await settle();
   await settle();
-  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/deployments/api-prod, /v1/applies/plans/plan_ready_123') throw new Error('unexpected fetch sequence after apply create: ' + fetchCalls.join(', '));
+  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/overview/deployments/api-prod, /v1/plans/deployments/api-prod, /v1/applies/plans/plan_ready_123') throw new Error('unexpected fetch sequence after apply create: ' + fetchCalls.join(', '));
   if (!createApplyRequestOptions || createApplyRequestOptions.method !== 'POST') throw new Error('expected Apply Plan to POST');
   if (window.location.search !== '?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123') throw new Error('expected Apply Plan to persist applyId in URL, got ' + window.location.search);
   text = collectText(root).join(' | ');
@@ -8667,8 +8691,16 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
   refreshPlan = buttons.find((node) => node.textContent === 'Refresh plan preview');
   refreshApply = buttons.find((node) => node.textContent === 'Refresh apply request');
-  if (!refreshPlan || !refreshApply) throw new Error('expected refresh buttons after apply create');
-  if (refreshPlan.disabled || refreshApply.disabled) throw new Error('expected refresh buttons enabled after apply create');
+  toolbarButtons = collectNodes(toolbarRoot, (node) => node.tagName === 'BUTTON');
+  refreshWorkspace = toolbarButtons.find((node) => node.textContent === 'Refresh plan workspace');
+  if (!refreshPlan || !refreshApply || !refreshWorkspace) throw new Error('expected refresh buttons after apply create');
+  if (refreshPlan.disabled || refreshApply.disabled || refreshWorkspace.disabled) throw new Error('expected refresh buttons enabled after apply create');
+  const bookmarkedPlanApplySearch = window.location.search;
+  refreshWorkspace.dispatch('click');
+  await settle();
+  await settle();
+  if (detailFetchCount !== 3) throw new Error('expected plan workspace refresh after apply to re-fetch deployment detail in place');
+  if (window.location.search !== bookmarkedPlanApplySearch) throw new Error('expected plan workspace refresh to preserve plan/apply bookmark, got ' + window.location.search);
 })();
 `
 		runNodeHarness(t, nodeProgram)

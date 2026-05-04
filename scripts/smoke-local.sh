@@ -1277,8 +1277,9 @@ assert "resolveManagedDriftResourceRef(detail, row.resourceRef)" in ui, ui
 assert 'Drift summary' in ui, ui
 assert 'Refresh drift workspace' in ui, ui
 assert 'Clear drift filters' in ui, ui
-assert 'Refreshing drift workspace from GET /v1/overview/deployments/{deploymentName}…' in ui, ui
-assert 'Failed to refresh drift workspace:' in ui, ui
+assert "const workspaceLabel = mode === 'plan' ? 'plan workspace' : 'drift workspace';" in ui, ui
+assert 'Refreshing ${workspaceLabel} from GET /v1/overview/deployments/{deploymentName}…' in ui, ui
+assert 'Failed to refresh ${workspaceLabel}:' in ui, ui
 assert 'Total rows' in ui, ui
 assert 'Visible rows' in ui, ui
 assert 'Visible high' in ui, ui
@@ -1600,7 +1601,7 @@ assert 'Open drift view' in audit_ui, audit_ui
 assert 'Open plan/apply workspace' in audit_ui, audit_ui
 assert "const buildDeploymentEventsReadRoute = (deploymentName) => `/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`;" in ui, ui
 assert "const fetchDeploymentEvents = (deploymentName) => fetchEmbeddedReadRouteJSON(buildDeploymentEventsReadRoute(deploymentName), {" in ui, ui
-assert "const ifMatch = detail.sourceFingerprint || await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;" in ui, ui
+assert "const ifMatch = workspaceDetail.sourceFingerprint || await derivePlanSourceFingerprint(workspaceDetail).catch(() => '') || fallbackIfMatch;" in ui, ui
 assert 'Recent logs' in ui, ui
 assert 'Refresh recent logs' in ui, ui
 assert 'Requested cap' in ui, ui
@@ -1633,6 +1634,10 @@ assert "return `${operatorReadFailureMessage(operatorApplyRequestReadRoute(activ
 assert "if (operatorReadStateForbidden(state) || operatorWriteForbiddenState(state)) return 'Access denied';" in ui, ui
 assert 'Refresh plan preview' in ui, ui
 assert 'Refresh apply request' in ui, ui
+assert 'Refresh plan workspace' in ui, ui
+assert "const workspaceLabel = mode === 'plan' ? 'plan workspace' : 'drift workspace';" in ui, ui
+assert 'Refreshing ${workspaceLabel} from GET /v1/overview/deployments/{deploymentName}…' in ui, ui
+assert 'Failed to refresh ${workspaceLabel}:' in ui, ui
 assert 'const loadPlanPreviewRecord = (planId) => {' in ui, ui
 assert 'const loadApplyRequestRecord = (applyId) => {' in ui, ui
 assert 'const buildPlanPreviewRoute = (planId) => `/v1/plans/${encodeURIComponent(planId)}`;' in ui, ui
