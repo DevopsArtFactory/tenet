@@ -439,6 +439,9 @@ type TenetManagedLoginDiagnostic struct {
 	CallbackRoute                    string   `json:"callbackRoute,omitempty"`
 	LogoutRoute                      string   `json:"logoutRoute,omitempty"`
 	SessionCookieName                string   `json:"sessionCookieName,omitempty"`
+	SessionCookiePath                string   `json:"sessionCookiePath"`
+	SessionCookieHTTPOnly            bool     `json:"sessionCookieHttpOnly"`
+	SessionCookieSameSite            string   `json:"sessionCookieSameSite"`
 	SessionCookieSecureOverride      bool     `json:"sessionCookieSecureOverride"`
 	SessionCookieSecureForRequest    bool     `json:"sessionCookieSecureForRequest"`
 	SessionCookieSecureSources       []string `json:"sessionCookieSecureSources,omitempty"`
@@ -684,6 +687,9 @@ func buildAuthRuntimeDiagnosticForRequest(r *http.Request, options Options) Auth
 	managedLogin := diagnostic.TenetManagedLogin
 	authSession := authSessionConfigFromOptions(options)
 	managedLogin.SessionCookieSecureOverride = authSession.CookieSecure
+	managedLogin.SessionCookiePath = defaultAuthSessionCookiePath
+	managedLogin.SessionCookieHTTPOnly = true
+	managedLogin.SessionCookieSameSite = defaultAuthSessionCookieSameSite
 	managedLogin.OAuthStateTTLSeconds = int64(authSession.stateTTL().Seconds())
 	managedLogin.SessionTTLSeconds = int64(authSession.sessionTTL().Seconds())
 	managedLogin.SessionExpiryEnforced = true
@@ -721,6 +727,13 @@ func normalizeAuthRuntimeDiagnostic(diagnostic AuthRuntimeDiagnostic) AuthRuntim
 	}
 	if managedLogin.SessionTTLSeconds <= 0 {
 		managedLogin.SessionTTLSeconds = int64(defaultAuthSessionTTL.Seconds())
+	}
+	if strings.TrimSpace(managedLogin.SessionCookiePath) == "" {
+		managedLogin.SessionCookiePath = defaultAuthSessionCookiePath
+	}
+	managedLogin.SessionCookieHTTPOnly = true
+	if strings.TrimSpace(managedLogin.SessionCookieSameSite) == "" {
+		managedLogin.SessionCookieSameSite = defaultAuthSessionCookieSameSite
 	}
 	managedLogin.SessionExpiryEnforced = true
 	managedLogin.ProviderAccessTokenStored = false

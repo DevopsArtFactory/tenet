@@ -22,9 +22,11 @@ import (
 )
 
 const (
-	defaultAuthSessionCookieName = "tenet_session"
-	defaultAuthStateTTL          = 10 * time.Minute
-	defaultAuthSessionTTL        = 12 * time.Hour
+	defaultAuthSessionCookieName     = "tenet_session"
+	defaultAuthSessionCookiePath     = "/"
+	defaultAuthSessionCookieSameSite = "Lax"
+	defaultAuthStateTTL              = 10 * time.Minute
+	defaultAuthSessionTTL            = 12 * time.Hour
 )
 
 type authSessionConfig struct {
@@ -234,7 +236,7 @@ func handleGitHubCallback(w http.ResponseWriter, r *http.Request, cfg authSessio
 	http.SetCookie(w, &http.Cookie{
 		Name:     cfg.cookieName(),
 		Value:    cookieValue,
-		Path:     "/",
+		Path:     defaultAuthSessionCookiePath,
 		Expires:  claims.Expires,
 		MaxAge:   int(claims.Expires.Sub(cfg.now()).Seconds()),
 		HttpOnly: true,
@@ -265,7 +267,7 @@ func handleManagedLoginLogout(w http.ResponseWriter, r *http.Request, cfg authSe
 	http.SetCookie(w, &http.Cookie{
 		Name:     cfg.cookieName(),
 		Value:    "",
-		Path:     "/",
+		Path:     defaultAuthSessionCookiePath,
 		Expires:  time.Unix(0, 0).UTC(),
 		MaxAge:   -1,
 		HttpOnly: true,

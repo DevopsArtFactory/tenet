@@ -268,6 +268,9 @@ func assertManagedLoginLifecycleDiagnostics(t *testing.T, managedLogin TenetMana
 	if managedLogin.SessionTTLSeconds != int64(defaultAuthSessionTTL.Seconds()) || !managedLogin.SessionExpiryEnforced {
 		t.Fatalf("expected signed session TTL/expiry diagnostics, got %#v", managedLogin)
 	}
+	if managedLogin.SessionCookiePath != defaultAuthSessionCookiePath || !managedLogin.SessionCookieHTTPOnly || managedLogin.SessionCookieSameSite != defaultAuthSessionCookieSameSite {
+		t.Fatalf("expected stable session cookie attribute diagnostics, got %#v", managedLogin)
+	}
 	if managedLogin.ProviderAccessTokenStored || managedLogin.ProviderAccessTokenReturned || managedLogin.ProviderTokenRefreshSupported || managedLogin.ProviderTokenRevocationSupported {
 		t.Fatalf("expected provider-token diagnostics to remain non-secret/non-refreshing/non-revoking, got %#v", managedLogin)
 	}

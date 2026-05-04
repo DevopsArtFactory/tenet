@@ -299,6 +299,9 @@ func assertManagedLoginRawLifecycleDiagnostics(t *testing.T, managedLogin map[st
 	if managedLogin["sessionTtlSeconds"] != float64(DefaultTenetManagedLoginSessionTTLSeconds()) || managedLogin["sessionExpiryEnforced"] != true {
 		t.Fatalf("expected signed session TTL/expiry diagnostics, got %#v", managedLogin)
 	}
+	if managedLogin["sessionCookiePath"] != defaultAuthSessionCookiePath || managedLogin["sessionCookieHttpOnly"] != true || managedLogin["sessionCookieSameSite"] != defaultAuthSessionCookieSameSite {
+		t.Fatalf("expected stable session cookie attribute diagnostics, got %#v", managedLogin)
+	}
 	if managedLogin["providerAccessTokenStored"] != false || managedLogin["providerAccessTokenReturned"] != false || managedLogin["providerTokenRefreshSupported"] != false || managedLogin["providerTokenRevocationSupported"] != false {
 		t.Fatalf("expected provider-token diagnostics to remain non-secret/non-refreshing/non-revoking, got %#v", managedLogin)
 	}

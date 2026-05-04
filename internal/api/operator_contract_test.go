@@ -85,6 +85,7 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 		"OIDC/SAML provider selection, provider-token refresh/revocation, and long-lived token lifecycle management remain future work",
 		"non-secret `requiredSettings` and `missingSettings`",
 		"`sessionCookieSecureOverride`, `sessionCookieSecureForRequest`, and `sessionCookieSecureSources`",
+		"`sessionCookiePath=/`, `sessionCookieHttpOnly=true`, `sessionCookieSameSite=Lax`",
 		"Treat managed-login release coverage as two complementary checks",
 		"without live GitHub credentials",
 	} {
