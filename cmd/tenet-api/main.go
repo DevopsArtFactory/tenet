@@ -7,6 +7,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -458,13 +459,15 @@ func enterpriseSSODiagnosticFromSettings(provider string, settings map[string]st
 			missingSettings = append(missingSettings, setting)
 		}
 	}
-	configured := len(missingSettings) == 0
+	invalidSettings := enterpriseSSOInvalidSettings(provider, settings)
+	configured := len(missingSettings) == 0 && len(invalidSettings) == 0
 	diagnostic := api.EnterpriseSSODiagnostic{
 		Configured:              configured,
 		Active:                  false,
 		Provider:                provider,
 		RequiredSettings:        requiredSettings,
 		MissingSettings:         missingSettings,
+		InvalidSettings:         invalidSettings,
 		LoginRoute:              loginRoute,
 		CallbackRoute:           callbackRoute,
 		StateStoreConfigured:    settings["TENET_AUTH_STATE_STORE_PATH"] != "",
@@ -472,10 +475,34 @@ func enterpriseSSODiagnosticFromSettings(provider string, settings map[string]st
 		SessionSecretConfigured: settings["TENET_AUTH_SESSION_SECRET"] != "",
 		UnavailableReason:       "enterprise SSO provider diagnostics are configured, but provider login/callback runtime is not active for this API instance",
 	}
-	if !configured {
+	if len(missingSettings) > 0 {
 		diagnostic.UnavailableReason = "enterprise SSO provider configuration is incomplete or missing shared managed-session settings"
+	} else if len(invalidSettings) > 0 {
+		diagnostic.UnavailableReason = "enterprise SSO provider configuration contains invalid non-secret URL settings"
 	}
 	return diagnostic
+}
+
+func enterpriseSSOInvalidSettings(provider string, settings map[string]string) []string {
+	if canonicalAuthProvider(provider) != "okta_saml" {
+		return nil
+	}
+	invalid := []string{}
+	if value := strings.TrimSpace(settings["TENET_OKTA_SAML_METADATA_URL"]); value != "" && !isAbsoluteHTTPURL(value) {
+		invalid = append(invalid, "TENET_OKTA_SAML_METADATA_URL")
+	}
+	if value := strings.TrimSpace(settings["TENET_OKTA_SAML_ACS_URL"]); value != "" {
+		parsed, err := url.Parse(value)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.EscapedPath() != "/auth/callback/okta/saml" {
+			invalid = append(invalid, "TENET_OKTA_SAML_ACS_URL")
+		}
+	}
+	return invalid
+}
+
+func isAbsoluteHTTPURL(value string) bool {
+	parsed, err := url.Parse(value)
+	return err == nil && parsed.Scheme != "" && parsed.Host != "" && (parsed.Scheme == "https" || parsed.Scheme == "http")
 }
 
 func enterpriseSSORequiredSettingsAndRoutes(provider string) ([]string, string, string) {

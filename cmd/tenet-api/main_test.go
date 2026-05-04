@@ -389,6 +389,54 @@ func TestNewAPIOptionsReportsEnterpriseSSOMissingSettingsForOktaSAML(t *testing.
 	}
 }
 
+func TestNewAPIOptionsRejectsInvalidOktaSAMLURLDiagnostics(t *testing.T) {
+	t.Setenv("TENET_AUTH_PROVIDER", "okta_saml")
+	t.Setenv("TENET_OKTA_SAML_METADATA_URL", "ftp://okta.example.com/app/metadata")
+	t.Setenv("TENET_OKTA_SAML_ACS_URL", "https://tenet.example.com/auth/callback/okta")
+	t.Setenv("TENET_AUTH_STATE_STORE_PATH", filepath.Join(t.TempDir(), "saml-state.json"))
+	t.Setenv("TENET_AUTH_IDENTITY_STORE_PATH", filepath.Join(t.TempDir(), "saml-identities.json"))
+	t.Setenv("TENET_AUTH_SESSION_SECRET", "session-secret")
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, writeRepositoryFixture(t), nil)
+	enterpriseSSO := options.AuthRuntime.EnterpriseSSO
+
+	if enterpriseSSO.Configured || enterpriseSSO.Active || enterpriseSSO.Provider != "okta_saml" {
+		t.Fatalf("expected invalid Okta SAML URL diagnostics to stay inactive, got %+v", enterpriseSSO)
+	}
+	if len(enterpriseSSO.MissingSettings) != 0 {
+		t.Fatalf("expected complete settings to avoid missing-settings diagnostics, got %+v", enterpriseSSO.MissingSettings)
+	}
+	expectedInvalid := []string{"TENET_OKTA_SAML_METADATA_URL", "TENET_OKTA_SAML_ACS_URL"}
+	if !reflect.DeepEqual(enterpriseSSO.InvalidSettings, expectedInvalid) {
+		t.Fatalf("unexpected Okta SAML invalid settings: %+v", enterpriseSSO.InvalidSettings)
+	}
+	if enterpriseSSO.UnavailableReason != "enterprise SSO provider configuration contains invalid non-secret URL settings" {
+		t.Fatalf("unexpected Okta SAML invalid-settings reason: %q", enterpriseSSO.UnavailableReason)
+	}
+}
+
+func TestNewAPIOptionsReportsConfiguredInactiveOktaSAMLWithValidURLDiagnostics(t *testing.T) {
+	t.Setenv("TENET_AUTH_PROVIDER", "okta_saml")
+	t.Setenv("TENET_OKTA_SAML_METADATA_URL", "https://okta.example.com/app/metadata")
+	t.Setenv("TENET_OKTA_SAML_ACS_URL", "https://tenet.example.com/auth/callback/okta/saml")
+	t.Setenv("TENET_AUTH_STATE_STORE_PATH", filepath.Join(t.TempDir(), "saml-state.json"))
+	t.Setenv("TENET_AUTH_IDENTITY_STORE_PATH", filepath.Join(t.TempDir(), "saml-identities.json"))
+	t.Setenv("TENET_AUTH_SESSION_SECRET", "session-secret")
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, writeRepositoryFixture(t), nil)
+	enterpriseSSO := options.AuthRuntime.EnterpriseSSO
+
+	if !enterpriseSSO.Configured || enterpriseSSO.Active || enterpriseSSO.Provider != "okta_saml" {
+		t.Fatalf("expected configured-but-inactive Okta SAML enterprise SSO diagnostic, got %+v", enterpriseSSO)
+	}
+	if len(enterpriseSSO.MissingSettings) != 0 || len(enterpriseSSO.InvalidSettings) != 0 {
+		t.Fatalf("unexpected Okta SAML missing/invalid settings: %+v invalid=%+v", enterpriseSSO.MissingSettings, enterpriseSSO.InvalidSettings)
+	}
+	if enterpriseSSO.LoginRoute != "/auth/login/okta" || enterpriseSSO.CallbackRoute != "/auth/callback/okta/saml" {
+		t.Fatalf("unexpected Okta SAML routes: %+v", enterpriseSSO)
+	}
+}
+
 func TestNewAPIOptionsCanForceManagedLoginSecureSessionCookie(t *testing.T) {
 	t.Setenv("TENET_AUTH_PROVIDER", "github")
 	t.Setenv("TENET_GITHUB_OAUTH_CLIENT_ID", "client-id")

@@ -418,6 +418,7 @@ type EnterpriseSSODiagnostic struct {
 	Provider                string   `json:"provider,omitempty"`
 	RequiredSettings        []string `json:"requiredSettings,omitempty"`
 	MissingSettings         []string `json:"missingSettings,omitempty"`
+	InvalidSettings         []string `json:"invalidSettings,omitempty"`
 	LoginRoute              string   `json:"loginRoute,omitempty"`
 	CallbackRoute           string   `json:"callbackRoute,omitempty"`
 	StateStoreConfigured    bool     `json:"stateStoreConfigured"`
@@ -727,7 +728,7 @@ func buildAuthRuntimeDiagnosticForRequest(r *http.Request, options Options) Auth
 		if enterpriseSSO.MissingSettings == nil {
 			enterpriseSSO.MissingSettings = []string{}
 		}
-		enterpriseSSO.Active = authSession.active() && authSession.Provider.Name() == enterpriseSSO.Provider && len(enterpriseSSO.MissingSettings) == 0
+		enterpriseSSO.Active = authSession.active() && authSession.Provider.Name() == enterpriseSSO.Provider && len(enterpriseSSO.MissingSettings) == 0 && len(enterpriseSSO.InvalidSettings) == 0
 		if enterpriseSSO.Active {
 			enterpriseSSO.Configured = true
 			enterpriseSSO.UnavailableReason = ""
@@ -769,7 +770,7 @@ func normalizeAuthRuntimeDiagnostic(diagnostic AuthRuntimeDiagnostic) AuthRuntim
 		if enterpriseSSO.MissingSettings == nil {
 			enterpriseSSO.MissingSettings = []string{}
 		}
-		enterpriseSSO.Configured = enterpriseSSO.Configured && len(enterpriseSSO.MissingSettings) == 0
+		enterpriseSSO.Configured = enterpriseSSO.Configured && len(enterpriseSSO.MissingSettings) == 0 && len(enterpriseSSO.InvalidSettings) == 0
 		enterpriseSSO.Active = enterpriseSSO.Active && enterpriseSSO.Configured
 		if enterpriseSSO.Active {
 			enterpriseSSO.UnavailableReason = ""

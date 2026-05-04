@@ -230,6 +230,47 @@ func TestRouterOperatorContextReportsEnterpriseSSORuntimeDiagnostic(t *testing.T
 	}
 }
 
+func TestRouterOperatorContextReportsEnterpriseSSOInvalidSettings(t *testing.T) {
+	router := NewRouter(Options{
+		AuthRuntime: AuthRuntimeDiagnostic{
+			EnterpriseSSO: EnterpriseSSODiagnostic{
+				Configured:              true,
+				Provider:                "okta_saml",
+				RequiredSettings:        []string{"TENET_AUTH_PROVIDER", "TENET_OKTA_SAML_ACS_URL"},
+				MissingSettings:         []string{},
+				InvalidSettings:         []string{"TENET_OKTA_SAML_ACS_URL"},
+				LoginRoute:              "/auth/login/okta",
+				CallbackRoute:           "/auth/callback/okta/saml",
+				StateStoreConfigured:    true,
+				IdentityStoreConfigured: true,
+				SessionSecretConfigured: true,
+				UnavailableReason:       "enterprise SSO provider configuration contains invalid non-secret URL settings",
+			},
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode operator context response: %v", err)
+	}
+	authRuntime := body["authRuntime"].(map[string]any)
+	enterpriseSSO := authRuntime["enterpriseSso"].(map[string]any)
+	if enterpriseSSO["configured"] != false || enterpriseSSO["active"] != false || enterpriseSSO["provider"] != "okta_saml" {
+		t.Fatalf("expected invalid enterprise SSO settings to force inactive diagnostic, got %#v", enterpriseSSO)
+	}
+	invalid, ok := enterpriseSSO["invalidSettings"].([]any)
+	if !ok || len(invalid) != 1 || invalid[0] != "TENET_OKTA_SAML_ACS_URL" {
+		t.Fatalf("expected raw JSON invalidSettings diagnostic, got %#v", enterpriseSSO["invalidSettings"])
+	}
+}
+
 func TestRouterManagedLoginRoutesRequireActiveRuntime(t *testing.T) {
 	router := NewRouter(Options{
 		AuthRuntime: AuthRuntimeDiagnostic{
