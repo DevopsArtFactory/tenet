@@ -4175,11 +4175,25 @@
         const normalized = String(value || '').trim().replace(/_/g, ' ');
         return normalized || 'unknown truncation status';
       };
+      const ecsTaskScopeUnavailableText = (scope) => {
+        const reason = resourceInspectionUnavailableReasonText(scope?.unavailableReason);
+        const summary = String(scope?.summary || '').trim();
+        return [reason, summary].filter(Boolean).join(' ');
+      };
+      const isECSTaskScopeUnavailable = (scope) => scope && typeof scope === 'object' && scope.available === false;
       const createECSTaskScopeSummary = (scope) => {
         if (!scope || typeof scope !== 'object') return null;
         const effectiveLimit = scope.effectiveLimit;
         const returnedTaskCount = scope.returnedTaskCount;
         const truncationStatus = ecsTaskScopeStatusText(scope.truncationStatus);
+        if (isECSTaskScopeUnavailable(scope)) {
+          const unavailableText = ecsTaskScopeUnavailableText(scope) || truncationStatus;
+          return createElement(
+            'p',
+            'detail-section-copy warning',
+            `Task sample unavailable · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${unavailableText}`,
+          );
+        }
         return createElement(
           'p',
           'detail-section-copy',
@@ -4306,11 +4320,14 @@
           },
           'No active ECS deployments are reported for this service.',
         );
+        const taskScopeUnavailable = isECSTaskScopeUnavailable(service?.tasksScope);
         const tasksSection = createInspectionListSection(
           'Recent ECS tasks',
           service?.tasks || [],
           (task) => createECSTaskListItem(deploymentName, task, true),
-          'No recent ECS tasks are reported for this service.',
+          taskScopeUnavailable
+            ? 'Task sampling could not be completed for this service, so no ECS task handoffs are shown.'
+            : 'No recent ECS tasks are reported for this service.',
           [createECSTaskScopeSummary(service?.tasksScope)],
         );
         const eventsSection = createInspectionListSection(
