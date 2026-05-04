@@ -1150,6 +1150,65 @@
         const hiddenCount = Math.max(0, total - visible.length);
         return `Visible deployment examples: ${visible.join('; ')}${hiddenCount > 0 ? `; +${hiddenCount} more` : ''}`;
       };
+      const operatorContextDesiredStateSource = (context) => context?.desiredStateSource || null;
+      const operatorContextDesiredStateSourceKindLabel = (kind) => {
+        const labels = { filesystem: 'filesystem catalog', github: 'GitHub catalog', none: 'not configured' };
+        return labels[kind] || kind || 'not configured';
+      };
+      const operatorContextDesiredStateSourceLabel = (context) => {
+        const source = operatorContextDesiredStateSource(context);
+        if (!source || typeof source !== 'object') return null;
+        if (!source.configured) return 'Desired-state source: not configured; webhook refresh relevance is unavailable for this API instance';
+        if (source.kind === 'filesystem') {
+          const mode = source.filesystem?.mode ? ` (${source.filesystem.mode})` : '';
+          return `Desired-state source: filesystem catalog${mode}; GitHub webhooks are diagnostic-only in this mode`;
+        }
+        if (source.kind === 'github') {
+          const github = source.github || {};
+          const fields = [];
+          if (github.repository) fields.push(`repo ${github.repository}`);
+          if (github.ref) fields.push(`ref ${github.ref}`);
+          if (github.path) fields.push(`path ${github.path}`);
+          if (github.baseUrl) fields.push(`base URL ${github.baseUrl}`);
+          return `Desired-state source: GitHub catalog${fields.length ? ` (${fields.join('; ')})` : ''}`;
+        }
+        return `Desired-state source: ${operatorContextDesiredStateSourceKindLabel(source.kind)}`;
+      };
+      const operatorContextControllerRefreshStatusLabel = (status) => {
+        const labels = {
+          available: 'Redis controller-refresh handoff available',
+          redis_unavailable: 'GitHub source configured; Redis controller-refresh handoff unavailable',
+          filesystem_noop: 'filesystem source; webhook refresh handoff is a no-op',
+          source_not_configured: 'desired-state source not configured',
+          not_configured: 'controller-refresh handoff not configured',
+        };
+        return labels[status] || status || 'controller-refresh status unavailable';
+      };
+      const operatorContextControllerRefreshLabel = (context) => {
+        const refresh = operatorContextDesiredStateSource(context)?.controllerRefresh || null;
+        if (!refresh || typeof refresh !== 'object') return null;
+        const fields = [];
+        if (refresh.backend) fields.push(`backend ${refresh.backend}`);
+        if (refresh.channel) fields.push(`channel ${refresh.channel}`);
+        const fieldText = fields.length ? ` (${fields.join('; ')})` : '';
+        const reason = refresh.reason ? ` — ${refresh.reason}` : '';
+        const diagnostic = refresh.diagnosticOnly ? ' Diagnostic only; no webhook is sent from this page.' : '';
+        return `Controller refresh: ${operatorContextControllerRefreshStatusLabel(refresh.status)}${fieldText}.${diagnostic}${reason}`;
+      };
+      const operatorContextDesiredStateSourceListLabel = (source, field, label) => {
+        const values = Array.isArray(source?.[field]) ? source[field].filter(Boolean) : [];
+        return values.length ? `${label}: ${values.join(', ')}` : null;
+      };
+      const operatorContextDesiredStateSourceEntries = (context) => {
+        const source = operatorContextDesiredStateSource(context);
+        if (!source || typeof source !== 'object') return [];
+        return [
+          { label: operatorContextDesiredStateSourceLabel(context), className: source.configured ? '' : 'operator-context-warning' },
+          { label: operatorContextControllerRefreshLabel(context), className: source.controllerRefresh?.available ? '' : 'operator-context-warning' },
+          { label: operatorContextDesiredStateSourceListLabel(source, 'webhookMatchStatuses', 'Webhook match statuses') },
+          { label: operatorContextDesiredStateSourceListLabel(source, 'webhookProcessedFalseReasons', 'Webhook ignored reasons') },
+        ].filter((entry) => entry.label);
+      };
       const operatorContextEnforcementModeLabel = (context) => {
         const mode = context?.enforcement?.mode || '';
         const labels = {
@@ -1547,6 +1606,9 @@
             detailsMeta.append(createElement('span', '', visibleDeploymentExamples));
           }
           operatorContextAccessVerdictEntries(context).forEach((entry) => {
+            detailsMeta.append(createElement('span', entry.className, entry.label));
+          });
+          operatorContextDesiredStateSourceEntries(context).forEach((entry) => {
             detailsMeta.append(createElement('span', entry.className, entry.label));
           });
           if (detailsMeta.children.length) {
