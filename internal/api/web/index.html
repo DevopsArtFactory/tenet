@@ -4377,10 +4377,22 @@
         }
         return null;
       };
+      const autoScalingGroupRecentLogsHandoff = (deploymentName, resource) => {
+        if (!deploymentName || !resource?.id) return null;
+        if (!['candidateAutoScalingGroup', 'serviceAutoScalingGroup'].includes(String(resource?.type || '').trim())) return null;
+        return createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', {
+          deployment: deploymentName,
+          resourceType: resource.type,
+          resourceId: resource.id,
+        }), 'Open EC2 console logs', '_self');
+      };
       const renderAutoScalingGroupInspection = (section, deploymentName, resource, result) => {
         const group = result?.autoScalingGroup;
         const observedLaunchTemplate = autoScalingObservedLaunchTemplate(group);
-        const actions = createResourceInspectionActions(section, deploymentName, resource);
+        const actions = [
+          ...createResourceInspectionActions(section, deploymentName, resource),
+          autoScalingGroupRecentLogsHandoff(deploymentName, resource),
+        ].filter(Boolean);
         const metadata = createLookupContextGrid(result?.lookupContext, [
           ['Inspection source', metricValue(result?.source)],
           ['Auto Scaling Group name', textOrDash(group?.autoScalingGroupName)],
