@@ -131,6 +131,8 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 func TestEnterpriseSSOSmokeContracts(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
 	for _, fragment := range []string{
+		"`GET /v1/operator/context.authRuntime.enterpriseSso` is the provider-neutral diagnostic surface",
+		"For `TENET_AUTH_PROVIDER=google_oidc`, `okta_saml`, or `okta_oidc`, it reports the provider",
 		"`make smoke-local` and `make smoke-docker` now restart the API with fake local Google OIDC and Okta SAML settings",
 		"configured-but-inactive `enterpriseSso` diagnostics stay present, non-secret, credential-free",
 		"does not contact Google or Okta and does not validate live provider login",
