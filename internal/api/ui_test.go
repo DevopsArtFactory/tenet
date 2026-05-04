@@ -2105,6 +2105,8 @@ func TestCISmokeWorkflowSyntaxChecksBothSmokeScriptsInFastLane(t *testing.T) {
 		"cmd/tenet-controller/*|cmd/tenet-controller/**",
 		"internal/api/*|internal/api/**",
 		"internal/authprovider/*|internal/authprovider/**",
+		"internal/authsaml/*|internal/authsaml/**",
+		"internal/authsso/*|internal/authsso/**",
 		"internal/authidentity/*|internal/authidentity/**",
 		"internal/authstate/*|internal/authstate/**",
 		"internal/requestactor/*|internal/requestactor/**",
@@ -2148,6 +2150,8 @@ func TestCISmokeWorkflowDockerScopeCoversManagedLoginRuntimeChanges(t *testing.T
 	patterns := dockerSmokeScopePatterns(t, string(body))
 	for _, changedPath := range []string{
 		"internal/authprovider/google_oidc.go",
+		"internal/authsaml/assertion.go",
+		"internal/authsso/runtime.go",
 		"internal/authidentity/file.go",
 		"internal/authstate/file.go",
 	} {
@@ -3103,6 +3107,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"on pull requests, a cheap `docker-smoke-scope` job first checks changed paths",
 			"runs the full `make smoke-docker` container stack only when the PR touches Compose/front-door/auth/API/controller, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surfaces",
 			"Unrelated docs-only PRs keep the cheap fast lane without the Docker stack",
+			"reserved Okta SAML/enterprise runtime paths `internal/authsaml/**` and `internal/authsso/**`",
 			"make smoke-docker",
 		},
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
@@ -3180,6 +3185,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"Pull requests first pass through a cheap `docker-smoke-scope` path filter",
 			"only PRs that touch Compose/front-door/auth/API/controller, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surfaces",
 			"`internal/resourceaws/**`",
+			"reserved Okta SAML/enterprise runtime paths `internal/authsaml/**` and `internal/authsso/**`",
 			"unrelated docs-only PRs on the cheap fast lane",
 			"`docker compose down --remove-orphans` even on failure",
 		},
