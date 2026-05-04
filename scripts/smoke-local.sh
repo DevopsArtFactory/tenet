@@ -1106,6 +1106,11 @@ assert "const operatorContextManagedLoginStateLabel = (context) => {" in ui, ui
 assert "Managed login runtime:" in ui, ui
 assert "Managed login missing settings:" in ui, ui
 assert "Managed login storage/session:" in ui, ui
+assert "const operatorContextManagedLoginCookieAttributesLabel = (context) => {" in ui, ui
+assert "Managed login cookie attributes:" in ui, ui
+assert "local HTTP without TLS or forwarded HTTPS evidence is expected for development" in ui, ui
+assert "configured secure-cookie override" in ui, ui
+assert "X-Forwarded-Proto=https" in ui, ui
 assert "operatorContextManagedLoginClass(context)" in ui, ui
 assert 'operatorContextSupportedIdentityHeadersLabel(context)' in ui, ui
 assert "const operatorContextSupportedActorHeadersLabel = (context) => {" in ui, ui
