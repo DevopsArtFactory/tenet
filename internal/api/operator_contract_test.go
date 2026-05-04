@@ -72,22 +72,22 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 	}
 
 	readme := readRepoFile(t, "README.md")
-	if !strings.Contains(readme, "`GET /auth/login/github` or `GET /auth/login/google` creates one-time callback state") {
+	if !strings.Contains(readme, "`GET /auth/login/github`, `GET /auth/login/google`, or `GET /auth/login/okta` creates one-time callback state") {
 		t.Fatal("expected README auth runtime boundary to state public GitHub login route is shipped")
 	}
 	if !strings.Contains(readme, "reports `authRuntime.tenetManagedLogin.active=true` from `GET /v1/operator/context`") {
 		t.Fatal("expected README auth runtime boundary to state auth-provider runtime settings activate the diagnostic")
 	}
 	for _, fragment := range []string{
-		"`GET /auth/login/github` or `GET /auth/login/google` creates one-time callback state",
+		"`GET /auth/login/github`, `GET /auth/login/google`, or `GET /auth/login/okta` creates one-time callback state",
 		"reports `GET /v1/operator/context.authRuntime.tenetManagedLogin.active=true`",
 		"When any setting is absent the runtime stays disabled",
-		"Okta SAML/OIDC provider selection, provider-token refresh/revocation, and long-lived token lifecycle management remain future work",
+		"Okta SAML provider selection, provider-token refresh/revocation, and long-lived token lifecycle management remain future work",
 		"non-secret `requiredSettings` and `missingSettings`",
 		"`sessionCookieSecureOverride`, `sessionCookieSecureForRequest`, and `sessionCookieSecureSources`",
 		"`sessionCookiePath=/`, `sessionCookieHttpOnly=true`, `sessionCookieSameSite=Lax`",
 		"Treat managed-login release coverage as two complementary checks",
-		"without live GitHub or Google credentials",
+		"without live GitHub, Google, or Okta credentials",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
 			t.Fatalf("expected local runtime auth groundwork boundary to include %q", fragment)
@@ -99,8 +99,8 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
 	for _, fragment := range []string{
 		"`docs/architecture/tenet-v1-enterprise-sso.md`",
-		"Okta SAML/OIDC activation checklists for follow-up work",
-		"full enterprise SSO providers for Okta and repository-backed provider group authorization",
+		"Okta SAML/OIDC activation checklists",
+		"Okta SAML runtime and repository-backed provider group authorization",
 		"repository-backed RBAC policy evaluation for users/groups",
 	} {
 		if !strings.Contains(readme, fragment) {
@@ -150,14 +150,14 @@ func TestEnterpriseSSOSmokeContracts(t *testing.T) {
 	for _, fragment := range []string{
 		"`GET /v1/operator/context.authRuntime.enterpriseSso` is the provider-neutral diagnostic surface",
 		"For `TENET_AUTH_PROVIDER=google_oidc` (or the `google` alias), the managed-login runtime is active",
-		"`make smoke-local` and `make smoke-docker` restart the API with fake local Google OIDC and Okta SAML settings",
-		"Google reports an active managed-login/enterprise-SSO runtime while Okta remains configured-but-inactive, non-secret, credential-free",
+		"`make smoke-local` and `make smoke-docker` restart the API with fake local Google OIDC, Okta OIDC, and Okta SAML settings",
+		"Google and Okta OIDC report active managed-login/enterprise-SSO runtimes while Okta SAML remains configured-but-inactive, non-secret, credential-free",
 		"required/missing/invalid settings",
 		"sign-in/callback/logout routes",
-		"does not contact Google or Okta; focused Go tests cover the Google fake-provider login/callback path",
+		"does not contact Google or Okta; focused Go tests cover the Google and Okta OIDC fake-provider login/callback paths",
 		"The smoke guard now also exercises `GET /auth/logout` and `POST /auth/logout` on the configured Google path",
 		"does not claim provider-token/front-door-session revocation",
-		"focused Go tests cover the Google fake-provider login/callback path, the remaining `okta_oidc` diagnostic shape",
+		"focused Go tests cover the Google and Okta OIDC fake-provider login/callback paths",
 		"including the Google Workspace case where the API reports both `tenetManagedLogin.active=true` and `enterpriseSso.active=true`",
 		"the embedded recovery copy deliberately prefers the enterprise SSO label",
 		"reserved Okta SAML/enterprise runtime paths `internal/authsaml/**` and `internal/authsso/**`",
@@ -169,13 +169,13 @@ func TestEnterpriseSSOSmokeContracts(t *testing.T) {
 
 	enterpriseSSODoc := readRepoFile(t, "docs/architecture/tenet-v1-enterprise-sso.md")
 	for _, fragment := range []string{
-		"The current smoke guard restarts the direct-process and Compose API with fake local Google OIDC and Okta SAML settings",
-		"Google reports an active `enterpriseSso` / `tenetManagedLogin` runtime with canonical provider `google` and same-origin `loginRoute`, `callbackRoute`, and `logoutRoute`",
+		"The current smoke guard restarts the direct-process and Compose API with fake local Google OIDC, Okta OIDC, and Okta SAML settings",
+		"Google and Okta OIDC report active `enterpriseSso` / `tenetManagedLogin` runtimes with same-origin `loginRoute`, `callbackRoute`, and `logoutRoute`",
 		"The smoke guard also calls both `GET /auth/logout` and `POST /auth/logout` against the configured Google path",
 		"asserting a safe in-app redirect, Tenet `tenet_session` cookie expiry, and no provider-token/front-door-session revocation claim",
 		"without contacting an external IdP",
-		"Focused unit/router tests cover Google fake-provider code exchange/profile lookup",
-		"the embedded guarded-read handoff preference when Google reports both `enterpriseSso.active=true` and `tenetManagedLogin.active=true`",
+		"Focused unit/router tests cover Google and Okta OIDC fake-provider code exchange/profile lookup",
+		"the embedded guarded-read handoff preference when enterprise SSO reports both `enterpriseSso.active=true` and `tenetManagedLogin.active=true`",
 		"operator copy must use `Sign in with Google Workspace SSO`",
 		"reserved Okta SAML/enterprise runtime paths `internal/authsaml/**` and `internal/authsso/**`",
 		"while unrelated docs-only edits stay on the cheaper fast lane",
@@ -194,6 +194,10 @@ func TestEnterpriseSSOSmokeContracts(t *testing.T) {
 		`TENET_GOOGLE_OIDC_REDIRECT_URL: ${TENET_GOOGLE_OIDC_REDIRECT_URL:-}`,
 		`TENET_OKTA_SAML_METADATA_URL: ${TENET_OKTA_SAML_METADATA_URL:-}`,
 		`TENET_OKTA_SAML_ACS_URL: ${TENET_OKTA_SAML_ACS_URL:-}`,
+		`TENET_OKTA_OIDC_ISSUER_URL: ${TENET_OKTA_OIDC_ISSUER_URL:-}`,
+		`TENET_OKTA_OIDC_CLIENT_ID: ${TENET_OKTA_OIDC_CLIENT_ID:-}`,
+		`TENET_OKTA_OIDC_CLIENT_SECRET: ${TENET_OKTA_OIDC_CLIENT_SECRET:-}`,
+		`TENET_OKTA_OIDC_REDIRECT_URL: ${TENET_OKTA_OIDC_REDIRECT_URL:-}`,
 		`TENET_AUTH_STATE_STORE_PATH: ${TENET_AUTH_STATE_STORE_PATH:-}`,
 		`TENET_AUTH_IDENTITY_STORE_PATH: ${TENET_AUTH_IDENTITY_STORE_PATH:-}`,
 		`TENET_AUTH_SESSION_SECRET: ${TENET_AUTH_SESSION_SECRET:-}`,
@@ -209,6 +213,8 @@ func TestEnterpriseSSOSmokeContracts(t *testing.T) {
 			`assert_enterprise_sso_logout_boundary() {`,
 			`enterprise_sso_google_context=$(curl -fsS "http://$HOST:$PORT/v1/operator/context")`,
 			`assert_enterprise_sso_diagnostic "$enterprise_sso_google_context_path" google /auth/login/google /auth/callback/google true`,
+			`enterprise_sso_okta_oidc_context=$(curl -fsS "http://$HOST:$PORT/v1/operator/context")`,
+			`assert_enterprise_sso_diagnostic "$enterprise_sso_okta_oidc_context_path" okta_oidc /auth/login/okta /auth/callback/okta/oidc true`,
 			`assert_enterprise_sso_diagnostic "$enterprise_sso_okta_saml_context_path" okta_saml /auth/login/okta /auth/callback/okta/saml false`,
 			`assert_enterprise_sso_logout_boundary GET "/?page=operator-context"`,
 			`assert_enterprise_sso_logout_boundary POST "/?page=operator-context&action=logout"`,
@@ -230,9 +236,12 @@ func TestEnterpriseSSOSmokeContracts(t *testing.T) {
 			`assert_enterprise_sso_logout_boundary() {`,
 			`restart_api_with_enterprise_sso() {`,
 			`restart_api_with_enterprise_sso google_oidc`,
+			`restart_api_with_enterprise_sso okta_oidc`,
 			`restart_api_with_enterprise_sso okta_saml`,
 			`enterprise_sso_google_context=$(curl -fsS "$API_BASE_URL/v1/operator/context")`,
 			`assert_enterprise_sso_diagnostic "$enterprise_sso_google_context_path" google /auth/login/google /auth/callback/google true`,
+			`enterprise_sso_okta_oidc_context=$(curl -fsS "$API_BASE_URL/v1/operator/context")`,
+			`assert_enterprise_sso_diagnostic "$enterprise_sso_okta_oidc_context_path" okta_oidc /auth/login/okta /auth/callback/okta/oidc true`,
 			`assert_enterprise_sso_diagnostic "$enterprise_sso_okta_saml_context_path" okta_saml /auth/login/okta /auth/callback/okta/saml false`,
 			`assert_enterprise_sso_logout_boundary GET "/?page=operator-context"`,
 			`assert_enterprise_sso_logout_boundary POST "/?page=operator-context&action=logout"`,
@@ -1611,7 +1620,7 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 		"`X-Tenet-Authorized-Deployments`",
 		"strip any inbound `X-Tenet-Authenticated-*`, `X-Tenet-Authorized-Deployments`, `X-Tenet-Authorized-Projects`, `X-Tenet-Authorized-Environments`, and trusted-alias `X-User-*` headers from untrusted clients",
 		"callers can spoof operator identity or deployment access by sending those headers directly",
-		"can now also run an explicitly configured Tenet-managed GitHub OAuth or Google Workspace OIDC browser login inside `tenet-api`",
+		"can now also run an explicitly configured Tenet-managed GitHub OAuth, Google Workspace OIDC, or Okta OIDC browser login inside `tenet-api`",
 		"internal `authidentity` package provides JSON-backed normalized identity-store groundwork toward a future durable `auth_identities` table",
 		"internal `authstate` package provides JSON-backed OAuth callback state groundwork with expiry and one-time consume semantics for future CSRF/state validation",
 		"exposes `GET /auth/login/github` and `GET /auth/callback/github`",
@@ -1620,7 +1629,7 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 		"`HttpOnly`, `SameSite=Lax`",
 		"`TENET_AUTH_SESSION_COOKIE_SECURE` override",
 		"local HTTP development keeps the cookie non-`Secure`",
-		"Okta SAML/OIDC provider selection, provider-token refresh/revocation, and long-lived token lifecycle management remain future work",
+		"Okta SAML provider selection, provider-token refresh/revocation, and long-lived token lifecycle management remain future work",
 		"The legacy `/api/v1/auth/*` route family remains unregistered.",
 		"Reviewer verification for managed-login changes should include `go test ./internal/api ./cmd/tenet-api`",
 		"go test ./internal/authprovider ./internal/authidentity ./internal/authstate",
