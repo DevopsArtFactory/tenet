@@ -1154,9 +1154,16 @@ assert "Project/environment visibility:" in ui, ui
 assert "projectEnvironmentExamples" in ui, ui
 assert "const operatorContextVisibleDeploymentSourceLabel = (deploymentName, example, access) => {" in ui, ui
 assert "const operatorContextVisibleDeploymentExamplesLabel = (context) => {" in ui, ui
-assert "Visible deployment examples:" in ui, ui
+assert 'Visible deployment examples:' in ui, ui
 assert "via exact deployment grant + project/environment scope" in ui, ui
 assert "via project/environment scope" in ui, ui
+assert "const operatorContextDesiredStateSourceEntries = (context) => {" in ui, ui
+assert "Desired-state source:" in ui, ui
+assert "Controller refresh:" in ui, ui
+assert "Webhook match statuses" in ui, ui
+assert "Webhook ignored reasons" in ui, ui
+assert "Diagnostic only; no webhook is sent from this page." in ui, ui
+assert "operatorContextDesiredStateSourceEntries(context)" in ui, ui
 assert "const operatorContextEnforcementModeLabel = (context) => {" in ui, ui
 assert "Enforcement mode:" in ui, ui
 assert "read/write guarded" in ui, ui
