@@ -99,24 +99,38 @@ func (cfg authSessionConfig) secureCookieSources(r *http.Request) []string {
 	if r == nil {
 		return sources
 	}
+	if requestHasForwardedProtoHTTPS(r) {
+		sources = append(sources, "x_forwarded_proto_https")
+	}
+	if requestHasForwardedHeaderProtoHTTPS(r) {
+		sources = append(sources, "forwarded_proto_https")
+	}
+	return sources
+}
+
+func requestHasForwardedProtoHTTPS(r *http.Request) bool {
 	for _, value := range r.Header.Values("X-Forwarded-Proto") {
 		for _, part := range strings.Split(value, ",") {
 			if strings.EqualFold(strings.TrimSpace(part), "https") {
-				sources = append(sources, "x_forwarded_proto_https")
-				break
+				return true
 			}
 		}
 	}
+	return false
+}
+
+func requestHasForwardedHeaderProtoHTTPS(r *http.Request) bool {
 	for _, value := range r.Header.Values("Forwarded") {
-		for _, part := range strings.Split(value, ";") {
-			name, proto, ok := strings.Cut(strings.TrimSpace(part), "=")
-			if ok && strings.EqualFold(strings.TrimSpace(name), "proto") && strings.EqualFold(strings.Trim(strings.TrimSpace(proto), "\""), "https") {
-				sources = append(sources, "forwarded_proto_https")
-				break
+		for _, forwardedElement := range strings.Split(value, ",") {
+			for _, part := range strings.Split(forwardedElement, ";") {
+				name, proto, ok := strings.Cut(strings.TrimSpace(part), "=")
+				if ok && strings.EqualFold(strings.TrimSpace(name), "proto") && strings.EqualFold(strings.Trim(strings.TrimSpace(proto), "\""), "https") {
+					return true
+				}
 			}
 		}
 	}
-	return sources
+	return false
 }
 
 type authSessionClaims struct {
