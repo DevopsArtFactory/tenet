@@ -1859,15 +1859,16 @@ func TestAPIOptionsOverviewDeploymentResourceInspectionWiresObserverRoleAndPlace
 		t.Fatalf("expected wired provider result, got %+v", result)
 	}
 	want := resourceinspection.Request{
-		DeploymentName:      "api-prod",
-		ResourceType:        "ecsService",
-		ResourceName:        "api-prod-live-service",
-		ResourceDescription: "live ECS service",
-		ControlAccountID:    "123456789012",
-		TargetAccountID:     "123456789012",
-		Region:              "ap-northeast-2",
-		ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
-		TaskSummaryLimit:    7,
+		DeploymentName:           "api-prod",
+		ResourceType:             "ecsService",
+		ResourceName:             "api-prod-live-service",
+		ResourceDescription:      "live ECS service",
+		ControlAccountID:         "123456789012",
+		TargetAccountID:          "123456789012",
+		Region:                   "ap-northeast-2",
+		ObserverRoleARN:          "arn:aws:iam::123456789012:role/TenetObserverRole",
+		TaskSummaryLimit:         7,
+		AutoScalingInstanceLimit: 7,
 	}
 	if !reflect.DeepEqual(provider.lastRequest, want) {
 		t.Fatalf("unexpected resource inspection request: %+v", provider.lastRequest)

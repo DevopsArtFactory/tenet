@@ -6935,35 +6935,62 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		})
 	})
 
-	t.Run("rejects invalid ECS service inspection limit before provider lookup", func(t *testing.T) {
-		var overviewCalls int
-		var inspectionCalls int
+	t.Run("rejects invalid bounded inspection limit before provider lookup", func(t *testing.T) {
+		for _, resourceType := range []string{"ecsService", "candidateAutoScalingGroup", "serviceAutoScalingGroup"} {
+			t.Run(resourceType, func(t *testing.T) {
+				var overviewCalls int
+				var inspectionCalls int
+				router := NewRouter(Options{
+					BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+					OverviewDeployment: func(context.Context, string) (catalog.DeploymentOverviewDetail, error) {
+						overviewCalls++
+						return catalog.DeploymentOverviewDetail{Name: "api-prod"}, nil
+					},
+					OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
+						inspectionCalls++
+						return resourceinspection.Result{}, nil
+					},
+				})
+
+				resp := httptest.NewRecorder()
+				router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType="+resourceType+"&resourceName=api-prod-resource&limit=0", nil))
+				if resp.Code != http.StatusBadRequest {
+					t.Fatalf("expected 400 for invalid %s inspection limit, got %d with body %q", resourceType, resp.Code, resp.Body.String())
+				}
+				if body := resp.Body.String(); body != "invalid limit query\n" {
+					t.Fatalf("unexpected invalid limit response: %q", body)
+				}
+				if overviewCalls != 0 || inspectionCalls != 0 {
+					t.Fatalf("expected invalid limit to short-circuit providers, got overview=%d inspection=%d", overviewCalls, inspectionCalls)
+				}
+			})
+		}
+	})
+
+	t.Run("passes explicit ASG inspection limit to provider", func(t *testing.T) {
+		var gotLimit int
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 			OverviewDeployment: func(context.Context, string) (catalog.DeploymentOverviewDetail, error) {
-				overviewCalls++
 				return catalog.DeploymentOverviewDetail{Name: "api-prod"}, nil
 			},
-			OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
-				inspectionCalls++
-				return resourceinspection.Result{}, nil
+			OverviewDeploymentResourceInspection: func(_ context.Context, name, resourceType, resourceName string, limit int) (resourceinspection.Result, error) {
+				gotLimit = limit
+				return resourceinspection.Result{DeploymentName: name, ResourceType: resourceType, ResourceName: resourceName, Available: true}, nil
 			},
 		})
 
 		resp := httptest.NewRecorder()
-		router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=api-prod-service&limit=0", nil))
-		if resp.Code != http.StatusBadRequest {
-			t.Fatalf("expected 400 for invalid ECS service inspection limit, got %d with body %q", resp.Code, resp.Body.String())
+		router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=api-prod-candidate&limit=4", nil))
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected ASG resource inspection to accept positive limit, got %d with body %q", resp.Code, resp.Body.String())
 		}
-		if body := resp.Body.String(); body != "invalid limit query\n" {
-			t.Fatalf("unexpected invalid limit response: %q", body)
-		}
-		if overviewCalls != 0 || inspectionCalls != 0 {
-			t.Fatalf("expected invalid limit to short-circuit providers, got overview=%d inspection=%d", overviewCalls, inspectionCalls)
+		if gotLimit != 4 {
+			t.Fatalf("expected ASG resource inspection limit 4, got %d", gotLimit)
 		}
 	})
 
-	t.Run("ignores limit query for non ECS service inspection resources", func(t *testing.T) {
+	t.Run("ignores limit query for unbounded inspection resources", func(t *testing.T) {
 		var gotLimit int
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},

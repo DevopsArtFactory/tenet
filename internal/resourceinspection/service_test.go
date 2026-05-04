@@ -261,6 +261,69 @@ func TestServiceInspect(t *testing.T) {
 		}
 	})
 
+	t.Run("auto scaling group applies default instance scope", func(t *testing.T) {
+		service := NewService(Options{
+			InspectAutoScalingGroup: func(ctx context.Context, req AutoScalingGroupRequest) (AutoScalingInspection, error) {
+				if req.InstanceLimit != 0 {
+					t.Fatalf("expected omitted ASG limit to reach provider as zero, got %d", req.InstanceLimit)
+				}
+				return AutoScalingInspection{
+					AutoScalingGroupName: "payments-api-prod-candidate",
+					Instances: []AutoScalingGroupInstanceSummary{
+						{InstanceID: "i-011"}, {InstanceID: "i-002"}, {InstanceID: "i-001"}, {InstanceID: "i-003"}, {InstanceID: "i-004"}, {InstanceID: "i-005"},
+						{InstanceID: "i-006"}, {InstanceID: "i-007"}, {InstanceID: "i-008"}, {InstanceID: "i-009"}, {InstanceID: "i-010"},
+					},
+				}, nil
+			},
+		})
+
+		result, err := service.Inspect(context.Background(), Request{ResourceType: "candidateAutoScalingGroup", ResourceName: "payments-api-prod-candidate"})
+		if err != nil {
+			t.Fatalf("Inspect returned error: %v", err)
+		}
+		if result.AutoScalingGroup == nil || result.AutoScalingGroup.InstancesScope == nil {
+			t.Fatalf("expected ASG instancesScope, got %+v", result.AutoScalingGroup)
+		}
+		scope := result.AutoScalingGroup.InstancesScope
+		if scope.RequestedLimit != nil || scope.EffectiveLimit != 10 || scope.ReturnedInstanceCount != 10 || scope.TruncationStatus != "truncated" {
+			t.Fatalf("unexpected default ASG instancesScope: %+v", scope)
+		}
+		if got := result.AutoScalingGroup.Instances; len(got) != 10 || got[0].InstanceID != "i-001" || got[9].InstanceID != "i-010" {
+			t.Fatalf("expected deterministic capped ASG instances, got %+v", got)
+		}
+	})
+
+	t.Run("auto scaling group honors explicit instance limit without truncation", func(t *testing.T) {
+		service := NewService(Options{
+			InspectAutoScalingGroup: func(ctx context.Context, req AutoScalingGroupRequest) (AutoScalingInspection, error) {
+				if req.InstanceLimit != 5 {
+					t.Fatalf("expected explicit ASG limit 5, got %d", req.InstanceLimit)
+				}
+				return AutoScalingInspection{
+					AutoScalingGroupName: "worker-prod-asg",
+					Instances: []AutoScalingGroupInstanceSummary{
+						{InstanceID: "i-003"}, {InstanceID: "i-001"}, {InstanceID: "i-002"},
+					},
+				}, nil
+			},
+		})
+
+		result, err := service.Inspect(context.Background(), Request{ResourceType: "serviceAutoScalingGroup", ResourceName: "worker-prod-asg", AutoScalingInstanceLimit: 5})
+		if err != nil {
+			t.Fatalf("Inspect returned error: %v", err)
+		}
+		if result.AutoScalingGroup == nil || result.AutoScalingGroup.InstancesScope == nil {
+			t.Fatalf("expected ASG instancesScope, got %+v", result.AutoScalingGroup)
+		}
+		scope := result.AutoScalingGroup.InstancesScope
+		if scope.RequestedLimit == nil || *scope.RequestedLimit != 5 || scope.EffectiveLimit != 5 || scope.ReturnedInstanceCount != 3 || scope.TruncationStatus != "not_truncated" {
+			t.Fatalf("unexpected explicit ASG instancesScope: %+v", scope)
+		}
+		if got := result.AutoScalingGroup.Instances; len(got) != 3 || got[0].InstanceID != "i-001" || got[2].InstanceID != "i-003" {
+			t.Fatalf("expected deterministic ASG instances, got %+v", got)
+		}
+	})
+
 	t.Run("user data bootstrap source reuses auto scaling inspection evidence", func(t *testing.T) {
 		var gotLookup AutoScalingGroupRequest
 		service := NewService(Options{

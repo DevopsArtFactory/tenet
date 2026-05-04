@@ -22,14 +22,15 @@ import (
 )
 
 const (
-	SourceECSService            = "ecs_service"
-	SourceAutoScalingGroup      = "auto_scaling_group"
-	SourceTrafficRoutingAWS     = "traffic_routing_aws"
-	SourceRolloutSummary        = "rollout_execution_summary"
-	ecsServiceHintCacheCap      = 256
-	trafficRoutingCacheCap      = 128
-	maxECSServiceTaskSummaries  = 10
-	ecsServiceTaskListPageLimit = 10
+	SourceECSService                     = "ecs_service"
+	SourceAutoScalingGroup               = "auto_scaling_group"
+	SourceTrafficRoutingAWS              = "traffic_routing_aws"
+	SourceRolloutSummary                 = "rollout_execution_summary"
+	ecsServiceHintCacheCap               = 256
+	trafficRoutingCacheCap               = 128
+	maxECSServiceTaskSummaries           = 10
+	maxAutoScalingGroupInstanceSummaries = maxECSServiceTaskSummaries
+	ecsServiceTaskListPageLimit          = 10
 )
 
 var launchTemplateBootstrapSourcePatterns = []*regexp.Regexp{
@@ -43,17 +44,18 @@ var ErrNotImplemented = errors.New("resource inspection service not implemented"
 type LookupContext = resourceaws.LookupContext
 
 type Request struct {
-	DeploymentName      string
-	ResourceType        string
-	ResourceName        string
-	ResourceDescription string
-	TaskSummaryLimit    int
-	BackingResourceType string
-	BackingResourceName string
-	ControlAccountID    string
-	TargetAccountID     string
-	Region              string
-	ObserverRoleARN     string
+	DeploymentName           string
+	ResourceType             string
+	ResourceName             string
+	ResourceDescription      string
+	TaskSummaryLimit         int
+	AutoScalingInstanceLimit int
+	BackingResourceType      string
+	BackingResourceName      string
+	ControlAccountID         string
+	TargetAccountID          string
+	Region                   string
+	ObserverRoleARN          string
 }
 
 type Result struct {
@@ -274,6 +276,14 @@ type AutoScalingInspection struct {
 	MixedInstancesPolicy          *AutoScalingMixedInstancesPolicy  `json:"mixedInstancesPolicy,omitempty"`
 	TargetGroupARNs               []string                          `json:"targetGroupArns,omitempty"`
 	Instances                     []AutoScalingGroupInstanceSummary `json:"instances"`
+	InstancesScope                *AutoScalingInstanceScope         `json:"instancesScope,omitempty"`
+}
+
+type AutoScalingInstanceScope struct {
+	RequestedLimit        *int   `json:"requestedLimit,omitempty"`
+	EffectiveLimit        int    `json:"effectiveLimit"`
+	ReturnedInstanceCount int    `json:"returnedInstanceCount"`
+	TruncationStatus      string `json:"truncationStatus"`
 }
 
 type AutoScalingLaunchTemplateSummary struct {
@@ -540,6 +550,7 @@ type ECSTaskRequest struct {
 type AutoScalingGroupRequest struct {
 	DeploymentName  string
 	ResourceName    string
+	InstanceLimit   int
 	Region          string
 	TargetAccountID string
 	ObserverRoleARN string
@@ -665,6 +676,7 @@ func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
 		detail, err := inspect(ctx, AutoScalingGroupRequest{
 			DeploymentName:  req.DeploymentName,
 			ResourceName:    req.ResourceName,
+			InstanceLimit:   req.AutoScalingInstanceLimit,
 			Region:          req.Region,
 			TargetAccountID: req.TargetAccountID,
 			ObserverRoleARN: req.ObserverRoleARN,
@@ -759,6 +771,7 @@ func availableECSTaskResult(req Request, detail ECSTaskInspection) Result {
 }
 
 func availableAutoScalingResult(req Request, detail AutoScalingInspection) Result {
+	detail = applyAutoScalingInstanceScope(detail, req.AutoScalingInstanceLimit)
 	return Result{
 		DeploymentName:    req.DeploymentName,
 		ResourceType:      req.ResourceType,
@@ -769,6 +782,41 @@ func availableAutoScalingResult(req Request, detail AutoScalingInspection) Resul
 		AutoScalingGroup:  &detail,
 		UnavailableReason: "",
 	}
+}
+
+func applyAutoScalingInstanceScope(detail AutoScalingInspection, limit int) AutoScalingInspection {
+	effectiveLimit := maxAutoScalingGroupInstanceSummaries
+	var requestedLimit *int
+	if limit > 0 {
+		effectiveLimit = limit
+		requested := limit
+		requestedLimit = &requested
+	}
+
+	instances := append([]AutoScalingGroupInstanceSummary(nil), detail.Instances...)
+	sort.SliceStable(instances, func(i, j int) bool {
+		if instances[i].InstanceID == instances[j].InstanceID {
+			if instances[i].AvailabilityZone == instances[j].AvailabilityZone {
+				return instances[i].LifecycleState < instances[j].LifecycleState
+			}
+			return instances[i].AvailabilityZone < instances[j].AvailabilityZone
+		}
+		return instances[i].InstanceID < instances[j].InstanceID
+	})
+
+	truncationStatus := "not_truncated"
+	if len(instances) > effectiveLimit {
+		truncationStatus = "truncated"
+		instances = instances[:effectiveLimit]
+	}
+	detail.Instances = instances
+	detail.InstancesScope = &AutoScalingInstanceScope{
+		RequestedLimit:        requestedLimit,
+		EffectiveLimit:        effectiveLimit,
+		ReturnedInstanceCount: len(instances),
+		TruncationStatus:      truncationStatus,
+	}
+	return detail
 }
 
 func availableUserDataBootstrapSourceResult(req Request, detail AutoScalingInspection) Result {

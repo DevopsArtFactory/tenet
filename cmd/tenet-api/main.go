@@ -816,17 +816,18 @@ func newOverviewDeploymentResourceInspectionProvider(
 			return resourceinspection.Result{}, err
 		}
 		return provider.Inspect(ctx, resourceinspection.Request{
-			DeploymentName:      request.DeploymentName,
-			ResourceType:        request.ResourceType,
-			ResourceName:        request.ResourceName,
-			ResourceDescription: request.ResourceDescription,
-			TaskSummaryLimit:    limit,
-			BackingResourceType: request.BackingResourceType,
-			BackingResourceName: request.BackingResourceName,
-			ControlAccountID:    request.ControlAccountID,
-			TargetAccountID:     request.TargetAccountID,
-			Region:              request.Region,
-			ObserverRoleARN:     request.ObserverRoleARN,
+			DeploymentName:           request.DeploymentName,
+			ResourceType:             request.ResourceType,
+			ResourceName:             request.ResourceName,
+			ResourceDescription:      request.ResourceDescription,
+			TaskSummaryLimit:         limit,
+			AutoScalingInstanceLimit: limit,
+			BackingResourceType:      request.BackingResourceType,
+			BackingResourceName:      request.BackingResourceName,
+			ControlAccountID:         request.ControlAccountID,
+			TargetAccountID:          request.TargetAccountID,
+			Region:                   request.Region,
+			ObserverRoleARN:          request.ObserverRoleARN,
 		})
 	}
 }
