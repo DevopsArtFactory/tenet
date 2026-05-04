@@ -85,6 +85,9 @@ jobs:
               cmd/tenet-api/*|cmd/tenet-api/**|\
               cmd/tenet-controller/*|cmd/tenet-controller/**|\
               internal/api/*|internal/api/**|\
+              internal/authprovider/*|internal/authprovider/**|\
+              internal/authidentity/*|internal/authidentity/**|\
+              internal/authstate/*|internal/authstate/**|\
               internal/requestactor/*|internal/requestactor/**|\
               internal/statusstore/*|internal/statusstore/**|\
               internal/resourceaws/*|internal/resourceaws/**|\
