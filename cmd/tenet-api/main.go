@@ -393,6 +393,9 @@ func authRuntimeDiagnosticFromEnv() api.AuthRuntimeDiagnostic {
 		"TENET_GOOGLE_OIDC_CLIENT_SECRET":  strings.TrimSpace(os.Getenv("TENET_GOOGLE_OIDC_CLIENT_SECRET")),
 		"TENET_GOOGLE_OIDC_ISSUER_URL":     strings.TrimSpace(os.Getenv("TENET_GOOGLE_OIDC_ISSUER_URL")),
 		"TENET_GOOGLE_OIDC_REDIRECT_URL":   strings.TrimSpace(os.Getenv("TENET_GOOGLE_OIDC_REDIRECT_URL")),
+		"TENET_GOOGLE_OIDC_AUTH_URL":       strings.TrimSpace(os.Getenv("TENET_GOOGLE_OIDC_AUTH_URL")),
+		"TENET_GOOGLE_OIDC_TOKEN_URL":      strings.TrimSpace(os.Getenv("TENET_GOOGLE_OIDC_TOKEN_URL")),
+		"TENET_GOOGLE_OIDC_USERINFO_URL":   strings.TrimSpace(os.Getenv("TENET_GOOGLE_OIDC_USERINFO_URL")),
 		"TENET_OKTA_SAML_METADATA_URL":     strings.TrimSpace(os.Getenv("TENET_OKTA_SAML_METADATA_URL")),
 		"TENET_OKTA_SAML_ACS_URL":          strings.TrimSpace(os.Getenv("TENET_OKTA_SAML_ACS_URL")),
 		"TENET_OKTA_OIDC_ISSUER_URL":       strings.TrimSpace(os.Getenv("TENET_OKTA_OIDC_ISSUER_URL")),
@@ -400,22 +403,22 @@ func authRuntimeDiagnosticFromEnv() api.AuthRuntimeDiagnostic {
 		"TENET_OKTA_OIDC_CLIENT_SECRET":    strings.TrimSpace(os.Getenv("TENET_OKTA_OIDC_CLIENT_SECRET")),
 		"TENET_OKTA_OIDC_REDIRECT_URL":     strings.TrimSpace(os.Getenv("TENET_OKTA_OIDC_REDIRECT_URL")),
 	}
-	requiredSettings := api.RequiredTenetManagedLoginSettings()
+	provider = canonicalAuthProvider(provider)
+	requiredSettings := requiredManagedLoginSettings(provider)
 	missingSettings := make([]string, 0, len(requiredSettings))
 	for _, setting := range requiredSettings {
 		if strings.TrimSpace(settings[setting]) == "" {
 			missingSettings = append(missingSettings, setting)
 		}
 	}
-	if provider != "" && provider != "github" {
+	if provider != "" && !managedLoginProviderSupported(provider) {
 		for _, setting := range requiredSettings[1:] {
 			if !containsString(missingSettings, setting) {
 				missingSettings = append(missingSettings, setting)
 			}
 		}
 	}
-
-	configured := provider == "github" && len(missingSettings) == 0
+	configured := managedLoginProviderSupported(provider) && len(missingSettings) == 0
 	managedLogin := api.TenetManagedLoginDiagnostic{
 		Configured:                       configured,
 		Provider:                         provider,
@@ -435,9 +438,8 @@ func authRuntimeDiagnosticFromEnv() api.AuthRuntimeDiagnostic {
 		SessionSecretConfigured:          settings["TENET_AUTH_SESSION_SECRET"] != "",
 	}
 	if configured {
-		managedLogin.Provider = "github"
-		managedLogin.LoginRoute = "/auth/login/github"
-		managedLogin.CallbackRoute = "/auth/callback/github"
+		managedLogin.Provider = provider
+		managedLogin.LoginRoute, managedLogin.CallbackRoute = managedLoginRoutesForProvider(provider)
 		managedLogin.SessionCookieName = "tenet_session"
 	}
 	enterpriseSSO := enterpriseSSODiagnosticFromSettings(provider, settings)
@@ -445,7 +447,7 @@ func authRuntimeDiagnosticFromEnv() api.AuthRuntimeDiagnostic {
 }
 
 func enterpriseSSODiagnosticFromSettings(provider string, settings map[string]string) api.EnterpriseSSODiagnostic {
-	provider = strings.ToLower(strings.TrimSpace(provider))
+	provider = canonicalAuthProvider(provider)
 	requiredSettings, loginRoute, callbackRoute := enterpriseSSORequiredSettingsAndRoutes(provider)
 	if len(requiredSettings) == 0 {
 		return api.EnterpriseSSODiagnostic{}
@@ -478,7 +480,7 @@ func enterpriseSSODiagnosticFromSettings(provider string, settings map[string]st
 
 func enterpriseSSORequiredSettingsAndRoutes(provider string) ([]string, string, string) {
 	switch provider {
-	case "google_oidc":
+	case "google":
 		return []string{
 			"TENET_AUTH_PROVIDER",
 			"TENET_GOOGLE_OIDC_CLIENT_ID",
@@ -528,17 +530,33 @@ func configureManagedLoginRuntime(options *api.Options) {
 		return
 	}
 	managedLogin := options.AuthRuntime.TenetManagedLogin
-	if !managedLogin.Configured || len(managedLogin.MissingSettings) > 0 || strings.ToLower(strings.TrimSpace(managedLogin.Provider)) != "github" {
+	providerName := canonicalAuthProvider(managedLogin.Provider)
+	if !managedLogin.Configured || len(managedLogin.MissingSettings) > 0 || !managedLoginProviderSupported(providerName) {
 		return
 	}
-	provider, err := authprovider.NewGitHubProvider(authprovider.GitHubConfig{
-		ClientID:     strings.TrimSpace(os.Getenv("TENET_GITHUB_OAUTH_CLIENT_ID")),
-		ClientSecret: strings.TrimSpace(os.Getenv("TENET_GITHUB_OAUTH_CLIENT_SECRET")),
-		RedirectURL:  strings.TrimSpace(os.Getenv("TENET_GITHUB_OAUTH_REDIRECT_URL")),
-	})
+	var provider authprovider.Provider
+	var err error
+	switch providerName {
+	case authprovider.GitHubProviderName:
+		provider, err = authprovider.NewGitHubProvider(authprovider.GitHubConfig{
+			ClientID:     strings.TrimSpace(os.Getenv("TENET_GITHUB_OAUTH_CLIENT_ID")),
+			ClientSecret: strings.TrimSpace(os.Getenv("TENET_GITHUB_OAUTH_CLIENT_SECRET")),
+			RedirectURL:  strings.TrimSpace(os.Getenv("TENET_GITHUB_OAUTH_REDIRECT_URL")),
+		})
+	case authprovider.GoogleProviderName:
+		provider, err = authprovider.NewGoogleProvider(authprovider.GoogleConfig{
+			ClientID:     strings.TrimSpace(os.Getenv("TENET_GOOGLE_OIDC_CLIENT_ID")),
+			ClientSecret: strings.TrimSpace(os.Getenv("TENET_GOOGLE_OIDC_CLIENT_SECRET")),
+			RedirectURL:  strings.TrimSpace(os.Getenv("TENET_GOOGLE_OIDC_REDIRECT_URL")),
+			IssuerURL:    strings.TrimSpace(os.Getenv("TENET_GOOGLE_OIDC_ISSUER_URL")),
+			AuthURL:      strings.TrimSpace(os.Getenv("TENET_GOOGLE_OIDC_AUTH_URL")),
+			TokenURL:     strings.TrimSpace(os.Getenv("TENET_GOOGLE_OIDC_TOKEN_URL")),
+			UserInfoURL:  strings.TrimSpace(os.Getenv("TENET_GOOGLE_OIDC_USERINFO_URL")),
+		})
+	}
 	if err != nil {
 		options.AuthRuntime.TenetManagedLogin.Active = false
-		options.AuthRuntime.TenetManagedLogin.UnavailableReason = "tenet-managed GitHub login is configured but provider initialization failed"
+		options.AuthRuntime.TenetManagedLogin.UnavailableReason = "tenet-managed " + providerName + " login is configured but provider initialization failed"
 		return
 	}
 	options.AuthProvider = provider
@@ -547,9 +565,58 @@ func configureManagedLoginRuntime(options *api.Options) {
 	options.AuthSessionSecret = strings.TrimSpace(os.Getenv("TENET_AUTH_SESSION_SECRET"))
 	options.AuthSessionCookieName = "tenet_session"
 	options.AuthSessionCookieSecure = authSessionCookieSecureEnabled()
+	loginRoute, callbackRoute := managedLoginRoutesForProvider(providerName)
+	options.AuthRuntime.TenetManagedLogin.Provider = providerName
 	options.AuthRuntime.TenetManagedLogin.Active = true
+	options.AuthRuntime.TenetManagedLogin.LoginRoute = loginRoute
+	options.AuthRuntime.TenetManagedLogin.CallbackRoute = callbackRoute
 	options.AuthRuntime.TenetManagedLogin.SessionCookieName = options.AuthSessionCookieName
 	options.AuthRuntime.TenetManagedLogin.UnavailableReason = ""
+	if providerName == authprovider.GoogleProviderName {
+		options.AuthRuntime.EnterpriseSSO.Provider = authprovider.GoogleProviderName
+		options.AuthRuntime.EnterpriseSSO.Configured = true
+		options.AuthRuntime.EnterpriseSSO.Active = true
+		options.AuthRuntime.EnterpriseSSO.LoginRoute = loginRoute
+		options.AuthRuntime.EnterpriseSSO.CallbackRoute = callbackRoute
+		options.AuthRuntime.EnterpriseSSO.MissingSettings = []string{}
+		options.AuthRuntime.EnterpriseSSO.UnavailableReason = ""
+	}
+}
+
+func canonicalAuthProvider(provider string) string {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	if provider == authprovider.GoogleOIDCProviderAlias {
+		return authprovider.GoogleProviderName
+	}
+	return provider
+}
+
+func managedLoginProviderSupported(provider string) bool {
+	switch canonicalAuthProvider(provider) {
+	case authprovider.GitHubProviderName, authprovider.GoogleProviderName:
+		return true
+	default:
+		return false
+	}
+}
+
+func requiredManagedLoginSettings(provider string) []string {
+	switch canonicalAuthProvider(provider) {
+	case authprovider.GoogleProviderName:
+		settings, _, _ := enterpriseSSORequiredSettingsAndRoutes(authprovider.GoogleProviderName)
+		return settings
+	default:
+		return api.RequiredTenetManagedLoginSettings()
+	}
+}
+
+func managedLoginRoutesForProvider(provider string) (string, string) {
+	switch canonicalAuthProvider(provider) {
+	case authprovider.GoogleProviderName:
+		return "/auth/login/google", "/auth/callback/google"
+	default:
+		return "/auth/login/github", "/auth/callback/github"
+	}
 }
 
 func newApplyRequestFingerprintProvider(loadDetail func(context.Context, string) (catalog.DeploymentOverviewDetail, error)) applyrequest.CurrentFingerprintProvider {

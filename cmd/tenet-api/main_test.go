@@ -333,10 +333,17 @@ func TestNewAPIOptionsReportsEnterpriseSSODiagnosticForGoogleOIDC(t *testing.T) 
 	t.Setenv("TENET_AUTH_SESSION_SECRET", "session-secret")
 
 	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, writeRepositoryFixture(t), nil)
+	managedLogin := options.AuthRuntime.TenetManagedLogin
+	if !managedLogin.Configured || !managedLogin.Active || managedLogin.Provider != "google" {
+		t.Fatalf("expected Google OIDC to activate managed-login runtime, got %+v", managedLogin)
+	}
+	if managedLogin.LoginRoute != "/auth/login/google" || managedLogin.CallbackRoute != "/auth/callback/google" {
+		t.Fatalf("unexpected Google managed-login routes: %+v", managedLogin)
+	}
 	enterpriseSSO := options.AuthRuntime.EnterpriseSSO
 
-	if !enterpriseSSO.Configured || enterpriseSSO.Active || enterpriseSSO.Provider != "google_oidc" {
-		t.Fatalf("expected configured-but-inactive Google OIDC enterprise SSO diagnostic, got %+v", enterpriseSSO)
+	if !enterpriseSSO.Configured || !enterpriseSSO.Active || enterpriseSSO.Provider != "google" {
+		t.Fatalf("expected configured and active Google OIDC enterprise SSO diagnostic, got %+v", enterpriseSSO)
 	}
 	if enterpriseSSO.LoginRoute != "/auth/login/google" || enterpriseSSO.CallbackRoute != "/auth/callback/google" {
 		t.Fatalf("unexpected Google OIDC diagnostic routes: %+v", enterpriseSSO)

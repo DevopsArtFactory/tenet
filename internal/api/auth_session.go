@@ -142,11 +142,27 @@ type authSessionClaims struct {
 }
 
 func handleGitHubLogin(w http.ResponseWriter, r *http.Request, cfg authSessionConfig) {
+	handleProviderLogin(w, r, cfg, authprovider.GitHubProviderName, "GitHub OAuth", []string{"read:user", "user:email"})
+}
+
+func handleGitHubCallback(w http.ResponseWriter, r *http.Request, cfg authSessionConfig) {
+	handleProviderCallback(w, r, cfg, authprovider.GitHubProviderName, "GitHub OAuth")
+}
+
+func handleGoogleLogin(w http.ResponseWriter, r *http.Request, cfg authSessionConfig) {
+	handleProviderLogin(w, r, cfg, authprovider.GoogleProviderName, "Google Workspace OIDC", []string{"openid", "email", "profile"})
+}
+
+func handleGoogleCallback(w http.ResponseWriter, r *http.Request, cfg authSessionConfig) {
+	handleProviderCallback(w, r, cfg, authprovider.GoogleProviderName, "Google Workspace OIDC")
+}
+
+func handleProviderLogin(w http.ResponseWriter, r *http.Request, cfg authSessionConfig, providerName, providerLabel string, scopes []string) {
 	if !requireMethod(w, r, http.MethodGet) {
 		return
 	}
-	if !cfg.active() || cfg.Provider.Name() != authprovider.GitHubProviderName {
-		http.Error(w, "tenet-managed GitHub login is not configured for this API instance", http.StatusServiceUnavailable)
+	if !cfg.active() || cfg.Provider.Name() != providerName {
+		http.Error(w, fmt.Sprintf("tenet-managed %s login is not configured for this API instance", providerLabel), http.StatusServiceUnavailable)
 		return
 	}
 	returnURL := strings.TrimSpace(r.URL.Query().Get("returnUrl"))
@@ -165,7 +181,7 @@ func handleGitHubLogin(w http.ResponseWriter, r *http.Request, cfg authSessionCo
 	now := cfg.now()
 	if _, err := cfg.StateStore.Save(r.Context(), authstate.State{
 		Token:     token,
-		Provider:  authprovider.GitHubProviderName,
+		Provider:  providerName,
 		ReturnURL: returnURL,
 		CreatedAt: now,
 		ExpiresAt: now.Add(cfg.stateTTL()),
@@ -173,20 +189,20 @@ func handleGitHubLogin(w http.ResponseWriter, r *http.Request, cfg authSessionCo
 		http.Error(w, "failed to create OAuth callback state", http.StatusServiceUnavailable)
 		return
 	}
-	authURL, err := cfg.Provider.AuthCodeURL(token, []string{"read:user", "user:email"})
+	authURL, err := cfg.Provider.AuthCodeURL(token, scopes)
 	if err != nil {
-		http.Error(w, "failed to build GitHub OAuth authorization URL", http.StatusServiceUnavailable)
+		http.Error(w, fmt.Sprintf("failed to build %s authorization URL", providerLabel), http.StatusServiceUnavailable)
 		return
 	}
 	http.Redirect(w, r, authURL, http.StatusFound)
 }
 
-func handleGitHubCallback(w http.ResponseWriter, r *http.Request, cfg authSessionConfig) {
+func handleProviderCallback(w http.ResponseWriter, r *http.Request, cfg authSessionConfig, providerName, providerLabel string) {
 	if !requireMethod(w, r, http.MethodGet) {
 		return
 	}
-	if !cfg.active() || cfg.Provider.Name() != authprovider.GitHubProviderName {
-		http.Error(w, "tenet-managed GitHub login is not configured for this API instance", http.StatusServiceUnavailable)
+	if !cfg.active() || cfg.Provider.Name() != providerName {
+		http.Error(w, fmt.Sprintf("tenet-managed %s login is not configured for this API instance", providerLabel), http.StatusServiceUnavailable)
 		return
 	}
 	stateToken := strings.TrimSpace(r.URL.Query().Get("state"))
@@ -204,8 +220,8 @@ func handleGitHubCallback(w http.ResponseWriter, r *http.Request, cfg authSessio
 		respondAuthStateConsumeError(w, err)
 		return
 	}
-	if state.Provider != authprovider.GitHubProviderName {
-		http.Error(w, "OAuth callback provider does not match GitHub login", http.StatusBadRequest)
+	if state.Provider != providerName {
+		http.Error(w, fmt.Sprintf("OAuth callback provider does not match %s login", providerLabel), http.StatusBadRequest)
 		return
 	}
 	if state.Expired(cfg.now()) {
@@ -218,16 +234,16 @@ func handleGitHubCallback(w http.ResponseWriter, r *http.Request, cfg authSessio
 	}
 	token, err := cfg.Provider.Exchange(r.Context(), code)
 	if err != nil {
-		http.Error(w, "GitHub OAuth code exchange failed", http.StatusBadGateway)
+		http.Error(w, fmt.Sprintf("%s code exchange failed", providerLabel), http.StatusBadGateway)
 		return
 	}
 	profile, err := cfg.Provider.User(r.Context(), token.AccessToken)
 	if err != nil {
-		http.Error(w, "GitHub OAuth user lookup failed", http.StatusBadGateway)
+		http.Error(w, fmt.Sprintf("%s user lookup failed", providerLabel), http.StatusBadGateway)
 		return
 	}
-	if strings.ToLower(strings.TrimSpace(profile.Provider)) != authprovider.GitHubProviderName {
-		http.Error(w, "GitHub OAuth user profile returned an unexpected provider", http.StatusBadGateway)
+	if strings.ToLower(strings.TrimSpace(profile.Provider)) != providerName {
+		http.Error(w, fmt.Sprintf("%s user profile returned an unexpected provider", providerLabel), http.StatusBadGateway)
 		return
 	}
 	identity, err := cfg.IdentityStore.Upsert(r.Context(), authidentity.FromProviderIdentity(profile))

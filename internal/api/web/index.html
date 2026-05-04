@@ -3554,10 +3554,12 @@
       const operatorContextSignInRuntime = (context = operatorContextState.context) => {
         if (operatorContextManagedLoginActive(context)) {
           const managedLogin = operatorContextManagedLogin(context);
+          const providerLabel = operatorContextManagedLoginProviderLabel(managedLogin.provider);
+          const runtimeLabel = providerLabel === 'GitHub OAuth' ? 'Tenet-managed GitHub login' : `Tenet-managed ${providerLabel} login`;
           return {
             loginRoute: safeManagedLoginRoute(managedLogin.loginRoute),
-            label: 'Tenet-managed GitHub login',
-            message: 'Tenet-managed GitHub login is active for this API instance',
+            label: runtimeLabel,
+            message: `${runtimeLabel} is active for this API instance`,
           };
         }
         if (operatorContextEnterpriseSSOActive(context)) {
