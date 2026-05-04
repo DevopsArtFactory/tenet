@@ -1822,6 +1822,8 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		"present for both `available=true` and unavailable responses",
 		"`trafficShiftPlan`, `productionListenerRule`, `activeTargetGroup`, and `candidateTargetGroup` also preserve the same route and lookup-context envelope",
 		"`unavailableReason=no_log_source`",
+		"capture the HTTP `Request-Id` response header next to the `lookupContext` object before escalating",
+		"the request ID anchors Tenet's structured API logs while the lookup context explains which region, control account, target account, and observer-role path the provider attempted",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README resource log contract to include %q", fragment)
@@ -1847,6 +1849,8 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		"Current route-stable rollout resources with explicit no-log-source responses",
 		"weighted-target-group traffic-routing resources (`trafficShiftPlan`, `productionListenerRule`, `activeTargetGroup`, and `candidateTargetGroup`)",
 		"This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet.",
+		"Operators should capture the HTTP `Request-Id` response header together with the `lookupContext` object before escalating",
+		"that pair gives reviewers the exact Tenet request log correlation key plus the attempted region/account/observer-role path",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
 			t.Fatalf("expected resource recent logs doc to include %q", fragment)
