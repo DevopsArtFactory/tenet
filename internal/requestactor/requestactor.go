@@ -7,9 +7,10 @@ import (
 )
 
 const (
-	AuthenticatedIdentitySourceCanonical = "canonical"
-	AuthenticatedIdentitySourceAlias     = "alias"
-	AuthenticatedIdentitySourceAbsent    = "absent"
+	AuthenticatedIdentitySourceCanonical            = "canonical"
+	AuthenticatedIdentitySourceAlias                = "alias"
+	AuthenticatedIdentitySourceManagedSessionCookie = "managed_session_cookie"
+	AuthenticatedIdentitySourceAbsent               = "absent"
 
 	ActorAttributionSourceExplicitActorHeaders         = "explicit_actor_headers"
 	ActorAttributionSourceActorAliasHeaders            = "actor_alias_headers"
@@ -43,6 +44,7 @@ const (
 
 type actorContextKey struct{}
 type authenticatedIdentityContextKey struct{}
+type authenticatedIdentityProvenanceContextKey struct{}
 type authenticatedRolesContextKey struct{}
 type authenticatedGroupsContextKey struct{}
 type authorizedDeploymentsContextKey struct{}
@@ -142,6 +144,21 @@ func WithAuthenticatedIdentityContext(ctx context.Context, identity Authenticate
 	return context.WithValue(ctx, authenticatedIdentityContextKey{}, NormalizeAuthenticatedIdentity(identity))
 }
 
+// WithAuthenticatedIdentityProvenanceContext stores diagnostic provenance for the authenticated identity on the context.
+func WithAuthenticatedIdentityProvenanceContext(ctx context.Context, provenance AuthenticatedIdentityProvenance) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, authenticatedIdentityProvenanceContextKey{}, NormalizeAuthenticatedIdentityProvenance(provenance))
+}
+
+// WithManagedSessionAuthenticatedIdentityContext stores a Tenet-managed session identity and marks its provenance as the session cookie.
+func WithManagedSessionAuthenticatedIdentityContext(ctx context.Context, identity AuthenticatedIdentity) context.Context {
+	identity = NormalizeAuthenticatedIdentity(identity)
+	ctx = WithAuthenticatedIdentityContext(ctx, identity)
+	return WithAuthenticatedIdentityProvenanceContext(ctx, AuthenticatedIdentityProvenanceFromManagedSession(identity))
+}
+
 // WithAuthenticatedRolesContext stores one normalized authenticated role set on the context.
 func WithAuthenticatedRolesContext(ctx context.Context, roles AuthenticatedRoles) context.Context {
 	if ctx == nil {
@@ -198,6 +215,15 @@ func AuthenticatedIdentityFromContext(ctx context.Context) AuthenticatedIdentity
 	}
 	identity, _ := ctx.Value(authenticatedIdentityContextKey{}).(AuthenticatedIdentity)
 	return NormalizeAuthenticatedIdentity(identity)
+}
+
+// AuthenticatedIdentityProvenanceFromContext returns normalized diagnostic provenance for the context identity.
+func AuthenticatedIdentityProvenanceFromContext(ctx context.Context) AuthenticatedIdentityProvenance {
+	if ctx == nil {
+		return NormalizeAuthenticatedIdentityProvenance(AuthenticatedIdentityProvenance{})
+	}
+	provenance, _ := ctx.Value(authenticatedIdentityProvenanceContextKey{}).(AuthenticatedIdentityProvenance)
+	return NormalizeAuthenticatedIdentityProvenance(provenance)
 }
 
 // AuthenticatedRolesFromContext returns the normalized authenticated roles stored on the context.
@@ -327,6 +353,25 @@ func AuthenticatedIdentityProvenanceFromHeaders(header http.Header) Authenticate
 		NameSource:  headerSource(header, AuthenticatedHeaderName, HeaderAliasName),
 		EmailSource: headerSource(header, AuthenticatedHeaderEmail, HeaderAliasEmail),
 	})
+}
+
+// AuthenticatedIdentityProvenanceFromManagedSession reports which fields came from a valid Tenet-managed session cookie.
+func AuthenticatedIdentityProvenanceFromManagedSession(identity AuthenticatedIdentity) AuthenticatedIdentityProvenance {
+	identity = NormalizeAuthenticatedIdentity(identity)
+	if !identity.Authenticated {
+		return NormalizeAuthenticatedIdentityProvenance(AuthenticatedIdentityProvenance{})
+	}
+	provenance := AuthenticatedIdentityProvenance{}
+	if strings.TrimSpace(identity.ID) != "" {
+		provenance.IDSource = AuthenticatedIdentitySourceManagedSessionCookie
+	}
+	if strings.TrimSpace(identity.Name) != "" {
+		provenance.NameSource = AuthenticatedIdentitySourceManagedSessionCookie
+	}
+	if strings.TrimSpace(identity.Email) != "" {
+		provenance.EmailSource = AuthenticatedIdentitySourceManagedSessionCookie
+	}
+	return NormalizeAuthenticatedIdentityProvenance(provenance)
 }
 
 // AuthenticatedRolesFromHeaders derives one normalized trusted role set from forwarded front-door headers.
@@ -633,6 +678,8 @@ func normalizeAuthenticatedIdentitySource(source string) string {
 		return AuthenticatedIdentitySourceCanonical
 	case AuthenticatedIdentitySourceAlias:
 		return AuthenticatedIdentitySourceAlias
+	case AuthenticatedIdentitySourceManagedSessionCookie:
+		return AuthenticatedIdentitySourceManagedSessionCookie
 	default:
 		return AuthenticatedIdentitySourceAbsent
 	}
