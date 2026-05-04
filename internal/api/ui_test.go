@@ -2403,6 +2403,15 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Refresh live inspection' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh live inspection")
 	}
+	for _, fragment := range []string{
+		`assert "const createECSTaskScopeSummary = (scope) => {" in ui, ui`,
+		`assert "Task sample scope · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${truncationStatus}" in ui, ui`,
+		`assert "[createECSTaskScopeSummary(service?.tasksScope)]" in ui, ui`,
+	} {
+		if !strings.Contains(text, fragment) {
+			t.Fatalf("expected smoke-local.sh to assert ECS task sample scope shell fragment %q", fragment)
+		}
+	}
 	if !strings.Contains(text, "assert 'Lookup path ·' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Lookup path summary")
 	}
@@ -3477,6 +3486,9 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		"\"'Refresh live inspection'\",",
 		"\"const buildResourceInspectionRoute = (deploymentName, resource) => {\",",
 		"\"const resourceInspectionReadRoute = (deploymentName, resource) => `GET ${buildResourceInspectionRoute(deploymentName, resource)}`;\",",
+		"\"const createECSTaskScopeSummary = (scope) => {\",",
+		"\"Task sample scope · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${truncationStatus}\",",
+		"\"[createECSTaskScopeSummary(service?.tasksScope)]\",",
 		"\"renderResourceInspectionState(section, 'Loading live inspection…', '', [], [], loadingActions);\",",
 		"\"`Failed to load live inspection: ${error.message}`\",",
 		"\"'Live inspection'\",",
@@ -3484,6 +3496,31 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 	} {
 		if !strings.Contains(dockerSmoke, fragment) {
 			t.Fatalf("expected smoke-docker.sh to lock resource refresh fragment %q", fragment)
+		}
+	}
+}
+
+func TestOverviewDocsDescribeECSTaskScopeReleaseGuard(t *testing.T) {
+	files := map[string][]string{
+		"../../README.md": {
+			"Local and compose smoke lock the raw shell helper/copy for that scope note without requiring live AWS task rows.",
+		},
+		"../../docs/features/overview-dashboard.md": {
+			"local and compose smoke also lock the embedded shell helper/copy that renders `ecsService.tasksScope` as the `Task sample scope` note",
+			"without needing live AWS task inventory",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
 		}
 	}
 }
