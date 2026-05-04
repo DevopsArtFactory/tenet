@@ -30,6 +30,7 @@ Response fields:
 - `deploymentName`
 - `resourceType`
 - `resourceName`
+- optional `resourceDescription` when Tenet resolved a rollout execution description for the selected resource
 - optional `backingResourceType`
 - optional `backingResourceName`
 - optional `containerName` when an ECS task recent-log request supplied a container selector
@@ -90,7 +91,7 @@ Behavior by type:
 - `codeDeployDeploymentGroup` reads the newest deployment records for the selected CodeDeploy deployment group, returns them newest-first, and projects each deployment into one operator-facing recent-log row with the deployment ID in `entries[].stream`.
 - `productionListener`, `testListener`, `blueTaskSetTargetGroup`, and `greenTaskSetTargetGroup` now reuse that same CodeDeploy deployment-group history through additive `backingResourceType=codeDeployDeploymentGroup` and `backingResourceName={deployment}-codedeploy-group`, so the resource page can show rollout history for those drill-down siblings without inventing a second event route.
 - weighted-target-group traffic-routing resources (`trafficShiftPlan`, `productionListenerRule`, `activeTargetGroup`, and `candidateTargetGroup`) are first-class route resources even though they do not have an independent recent-log stream yet; the recent-log route returns `available=false` with `unavailableReason=no_log_source` instead of treating them as unsupported, while the lookup context stays present for operator troubleshooting.
-- when a bootstrap-source or CodeDeploy sibling lookup resolves through a backing resource, the response also keeps the original `resourceType`/`resourceName` and adds the resolved `backingResourceType` plus `backingResourceName` so the payload stays self-describing without changing the route shape.
+- when a bootstrap-source or CodeDeploy sibling lookup resolves through a backing resource, the response also keeps the original `resourceType`/`resourceName` and adds the resolved `backingResourceType` plus `backingResourceName` so the payload stays self-describing without changing the route shape. When Tenet resolved a rollout execution description for the selected resource, the response also echoes it as `resourceDescription` on both available and unavailable payloads so operators can understand the selected resource without rejoining deployment detail.
 
 Inside one Tenet API process, the built-in AWS-backed provider now reuses SDK config/client setup per `(region, targetAccountID, observerRoleARN)` key. That keeps repeated operator refreshes on the same deployment/resource from rebuilding ECS, CloudWatch Logs, Auto Scaling, and EC2 clients for every request.
 

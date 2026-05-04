@@ -565,6 +565,8 @@ Current provider-backed recent-log support includes:
 - `codeDeployDeploymentGroup` via newest-first CodeDeploy deployment history for the selected deployment group
 - `productionListener`, `testListener`, `blueTaskSetTargetGroup`, and `greenTaskSetTargetGroup` via the backing CodeDeploy deployment-group history for the same rollout
 
+Recent-log payloads also echo the selected rollout execution description as additive `resourceDescription` when Tenet resolved one, including available and explicit unavailable responses. That keeps scripted troubleshooting output self-describing without forcing clients to re-fetch deployment detail just to explain the selected resource.
+
 The same drill-down now has a parallel inspection route family:
 - `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}`
 

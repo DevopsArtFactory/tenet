@@ -92,14 +92,15 @@ func TestServiceRecent(t *testing.T) {
 		})
 
 		result, err := service.Recent(context.Background(), Request{
-			DeploymentName:   "payments-api-prod",
-			ResourceType:     "ecsTask",
-			ResourceName:     "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123",
-			ControlAccountID: "123456789012",
-			TargetAccountID:  "123456789012",
-			Region:           "ap-northeast-2",
-			ContainerName:    "api",
-			Limit:            2,
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "ecsTask",
+			ResourceName:        "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123",
+			ResourceDescription: "ECS task selected from live service inspection",
+			ControlAccountID:    "123456789012",
+			TargetAccountID:     "123456789012",
+			Region:              "ap-northeast-2",
+			ContainerName:       "api",
+			Limit:               2,
 		})
 		if err != nil {
 			t.Fatalf("Recent returned error: %v", err)
@@ -107,8 +108,8 @@ func TestServiceRecent(t *testing.T) {
 		if gotLookup.ResourceName != "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123" || gotLookup.ContainerName != "api" || gotLookup.Limit != 2 {
 			t.Fatalf("unexpected ECS task log lookup request: %+v", gotLookup)
 		}
-		if !result.Available || result.Source != SourceCloudWatch || result.ContainerName != "api" || len(result.Entries) != 1 || result.Entries[0].Stream != "ecs/api/abc123" {
-			t.Fatalf("expected available ECS task logs with echoed container selector, got %+v", result)
+		if !result.Available || result.Source != SourceCloudWatch || result.ContainerName != "api" || result.ResourceDescription != "ECS task selected from live service inspection" || len(result.Entries) != 1 || result.Entries[0].Stream != "ecs/api/abc123" {
+			t.Fatalf("expected available ECS task logs with echoed container selector and description, got %+v", result)
 		}
 	})
 
@@ -503,23 +504,25 @@ func TestServiceRecent(t *testing.T) {
 		})
 
 		result, err := service.Recent(context.Background(), Request{
-			DeploymentName:   "payments-api-prod",
-			ResourceType:     "userDataBootstrapSource",
-			ResourceName:     "file:userdata/payments-api-prod.sh",
-			ControlAccountID: "123456789012",
-			TargetAccountID:  "123456789012",
-			Region:           "ap-northeast-2",
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "userDataBootstrapSource",
+			ResourceName:        "file:userdata/payments-api-prod.sh",
+			ResourceDescription: "Normalized userdata bootstrap source for candidate EC2 capacity",
+			ControlAccountID:    "123456789012",
+			TargetAccountID:     "123456789012",
+			Region:              "ap-northeast-2",
 		})
 		if err != nil {
 			t.Fatalf("Recent returned error: %v", err)
 		}
 		want := Result{
-			DeploymentName:    "payments-api-prod",
-			ResourceType:      "userDataBootstrapSource",
-			ResourceName:      "file:userdata/payments-api-prod.sh",
-			LookupContext:     expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
-			Available:         false,
-			UnavailableReason: UnavailableReasonNoLogSource,
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "userDataBootstrapSource",
+			ResourceName:        "file:userdata/payments-api-prod.sh",
+			ResourceDescription: "Normalized userdata bootstrap source for candidate EC2 capacity",
+			LookupContext:       expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
+			Available:           false,
+			UnavailableReason:   UnavailableReasonNoLogSource,
 		}
 		if !reflect.DeepEqual(result, want) {
 			t.Fatalf("unexpected bootstrap-source unavailable result: %+v", result)

@@ -6418,9 +6418,10 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 
 	t.Run("returns codeDeploy deployment-group resource log payload", func(t *testing.T) {
 		expected := resourcelogs.Result{
-			DeploymentName: "payments-api-staging",
-			ResourceType:   "codeDeployDeploymentGroup",
-			ResourceName:   "payments-api-staging-codedeploy-group",
+			DeploymentName:      "payments-api-staging",
+			ResourceType:        "codeDeployDeploymentGroup",
+			ResourceName:        "payments-api-staging-codedeploy-group",
+			ResourceDescription: "CodeDeploy deployment group coordinating ECS task-set traffic shifting",
 			LookupContext: resourcelogs.LookupContext{
 				Region:                 "ap-northeast-2",
 				ControlAccountID:       "123456789012",
@@ -6478,6 +6479,9 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		}
 		if got := raw["source"]; got != resourcelogs.SourceCodeDeploy {
 			t.Fatalf("expected source %q, got %#v", resourcelogs.SourceCodeDeploy, got)
+		}
+		if got := raw["resourceDescription"]; got != "CodeDeploy deployment group coordinating ECS task-set traffic shifting" {
+			t.Fatalf("expected resourceDescription to be serialized, got %#v", got)
 		}
 		entries, ok := raw["entries"].([]any)
 		if !ok || len(entries) != 1 {

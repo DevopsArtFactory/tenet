@@ -1770,6 +1770,8 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		"newest running and recently stopped service task/container streams",
 		"failed rollouts and crash loops can still surface useful logs",
 		"`containerName` is optional and only meaningful for `resourceType=ecsTask`",
+		"optional `resourceDescription` when Tenet resolved a rollout execution description",
+		"echoes it as `resourceDescription` on both available and unavailable payloads",
 		"`ecsTask` reads recent CloudWatch log events for the exact ECS task ARN or task identifier",
 		"resourceType=ecsTask&containerName=worker&limit=1",
 		"`aws_unavailable`, `resource_not_found`, `cross_account_not_configured`, or `no_log_source`",

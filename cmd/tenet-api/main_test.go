@@ -1432,14 +1432,15 @@ func TestAPIOptionsOverviewDeploymentResourceLogsWiresObserverRoleAndPlacement(t
 		t.Fatalf("expected wired provider result, got %+v", result)
 	}
 	want := resourcelogs.Request{
-		DeploymentName:   "api-prod",
-		ResourceType:     "ecsService",
-		ResourceName:     "api-prod-live-service",
-		ControlAccountID: "123456789012",
-		TargetAccountID:  "123456789012",
-		Region:           "ap-northeast-2",
-		ObserverRoleARN:  "arn:aws:iam::123456789012:role/TenetObserverRole",
-		Limit:            7,
+		DeploymentName:      "api-prod",
+		ResourceType:        "ecsService",
+		ResourceName:        "api-prod-live-service",
+		ResourceDescription: "live ECS service",
+		ControlAccountID:    "123456789012",
+		TargetAccountID:     "123456789012",
+		Region:              "ap-northeast-2",
+		ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
+		Limit:               7,
 	}
 	if !reflect.DeepEqual(provider.lastRequest, want) {
 		t.Fatalf("unexpected resource log request: %+v", provider.lastRequest)
@@ -1472,8 +1473,8 @@ func TestAPIOptionsOverviewDeploymentResourceLogsPassesBootstrapSourceBackingRes
 	if err != nil {
 		t.Fatalf("OverviewDeploymentResourceLogs returned error: %v", err)
 	}
-	if provider.lastRequest.BackingResourceType != "candidateAutoScalingGroup" || provider.lastRequest.BackingResourceName != "api-prod-candidate" {
-		t.Fatalf("expected bootstrap-source logs request to carry backing ASG context, got %+v", provider.lastRequest)
+	if provider.lastRequest.BackingResourceType != "candidateAutoScalingGroup" || provider.lastRequest.BackingResourceName != "api-prod-candidate" || provider.lastRequest.ResourceDescription != "bootstrap source" {
+		t.Fatalf("expected bootstrap-source logs request to carry backing ASG context and resource description, got %+v", provider.lastRequest)
 	}
 }
 
