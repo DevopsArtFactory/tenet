@@ -1786,11 +1786,13 @@
         const name = resource.name || type;
         const description = resource.description || '—';
         const resourceId = stableResourceIdentity({ type, name, description });
+        const containerName = String(resource.containerName || '').trim();
         return {
           id: resourceId,
           type,
           name,
           description,
+          ...(containerName ? { containerName } : {}),
         };
       };
       const parseResourceIdentity = (resourceId) => {
@@ -2068,6 +2070,7 @@
           applyId: params.get('applyId') || '',
           resourceType: params.get('resourceType') || '',
           resourceId: params.get('resourceId') || '',
+          containerName: params.get('containerName') || '',
           auditAction: normalizeAuditAction(params.get('action') || ''),
           auditLimit: normalizeAuditLimit(params.get('limit') || ''),
         };
@@ -2944,6 +2947,10 @@
         syncActiveResourceQuickNav();
         scrollToCurrentHashTarget();
       };
+      const applyResourcePageContainerState = (resource) => {
+        const containerName = String(currentPageState.containerName || '').trim();
+        return containerName ? { ...resource, containerName } : resource;
+      };
       const resolveResourceDetail = (detail) => {
         const resources = groupResourceSections(detail).flatMap((group) => group.resources || []);
         const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);
@@ -2966,7 +2973,7 @@
           }
           return Boolean(bookmarkedResource.type || bookmarkedResource.name);
         });
-        return exactMatch || aliasMatch || tolerantMatch || resources.find((resource) => {
+        const resolved = exactMatch || aliasMatch || tolerantMatch || resources.find((resource) => {
           if (currentPageState.resourceType) {
             return resource.type === currentPageState.resourceType;
           }
@@ -2977,6 +2984,7 @@
           name: bookmarkedResource.name || bookmarkedResource.type || currentPageState.resourceType || 'Resource',
           description: bookmarkedResource.description || 'No linked resource metadata is available for this selection.',
         };
+        return applyResourcePageContainerState(resolved);
       };
       const createCurrentResourceRouteState = (resource) => {
         const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);
@@ -2986,6 +2994,7 @@
           openedViaAlias,
           routeResourceType: currentPageState.resourceType || bookmarkedResource.type || resource.type,
           routeResourceId: openedViaAlias ? bookmarkedResource.id : resource.id,
+          routeContainerName: String(currentPageState.containerName || resource.containerName || '').trim(),
         };
       };
       const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = [], currentSectionEmptyLabel = '') => {
@@ -3368,6 +3377,7 @@
               deployment: deploymentName,
               resourceType: resourceRouteState.routeResourceType,
               resourceId: resourceRouteState.routeResourceId,
+              containerName: resourceRouteState.routeContainerName,
             }),
           });
         };
@@ -4154,9 +4164,12 @@
         const taskResource = ecsTaskResource(task);
         const containerName = String(container?.name || '').trim();
         if (!deploymentName || !taskResource || !containerName || !container?.awslogs) return null;
-        const link = createNavLink(buildResourceLogsRoute(deploymentName, { ...taskResource, containerName }), 'Open container recent logs', '_blank');
-        link.rel = 'noreferrer noopener';
-        return link;
+        return createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', {
+          deployment: deploymentName,
+          resourceType: taskResource.type,
+          resourceId: taskResource.id,
+          containerName,
+        }), 'Open container recent logs', '_self');
       };
       const appendECSTaskContainerRows = (item, containers, deploymentName = '', task = null) => {
         if (!Array.isArray(containers) || !containers.length) return;

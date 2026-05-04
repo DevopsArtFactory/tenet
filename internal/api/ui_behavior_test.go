@@ -5064,11 +5064,45 @@ async function renderScenario(hash, fetchImpl) {
   const inspectionRoot = inspectionRun.document.getElementById('accounts');
   const containerLogLink = collectNodes(inspectionRoot, (node) => node.tagName === 'A' && node.textContent === 'Open container recent logs')[0];
   if (!containerLogLink) throw new Error('expected ECS task container rows to expose recent-log handoff');
-  if (!containerLogLink.href.includes('/v1/overview/deployments/payments-api-staging/resource-logs?')) throw new Error('expected container log handoff to call recent-log API route, got ' + containerLogLink.href);
-  ['resourceType=ecsTask', 'resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Atask%2Fpayments-staging%2Fabc123', 'containerName=worker'].forEach((fragment) => {
+  if (!containerLogLink.href.startsWith('/console?page=resource')) throw new Error('expected container log handoff to stay in the embedded resource shell, got ' + containerLogLink.href);
+  ['deployment=payments-api-staging', 'resourceType=ecsTask', 'containerName=worker'].forEach((fragment) => {
     if (!containerLogLink.href.includes(fragment)) throw new Error('expected container log handoff URL to include ' + fragment + ', got ' + containerLogLink.href);
   });
-  if (containerLogLink.target !== '_blank' || containerLogLink.rel !== 'noreferrer noopener') throw new Error('expected container log handoff to open the JSON route separately');
+  const decodedContainerHref = decodeURIComponent(containerLogLink.href.replace(/\+/g, '%20'));
+  if (!decodedContainerHref.includes('resourceId=ecsTask::arn:aws:ecs:ap-northeast-2:210987654321:task/payments-staging/abc123::ECS task abc123')) throw new Error('expected container handoff to preserve task resource identity, got ' + containerLogLink.href);
+  if (!containerLogLink.href.endsWith('#resource-recent-logs')) throw new Error('expected container handoff to target recent logs section, got ' + containerLogLink.href);
+  if (containerLogLink.target !== '_self' || containerLogLink.rel) throw new Error('expected container log handoff to remain in-shell');
+
+  const containerTaskResourceID = 'ecsTask::arn:aws:ecs:ap-northeast-2:210987654321:task/payments-staging/abc123::ECS task abc123';
+  const containerLogsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsTask&resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Atask%2Fpayments-staging%2Fabc123&containerName=worker';
+  const containerInspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsTask&resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Atask%2Fpayments-staging%2Fabc123';
+  const containerFetches = [];
+  const containerRun = await (async () => {
+    const document = createDocument();
+    const initialSearch = '?page=resource&deployment=payments-api-staging&resourceType=ecsTask&resourceId=' + encodeURIComponent(containerTaskResourceID) + '&containerName=worker&q=payments&sync=OutOfSync&account=210987654321';
+    const window = createWindow(initialSearch, '#resource-recent-logs');
+    const history = { replaceState(_state, _title, url) {
+      const [pathAndQuery, nextHash = ''] = String(url).split('#');
+      const [pathname, query = ''] = pathAndQuery.split('?');
+      window.location.pathname = pathname || '/console';
+      window.location.search = query ? '?' + query : '';
+      window.location.hash = nextHash ? '#' + nextHash : '';
+    } };
+    const fetchImpl = (url) => {
+      containerFetches.push(String(url));
+      if (url === deploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+      if (url === containerLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', containerName: 'worker', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, resultScope: { effectiveLimit: 100, returnedEntryCount: 1, truncationStatus: 'not_truncated' }, entries: [{ timestamp: '2026-05-03T00:00:00Z', containerName: 'worker', message: 'bookmarked worker log' }] }) });
+      if (url === containerInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'aws_unavailable' }) });
+      throw new Error('unexpected container resource fetch url: ' + url);
+    };
+    new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetchImpl, history, Element, InputElement);
+    await settle(); await settle(); await settle();
+    return { document, window, initialSearch };
+  })();
+  if (containerRun.window.location.search !== containerRun.initialSearch) throw new Error('expected bookmarked container route query to stay stable, got ' + containerRun.window.location.search);
+  if (!containerFetches.includes(containerLogsURL)) throw new Error('expected bookmarked container route to fetch container-scoped recent logs, got ' + JSON.stringify(containerFetches));
+  const containerText = collectText(containerRun.document.getElementById('accounts')).join(' | ');
+  if (!containerText.includes('Selected container | worker') || !containerText.includes('bookmarked worker log')) throw new Error('expected bookmarked container route to render container-scoped logs, got ' + containerText);
 })();
 `
 

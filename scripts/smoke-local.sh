@@ -1412,6 +1412,10 @@ assert "sectionLink?.sectionID !== currentSectionLink?.sectionID" in ui, ui
 assert "const pushResourceSection = (section, sectionID, label) => {" in ui, ui
 assert "sectionID," in ui, ui
 assert "href: buildPageSectionURL('resource', sectionID, {" in ui, ui
+assert "containerName: resourceRouteState.routeContainerName," in ui, ui
+assert "routeContainerName: String(currentPageState.containerName || resource.containerName || '').trim()" in ui, ui
+assert "containerName: params.get('containerName') || ''" in ui, ui
+assert "buildPageSectionURL('resource', 'resource-recent-logs'" in ui, ui
 assert "pushResourceSection(historySection, 'resource-runtime-history', 'Runtime history');" in ui, ui
 assert "pushResourceSection(executionSection, 'resource-rollout-execution', 'Rollout execution');" in ui, ui
 assert "pushResourceSection(conditionsSection, 'resource-status-conditions', 'Conditions');" in ui, ui
