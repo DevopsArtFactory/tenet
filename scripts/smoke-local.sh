@@ -1628,14 +1628,19 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "const resourceInspectionReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceInspectionRoute(deploymentName, resource, limit)}`;" in body, body
     assert "const resourceInspectionTaskDefaultLimit = 10;" in body, body
     assert "const resourceInspectionLimitOptions = [" in body, body
+    assert "resourceInspectionLimitLabel(resource)" in body, body
     assert "'Task sample limit'" in body, body
-    assert "resource?.type !== 'ecsService'" in body, body
+    assert "'ASG instance sample limit'" in body, body
+    assert "supportsBoundedResourceInspection(resource)" in body, body
     assert "const ecsTaskScopeUnavailableReasonText = (reason) => {" in body, body
     assert "Task sample unavailable · ${reasonText} · requested ${countText(scope.requestedLimit)} · effective ${countText(effectiveLimit)}" in body, body
     assert "Task sampling is unavailable for this service; service inspection remains available." in body, body
     assert "const createECSTaskScopeSummary = (scope) => {" in body, body
     assert "Task sample scope · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${truncationStatus}" in body, body
     assert "[createECSTaskScopeSummary(service?.tasksScope)]" in body, body
+    assert "const createAutoScalingInstanceScopeSummary = (scope) => {" in body, body
+    assert "ASG instance sample scope · requested ${countText(scope.requestedLimit)} · effective ${countText(effectiveLimit)} · returned ${countText(returnedInstanceCount)} instance(s) · ${truncationStatus}" in body, body
+    assert "ASG instance sampling is unavailable for this group; group inspection remains available." in body, body
     assert "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')" in body, body
     assert "createNavLink(buildPageURL('resource', {" in body, body
     assert "const resolveBackingResourceDrillDown = (detail, inspectionDetail) => {" in body, body

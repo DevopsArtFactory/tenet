@@ -1822,8 +1822,9 @@
         return Boolean(bookmarkedAlias && resolvedAlias && bookmarkedAlias === resolvedAlias);
       };
       const resourceLogCacheKey = (deploymentName, resource) => [deploymentName || '', resource.type || '', resource.name || '', resource.id || '', resource.containerName || ''].join('::');
+      const supportsBoundedResourceInspection = (resource) => ['ecsService', 'candidateAutoScalingGroup', 'serviceAutoScalingGroup'].includes(String(resource?.type || '').trim());
       const resourceLogRequestCacheKey = (deploymentName, resource, limit = 0) => `${resourceLogCacheKey(deploymentName, resource)}::limit=${normalizeResourceLogsLimit(limit)}`;
-      const resourceInspectionRequestCacheKey = (deploymentName, resource, limit = 0) => `${resourceLogCacheKey(deploymentName, resource)}::inspection-limit=${resource?.type === 'ecsService' ? normalizeResourceInspectionTaskLimit(limit) : 0}`;
+      const resourceInspectionRequestCacheKey = (deploymentName, resource, limit = 0) => `${resourceLogCacheKey(deploymentName, resource)}::inspection-limit=${supportsBoundedResourceInspection(resource) ? normalizeResourceInspectionTaskLimit(limit) : 0}`;
       const normalizeResourceLogsLimit = (value) => {
         const limit = Number.parseInt(String(value || '').trim(), 10);
         return Number.isInteger(limit) && limit > 0 ? limit : 0;
@@ -4093,12 +4094,13 @@
       };
       const resourceInspectionCacheKey = (deploymentName, resource) => resourceLogCacheKey(deploymentName, resource);
       const selectedResourceInspectionLimit = (deploymentName, resource) => normalizeResourceInspectionTaskLimit(resourceInspectionLimitByResourceKey.get(resourceInspectionCacheKey(deploymentName, resource)) || 0);
+      const resourceInspectionLimitLabel = (resource) => String(resource?.type || '').trim() === 'ecsService' ? 'Task sample limit' : 'ASG instance sample limit';
       const buildResourceInspectionRoute = (deploymentName, resource, limit = 0) => {
         const params = new URLSearchParams({
           resourceType: resource?.type || '',
           resourceName: resource?.name || '',
         });
-        const normalizedLimit = resource?.type === 'ecsService' ? normalizeResourceInspectionTaskLimit(limit) : 0;
+        const normalizedLimit = supportsBoundedResourceInspection(resource) ? normalizeResourceInspectionTaskLimit(limit) : 0;
         if (normalizedLimit > 0) {
           params.set('limit', String(normalizedLimit));
         }
@@ -4110,10 +4112,10 @@
       };
       const createResourceInspectionLimitControl = (section, detail, resource, isLoading = false) => {
         const deploymentName = detail?.name || currentPageState.deployment || '';
-        if (resource?.type !== 'ecsService') return null;
+        if (!supportsBoundedResourceInspection(resource)) return null;
         const selectedLimit = selectedResourceInspectionLimit(deploymentName, resource);
         return createSelect(
-          'Task sample limit',
+          resourceInspectionLimitLabel(resource),
           String(selectedLimit),
           resourceInspectionLimitOptions,
           (event) => {
@@ -4377,6 +4379,45 @@
         }
         return null;
       };
+      const autoScalingInstanceScopeStatusText = (value) => {
+        const normalized = String(value || '').trim().replace(/_/g, ' ');
+        return normalized || 'unknown truncation status';
+      };
+      const isAutoScalingInstanceScopeUnavailable = (scope) => scope && typeof scope === 'object' && scope.available === false;
+      const autoScalingInstanceScopeUnavailableReasonText = (reason) => {
+        switch (reason) {
+          case 'aws_unavailable':
+            return 'AWS access is currently unavailable for ASG instance sampling.';
+          case 'cross_account_not_configured':
+            return 'Cross-account access is not configured for ASG instance sampling.';
+          case 'resource_not_found':
+            return 'The Auto Scaling Group instance sampling source could not be found.';
+          case 'unsupported_resource_type':
+            return 'ASG instance sampling is not supported for this resource type.';
+          default:
+            return reason ? String(reason).trim().replace(/_/g, ' ') : 'ASG instance sampling is unavailable.';
+        }
+      };
+      const createAutoScalingInstanceScopeSummary = (scope) => {
+        if (!scope || typeof scope !== 'object') return null;
+        const effectiveLimit = scope.effectiveLimit;
+        const returnedInstanceCount = scope.returnedInstanceCount;
+        const truncationStatus = autoScalingInstanceScopeStatusText(scope.truncationStatus);
+        if (isAutoScalingInstanceScopeUnavailable(scope)) {
+          const summary = String(scope.summary || '').trim();
+          const reasonText = summary || autoScalingInstanceScopeUnavailableReasonText(scope.unavailableReason);
+          return createElement(
+            'p',
+            'detail-section-copy warning',
+            `ASG instance sample unavailable · ${reasonText} · requested ${countText(scope.requestedLimit)} · effective ${countText(effectiveLimit)}`,
+          );
+        }
+        return createElement(
+          'p',
+          'detail-section-copy',
+          `ASG instance sample scope · requested ${countText(scope.requestedLimit)} · effective ${countText(effectiveLimit)} · returned ${countText(returnedInstanceCount)} instance(s) · ${truncationStatus}`,
+        );
+      };
       const autoScalingGroupRecentLogsHandoff = (deploymentName, resource) => {
         if (!deploymentName || !resource?.id) return null;
         if (!['candidateAutoScalingGroup', 'serviceAutoScalingGroup'].includes(String(resource?.type || '').trim())) return null;
@@ -4418,6 +4459,7 @@
           },
           'No target groups are attached to this Auto Scaling Group.',
         );
+        const instanceSampleUnavailable = isAutoScalingInstanceScopeUnavailable(group?.instancesScope);
         const instancesSection = createInspectionListSection(
           'Instances',
           group?.instances || [],
@@ -4437,7 +4479,8 @@
             item.append(meta);
             return item;
           },
-          'No instances are currently reported for this Auto Scaling Group.',
+          instanceSampleUnavailable ? 'ASG instance sampling is unavailable for this group; group inspection remains available.' : 'No instances are currently reported for this Auto Scaling Group.',
+          [createAutoScalingInstanceScopeSummary(group?.instancesScope)],
         );
         const mixedInstancesOverridesSection = createInspectionListSection(
           'Mixed instances overrides',
@@ -4787,7 +4830,7 @@
         const deploymentName = detail?.name || currentPageState.deployment || '';
         const force = Boolean(options?.force);
         const baseInspectionKey = resourceInspectionCacheKey(deploymentName, resource);
-        const selectedLimit = resource?.type === 'ecsService' ? normalizeResourceInspectionTaskLimit(options?.limit ?? resourceInspectionLimitByResourceKey.get(baseInspectionKey) ?? 0) : 0;
+        const selectedLimit = supportsBoundedResourceInspection(resource) ? normalizeResourceInspectionTaskLimit(options?.limit ?? resourceInspectionLimitByResourceKey.get(baseInspectionKey) ?? 0) : 0;
         resourceInspectionLimitByResourceKey.set(baseInspectionKey, selectedLimit);
         const inspectionKey = resourceInspectionRequestCacheKey(deploymentName, resource, selectedLimit);
         const cached = resourceInspectionStateByKey.get(inspectionKey);
