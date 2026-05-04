@@ -8528,7 +8528,36 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!createRequestOptions || createRequestOptions.method !== 'POST') throw new Error('expected Create Plan to POST');
   if (!createRequestOptions.headers || createRequestOptions.headers['Content-Type'] !== 'application/json') throw new Error('expected Create Plan content type header');
   const createBody = JSON.parse(createRequestOptions.body || '{}');
-  if (!/^plan_[0-9a-f]{16}$/.test(createBody.ifMatch || '')) throw new Error('expected Create Plan to send derived ifMatch fingerprint, got ' + createRequestOptions.body);
+  const expectedFingerprintPayload = {
+    deploymentName: 'api-prod',
+    sync: { reason: 'rollout in progress', state: 'OutOfSync' },
+    health: { overall: 'Healthy', summary: 'traffic shifting' },
+    targetType: 'ecs',
+    strategy: 'linear',
+    executionMode: 'ecsCodeDeploy',
+    desiredArtifact: { image: 'ghcr.io/example/payments:v2' },
+    deployedArtifact: { image: 'ghcr.io/example/payments:v1' },
+    runtimeTimestamp: '2026-04-16T07:10:00Z',
+    runtimeSource: 'runtime-agent',
+    currentStep: 'ShiftTrafficCanary',
+    desiredGeneration: 1,
+    rolloutSteps: [
+      { detail: 'Created CodeDeploy deployment', kind: 'CreateCodeDeployDeployment', status: 'completed' },
+      { detail: 'Moving 10% traffic to the green task set', kind: 'ShiftTrafficCanary', status: 'current' },
+    ],
+    rolloutExecution: [
+      { resource: 'ecsService', name: 'api-prod-service' },
+      { resource: 'codeDeployApplication', name: 'api-prod-codedeploy-app' },
+      { resource: 'codeDeployDeploymentGroup', name: 'api-prod-codedeploy-group' },
+      { resource: 'productionListener', name: 'api-prod-prod-listener' },
+      { resource: 'testListener', name: 'api-prod-test-listener' },
+      { resource: 'blueTaskSetTargetGroup', name: 'api-prod-blue' },
+      { resource: 'greenTaskSetTargetGroup', name: 'api-prod-green' },
+    ],
+  };
+  const expectedDigest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(expectedFingerprintPayload)));
+  const expectedFingerprint = 'plan_' + Array.from(new Uint8Array(expectedDigest)).map((value) => value.toString(16).padStart(2, '0')).join('').slice(0, 16);
+  if (createBody.ifMatch !== expectedFingerprint) throw new Error('expected Create Plan ifMatch to include runtimeSummary rollout context and fallback execution resources, got ' + createRequestOptions.body + ' want ' + expectedFingerprint);
   if (window.location.search !== '?page=plan&deployment=api-prod&planId=plan_ready_123') throw new Error('expected Create Plan to persist planId in URL, got ' + window.location.search);
   text = collectText(root).join(' | ');
   if (!text.includes('Plan preview ready')) throw new Error('expected ready plan-preview heading');
