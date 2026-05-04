@@ -1800,6 +1800,7 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 		"return 'This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet.';",
 		"case 'aws_unavailable':",
 		"return 'AWS access is currently unavailable for recent logs.';",
+		"return reason ? 'Tenet returned an unavailable recent-log state. Use the lookup context above to continue provider troubleshooting.' : '';",
 		"const lookupContextText = (value) => value == null || value === '' ? '—' : String(value);",
 		"const lookupContextBoolText = (value) => typeof value === 'boolean' ? boolLabel(value) : '—';",
 		"const resourceLogsLookupContextFields = (lookupContext) => [",
@@ -2949,6 +2950,7 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"Successful responses include additive `resultScope` metadata",
 			"Tenet does not issue extra provider calls solely to prove exact totals beyond the bounded read",
 			"operator troubleshooting examples that distinguish bounded successful reads, AWS-unavailable supported-resource lookups, and route-stable no-log-source resources",
+			"Known `unavailableReason` values render friendly operator copy, and unknown provider/internal codes fall back to generic troubleshooting guidance instead of being shown literally",
 		},
 		"../../docs/features/resource-recent-logs.md": {
 			"Both local and compose smoke coverage lock a representative `ecsService` bounded read (`limit=1`), an ECS task/container read (`resourceType=ecsTask&containerName=worker&limit=1`), plus the invalid `limit=0` rejection",
@@ -2961,6 +2963,7 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"Operator troubleshooting examples",
 			"Bounded successful read: `available=true`",
 			"Supported resource, AWS lookup unavailable: `available=false`, `unavailableReason=aws_unavailable`",
+			"uses generic troubleshooting guidance for unknown provider/internal codes so the operator page does not expose raw machine-code strings",
 			"Route-stable resource with no independent stream: `available=false`, `unavailableReason=no_log_source`",
 			"unavailable/no-log-source responses use `returnedEntryCount=0` and `truncationStatus=not_applicable`",
 			"the UI also recognizes the compatibility aliases `capped` and `at_cap_unknown_total`",
