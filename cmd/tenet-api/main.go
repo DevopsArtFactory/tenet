@@ -823,6 +823,7 @@ func newOverviewDeploymentResourceInspectionProvider(
 			ResourceDescription:      request.ResourceDescription,
 			TaskSummaryLimit:         limit,
 			AutoScalingInstanceLimit: limit,
+			InstanceID:               resourceinspection.InstanceIDFromContext(ctx),
 			BackingResourceType:      request.BackingResourceType,
 			BackingResourceName:      request.BackingResourceName,
 			ControlAccountID:         request.ControlAccountID,

@@ -30,6 +30,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
 	"github.com/DevopsArtFactory/tenet/internal/rbacpolicy"
 	"github.com/DevopsArtFactory/tenet/internal/requestactor"
+	"github.com/DevopsArtFactory/tenet/internal/resourceaws"
 	"github.com/DevopsArtFactory/tenet/internal/resourceinspection"
 	"github.com/DevopsArtFactory/tenet/internal/resourcelogs"
 	"github.com/DevopsArtFactory/tenet/internal/statusstore"
@@ -7083,6 +7084,75 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 		if gotLimit != 4 {
 			t.Fatalf("expected ASG resource inspection limit 4, got %d", gotLimit)
+		}
+	})
+
+	t.Run("passes selected ASG inspection instanceId to provider context", func(t *testing.T) {
+		var gotInstanceID string
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(context.Context, string) (catalog.DeploymentOverviewDetail, error) {
+				return catalog.DeploymentOverviewDetail{Name: "api-prod"}, nil
+			},
+			OverviewDeploymentResourceInspection: func(ctx context.Context, name, resourceType, resourceName string, limit int) (resourceinspection.Result, error) {
+				gotInstanceID = resourceinspection.InstanceIDFromContext(ctx)
+				return resourceinspection.Result{
+					DeploymentName:    name,
+					ResourceType:      resourceType,
+					ResourceName:      resourceName,
+					InstanceID:        gotInstanceID,
+					Available:         false,
+					UnavailableReason: resourceaws.UnavailableReasonResourceNotFound,
+				}, nil
+			},
+		})
+
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=api-prod-candidate&instanceId=+i-0abc123def4567890+", nil))
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected selected ASG resource inspection to pass, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if gotInstanceID != "i-0abc123def4567890" {
+			t.Fatalf("expected trimmed instanceId in provider context, got %q", gotInstanceID)
+		}
+		var got map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode selected ASG inspection payload: %v", err)
+		}
+		if got["instanceId"] != "i-0abc123def4567890" || got["unavailableReason"] != resourceaws.UnavailableReasonResourceNotFound {
+			t.Fatalf("expected selected instanceId and unavailable reason in raw payload, got %v", got)
+		}
+	})
+
+	t.Run("rejects invalid ASG inspection instanceId before provider lookup", func(t *testing.T) {
+		for _, rawInstanceID := range []string{"not-an-instance", "i-", "i-abc/def"} {
+			t.Run(rawInstanceID, func(t *testing.T) {
+				var overviewCalls int
+				var inspectionCalls int
+				router := NewRouter(Options{
+					BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+					OverviewDeployment: func(context.Context, string) (catalog.DeploymentOverviewDetail, error) {
+						overviewCalls++
+						return catalog.DeploymentOverviewDetail{Name: "api-prod"}, nil
+					},
+					OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
+						inspectionCalls++
+						return resourceinspection.Result{}, nil
+					},
+				})
+
+				resp := httptest.NewRecorder()
+				router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=api-prod-candidate&instanceId="+url.QueryEscape(rawInstanceID), nil))
+				if resp.Code != http.StatusBadRequest {
+					t.Fatalf("expected 400 for instanceId=%s, got %d with body %q", rawInstanceID, resp.Code, resp.Body.String())
+				}
+				if body := resp.Body.String(); body != "invalid instanceId query\n" {
+					t.Fatalf("unexpected invalid instanceId response: %q", body)
+				}
+				if overviewCalls != 0 || inspectionCalls != 0 {
+					t.Fatalf("expected invalid instanceId to short-circuit providers, got overview=%d inspection=%d", overviewCalls, inspectionCalls)
+				}
+			})
 		}
 	})
 

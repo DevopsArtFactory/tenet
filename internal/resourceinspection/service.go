@@ -43,6 +43,21 @@ var ErrNotImplemented = errors.New("resource inspection service not implemented"
 
 type LookupContext = resourceaws.LookupContext
 
+type instanceIDContextKey struct{}
+
+func ContextWithInstanceID(ctx context.Context, instanceID string) context.Context {
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, instanceIDContextKey{}, instanceID)
+}
+
+func InstanceIDFromContext(ctx context.Context) string {
+	value, _ := ctx.Value(instanceIDContextKey{}).(string)
+	return strings.TrimSpace(value)
+}
+
 type Request struct {
 	DeploymentName           string
 	ResourceType             string
@@ -50,6 +65,7 @@ type Request struct {
 	ResourceDescription      string
 	TaskSummaryLimit         int
 	AutoScalingInstanceLimit int
+	InstanceID               string
 	BackingResourceType      string
 	BackingResourceName      string
 	ControlAccountID         string
@@ -62,6 +78,9 @@ type Result struct {
 	DeploymentName          string                             `json:"deploymentName"`
 	ResourceType            string                             `json:"resourceType"`
 	ResourceName            string                             `json:"resourceName"`
+	InstanceID              string                             `json:"instanceId,omitempty"`
+	BackingResourceType     string                             `json:"backingResourceType,omitempty"`
+	BackingResourceName     string                             `json:"backingResourceName,omitempty"`
 	LookupContext           LookupContext                      `json:"lookupContext"`
 	Available               bool                               `json:"available"`
 	Source                  string                             `json:"source"`
@@ -551,6 +570,7 @@ type AutoScalingGroupRequest struct {
 	DeploymentName  string
 	ResourceName    string
 	InstanceLimit   int
+	InstanceID      string
 	Region          string
 	TargetAccountID string
 	ObserverRoleARN string
@@ -677,6 +697,7 @@ func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
 			DeploymentName:  req.DeploymentName,
 			ResourceName:    req.ResourceName,
 			InstanceLimit:   req.AutoScalingInstanceLimit,
+			InstanceID:      strings.TrimSpace(req.InstanceID),
 			Region:          req.Region,
 			TargetAccountID: req.TargetAccountID,
 			ObserverRoleARN: req.ObserverRoleARN,
@@ -686,6 +707,13 @@ func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
 				return unavailableResult(req, reason), nil
 			}
 			return Result{}, err
+		}
+		if instanceID := strings.TrimSpace(req.InstanceID); instanceID != "" {
+			instance, ok := selectedAutoScalingInstance(detail, instanceID)
+			if !ok {
+				return unavailableResult(req, resourceaws.UnavailableReasonResourceNotFound), nil
+			}
+			detail.Instances = []AutoScalingGroupInstanceSummary{instance}
 		}
 		return availableAutoScalingResult(req, detail), nil
 	case "userDataBootstrapSource":
@@ -705,6 +733,7 @@ func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
 		detail, err := inspect(ctx, AutoScalingGroupRequest{
 			DeploymentName:  req.DeploymentName,
 			ResourceName:    req.BackingResourceName,
+			InstanceID:      strings.TrimSpace(req.InstanceID),
 			Region:          req.Region,
 			TargetAccountID: req.TargetAccountID,
 			ObserverRoleARN: req.ObserverRoleARN,
@@ -714,6 +743,11 @@ func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
 				return unavailableResult(req, reason), nil
 			}
 			return Result{}, err
+		}
+		if instanceID := strings.TrimSpace(req.InstanceID); instanceID != "" {
+			if _, ok := selectedAutoScalingInstance(detail, instanceID); !ok {
+				return unavailableResult(req, resourceaws.UnavailableReasonResourceNotFound), nil
+			}
 		}
 		return availableUserDataBootstrapSourceResult(req, detail), nil
 	default:
@@ -735,12 +769,15 @@ func (s Service) awsClients(ctx context.Context, region, targetAccountID, observ
 
 func unavailableResult(req Request, reason string) Result {
 	return Result{
-		DeploymentName:    req.DeploymentName,
-		ResourceType:      req.ResourceType,
-		ResourceName:      req.ResourceName,
-		LookupContext:     lookupContext(req),
-		Available:         false,
-		UnavailableReason: reason,
+		DeploymentName:      req.DeploymentName,
+		ResourceType:        req.ResourceType,
+		ResourceName:        req.ResourceName,
+		InstanceID:          strings.TrimSpace(req.InstanceID),
+		BackingResourceType: strings.TrimSpace(req.BackingResourceType),
+		BackingResourceName: strings.TrimSpace(req.BackingResourceName),
+		LookupContext:       lookupContext(req),
+		Available:           false,
+		UnavailableReason:   reason,
 	}
 }
 
@@ -771,17 +808,35 @@ func availableECSTaskResult(req Request, detail ECSTaskInspection) Result {
 }
 
 func availableAutoScalingResult(req Request, detail AutoScalingInspection) Result {
-	detail = applyAutoScalingInstanceScope(detail, req.AutoScalingInstanceLimit)
+	instanceLimit := req.AutoScalingInstanceLimit
+	if strings.TrimSpace(req.InstanceID) != "" {
+		instanceLimit = 1
+	}
+	detail = applyAutoScalingInstanceScope(detail, instanceLimit)
 	return Result{
 		DeploymentName:    req.DeploymentName,
 		ResourceType:      req.ResourceType,
 		ResourceName:      req.ResourceName,
+		InstanceID:        strings.TrimSpace(req.InstanceID),
 		LookupContext:     lookupContext(req),
 		Available:         true,
 		Source:            SourceAutoScalingGroup,
 		AutoScalingGroup:  &detail,
 		UnavailableReason: "",
 	}
+}
+
+func selectedAutoScalingInstance(detail AutoScalingInspection, instanceID string) (AutoScalingGroupInstanceSummary, bool) {
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return AutoScalingGroupInstanceSummary{}, false
+	}
+	for _, instance := range detail.Instances {
+		if strings.TrimSpace(instance.InstanceID) == instanceID {
+			return instance, true
+		}
+	}
+	return AutoScalingGroupInstanceSummary{}, false
 }
 
 func applyAutoScalingInstanceScope(detail AutoScalingInspection, limit int) AutoScalingInspection {
@@ -821,12 +876,15 @@ func applyAutoScalingInstanceScope(detail AutoScalingInspection, limit int) Auto
 
 func availableUserDataBootstrapSourceResult(req Request, detail AutoScalingInspection) Result {
 	return Result{
-		DeploymentName: req.DeploymentName,
-		ResourceType:   req.ResourceType,
-		ResourceName:   req.ResourceName,
-		LookupContext:  lookupContext(req),
-		Available:      true,
-		Source:         SourceAutoScalingGroup,
+		DeploymentName:      req.DeploymentName,
+		ResourceType:        req.ResourceType,
+		ResourceName:        req.ResourceName,
+		InstanceID:          strings.TrimSpace(req.InstanceID),
+		BackingResourceType: strings.TrimSpace(req.BackingResourceType),
+		BackingResourceName: strings.TrimSpace(req.BackingResourceName),
+		LookupContext:       lookupContext(req),
+		Available:           true,
+		Source:              SourceAutoScalingGroup,
 		UserDataBootstrapSource: &UserDataBootstrapSourceInspection{
 			DesiredBootstrapSource:  req.ResourceName,
 			ObservedBootstrapSource: strings.TrimSpace(detail.LaunchTemplateBootstrapSource),
