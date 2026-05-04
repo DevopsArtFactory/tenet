@@ -2089,6 +2089,9 @@ func TestCISmokeWorkflowSyntaxChecksBothSmokeScriptsInFastLane(t *testing.T) {
 		"cmd/tenet-api/*|cmd/tenet-api/**",
 		"cmd/tenet-controller/*|cmd/tenet-controller/**",
 		"internal/api/*|internal/api/**",
+		"internal/authprovider/*|internal/authprovider/**",
+		"internal/authidentity/*|internal/authidentity/**",
+		"internal/authstate/*|internal/authstate/**",
 		"internal/requestactor/*|internal/requestactor/**",
 		"internal/statusstore/*|internal/statusstore/**",
 		"internal/resourceaws/*|internal/resourceaws/**",
@@ -2118,6 +2121,24 @@ func TestCISmokeWorkflowDockerScopeCoversSharedResourceAWSChanges(t *testing.T) 
 	}
 	if dockerSmokeScopeMatches(patterns, "docs/features/resource-recent-logs.md") {
 		t.Fatalf("expected unrelated docs-only paths to skip docker smoke scope")
+	}
+}
+
+func TestCISmokeWorkflowDockerScopeCoversManagedLoginRuntimeChanges(t *testing.T) {
+	body, err := os.ReadFile("../../.github/workflows/ci-smoke.yml")
+	if err != nil {
+		t.Fatalf("read ci-smoke workflow: %v", err)
+	}
+
+	patterns := dockerSmokeScopePatterns(t, string(body))
+	for _, changedPath := range []string{
+		"internal/authprovider/google_oidc.go",
+		"internal/authidentity/file.go",
+		"internal/authstate/file.go",
+	} {
+		if !dockerSmokeScopeMatches(patterns, changedPath) {
+			t.Fatalf("expected %s to trigger docker smoke scope; patterns=%v", changedPath, patterns)
+		}
 	}
 }
 
