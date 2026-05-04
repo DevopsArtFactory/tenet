@@ -4200,7 +4200,7 @@
           const reasonText = summary || ecsTaskScopeUnavailableReasonText(scope.unavailableReason);
           return createElement(
             'p',
-            'detail-section-copy',
+            'detail-section-copy warning',
             `Task sample unavailable · ${reasonText} · requested ${countText(scope.requestedLimit)} · effective ${countText(effectiveLimit)}`,
           );
         }

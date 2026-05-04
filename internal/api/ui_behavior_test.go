@@ -4768,6 +4768,7 @@ async function render(search, inspectionResult) {
   if (!serviceRun.text.includes('Recent ECS tasks')) throw new Error('expected ECS service task list');
   if (!serviceRun.text.includes('Task sample scope · returned 1 task(s) from effective limit 10 · not truncated')) throw new Error('expected ECS task sample scope text: ' + serviceRun.text);
   if (!serviceRun.text.includes('Task ARN · ' + taskArn)) throw new Error('expected ECS task ARN in service inspection');
+
   const taskLimitSelect = collectNodes(serviceRun.document.getElementById('accounts'), (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'Task sample limit')[0];
   if (!taskLimitSelect) throw new Error('expected ECS service live inspection to expose task sample limit select');
   const limitOptionsText = (taskLimitSelect.children || []).map((node) => node.textContent).join(' | ');

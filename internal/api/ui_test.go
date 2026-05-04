@@ -3530,7 +3530,7 @@ func TestOverviewDocsDescribeECSTaskScopeReleaseGuard(t *testing.T) {
 		},
 		"../../docs/features/overview-dashboard.md": {
 			"`resource-inspection?resourceType=ecsService&resourceName={serviceName}&limit={n}` accepts an optional positive task-sample cap",
-			"local and compose smoke also lock the embedded shell helper/copy that renders `ecsService.tasksScope` as the `Task sample scope` note",
+			"local and compose smoke also lock the embedded shell helper/copy that renders `ecsService.tasksScope` as either the normal `Task sample scope` note or the distinct `Task sample unavailable` warning",
 			"without needing live AWS task inventory",
 			"conservative `truncationStatus` semantics (`not_truncated` = complete bounded result, `truncated` = more matching tasks existed, `unknown` = Tenet reached the cap without provider proof either way, `not_applicable` = task bridge unavailable)",
 			"That separates true empty successful samples (`available=true`, `returnedTaskCount=0`) from partial/unavailable task-bridge evidence",
