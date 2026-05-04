@@ -105,7 +105,7 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 
 		"keeps GitHub OAuth, Google Workspace OIDC, and Okta OIDC as active managed-login providers only when explicitly configured",
 		"keeps Okta SAML diagnostic-only",
-		"Okta SAML runtime and repository-backed provider group authorization",
+		"Okta SAML activation and repository-backed provider group authorization",
 
 		"repository-backed RBAC policy evaluation for users/groups",
 	} {

@@ -3053,7 +3053,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"the internal `authidentity` package provides a small JSON-backed identity-store contract for normalized provider identities",
 			"the internal `authstate` package provides a JSON-backed OAuth callback state store with expiry and one-time consume semantics for future CSRF/state validation",
 			"When the runtime variables are complete",
-			"`tenet-api` wires that OIDC provider plus the same JSON-backed state/identity stores",
+			"`tenet-api` wires the GitHub provider plus JSON-backed state/identity stores",
 			"reports `authRuntime.tenetManagedLogin.active=true` from `GET /v1/operator/context`",
 			"The runtime stays disabled when any setting is absent",
 			"The shipped managed-login runtime supports GitHub OAuth, Google Workspace OIDC, and Okta OIDC browser login today",
