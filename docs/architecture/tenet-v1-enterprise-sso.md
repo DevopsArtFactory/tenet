@@ -30,20 +30,20 @@ Enterprise SSO should extend the second family as provider-neutral managed-login
 Provider work is disabled by default. The first runtime slice now exposes provider-neutral diagnostics for `google_oidc`, `okta_saml`, and `okta_oidc` through `GET /v1/operator/context.authRuntime.enterpriseSso` without enabling live enterprise login routes yet. Configure the diagnostic with settings such as:
 
 ```text
-TENET_AUTH_PROVIDER=google_oidc
-TENET_GOOGLE_OIDC_CLIENT_ID=***
-TENET_GOOGLE_OIDC_CLIENT_SECRET=***
+TENET_AUTH_PROVIDER=google_oidc        # or okta_saml / okta_oidc
+TENET_GOOGLE_OIDC_CLIENT_ID=google-client-id
+TENET_GOOGLE_OIDC_CLIENT_SECRET=<secret from Google Workspace>
 TENET_GOOGLE_OIDC_ISSUER_URL=https://accounts.google.com
 TENET_GOOGLE_OIDC_REDIRECT_URL=https://tenet.example.com/auth/callback/google
-TENET_OKTA_SAML_METADATA_URL=***
+TENET_OKTA_SAML_METADATA_URL=https://okta.example.com/app/tenet/sso/saml/metadata
 TENET_OKTA_SAML_ACS_URL=https://tenet.example.com/auth/callback/okta/saml
-TENET_OKTA_OIDC_ISSUER_URL=***
-TENET_OKTA_OIDC_CLIENT_ID=***
-TENET_OKTA_OIDC_CLIENT_SECRET=***
+TENET_OKTA_OIDC_ISSUER_URL=https://okta.example.com/oauth2/default
+TENET_OKTA_OIDC_CLIENT_ID=okta-client-id
+TENET_OKTA_OIDC_CLIENT_SECRET=<secret from Okta>
 TENET_OKTA_OIDC_REDIRECT_URL=https://tenet.example.com/auth/callback/okta/oidc
-TENET_AUTH_STATE_STORE_PATH=/tmp/tenet/oauth-state.json
-TENET_AUTH_IDENTITY_STORE_PATH=/tmp/tenet/oauth-identities.json
-TENET_AUTH_SESSION_SECRET=***
+TENET_AUTH_STATE_STORE_PATH=/var/lib/tenet/auth-state.json
+TENET_AUTH_IDENTITY_STORE_PATH=/var/lib/tenet/auth-identities.json
+TENET_AUTH_SESSION_SECRET=<32+ byte session signing secret>
 ```
 
 The operator contract for these settings is:
@@ -103,7 +103,7 @@ Provider implementation and review should use local fakes:
 - router/session tests for callback, return URL, cookie, and diagnostic behavior
 - operator-context tests proving secrets are redacted and missing settings are explicit
 
-CI and local smoke should not require live Google Workspace, Gmail, or Okta credentials. Smoke can prove default-disabled behavior and non-secret diagnostics; focused unit/router tests can cover configured fake providers.
+CI and local smoke should not require live Google Workspace, Gmail, or Okta credentials. The current smoke guard restarts the direct-process and Compose API with fake local Google OIDC and Okta SAML settings, then reads `GET /v1/operator/context` to prove the configured-but-inactive `enterpriseSso` payload stays non-secret, names the provider, preserves route placeholders, reports the required/missing setting lists, marks the shared state/identity/session-secret stores configured, and returns the stable inactive reason without contacting an external IdP. Focused unit/router tests continue to cover the remaining Okta OIDC diagnostic shape, missing-setting combinations, and raw JSON field-name contracts.
 
 ## Explicit non-goals for issue #662
 

@@ -22,6 +22,8 @@ WEBHOOK_SECRET=${TENET_GITHUB_WEBHOOK_SECRET:-smoke-webhook-secret}
 STATUS_PATH=$(mktemp)
 PLAN_STORE_PATH=$(mktemp)
 APPLY_STORE_PATH=$(mktemp)
+ENTERPRISE_SSO_STATE_STORE_PATH=$(mktemp)
+ENTERPRISE_SSO_IDENTITY_STORE_PATH=$(mktemp)
 PAYLOAD_DIR=$(mktemp -d)
 cp "$FIXTURE_STATUS_PATH" "$STATUS_PATH"
 rm -f "$PLAN_STORE_PATH"
@@ -78,7 +80,7 @@ cleanup() {
     kill "$API_PID" 2>/dev/null || true
     wait "$API_PID" 2>/dev/null || true
   fi
-  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$INVALID_RESOURCE_LOG_LIMIT_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$INVALID_WEBHOOK_BODY" "$AUTH_UNAUTHENTICATED_PLAN_BODY" "$AUTH_UNAUTHENTICATED_APPLY_BODY" "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_CATALOG_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY" "$AUTH_ROLE_REQUIRED_COLLECTION_BODY" "$AUTH_ROLE_REQUIRED_STATUS_READ_BODY" "$AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_READ_BODY" "$AUTH_UNAUTHENTICATED_STATUS_READ_BODY" "$AUTH_UNAUTHENTICATED_EVENTS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY" "$AUTH_FORBIDDEN_GROUP_DETAIL_BODY" "$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" "$AUTH_FORBIDDEN_READ_BODY" "$AUTH_FORBIDDEN_STATUS_READ_BODY" "$AUTH_FORBIDDEN_EVENTS_BODY" "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_PLAN_WRITE_BODY" "$AUTH_FORBIDDEN_APPLY_WRITE_BODY" "$AUTH_FORBIDDEN_TRANSITION_BODY" "$AUTH_FORBIDDEN_PLAN_READ_BODY" "$AUTH_FORBIDDEN_APPLY_READ_BODY" "$AUTH_FORBIDDEN_AUDIT_BODY" "$AUTH_ROLE_REQUIRED_PLAN_READ_BODY" "$AUTH_ROLE_REQUIRED_APPLY_READ_BODY"
+  rm -f "$LOG_FILE" "$CONTROLLER_LOG_FILE" "$STATUS_PATH" "$PLAN_STORE_PATH" "$APPLY_STORE_PATH" "$ENTERPRISE_SSO_STATE_STORE_PATH" "$ENTERPRISE_SSO_IDENTITY_STORE_PATH" "$INVALID_AUDIT_ACTION_BODY" "$INVALID_RESOURCE_LOG_LIMIT_BODY" "$STALE_APPLY_CONFLICT_BODY" "$INVALID_APPLY_TRANSITION_BODY" "$UNKNOWN_APPLY_TRANSITION_BODY" "$TERMINAL_APPLY_TRANSITION_BODY" "$INVALID_WEBHOOK_BODY" "$AUTH_UNAUTHENTICATED_PLAN_BODY" "$AUTH_UNAUTHENTICATED_APPLY_BODY" "$AUTH_UNAUTHENTICATED_TRANSITION_BODY" "$AUTH_UNAUTHENTICATED_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_STATUS_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_ACCOUNT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_CATALOG_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_AUDIT_COLLECTION_BODY" "$AUTH_ROLE_REQUIRED_COLLECTION_BODY" "$AUTH_ROLE_REQUIRED_STATUS_READ_BODY" "$AUTH_ROLE_REQUIRED_AUDIT_COLLECTION_BODY" "$AUTH_UNAUTHENTICATED_READ_BODY" "$AUTH_UNAUTHENTICATED_STATUS_READ_BODY" "$AUTH_UNAUTHENTICATED_EVENTS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY" "$AUTH_FORBIDDEN_GROUP_DETAIL_BODY" "$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" "$AUTH_FORBIDDEN_READ_BODY" "$AUTH_FORBIDDEN_STATUS_READ_BODY" "$AUTH_FORBIDDEN_EVENTS_BODY" "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" "$AUTH_FORBIDDEN_PLAN_WRITE_BODY" "$AUTH_FORBIDDEN_APPLY_WRITE_BODY" "$AUTH_FORBIDDEN_TRANSITION_BODY" "$AUTH_FORBIDDEN_PLAN_READ_BODY" "$AUTH_FORBIDDEN_APPLY_READ_BODY" "$AUTH_FORBIDDEN_AUDIT_BODY" "$AUTH_ROLE_REQUIRED_PLAN_READ_BODY" "$AUTH_ROLE_REQUIRED_APPLY_READ_BODY"
   rm -rf "$PAYLOAD_DIR" "$REPO_ROOT"
 }
 trap cleanup EXIT
@@ -150,6 +152,41 @@ wait_for_apply_status() {
 
   printf '%s' "$response"
   return 1
+}
+
+assert_enterprise_sso_diagnostic() {
+  local payload_path=$1
+  local provider=$2
+  local expected_login_route=$3
+  local expected_callback_route=$4
+  shift 4
+
+  python3 - "$payload_path" "$provider" "$expected_login_route" "$expected_callback_route" "$@" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+provider = sys.argv[2]
+expected_login_route = sys.argv[3]
+expected_callback_route = sys.argv[4]
+expected_required = list(sys.argv[5:])
+enterprise_sso = (payload.get('authRuntime') or {}).get('enterpriseSso') or {}
+assert enterprise_sso.get('configured') is True, payload
+assert enterprise_sso.get('active') is False, payload
+assert enterprise_sso.get('provider') == provider, payload
+assert enterprise_sso.get('loginRoute') == expected_login_route, payload
+assert enterprise_sso.get('callbackRoute') == expected_callback_route, payload
+assert enterprise_sso.get('requiredSettings') == expected_required, payload
+assert not enterprise_sso.get('missingSettings'), payload
+assert enterprise_sso.get('stateStoreConfigured') is True, payload
+assert enterprise_sso.get('identityStoreConfigured') is True, payload
+assert enterprise_sso.get('sessionSecretConfigured') is True, payload
+assert enterprise_sso.get('unavailableReason') == 'enterprise SSO provider diagnostics are configured, but provider login/callback runtime is not active for this API instance', payload
+serialized = json.dumps(enterprise_sso, sort_keys=True).lower()
+for forbidden in ('secret-value', 'google-client-secret', 'okta-private-key', 'saml assertion', 'authorization_code'):
+    assert forbidden not in serialized, enterprise_sso
+PY
 }
 
 stop_api() {
@@ -2784,6 +2821,47 @@ assert allowed_scoped_audit['entries'][0]['action'] == 'apply.requested', allowe
 print('smoke-local: deployment read auth path ok')
 PY
 
+stop_api
+TENET_AUTH_PROVIDER=google_oidc \
+TENET_GOOGLE_OIDC_CLIENT_ID=google-smoke-client \
+TENET_GOOGLE_OIDC_CLIENT_SECRET=placeholder-google-client-value \
+TENET_GOOGLE_OIDC_ISSUER_URL=https://accounts.google.com \
+TENET_GOOGLE_OIDC_REDIRECT_URL=http://127.0.0.1/auth/callback/google \
+TENET_AUTH_STATE_STORE_PATH="$ENTERPRISE_SSO_STATE_STORE_PATH" \
+TENET_AUTH_IDENTITY_STORE_PATH="$ENTERPRISE_SSO_IDENTITY_STORE_PATH" \
+TENET_AUTH_SESSION_SECRET=placeholder-enterprise-session-value \
+  start_api "$AUTH_TRUSTED_HEADERS" "$AUTH_ENFORCED" false false
+enterprise_sso_google_context=$(curl -fsS "http://$HOST:$PORT/v1/operator/context")
+enterprise_sso_google_context_path=$(write_payload enterprise-sso-google-context.json "$enterprise_sso_google_context")
+assert_enterprise_sso_diagnostic "$enterprise_sso_google_context_path" google_oidc /auth/login/google /auth/callback/google \
+  TENET_AUTH_PROVIDER \
+  TENET_GOOGLE_OIDC_CLIENT_ID \
+  TENET_GOOGLE_OIDC_CLIENT_SECRET \
+  TENET_GOOGLE_OIDC_ISSUER_URL \
+  TENET_GOOGLE_OIDC_REDIRECT_URL \
+  TENET_AUTH_STATE_STORE_PATH \
+  TENET_AUTH_IDENTITY_STORE_PATH \
+  TENET_AUTH_SESSION_SECRET
+
+stop_api
+TENET_AUTH_PROVIDER=okta_saml \
+TENET_OKTA_SAML_METADATA_URL=https://okta.example.com/app/smoke/sso/saml/metadata \
+TENET_OKTA_SAML_ACS_URL=http://127.0.0.1/auth/callback/okta/saml \
+TENET_AUTH_STATE_STORE_PATH="$ENTERPRISE_SSO_STATE_STORE_PATH" \
+TENET_AUTH_IDENTITY_STORE_PATH="$ENTERPRISE_SSO_IDENTITY_STORE_PATH" \
+TENET_AUTH_SESSION_SECRET=placeholder-enterprise-session-value \
+  start_api "$AUTH_TRUSTED_HEADERS" "$AUTH_ENFORCED" false false
+enterprise_sso_okta_saml_context=$(curl -fsS "http://$HOST:$PORT/v1/operator/context")
+enterprise_sso_okta_saml_context_path=$(write_payload enterprise-sso-okta-saml-context.json "$enterprise_sso_okta_saml_context")
+assert_enterprise_sso_diagnostic "$enterprise_sso_okta_saml_context_path" okta_saml /auth/login/okta /auth/callback/okta/saml \
+  TENET_AUTH_PROVIDER \
+  TENET_OKTA_SAML_METADATA_URL \
+  TENET_OKTA_SAML_ACS_URL \
+  TENET_AUTH_STATE_STORE_PATH \
+  TENET_AUTH_IDENTITY_STORE_PATH \
+  TENET_AUTH_SESSION_SECRET
+
+echo "smoke-local: configured inactive enterprise SSO diagnostics ok"
 stop_api
 start_api "$AUTH_TRUSTED_HEADERS" "$AUTH_ENFORCED" false false
 
