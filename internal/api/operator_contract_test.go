@@ -139,6 +139,7 @@ func TestEnterpriseSSOSmokeContracts(t *testing.T) {
 		"focused Go tests cover the Google fake-provider login/callback path, the remaining `okta_oidc` diagnostic shape",
 		"including the Google Workspace case where the API reports both `tenetManagedLogin.active=true` and `enterpriseSso.active=true`",
 		"the embedded recovery copy deliberately prefers the enterprise SSO label",
+		"reserved Okta SAML/enterprise runtime paths `internal/authsaml/**` and `internal/authsso/**`",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README enterprise SSO smoke scope to include %q", fragment)
@@ -153,6 +154,8 @@ func TestEnterpriseSSOSmokeContracts(t *testing.T) {
 		"Focused unit/router tests cover Google fake-provider code exchange/profile lookup",
 		"the embedded guarded-read handoff preference when Google reports both `enterpriseSso.active=true` and `tenetManagedLogin.active=true`",
 		"operator copy must use `Sign in with Google Workspace SSO`",
+		"reserved Okta SAML/enterprise runtime paths `internal/authsaml/**` and `internal/authsso/**`",
+		"while unrelated docs-only edits stay on the cheaper fast lane",
 	} {
 		if !strings.Contains(enterpriseSSODoc, fragment) {
 			t.Fatalf("expected enterprise SSO docs to describe smoke release guard scope with %q", fragment)
