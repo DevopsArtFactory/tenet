@@ -199,10 +199,13 @@ type ECSServiceInspection struct {
 }
 
 type ECSTaskSummaryScope struct {
+	Available         bool   `json:"available"`
 	RequestedLimit    *int   `json:"requestedLimit,omitempty"`
 	EffectiveLimit    int    `json:"effectiveLimit"`
 	ReturnedTaskCount int    `json:"returnedTaskCount"`
 	TruncationStatus  string `json:"truncationStatus"`
+	UnavailableReason string `json:"unavailableReason,omitempty"`
+	Summary           string `json:"summary,omitempty"`
 }
 
 type ECSTaskSummary struct {
@@ -1138,7 +1141,7 @@ func ecsServiceTaskSummaries(ctx context.Context, client ecsServiceAPI, clusterA
 		for pages.HasMorePages() {
 			out, err := pages.NextPage(ctx)
 			if err != nil {
-				return nil, nil, err
+				return nil, unavailableECSTaskSummaryScope(requestedLimit, effectiveLimit, err), nil
 			}
 			for _, taskARN := range out.TaskArns {
 				taskARN = strings.TrimSpace(taskARN)
@@ -1157,7 +1160,7 @@ func ecsServiceTaskSummaries(ctx context.Context, client ecsServiceAPI, clusterA
 		}
 	}
 	if len(taskARNs) == 0 {
-		return nil, &ECSTaskSummaryScope{RequestedLimit: requestedLimit, EffectiveLimit: effectiveLimit, ReturnedTaskCount: 0, TruncationStatus: "not_truncated"}, nil
+		return nil, &ECSTaskSummaryScope{Available: true, RequestedLimit: requestedLimit, EffectiveLimit: effectiveLimit, ReturnedTaskCount: 0, TruncationStatus: "not_truncated"}, nil
 	}
 
 	tasks := make([]ecstypes.Task, 0, len(taskARNs))
@@ -1168,7 +1171,7 @@ func ecsServiceTaskSummaries(ctx context.Context, client ecsServiceAPI, clusterA
 		}
 		out, err := client.DescribeTasks(ctx, &ecs.DescribeTasksInput{Cluster: aws.String(clusterARN), Tasks: taskARNs[start:end]})
 		if err != nil {
-			return nil, nil, err
+			return nil, unavailableECSTaskSummaryScope(requestedLimit, effectiveLimit, err), nil
 		}
 		tasks = append(tasks, out.Tasks...)
 	}
@@ -1196,8 +1199,37 @@ func ecsServiceTaskSummaries(ctx context.Context, client ecsServiceAPI, clusterA
 	} else if len(summaries) == effectiveLimit {
 		truncationStatus = "unknown"
 	}
-	scope := &ECSTaskSummaryScope{RequestedLimit: requestedLimit, EffectiveLimit: effectiveLimit, ReturnedTaskCount: len(summaries), TruncationStatus: truncationStatus}
+	scope := &ECSTaskSummaryScope{Available: true, RequestedLimit: requestedLimit, EffectiveLimit: effectiveLimit, ReturnedTaskCount: len(summaries), TruncationStatus: truncationStatus}
 	return summaries, scope, nil
+}
+
+func unavailableECSTaskSummaryScope(requestedLimit *int, effectiveLimit int, err error) *ECSTaskSummaryScope {
+	reason, ok := resourceaws.UnavailableReasonForError(err)
+	if !ok || strings.TrimSpace(reason) == "" {
+		reason = resourceaws.UnavailableReasonAWSUnavailable
+	}
+	return &ECSTaskSummaryScope{
+		Available:         false,
+		RequestedLimit:    requestedLimit,
+		EffectiveLimit:    effectiveLimit,
+		ReturnedTaskCount: 0,
+		TruncationStatus:  "not_applicable",
+		UnavailableReason: reason,
+		Summary:           ecsTaskSummaryUnavailableText(reason),
+	}
+}
+
+func ecsTaskSummaryUnavailableText(reason string) string {
+	switch reason {
+	case resourceaws.UnavailableReasonCrossAccountNotConfigured:
+		return "ECS task sampling is unavailable because cross-account observer-role access is not configured."
+	case resourceaws.UnavailableReasonResourceNotFound:
+		return "ECS task sampling is unavailable because the service or task bridge resource could not be found."
+	case resourceaws.UnavailableReasonAWSUnavailable:
+		return "ECS task sampling is unavailable because AWS access for the task bridge could not be completed."
+	default:
+		return "ECS task sampling is unavailable; inspect the lookup context before treating this as an empty task sample."
+	}
 }
 
 func ecsTaskDefinitionsByARN(ctx context.Context, client ecsServiceAPI, tasks []ecstypes.Task) map[string]ecstypes.TaskDefinition {

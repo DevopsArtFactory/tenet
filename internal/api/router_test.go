@@ -7028,6 +7028,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				}},
 				Tasks: []resourceinspection.ECSTaskSummary{{TaskARN: "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/task-1", TaskID: "task-1"}},
 				TasksScope: &resourceinspection.ECSTaskSummaryScope{
+					Available:         true,
 					RequestedLimit:    &requestedLimit,
 					EffectiveLimit:    3,
 					ReturnedTaskCount: 1,
@@ -7110,8 +7111,96 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected tasksScope object in ECS service payload, got %#v", ecsService["tasksScope"])
 		}
-		if tasksScope["requestedLimit"] != float64(3) || tasksScope["effectiveLimit"] != float64(3) || tasksScope["returnedTaskCount"] != float64(1) || tasksScope["truncationStatus"] != "not_truncated" {
+		if tasksScope["available"] != true || tasksScope["requestedLimit"] != float64(3) || tasksScope["effectiveLimit"] != float64(3) || tasksScope["returnedTaskCount"] != float64(1) || tasksScope["truncationStatus"] != "not_truncated" {
 			t.Fatalf("unexpected tasksScope payload: %#v", tasksScope)
+		}
+	})
+
+	t.Run("returns ECS service success-empty task sample scope", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(context.Context, string) (catalog.DeploymentOverviewDetail, error) {
+				return catalog.DeploymentOverviewDetail{Name: "api-prod"}, nil
+			},
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
+				return resourceinspection.Result{
+					DeploymentName: "api-prod",
+					ResourceType:   "ecsService",
+					ResourceName:   "api-prod-service",
+					Available:      true,
+					Source:         resourceinspection.SourceECSService,
+					ECSService: &resourceinspection.ECSServiceInspection{
+						ServiceName: "api-prod-service",
+						Deployments: []resourceinspection.ECSDeploymentSummary{},
+						Events:      []resourceinspection.ECSServiceEvent{},
+						TasksScope:  &resourceinspection.ECSTaskSummaryScope{Available: true, EffectiveLimit: 10, ReturnedTaskCount: 0, TruncationStatus: "not_truncated"},
+					},
+				}, nil
+			},
+		})
+
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=api-prod-service", nil))
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw resource inspection payload: %v", err)
+		}
+		ecsService := raw["ecsService"].(map[string]any)
+		tasksScope := ecsService["tasksScope"].(map[string]any)
+		if tasksScope["available"] != true || tasksScope["returnedTaskCount"] != float64(0) || tasksScope["truncationStatus"] != "not_truncated" {
+			t.Fatalf("expected successful empty task-scope payload, got %#v", tasksScope)
+		}
+		if _, ok := tasksScope["unavailableReason"]; ok {
+			t.Fatalf("expected successful empty task scope to omit unavailableReason, got %#v", tasksScope)
+		}
+	})
+
+	t.Run("returns ECS service sample-unavailable task scope", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(context.Context, string) (catalog.DeploymentOverviewDetail, error) {
+				return catalog.DeploymentOverviewDetail{Name: "api-prod"}, nil
+			},
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
+				return resourceinspection.Result{
+					DeploymentName: "api-prod",
+					ResourceType:   "ecsService",
+					ResourceName:   "api-prod-service",
+					Available:      true,
+					Source:         resourceinspection.SourceECSService,
+					ECSService: &resourceinspection.ECSServiceInspection{
+						ServiceName: "api-prod-service",
+						Deployments: []resourceinspection.ECSDeploymentSummary{},
+						Events:      []resourceinspection.ECSServiceEvent{},
+						TasksScope: &resourceinspection.ECSTaskSummaryScope{
+							Available:         false,
+							EffectiveLimit:    10,
+							ReturnedTaskCount: 0,
+							TruncationStatus:  "not_applicable",
+							UnavailableReason: "aws_unavailable",
+							Summary:           "ECS task sampling is unavailable because AWS access for the task bridge could not be completed.",
+						},
+					},
+				}, nil
+			},
+		})
+
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=api-prod-service", nil))
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw resource inspection payload: %v", err)
+		}
+		ecsService := raw["ecsService"].(map[string]any)
+		tasksScope := ecsService["tasksScope"].(map[string]any)
+		if tasksScope["available"] != false || tasksScope["unavailableReason"] != "aws_unavailable" || tasksScope["truncationStatus"] != "not_applicable" || tasksScope["summary"] == "" {
+			t.Fatalf("expected explicit sample-unavailable task-scope payload, got %#v", tasksScope)
 		}
 	})
 
