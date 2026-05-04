@@ -76,6 +76,7 @@ func runController(ctx context.Context, logger *log.Logger, config startupConfig
 				logger.Printf("controller refresh handoff ignored: %v", message.Err)
 				continue
 			}
+			receivedAt := time.Now().UTC()
 			logger.Printf(
 				"controller refresh handoff received request_id=%s delivery_id=%s repository=%s ref=%s after=%s requested_at=%s",
 				message.Request.RequestID,
@@ -85,7 +86,7 @@ func runController(ctx context.Context, logger *log.Logger, config startupConfig
 				message.Request.After,
 				message.Request.RequestedAt,
 			)
-			if err := emitRuntimePlans(ctx, logger, config, store); err != nil {
+			if err := emitRuntimePlansForRefresh(ctx, logger, config, store, &message.Request, receivedAt); err != nil {
 				logger.Printf("controller runtime error: %v", err)
 			}
 		case <-ticker.C:

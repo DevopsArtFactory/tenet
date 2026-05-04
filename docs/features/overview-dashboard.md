@@ -241,6 +241,7 @@ Separate from that controller-runtime timeline, the backend also exposes `GET /v
 Current behavior:
 - returns `deploymentName` plus an explicit `events[]` array
 - returns an additive `managedDriftSummary` object with explicit `total`, `high`, `medium`, and `low` counts derived from the returned history rows; rows with missing/unknown severity count toward `total` only
+- includes additive non-secret `events[].controllerRefresh` metadata (`requestId`, `deliveryId`, `repository`, `ref`, optional `after`, `requestedAt`, `receivedAt`, and `reconciledAt`) only when a Redis controller-refresh handoff from an accepted GitHub desired-state push triggered that reconcile; ticker reconciles omit the object, and deleted-ref webhook pushes still publish no handoff and create no runtime event
 - returns `200 OK` with `events: []` and zero drift-summary counts when the deployment exists but no runtime history has been persisted yet
 - never calls live AWS APIs; it only reflects the stored controller/runtime read model
 - the application detail page consumes the same route directly instead of reusing `history[]` from the deeper deployment-detail payload, renders the additive summary as `Managed drift summary · {total} total · {high} high · {medium} medium · {low} low` above the event list so drift severity is visible without expanding every event, and adds an in-shell `Open field-level drift` handoff to `/?page=drift&deployment={deploymentName}#drift-field-level` when the summary reports managed drift.
@@ -255,6 +256,16 @@ Example response shape:
       "timestamp": "2026-04-16T06:15:00Z",
       "source": "controller",
       "summary": "Deployment has managed drift",
+      "controllerRefresh": {
+        "requestId": "req-123",
+        "deliveryId": "delivery-456",
+        "repository": "DevopsArtFactory/tenet-config",
+        "ref": "refs/heads/main",
+        "after": "abc123def456",
+        "requestedAt": "2026-04-16T06:00:00Z",
+        "receivedAt": "2026-04-16T06:00:03Z",
+        "reconciledAt": "2026-04-16T06:15:00Z"
+      },
       "managedDrift": [
         {"field": "runtimeContext.capacity.desired", "desired": "6", "actual": "4", "severity": "high"}
       ]

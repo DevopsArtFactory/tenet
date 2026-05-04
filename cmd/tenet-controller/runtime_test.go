@@ -16,6 +16,7 @@ import (
 
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
+	"github.com/DevopsArtFactory/tenet/internal/controllerrefresh"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/githubcontents"
 	"github.com/DevopsArtFactory/tenet/internal/manifest"
@@ -1576,6 +1577,101 @@ func TestEmitRuntimePlansPersistsRuntimeHistory(t *testing.T) {
 	}
 	if got := status.History[0].Timestamp; got != "2026-04-16T05:00:00Z" {
 		t.Fatalf("expected seeded history to be preserved, got %+v", status.History)
+	}
+}
+
+func TestEmitRuntimePlansForRefreshPersistsControllerRefreshEvidence(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1},"userdata":{"type":"file","path":"userdata/api-prod.sh"}}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, `[{"deploymentName":"api-prod","status":{"observedGeneration":-1,"sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"conditions":[],"history":[{"timestamp":"2026-04-16T05:00:00Z","source":"controller","summary":"Waiting for fresher desired state","sync":{"state":"OutOfSync","reason":"candidate missing"},"health":{"overall":"Progressing","summary":"candidate pending"},"rolloutPhase":"Accepted","currentStep":"AwaitFreshDesired"}]}}]`)
+
+	oldNow := runtimeHistoryNow
+	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 0, 0, 0, time.UTC) }
+	defer func() { runtimeHistoryNow = oldNow }()
+
+	request := controllerrefresh.Request{
+		RequestID:   "req-123",
+		DeliveryID:  "delivery-456",
+		Repository:  "DevopsArtFactory/tenet-config",
+		Ref:         "refs/heads/main",
+		After:       "abc123def456",
+		RequestedAt: "2026-04-16T05:59:00Z",
+	}
+	receivedAt := time.Date(2026, 4, 16, 5, 59, 30, 0, time.UTC)
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlansForRefresh(context.Background(), logger, config, nil, &request, receivedAt); err != nil {
+		t.Fatalf("emitRuntimePlansForRefresh returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	status := snapshots[0].Status
+	if len(status.History) != 3 {
+		t.Fatalf("expected prior, controller, and refresh history entries, got %+v", status.History)
+	}
+	latest := status.History[len(status.History)-1]
+	if latest.Source != runtimeHistorySourceController || latest.Summary != "Controller reconciled deployment after GitHub desired-state push" {
+		t.Fatalf("expected controller refresh event summary, got %+v", latest)
+	}
+	if latest.ControllerRefresh == nil {
+		t.Fatalf("expected controller refresh evidence, got %+v", latest)
+	}
+	wantRefresh := domain.ControllerRefreshEvidence{
+		RequestID:    "req-123",
+		DeliveryID:   "delivery-456",
+		Repository:   "DevopsArtFactory/tenet-config",
+		Ref:          "refs/heads/main",
+		After:        "abc123def456",
+		RequestedAt:  "2026-04-16T05:59:00Z",
+		ReceivedAt:   "2026-04-16T05:59:30Z",
+		ReconciledAt: "2026-04-16T06:00:00Z",
+	}
+	if *latest.ControllerRefresh != wantRefresh {
+		t.Fatalf("expected refresh evidence %+v, got %+v", wantRefresh, *latest.ControllerRefresh)
+	}
+	payload, err := json.Marshal(latest)
+	if err != nil {
+		t.Fatalf("failed to marshal latest history event: %v", err)
+	}
+	for _, fragment := range []string{`"controllerRefresh"`, `"requestId":"req-123"`, `"deliveryId":"delivery-456"`, `"repository":"DevopsArtFactory/tenet-config"`, `"ref":"refs/heads/main"`, `"after":"abc123def456"`, `"requestedAt":"2026-04-16T05:59:00Z"`, `"receivedAt":"2026-04-16T05:59:30Z"`, `"reconciledAt":"2026-04-16T06:00:00Z"`} {
+		if !strings.Contains(string(payload), fragment) {
+			t.Fatalf("expected raw event JSON to contain %s, got %s", fragment, payload)
+		}
+	}
+}
+
+func TestEmitRuntimePlansWithoutRefreshDoesNotFabricateControllerRefreshEvidence(t *testing.T) {
+	root := t.TempDir()
+	writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+	writeJSON(t, filepath.Join(root, "environments", "prod-apne2.json"), `{"name":"prod-apne2","accountRef":"prod-core","region":"ap-northeast-2","networkRef":"prod-main"}`)
+	writeJSON(t, filepath.Join(root, "deployments", "api-prod.json"), `{"name":"api-prod","appRef":"payments-api","environmentRef":"prod-apne2","target":{"type":"ec2"},"strategy":{"type":"blueGreen"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1},"userdata":{"type":"file","path":"userdata/api-prod.sh"}}`)
+	statusPath := filepath.Join(root, "status", "deployments.json")
+	writeJSON(t, statusPath, `[]`)
+
+	oldNow := runtimeHistoryNow
+	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 30, 0, 0, time.UTC) }
+	defer func() { runtimeHistoryNow = oldNow }()
+
+	logger := log.New(&bytes.Buffer{}, "", 0)
+	config := startupConfig{RepoRoot: root, StatusPath: statusPath}
+	if err := emitRuntimePlans(context.Background(), logger, config, nil); err != nil {
+		t.Fatalf("emitRuntimePlans returned error: %v", err)
+	}
+
+	snapshots, err := statusstore.Load(statusPath)
+	if err != nil {
+		t.Fatalf("failed to load status snapshots: %v", err)
+	}
+	for _, entry := range snapshots[0].Status.History {
+		if entry.ControllerRefresh != nil {
+			t.Fatalf("expected ticker/default reconcile history to omit controller refresh evidence, got %+v", entry)
+		}
 	}
 }
 
