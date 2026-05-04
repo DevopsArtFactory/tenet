@@ -3504,10 +3504,17 @@ func TestOverviewDocsDescribeECSTaskScopeReleaseGuard(t *testing.T) {
 	files := map[string][]string{
 		"../../README.md": {
 			"Local and compose smoke lock the raw shell helper/copy for that scope note without requiring live AWS task rows.",
+			"`effectiveLimit` is the backend cap Tenet applied to the sample",
+			"`unknown` means Tenet hit the cap without enough provider evidence to prove whether more rows exist",
 		},
 		"../../docs/features/overview-dashboard.md": {
 			"local and compose smoke also lock the embedded shell helper/copy that renders `ecsService.tasksScope` as the `Task sample scope` note",
 			"without needing live AWS task inventory",
+			"conservative `truncationStatus` semantics (`not_truncated` = complete bounded result, `truncated` = more matching tasks existed, `unknown` = Tenet reached the cap without provider proof either way)",
+		},
+		"../../docs/architecture/tenet-v1-overview-ui.md": {
+			"sibling `tasksScope` keeps the row cap self-describing with `effectiveLimit`, `returnedTaskCount`, and conservative `truncationStatus` values",
+			"`unknown` when Tenet reaches the cap without provider evidence that proves whether more matching tasks exist",
 		},
 	}
 
