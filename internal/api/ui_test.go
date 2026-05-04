@@ -1969,7 +1969,11 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"Service ARN",
 		"Service deployments",
 		"const createECSTaskScopeSummary = (scope) => {",
+		"const isECSTaskScopeUnavailable = (scope) => scope && typeof scope === 'object' && scope.available === false;",
+		"const ecsTaskScopeUnavailableText = (scope) => {",
+		"Task sample unavailable · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${unavailableText}",
 		"Task sample scope · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${truncationStatus}",
+		"Task sampling could not be completed for this service, so no ECS task handoffs are shown.",
 		"[createECSTaskScopeSummary(service?.tasksScope)]",
 		"Recent ECS tasks",
 		"Open task live inspection",
@@ -2412,7 +2416,11 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	for _, fragment := range []string{
 		`assert "const createECSTaskScopeSummary = (scope) => {" in ui, ui`,
+		`assert "const isECSTaskScopeUnavailable = (scope) => scope && typeof scope === 'object' && scope.available === false;" in ui, ui`,
+		`assert "const ecsTaskScopeUnavailableText = (scope) => {" in ui, ui`,
+		`assert "Task sample unavailable · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${unavailableText}" in ui, ui`,
 		`assert "Task sample scope · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${truncationStatus}" in ui, ui`,
+		`assert "Task sampling could not be completed for this service, so no ECS task handoffs are shown." in ui, ui`,
 		`assert "[createECSTaskScopeSummary(service?.tasksScope)]" in ui, ui`,
 	} {
 		if !strings.Contains(text, fragment) {
@@ -3521,7 +3529,7 @@ func TestOverviewDocsDescribeECSTaskScopeReleaseGuard(t *testing.T) {
 		},
 		"../../docs/features/overview-dashboard.md": {
 			"`resource-inspection?resourceType=ecsService&resourceName={serviceName}&limit={n}` accepts an optional positive task-sample cap",
-			"local and compose smoke also lock the embedded shell helper/copy that renders `ecsService.tasksScope` as the `Task sample scope` note",
+			"local and compose smoke also lock the embedded shell helper/copy that renders `ecsService.tasksScope` as either the normal `Task sample scope` note or the distinct `Task sample unavailable` warning",
 			"without needing live AWS task inventory",
 			"conservative `truncationStatus` semantics (`not_truncated` = complete bounded result, `truncated` = more matching tasks existed, `unknown` = Tenet reached the cap without provider proof either way, `not_applicable` = task bridge unavailable)",
 			"That separates true empty successful samples (`available=true`, `returnedTaskCount=0`) from partial/unavailable task-bridge evidence",
