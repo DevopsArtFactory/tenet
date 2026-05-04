@@ -1714,7 +1714,7 @@ func TestAppendRuntimeHistoryAppendsWhenGenerationsChangeWithoutOtherStatusChang
 	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 30, 0, 0, time.UTC) }
 	defer func() { runtimeHistoryNow = oldNow }()
 
-	got := appendRuntimeHistory(previous, current)
+	got := appendRuntimeHistory(previous, current, nil)
 	if len(got) != 2 {
 		t.Fatalf("expected generation change to append a new history entry, got %+v", got)
 	}
@@ -1786,7 +1786,7 @@ func TestAppendRuntimeHistoryIncludesChangeDetails(t *testing.T) {
 	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 45, 0, 0, time.UTC) }
 	defer func() { runtimeHistoryNow = oldNow }()
 
-	history := appendRuntimeHistory(previous, current)
+	history := appendRuntimeHistory(previous, current, nil)
 	if len(history) != 1 {
 		t.Fatalf("expected appended controller-authored history entry, got %+v", history)
 	}
@@ -1882,7 +1882,7 @@ func TestAppendRuntimeHistoryTracksArtifactAndConditionChanges(t *testing.T) {
 	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 35, 0, 0, time.UTC) }
 	defer func() { runtimeHistoryNow = oldNow }()
 
-	got := appendRuntimeHistory(previous, current)
+	got := appendRuntimeHistory(previous, current, nil)
 	if len(got) != 2 {
 		t.Fatalf("expected artifact/condition change to append a new history entry, got %+v", got)
 	}
@@ -2549,7 +2549,7 @@ func TestAppendRuntimeHistoryIgnoresConditionOrderChanges(t *testing.T) {
 		{Type: "Ready", Status: true, Reason: "TrafficShiftReady", Message: "candidate can receive traffic"},
 	}
 
-	got := appendRuntimeHistory(previous, current)
+	got := appendRuntimeHistory(previous, current, nil)
 	if len(got) != 1 {
 		t.Fatalf("expected reordered conditions to avoid runtime history churn, got %+v", got)
 	}
@@ -2610,7 +2610,7 @@ func TestAppendRuntimeHistoryTracksRolloutContextChanges(t *testing.T) {
 	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 40, 0, 0, time.UTC) }
 	defer func() { runtimeHistoryNow = oldNow }()
 
-	got := appendRuntimeHistory(previous, current)
+	got := appendRuntimeHistory(previous, current, nil)
 	if len(got) != 2 {
 		t.Fatalf("expected rollout context change to append a new history entry, got %+v", got)
 	}
@@ -2980,7 +2980,7 @@ func TestAppendRuntimeHistoryCapsOversizedExistingHistoryWithoutMeaningfulChange
 		CurrentStep:  current.Rollout.CurrentStep,
 	})
 
-	got := appendRuntimeHistory(current, current)
+	got := appendRuntimeHistory(current, current, nil)
 	if len(got) != runtimeHistoryMaxEntries {
 		t.Fatalf("expected oversized history to be trimmed to %d entries even without a new entry, got %+v", runtimeHistoryMaxEntries, got)
 	}
@@ -3017,7 +3017,7 @@ func TestAppendRuntimeHistoryDedupesAgainstLatestPersistedEntryForLegacySnapshot
 		}},
 	}
 
-	got := appendRuntimeHistory(previous, current)
+	got := appendRuntimeHistory(previous, current, nil)
 	if len(got) != 1 {
 		t.Fatalf("expected legacy snapshot dedupe to reuse the latest persisted entry instead of appending a duplicate, got %+v", got)
 	}
@@ -3057,7 +3057,7 @@ func TestAppendRuntimeHistoryNormalizesLegacyLatestControllerEntryContext(t *tes
 		}},
 	}
 
-	got := appendRuntimeHistory(previous, current)
+	got := appendRuntimeHistory(previous, current, nil)
 	if len(got) != 1 {
 		t.Fatalf("expected legacy latest controller history entry to be normalized in place without appending, got %+v", got)
 	}
@@ -3114,7 +3114,7 @@ func TestAppendRuntimeHistoryLabelsFirstControllerEntryInitialAfterLegacyEntries
 	runtimeHistoryNow = func() time.Time { return time.Date(2026, 4, 16, 6, 35, 0, 0, time.UTC) }
 	defer func() { runtimeHistoryNow = oldNow }()
 
-	got := appendRuntimeHistory(previous, current)
+	got := appendRuntimeHistory(previous, current, nil)
 	if len(got) != 2 {
 		t.Fatalf("expected first controller-authored history entry to append after legacy entries, got %+v", got)
 	}
@@ -3298,7 +3298,7 @@ func compiledRuntimeStatusForTest(t *testing.T, root string, deploymentName stri
 		status.Rollout = deriveRolloutSummary(deployment, status, plan)
 		liveCapacity := runtimeLiveCapacity(context.Background(), nil, resourceinspection.Service{}, compiled.Accounts, compiled.Environments, deployment)
 		status.ManagedDrift = deriveManagedDriftItems(deployment, status, liveCapacity)
-		status.History = appendRuntimeHistory(previous, status)
+		status.History = appendRuntimeHistory(previous, status, nil)
 		return status
 	}
 	t.Fatalf("deployment %q not found in compiled catalog", deploymentName)

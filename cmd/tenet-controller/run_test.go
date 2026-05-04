@@ -259,4 +259,22 @@ func TestRunControllerReconcilesImmediatelyWhenRefreshHandoffArrives(t *testing.
 	case <-time.After(2 * time.Second):
 		t.Fatalf("runController did not stop after cancellation")
 	}
+
+	if len(store.snapshots) != 1 {
+		t.Fatalf("expected one persisted snapshot, got %+v", store.snapshots)
+	}
+	history := store.snapshots[0].Status.History
+	if len(history) < 2 {
+		t.Fatalf("expected refresh-triggered reconcile to append runtime evidence, got %+v", history)
+	}
+	refresh := history[len(history)-1].ControllerRefresh
+	if refresh == nil {
+		t.Fatalf("expected latest runtime event to include controllerRefresh evidence, got %+v", history[len(history)-1])
+	}
+	if refresh.RequestID != "github-webhook:delivery-1:2222222" || refresh.DeliveryID != "delivery-1" || refresh.Repository != "acme/platform-config" || refresh.Ref != "refs/heads/main" || refresh.After != "2222222" || refresh.RequestedAt != "2026-04-19T09:30:00Z" {
+		t.Fatalf("expected non-secret webhook metadata on refresh evidence, got %+v", refresh)
+	}
+	if refresh.ReceivedAt == "" || refresh.ReconciledAt == "" {
+		t.Fatalf("expected controller timing evidence, got %+v", refresh)
+	}
 }

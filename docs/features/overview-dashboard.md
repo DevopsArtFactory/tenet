@@ -241,6 +241,7 @@ Separate from that controller-runtime timeline, the backend also exposes `GET /v
 Current behavior:
 - returns `deploymentName` plus an explicit `events[]` array
 - returns an additive `managedDriftSummary` object with explicit `total`, `high`, `medium`, and `low` counts derived from the returned history rows; rows with missing/unknown severity count toward `total` only
+- webhook-triggered controller reconciles may include an optional `controllerRefresh` object on each persisted event, carrying non-secret GitHub handoff metadata (`requestId`, `deliveryId`, `repository`, `ref`, `after`, `requestedAt`) and controller timing (`receivedAt`, `reconciledAt`); ticker-based reconciles omit it
 - returns `200 OK` with `events: []` and zero drift-summary counts when the deployment exists but no runtime history has been persisted yet
 - never calls live AWS APIs; it only reflects the stored controller/runtime read model
 - the application detail page consumes the same route directly instead of reusing `history[]` from the deeper deployment-detail payload, renders the additive summary as `Managed drift summary · {total} total · {high} high · {medium} medium · {low} low` above the event list so drift severity is visible without expanding every event, and adds an in-shell `Open field-level drift` handoff to `/?page=drift&deployment={deploymentName}#drift-field-level` when the summary reports managed drift.
@@ -255,6 +256,16 @@ Example response shape:
       "timestamp": "2026-04-16T06:15:00Z",
       "source": "controller",
       "summary": "Deployment has managed drift",
+      "controllerRefresh": {
+        "requestId": "github-webhook:delivery-1:2222222",
+        "deliveryId": "delivery-1",
+        "repository": "acme/platform-config",
+        "ref": "refs/heads/main",
+        "after": "2222222",
+        "requestedAt": "2026-04-19T09:30:00Z",
+        "receivedAt": "2026-04-19T09:30:01Z",
+        "reconciledAt": "2026-04-19T09:30:02Z"
+      },
       "managedDrift": [
         {"field": "runtimeContext.capacity.desired", "desired": "6", "actual": "4", "severity": "high"}
       ]

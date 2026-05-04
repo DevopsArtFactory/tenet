@@ -54,6 +54,10 @@ type runtimeLiveTrafficRoutingObservation struct {
 var runtimeLiveCapacityLookup = runtimeLiveCapacityLookupFromInspection
 
 func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupConfig, store statusstore.Store) error {
+	return emitRuntimePlansWithRefresh(ctx, logger, config, store, nil)
+}
+
+func emitRuntimePlansWithRefresh(ctx context.Context, logger *log.Logger, config startupConfig, store statusstore.Store, refresh *domain.ControllerRefreshEvidence) error {
 	source := config.catalogSource()
 	if !source.configured() {
 		logger.Printf("controller runtime disabled reason=no_catalog_source")
@@ -125,7 +129,7 @@ func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupCon
 		liveTrafficRouting := runtimeLiveTrafficRouting(ctx, logger, liveInspectionService, compiled.Accounts, compiled.Environments, deployment)
 		status.ManagedDrift = deriveManagedDriftItems(deployment, status, liveCapacity, liveTrafficRouting...)
 		status = applyControllerManagedDriftStatus(status, plan)
-		status.History = appendRuntimeHistory(previousStatus, status)
+		status.History = appendRuntimeHistory(previousStatus, status, refresh)
 		currentStatuses[deployment.Name] = status
 		logger.Printf(
 			"controller reconcile deployment=%s strategy=%s execution_mode=%s desired_generation=%d observed_generation=%d sync_state=%s steps=%s",
@@ -193,13 +197,14 @@ func runtimeStatusBatchWriter(store statusstore.Store) statusstore.BatchWriter {
 	return writer
 }
 
-func appendRuntimeHistory(previous domain.DeploymentStatus, current domain.DeploymentStatus) []domain.StatusHistoryEntry {
+func appendRuntimeHistory(previous domain.DeploymentStatus, current domain.DeploymentStatus, refresh *domain.ControllerRefreshEvidence) []domain.StatusHistoryEntry {
 	history := append([]domain.StatusHistoryEntry(nil), current.History...)
 	entry := deriveRuntimeHistoryEntry(current)
 	previousEntry := deriveRuntimeHistoryEntry(previous)
 	if len(history) == 0 {
 		entry.Timestamp = runtimeHistoryNow().UTC().Format(time.RFC3339)
 		entry.Changes, entry.ChangeDetails = runtimeHistoryInitialDiff(previousEntry, entry)
+		attachRuntimeHistoryRefresh(&entry, refresh)
 		return []domain.StatusHistoryEntry{entry}
 	}
 
@@ -213,6 +218,13 @@ func appendRuntimeHistory(previous domain.DeploymentStatus, current domain.Deplo
 		history[len(history)-1] = normalizedLatest
 	}
 	if !runtimeHistoryMeaningfullyChanged(normalizedLatest, entry) {
+		if shouldAppendRuntimeRefreshEvent(history, refresh) {
+			entry.Timestamp = runtimeHistoryNow().UTC().Format(time.RFC3339)
+			entry.Changes = []string{"controllerRefresh"}
+			entry.ChangeDetails = []string{describeControllerRefresh(refresh)}
+			attachRuntimeHistoryRefresh(&entry, refresh)
+			history = append(history, entry)
+		}
 		return capRuntimeHistory(history)
 	}
 
@@ -222,8 +234,52 @@ func appendRuntimeHistory(previous domain.DeploymentStatus, current domain.Deplo
 	} else {
 		entry.Changes, entry.ChangeDetails = runtimeHistoryDiff(normalizedLatest, entry)
 	}
+	attachRuntimeHistoryRefresh(&entry, refresh)
 	history = append(history, entry)
 	return capRuntimeHistory(history)
+}
+
+func attachRuntimeHistoryRefresh(entry *domain.StatusHistoryEntry, refresh *domain.ControllerRefreshEvidence) {
+	if entry == nil || refresh == nil {
+		return
+	}
+	evidence := *refresh
+	if evidence.ReconciledAt == "" {
+		evidence.ReconciledAt = entry.Timestamp
+	}
+	entry.ControllerRefresh = &evidence
+}
+
+func shouldAppendRuntimeRefreshEvent(history []domain.StatusHistoryEntry, refresh *domain.ControllerRefreshEvidence) bool {
+	if refresh == nil || refresh.RequestID == "" {
+		return false
+	}
+	for i := len(history) - 1; i >= 0; i-- {
+		if history[i].ControllerRefresh != nil && history[i].ControllerRefresh.RequestID == refresh.RequestID {
+			return false
+		}
+	}
+	return true
+}
+
+func describeControllerRefresh(refresh *domain.ControllerRefreshEvidence) string {
+	if refresh == nil {
+		return "Controller reconciled from external refresh handoff"
+	}
+	parts := []string{"Controller reconciled from GitHub refresh handoff"}
+	if refresh.DeliveryID != "" {
+		parts = append(parts, "delivery="+refresh.DeliveryID)
+	}
+	if refresh.Repository != "" {
+		parts = append(parts, "repository="+refresh.Repository)
+	}
+	if refresh.Ref != "" {
+		parts = append(parts, "ref="+refresh.Ref)
+	}
+	if refresh.After != "" {
+		parts = append(parts, "after="+refresh.After)
+	}
+	return strings.Join(parts, " ")
 }
 
 func normalizeRuntimeHistoryEntryContext(entry domain.StatusHistoryEntry, fallback domain.StatusHistoryEntry) domain.StatusHistoryEntry {

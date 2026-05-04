@@ -1023,6 +1023,16 @@ func TestBuildDeploymentOverviewEvents(t *testing.T) {
 					RolloutPhase:       domain.RolloutPhaseAccepted,
 					CurrentStep:        "CreateCandidateCapacity",
 					ChangeDetails:      []string{"Summary changed to Accepted rollout for r7"},
+					ControllerRefresh: &domain.ControllerRefreshEvidence{
+						RequestID:    "github-webhook:delivery-1:2222222",
+						DeliveryID:   "delivery-1",
+						Repository:   "acme/platform-config",
+						Ref:          "refs/heads/main",
+						After:        "2222222",
+						RequestedAt:  "2026-04-19T09:30:00Z",
+						ReceivedAt:   "2026-04-19T09:30:01Z",
+						ReconciledAt: "2026-04-19T09:30:02Z",
+					},
 					ManagedDrift: []domain.ManagedDriftItem{
 						{Field: "runtimeContext.capacity.desired", Desired: "6", Actual: "4", Severity: domain.ManagedDriftSeverityHigh},
 						{Field: "runtimeContext.capacity.min", Desired: "4", Actual: "2", Severity: domain.ManagedDriftSeverityMedium},
@@ -1044,19 +1054,47 @@ func TestBuildDeploymentOverviewEvents(t *testing.T) {
 	if len(events.Events) != 1 || events.Events[0].Summary != "Accepted rollout for r7" || events.Events[0].Source != "controller" {
 		t.Fatalf("expected controller-derived runtime events, got %+v", events.Events)
 	}
+	if events.Events[0].ControllerRefresh == nil || events.Events[0].ControllerRefresh.RequestID != "github-webhook:delivery-1:2222222" || events.Events[0].ControllerRefresh.ReconciledAt != "2026-04-19T09:30:02Z" {
+		t.Fatalf("expected controller refresh evidence to be surfaced, got %+v", events.Events[0].ControllerRefresh)
+	}
 	if events.ManagedDriftSummary != (ManagedDriftSummary{Total: 4, High: 1, Medium: 1, Low: 1}) {
 		t.Fatalf("expected managed drift summary to count events by severity, got %+v", events.ManagedDriftSummary)
+	}
+	payload, err := json.Marshal(events)
+	if err != nil {
+		t.Fatalf("Marshal returned error: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("failed to decode events payload: %v", err)
+	}
+	rawEvents, ok := decoded["events"].([]any)
+	if !ok || len(rawEvents) != 1 {
+		t.Fatalf("expected events array in JSON payload, got %#v", decoded["events"])
+	}
+	rawEvent, ok := rawEvents[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected event object, got %#v", rawEvents[0])
+	}
+	refreshJSON, ok := rawEvent["controllerRefresh"].(map[string]any)
+	if !ok || refreshJSON["requestId"] != "github-webhook:delivery-1:2222222" || refreshJSON["deliveryId"] != "delivery-1" || refreshJSON["repository"] != "acme/platform-config" || refreshJSON["ref"] != "refs/heads/main" || refreshJSON["after"] != "2222222" || refreshJSON["requestedAt"] != "2026-04-19T09:30:00Z" || refreshJSON["receivedAt"] != "2026-04-19T09:30:01Z" || refreshJSON["reconciledAt"] != "2026-04-19T09:30:02Z" {
+		t.Fatalf("expected controllerRefresh JSON evidence, got %#v", rawEvent["controllerRefresh"])
+	}
+	if _, exists := rawEvent["ControllerRefresh"]; exists {
+		t.Fatalf("unexpected Go-style controller refresh field in %#v", rawEvent)
 	}
 
 	snapshots[0].Status.History[0].Summary = "mutated"
 	snapshots[0].Status.History[0].ChangeDetails[0] = "mutated"
-	if events.Events[0].Summary != "Accepted rollout for r7" || events.Events[0].ChangeDetails[0] != "Summary changed to Accepted rollout for r7" {
+	snapshots[0].Status.History[0].ControllerRefresh.RequestID = "mutated"
+	if events.Events[0].Summary != "Accepted rollout for r7" || events.Events[0].ChangeDetails[0] != "Summary changed to Accepted rollout for r7" || events.Events[0].ControllerRefresh.RequestID != "github-webhook:delivery-1:2222222" {
 		t.Fatalf("expected runtime events to be cloned defensively, got %+v", events.Events)
 	}
 
 	events.Events[0].Summary = "mutated-by-caller"
 	events.Events[0].ChangeDetails[0] = "mutated-by-caller"
-	if snapshots[0].Status.History[0].Summary != "mutated" || snapshots[0].Status.History[0].ChangeDetails[0] != "mutated" {
+	events.Events[0].ControllerRefresh.RequestID = "mutated-by-caller"
+	if snapshots[0].Status.History[0].Summary != "mutated" || snapshots[0].Status.History[0].ChangeDetails[0] != "mutated" || snapshots[0].Status.History[0].ControllerRefresh.RequestID != "mutated" {
 		t.Fatalf("expected caller mutations to avoid mutating stored history, got %+v", snapshots[0].Status.History)
 	}
 }

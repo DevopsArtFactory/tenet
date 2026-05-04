@@ -671,6 +671,10 @@ func cloneStatusHistory(history []domain.StatusHistoryEntry) []domain.StatusHist
 	for i := range cloned {
 		cloned[i].Changes = append([]string(nil), history[i].Changes...)
 		cloned[i].ChangeDetails = append([]string(nil), history[i].ChangeDetails...)
+		if history[i].ControllerRefresh != nil {
+			refresh := *history[i].ControllerRefresh
+			cloned[i].ControllerRefresh = &refresh
+		}
 		cloned[i].ManagedDrift = cloneManagedDrift(history[i].ManagedDrift)
 		cloned[i].Conditions = append([]domain.Condition(nil), history[i].Conditions...)
 	}

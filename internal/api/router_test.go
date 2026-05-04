@@ -3094,6 +3094,16 @@ func TestDeploymentOverviewEventsRouteIncludesManagedDriftSummary(t *testing.T) 
 					Timestamp: "2026-04-16T06:15:00Z",
 					Source:    "controller",
 					Summary:   "Deployment has managed drift",
+					ControllerRefresh: &domain.ControllerRefreshEvidence{
+						RequestID:    "github-webhook:delivery-1:2222222",
+						DeliveryID:   "delivery-1",
+						Repository:   "acme/platform-config",
+						Ref:          "refs/heads/main",
+						After:        "2222222",
+						RequestedAt:  "2026-04-19T09:30:00Z",
+						ReceivedAt:   "2026-04-19T09:30:01Z",
+						ReconciledAt: "2026-04-19T09:30:02Z",
+					},
 					ManagedDrift: []domain.ManagedDriftItem{
 						{Field: "artifact", Severity: domain.ManagedDriftSeverityHigh},
 						{Field: "runtimeContext.capacity.min", Severity: domain.ManagedDriftSeverityMedium},
@@ -3122,6 +3132,17 @@ func TestDeploymentOverviewEventsRouteIncludesManagedDriftSummary(t *testing.T) 
 	events, ok := payload["events"].([]any)
 	if !ok || len(events) != 1 {
 		t.Fatalf("expected events array in payload, got %#v", payload["events"])
+	}
+	event, ok := events[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected event object in payload, got %#v", events[0])
+	}
+	refresh, ok := event["controllerRefresh"].(map[string]any)
+	if !ok || refresh["requestId"] != "github-webhook:delivery-1:2222222" || refresh["deliveryId"] != "delivery-1" || refresh["repository"] != "acme/platform-config" || refresh["ref"] != "refs/heads/main" || refresh["after"] != "2222222" || refresh["requestedAt"] != "2026-04-19T09:30:00Z" || refresh["receivedAt"] != "2026-04-19T09:30:01Z" || refresh["reconciledAt"] != "2026-04-19T09:30:02Z" {
+		t.Fatalf("expected controllerRefresh evidence in event payload, got %#v", event["controllerRefresh"])
+	}
+	if _, exists := event["ControllerRefresh"]; exists {
+		t.Fatalf("unexpected Go-style controller refresh field in %#v", event)
 	}
 	summary, ok := payload["managedDriftSummary"].(map[string]any)
 	if !ok || summary["total"] != float64(3) || summary["high"] != float64(1) || summary["medium"] != float64(1) || summary["low"] != float64(1) {

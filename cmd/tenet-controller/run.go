@@ -6,7 +6,20 @@ import (
 	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/controllerrefresh"
+	"github.com/DevopsArtFactory/tenet/internal/domain"
 )
+
+func controllerRefreshEvidence(request controllerrefresh.Request, receivedAt string) domain.ControllerRefreshEvidence {
+	return domain.ControllerRefreshEvidence{
+		RequestID:   request.RequestID,
+		DeliveryID:  request.DeliveryID,
+		Repository:  request.Repository,
+		Ref:         request.Ref,
+		After:       request.After,
+		RequestedAt: request.RequestedAt,
+		ReceivedAt:  receivedAt,
+	}
+}
 
 func runController(ctx context.Context, logger *log.Logger, config startupConfig) {
 	catalogSource := config.catalogSource()
@@ -85,7 +98,8 @@ func runController(ctx context.Context, logger *log.Logger, config startupConfig
 				message.Request.After,
 				message.Request.RequestedAt,
 			)
-			if err := emitRuntimePlans(ctx, logger, config, store); err != nil {
+			refresh := controllerRefreshEvidence(message.Request, time.Now().UTC().Format(time.RFC3339))
+			if err := emitRuntimePlansWithRefresh(ctx, logger, config, store, &refresh); err != nil {
 				logger.Printf("controller runtime error: %v", err)
 			}
 		case <-ticker.C:
