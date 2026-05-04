@@ -11,7 +11,7 @@ import (
 )
 
 func TestDecodeAcceptedPushEvent(t *testing.T) {
-	const secret = "top-secret"
+	secret := testWebhookSecret(t)
 	body := `{
 		"ref":"refs/heads/main",
 		"before":"1111111111111111111111111111111111111111",
@@ -76,7 +76,7 @@ func TestDecodeAcceptedPushEvent(t *testing.T) {
 }
 
 func TestDecodeIgnoredDeletedRefPushEvent(t *testing.T) {
-	const secret = "top-secret"
+	secret := testWebhookSecret(t)
 	body := `{
 		"ref":"refs/heads/main",
 		"before":"1111111111111111111111111111111111111111",
@@ -117,7 +117,7 @@ func TestDecodeIgnoredDeletedRefPushEvent(t *testing.T) {
 }
 
 func TestDecodeIgnoredNonPushEvent(t *testing.T) {
-	const secret = "top-secret"
+	secret := testWebhookSecret(t)
 	body := `{"zen":"keep it logically awesome"}`
 
 	response, err := Decode(context.Background(), Request{
@@ -144,7 +144,7 @@ func TestDecodeIgnoredNonPushEvent(t *testing.T) {
 }
 
 func TestDecodeDesiredStateSourceMatch(t *testing.T) {
-	const secret = "top-secret"
+	secret := testWebhookSecret(t)
 
 	tests := []struct {
 		name       string
@@ -412,7 +412,7 @@ func TestDecodeDesiredStateSourceMatch(t *testing.T) {
 }
 
 func TestDecodeValidationFailures(t *testing.T) {
-	const secret = "top-secret"
+	secret := testWebhookSecret(t)
 	validBody := `{"repository":{"full_name":"acme/platform-config"},"ref":"refs/heads/main","before":"111","after":"222","commits":[]}`
 
 	tests := []struct {
@@ -519,9 +519,10 @@ func TestDecodeReturnsContextError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
+	secret := testWebhookSecret(t)
 	_, err := Decode(ctx, Request{
-		Secret: "top-secret",
-		Header: signedHeader("top-secret", "push", `{}`),
+		Secret: secret,
+		Header: signedHeader(secret, "push", `{}`),
 		Body:   strings.NewReader(`{}`),
 	})
 	if err == nil {
@@ -530,6 +531,12 @@ func TestDecodeReturnsContextError(t *testing.T) {
 	if err != context.Canceled {
 		t.Fatalf("expected context.Canceled, got %v", err)
 	}
+}
+
+func testWebhookSecret(t *testing.T) string {
+	t.Helper()
+	sum := sha256.Sum256([]byte(t.Name()))
+	return hex.EncodeToString(sum[:])
 }
 
 func signedHeader(secret, event, body string) http.Header {
