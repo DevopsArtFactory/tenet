@@ -1186,9 +1186,15 @@
       };
       const operatorContextManagedLoginLogoutActive = (context = operatorContextState.context) => {
         const managedLogin = operatorContextManagedLogin(context);
-        const missing = Array.isArray(managedLogin.missingSettings) ? managedLogin.missingSettings.filter(Boolean) : [];
+        const missing = operatorContextRuntimeMissingSettings(managedLogin);
         const logoutRoute = safeManagedLoginRoute(managedLogin.logoutRoute);
         return Boolean(managedLogin.active && logoutRoute && missing.length === 0);
+      };
+      const operatorContextEnterpriseSSOLogoutActive = (context = operatorContextState.context) => {
+        const enterpriseSso = operatorContextEnterpriseSSO(context);
+        const missing = operatorContextRuntimeMissingSettings(enterpriseSso);
+        const logoutRoute = safeManagedLoginRoute(enterpriseSso.logoutRoute);
+        return Boolean(enterpriseSso.active && logoutRoute && missing.length === 0);
       };
       const operatorContextAuthenticationBoundaryLabel = (context) => {
         if (operatorContextEnterpriseSSOActive(context)) {
@@ -1486,9 +1492,10 @@
           detailsMeta.append(createElement('span', '', operatorContextManagedLoginLifecycleLabel(context)));
           detailsMeta.append(createElement('span', '', operatorContextManagedLoginProviderTokenLabel(context)));
           detailsMeta.append(createElement('span', '', operatorContextManagedLoginLogoutBoundaryLabel(context)));
-          if (operatorContextManagedLoginLogoutActive(context)) {
-            detailsMeta.append(createElement('span', '', 'Tenet-managed sign-out handoff: clears only the Tenet session cookie and returns to this bookmarkable page; sign out of upstream GitHub or front-door sessions separately if needed.'));
-            detailsMeta.append(createNavLink(operatorContextManagedLoginSignOutURL(context), 'Sign out of Tenet-managed browser session', '_self'));
+          const signOutURL = operatorContextSignOutURL(context);
+          if (signOutURL) {
+            detailsMeta.append(createElement('span', '', operatorContextSignOutHandoffLabel(context)));
+            detailsMeta.append(createNavLink(signOutURL, operatorContextSignOutLabel(context), '_self'));
           }
           detailsMeta.append(createElement('span', operatorContextIdentityProvenanceClass(context), operatorContextIdentityProvenanceLabel(context)));
           const supportedIdentityHeaders = operatorContextSupportedIdentityHeadersLabel(context);
@@ -3587,12 +3594,43 @@
         const runtime = operatorContextSignInRuntime(context);
         return runtime?.label ? `Sign in with ${runtime.label}` : 'Sign in';
       };
-      const operatorContextManagedLoginSignOutURL = (context = operatorContextState.context) => {
-        if (!operatorContextManagedLoginLogoutActive(context)) return '';
-        const logoutRoute = safeManagedLoginRoute(operatorContextManagedLogin(context).logoutRoute);
+      const operatorContextSignOutRuntime = (context = operatorContextState.context) => {
+        if (operatorContextEnterpriseSSOLogoutActive(context)) {
+          const enterpriseSso = operatorContextEnterpriseSSO(context);
+          const providerLabel = operatorContextEnterpriseSSOProviderLabel(enterpriseSso.provider);
+          return {
+            logoutRoute: safeManagedLoginRoute(enterpriseSso.logoutRoute),
+            label: providerLabel,
+            enterprise: true,
+          };
+        }
+        if (operatorContextManagedLoginLogoutActive(context)) {
+          return {
+            logoutRoute: safeManagedLoginRoute(operatorContextManagedLogin(context).logoutRoute),
+            label: 'Tenet-managed browser',
+            enterprise: false,
+          };
+        }
+        return null;
+      };
+      const operatorContextSignOutURL = (context = operatorContextState.context) => {
+        const runtime = operatorContextSignOutRuntime(context);
+        if (!runtime?.logoutRoute) return '';
+        const logoutRoute = runtime.logoutRoute;
         const params = new URLSearchParams();
         params.set('returnUrl', currentBookmarkableURL());
         return `${logoutRoute}${logoutRoute.includes('?') ? '&' : '?'}${params.toString()}`;
+      };
+      const operatorContextSignOutLabel = (context = operatorContextState.context) => {
+        const runtime = operatorContextSignOutRuntime(context);
+        return runtime?.enterprise ? `Sign out of ${runtime.label} session` : 'Sign out of Tenet-managed browser session';
+      };
+      const operatorContextSignOutHandoffLabel = (context = operatorContextState.context) => {
+        const runtime = operatorContextSignOutRuntime(context);
+        if (runtime?.enterprise) {
+          return `${runtime.label} sign-out handoff: clears only the Tenet-managed session cookie and returns to this bookmarkable page; it does not sign out of upstream ${runtime.label}, trusted front-door sessions, or revoke provider tokens.`;
+        }
+        return 'Tenet-managed sign-out handoff: clears only the Tenet session cookie and returns to this bookmarkable page; it does not sign out of upstream provider or trusted front-door sessions, and it does not revoke provider tokens.';
       };
       const createOperatorReadFailureActions = (error) => {
         const actionBar = createElement('div', 'detail-section-actions operator-read-recovery-actions');
