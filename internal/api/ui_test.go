@@ -2132,6 +2132,7 @@ func TestCISmokeWorkflowSyntaxChecksBothSmokeScriptsInFastLane(t *testing.T) {
 		"cmd/tenet-api/*|cmd/tenet-api/**",
 		"cmd/tenet-controller/*|cmd/tenet-controller/**",
 		"internal/api/*|internal/api/**",
+		"internal/githubwebhook/*|internal/githubwebhook/**",
 		"internal/authprovider/*|internal/authprovider/**",
 		"internal/authsaml/*|internal/authsaml/**",
 		"internal/authsso/*|internal/authsso/**",
@@ -2145,12 +2146,27 @@ func TestCISmokeWorkflowSyntaxChecksBothSmokeScriptsInFastLane(t *testing.T) {
 		"internal/planpreview/*|internal/planpreview/**",
 		"internal/applyrequest/*|internal/applyrequest/**",
 		"internal/auditlog/*|internal/auditlog/**",
-		"Docker smoke required because this PR touches a Compose/front-door/auth/API/controller, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface.",
-		"Docker smoke skipped because this PR does not touch a Compose/front-door/auth/API/controller, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface.",
+		"Docker smoke required because this PR touches a Compose/front-door/auth/API/controller, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface.",
+		"Docker smoke skipped because this PR does not touch a Compose/front-door/auth/API/controller, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface.",
 	} {
 		if !strings.Contains(scopeJob, fragment) {
 			t.Fatalf("expected docker-smoke-scope job to include %q", fragment)
 		}
+	}
+}
+
+func TestCISmokeWorkflowDockerScopeCoversGitHubWebhookChanges(t *testing.T) {
+	body, err := os.ReadFile("../../.github/workflows/ci-smoke.yml")
+	if err != nil {
+		t.Fatalf("read ci-smoke workflow: %v", err)
+	}
+
+	patterns := dockerSmokeScopePatterns(t, string(body))
+	if !dockerSmokeScopeMatches(patterns, "internal/githubwebhook/webhook.go") {
+		t.Fatalf("expected internal/githubwebhook/webhook.go to trigger docker smoke scope; patterns=%v", patterns)
+	}
+	if dockerSmokeScopeMatches(patterns, "docs/features/overview-dashboard.md") {
+		t.Fatalf("expected unrelated docs-only paths to skip docker smoke scope")
 	}
 }
 
@@ -2829,7 +2845,7 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert isinstance(runtime_summary.get('changeDetails', []), list), overview") {
 		t.Fatalf("expected smoke-local.sh to verify overview runtimeSummary.changeDetails shape")
 	}
-	if !strings.Contains(text, "assert webhook_push['status'] == 'accepted', webhook_push") || !strings.Contains(text, "assert webhook_ping['status'] == 'ignored', webhook_ping") || !strings.Contains(text, "assert 'github webhook signature mismatch' in invalid_webhook, invalid_webhook") {
+	if !strings.Contains(text, "assert webhook_push['status'] == 'accepted', webhook_push") || !strings.Contains(text, "assert webhook_deleted['status'] == 'ignored', webhook_deleted") || !strings.Contains(text, "assert webhook_deleted['deleted'] is True, webhook_deleted") || !strings.Contains(text, "assert webhook_ping['status'] == 'ignored', webhook_ping") || !strings.Contains(text, "assert 'github webhook signature mismatch' in invalid_webhook, invalid_webhook") {
 		t.Fatalf("expected smoke-local.sh to verify github webhook accepted/ignored/error contracts")
 	}
 	if !strings.Contains(text, "assert isinstance(deployment_runtime_summary.get('changeDetails', []), list), deployment_detail") {
@@ -3142,7 +3158,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"Linux CI runners",
 			"syntax-checks both `scripts/smoke-local.sh` and `scripts/smoke-docker.sh` with `bash -n`, then runs `make smoke-local`",
 			"on pull requests, a cheap `docker-smoke-scope` job first checks changed paths",
-			"runs the full `make smoke-docker` container stack only when the PR touches Compose/front-door/auth/API/controller, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surfaces",
+			"runs the full `make smoke-docker` container stack only when the PR touches Compose/front-door/auth/API/controller, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surfaces",
 			"Unrelated docs-only PRs keep the cheap fast lane without the Docker stack",
 			"reserved Okta SAML/enterprise runtime paths `internal/authsaml/**` and `internal/authsso/**`",
 			"make smoke-docker",
@@ -3223,7 +3239,8 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"Linux CI runners with tighter environment-size limits",
 			"syntax-checks both `scripts/smoke-local.sh` and `scripts/smoke-docker.sh` with `bash -n`, then runs `make smoke-local`",
 			"Pull requests first pass through a cheap `docker-smoke-scope` path filter",
-			"only PRs that touch Compose/front-door/auth/API/controller, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surfaces",
+			"only PRs that touch Compose/front-door/auth/API/controller, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surfaces",
+			"`internal/githubwebhook/**`",
 			"`internal/resourceaws/**`",
 			"reserved Okta SAML/enterprise runtime paths `internal/authsaml/**` and `internal/authsso/**`",
 			"unrelated docs-only PRs on the cheap fast lane",

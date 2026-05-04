@@ -32,6 +32,7 @@ AUTH_FORBIDDEN_EVENTS_BODY=$(mktemp)
 AUTH_FORBIDDEN_RESOURCE_LOGS_BODY=$(mktemp)
 AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY=$(mktemp)
 WEBHOOK_PUSH_BODY_FILE=$(mktemp)
+WEBHOOK_DELETED_BODY_FILE=$(mktemp)
 WEBHOOK_PING_BODY_FILE=$(mktemp)
 INVALID_WEBHOOK_BODY=$(mktemp)
 PAYLOAD_DIR=$(mktemp -d)
@@ -580,6 +581,26 @@ webhook_push_status=$(curl -sS -o "$WEBHOOK_PUSH_BODY_FILE" -w "%{http_code}" -X
   --data "$webhook_push_body" \
   "$API_BASE_URL/api/v1/github/webhook")
 webhook_push=$(cat "$WEBHOOK_PUSH_BODY_FILE")
+webhook_deleted_body=$(cat <<'EOF'
+{"ref":"refs/heads/obsolete-release","before":"3333333333333333333333333333333333333333","after":"0000000000000000000000000000000000000000","repository":{"full_name":"acme/platform-config"},"head_commit":null,"commits":[{"id":"c","added":[],"modified":[],"removed":["deployments/obsolete.yaml"]}]}
+EOF
+)
+webhook_deleted_signature=$(WEBHOOK_SECRET="$WEBHOOK_SECRET" WEBHOOK_BODY="$webhook_deleted_body" python3 - <<'PY'
+import hashlib
+import hmac
+import os
+
+print('sha256=' + hmac.new(os.environ['WEBHOOK_SECRET'].encode('utf-8'), os.environ['WEBHOOK_BODY'].encode('utf-8'), hashlib.sha256).hexdigest())
+PY
+)
+webhook_deleted_status=$(curl -sS -o "$WEBHOOK_DELETED_BODY_FILE" -w "%{http_code}" -X POST \
+  -H 'Content-Type: application/json' \
+  -H 'X-GitHub-Delivery: delivery-deleted-1' \
+  -H 'X-GitHub-Event: push' \
+  -H "X-Hub-Signature-256: $webhook_deleted_signature" \
+  --data "$webhook_deleted_body" \
+  "$API_BASE_URL/api/v1/github/webhook")
+webhook_deleted=$(cat "$WEBHOOK_DELETED_BODY_FILE")
 webhook_ping_body='{"zen":"keep it logically awesome"}'
 webhook_ping_signature=$(WEBHOOK_SECRET="$WEBHOOK_SECRET" WEBHOOK_BODY="$webhook_ping_body" python3 - <<'PY'
 import hashlib
@@ -666,6 +687,7 @@ audit_logs_path=$(write_payload audit-logs.json "$audit_logs")
 audit_logs_action_filtered_path=$(write_payload audit-logs-action-filtered.json "$audit_logs_action_filtered")
 actor_audit_logs_path=$(write_payload actor-audit-logs.json "$actor_audit_logs")
 webhook_push_path=$(write_payload webhook-push.json "$webhook_push")
+webhook_deleted_path=$(write_payload webhook-deleted.json "$webhook_deleted")
 webhook_ping_path=$(write_payload webhook-ping.json "$webhook_ping")
 invalid_webhook_path=$(write_payload invalid-webhook.txt "$invalid_webhook")
 ui_path=$(write_payload ui.html "$ui")
@@ -681,7 +703,7 @@ drift_ui_path=$(write_payload drift-ui.html "$drift_ui")
 audit_ui_path=$(write_payload audit-ui.html "$audit_ui")
 plan_apply_ui_path=$(write_payload plan-apply-ui.html "$plan_apply_ui")
 
-SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" INVALID_APPLY_TRANSITION_STATUS="$invalid_apply_transition_status" INVALID_APPLY_TRANSITION_PATH="$invalid_apply_transition_path" UNKNOWN_APPLY_TRANSITION_STATUS="$unknown_apply_transition_status" UNKNOWN_APPLY_TRANSITION_PATH="$unknown_apply_transition_path" TERMINAL_APPLY_TRANSITION_STATUS="$terminal_apply_transition_status" TERMINAL_APPLY_TRANSITION_PATH="$terminal_apply_transition_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" DEPLOYMENT_EVENTS_PATH="$deployment_events_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" LIMITED_WORKER_RESOURCE_LOGS_PATH="$limited_worker_resource_logs_path" ECS_TASK_RESOURCE_LOGS_PATH="$ecs_task_resource_logs_path" ECS_TASK_RESOURCE_INSPECTION_PATH="$ecs_task_resource_inspection_path" INVALID_RESOURCE_LOG_LIMIT_STATUS="$invalid_resource_log_limit_status" INVALID_RESOURCE_LOG_LIMIT_PATH="$invalid_resource_log_limit_path" CODEDEPLOY_APPLICATION_RESOURCE_LOGS_PATH="$codedeploy_application_resource_logs_path" TEST_LISTENER_RESOURCE_LOGS_PATH="$test_listener_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" BOOTSTRAP_RESOURCE_LOGS_PATH="$bootstrap_resource_logs_path" TRAFFIC_RESOURCE_LOGS_PATH="$traffic_resource_logs_path" PRODUCTION_LISTENER_RULE_RESOURCE_LOGS_PATH="$production_listener_rule_resource_logs_path" ACTIVE_TARGET_GROUP_RESOURCE_LOGS_PATH="$active_target_group_resource_logs_path" CANDIDATE_TARGET_GROUP_RESOURCE_LOGS_PATH="$candidate_target_group_resource_logs_path" BOOTSTRAP_RESOURCE_INSPECTION_PATH="$bootstrap_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_APPLICATION_RESOURCE_INSPECTION_PATH="$codedeploy_application_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$blue_task_set_target_group_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" PRODUCTION_LISTENER_RULE_RESOURCE_INSPECTION_PATH="$production_listener_rule_resource_inspection_path" ACTIVE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$active_target_group_resource_inspection_path" CANDIDATE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$candidate_target_group_resource_inspection_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PUSH_STATUS="$webhook_push_status" WEBHOOK_PING_PATH="$webhook_ping_path" WEBHOOK_PING_STATUS="$webhook_ping_status" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" UI_PATH="$ui_path" APPLICATION_UI_PATH="$application_ui_path" ACCOUNT_UI_PATH="$account_ui_path" RESOURCE_UI_PATH="$resource_ui_path" ECS_RESOURCE_UI_PATH="$ecs_resource_ui_path" BOOTSTRAP_RESOURCE_UI_PATH="$bootstrap_resource_ui_path" CODEDEPLOY_APPLICATION_RESOURCE_UI_PATH="$codedeploy_application_resource_ui_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_UI_PATH="$blue_task_set_target_group_resource_ui_path" PRODUCTION_LISTENER_RULE_RESOURCE_UI_PATH="$production_listener_rule_resource_ui_path" DRIFT_UI_PATH="$drift_ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_APPLY_UI_PATH="$plan_apply_ui_path" python3 - <<'PY'
+SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" INVALID_APPLY_TRANSITION_STATUS="$invalid_apply_transition_status" INVALID_APPLY_TRANSITION_PATH="$invalid_apply_transition_path" UNKNOWN_APPLY_TRANSITION_STATUS="$unknown_apply_transition_status" UNKNOWN_APPLY_TRANSITION_PATH="$unknown_apply_transition_path" TERMINAL_APPLY_TRANSITION_STATUS="$terminal_apply_transition_status" TERMINAL_APPLY_TRANSITION_PATH="$terminal_apply_transition_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" DEPLOYMENT_EVENTS_PATH="$deployment_events_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" LIMITED_WORKER_RESOURCE_LOGS_PATH="$limited_worker_resource_logs_path" ECS_TASK_RESOURCE_LOGS_PATH="$ecs_task_resource_logs_path" ECS_TASK_RESOURCE_INSPECTION_PATH="$ecs_task_resource_inspection_path" INVALID_RESOURCE_LOG_LIMIT_STATUS="$invalid_resource_log_limit_status" INVALID_RESOURCE_LOG_LIMIT_PATH="$invalid_resource_log_limit_path" CODEDEPLOY_APPLICATION_RESOURCE_LOGS_PATH="$codedeploy_application_resource_logs_path" TEST_LISTENER_RESOURCE_LOGS_PATH="$test_listener_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" BOOTSTRAP_RESOURCE_LOGS_PATH="$bootstrap_resource_logs_path" TRAFFIC_RESOURCE_LOGS_PATH="$traffic_resource_logs_path" PRODUCTION_LISTENER_RULE_RESOURCE_LOGS_PATH="$production_listener_rule_resource_logs_path" ACTIVE_TARGET_GROUP_RESOURCE_LOGS_PATH="$active_target_group_resource_logs_path" CANDIDATE_TARGET_GROUP_RESOURCE_LOGS_PATH="$candidate_target_group_resource_logs_path" BOOTSTRAP_RESOURCE_INSPECTION_PATH="$bootstrap_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_APPLICATION_RESOURCE_INSPECTION_PATH="$codedeploy_application_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$blue_task_set_target_group_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" PRODUCTION_LISTENER_RULE_RESOURCE_INSPECTION_PATH="$production_listener_rule_resource_inspection_path" ACTIVE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$active_target_group_resource_inspection_path" CANDIDATE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$candidate_target_group_resource_inspection_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PUSH_STATUS="$webhook_push_status" WEBHOOK_DELETED_PATH="$webhook_deleted_path" WEBHOOK_DELETED_STATUS="$webhook_deleted_status" WEBHOOK_PING_PATH="$webhook_ping_path" WEBHOOK_PING_STATUS="$webhook_ping_status" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" UI_PATH="$ui_path" APPLICATION_UI_PATH="$application_ui_path" ACCOUNT_UI_PATH="$account_ui_path" RESOURCE_UI_PATH="$resource_ui_path" ECS_RESOURCE_UI_PATH="$ecs_resource_ui_path" BOOTSTRAP_RESOURCE_UI_PATH="$bootstrap_resource_ui_path" CODEDEPLOY_APPLICATION_RESOURCE_UI_PATH="$codedeploy_application_resource_ui_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_UI_PATH="$blue_task_set_target_group_resource_ui_path" PRODUCTION_LISTENER_RULE_RESOURCE_UI_PATH="$production_listener_rule_resource_ui_path" DRIFT_UI_PATH="$drift_ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_APPLY_UI_PATH="$plan_apply_ui_path" python3 - <<'PY'
 import json, os
 
 def read_json(path_env):
@@ -744,6 +766,7 @@ audit_logs_action_filtered = read_json("AUDIT_LOGS_ACTION_FILTERED_PATH")
 actor_audit_logs = read_json("ACTOR_AUDIT_LOGS_PATH")
 invalid_audit_action_body = read_text("INVALID_AUDIT_ACTION_BODY_PATH")
 webhook_push = read_json("WEBHOOK_PUSH_PATH")
+webhook_deleted = read_json("WEBHOOK_DELETED_PATH")
 webhook_ping = read_json("WEBHOOK_PING_PATH")
 invalid_webhook = read_text("INVALID_WEBHOOK_PATH")
 ui = read_text("UI_PATH")
@@ -868,6 +891,19 @@ assert webhook_push["desiredStateSourceMatch"]["kind"] == "filesystem", webhook_
 assert webhook_push["desiredStateSourceMatch"]["matches"] is False, webhook_push
 assert webhook_push["desiredStateSourceMatch"]["matchStatus"] == "filesystem_source", webhook_push
 assert webhook_push["desiredStateSourceMatch"]["reason"] == "desired-state source uses the filesystem catalog, so GitHub push relevance is unavailable in this mode", webhook_push
+assert os.environ["WEBHOOK_DELETED_STATUS"] == "200", os.environ["WEBHOOK_DELETED_STATUS"]
+assert webhook_deleted["deliveryId"] == "delivery-deleted-1", webhook_deleted
+assert webhook_deleted["event"] == "push", webhook_deleted
+assert webhook_deleted["status"] == "ignored", webhook_deleted
+assert webhook_deleted["processed"] is False, webhook_deleted
+assert webhook_deleted["deleted"] is True, webhook_deleted
+assert webhook_deleted["repository"] == "acme/platform-config", webhook_deleted
+assert webhook_deleted["ref"] == "refs/heads/obsolete-release", webhook_deleted
+assert webhook_deleted["before"] == "3333333333333333333333333333333333333333", webhook_deleted
+assert webhook_deleted["after"] == "0000000000000000000000000000000000000000", webhook_deleted
+assert webhook_deleted["changedFiles"]["all"] == ["deployments/obsolete.yaml"], webhook_deleted
+assert "controller refresh handoff skipped" in webhook_deleted["reason"], webhook_deleted
+assert "controllerRefresh" not in webhook_deleted, webhook_deleted
 assert os.environ["WEBHOOK_PING_STATUS"] == "200", os.environ["WEBHOOK_PING_STATUS"]
 assert webhook_ping["deliveryId"] == "delivery-ping-1", webhook_ping
 assert webhook_ping["event"] == "ping", webhook_ping
