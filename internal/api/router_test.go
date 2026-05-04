@@ -216,7 +216,7 @@ func TestRouterOperatorContextReportsEnterpriseSSORuntimeDiagnostic(t *testing.T
 	}
 	authRuntime := body["authRuntime"].(map[string]any)
 	enterpriseSSO := authRuntime["enterpriseSso"].(map[string]any)
-	if enterpriseSSO["configured"] != true || enterpriseSSO["active"] != false || enterpriseSSO["provider"] != "google_oidc" {
+	if enterpriseSSO["configured"] != true || enterpriseSSO["active"] != false || enterpriseSSO["provider"] != "google" {
 		t.Fatalf("expected configured inactive enterprise SSO diagnostic, got %#v", enterpriseSSO)
 	}
 	if enterpriseSSO["loginRoute"] != "/auth/login/google" || enterpriseSSO["callbackRoute"] != "/auth/callback/google" {
@@ -253,7 +253,7 @@ func TestRouterManagedLoginRoutesRequireActiveRuntime(t *testing.T) {
 
 			router.ServeHTTP(resp, req)
 
-			if resp.Code != http.StatusServiceUnavailable || !strings.Contains(resp.Body.String(), "tenet-managed GitHub login is not configured") {
+			if resp.Code != http.StatusServiceUnavailable || !strings.Contains(resp.Body.String(), "tenet-managed GitHub OAuth login is not configured") {
 				t.Fatalf("expected inactive managed-login runtime to return 503 for %s, got %d: %s", path, resp.Code, resp.Body.String())
 			}
 		})

@@ -679,6 +679,25 @@ func buildOperatorContextRepositoryPolicy(ctx context.Context, options Options, 
 	}
 }
 
+func managedLoginRoutesForProvider(provider string) (string, string) {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case authprovider.GoogleProviderName, authprovider.GoogleOIDCProviderAlias:
+		return "/auth/login/google", "/auth/callback/google"
+	case authprovider.GitHubProviderName, "":
+		return "/auth/login/github", "/auth/callback/github"
+	default:
+		return "/auth/login/" + strings.ToLower(strings.TrimSpace(provider)), "/auth/callback/" + strings.ToLower(strings.TrimSpace(provider))
+	}
+}
+
+func canonicalManagedLoginProvider(provider string) string {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	if provider == authprovider.GoogleOIDCProviderAlias {
+		return authprovider.GoogleProviderName
+	}
+	return provider
+}
+
 func buildAuthRuntimeDiagnosticForRequest(r *http.Request, options Options) AuthRuntimeDiagnostic {
 	diagnostic := options.AuthRuntime
 	managedLogin := diagnostic.TenetManagedLogin
@@ -703,13 +722,16 @@ func buildAuthRuntimeDiagnosticForRequest(r *http.Request, options Options) Auth
 	}
 	diagnostic.TenetManagedLogin = managedLogin
 	enterpriseSSO := diagnostic.EnterpriseSSO
-	enterpriseSSO.Provider = strings.ToLower(strings.TrimSpace(enterpriseSSO.Provider))
+	enterpriseSSO.Provider = canonicalManagedLoginProvider(enterpriseSSO.Provider)
 	if enterpriseSSO.Provider != "" {
 		if enterpriseSSO.MissingSettings == nil {
 			enterpriseSSO.MissingSettings = []string{}
 		}
-		enterpriseSSO.Active = false
-		if enterpriseSSO.UnavailableReason == "" {
+		enterpriseSSO.Active = authSession.active() && authSession.Provider.Name() == enterpriseSSO.Provider && len(enterpriseSSO.MissingSettings) == 0
+		if enterpriseSSO.Active {
+			enterpriseSSO.Configured = true
+			enterpriseSSO.UnavailableReason = ""
+		} else if enterpriseSSO.UnavailableReason == "" {
 			enterpriseSSO.UnavailableReason = "enterprise SSO provider diagnostics are configured, but provider login/callback runtime is not active for this API instance"
 		}
 		diagnostic.EnterpriseSSO = enterpriseSSO
@@ -742,14 +764,16 @@ func normalizeAuthRuntimeDiagnostic(diagnostic AuthRuntimeDiagnostic) AuthRuntim
 		managedLogin.RequiredSettings = RequiredTenetManagedLoginSettings()
 	}
 	enterpriseSSO := diagnostic.EnterpriseSSO
-	enterpriseSSO.Provider = strings.ToLower(strings.TrimSpace(enterpriseSSO.Provider))
+	enterpriseSSO.Provider = canonicalManagedLoginProvider(enterpriseSSO.Provider)
 	if enterpriseSSO.Provider != "" {
 		if enterpriseSSO.MissingSettings == nil {
 			enterpriseSSO.MissingSettings = []string{}
 		}
-		enterpriseSSO.Active = false
 		enterpriseSSO.Configured = enterpriseSSO.Configured && len(enterpriseSSO.MissingSettings) == 0
-		if enterpriseSSO.UnavailableReason == "" {
+		enterpriseSSO.Active = enterpriseSSO.Active && enterpriseSSO.Configured
+		if enterpriseSSO.Active {
+			enterpriseSSO.UnavailableReason = ""
+		} else if enterpriseSSO.UnavailableReason == "" {
 			enterpriseSSO.UnavailableReason = "enterprise SSO provider diagnostics are configured, but provider login/callback runtime is not active for this API instance"
 		}
 	}
@@ -759,15 +783,16 @@ func normalizeAuthRuntimeDiagnostic(diagnostic AuthRuntimeDiagnostic) AuthRuntim
 		if managedLogin.MissingSettings == nil {
 			managedLogin.MissingSettings = []string{}
 		}
-		managedLogin.Provider = strings.TrimSpace(managedLogin.Provider)
+		managedLogin.Provider = canonicalManagedLoginProvider(managedLogin.Provider)
 		if managedLogin.Provider == "" {
-			managedLogin.Provider = "github"
+			managedLogin.Provider = authprovider.GitHubProviderName
 		}
+		loginRoute, callbackRoute := managedLoginRoutesForProvider(managedLogin.Provider)
 		if managedLogin.LoginRoute == "" {
-			managedLogin.LoginRoute = "/auth/login/github"
+			managedLogin.LoginRoute = loginRoute
 		}
 		if managedLogin.CallbackRoute == "" {
-			managedLogin.CallbackRoute = "/auth/callback/github"
+			managedLogin.CallbackRoute = callbackRoute
 		}
 		if managedLogin.LogoutRoute == "" && managedLogin.Active {
 			managedLogin.LogoutRoute = "/auth/logout"
@@ -1615,9 +1640,11 @@ func NewRouter(options Options) http.Handler {
 	options.AuthRuntime.TenetManagedLogin.Active = authSession.active()
 	if authSession.active() {
 		options.AuthRuntime.TenetManagedLogin.Configured = true
-		options.AuthRuntime.TenetManagedLogin.Provider = authSession.Provider.Name()
-		options.AuthRuntime.TenetManagedLogin.LoginRoute = "/auth/login/github"
-		options.AuthRuntime.TenetManagedLogin.CallbackRoute = "/auth/callback/github"
+		providerName := authSession.Provider.Name()
+		loginRoute, callbackRoute := managedLoginRoutesForProvider(providerName)
+		options.AuthRuntime.TenetManagedLogin.Provider = providerName
+		options.AuthRuntime.TenetManagedLogin.LoginRoute = loginRoute
+		options.AuthRuntime.TenetManagedLogin.CallbackRoute = callbackRoute
 		options.AuthRuntime.TenetManagedLogin.LogoutRoute = "/auth/logout"
 		options.AuthRuntime.TenetManagedLogin.SessionCookieName = authSession.cookieName()
 		options.AuthRuntime.TenetManagedLogin.MissingSettings = []string{}
@@ -1639,6 +1666,12 @@ func NewRouter(options Options) http.Handler {
 	})
 	mux.HandleFunc("/auth/callback/github", func(w http.ResponseWriter, r *http.Request) {
 		handleGitHubCallback(w, r, authSession)
+	})
+	mux.HandleFunc("/auth/login/google", func(w http.ResponseWriter, r *http.Request) {
+		handleGoogleLogin(w, r, authSession)
+	})
+	mux.HandleFunc("/auth/callback/google", func(w http.ResponseWriter, r *http.Request) {
+		handleGoogleCallback(w, r, authSession)
 	})
 	if authSession.active() {
 		mux.HandleFunc("/auth/logout", func(w http.ResponseWriter, r *http.Request) {

@@ -159,9 +159,10 @@ assert_enterprise_sso_diagnostic() {
   local provider=$2
   local expected_login_route=$3
   local expected_callback_route=$4
-  shift 4
+  local expected_active=$5
+  shift 5
 
-  python3 - "$payload_path" "$provider" "$expected_login_route" "$expected_callback_route" "$@" <<'PY'
+  python3 - "$payload_path" "$provider" "$expected_login_route" "$expected_callback_route" "$expected_active" "$@" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -170,10 +171,11 @@ payload = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
 provider = sys.argv[2]
 expected_login_route = sys.argv[3]
 expected_callback_route = sys.argv[4]
-expected_required = list(sys.argv[5:])
+expected_active = sys.argv[5] == 'true'
+expected_required = list(sys.argv[6:])
 enterprise_sso = (payload.get('authRuntime') or {}).get('enterpriseSso') or {}
 assert enterprise_sso.get('configured') is True, payload
-assert enterprise_sso.get('active') is False, payload
+assert enterprise_sso.get('active') is expected_active, payload
 assert enterprise_sso.get('provider') == provider, payload
 assert enterprise_sso.get('loginRoute') == expected_login_route, payload
 assert enterprise_sso.get('callbackRoute') == expected_callback_route, payload
@@ -182,7 +184,11 @@ assert not enterprise_sso.get('missingSettings'), payload
 assert enterprise_sso.get('stateStoreConfigured') is True, payload
 assert enterprise_sso.get('identityStoreConfigured') is True, payload
 assert enterprise_sso.get('sessionSecretConfigured') is True, payload
-assert enterprise_sso.get('unavailableReason') == 'enterprise SSO provider diagnostics are configured, but provider login/callback runtime is not active for this API instance', payload
+
+if expected_active:
+    assert enterprise_sso.get('unavailableReason', '') == '', payload
+else:
+    assert enterprise_sso.get('unavailableReason') == 'enterprise SSO provider diagnostics are configured, but provider login/callback runtime is not active for this API instance', payload
 serialized = json.dumps(enterprise_sso, sort_keys=True).lower()
 for forbidden in ('secret-value', 'google-client-secret', 'okta-private-key', 'saml assertion', 'authorization_code'):
     assert forbidden not in serialized, enterprise_sso
@@ -2835,7 +2841,7 @@ TENET_AUTH_SESSION_SECRET=placeholder-enterprise-session-value \
   start_api "$AUTH_TRUSTED_HEADERS" "$AUTH_ENFORCED" false false
 enterprise_sso_google_context=$(curl -fsS "http://$HOST:$PORT/v1/operator/context")
 enterprise_sso_google_context_path=$(write_payload enterprise-sso-google-context.json "$enterprise_sso_google_context")
-assert_enterprise_sso_diagnostic "$enterprise_sso_google_context_path" google_oidc /auth/login/google /auth/callback/google \
+assert_enterprise_sso_diagnostic "$enterprise_sso_google_context_path" google /auth/login/google /auth/callback/google true \
   TENET_AUTH_PROVIDER \
   TENET_GOOGLE_OIDC_CLIENT_ID \
   TENET_GOOGLE_OIDC_CLIENT_SECRET \
@@ -2855,7 +2861,7 @@ TENET_AUTH_SESSION_SECRET=placeholder-enterprise-session-value \
   start_api "$AUTH_TRUSTED_HEADERS" "$AUTH_ENFORCED" false false
 enterprise_sso_okta_saml_context=$(curl -fsS "http://$HOST:$PORT/v1/operator/context")
 enterprise_sso_okta_saml_context_path=$(write_payload enterprise-sso-okta-saml-context.json "$enterprise_sso_okta_saml_context")
-assert_enterprise_sso_diagnostic "$enterprise_sso_okta_saml_context_path" okta_saml /auth/login/okta /auth/callback/okta/saml \
+assert_enterprise_sso_diagnostic "$enterprise_sso_okta_saml_context_path" okta_saml /auth/login/okta /auth/callback/okta/saml false \
   TENET_AUTH_PROVIDER \
   TENET_OKTA_SAML_METADATA_URL \
   TENET_OKTA_SAML_ACS_URL \
@@ -2863,7 +2869,7 @@ assert_enterprise_sso_diagnostic "$enterprise_sso_okta_saml_context_path" okta_s
   TENET_AUTH_IDENTITY_STORE_PATH \
   TENET_AUTH_SESSION_SECRET
 
-echo "smoke-local: configured inactive enterprise SSO diagnostics ok"
+echo "smoke-local: configured enterprise SSO diagnostics ok"
 stop_api
 start_api "$AUTH_TRUSTED_HEADERS" "$AUTH_ENFORCED" false false
 

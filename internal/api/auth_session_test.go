@@ -20,19 +20,30 @@ import (
 )
 
 type fakeAuthProvider struct {
+	name           string
+	authBaseURL    string
 	exchangedCodes []string
 	userTokens     []string
 	exchangeErr    error
 	userErr        error
 }
 
-func (p *fakeAuthProvider) Name() string { return authprovider.GitHubProviderName }
+func (p *fakeAuthProvider) Name() string {
+	if p.name != "" {
+		return p.name
+	}
+	return authprovider.GitHubProviderName
+}
 
 func (p *fakeAuthProvider) AuthCodeURL(state string, scopes []string) (string, error) {
 	values := url.Values{}
 	values.Set("state", state)
 	values.Set("scope", strings.Join(scopes, " "))
-	return "https://github.example.test/login/oauth/authorize?" + values.Encode(), nil
+	baseURL := p.authBaseURL
+	if baseURL == "" {
+		baseURL = "https://github.example.test/login/oauth/authorize"
+	}
+	return baseURL + "?" + values.Encode(), nil
 }
 
 func (p *fakeAuthProvider) Exchange(_ context.Context, code string) (authprovider.Token, error) {
@@ -49,7 +60,7 @@ func (p *fakeAuthProvider) User(_ context.Context, accessToken string) (authprov
 		return authprovider.Identity{}, p.userErr
 	}
 	return authprovider.Identity{
-		Provider: authprovider.GitHubProviderName,
+		Provider: p.Name(),
 		ID:       "12345",
 		Login:    "octo",
 		Name:     "Octo Operator",
@@ -62,15 +73,25 @@ func managedLoginTestOptions(t *testing.T, provider authprovider.Provider) (Opti
 	t.Helper()
 	dir := t.TempDir()
 	identityPath := filepath.Join(dir, "identities.json")
+	providerName := authprovider.GitHubProviderName
+	loginRoute := "/auth/login/github"
+	callbackRoute := "/auth/callback/github"
+	requiredSettings := RequiredTenetManagedLoginSettings()
+	if provider != nil && provider.Name() == authprovider.GoogleProviderName {
+		providerName = authprovider.GoogleProviderName
+		loginRoute = "/auth/login/google"
+		callbackRoute = "/auth/callback/google"
+		requiredSettings = []string{"TENET_AUTH_PROVIDER", "TENET_GOOGLE_OIDC_CLIENT_ID", "TENET_GOOGLE_OIDC_CLIENT_SECRET", "TENET_GOOGLE_OIDC_ISSUER_URL", "TENET_GOOGLE_OIDC_REDIRECT_URL", "TENET_AUTH_STATE_STORE_PATH", "TENET_AUTH_IDENTITY_STORE_PATH", "TENET_AUTH_SESSION_SECRET"}
+	}
 	return Options{
 		AuthRuntime: AuthRuntimeDiagnostic{TenetManagedLogin: TenetManagedLoginDiagnostic{
 			Configured:              true,
 			Active:                  true,
-			Provider:                authprovider.GitHubProviderName,
-			RequiredSettings:        RequiredTenetManagedLoginSettings(),
+			Provider:                providerName,
+			RequiredSettings:        requiredSettings,
 			MissingSettings:         []string{},
-			LoginRoute:              "/auth/login/github",
-			CallbackRoute:           "/auth/callback/github",
+			LoginRoute:              loginRoute,
+			CallbackRoute:           callbackRoute,
 			LogoutRoute:             "/auth/logout",
 			SessionCookieName:       "tenet_session",
 			StateStoreConfigured:    true,
@@ -218,6 +239,73 @@ func TestManagedGitHubLoginCallbackCreatesSessionAndAuthenticatedContext(t *test
 	}
 	if !body.Actor.Available || body.Actor.ID != "github:12345" {
 		t.Fatalf("expected actor projection from session identity, got %#v", body.Actor)
+	}
+}
+
+func TestManagedGoogleOIDCLoginCallbackCreatesSessionAndAuthenticatedContext(t *testing.T) {
+	provider := &fakeAuthProvider{name: authprovider.GoogleProviderName, authBaseURL: "https://accounts.example.test/o/oauth2/v2/auth"}
+	options, identityPath := managedLoginTestOptions(t, provider)
+	router := NewRouter(options)
+
+	loginReq := httptest.NewRequest(http.MethodGet, "/auth/login/google?returnUrl=/v1/operator/context%3Ffrom%3Dgoogle", nil)
+	loginResp := httptest.NewRecorder()
+	router.ServeHTTP(loginResp, loginReq)
+	if loginResp.Code != http.StatusFound {
+		t.Fatalf("expected Google login 302, got %d: %s", loginResp.Code, loginResp.Body.String())
+	}
+	parsedLocation, err := url.Parse(loginResp.Header().Get("Location"))
+	if err != nil {
+		t.Fatalf("parse Google login redirect: %v", err)
+	}
+	state := parsedLocation.Query().Get("state")
+	if state == "" {
+		t.Fatalf("expected Google login redirect to carry callback state, got %q", loginResp.Header().Get("Location"))
+	}
+	scope := parsedLocation.Query().Get("scope")
+	for _, want := range []string{"openid", "email", "profile"} {
+		if !strings.Contains(scope, want) {
+			t.Fatalf("expected Google OIDC scope %q in redirect scope %q", want, scope)
+		}
+	}
+
+	callbackReq := httptest.NewRequest(http.MethodGet, "/auth/callback/google?state="+url.QueryEscape(state)+"&code=google-code-123", nil)
+	callbackResp := httptest.NewRecorder()
+	router.ServeHTTP(callbackResp, callbackReq)
+	if callbackResp.Code != http.StatusFound {
+		t.Fatalf("expected Google callback 302, got %d: %s", callbackResp.Code, callbackResp.Body.String())
+	}
+	if got := callbackResp.Header().Get("Location"); got != "/v1/operator/context?from=google" {
+		t.Fatalf("expected safe in-app Google redirect, got %q", got)
+	}
+	if len(provider.exchangedCodes) != 1 || provider.exchangedCodes[0] != "google-code-123" {
+		t.Fatalf("expected provider exchange for Google callback code, got %#v", provider.exchangedCodes)
+	}
+	identities, err := authidentity.Load(identityPath)
+	if err != nil {
+		t.Fatalf("load identities: %v", err)
+	}
+	if len(identities) != 1 || identities[0].Provider != "google" || identities[0].Subject != "12345" {
+		t.Fatalf("expected persisted Google identity, got %#v", identities)
+	}
+
+	contextReq := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+	contextReq.AddCookie(callbackResp.Result().Cookies()[0])
+	contextResp := httptest.NewRecorder()
+	router.ServeHTTP(contextResp, contextReq)
+	if contextResp.Code != http.StatusOK {
+		t.Fatalf("expected operator context 200 after Google callback, got %d: %s", contextResp.Code, contextResp.Body.String())
+	}
+	var body struct {
+		Identity requestactor.AuthenticatedIdentity `json:"identity"`
+	}
+	if err := json.Unmarshal(contextResp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode operator context: %v", err)
+	}
+	if !body.Identity.Authenticated || body.Identity.ID != "google:12345" || body.Identity.Email != "octo@example.com" {
+		t.Fatalf("expected Google session-derived authenticated identity, got %#v", body.Identity)
+	}
+	if strings.Contains(contextResp.Body.String(), "token-for-google-code-123") || strings.Contains(contextResp.Body.String(), "accessToken") {
+		t.Fatalf("operator context leaked Google provider access token material: %s", contextResp.Body.String())
 	}
 }
 
