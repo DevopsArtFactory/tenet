@@ -202,6 +202,37 @@ const scenarios = [
     unexpected: 'Failed to load overview:',
   },
   {
+    name: 'applications overview 401 offers Okta SAML enterprise SSO handoff when diagnostics report active same-origin route',
+    search: '?q=payments&sync=OutOfSync&account=210987654321',
+    route: '/v1/overview/applications',
+    status: 401,
+    body: 'unauthenticated: operator identity missing',
+    operatorContext: { authRuntime: { enterpriseSso: { configured: true, active: true, provider: 'okta_saml', requiredSettings: ['TENET_AUTH_PROVIDER', 'TENET_OKTA_SAML_METADATA_URL', 'TENET_OKTA_SAML_ACS_URL', 'TENET_AUTH_STATE_STORE_PATH', 'TENET_AUTH_IDENTITY_STORE_PATH', 'TENET_AUTH_SESSION_SECRET'], missingSettings: [], loginRoute: '/auth/login/okta', callbackRoute: '/auth/callback/okta/saml', stateStoreConfigured: true, identityStoreConfigured: true, sessionSecretConfigured: true } }, trustedHeaders: { enabled: true }, enforcement: { mode: 'trusted_front_door_read_write' }, identity: { authenticated: false }, roles: { canRead: false, canWrite: false }, deploymentAccess: { enforced: true, forwarded: false } },
+    expected: [
+      'Applications overview',
+      'Authenticated operator required',
+      'Okta SSO is active for this API instance; use the sign-in handoff below to authenticate through /auth/login/okta and return to this same bookmarkable URL. Trusted front-door X-Tenet-Authenticated-* identity headers still take precedence when present.',
+      'Sign in with Okta SSO',
+    ],
+    unexpected: 'Failed to load overview:',
+  },
+  {
+    name: 'applications overview 401 keeps configured inactive Okta SAML diagnostics non-clickable',
+    search: '?q=payments&sync=OutOfSync&account=210987654321',
+    route: '/v1/overview/applications',
+    status: 401,
+    body: 'unauthenticated: operator identity missing',
+    operatorContext: { authRuntime: { enterpriseSso: { configured: true, active: false, provider: 'okta_saml', requiredSettings: ['TENET_AUTH_PROVIDER', 'TENET_OKTA_SAML_METADATA_URL', 'TENET_OKTA_SAML_ACS_URL', 'TENET_AUTH_STATE_STORE_PATH', 'TENET_AUTH_IDENTITY_STORE_PATH', 'TENET_AUTH_SESSION_SECRET'], missingSettings: [], loginRoute: '/auth/login/okta', callbackRoute: '/auth/callback/okta/saml', stateStoreConfigured: true, identityStoreConfigured: true, sessionSecretConfigured: true, unavailableReason: 'enterprise SSO provider diagnostics are configured, but provider login/callback runtime is not active for this API instance' } }, trustedHeaders: { enabled: true }, enforcement: { mode: 'trusted_front_door_read_write' }, identity: { authenticated: false }, roles: { canRead: false, canWrite: false }, deploymentAccess: { enforced: true, forwarded: false } },
+    expected: [
+      'Applications overview',
+      'Authenticated operator required',
+      'Tenet does not start a built-in GitHub OAuth login, enterprise SSO login, or Tenet-managed browser session from this page; reopen this same bookmarkable URL through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.',
+      'Retry current page after front-door sign-in',
+    ],
+    forbiddenFragments: ['Sign in with Okta SSO'],
+    unexpected: 'Failed to load overview:',
+  },
+  {
     name: 'applications overview 403 explains operator authorization failure',
     search: '?q=payments',
     route: '/v1/overview/applications',
@@ -358,13 +389,14 @@ const scenarios = [
     ];
     const signInRetryLink = links.find((link) => link.text.includes('Retry current page after front-door sign-in'));
     const managedSignInLink = links.find((link) => link.text.includes('Sign in with Tenet-managed GitHub login'));
-    const enterpriseSignInLink = links.find((link) => link.text.includes('Sign in with Google Workspace SSO'));
+    const enterpriseSignInLink = links.find((link) => link.text.includes('Sign in with Google Workspace SSO') || link.text.includes('Sign in with Okta SSO'));
     const accessRetryLink = links.find((link) => link.text.includes('Retry current page after access update'));
     const operatorContextLink = links.find((link) => link.text.includes('Open Operator context details'));
     if (scenario.status === 401 && scenario.operatorContext?.authRuntime?.enterpriseSso?.active) {
       if (!enterpriseSignInLink) throw new Error('expected enterprise SSO sign-in recovery link for ' + scenario.name + ': ' + JSON.stringify(links));
       const expectedReturn = encodeURIComponent('/' + initialSearch);
-      if (enterpriseSignInLink.href !== '/auth/login/google?returnUrl=' + expectedReturn) throw new Error('expected enterprise sign-in link to preserve returnUrl for ' + scenario.name + ', got ' + enterpriseSignInLink.href);
+      const expectedEnterpriseRoute = scenario.operatorContext.authRuntime.enterpriseSso.loginRoute;
+      if (enterpriseSignInLink.href !== expectedEnterpriseRoute + '?returnUrl=' + expectedReturn) throw new Error('expected enterprise sign-in link to preserve returnUrl for ' + scenario.name + ', got ' + enterpriseSignInLink.href);
       if (enterpriseSignInLink.target !== '_self') throw new Error('expected enterprise sign-in link to stay in same shell for ' + scenario.name);
       if (signInRetryLink) throw new Error('did not expect front-door retry link when enterprise SSO is active for ' + scenario.name);
       if (accessRetryLink) throw new Error('did not expect access-update retry link for auth-required scenario ' + scenario.name);
