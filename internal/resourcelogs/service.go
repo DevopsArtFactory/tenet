@@ -132,6 +132,7 @@ type Entry struct {
 	Message       string `json:"message"`
 	Stream        string `json:"stream,omitempty"`
 	ContainerName string `json:"containerName,omitempty"`
+	InstanceID    string `json:"instanceId,omitempty"`
 }
 
 type Options struct {
@@ -474,7 +475,7 @@ func formatConsoleEntries(consoles []InstanceConsole, max int) []Entry {
 			if message == "" {
 				continue
 			}
-			entries = append(entries, Entry{Timestamp: console.Lines[i].Timestamp.UTC().Format(time.RFC3339), Message: message})
+			entries = append(entries, Entry{Timestamp: console.Lines[i].Timestamp.UTC().Format(time.RFC3339), Message: message, InstanceID: strings.TrimSpace(console.InstanceID)})
 			if len(entries) == max {
 				break
 			}
