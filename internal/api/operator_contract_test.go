@@ -82,7 +82,8 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 		"`GET /auth/login/github`, `GET /auth/login/google`, or `GET /auth/login/okta` creates one-time callback state",
 		"reports `GET /v1/operator/context.authRuntime.tenetManagedLogin.active=true`",
 		"When any setting is absent the runtime stays disabled",
-		"Okta SAML provider selection, provider-token refresh/revocation, and long-lived token lifecycle management remain future work",
+		"The active managed-login runtime supports GitHub OAuth, Google Workspace OIDC, and Okta OIDC today",
+		"Okta SAML provider selection remains diagnostic-only, while provider-token refresh/revocation, upstream provider/front-door logout, and long-lived token lifecycle management remain future work",
 		"non-secret `requiredSettings` and `missingSettings`",
 		"`sessionCookieSecureOverride`, `sessionCookieSecureForRequest`, and `sessionCookieSecureSources`",
 		"`sessionCookiePath=/`, `sessionCookieHttpOnly=true`, `sessionCookieSameSite=Lax`",
@@ -99,7 +100,8 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
 	for _, fragment := range []string{
 		"`docs/architecture/tenet-v1-enterprise-sso.md`",
-		"Okta SAML/OIDC activation checklists",
+		"keeps GitHub OAuth, Google Workspace OIDC, and Okta OIDC as active managed-login providers only when explicitly configured",
+		"keeps Okta SAML diagnostic-only",
 		"Okta SAML runtime and repository-backed provider group authorization",
 		"repository-backed RBAC policy evaluation for users/groups",
 	} {
