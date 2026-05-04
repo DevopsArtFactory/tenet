@@ -128,6 +128,85 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 	}
 }
 
+func TestEnterpriseSSOSmokeContracts(t *testing.T) {
+	readme := readRepoFile(t, "README.md")
+	for _, fragment := range []string{
+		"`make smoke-local` and `make smoke-docker` now restart the API with fake local Google OIDC and Okta SAML settings",
+		"configured-but-inactive `enterpriseSso` diagnostics stay present, non-secret, credential-free",
+		"does not contact Google or Okta and does not validate live provider login",
+		"focused Go tests continue to cover the remaining `okta_oidc` diagnostic shape",
+	} {
+		if !strings.Contains(readme, fragment) {
+			t.Fatalf("expected README enterprise SSO smoke scope to include %q", fragment)
+		}
+	}
+
+	enterpriseSSODoc := readRepoFile(t, "docs/architecture/tenet-v1-enterprise-sso.md")
+	for _, fragment := range []string{
+		"The current smoke guard restarts the direct-process and Compose API with fake local Google OIDC and Okta SAML settings",
+		"configured-but-inactive `enterpriseSso` payload stays non-secret",
+		"without contacting an external IdP",
+		"Focused unit/router tests continue to cover the remaining Okta OIDC diagnostic shape",
+	} {
+		if !strings.Contains(enterpriseSSODoc, fragment) {
+			t.Fatalf("expected enterprise SSO docs to describe smoke release guard scope with %q", fragment)
+		}
+	}
+
+	compose := readRepoFile(t, "compose.yaml")
+	for _, fragment := range []string{
+		`TENET_AUTH_PROVIDER: ${TENET_AUTH_PROVIDER:-}`,
+		`TENET_GOOGLE_OIDC_CLIENT_ID: ${TENET_GOOGLE_OIDC_CLIENT_ID:-}`,
+		`TENET_GOOGLE_OIDC_CLIENT_SECRET: ${TENET_GOOGLE_OIDC_CLIENT_SECRET:-}`,
+		`TENET_GOOGLE_OIDC_ISSUER_URL: ${TENET_GOOGLE_OIDC_ISSUER_URL:-}`,
+		`TENET_GOOGLE_OIDC_REDIRECT_URL: ${TENET_GOOGLE_OIDC_REDIRECT_URL:-}`,
+		`TENET_OKTA_SAML_METADATA_URL: ${TENET_OKTA_SAML_METADATA_URL:-}`,
+		`TENET_OKTA_SAML_ACS_URL: ${TENET_OKTA_SAML_ACS_URL:-}`,
+		`TENET_AUTH_STATE_STORE_PATH: ${TENET_AUTH_STATE_STORE_PATH:-}`,
+		`TENET_AUTH_IDENTITY_STORE_PATH: ${TENET_AUTH_IDENTITY_STORE_PATH:-}`,
+		`TENET_AUTH_SESSION_SECRET: ${TENET_AUTH_SESSION_SECRET:-}`,
+	} {
+		if !strings.Contains(compose, fragment) {
+			t.Fatalf("expected compose enterprise SSO diagnostic passthrough to include %q", fragment)
+		}
+	}
+
+	smokeScripts := map[string][]string{
+		"scripts/smoke-local.sh": {
+			`assert_enterprise_sso_diagnostic() {`,
+			`enterprise_sso_google_context=$(curl -fsS "http://$HOST:$PORT/v1/operator/context")`,
+			`assert_enterprise_sso_diagnostic "$enterprise_sso_google_context_path" google_oidc /auth/login/google /auth/callback/google`,
+			`assert_enterprise_sso_diagnostic "$enterprise_sso_okta_saml_context_path" okta_saml /auth/login/okta /auth/callback/okta/saml`,
+			`assert not enterprise_sso.get('missingSettings'), payload`,
+			`assert enterprise_sso.get('stateStoreConfigured') is True, payload`,
+			`assert enterprise_sso.get('identityStoreConfigured') is True, payload`,
+			`assert enterprise_sso.get('sessionSecretConfigured') is True, payload`,
+			`secret-value`,
+			`configured inactive enterprise SSO diagnostics ok`,
+		},
+		"scripts/smoke-docker.sh": {
+			`assert_enterprise_sso_diagnostic() {`,
+			`restart_api_with_enterprise_sso() {`,
+			`restart_api_with_enterprise_sso google_oidc`,
+			`restart_api_with_enterprise_sso okta_saml`,
+			`enterprise_sso_google_context=$(curl -fsS "$API_BASE_URL/v1/operator/context")`,
+			`assert_enterprise_sso_diagnostic "$enterprise_sso_google_context_path" google_oidc /auth/login/google /auth/callback/google`,
+			`assert_enterprise_sso_diagnostic "$enterprise_sso_okta_saml_context_path" okta_saml /auth/login/okta /auth/callback/okta/saml`,
+			`TENET_AUTH_STATE_STORE_PATH=/tmp/tenet-enterprise-sso-state.json`,
+			`TENET_AUTH_IDENTITY_STORE_PATH=/tmp/tenet-enterprise-sso-identities.json`,
+			`configured inactive enterprise SSO diagnostics ok`,
+		},
+	}
+	for path, fragments := range smokeScripts {
+		script := readRepoFile(t, path)
+		for _, fragment := range fragments {
+			if !strings.Contains(script, fragment) {
+				t.Fatalf("expected %s enterprise SSO smoke contract to include %q", path, fragment)
+			}
+		}
+	}
+}
+
 func TestDockerUpOperatorContract(t *testing.T) {
 	compose := readRepoFile(t, "compose.yaml")
 	if !strings.Contains(compose, `TENET_AWS_ENABLE_APPLY: ${TENET_AWS_ENABLE_APPLY:-false}`) {

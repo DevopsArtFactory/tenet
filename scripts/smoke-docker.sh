@@ -222,6 +222,41 @@ wait_for_apply_status() {
   return 1
 }
 
+assert_enterprise_sso_diagnostic() {
+  local payload_path=$1
+  local provider=$2
+  local expected_login_route=$3
+  local expected_callback_route=$4
+  shift 4
+
+  python3 - "$payload_path" "$provider" "$expected_login_route" "$expected_callback_route" "$@" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+provider = sys.argv[2]
+expected_login_route = sys.argv[3]
+expected_callback_route = sys.argv[4]
+expected_required = list(sys.argv[5:])
+enterprise_sso = (payload.get('authRuntime') or {}).get('enterpriseSso') or {}
+assert enterprise_sso.get('configured') is True, payload
+assert enterprise_sso.get('active') is False, payload
+assert enterprise_sso.get('provider') == provider, payload
+assert enterprise_sso.get('loginRoute') == expected_login_route, payload
+assert enterprise_sso.get('callbackRoute') == expected_callback_route, payload
+assert enterprise_sso.get('requiredSettings') == expected_required, payload
+assert not enterprise_sso.get('missingSettings'), payload
+assert enterprise_sso.get('stateStoreConfigured') is True, payload
+assert enterprise_sso.get('identityStoreConfigured') is True, payload
+assert enterprise_sso.get('sessionSecretConfigured') is True, payload
+assert enterprise_sso.get('unavailableReason') == 'enterprise SSO provider diagnostics are configured, but provider login/callback runtime is not active for this API instance', payload
+serialized = json.dumps(enterprise_sso, sort_keys=True).lower()
+for forbidden in ('secret-value', 'google-client-secret', 'okta-private-key', 'saml assertion', 'authorization_code'):
+    assert forbidden not in serialized, enterprise_sso
+PY
+}
+
 wait_for_deployment_managed_drift() {
   local deployment_name=$1
   local response='{}'
@@ -272,7 +307,47 @@ restart_api_with_frontdoor_read_auth() {
   "${COMPOSE[@]}" up -d api >/dev/null
   wait_for_api_health
 }
+restart_api_with_enterprise_sso() {
+  local provider=$1
 
+  case "$provider" in
+    google_oidc)
+      TENET_AWS_ENABLE_APPLY=false \
+      TENET_API_TRUST_AUTHENTICATED_HEADERS=true \
+      TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=false \
+      TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=false \
+      TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=false \
+      TENET_AUTH_PROVIDER=google_oidc \
+      TENET_GOOGLE_OIDC_CLIENT_ID=google-smoke-client \
+      TENET_GOOGLE_OIDC_CLIENT_SECRET=placeholder-google-client-value \
+      TENET_GOOGLE_OIDC_ISSUER_URL=https://accounts.google.com \
+      TENET_GOOGLE_OIDC_REDIRECT_URL=http://127.0.0.1/auth/callback/google \
+      TENET_AUTH_STATE_STORE_PATH=/tmp/tenet-enterprise-sso-state.json \
+      TENET_AUTH_IDENTITY_STORE_PATH=/tmp/tenet-enterprise-sso-identities.json \
+      TENET_AUTH_SESSION_SECRET=placeholder-enterprise-session-value \
+      "${COMPOSE[@]}" up -d api >/dev/null
+      ;;
+    okta_saml)
+      TENET_AWS_ENABLE_APPLY=false \
+      TENET_API_TRUST_AUTHENTICATED_HEADERS=true \
+      TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=false \
+      TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=false \
+      TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=false \
+      TENET_AUTH_PROVIDER=okta_saml \
+      TENET_OKTA_SAML_METADATA_URL=https://okta.example.com/app/smoke/sso/saml/metadata \
+      TENET_OKTA_SAML_ACS_URL=http://127.0.0.1/auth/callback/okta/saml \
+      TENET_AUTH_STATE_STORE_PATH=/tmp/tenet-enterprise-sso-state.json \
+      TENET_AUTH_IDENTITY_STORE_PATH=/tmp/tenet-enterprise-sso-identities.json \
+      TENET_AUTH_SESSION_SECRET=placeholder-enterprise-session-value \
+      "${COMPOSE[@]}" up -d api >/dev/null
+      ;;
+    *)
+      echo "smoke-docker: unsupported enterprise SSO provider $provider" >&2
+      exit 1
+      ;;
+  esac
+  wait_for_api_health
+}
 "${COMPOSE[@]}" config >/dev/null
 services=$("${COMPOSE[@]}" config --services)
 for service in api controller redis; do
@@ -2307,6 +2382,31 @@ assert empty_status_collection == [], empty_status_collection
 assert empty_audit_collection == {"entries": []}, empty_audit_collection
 PY
 
+restart_api_with_enterprise_sso google_oidc
+enterprise_sso_google_context=$(curl -fsS "$API_BASE_URL/v1/operator/context")
+enterprise_sso_google_context_path=$(write_payload enterprise-sso-google-context.json "$enterprise_sso_google_context")
+assert_enterprise_sso_diagnostic "$enterprise_sso_google_context_path" google_oidc /auth/login/google /auth/callback/google \
+  TENET_AUTH_PROVIDER \
+  TENET_GOOGLE_OIDC_CLIENT_ID \
+  TENET_GOOGLE_OIDC_CLIENT_SECRET \
+  TENET_GOOGLE_OIDC_ISSUER_URL \
+  TENET_GOOGLE_OIDC_REDIRECT_URL \
+  TENET_AUTH_STATE_STORE_PATH \
+  TENET_AUTH_IDENTITY_STORE_PATH \
+  TENET_AUTH_SESSION_SECRET
+
+restart_api_with_enterprise_sso okta_saml
+enterprise_sso_okta_saml_context=$(curl -fsS "$API_BASE_URL/v1/operator/context")
+enterprise_sso_okta_saml_context_path=$(write_payload enterprise-sso-okta-saml-context.json "$enterprise_sso_okta_saml_context")
+assert_enterprise_sso_diagnostic "$enterprise_sso_okta_saml_context_path" okta_saml /auth/login/okta /auth/callback/okta/saml \
+  TENET_AUTH_PROVIDER \
+  TENET_OKTA_SAML_METADATA_URL \
+  TENET_OKTA_SAML_ACS_URL \
+  TENET_AUTH_STATE_STORE_PATH \
+  TENET_AUTH_IDENTITY_STORE_PATH \
+  TENET_AUTH_SESSION_SECRET
+
+echo "smoke-docker: configured inactive enterprise SSO diagnostics ok"
 restart_api_with_apply_mode true
 
 queued_deployment_detail=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod")
