@@ -4128,9 +4128,10 @@
             return reason || '';
         }
       };
-      const createInspectionListSection = (title, items, renderItem, emptyText) => {
+      const createInspectionListSection = (title, items, renderItem, emptyText, beforeListNodes = []) => {
         const section = createElement('section', 'detail-section');
         section.append(createElement('h4', '', title));
+        beforeListNodes.filter(Boolean).forEach((node) => section.append(node));
         if (!items.length) {
           section.append(createElement('div', 'detail-state', emptyText));
           return section;
@@ -4139,6 +4140,21 @@
         items.forEach((item) => list.append(renderItem(item)));
         section.append(list);
         return section;
+      };
+      const ecsTaskScopeStatusText = (value) => {
+        const normalized = String(value || '').trim().replace(/_/g, ' ');
+        return normalized || 'unknown truncation status';
+      };
+      const createECSTaskScopeSummary = (scope) => {
+        if (!scope || typeof scope !== 'object') return null;
+        const effectiveLimit = scope.effectiveLimit;
+        const returnedTaskCount = scope.returnedTaskCount;
+        const truncationStatus = ecsTaskScopeStatusText(scope.truncationStatus);
+        return createElement(
+          'p',
+          'detail-section-copy',
+          `Task sample scope · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${truncationStatus}`,
+        );
       };
       const ecsTaskDisplayName = (task) => textOrDash(task?.taskId || task?.taskArn || 'ECS task');
       const ecsTaskResource = (task) => {
@@ -4265,6 +4281,7 @@
           service?.tasks || [],
           (task) => createECSTaskListItem(deploymentName, task, true),
           'No recent ECS tasks are reported for this service.',
+          [createECSTaskScopeSummary(service?.tasksScope)],
         );
         const eventsSection = createInspectionListSection(
           'Recent ECS service events',
