@@ -3131,7 +3131,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"`tenet-api` loads the GitHub provider plus JSON-backed state/identity stores",
 			"reports `GET /v1/operator/context.authRuntime.tenetManagedLogin.active=true`",
 			"When any setting is absent the runtime stays disabled",
-			"Okta/SAML provider selection, provider-token refresh/revocation, and long-lived token lifecycle management remain future work",
+			"Okta SAML/OIDC provider selection, provider-token refresh/revocation, and long-lived token lifecycle management remain future work",
 			"non-secret `requiredSettings` and `missingSettings` arrays",
 			"The legacy `/api/v1/auth/*` route family remains unregistered.",
 			"Reviewer verification for managed-login changes should include `go test ./internal/api ./cmd/tenet-api`",
