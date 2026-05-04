@@ -47,6 +47,7 @@ type Request struct {
 	ResourceType        string
 	ResourceName        string
 	ResourceDescription string
+	TaskSummaryLimit    int
 	BackingResourceType string
 	BackingResourceName string
 	ControlAccountID    string
@@ -198,6 +199,7 @@ type ECSServiceInspection struct {
 }
 
 type ECSTaskSummaryScope struct {
+	RequestedLimit    *int   `json:"requestedLimit,omitempty"`
 	EffectiveLimit    int    `json:"effectiveLimit"`
 	ReturnedTaskCount int    `json:"returnedTaskCount"`
 	TruncationStatus  string `json:"truncationStatus"`
@@ -516,11 +518,12 @@ func (c *ecsServiceClusterHintCache) Delete(key ecsServiceClusterHintKey) {
 }
 
 type ECSRequest struct {
-	DeploymentName  string
-	ResourceName    string
-	Region          string
-	TargetAccountID string
-	ObserverRoleARN string
+	DeploymentName   string
+	ResourceName     string
+	TaskSummaryLimit int
+	Region           string
+	TargetAccountID  string
+	ObserverRoleARN  string
 }
 
 type ECSTaskRequest struct {
@@ -606,11 +609,12 @@ func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
 			inspect = s.inspectECSServiceFromAWS
 		}
 		detail, err := inspect(ctx, ECSRequest{
-			DeploymentName:  req.DeploymentName,
-			ResourceName:    req.ResourceName,
-			Region:          req.Region,
-			TargetAccountID: req.TargetAccountID,
-			ObserverRoleARN: req.ObserverRoleARN,
+			DeploymentName:   req.DeploymentName,
+			ResourceName:     req.ResourceName,
+			TaskSummaryLimit: req.TaskSummaryLimit,
+			Region:           req.Region,
+			TargetAccountID:  req.TargetAccountID,
+			ObserverRoleARN:  req.ObserverRoleARN,
 		})
 		if err != nil {
 			if reason, ok := resourceaws.UnavailableReasonForError(err); ok {
@@ -994,7 +998,7 @@ func (s Service) inspectECSServiceFromAWS(ctx context.Context, req ECSRequest) (
 			taskDefinitionImage = ecsTaskDefinitionImage(out.TaskDefinition)
 		}
 	}
-	tasks, tasksScope, _ := ecsServiceTaskSummaries(ctx, clients.ECS, aws.ToString(clusterARN), aws.ToString(service.ServiceName))
+	tasks, tasksScope, _ := ecsServiceTaskSummaries(ctx, clients.ECS, aws.ToString(clusterARN), aws.ToString(service.ServiceName), req.TaskSummaryLimit)
 	return ecsInspectionFromService(*service, aws.ToString(clusterARN), taskDefinitionImage, tasks, tasksScope), nil
 }
 
@@ -1100,48 +1104,77 @@ func ecsTaskSummaryFromTask(task ecstypes.Task, clusterARN string, definitions m
 	return ECSTaskSummary{TaskARN: strings.TrimSpace(aws.ToString(task.TaskArn)), TaskID: taskID, ClusterARN: strings.TrimSpace(clusterARN), LastStatus: strings.TrimSpace(aws.ToString(task.LastStatus)), DesiredStatus: strings.TrimSpace(aws.ToString(task.DesiredStatus)), HealthStatus: string(task.HealthStatus), LaunchType: string(task.LaunchType), StartedAt: formatTime(aws.ToTime(task.StartedAt)), StoppedAt: formatTime(aws.ToTime(task.StoppedAt)), StoppedReason: strings.TrimSpace(aws.ToString(task.StoppedReason)), Containers: containers}
 }
 
-func ecsServiceTaskSummaries(ctx context.Context, client ecsServiceAPI, clusterARN, serviceName string) ([]ECSTaskSummary, *ECSTaskSummaryScope, error) {
+func ecsServiceTaskSummaries(ctx context.Context, client ecsServiceAPI, clusterARN, serviceName string, limit int) ([]ECSTaskSummary, *ECSTaskSummaryScope, error) {
 	clusterARN = strings.TrimSpace(clusterARN)
 	serviceName = strings.TrimSpace(serviceName)
 	if client == nil || clusterARN == "" || serviceName == "" {
 		return nil, nil, nil
 	}
 
-	taskARNs := make([]string, 0, maxECSServiceTaskSummaries*2)
+	effectiveLimit := maxECSServiceTaskSummaries
+	var requestedLimit *int
+	if limit > 0 {
+		effectiveLimit = limit
+		requested := limit
+		requestedLimit = &requested
+	}
+
+	taskARNs := make([]string, 0, effectiveLimit+1)
 	seen := make(map[string]struct{})
+	listPageLimit := int32(effectiveLimit + 1)
+	if listPageLimit < ecsServiceTaskListPageLimit {
+		listPageLimit = ecsServiceTaskListPageLimit
+	}
+	if listPageLimit > 100 {
+		listPageLimit = 100
+	}
 	for _, desiredStatus := range []ecstypes.DesiredStatus{ecstypes.DesiredStatusRunning, ecstypes.DesiredStatusStopped} {
-		out, err := client.ListTasks(ctx, &ecs.ListTasksInput{
+		pages := ecs.NewListTasksPaginator(client, &ecs.ListTasksInput{
 			Cluster:       aws.String(clusterARN),
 			ServiceName:   aws.String(serviceName),
 			DesiredStatus: desiredStatus,
-			MaxResults:    aws.Int32(ecsServiceTaskListPageLimit),
+			MaxResults:    aws.Int32(listPageLimit),
 		})
-		if err != nil {
-			return nil, nil, err
-		}
-		for _, taskARN := range out.TaskArns {
-			taskARN = strings.TrimSpace(taskARN)
-			if taskARN == "" {
-				continue
+		for pages.HasMorePages() {
+			out, err := pages.NextPage(ctx)
+			if err != nil {
+				return nil, nil, err
 			}
-			if _, ok := seen[taskARN]; ok {
-				continue
+			for _, taskARN := range out.TaskArns {
+				taskARN = strings.TrimSpace(taskARN)
+				if taskARN == "" {
+					continue
+				}
+				if _, ok := seen[taskARN]; ok {
+					continue
+				}
+				seen[taskARN] = struct{}{}
+				taskARNs = append(taskARNs, taskARN)
 			}
-			seen[taskARN] = struct{}{}
-			taskARNs = append(taskARNs, taskARN)
+			if len(taskARNs) > effectiveLimit {
+				break
+			}
 		}
 	}
 	if len(taskARNs) == 0 {
-		return nil, &ECSTaskSummaryScope{EffectiveLimit: maxECSServiceTaskSummaries, ReturnedTaskCount: 0, TruncationStatus: "not_truncated"}, nil
+		return nil, &ECSTaskSummaryScope{RequestedLimit: requestedLimit, EffectiveLimit: effectiveLimit, ReturnedTaskCount: 0, TruncationStatus: "not_truncated"}, nil
 	}
 
-	out, err := client.DescribeTasks(ctx, &ecs.DescribeTasksInput{Cluster: aws.String(clusterARN), Tasks: taskARNs})
-	if err != nil {
-		return nil, nil, err
+	tasks := make([]ecstypes.Task, 0, len(taskARNs))
+	for start := 0; start < len(taskARNs); start += 100 {
+		end := start + 100
+		if end > len(taskARNs) {
+			end = len(taskARNs)
+		}
+		out, err := client.DescribeTasks(ctx, &ecs.DescribeTasksInput{Cluster: aws.String(clusterARN), Tasks: taskARNs[start:end]})
+		if err != nil {
+			return nil, nil, err
+		}
+		tasks = append(tasks, out.Tasks...)
 	}
-	definitions := ecsTaskDefinitionsByARN(ctx, client, out.Tasks)
-	summaries := make([]ECSTaskSummary, 0, len(out.Tasks))
-	for _, task := range out.Tasks {
+	definitions := ecsTaskDefinitionsByARN(ctx, client, tasks)
+	summaries := make([]ECSTaskSummary, 0, len(tasks))
+	for _, task := range tasks {
 		summary := ecsTaskSummaryFromTask(task, clusterARN, definitions)
 		if summary.TaskARN == "" {
 			continue
@@ -1157,13 +1190,13 @@ func ecsServiceTaskSummaries(ctx context.Context, client ecsServiceAPI, clusterA
 		return left.After(right)
 	})
 	truncationStatus := "not_truncated"
-	if len(summaries) > maxECSServiceTaskSummaries {
+	if len(summaries) > effectiveLimit {
 		truncationStatus = "truncated"
-		summaries = summaries[:maxECSServiceTaskSummaries]
-	} else if len(summaries) == maxECSServiceTaskSummaries {
+		summaries = summaries[:effectiveLimit]
+	} else if len(summaries) == effectiveLimit {
 		truncationStatus = "unknown"
 	}
-	scope := &ECSTaskSummaryScope{EffectiveLimit: maxECSServiceTaskSummaries, ReturnedTaskCount: len(summaries), TruncationStatus: truncationStatus}
+	scope := &ECSTaskSummaryScope{RequestedLimit: requestedLimit, EffectiveLimit: effectiveLimit, ReturnedTaskCount: len(summaries), TruncationStatus: truncationStatus}
 	return summaries, scope, nil
 }
 
