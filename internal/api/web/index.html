@@ -4713,12 +4713,13 @@
         unavailable: 'deployment detail unavailable',
         failure: 'detail request failed',
       });
-      const driftWorkspaceRefreshStateText = (workspaceState) => {
+      const deploymentWorkspaceRefreshStateText = (mode, workspaceState) => {
+        const workspaceLabel = mode === 'plan' ? 'plan workspace' : 'drift workspace';
         if (workspaceState?.status === 'loading') {
-          return 'Refreshing drift workspace from GET /v1/overview/deployments/{deploymentName}…';
+          return `Refreshing ${workspaceLabel} from GET /v1/overview/deployments/{deploymentName}…`;
         }
         if (workspaceState?.status === 'error') {
-          return `Failed to refresh drift workspace: ${workspaceState.error?.message || 'unknown error'}`;
+          return `Failed to refresh ${workspaceLabel}: ${workspaceState.error?.message || 'unknown error'}`;
         }
         return '';
       };
@@ -6197,8 +6198,15 @@
         toolbarActions.append(
           backLink,
           createNavLink(buildPageURL('audit', { deployment: detail.name || currentPageState.deployment || '' }), 'Audit log', '_self'),
-          createElement('div', 'toolbar-active', `${workspaceTitle} · ${detail.name || currentPageState.deployment || 'deployment'}`),
         );
+        if (mode === 'plan') {
+          toolbarActions.append(createRefreshButton(
+            'Refresh plan workspace',
+            workspaceState?.status === 'loading' || !(detail.name || currentPageState.deployment),
+            () => workspaceState?.onRefresh?.().catch(() => {}),
+          ));
+        }
+        toolbarActions.append(createElement('div', 'toolbar-active', `${workspaceTitle} · ${detail.name || currentPageState.deployment || 'deployment'}`));
         toolbar.replaceChildren(toolbarActions);
 
         const workspaceSummary = createElement('div', 'detail-grid');
@@ -6246,6 +6254,12 @@
           runtimeSignals.append(createMetric(label, value));
         });
         runtimeSignalsSection.append(runtimeSignals);
+        if (mode === 'plan') {
+          const planRefreshState = deploymentWorkspaceRefreshStateText(mode, workspaceState);
+          if (planRefreshState) {
+            runtimeSignalsSection.append(createElement('div', workspaceState?.status === 'error' ? 'detail-state error' : 'detail-state', planRefreshState));
+          }
+        }
         const runtimeChanges = detail.runtimeSummary?.changes || [];
         if (!runtimeChanges.length) {
           runtimeSignalsSection.append(createElement('div', 'detail-state', 'No runtime change signals are currently reported.'));
@@ -6299,7 +6313,7 @@
           const driftSection = createElement('section', 'detail-section');
           driftSection.id = 'drift-field-level';
           driftSection.append(createDetailSectionHeader(emptyTitle, driftActions));
-          const driftRefreshState = driftWorkspaceRefreshStateText(workspaceState);
+          const driftRefreshState = deploymentWorkspaceRefreshStateText(mode, workspaceState);
           if (driftRefreshState) {
             driftSection.append(createElement('div', workspaceState?.status === 'error' ? 'detail-state error' : 'detail-state', driftRefreshState));
           }
@@ -7219,6 +7233,13 @@
                 return;
               }
               if (currentPageState.page === 'plan') {
+                let workspaceDetail = detail;
+                const workspaceState = {
+                  status: 'idle',
+                  detail: workspaceDetail,
+                  error: null,
+                  onRefresh: null,
+                };
                 let planState = {
                   status: 'idle',
                   request: 'idle',
@@ -7236,7 +7257,7 @@
                 const syncPlanPageURL = (planId, applyId = '') => {
                   currentPageState = { ...currentPageState, planId: planId || '', applyId: applyId || '' };
                   const query = buildPageURL('plan', {
-                    deployment: detail.name || currentPageState.deployment,
+                    deployment: workspaceDetail.name || currentPageState.deployment,
                     planId: planId || '',
                     applyId: applyId || '',
                   });
@@ -7255,8 +7276,8 @@
                   renderPlanWorkspace();
                   return fetchPlanPreview(planId)
                     .then((record) => {
-                      if (record.deploymentName && detail.name && record.deploymentName !== detail.name) {
-                        throw requestError('fetch-error', `plan preview ${record.id} belongs to ${record.deploymentName}, not ${detail.name}`);
+                      if (record.deploymentName && workspaceDetail.name && record.deploymentName !== workspaceDetail.name) {
+                        throw requestError('fetch-error', `plan preview ${record.id} belongs to ${record.deploymentName}, not ${workspaceDetail.name}`);
                       }
                       planState = {
                         ...planState,
@@ -7293,8 +7314,8 @@
                   renderPlanWorkspace();
                   return fetchApplyRequest(applyId)
                     .then((record) => {
-                      if (record.deploymentName && detail.name && record.deploymentName !== detail.name) {
-                        throw requestError('fetch-error', `apply request ${record.id} belongs to ${record.deploymentName}, not ${detail.name}`);
+                      if (record.deploymentName && workspaceDetail.name && record.deploymentName !== workspaceDetail.name) {
+                        throw requestError('fetch-error', `apply request ${record.id} belongs to ${record.deploymentName}, not ${workspaceDetail.name}`);
                       }
                       if (currentPageState.planId && record.planId && record.planId !== currentPageState.planId) {
                         throw requestError('fetch-error', `apply request ${record.id} belongs to plan ${record.planId}, not ${currentPageState.planId}`);
@@ -7323,7 +7344,7 @@
                     });
                 };
                 const renderPlanWorkspace = () => {
-                  renderDeploymentWorkspace('plan', detail, {
+                  renderDeploymentWorkspace('plan', workspaceDetail, {
                     ...planState,
                     onReloadPlan: (planId) => loadPlanPreviewRecord(planId),
                     onCreatePlan: async () => {
@@ -7344,8 +7365,8 @@
                         error: null,
                       };
                       renderPlanWorkspace();
-                      const ifMatch = detail.sourceFingerprint || await derivePlanSourceFingerprint(detail).catch(() => '') || fallbackIfMatch;
-                      createPlanPreview(detail.name || currentPageState.deployment, ifMatch)
+                      const ifMatch = workspaceDetail.sourceFingerprint || await derivePlanSourceFingerprint(workspaceDetail).catch(() => '') || fallbackIfMatch;
+                      createPlanPreview(workspaceDetail.name || currentPageState.deployment, ifMatch)
                         .then((record) => {
                           planState = {
                             ...planState,
@@ -7385,8 +7406,8 @@
                       renderPlanWorkspace();
                       createApplyRequest(planID)
                         .then((record) => {
-                          if (record.deploymentName && detail.name && record.deploymentName !== detail.name) {
-                            throw requestError('fetch-error', `apply request ${record.id} belongs to ${record.deploymentName}, not ${detail.name}`);
+                          if (record.deploymentName && workspaceDetail.name && record.deploymentName !== workspaceDetail.name) {
+                            throw requestError('fetch-error', `apply request ${record.id} belongs to ${record.deploymentName}, not ${workspaceDetail.name}`);
                           }
                           if (record.planId && planState.record?.id && record.planId !== planState.record.id) {
                             throw requestError('fetch-error', `apply request ${record.id} belongs to plan ${record.planId}, not ${planState.record.id}`);
@@ -7412,7 +7433,29 @@
                           renderPlanWorkspace();
                         });
                     },
-                  });
+                  }, workspaceState);
+                };
+                workspaceState.onRefresh = () => {
+                  const deploymentName = workspaceDetail?.name || currentPageState.deployment || '';
+                  if (!deploymentName || workspaceState.status === 'loading') return Promise.resolve(workspaceDetail);
+                  workspaceState.status = 'loading';
+                  workspaceState.error = null;
+                  renderPlanWorkspace();
+                  return fetchDeploymentDetail(deploymentName)
+                    .then((nextDetail) => {
+                      workspaceDetail = nextDetail;
+                      workspaceState.status = 'idle';
+                      workspaceState.detail = nextDetail;
+                      workspaceState.error = null;
+                      renderPlanWorkspace();
+                      return nextDetail;
+                    })
+                    .catch((error) => {
+                      workspaceState.status = 'error';
+                      workspaceState.error = error;
+                      renderPlanWorkspace();
+                      throw error;
+                    });
                 };
 
                 renderPlanWorkspace();
