@@ -21,16 +21,16 @@ Google Workspace/Gmail means identity login only. It does not grant Tenet Gmail 
 Tenet already supports two auth inputs that must remain compatible:
 
 1. **Trusted front-door headers** for deployments where an authenticating proxy or load balancer has already authenticated the operator and forwards trusted identity, role, and deployment/project/environment scope headers.
-2. **Tenet-managed login groundwork** for optional local browser login/session flows. That runtime uses GitHub OAuth or Google Workspace OIDC for identity lookup only, stores Tenet-managed session cookies, and reports non-secret lifecycle diagnostics through `GET /v1/operator/context.authRuntime.tenetManagedLogin`.
+2. **Tenet-managed login groundwork** for optional local browser login/session flows. That runtime uses GitHub OAuth, Google Workspace OIDC, or Okta OIDC for identity lookup only, stores Tenet-managed session cookies, and reports non-secret lifecycle diagnostics through `GET /v1/operator/context.authRuntime.tenetManagedLogin`.
 
 Enterprise SSO should extend the second family as provider-neutral managed-login inputs while preserving the first family as the default production integration model.
 
 ## Provider-neutral configuration shape
 
-Provider work is disabled by default. Google Workspace OIDC can now be activated as a Tenet-managed login provider with `TENET_AUTH_PROVIDER=google_oidc` (canonical diagnostic provider `google`) while Okta SAML/OIDC remain diagnostic-only and inactive. Configure the diagnostic/runtime with settings such as:
+Provider work is disabled by default. Google Workspace OIDC can be activated as a Tenet-managed login provider with `TENET_AUTH_PROVIDER=google_oidc` (canonical diagnostic provider `google`; the legacy `google` alias is accepted), and Okta OIDC can now be activated with `TENET_AUTH_PROVIDER=okta_oidc`. Okta SAML remains diagnostic-only and inactive. Configure the diagnostic/runtime with settings such as:
 
 ```text
-TENET_AUTH_PROVIDER=google_oidc        # google activates runtime; okta_saml / okta_oidc remain diagnostic-only
+TENET_AUTH_PROVIDER=okta_oidc          # google_oidc and okta_oidc activate runtime; okta_saml remains diagnostic-only
 TENET_GOOGLE_OIDC_CLIENT_ID=google-client-id
 TENET_GOOGLE_OIDC_CLIENT_SECRET=<secret from Google Workspace>
 TENET_GOOGLE_OIDC_ISSUER_URL=https://accounts.google.com
@@ -80,7 +80,7 @@ Issue #713 should activate Okta OIDC only through the same managed-session/OIDC 
 - Tests use local fake Okta OIDC authorization-code/profile responses for successful, malformed, expired-state, and provider-error paths; CI and smoke remain credential-free and must not contact live Okta.
 - Trusted front-door headers, repository-backed RBAC policy, role checks, deployment/project/environment grants, and immutable plan/apply authorization remain unchanged; Okta OIDC authenticates identity only and never grants Tenet access by itself.
 
-Until a PR satisfies that checklist, Okta OIDC should remain configured-but-inactive diagnostic evidence so operators can preflight settings without seeing a clickable sign-in path that cannot complete safely.
+This checklist is now the shipped Okta OIDC runtime contract: complete settings activate the same managed-session path as Google Workspace OIDC, while incomplete settings remain explicit inactive diagnostics so operators can preflight configuration without seeing a sign-in path that cannot complete safely.
 
 ## Identity normalization
 
@@ -132,7 +132,7 @@ Provider implementation and review should use local fakes:
 - router/session tests for callback, return URL, cookie, and diagnostic behavior
 - operator-context tests proving secrets are redacted and missing settings are explicit
 
-CI and local smoke should not require live Google Workspace, Gmail, or Okta credentials. The current smoke guard restarts the direct-process and Compose API with fake local Google OIDC and Okta SAML settings, then reads `GET /v1/operator/context` to prove Google reports an active `enterpriseSso` / `tenetManagedLogin` runtime with canonical provider `google` and same-origin `loginRoute`, `callbackRoute`, and `logoutRoute`, while Okta SAML stays configured-but-inactive with the stable inactive reason. The smoke guard also calls both `GET /auth/logout` and `POST /auth/logout` against the configured Google path, asserting a safe in-app redirect, Tenet `tenet_session` cookie expiry, and no provider-token/front-door-session revocation claim in the response body. The payloads stay non-secret, name the provider, preserve route placeholders, report required/missing setting lists, and mark shared state/identity/session-secret stores configured without contacting an external IdP. Focused unit/router tests cover Google fake-provider code exchange/profile lookup, the remaining Okta OIDC diagnostic shape, missing-setting combinations, raw JSON field-name contracts, and the embedded guarded-read handoff preference when Google reports both `enterpriseSso.active=true` and `tenetManagedLogin.active=true`: operator copy must use `Sign in with Google Workspace SSO`, not a GitHub-style managed-login label. The PR Docker-smoke scope is intentionally path-filtered rather than provider-credential-driven: changes under provider/session/auth runtime packages such as `internal/authprovider/**`, reserved Okta SAML/enterprise runtime paths `internal/authsaml/**` and `internal/authsso/**`, `internal/authidentity/**`, `internal/authstate/**`, and request-context/API wiring trigger `make smoke-docker`, while unrelated docs-only edits stay on the cheaper fast lane.
+CI and local smoke should not require live Google Workspace, Gmail, or Okta credentials. The current smoke guard restarts the direct-process and Compose API with fake local Google OIDC, Okta OIDC, and Okta SAML settings, then reads `GET /v1/operator/context` to prove Google and Okta OIDC report active `enterpriseSso` / `tenetManagedLogin` runtimes with same-origin `loginRoute`, `callbackRoute`, and `logoutRoute`, while Okta SAML stays configured-but-inactive with the stable inactive reason. The smoke guard also calls both `GET /auth/logout` and `POST /auth/logout` against the configured Google path, asserting a safe in-app redirect, Tenet `tenet_session` cookie expiry, and no provider-token/front-door-session revocation claim in the response body. The payloads stay non-secret, name the provider, preserve route placeholders, report required/missing setting lists, and mark shared state/identity/session-secret stores configured without contacting an external IdP. Focused unit/router tests cover Google and Okta OIDC fake-provider code exchange/profile lookup, missing-setting combinations, raw JSON field-name contracts, and the embedded guarded-read handoff preference when enterprise SSO reports both `enterpriseSso.active=true` and `tenetManagedLogin.active=true`: operator copy must use `Sign in with Google Workspace SSO`, not a GitHub-style managed-login label. The PR Docker-smoke scope is intentionally path-filtered rather than provider-credential-driven: changes under provider/session/auth runtime packages such as `internal/authprovider/**`, reserved Okta SAML/enterprise runtime paths `internal/authsaml/**` and `internal/authsso/**`, `internal/authidentity/**`, `internal/authstate/**`, and request-context/API wiring trigger `make smoke-docker`, while unrelated docs-only edits stay on the cheaper fast lane.
 
 ## Explicit non-goals for issue #662
 

@@ -685,6 +685,8 @@ func managedLoginRoutesForProvider(provider string) (string, string) {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
 	case authprovider.GoogleProviderName, authprovider.GoogleOIDCProviderAlias:
 		return "/auth/login/google", "/auth/callback/google"
+	case authprovider.OktaOIDCProviderName:
+		return "/auth/login/okta", "/auth/callback/okta/oidc"
 	case authprovider.GitHubProviderName, "":
 		return "/auth/login/github", "/auth/callback/github"
 	default:
@@ -1677,6 +1679,12 @@ func NewRouter(options Options) http.Handler {
 	})
 	mux.HandleFunc("/auth/callback/google", func(w http.ResponseWriter, r *http.Request) {
 		handleGoogleCallback(w, r, authSession)
+	})
+	mux.HandleFunc("/auth/login/okta", func(w http.ResponseWriter, r *http.Request) {
+		handleOktaOIDCLogin(w, r, authSession)
+	})
+	mux.HandleFunc("/auth/callback/okta/oidc", func(w http.ResponseWriter, r *http.Request) {
+		handleOktaOIDCCallback(w, r, authSession)
 	})
 	if authSession.active() {
 		mux.HandleFunc("/auth/logout", func(w http.ResponseWriter, r *http.Request) {

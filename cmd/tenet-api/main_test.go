@@ -368,6 +368,48 @@ func TestNewAPIOptionsReportsEnterpriseSSODiagnosticForGoogleOIDC(t *testing.T) 
 	}
 }
 
+func TestNewAPIOptionsReportsEnterpriseSSODiagnosticForOktaOIDC(t *testing.T) {
+	t.Setenv("TENET_AUTH_PROVIDER", "okta_oidc")
+	t.Setenv("TENET_OKTA_OIDC_ISSUER_URL", "https://dev-12345.okta.com/oauth2/default")
+	t.Setenv("TENET_OKTA_OIDC_CLIENT_ID", "okta-client-id")
+	t.Setenv("TENET_OKTA_OIDC_CLIENT_SECRET", "okta-client-secret")
+	t.Setenv("TENET_OKTA_OIDC_REDIRECT_URL", "https://tenet.example.com/auth/callback/okta/oidc")
+	t.Setenv("TENET_AUTH_STATE_STORE_PATH", filepath.Join(t.TempDir(), "okta-state.json"))
+	t.Setenv("TENET_AUTH_IDENTITY_STORE_PATH", filepath.Join(t.TempDir(), "okta-identities.json"))
+	t.Setenv("TENET_AUTH_SESSION_SECRET", "session-secret")
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, writeRepositoryFixture(t), nil)
+	managedLogin := options.AuthRuntime.TenetManagedLogin
+	if !managedLogin.Configured || !managedLogin.Active || managedLogin.Provider != "okta_oidc" {
+		t.Fatalf("expected Okta OIDC to activate managed-login runtime, got %+v", managedLogin)
+	}
+	if managedLogin.LoginRoute != "/auth/login/okta" || managedLogin.CallbackRoute != "/auth/callback/okta/oidc" {
+		t.Fatalf("unexpected Okta OIDC managed-login routes: %+v", managedLogin)
+	}
+	enterpriseSSO := options.AuthRuntime.EnterpriseSSO
+	if !enterpriseSSO.Configured || !enterpriseSSO.Active || enterpriseSSO.Provider != "okta_oidc" {
+		t.Fatalf("expected configured and active Okta OIDC enterprise SSO diagnostic, got %+v", enterpriseSSO)
+	}
+	if enterpriseSSO.LoginRoute != "/auth/login/okta" || enterpriseSSO.CallbackRoute != "/auth/callback/okta/oidc" || enterpriseSSO.LogoutRoute != "/auth/logout" {
+		t.Fatalf("unexpected Okta OIDC diagnostic routes: %+v", enterpriseSSO)
+	}
+	if !enterpriseSSO.StateStoreConfigured || !enterpriseSSO.IdentityStoreConfigured || !enterpriseSSO.SessionSecretConfigured {
+		t.Fatalf("expected shared managed-session stores to be reported configured: %+v", enterpriseSSO)
+	}
+	if !reflect.DeepEqual(enterpriseSSO.RequiredSettings, []string{
+		"TENET_AUTH_PROVIDER",
+		"TENET_OKTA_OIDC_ISSUER_URL",
+		"TENET_OKTA_OIDC_CLIENT_ID",
+		"TENET_OKTA_OIDC_CLIENT_SECRET",
+		"TENET_OKTA_OIDC_REDIRECT_URL",
+		"TENET_AUTH_STATE_STORE_PATH",
+		"TENET_AUTH_IDENTITY_STORE_PATH",
+		"TENET_AUTH_SESSION_SECRET",
+	}) || len(enterpriseSSO.MissingSettings) != 0 {
+		t.Fatalf("unexpected Okta OIDC required/missing settings: required=%+v missing=%+v", enterpriseSSO.RequiredSettings, enterpriseSSO.MissingSettings)
+	}
+}
+
 func TestNewAPIOptionsReportsEnterpriseSSOMissingSettingsForOktaSAML(t *testing.T) {
 	t.Setenv("TENET_AUTH_PROVIDER", "okta_saml")
 	t.Setenv("TENET_OKTA_SAML_METADATA_URL", "https://okta.example.com/app/metadata")

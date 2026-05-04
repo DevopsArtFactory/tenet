@@ -82,6 +82,11 @@ func managedLoginTestOptions(t *testing.T, provider authprovider.Provider) (Opti
 		loginRoute = "/auth/login/google"
 		callbackRoute = "/auth/callback/google"
 		requiredSettings = []string{"TENET_AUTH_PROVIDER", "TENET_GOOGLE_OIDC_CLIENT_ID", "TENET_GOOGLE_OIDC_CLIENT_SECRET", "TENET_GOOGLE_OIDC_ISSUER_URL", "TENET_GOOGLE_OIDC_REDIRECT_URL", "TENET_AUTH_STATE_STORE_PATH", "TENET_AUTH_IDENTITY_STORE_PATH", "TENET_AUTH_SESSION_SECRET"}
+	} else if provider != nil && provider.Name() == authprovider.OktaOIDCProviderName {
+		providerName = authprovider.OktaOIDCProviderName
+		loginRoute = "/auth/login/okta"
+		callbackRoute = "/auth/callback/okta/oidc"
+		requiredSettings = []string{"TENET_AUTH_PROVIDER", "TENET_OKTA_OIDC_ISSUER_URL", "TENET_OKTA_OIDC_CLIENT_ID", "TENET_OKTA_OIDC_CLIENT_SECRET", "TENET_OKTA_OIDC_REDIRECT_URL", "TENET_AUTH_STATE_STORE_PATH", "TENET_AUTH_IDENTITY_STORE_PATH", "TENET_AUTH_SESSION_SECRET"}
 	}
 	return Options{
 		AuthRuntime: AuthRuntimeDiagnostic{TenetManagedLogin: TenetManagedLoginDiagnostic{
@@ -306,6 +311,72 @@ func TestManagedGoogleOIDCLoginCallbackCreatesSessionAndAuthenticatedContext(t *
 	}
 	if strings.Contains(contextResp.Body.String(), "token-for-google-code-123") || strings.Contains(contextResp.Body.String(), "accessToken") {
 		t.Fatalf("operator context leaked Google provider access token material: %s", contextResp.Body.String())
+	}
+}
+
+func TestManagedOktaOIDCLoginCallbackCreatesSessionAndAuthenticatedContext(t *testing.T) {
+	provider := &fakeAuthProvider{name: authprovider.OktaOIDCProviderName, authBaseURL: "https://okta.example.test/oauth2/default/v1/authorize"}
+	options, identityPath := managedLoginTestOptions(t, provider)
+	router := NewRouter(options)
+
+	loginReq := httptest.NewRequest(http.MethodGet, "/auth/login/okta?returnUrl=/v1/operator/context%3Ffrom%3Dokta", nil)
+	loginResp := httptest.NewRecorder()
+	router.ServeHTTP(loginResp, loginReq)
+	if loginResp.Code != http.StatusFound {
+		t.Fatalf("expected Okta OIDC login 302, got %d: %s", loginResp.Code, loginResp.Body.String())
+	}
+	parsedLocation, err := url.Parse(loginResp.Header().Get("Location"))
+	if err != nil {
+		t.Fatalf("parse Okta OIDC login redirect: %v", err)
+	}
+	state := parsedLocation.Query().Get("state")
+	if state == "" {
+		t.Fatalf("expected Okta OIDC login redirect to carry callback state, got %q", loginResp.Header().Get("Location"))
+	}
+	for _, want := range []string{"openid", "email", "profile"} {
+		if !strings.Contains(parsedLocation.Query().Get("scope"), want) {
+			t.Fatalf("expected Okta OIDC scope %q in redirect scope %q", want, parsedLocation.Query().Get("scope"))
+		}
+	}
+
+	callbackReq := httptest.NewRequest(http.MethodGet, "/auth/callback/okta/oidc?state="+url.QueryEscape(state)+"&code=okta-code-123", nil)
+	callbackResp := httptest.NewRecorder()
+	router.ServeHTTP(callbackResp, callbackReq)
+	if callbackResp.Code != http.StatusFound {
+		t.Fatalf("expected Okta OIDC callback 302, got %d: %s", callbackResp.Code, callbackResp.Body.String())
+	}
+	if got := callbackResp.Header().Get("Location"); got != "/v1/operator/context?from=okta" {
+		t.Fatalf("expected safe in-app Okta redirect, got %q", got)
+	}
+	if len(provider.exchangedCodes) != 1 || provider.exchangedCodes[0] != "okta-code-123" {
+		t.Fatalf("expected provider exchange for Okta callback code, got %#v", provider.exchangedCodes)
+	}
+	identities, err := authidentity.Load(identityPath)
+	if err != nil {
+		t.Fatalf("load identities: %v", err)
+	}
+	if len(identities) != 1 || identities[0].Provider != "okta_oidc" || identities[0].Subject != "12345" {
+		t.Fatalf("expected persisted Okta OIDC identity, got %#v", identities)
+	}
+
+	contextReq := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+	contextReq.AddCookie(callbackResp.Result().Cookies()[0])
+	contextResp := httptest.NewRecorder()
+	router.ServeHTTP(contextResp, contextReq)
+	if contextResp.Code != http.StatusOK {
+		t.Fatalf("expected operator context 200 after Okta OIDC callback, got %d: %s", contextResp.Code, contextResp.Body.String())
+	}
+	var body struct {
+		Identity requestactor.AuthenticatedIdentity `json:"identity"`
+	}
+	if err := json.Unmarshal(contextResp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode operator context: %v", err)
+	}
+	if !body.Identity.Authenticated || body.Identity.ID != "okta_oidc:12345" || body.Identity.Email != "octo@example.com" {
+		t.Fatalf("expected Okta session-derived authenticated identity, got %#v", body.Identity)
+	}
+	if strings.Contains(contextResp.Body.String(), "token-for-okta-code-123") || strings.Contains(contextResp.Body.String(), "accessToken") {
+		t.Fatalf("operator context leaked Okta provider access token material: %s", contextResp.Body.String())
 	}
 }
 

@@ -157,6 +157,14 @@ func handleGoogleCallback(w http.ResponseWriter, r *http.Request, cfg authSessio
 	handleProviderCallback(w, r, cfg, authprovider.GoogleProviderName, "Google Workspace OIDC")
 }
 
+func handleOktaOIDCLogin(w http.ResponseWriter, r *http.Request, cfg authSessionConfig) {
+	handleProviderLogin(w, r, cfg, authprovider.OktaOIDCProviderName, "Okta OIDC", []string{"openid", "email", "profile"})
+}
+
+func handleOktaOIDCCallback(w http.ResponseWriter, r *http.Request, cfg authSessionConfig) {
+	handleProviderCallback(w, r, cfg, authprovider.OktaOIDCProviderName, "Okta OIDC")
+}
+
 func handleProviderLogin(w http.ResponseWriter, r *http.Request, cfg authSessionConfig, providerName, providerLabel string, scopes []string) {
 	if !requireMethod(w, r, http.MethodGet) {
 		return

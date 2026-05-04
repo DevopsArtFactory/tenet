@@ -378,6 +378,22 @@ restart_api_with_enterprise_sso() {
       TENET_AUTH_SESSION_SECRET=placeholder-enterprise-session-value \
       "${COMPOSE[@]}" up -d api >/dev/null
       ;;
+    okta_oidc)
+      TENET_AWS_ENABLE_APPLY=false \
+      TENET_API_TRUST_AUTHENTICATED_HEADERS=true \
+      TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true \
+      TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true \
+      TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true \
+      TENET_AUTH_PROVIDER=okta_oidc \
+      TENET_OKTA_OIDC_ISSUER_URL=https://okta.example.com/oauth2/default \
+      TENET_OKTA_OIDC_CLIENT_ID=okta-smoke-client \
+      TENET_OKTA_OIDC_CLIENT_SECRET=placeholder-secret-value \
+      TENET_OKTA_OIDC_REDIRECT_URL=http://127.0.0.1/auth/callback/okta/oidc \
+      TENET_AUTH_STATE_STORE_PATH=/tmp/tenet/enterprise-sso-state.json \
+      TENET_AUTH_IDENTITY_STORE_PATH=/tmp/tenet/enterprise-sso-identities.json \
+      TENET_AUTH_SESSION_SECRET=placeholder-session-secret-value \
+      "${COMPOSE[@]}" up -d api >/dev/null
+      ;;
     okta_saml)
       TENET_AWS_ENABLE_APPLY=false \
       TENET_API_TRUST_AUTHENTICATED_HEADERS=true \
@@ -2456,6 +2472,19 @@ assert_enterprise_sso_diagnostic "$enterprise_sso_google_context_path" google /a
   TENET_AUTH_SESSION_SECRET
 assert_enterprise_sso_logout_boundary GET "/?page=operator-context"
 assert_enterprise_sso_logout_boundary POST "/?page=operator-context&action=logout"
+
+restart_api_with_enterprise_sso okta_oidc
+enterprise_sso_okta_oidc_context=$(curl -fsS "$API_BASE_URL/v1/operator/context")
+enterprise_sso_okta_oidc_context_path=$(write_payload enterprise-sso-okta-oidc-context.json "$enterprise_sso_okta_oidc_context")
+assert_enterprise_sso_diagnostic "$enterprise_sso_okta_oidc_context_path" okta_oidc /auth/login/okta /auth/callback/okta/oidc true \
+  TENET_AUTH_PROVIDER \
+  TENET_OKTA_OIDC_ISSUER_URL \
+  TENET_OKTA_OIDC_CLIENT_ID \
+  TENET_OKTA_OIDC_CLIENT_SECRET \
+  TENET_OKTA_OIDC_REDIRECT_URL \
+  TENET_AUTH_STATE_STORE_PATH \
+  TENET_AUTH_IDENTITY_STORE_PATH \
+  TENET_AUTH_SESSION_SECRET
 
 restart_api_with_enterprise_sso okta_saml
 enterprise_sso_okta_saml_context=$(curl -fsS "$API_BASE_URL/v1/operator/context")

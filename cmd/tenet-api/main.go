@@ -583,6 +583,13 @@ func configureManagedLoginRuntime(options *api.Options) {
 			TokenURL:     strings.TrimSpace(os.Getenv("TENET_GOOGLE_OIDC_TOKEN_URL")),
 			UserInfoURL:  strings.TrimSpace(os.Getenv("TENET_GOOGLE_OIDC_USERINFO_URL")),
 		})
+	case authprovider.OktaOIDCProviderName:
+		provider, err = authprovider.NewOktaOIDCProvider(authprovider.OktaOIDCConfig{
+			ClientID:     strings.TrimSpace(os.Getenv("TENET_OKTA_OIDC_CLIENT_ID")),
+			ClientSecret: strings.TrimSpace(os.Getenv("TENET_OKTA_OIDC_CLIENT_SECRET")),
+			RedirectURL:  strings.TrimSpace(os.Getenv("TENET_OKTA_OIDC_REDIRECT_URL")),
+			IssuerURL:    strings.TrimSpace(os.Getenv("TENET_OKTA_OIDC_ISSUER_URL")),
+		})
 	}
 	if err != nil {
 		options.AuthRuntime.TenetManagedLogin.Active = false
@@ -602,8 +609,8 @@ func configureManagedLoginRuntime(options *api.Options) {
 	options.AuthRuntime.TenetManagedLogin.CallbackRoute = callbackRoute
 	options.AuthRuntime.TenetManagedLogin.SessionCookieName = options.AuthSessionCookieName
 	options.AuthRuntime.TenetManagedLogin.UnavailableReason = ""
-	if providerName == authprovider.GoogleProviderName {
-		options.AuthRuntime.EnterpriseSSO.Provider = authprovider.GoogleProviderName
+	if providerName == authprovider.GoogleProviderName || providerName == authprovider.OktaOIDCProviderName {
+		options.AuthRuntime.EnterpriseSSO.Provider = providerName
 		options.AuthRuntime.EnterpriseSSO.Configured = true
 		options.AuthRuntime.EnterpriseSSO.Active = true
 		options.AuthRuntime.EnterpriseSSO.LoginRoute = loginRoute
@@ -624,7 +631,7 @@ func canonicalAuthProvider(provider string) string {
 
 func managedLoginProviderSupported(provider string) bool {
 	switch canonicalAuthProvider(provider) {
-	case authprovider.GitHubProviderName, authprovider.GoogleProviderName:
+	case authprovider.GitHubProviderName, authprovider.GoogleProviderName, authprovider.OktaOIDCProviderName:
 		return true
 	default:
 		return false
@@ -636,6 +643,9 @@ func requiredManagedLoginSettings(provider string) []string {
 	case authprovider.GoogleProviderName:
 		settings, _, _ := enterpriseSSORequiredSettingsAndRoutes(authprovider.GoogleProviderName)
 		return settings
+	case authprovider.OktaOIDCProviderName:
+		settings, _, _ := enterpriseSSORequiredSettingsAndRoutes(authprovider.OktaOIDCProviderName)
+		return settings
 	default:
 		return api.RequiredTenetManagedLoginSettings()
 	}
@@ -645,6 +655,8 @@ func managedLoginRoutesForProvider(provider string) (string, string) {
 	switch canonicalAuthProvider(provider) {
 	case authprovider.GoogleProviderName:
 		return "/auth/login/google", "/auth/callback/google"
+	case authprovider.OktaOIDCProviderName:
+		return "/auth/login/okta", "/auth/callback/okta/oidc"
 	default:
 		return "/auth/login/github", "/auth/callback/github"
 	}
