@@ -3491,17 +3491,19 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		"\"`Failed to load recent logs: ${error.message}`\",",
 		"\"'Recent logs'\",",
 		"\"resourceLogsReadRoute(deploymentName, resource, target?.limit ?? selectedLimit)\",",
-		"\"const createResourceInspectionActions = (section, detail, resource, isLoading = false) => {\",",
+		"\"const createResourceInspectionActions = (section, detail, resource, isLoading = false) => [\",",
+		"\"createResourceInspectionLimitControl(section, detail, resource, isLoading)\",",
+		"\"'Task sample limit'\",",
 		"\"'Refresh live inspection'\",",
-		"\"const buildResourceInspectionRoute = (deploymentName, resource) => {\",",
-		"\"const resourceInspectionReadRoute = (deploymentName, resource) => `GET ${buildResourceInspectionRoute(deploymentName, resource)}`;\",",
+		"\"const buildResourceInspectionRoute = (deploymentName, resource, limit = 0) => {\",",
+		"\"const resourceInspectionReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceInspectionRoute(deploymentName, resource, limit)}`;\",",
 		"\"const createECSTaskScopeSummary = (scope) => {\",",
 		"\"Task sample scope · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${truncationStatus}\",",
 		"\"[createECSTaskScopeSummary(service?.tasksScope)]\",",
 		"\"renderResourceInspectionState(section, 'Loading live inspection…', '', [], [], loadingActions);\",",
 		"\"`Failed to load live inspection: ${error.message}`\",",
 		"\"'Live inspection'\",",
-		"\"resourceInspectionReadRoute(deploymentName, resource)\",",
+		"\"resourceInspectionReadRoute(deploymentName, resource, targetLimit)\",",
 	} {
 		if !strings.Contains(dockerSmoke, fragment) {
 			t.Fatalf("expected smoke-docker.sh to lock resource refresh fragment %q", fragment)
