@@ -40,6 +40,8 @@ const (
 	DesiredStateSourceMatchStatusMatched            = "matched"
 )
 
+const deletedRefAfterSHA = "0000000000000000000000000000000000000000"
+
 type Request struct {
 	Secret             string
 	Header             http.Header
@@ -57,6 +59,7 @@ type Response struct {
 	Ref                     string                   `json:"ref,omitempty"`
 	Before                  string                   `json:"before,omitempty"`
 	After                   string                   `json:"after,omitempty"`
+	Deleted                 bool                     `json:"deleted,omitempty"`
 	HeadCommit              *Commit                  `json:"headCommit,omitempty"`
 	ChangedFiles            *ChangedFiles            `json:"changedFiles,omitempty"`
 	DesiredStateSourceMatch *DesiredStateSourceMatch `json:"desiredStateSourceMatch,omitempty"`
@@ -173,6 +176,7 @@ func Decode(ctx context.Context, req Request) (Response, error) {
 	}
 
 	changedFiles := collectChangedFiles(payload.Commits)
+	deleted := isDeletedRefPush(payload.After)
 	response := Response{
 		DeliveryID: deliveryID,
 		Event:      event,
@@ -183,6 +187,7 @@ func Decode(ctx context.Context, req Request) (Response, error) {
 		Ref:        payload.Ref,
 		Before:     payload.Before,
 		After:      payload.After,
+		Deleted:    deleted,
 		ChangedFiles: &ChangedFiles{
 			Added:    changedFiles.Added,
 			Modified: changedFiles.Modified,
@@ -190,6 +195,10 @@ func Decode(ctx context.Context, req Request) (Response, error) {
 			All:      changedFiles.All,
 		},
 		DesiredStateSourceMatch: desiredStateSourceMatch(payload, req.DesiredStateSource, changedFiles.All),
+	}
+	if deleted {
+		response.Status = StatusIgnored
+		response.Reason = fmt.Sprintf("github push deleted ref %q; controller refresh handoff skipped because there is no new desired-state revision to load", payload.Ref)
 	}
 	if payload.HeadCommit.ID != "" || payload.HeadCommit.Message != "" || payload.HeadCommit.Timestamp != "" {
 		response.HeadCommit = &Commit{
@@ -237,6 +246,10 @@ func (p pushPayload) validate() error {
 	default:
 		return nil
 	}
+}
+
+func isDeletedRefPush(after string) bool {
+	return strings.EqualFold(strings.TrimSpace(after), deletedRefAfterSHA)
 }
 
 func verifySignature(secret string, raw string, body []byte) error {

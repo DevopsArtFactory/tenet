@@ -11,7 +11,7 @@ import (
 )
 
 func TestDecodeAcceptedPushEvent(t *testing.T) {
-	const secret = "top-secret"
+	secret := testWebhookSecret(t)
 	body := `{
 		"ref":"refs/heads/main",
 		"before":"1111111111111111111111111111111111111111",
@@ -75,8 +75,49 @@ func TestDecodeAcceptedPushEvent(t *testing.T) {
 	}
 }
 
+func TestDecodeIgnoredDeletedRefPushEvent(t *testing.T) {
+	secret := testWebhookSecret(t)
+	body := `{
+		"ref":"refs/heads/main",
+		"before":"1111111111111111111111111111111111111111",
+		"after":"0000000000000000000000000000000000000000",
+		"repository":{"full_name":"acme/platform-config","default_branch":"main"},
+		"commits":[]
+	}`
+
+	response, err := Decode(context.Background(), Request{
+		Secret: secret,
+		Header: signedHeader(secret, "push", body),
+		Body:   strings.NewReader(body),
+		DesiredStateSource: DesiredStateSourceConfig{
+			Kind:       DesiredStateSourceKindGitHub,
+			Repository: "acme/platform-config",
+			Ref:        "main",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Decode returned error: %v", err)
+	}
+
+	if response.Status != StatusIgnored || response.Processed || !response.Deleted {
+		t.Fatalf("expected ignored deleted-ref response, got %+v", response)
+	}
+	if response.Reason != `github push deleted ref "refs/heads/main"; controller refresh handoff skipped because there is no new desired-state revision to load` {
+		t.Fatalf("unexpected deleted-ref reason: %q", response.Reason)
+	}
+	if response.Repository != "acme/platform-config" || response.Ref != "refs/heads/main" || response.After != deletedRefAfterSHA {
+		t.Fatalf("unexpected deleted-ref summary: %+v", response)
+	}
+	if response.ChangedFiles == nil || len(response.ChangedFiles.All) != 0 {
+		t.Fatalf("expected explicit empty changed-files summary, got %+v", response.ChangedFiles)
+	}
+	if response.DesiredStateSourceMatch == nil || !response.DesiredStateSourceMatch.Matches || response.DesiredStateSourceMatch.MatchStatus != DesiredStateSourceMatchStatusMatched {
+		t.Fatalf("expected desired-state source match to remain visible, got %+v", response.DesiredStateSourceMatch)
+	}
+}
+
 func TestDecodeIgnoredNonPushEvent(t *testing.T) {
-	const secret = "top-secret"
+	secret := testWebhookSecret(t)
 	body := `{"zen":"keep it logically awesome"}`
 
 	response, err := Decode(context.Background(), Request{
@@ -103,7 +144,7 @@ func TestDecodeIgnoredNonPushEvent(t *testing.T) {
 }
 
 func TestDecodeDesiredStateSourceMatch(t *testing.T) {
-	const secret = "top-secret"
+	secret := testWebhookSecret(t)
 
 	tests := []struct {
 		name       string
@@ -371,7 +412,7 @@ func TestDecodeDesiredStateSourceMatch(t *testing.T) {
 }
 
 func TestDecodeValidationFailures(t *testing.T) {
-	const secret = "top-secret"
+	secret := testWebhookSecret(t)
 	validBody := `{"repository":{"full_name":"acme/platform-config"},"ref":"refs/heads/main","before":"111","after":"222","commits":[]}`
 
 	tests := []struct {
@@ -478,9 +519,10 @@ func TestDecodeReturnsContextError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
+	secret := testWebhookSecret(t)
 	_, err := Decode(ctx, Request{
-		Secret: "top-secret",
-		Header: signedHeader("top-secret", "push", `{}`),
+		Secret: secret,
+		Header: signedHeader(secret, "push", `{}`),
 		Body:   strings.NewReader(`{}`),
 	})
 	if err == nil {
@@ -489,6 +531,12 @@ func TestDecodeReturnsContextError(t *testing.T) {
 	if err != context.Canceled {
 		t.Fatalf("expected context.Canceled, got %v", err)
 	}
+}
+
+func testWebhookSecret(t *testing.T) string {
+	t.Helper()
+	sum := sha256.Sum256([]byte(t.Name()))
+	return hex.EncodeToString(sum[:])
 }
 
 func signedHeader(secret, event, body string) http.Header {

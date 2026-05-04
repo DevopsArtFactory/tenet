@@ -2182,6 +2182,61 @@ func TestRouterGitHubWebhookPublishesControllerRefreshForMatchedPush(t *testing.
 	}
 }
 
+func TestRouterGitHubWebhookIgnoresDeletedRefPushWithoutPublishingRefresh(t *testing.T) {
+	const secret = "top-secret"
+	body := `{
+		"ref":"refs/heads/main",
+		"before":"1111111111111111111111111111111111111111",
+		"after":"0000000000000000000000000000000000000000",
+		"repository":{"full_name":"acme/platform-config","default_branch":"main"},
+		"commits":[]
+	}`
+
+	publisher := &recordingControllerRefreshPublisher{
+		receipt: controllerrefresh.Receipt{
+			Backend:   controllerrefresh.BackendRedis,
+			Channel:   "tenet:test:controller-refresh",
+			RequestID: "github-webhook:delivery-1:0000000000000000000000000000000000000000",
+		},
+	}
+	router := NewRouter(Options{
+		BuildInfo:           buildinfo.Info{Version: "dev", Commit: "abc123"},
+		GitHubWebhookSecret: secret,
+		GitHubWebhookDesiredStateSource: githubwebhook.DesiredStateSourceConfig{
+			Kind:       githubwebhook.DesiredStateSourceKindGitHub,
+			Repository: "acme/platform-config",
+			Ref:        "main",
+		},
+		GitHubWebhookRefreshPublisher: publisher,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/github/webhook", strings.NewReader(body))
+	req.Header = signedGitHubWebhookHeader(secret, "push", body)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200 ignored response, got %d body=%q", resp.Code, resp.Body.String())
+	}
+
+	var got githubwebhook.Response
+	if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if got.Status != githubwebhook.StatusIgnored || got.Processed || !got.Deleted {
+		t.Fatalf("unexpected deleted-ref payload: %+v", got)
+	}
+	if got.ControllerRefresh != nil {
+		t.Fatalf("expected no controller refresh handoff summary, got %+v", got.ControllerRefresh)
+	}
+	if got.DesiredStateSourceMatch == nil || !got.DesiredStateSourceMatch.Matches {
+		t.Fatalf("expected matched desired-state source summary to remain visible, got %+v", got.DesiredStateSourceMatch)
+	}
+	if len(publisher.requests) != 0 {
+		t.Fatalf("expected no controller refresh publish for deleted ref, got %+v", publisher.requests)
+	}
+}
+
 func TestRouterGitHubWebhookIgnoresNonPushEvent(t *testing.T) {
 	const secret = "top-secret"
 	body := `{"zen":"keep it logically awesome"}`
