@@ -331,6 +331,85 @@ func TestServiceRecent(t *testing.T) {
 		}
 	})
 
+	t.Run("candidate asg instance selector returns selected console and echoes selector", func(t *testing.T) {
+		var gotLookup ASGRequest
+		service := NewService(Options{
+			MaxEntries: 4,
+			ListASGInstanceConsoles: func(ctx context.Context, req ASGRequest) ([]InstanceConsole, error) {
+				gotLookup = req
+				return []InstanceConsole{
+					{InstanceID: "i-older", GeneratedAt: time.Date(2026, 4, 16, 7, 5, 0, 0, time.UTC), Lines: []ConsoleLine{{Timestamp: time.Date(2026, 4, 16, 7, 4, 0, 0, time.UTC), Message: "older bootstrap"}}},
+					{InstanceID: "i-selected", GeneratedAt: time.Date(2026, 4, 16, 7, 12, 0, 0, time.UTC), Lines: []ConsoleLine{{Timestamp: time.Date(2026, 4, 16, 7, 11, 30, 0, time.UTC), Message: "selected start"}, {Timestamp: time.Date(2026, 4, 16, 7, 11, 45, 0, time.UTC), Message: "selected complete"}}},
+				}, nil
+			},
+		})
+
+		result, err := service.Recent(context.Background(), Request{
+			DeploymentName:   "payments-api-prod",
+			ResourceType:     "candidateAutoScalingGroup",
+			ResourceName:     "payments-api-prod-candidate",
+			ControlAccountID: "123456789012",
+			TargetAccountID:  "123456789012",
+			Region:           "ap-northeast-2",
+			InstanceID:       " i-selected ",
+		})
+		if err != nil {
+			t.Fatalf("Recent returned error: %v", err)
+		}
+		if gotLookup.InstanceID != "i-selected" {
+			t.Fatalf("expected ASG provider to receive trimmed instance selector, got %+v", gotLookup)
+		}
+		want := Result{
+			DeploymentName: "payments-api-prod",
+			ResourceType:   "candidateAutoScalingGroup",
+			ResourceName:   "payments-api-prod-candidate",
+			InstanceID:     "i-selected",
+			LookupContext:  expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
+			Available:      true,
+			Source:         SourceEC2Console,
+			Entries: []Entry{
+				{Timestamp: "2026-04-16T07:11:30Z", Message: "selected start"},
+				{Timestamp: "2026-04-16T07:11:45Z", Message: "selected complete"},
+			},
+		}
+		if !reflect.DeepEqual(result, want) {
+			t.Fatalf("unexpected selected ASG resource logs result: got %+v want %+v", result, want)
+		}
+	})
+
+	t.Run("candidate asg instance selector returns unavailable when selected instance is absent", func(t *testing.T) {
+		service := NewService(Options{
+			ListASGInstanceConsoles: func(ctx context.Context, req ASGRequest) ([]InstanceConsole, error) {
+				return []InstanceConsole{{InstanceID: "i-present", GeneratedAt: time.Date(2026, 4, 16, 7, 5, 0, 0, time.UTC), Lines: []ConsoleLine{{Timestamp: time.Date(2026, 4, 16, 7, 4, 0, 0, time.UTC), Message: "present bootstrap"}}}}, nil
+			},
+		})
+
+		result, err := service.Recent(context.Background(), Request{
+			DeploymentName:   "payments-api-prod",
+			ResourceType:     "candidateAutoScalingGroup",
+			ResourceName:     "payments-api-prod-candidate",
+			ControlAccountID: "123456789012",
+			TargetAccountID:  "123456789012",
+			Region:           "ap-northeast-2",
+			InstanceID:       "i-missing",
+		})
+		if err != nil {
+			t.Fatalf("Recent returned error: %v", err)
+		}
+		want := Result{
+			DeploymentName:    "payments-api-prod",
+			ResourceType:      "candidateAutoScalingGroup",
+			ResourceName:      "payments-api-prod-candidate",
+			InstanceID:        "i-missing",
+			LookupContext:     expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
+			Available:         false,
+			UnavailableReason: UnavailableReasonResourceNotFound,
+		}
+		if !reflect.DeepEqual(result, want) {
+			t.Fatalf("unexpected missing selected instance result: got %+v want %+v", result, want)
+		}
+	})
+
 	t.Run("candidate asg uses tail of newest non-empty console lines while preserving displayed order", func(t *testing.T) {
 		service := NewService(Options{
 			MaxEntries: 3,

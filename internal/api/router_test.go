@@ -6330,6 +6330,89 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		}
 	})
 
+	t.Run("passes optional instance selector into provider context and raw payload", func(t *testing.T) {
+		expected := resourcelogs.Result{
+			DeploymentName:    "api-prod",
+			ResourceType:      "candidateAutoScalingGroup",
+			ResourceName:      "payments-api-prod-candidate",
+			InstanceID:        "i-0abc123def4567890",
+			Available:         false,
+			Entries:           []resourcelogs.Entry{},
+			UnavailableReason: resourcelogs.UnavailableReasonAWSUnavailable,
+		}
+
+		var gotInstanceID string
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "api-prod" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
+				gotInstanceID = resourcelogs.InstanceIDFromContext(ctx)
+				if deploymentName != "api-prod" || resourceType != "candidateAutoScalingGroup" || resourceName != "payments-api-prod-candidate" {
+					t.Fatalf("unexpected provider request: deployment=%q type=%q name=%q", deploymentName, resourceType, resourceName)
+				}
+				return expected, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate&instanceId=+i-0abc123def4567890+", nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if gotInstanceID != "i-0abc123def4567890" {
+			t.Fatalf("expected trimmed instanceId in provider context, got %q", gotInstanceID)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw selected instance resource logs payload: %v", err)
+		}
+		if raw["instanceId"] != "i-0abc123def4567890" {
+			t.Fatalf("expected instanceId to echo selected EC2 instance, got %#v", raw)
+		}
+		if raw["unavailableReason"] != resourcelogs.UnavailableReasonAWSUnavailable {
+			t.Fatalf("expected unavailable reason to survive selected instance payload, got %#v", raw)
+		}
+	})
+
+	t.Run("rejects malformed instance selector before provider lookup", func(t *testing.T) {
+		var overviewCalls int
+		var providerCalls int
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				overviewCalls++
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceLogs: func(_ context.Context, deploymentName, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
+				providerCalls++
+				return resourcelogs.Result{}, nil
+			},
+		})
+
+		for _, rawInstanceID := range []string{"not-an-instance", "i-", "i-abc/def"} {
+			t.Run(rawInstanceID, func(t *testing.T) {
+				resp := httptest.NewRecorder()
+				router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate&instanceId="+url.QueryEscape(rawInstanceID), nil))
+				if resp.Code != http.StatusBadRequest {
+					t.Fatalf("expected 400 for instanceId=%s, got %d with body %q", rawInstanceID, resp.Code, resp.Body.String())
+				}
+				if body := resp.Body.String(); body != "invalid instanceId query\n" {
+					t.Fatalf("unexpected invalid instanceId response: %q", body)
+				}
+			})
+		}
+		if overviewCalls != 0 || providerCalls != 0 {
+			t.Fatalf("expected invalid instanceId to short-circuit providers, got overview=%d resourceLogs=%d", overviewCalls, providerCalls)
+		}
+	})
+
 	t.Run("passes optional entry limit into provider and keeps router fallback truncation", func(t *testing.T) {
 		provided := resourcelogs.Result{
 			DeploymentName: "api-prod",

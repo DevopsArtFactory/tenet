@@ -801,6 +801,7 @@ func newOverviewDeploymentResourceLogsProvider(
 			Region:              request.Region,
 			ObserverRoleARN:     request.ObserverRoleARN,
 			ContainerName:       resourcelogs.ContainerNameFromContext(ctx),
+			InstanceID:          resourcelogs.InstanceIDFromContext(ctx),
 			Limit:               limit,
 		})
 	}

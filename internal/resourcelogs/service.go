@@ -54,6 +54,7 @@ const (
 var ErrNotImplemented = errors.New("resource log service not implemented")
 
 type containerNameContextKey struct{}
+type instanceIDContextKey struct{}
 
 func ContextWithContainerName(ctx context.Context, containerName string) context.Context {
 	containerName = strings.TrimSpace(containerName)
@@ -65,6 +66,19 @@ func ContextWithContainerName(ctx context.Context, containerName string) context
 
 func ContainerNameFromContext(ctx context.Context) string {
 	value, _ := ctx.Value(containerNameContextKey{}).(string)
+	return strings.TrimSpace(value)
+}
+
+func ContextWithInstanceID(ctx context.Context, instanceID string) context.Context {
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, instanceIDContextKey{}, instanceID)
+}
+
+func InstanceIDFromContext(ctx context.Context) string {
+	value, _ := ctx.Value(instanceIDContextKey{}).(string)
 	return strings.TrimSpace(value)
 }
 
@@ -80,6 +94,7 @@ type Request struct {
 	Region              string
 	ObserverRoleARN     string
 	ContainerName       string
+	InstanceID          string
 	Limit               int
 }
 
@@ -91,6 +106,7 @@ type Result struct {
 	BackingResourceType string        `json:"backingResourceType,omitempty"`
 	BackingResourceName string        `json:"backingResourceName,omitempty"`
 	ContainerName       string        `json:"containerName,omitempty"`
+	InstanceID          string        `json:"instanceId,omitempty"`
 	LookupContext       LookupContext `json:"lookupContext"`
 	Available           bool          `json:"available"`
 	Source              string        `json:"source"`
@@ -233,6 +249,7 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 			Region:          req.Region,
 			TargetAccountID: req.TargetAccountID,
 			ObserverRoleARN: req.ObserverRoleARN,
+			InstanceID:      instanceID(req),
 			Limit:           req.Limit,
 		})
 		if err != nil {
@@ -240,6 +257,10 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 				return unavailableResult(req, reason), nil
 			}
 			return Result{}, err
+		}
+		consoles = selectInstanceConsoles(consoles, instanceID(req))
+		if instanceID(req) != "" && len(consoles) == 0 {
+			return unavailableResult(req, UnavailableReasonResourceNotFound), nil
 		}
 		entries := formatConsoleEntries(consoles, s.effectiveLimit(req.Limit))
 		return availableResult(req, SourceEC2Console, entries), nil
@@ -305,6 +326,7 @@ type ASGRequest struct {
 	Region          string
 	TargetAccountID string
 	ObserverRoleARN string
+	InstanceID      string
 	Limit           int
 }
 
@@ -348,6 +370,7 @@ func unavailableResult(req Request, reason string) Result {
 		BackingResourceType: backingResourceType(req),
 		BackingResourceName: backingResourceName(req),
 		ContainerName:       containerName(req),
+		InstanceID:          instanceID(req),
 		LookupContext:       lookupContext(req),
 		Available:           false,
 		UnavailableReason:   reason,
@@ -363,6 +386,7 @@ func availableResult(req Request, source string, entries []Entry) Result {
 		BackingResourceType: backingResourceType(req),
 		BackingResourceName: backingResourceName(req),
 		ContainerName:       containerName(req),
+		InstanceID:          instanceID(req),
 		LookupContext:       lookupContext(req),
 		Available:           true,
 		Source:              source,
@@ -384,6 +408,10 @@ func backingResourceName(req Request) string {
 
 func containerName(req Request) string {
 	return strings.TrimSpace(req.ContainerName)
+}
+
+func instanceID(req Request) string {
+	return strings.TrimSpace(req.InstanceID)
 }
 
 func lookupContext(req Request) LookupContext {
@@ -459,6 +487,20 @@ func formatConsoleEntries(consoles []InstanceConsole, max int) []Entry {
 		entries[i], entries[j] = entries[j], entries[i]
 	}
 	return entries
+}
+
+func selectInstanceConsoles(consoles []InstanceConsole, instanceID string) []InstanceConsole {
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return consoles
+	}
+	selected := make([]InstanceConsole, 0, 1)
+	for _, console := range consoles {
+		if strings.TrimSpace(console.InstanceID) == instanceID {
+			selected = append(selected, console)
+		}
+	}
+	return selected
 }
 
 func formatCodeDeployEntries(events []CodeDeployEvent, max int) []Entry {
@@ -564,9 +606,17 @@ func (s Service) listASGInstanceConsolesFromAWS(ctx context.Context, req ASGRequ
 	if len(group.Instances) == 0 {
 		return nil, resourceaws.NewUnavailableError(UnavailableReasonNoInstances)
 	}
-	instanceID, err := newestInstanceID(ctx, clients.EC2, group.Instances)
-	if err != nil {
-		return nil, err
+	instanceID := strings.TrimSpace(req.InstanceID)
+	if instanceID != "" {
+		if !asgHasInstance(group.Instances, instanceID) {
+			return nil, resourceaws.NewUnavailableError(UnavailableReasonResourceNotFound)
+		}
+	} else {
+		var err error
+		instanceID, err = newestInstanceID(ctx, clients.EC2, group.Instances)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if instanceID == "" {
 		return nil, resourceaws.NewUnavailableError(UnavailableReasonNoInstances)
@@ -888,6 +938,19 @@ func taskIDFromARN(arn string) string {
 	}
 	parts := strings.Split(arn, "/")
 	return parts[len(parts)-1]
+}
+
+func asgHasInstance(instances []asgtypes.Instance, instanceID string) bool {
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return false
+	}
+	for _, instance := range instances {
+		if aws.ToString(instance.InstanceId) == instanceID {
+			return true
+		}
+	}
+	return false
 }
 
 func newestInstanceID(ctx context.Context, client *ec2.Client, instances []asgtypes.Instance) (string, error) {

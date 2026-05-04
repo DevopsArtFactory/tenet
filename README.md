@@ -557,9 +557,8 @@ Behind those routes, the built-in AWS-backed recent-log provider now reuses SDK 
 Current provider-backed recent-log support includes:
 - `ecsService` across newest running and recently stopped service tasks
 - `ecsTask` for an exact task ARN, with optional `containerName={container}` to narrow the bounded CloudWatch Logs read to one awslogs-backed container; responses echo that selector as response-level `containerName` when supplied so scripted clients can distinguish container-scoped task lookups from task-wide reads, while successful ECS task `entries[]` rows may carry additive `containerName` metadata for the resolved per-row log source
-- `candidateAutoScalingGroup`
-- `serviceAutoScalingGroup`
-- `userDataBootstrapSource` via the resolved backing Auto Scaling Group
+- `candidateAutoScalingGroup` and `serviceAutoScalingGroup` for EC2 console/bootstrap output, with optional `instanceId={i-...}` to narrow the read to a specific current ASG member while preserving the default newest-instance behavior when omitted
+- `userDataBootstrapSource` via the resolved backing Auto Scaling Group, with the same optional `instanceId={i-...}` selector available after backing-ASG resolution
 - `trafficShiftPlan`, `productionListenerRule`, `activeTargetGroup`, and `candidateTargetGroup` as route-stable weighted traffic-routing resources that may return explicit `no_log_source` evidence in local/no-AWS runs
 - `codeDeployApplication` via newest-first CodeDeploy deployment history for the selected application
 - `codeDeployDeploymentGroup` via newest-first CodeDeploy deployment history for the selected deployment group
