@@ -1351,7 +1351,7 @@ func TestECSServiceTaskSummariesDiscoversBoundedTasksWithContainerLogs(t *testin
 		},
 	}
 
-	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName)
+	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName, 0)
 	if err != nil {
 		t.Fatalf("ecsServiceTaskSummaries returned error: %v", err)
 	}
@@ -1375,6 +1375,39 @@ func TestECSServiceTaskSummariesDiscoversBoundedTasksWithContainerLogs(t *testin
 	}
 }
 
+func TestECSServiceTaskSummariesHonorsRequestedLimit(t *testing.T) {
+	const (
+		clusterARN  = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker"
+		serviceName = "worker-prod-service"
+	)
+	tasks := map[string]ecstypes.Task{}
+	taskARNs := make([]string, 0, 4)
+	base := time.Date(2026, 4, 18, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < 4; i++ {
+		taskARN := "arn:aws:ecs:ap-northeast-2:123456789012:task/worker/limited-" + strconv.Itoa(i)
+		taskARNs = append(taskARNs, taskARN)
+		tasks[taskARN] = ecstypes.Task{TaskArn: stringPtr(taskARN), LastStatus: stringPtr("RUNNING"), StartedAt: timePtr(base.Add(time.Duration(i) * time.Minute))}
+	}
+	client := &fakeECSServiceAPI{
+		taskARNsByDesired: map[ecstypes.DesiredStatus][]string{ecstypes.DesiredStatusRunning: taskARNs},
+		tasksByARN:        tasks,
+	}
+
+	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName, 2)
+	if err != nil {
+		t.Fatalf("ecsServiceTaskSummaries returned error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected requested two task summaries, got %d: %+v", len(got), got)
+	}
+	if got[0].TaskID != "limited-3" || got[1].TaskID != "limited-2" {
+		t.Fatalf("expected newest requested task summaries, got %+v", got)
+	}
+	if scope == nil || scope.RequestedLimit == nil || *scope.RequestedLimit != 2 || scope.EffectiveLimit != 2 || scope.ReturnedTaskCount != 2 || scope.TruncationStatus != "truncated" {
+		t.Fatalf("expected requested task-scope metadata, got %+v", scope)
+	}
+}
+
 func TestECSServiceTaskSummariesReportsUnknownWhenExactlyAtLimit(t *testing.T) {
 	const (
 		clusterARN  = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker"
@@ -1392,7 +1425,7 @@ func TestECSServiceTaskSummariesReportsUnknownWhenExactlyAtLimit(t *testing.T) {
 		tasksByARN:        tasks,
 	}
 
-	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName)
+	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName, 0)
 	if err != nil {
 		t.Fatalf("ecsServiceTaskSummaries returned error: %v", err)
 	}
@@ -1422,7 +1455,7 @@ func TestECSServiceTaskSummariesOmitLogMetadataWhenTaskDefinitionLookupFails(t *
 		describeTaskDefinitionErr: errors.New("access denied to task definition"),
 	}
 
-	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName)
+	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName, 0)
 	if err != nil {
 		t.Fatalf("ecsServiceTaskSummaries returned error: %v", err)
 	}

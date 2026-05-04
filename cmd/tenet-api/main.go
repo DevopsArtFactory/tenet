@@ -809,8 +809,8 @@ func newOverviewDeploymentResourceLogsProvider(
 func newOverviewDeploymentResourceInspectionProvider(
 	loadRequest overviewDeploymentResourceLookupProvider,
 	provider resourceInspectionProvider,
-) func(context.Context, string, string, string) (resourceinspection.Result, error) {
-	return func(ctx context.Context, name, resourceType, resourceName string) (resourceinspection.Result, error) {
+) func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
+	return func(ctx context.Context, name, resourceType, resourceName string, limit int) (resourceinspection.Result, error) {
 		request, err := loadRequest(ctx, name, resourceType, resourceName)
 		if err != nil {
 			return resourceinspection.Result{}, err
@@ -820,6 +820,7 @@ func newOverviewDeploymentResourceInspectionProvider(
 			ResourceType:        request.ResourceType,
 			ResourceName:        request.ResourceName,
 			ResourceDescription: request.ResourceDescription,
+			TaskSummaryLimit:    limit,
 			BackingResourceType: request.BackingResourceType,
 			BackingResourceName: request.BackingResourceName,
 			ControlAccountID:    request.ControlAccountID,
