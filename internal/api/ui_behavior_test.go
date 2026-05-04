@@ -5238,6 +5238,9 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   const loadingText = collectText(loadingRun.document.getElementById('accounts')).join(' | ');
   if (!loadingText.includes('Recent logs')) throw new Error('expected resource page to render recent logs section heading while loading');
   if (!loadingText.includes('Loading recent logs…')) throw new Error('expected resource page to render loading state for recent logs');
+  const loadingLimitSelect = collectNodes(loadingRun.document.getElementById('accounts'), (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'Log limit')[0];
+  if (!loadingLimitSelect) throw new Error('expected recent logs panel to expose the log limit select while loading');
+  if (!loadingLimitSelect.disabled) throw new Error('expected recent logs limit select to be disabled while logs are loading');
   if (!loadingFetchCalls.includes(logsURL)) throw new Error('expected resource page to lazy-load logs for the selected resource');
   resolveLogs({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, entries: [] }) });
   await settle();
