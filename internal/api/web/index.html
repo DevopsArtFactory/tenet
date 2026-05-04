@@ -3501,6 +3501,14 @@
         }
         return actionBar;
       };
+      const createOperatorWriteAuthRequiredActions = (state) => {
+        if (!operatorWriteAuthRequiredState(state)) return null;
+        const managedSignInURL = operatorContextManagedLoginSignInURL();
+        if (!managedSignInURL) return null;
+        const actionBar = createElement('div', 'detail-section-actions operator-write-recovery-actions');
+        actionBar.append(createNavLink(managedSignInURL, 'Sign in with Tenet-managed GitHub login', '_self'));
+        return actionBar;
+      };
       const renderOperatorReadFailurePage = (pageLabel, route, error) => {
         const heading = operatorReadFailureHeading(error);
         if (!heading) {
@@ -6389,6 +6397,7 @@
             actionBar,
             createElement('div', 'workspace-callout-label', planPreviewStatusHeading(planState)),
             planStateCallout,
+            createOperatorWriteAuthRequiredActions(planState),
           );
           pushPlanSection(actionsSection, 'plan-preview-actions', 'Plan preview actions');
 
@@ -6442,6 +6451,7 @@
           applySection.append(
             applyStateHead,
             applyStateCallout,
+            createOperatorWriteAuthRequiredActions(applyState),
           );
           pushPlanSection(applySection, 'plan-apply-actions', 'Apply request actions');
 
