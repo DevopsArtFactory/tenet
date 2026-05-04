@@ -192,9 +192,10 @@ func TestManagedGitHubLoginCallbackCreatesSessionAndAuthenticatedContext(t *test
 		t.Fatalf("expected operator context 200, got %d: %s", contextResp.Code, contextResp.Body.String())
 	}
 	var body struct {
-		AuthRuntime AuthRuntimeDiagnostic              `json:"authRuntime"`
-		Identity    requestactor.AuthenticatedIdentity `json:"identity"`
-		Actor       requestactor.Actor                 `json:"actor"`
+		AuthRuntime        AuthRuntimeDiagnostic                        `json:"authRuntime"`
+		Identity           requestactor.AuthenticatedIdentity           `json:"identity"`
+		IdentityProvenance requestactor.AuthenticatedIdentityProvenance `json:"identityProvenance"`
+		Actor              requestactor.Actor                           `json:"actor"`
 	}
 	if err := json.Unmarshal(contextResp.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode operator context: %v", err)
@@ -212,8 +213,42 @@ func TestManagedGitHubLoginCallbackCreatesSessionAndAuthenticatedContext(t *test
 	if !body.Identity.Authenticated || body.Identity.ID != "github:12345" || body.Identity.Name != "Octo Operator" || body.Identity.Email != "octo@example.com" {
 		t.Fatalf("expected session-derived authenticated identity, got %#v", body.Identity)
 	}
+	if body.IdentityProvenance.IDSource != requestactor.AuthenticatedIdentitySourceManagedSessionCookie || body.IdentityProvenance.NameSource != requestactor.AuthenticatedIdentitySourceManagedSessionCookie || body.IdentityProvenance.EmailSource != requestactor.AuthenticatedIdentitySourceManagedSessionCookie {
+		t.Fatalf("expected managed-session-cookie identity provenance, got %#v", body.IdentityProvenance)
+	}
 	if !body.Actor.Available || body.Actor.ID != "github:12345" {
 		t.Fatalf("expected actor projection from session identity, got %#v", body.Actor)
+	}
+}
+
+func TestManagedLoginOperatorContextPrefersTrustedHeaderIdentityOverSessionCookie(t *testing.T) {
+	options, _ := managedLoginTestOptions(t, &fakeAuthProvider{})
+	options.TrustAuthenticatedHeaders = true
+	router := NewRouter(options)
+	cookie := managedLoginCallbackCookie(t, router, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+	req.AddCookie(cookie)
+	req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+	req.Header.Set(requestactor.AuthenticatedHeaderName, "Front Door Operator")
+	req.Header.Set(requestactor.AuthenticatedHeaderEmail, "frontdoor@example.com")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected operator context 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var body struct {
+		Identity           requestactor.AuthenticatedIdentity           `json:"identity"`
+		IdentityProvenance requestactor.AuthenticatedIdentityProvenance `json:"identityProvenance"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode operator context: %v", err)
+	}
+	if !body.Identity.Authenticated || body.Identity.ID != "front-door-123" || body.Identity.Name != "Front Door Operator" || body.Identity.Email != "frontdoor@example.com" {
+		t.Fatalf("expected trusted front-door identity to win over managed session, got %#v", body.Identity)
+	}
+	if body.IdentityProvenance.IDSource != requestactor.AuthenticatedIdentitySourceCanonical || body.IdentityProvenance.NameSource != requestactor.AuthenticatedIdentitySourceCanonical || body.IdentityProvenance.EmailSource != requestactor.AuthenticatedIdentitySourceCanonical {
+		t.Fatalf("expected canonical trusted-header provenance, got %#v", body.IdentityProvenance)
 	}
 }
 

@@ -592,10 +592,7 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 	actor := requestactor.FromContext(r.Context())
 	actorHeaders := requestactor.FromHeaders(r.Header)
 	actorProvenance := requestactor.ActorProvenanceFromHeaders(r.Header)
-	identityProvenance := requestactor.NormalizeAuthenticatedIdentityProvenance(requestactor.AuthenticatedIdentityProvenance{})
-	if options.TrustAuthenticatedHeaders {
-		identityProvenance = requestactor.AuthenticatedIdentityProvenanceFromHeaders(r.Header)
-	}
+	identityProvenance := requestactor.AuthenticatedIdentityProvenanceFromContext(r.Context())
 	roles := requestactor.AuthenticatedRolesFromContext(r.Context())
 	rolesProvenance := requestactor.NormalizeAuthenticatedRolesProvenance(requestactor.AuthenticatedRolesProvenance{})
 	if options.TrustAuthenticatedHeaders {
