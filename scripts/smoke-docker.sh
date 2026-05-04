@@ -1996,6 +1996,11 @@ def assert_operator_context_common(payload):
     assert tenet_managed_login.get("oauthStateTtlSeconds") == 600, payload
     assert tenet_managed_login.get("sessionTtlSeconds") == 43200, payload
     assert tenet_managed_login.get("sessionExpiryEnforced") is True, payload
+    assert tenet_managed_login.get("sessionCookiePath") == "/", payload
+    assert tenet_managed_login.get("sessionCookieHttpOnly") is True, payload
+    assert tenet_managed_login.get("sessionCookieSameSite") == "Lax", payload
+    assert tenet_managed_login.get("sessionCookieSecureOverride") is False, payload
+    assert tenet_managed_login.get("sessionCookieSecureForRequest") is False, payload
     assert tenet_managed_login.get("providerAccessTokenStored") is False, payload
     assert tenet_managed_login.get("providerAccessTokenReturned") is False, payload
     assert tenet_managed_login.get("providerTokenRefreshSupported") is False, payload
