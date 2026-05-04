@@ -199,7 +199,7 @@
       const resourceLogLimitByResourceKey = new Map();
       const resourceInspectionStateByKey = new Map();
       let auditLogsPageState = { status: 'idle', route: '', result: null, error: null, promise: null, requestId: 0 };
-      let operatorContextState = { status: 'idle', context: null, error: null, refreshing: false };
+      let operatorContextState = { status: 'idle', context: null, error: null, refreshing: false, lastCheckedAt: null };
       let activeOperatorReadFailurePage = null;
       let operatorContextDetailsOpen = false;
       let operatorContextDetailsDeepLinkAppliedForHash = '';
@@ -1150,6 +1150,12 @@
         const hiddenCount = Math.max(0, total - visible.length);
         return `Visible deployment examples: ${visible.join('; ')}${hiddenCount > 0 ? `; +${hiddenCount} more` : ''}`;
       };
+      const operatorContextLastCheckedLabel = (checkedAt) => {
+        if (!checkedAt) return null;
+        const timestamp = checkedAt instanceof Date ? checkedAt : new Date(checkedAt);
+        if (Number.isNaN(timestamp.getTime())) return null;
+        return `Last checked ${timestamp.toLocaleString()}`;
+      };
       const operatorContextDesiredStateSource = (context) => context?.desiredStateSource || null;
       const operatorContextDesiredStateSourceKindLabel = (kind) => {
         const labels = { filesystem: 'filesystem catalog', github: 'GitHub catalog', none: 'not configured' };
@@ -1513,6 +1519,10 @@
           summary.textContent = operatorContextIdentityLabel(context);
           statusAnnouncement = `Operator context ready: ${summary.textContent}`;
           meta.append(createElement('span', '', `${context?.trustedHeaders?.enabled ? 'Trusted headers enabled' : 'Trusted headers disabled'} · ${operatorContextRoleLabel(context)} · ${operatorContextDeploymentAccessLabel(context)}`));
+          const lastCheckedLabel = operatorContextLastCheckedLabel(operatorContextState.lastCheckedAt);
+          if (lastCheckedLabel) {
+            meta.append(createElement('span', '', lastCheckedLabel));
+          }
           const deploymentAccessSummary = operatorContextDeploymentAccessSummaryLabel(context);
           if (operatorContextState.refreshing) {
             statusAnnouncement = 'Refreshing trusted front-door context…';
@@ -1655,16 +1665,17 @@
       const loadOperatorContextBanner = ({ refresh = false } = {}) => {
         if (!document.getElementById('operator-context')) return Promise.resolve(null);
         const previousContext = operatorContextState.context || null;
+        const previousLastCheckedAt = operatorContextState.lastCheckedAt || null;
         operatorContextState = refresh && previousContext
-          ? { status: 'ready', context: previousContext, error: null, refreshing: true }
-          : { status: 'loading', context: previousContext, error: null, refreshing: false };
+          ? { status: 'ready', context: previousContext, error: null, refreshing: true, lastCheckedAt: previousLastCheckedAt }
+          : { status: 'loading', context: previousContext, error: null, refreshing: false, lastCheckedAt: previousLastCheckedAt };
         renderOperatorContextBanner();
         return fetchEmbeddedReadRouteJSON(operatorContextRoute(), {
           unavailable: 'operator context unavailable',
           failure: 'operator context request failed',
         })
           .then((context) => {
-            operatorContextState = { status: 'ready', context, error: null, refreshing: false };
+            operatorContextState = { status: 'ready', context, error: null, refreshing: false, lastCheckedAt: new Date() };
             renderOperatorContextBanner();
             if (activeOperatorReadFailurePage && operatorReadAuthRequiredState(activeOperatorReadFailurePage.error)) {
               renderOperatorReadFailurePage(activeOperatorReadFailurePage.pageLabel, activeOperatorReadFailurePage.route, activeOperatorReadFailurePage.error);
@@ -1677,6 +1688,7 @@
               context: refresh ? previousContext : null,
               error,
               refreshing: false,
+              lastCheckedAt: refresh ? previousLastCheckedAt : null,
             };
             renderOperatorContextBanner();
             return null;

@@ -563,6 +563,8 @@ async function render(operatorResponses, initialHash = '') {
   if (!ready.liveStatusText().includes('Operator context ready: Front Door Operator')) throw new Error('expected compact live region to announce ready identity status');
   if (ready.liveStatusText().includes('Supported identity headers:') || ready.liveStatusText().includes('Supported Tenet roles:') || ready.liveStatusText().includes('Supported role headers:') || ready.liveStatusText().includes('Required trusted headers:') || ready.liveStatusText().includes('Operator reads allowed:')) throw new Error('verbose diagnostics should not be announced by compact live region');
   if (!ready.text().includes('Refresh context')) throw new Error('expected refresh action in operator context banner');
+  if (!ready.compactText().includes('Last checked ')) throw new Error('expected initial successful operator context load to show freshness timestamp');
+  if (ready.liveStatusText().includes('Last checked ')) throw new Error('freshness timestamp should not be announced by compact live region');
   if (ready.refresh().disabled) throw new Error('refresh action should be enabled after first context load');
   if (!ready.text().includes('Front Door Operator')) throw new Error('expected trusted identity in operator context banner');
   if (!ready.text().includes('Write-capable roles: viewer, operator')) throw new Error('expected role capability in operator context banner');
@@ -829,10 +831,13 @@ async function render(operatorResponses, initialHash = '') {
   refreshed.details().dispatch('toggle');
   if (!refreshed.detailsText().includes('Hide access details')) throw new Error('expected access details to be expanded before refresh');
   refreshed.refresh().dispatch('click');
+  if (!refreshed.compactText().includes('Last checked ')) throw new Error('refresh-in-flight should preserve the previous freshness timestamp');
+  if (!refreshed.compactText().includes('Refreshing trusted front-door context…')) throw new Error('refresh-in-flight should show refresh status beside preserved context');
   await settle();
   if (refreshed.fetchCalls.filter((url) => url === '/v1/operator/context').length !== 2) throw new Error('expected refresh to re-fetch operator context');
   if (refreshed.window.location.search !== '') throw new Error('refresh should not change bookmarkable URL state');
   if (!refreshed.text().includes('Refreshed Operator')) throw new Error('expected refreshed operator identity');
+  if (!refreshed.compactText().includes('Last checked ')) throw new Error('successful refresh should keep a visible freshness timestamp');
   if (!refreshed.liveStatusText().includes('Operator context ready: Refreshed Operator')) throw new Error('expected compact live region to announce refreshed identity only');
   if (refreshed.liveStatusText().includes('Supported Tenet roles:') || refreshed.liveStatusText().includes('Required trusted headers:')) throw new Error('refreshed live region should not include verbose diagnostics');
   if (!refreshed.text().includes('Read-capable roles: viewer')) throw new Error('expected refreshed role capability');
@@ -848,6 +853,7 @@ async function render(operatorResponses, initialHash = '') {
   failedRefresh.refresh().dispatch('click');
   await settle();
   if (!failedRefresh.text().includes('Front Door Operator')) throw new Error('failed refresh should keep last successful operator context visible');
+  if (!failedRefresh.compactText().includes('Last checked ')) throw new Error('failed refresh should keep the last successful freshness timestamp visible');
   if (!failedRefresh.text().includes('Last refresh failed:')) throw new Error('expected failed refresh diagnostic');
   if (!failedRefresh.text().includes('operator context provider unavailable')) throw new Error('expected failed refresh backend detail');
   if (!failedRefresh.liveStatusText().includes('Operator context refresh failed:') || !failedRefresh.liveStatusText().includes('operator context provider unavailable')) throw new Error('expected compact live region to announce refresh failure without verbose diagnostics: ' + failedRefresh.liveStatusText());
@@ -861,6 +867,7 @@ async function render(operatorResponses, initialHash = '') {
   await settle();
   if (failedAuthRefresh.window.location.search !== '') throw new Error('auth failed refresh should not change bookmarkable URL state');
   if (!failedAuthRefresh.text().includes('Front Door Operator')) throw new Error('auth failed refresh should keep last successful operator context visible');
+  if (!failedAuthRefresh.compactText().includes('Last checked ')) throw new Error('auth failed refresh should keep the last successful freshness timestamp visible');
   if (!failedAuthRefresh.text().includes('Last refresh failed: Tenet rejected GET /v1/operator/context because authenticated identity is required on this operator read route. Tenet does not start a built-in GitHub OAuth login, enterprise SSO login, or Tenet-managed browser session from this page; reopen this same bookmarkable URL through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.')) throw new Error('expected auth guidance on failed operator context refresh');
 
   const authRequired = await render({ ok: false, status: 401, text: () => Promise.resolve('authenticated identity is required on this operator read route') });

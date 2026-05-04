@@ -181,6 +181,8 @@ func TestEmbeddedUIRendersOperatorContextBannerSafely(t *testing.T) {
 		"loadOperatorContextBanner().catch(() => {});",
 		"loadOperatorContextBanner({ refresh: true });",
 		"Refresh context",
+		"Last checked ${timestamp.toLocaleString()}",
+		"lastCheckedAt: new Date()",
 		"Refreshing trusted front-door context…",
 		"Last refresh failed:",
 		"operator-context-details",

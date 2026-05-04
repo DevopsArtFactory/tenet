@@ -1201,6 +1201,8 @@ assert 'unmatched' in ui, ui
 assert "loadOperatorContextBanner().catch(() => {});" in ui, ui
 assert "loadOperatorContextBanner({ refresh: true });" in ui, ui
 assert 'Refresh context' in ui, ui
+assert 'Last checked ${timestamp.toLocaleString()}' in ui, ui
+assert 'lastCheckedAt: new Date()' in ui, ui
 assert 'id="operator-context-status" role="status" aria-live="polite" aria-atomic="true"' in ui, ui
 assert '.operator-context-live { position: absolute;' in ui, ui
 assert "liveStatus.setAttribute('aria-live', 'polite');" in ui, ui
