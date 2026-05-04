@@ -5386,6 +5386,16 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
     if (!unavailableText.includes(fragment)) throw new Error('expected unavailable recent logs scope evidence ' + fragment + ', got ' + unavailableText);
   });
 
+  const unknownReasonRun = await renderWithFetch((url) => {
+    if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: false }, unavailableReason: 'provider_internal_timeout_code', entries: [] }) });
+    throw new Error('unexpected unknown-reason fetch url: ' + url);
+  });
+  const unknownReasonText = collectText(unknownReasonRun.document.getElementById('accounts')).join(' | ');
+  if (!unknownReasonText.includes('Tenet returned an unavailable recent-log state. Use the lookup context above to continue provider troubleshooting.')) throw new Error('expected unknown recent-log reason to render generic operator copy');
+  if (unknownReasonText.includes('provider_internal_timeout_code')) throw new Error('expected unknown recent-log unavailableReason code not to render literally');
+  if (!unknownReasonText.includes('Lookup region')) throw new Error('expected unknown recent-log reason to keep lookup context visible');
+
   const emptyRun = await renderWithFetch((url) => {
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
     if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, resultScope: { effectiveLimit: 100, returnedEntryCount: 0, truncationStatus: 'not_truncated' }, entries: [] }) });
