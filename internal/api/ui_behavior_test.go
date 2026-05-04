@@ -217,6 +217,21 @@ const scenarios = [
     unexpected: 'Failed to load overview:',
   },
   {
+    name: 'applications overview 401 offers Okta OIDC enterprise SSO handoff when diagnostics report active same-origin route',
+    search: '?page=application&deployment=payments-api-staging',
+    route: '/v1/overview/applications/payments-api-staging',
+    status: 401,
+    body: 'unauthenticated: operator identity missing',
+    operatorContext: { authRuntime: { enterpriseSso: { configured: true, active: true, provider: 'okta_oidc', requiredSettings: ['TENET_AUTH_PROVIDER', 'TENET_OKTA_OIDC_CLIENT_ID', 'TENET_OKTA_OIDC_CLIENT_SECRET', 'TENET_OKTA_OIDC_ISSUER_URL', 'TENET_OKTA_OIDC_REDIRECT_URL', 'TENET_AUTH_STATE_STORE_PATH', 'TENET_AUTH_IDENTITY_STORE_PATH', 'TENET_AUTH_SESSION_SECRET'], missingSettings: [], loginRoute: '/auth/login/okta', callbackRoute: '/auth/callback/okta/oidc', stateStoreConfigured: true, identityStoreConfigured: true, sessionSecretConfigured: true } }, trustedHeaders: { enabled: true }, enforcement: { mode: 'trusted_front_door_read_write' }, identity: { authenticated: false }, roles: { canRead: false, canWrite: false }, deploymentAccess: { enforced: true, forwarded: false } },
+    expected: [
+      'Application detail',
+      'Authenticated operator required',
+      'Okta SSO is active for this API instance; use the sign-in handoff below to authenticate through /auth/login/okta and return to this same bookmarkable URL. Trusted front-door X-Tenet-Authenticated-* identity headers still take precedence when present.',
+      'Sign in with Okta SSO',
+    ],
+    unexpected: 'Failed to load overview:',
+  },
+  {
     name: 'applications overview 401 keeps configured inactive Okta SAML diagnostics non-clickable',
     search: '?q=payments&sync=OutOfSync&account=210987654321',
     route: '/v1/overview/applications',
