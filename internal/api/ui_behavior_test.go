@@ -10250,7 +10250,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const summaryText = collectText(document.getElementById('summary')).join(' | ');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/audit-logs?deployment=payments-api-prod&limit=2') throw new Error('expected only filtered audit log fetch on audit page');
-  if (!toolbarText.includes('Back to applications')) throw new Error('expected audit page back link');
+  if (!toolbarText.includes('Back to application')) throw new Error('expected deployment-scoped audit page back link');
   if (!toolbarText.includes('Audit filters: deployment payments-api-prod · Limit cap: latest 2')) throw new Error('expected audit toolbar filters');
   if (!summaryText.includes('Operator audit log')) throw new Error('expected audit page summary title');
   if (!summaryText.includes('Deployment audit timeline')) throw new Error('expected deployment-scoped audit summary label');
@@ -10279,8 +10279,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const refreshButton = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Refresh audit log');
   if (!refreshButton || refreshButton.disabled) throw new Error('expected enabled audit refresh button after initial render');
   const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
-  const backLink = toolbarLinks.find((node) => node.href === '/console?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.target === '_self');
-  if (!backLink || backLink.rel) throw new Error('expected audit page back link to preserve filters');
+  const backLink = toolbarLinks.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Back to application' && node.target === '_self');
+  if (!backLink || backLink.rel) throw new Error('expected deployment-scoped audit toolbar back link to return to application while preserving filters');
   const rows = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'DIV' && node.className === 'row');
   if (rows.length < 2) throw new Error('expected audit page rows');
   const rowTexts = rows.map((node) => collectText(node).join(' | '));
