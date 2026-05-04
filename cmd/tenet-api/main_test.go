@@ -1851,7 +1851,7 @@ func TestAPIOptionsOverviewDeploymentResourceInspectionWiresObserverRoleAndPlace
 		t.Fatalf("expected overview deployment resource inspection provider")
 	}
 
-	result, err := options.OverviewDeploymentResourceInspection(context.Background(), "api-prod", "ecsService", "api-prod-live-service")
+	result, err := options.OverviewDeploymentResourceInspection(context.Background(), "api-prod", "ecsService", "api-prod-live-service", 7)
 	if err != nil {
 		t.Fatalf("OverviewDeploymentResourceInspection returned error: %v", err)
 	}
@@ -1867,6 +1867,7 @@ func TestAPIOptionsOverviewDeploymentResourceInspectionWiresObserverRoleAndPlace
 		TargetAccountID:     "123456789012",
 		Region:              "ap-northeast-2",
 		ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
+		TaskSummaryLimit:    7,
 	}
 	if !reflect.DeepEqual(provider.lastRequest, want) {
 		t.Fatalf("unexpected resource inspection request: %+v", provider.lastRequest)
@@ -1888,7 +1889,7 @@ func TestAPIOptionsOverviewDeploymentResourceInspectionRejectsResourcesOutsideDe
 	defer restore()
 
 	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, store)
-	_, err := options.OverviewDeploymentResourceInspection(context.Background(), "api-prod", "ecsService", "other-service")
+	_, err := options.OverviewDeploymentResourceInspection(context.Background(), "api-prod", "ecsService", "other-service", 0)
 	if !errors.Is(err, statusstore.ErrNotFound) {
 		t.Fatalf("expected not found for unbound resource, got %v", err)
 	}
@@ -1928,7 +1929,7 @@ func TestAPIOptionsOverviewDeploymentResourceInspectionUsesFallbackWhenExecution
 		provider.calls = 0
 		provider.lastRequest = resourceinspection.Request{}
 
-		_, err := options.OverviewDeploymentResourceInspection(context.Background(), "api-prod", resource.resourceType, resource.resourceName)
+		_, err := options.OverviewDeploymentResourceInspection(context.Background(), "api-prod", resource.resourceType, resource.resourceName, 0)
 		if err != nil {
 			t.Fatalf("expected fallback resource binding to work for %s/%s, got %v", resource.resourceType, resource.resourceName, err)
 		}
@@ -1972,7 +1973,7 @@ func TestAPIOptionsOverviewDeploymentResourceInspectionUsesASGInstanceRefreshFal
 		provider.calls = 0
 		provider.lastRequest = resourceinspection.Request{}
 
-		_, err := options.OverviewDeploymentResourceInspection(context.Background(), "api-prod", resource.resourceType, resource.resourceName)
+		_, err := options.OverviewDeploymentResourceInspection(context.Background(), "api-prod", resource.resourceType, resource.resourceName, 0)
 		if err != nil {
 			t.Fatalf("expected instance-refresh fallback resource binding to work for %s/%s, got %v", resource.resourceType, resource.resourceName, err)
 		}
@@ -2026,7 +2027,7 @@ func TestAPIOptionsOverviewDeploymentResourceInspectionUsesCodeDeployFallbackWhe
 		provider.calls = 0
 		provider.lastRequest = resourceinspection.Request{}
 
-		_, err := options.OverviewDeploymentResourceInspection(context.Background(), "api-prod", resource.resourceType, resource.resourceName)
+		_, err := options.OverviewDeploymentResourceInspection(context.Background(), "api-prod", resource.resourceType, resource.resourceName, 0)
 		if err != nil {
 			t.Fatalf("expected CodeDeploy fallback resource binding to work for %s/%s, got %v", resource.resourceType, resource.resourceName, err)
 		}

@@ -3199,7 +3199,7 @@ func TestRouterDeploymentReadAuthorization(t *testing.T) {
 				providerCalls++
 				return resourcelogs.Result{DeploymentName: name, ResourceType: resourceType, ResourceName: resourceName}, nil
 			},
-			OverviewDeploymentResourceInspection: func(_ context.Context, name, resourceType, resourceName string) (resourceinspection.Result, error) {
+			OverviewDeploymentResourceInspection: func(_ context.Context, name, resourceType, resourceName string, _ int) (resourceinspection.Result, error) {
 				providerCalls++
 				return resourceinspection.Result{DeploymentName: name, ResourceType: resourceType, ResourceName: resourceName, Available: true}, nil
 			},
@@ -3811,7 +3811,7 @@ func TestRouterOperatorReadRoleAuthorization(t *testing.T) {
 				providerCalls++
 				return resourcelogs.Result{DeploymentName: name, ResourceType: resourceType, ResourceName: resourceName, Available: true}, nil
 			},
-			OverviewDeploymentResourceInspection: func(_ context.Context, name, resourceType, resourceName string) (resourceinspection.Result, error) {
+			OverviewDeploymentResourceInspection: func(_ context.Context, name, resourceType, resourceName string, _ int) (resourceinspection.Result, error) {
 				providerCalls++
 				return resourceinspection.Result{DeploymentName: name, ResourceType: resourceType, ResourceName: resourceName, Available: true}, nil
 			},
@@ -6858,7 +6858,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceInspection: func(_ context.Context, gotDeploymentName, gotResourceType, gotResourceName string) (resourceinspection.Result, error) {
+			OverviewDeploymentResourceInspection: func(_ context.Context, gotDeploymentName, gotResourceType, gotResourceName string, _ int) (resourceinspection.Result, error) {
 				inspectionCalls++
 				if gotDeploymentName != deploymentName || gotResourceType != resourceType || gotResourceName != resourceName {
 					t.Fatalf("unexpected resource inspection request: deployment=%q type=%q name=%q", gotDeploymentName, gotResourceType, gotResourceName)
@@ -6935,7 +6935,59 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		})
 	})
 
+	t.Run("rejects invalid ECS service inspection limit before provider lookup", func(t *testing.T) {
+		var overviewCalls int
+		var inspectionCalls int
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(context.Context, string) (catalog.DeploymentOverviewDetail, error) {
+				overviewCalls++
+				return catalog.DeploymentOverviewDetail{Name: "api-prod"}, nil
+			},
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
+				inspectionCalls++
+				return resourceinspection.Result{}, nil
+			},
+		})
+
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=api-prod-service&limit=0", nil))
+		if resp.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400 for invalid ECS service inspection limit, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if body := resp.Body.String(); body != "invalid limit query\n" {
+			t.Fatalf("unexpected invalid limit response: %q", body)
+		}
+		if overviewCalls != 0 || inspectionCalls != 0 {
+			t.Fatalf("expected invalid limit to short-circuit providers, got overview=%d inspection=%d", overviewCalls, inspectionCalls)
+		}
+	})
+
+	t.Run("ignores limit query for non ECS service inspection resources", func(t *testing.T) {
+		var gotLimit int
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(context.Context, string) (catalog.DeploymentOverviewDetail, error) {
+				return catalog.DeploymentOverviewDetail{Name: "api-prod"}, nil
+			},
+			OverviewDeploymentResourceInspection: func(_ context.Context, name, resourceType, resourceName string, limit int) (resourceinspection.Result, error) {
+				gotLimit = limit
+				return resourceinspection.Result{DeploymentName: name, ResourceType: resourceType, ResourceName: resourceName, Available: true}, nil
+			},
+		})
+
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=trafficShiftPlan&resourceName=api-prod-routing&limit=0", nil))
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected non-ECS resource inspection to ignore limit query, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if gotLimit != 0 {
+			t.Fatalf("expected non-ECS resource inspection limit to stay zero, got %d", gotLimit)
+		}
+	})
+
 	t.Run("returns resource inspection payload", func(t *testing.T) {
+		requestedLimit := 3
 		expected := resourceinspection.Result{
 			DeploymentName: "api-prod",
 			ResourceType:   "ecsService",
@@ -6976,7 +7028,8 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				}},
 				Tasks: []resourceinspection.ECSTaskSummary{{TaskARN: "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/task-1", TaskID: "task-1"}},
 				TasksScope: &resourceinspection.ECSTaskSummaryScope{
-					EffectiveLimit:    10,
+					RequestedLimit:    &requestedLimit,
+					EffectiveLimit:    3,
 					ReturnedTaskCount: 1,
 					TruncationStatus:  "not_truncated",
 				},
@@ -6987,6 +7040,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 			deploymentName string
 			resourceType   string
 			resourceName   string
+			limit          int
 			requestID      string
 		}
 		router := NewRouter(Options{
@@ -6997,16 +7051,17 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceInspection: func(ctx context.Context, deploymentName, resourceType, resourceName string) (resourceinspection.Result, error) {
+			OverviewDeploymentResourceInspection: func(ctx context.Context, deploymentName, resourceType, resourceName string, limit int) (resourceinspection.Result, error) {
 				gotRequest.deploymentName = deploymentName
 				gotRequest.resourceType = resourceType
 				gotRequest.resourceName = resourceName
+				gotRequest.limit = limit
 				gotRequest.requestID = RequestIDFromContext(ctx)
 				return expected, nil
 			},
 		})
 
-		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service", nil)
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service&limit=3", nil)
 		resp := httptest.NewRecorder()
 
 		router.ServeHTTP(resp, req)
@@ -7019,8 +7074,9 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 			deploymentName string
 			resourceType   string
 			resourceName   string
+			limit          int
 			requestID      string
-		}{deploymentName: "api-prod", resourceType: "ecsService", resourceName: "payments-api-prod-service", requestID: responseRequestID}) {
+		}{deploymentName: "api-prod", resourceType: "ecsService", resourceName: "payments-api-prod-service", limit: 3, requestID: responseRequestID}) {
 			t.Fatalf("unexpected provider request: %+v", gotRequest)
 		}
 
@@ -7054,7 +7110,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected tasksScope object in ECS service payload, got %#v", ecsService["tasksScope"])
 		}
-		if tasksScope["effectiveLimit"] != float64(10) || tasksScope["returnedTaskCount"] != float64(1) || tasksScope["truncationStatus"] != "not_truncated" {
+		if tasksScope["requestedLimit"] != float64(3) || tasksScope["effectiveLimit"] != float64(3) || tasksScope["returnedTaskCount"] != float64(1) || tasksScope["truncationStatus"] != "not_truncated" {
 			t.Fatalf("unexpected tasksScope payload: %#v", tasksScope)
 		}
 	})
@@ -7089,7 +7145,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
 				return expected, nil
 			},
 		})
@@ -7153,7 +7209,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
 				return expected, nil
 			},
 		})
@@ -7249,7 +7305,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
 				return expected, nil
 			},
 		})
@@ -7342,7 +7398,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
 				return expected, nil
 			},
 		})
@@ -7426,7 +7482,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
 				return expected, nil
 			},
 		})
@@ -7528,7 +7584,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
 				return expected, nil
 			},
 		})
@@ -7649,7 +7705,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
 				return expected, nil
 			},
 		})
@@ -7739,7 +7795,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
 				return expected, nil
 			},
 		})
@@ -7836,7 +7892,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
 				return expected, nil
 			},
 		})
@@ -7911,7 +7967,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
 				return expected, nil
 			},
 		})
@@ -7971,7 +8027,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 					t.Fatalf("overview deployment lookup should not run for invalid query")
 					return catalog.DeploymentOverviewDetail{}, nil
 				},
-				OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+				OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
 					t.Fatalf("resource inspection provider should not run for invalid query")
 					return resourceinspection.Result{}, nil
 				},
@@ -8016,7 +8072,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 				return catalog.DeploymentOverviewDetail{}, statusstore.ErrNotFound
 			},
-			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
 				t.Fatalf("resource inspection provider should not run when deployment lookup fails")
 				return resourceinspection.Result{}, nil
 			},
@@ -8037,7 +8093,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
 				return resourceinspection.Result{}, statusstore.ErrNotFound
 			},
 		})
@@ -8058,7 +8114,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
 				return resourceinspection.Result{}, errors.New(providerErr)
 			},
 		})
@@ -9819,7 +9875,7 @@ func TestRouterRejectsNonGETMethods(t *testing.T) {
 		OverviewDeploymentResourceLogs: func(context.Context, string, string, string, int) (resourcelogs.Result, error) {
 			return resourcelogs.Result{}, nil
 		},
-		OverviewDeploymentResourceInspection: func(context.Context, string, string, string) (resourceinspection.Result, error) {
+		OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
 			return resourceinspection.Result{}, nil
 		},
 		CreateDeploymentPlanPreview: func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error) {

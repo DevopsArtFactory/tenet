@@ -1733,7 +1733,7 @@ type Options struct {
 	OverviewDeployment                   func(context.Context, string) (catalog.DeploymentOverviewDetail, error)
 	OverviewDeploymentEvents             func(context.Context, string) (catalog.DeploymentOverviewEvents, error)
 	OverviewDeploymentResourceLogs       func(context.Context, string, string, string, int) (resourcelogs.Result, error)
-	OverviewDeploymentResourceInspection func(context.Context, string, string, string) (resourceinspection.Result, error)
+	OverviewDeploymentResourceInspection func(context.Context, string, string, string, int) (resourceinspection.Result, error)
 	AuditLogs                            func(context.Context, auditlog.Query) (auditlog.Result, error)
 	CreateDeploymentPlanPreview          func(context.Context, string, planpreview.CreateRequest) (planpreview.CreateResult, error)
 	PlanPreview                          func(context.Context, string) (planpreview.Record, error)
@@ -2232,11 +2232,19 @@ func NewRouter(options Options) http.Handler {
 			if !ok {
 				return
 			}
+			resourceLimit := 0
+			if resourceType == "ecsService" {
+				var limitOK bool
+				resourceLimit, limitOK = parseOptionalPositiveLimit(w, r)
+				if !limitOK {
+					return
+				}
+			}
 			if _, err := options.OverviewDeployment(r.Context(), name); err != nil {
 				respondReadLookupError(w, err, "overview deployment unavailable")
 				return
 			}
-			result, err := options.OverviewDeploymentResourceInspection(r.Context(), name, resourceType, resourceName)
+			result, err := options.OverviewDeploymentResourceInspection(r.Context(), name, resourceType, resourceName, resourceLimit)
 			if err != nil {
 				respondReadLookupError(w, err, "overview deployment resource inspection unavailable")
 				return

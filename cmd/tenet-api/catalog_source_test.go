@@ -175,7 +175,7 @@ func TestAPIOptionsWithGitHubCatalogSourceUsesObserverRoleForResourceInspection(
 	}
 
 	ctx := context.WithValue(context.Background(), key, "trace-value")
-	if _, err := options.OverviewDeploymentResourceInspection(ctx, "api-prod", "candidateAutoScalingGroup", "api-prod-candidate"); err != nil {
+	if _, err := options.OverviewDeploymentResourceInspection(ctx, "api-prod", "candidateAutoScalingGroup", "api-prod-candidate", 0); err != nil {
 		t.Fatalf("OverviewDeploymentResourceInspection returned error: %v", err)
 	}
 	if provider.calls != 1 {
