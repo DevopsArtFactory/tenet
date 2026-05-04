@@ -1587,7 +1587,11 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "const resourceLogsLimitOptions = [" in body, body
     assert "Log entry cap · ${resourceLogsLimitText(limit)}" in body, body
     assert "'Log limit'" in body, body
-    assert "const resourceInspectionReadRoute = (deploymentName, resource) => `GET ${buildResourceInspectionRoute(deploymentName, resource)}`;" in body, body
+    assert "const resourceInspectionReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceInspectionRoute(deploymentName, resource, limit)}`;" in body, body
+    assert "const resourceInspectionTaskDefaultLimit = 10;" in body, body
+    assert "const resourceInspectionLimitOptions = [" in body, body
+    assert "'Task sample limit'" in body, body
+    assert "resource?.type !== 'ecsService'" in body, body
     assert "const createECSTaskScopeSummary = (scope) => {" in body, body
     assert "Task sample scope · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${truncationStatus}" in body, body
     assert "[createECSTaskScopeSummary(service?.tasksScope)]" in body, body

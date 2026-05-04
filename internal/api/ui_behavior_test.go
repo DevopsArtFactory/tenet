@@ -4733,7 +4733,15 @@ async function render(search, inspectionResult) {
   const fetch = (url) => {
     fetchCalls.push(String(url));
     if (url === '/v1/overview/deployments/worker-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (String(url).startsWith('/v1/overview/deployments/worker-prod/resource-inspection?')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inspectionResult) });
+    if (String(url).startsWith('/v1/overview/deployments/worker-prod/resource-inspection?')) {
+      const route = new URL(String(url), 'http://tenet.local');
+      const limit = route.searchParams.get('limit');
+      const body = JSON.parse(JSON.stringify(inspectionResult));
+      if (body.ecsService && limit && body.ecsService.tasksScope) {
+        body.ecsService.tasksScope = { effectiveLimit: Number(limit), returnedTaskCount: 1, truncationStatus: 'not_truncated' };
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+    }
     if (String(url).startsWith('/v1/overview/deployments/worker-prod/resource-logs?')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'aws_unavailable', entries: [] }) });
     throw new Error('unexpected fetch url: ' + url);
   };
@@ -4755,6 +4763,28 @@ async function render(search, inspectionResult) {
   if (!serviceRun.text.includes('Recent ECS tasks')) throw new Error('expected ECS service task list');
   if (!serviceRun.text.includes('Task sample scope · returned 1 task(s) from effective limit 10 · not truncated')) throw new Error('expected ECS task sample scope text: ' + serviceRun.text);
   if (!serviceRun.text.includes('Task ARN · ' + taskArn)) throw new Error('expected ECS task ARN in service inspection');
+  const taskLimitSelect = collectNodes(serviceRun.document.getElementById('accounts'), (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'Task sample limit')[0];
+  if (!taskLimitSelect) throw new Error('expected ECS service live inspection to expose task sample limit select');
+  const limitOptionsText = (taskLimitSelect.children || []).map((node) => node.textContent).join(' | ');
+  ['10 tasks (default)', '25 tasks'].forEach((label) => {
+    if (!limitOptionsText.includes(label)) throw new Error('expected task limit option ' + label + ', got ' + limitOptionsText);
+  });
+  const inspectionURL = '/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&limit=10';
+  const fetchesBeforeTaskLimit = serviceRun.fetchCalls.length;
+  taskLimitSelect.value = '25';
+  taskLimitSelect.dispatch('change');
+  await settle(); await settle(); await settle();
+  const limitedInspectionURL = inspectionURL.replace('&limit=10', '&limit=25');
+  if (!serviceRun.fetchCalls.includes(limitedInspectionURL)) throw new Error('expected selected task sample limit in inspection fetch URL, got ' + JSON.stringify(serviceRun.fetchCalls));
+  if (serviceRun.window.location.search !== '?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId)) throw new Error('expected task sample limit select to preserve bookmarkable resource query, got ' + serviceRun.window.location.search);
+  const limitedInspectionText = collectText(serviceRun.document.getElementById('accounts')).join(' | ');
+  if (!limitedInspectionText.includes('Task sample scope · returned 1 task(s) from effective limit 25 · not truncated')) throw new Error('expected selected task scope evidence to stay backend-sourced, got ' + limitedInspectionText);
+  const refreshInspectionButton = collectNodes(serviceRun.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && node.textContent === 'Refresh live inspection')[0];
+  if (!refreshInspectionButton || refreshInspectionButton.disabled) throw new Error('expected refresh live inspection button usable after task limit change');
+  refreshInspectionButton.dispatch('click');
+  await settle(); await settle(); await settle();
+  if (serviceRun.fetchCalls.filter((url) => url === limitedInspectionURL).length < 2) throw new Error('expected refresh to reuse selected task sample limit');
+  if (serviceRun.fetchCalls.length <= fetchesBeforeTaskLimit) throw new Error('expected task limit flow to issue additional inspection fetches');
   const liveLink = serviceRun.links.find((node) => node.textContent === 'Open task live inspection');
   const logsLink = serviceRun.links.find((node) => node.textContent === 'Open task recent logs');
   if (!liveLink || liveLink.target !== '_self' || !liveLink.href.includes('resourceType=ecsTask') || !liveLink.href.endsWith('#resource-live-inspection')) throw new Error('expected task live-inspection handoff');
@@ -4933,7 +4963,7 @@ async function settle() { await Promise.resolve(); await new Promise((resolve) =
 const resourceID = 'ecsService::payments-api-staging-service::Primary ECS service';
 const deploymentURL = '/v1/overview/deployments/payments-api-staging';
 const logsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service';
-const inspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service';
+const inspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10';
 async function renderScenario(hash, fetchImpl) {
   const document = createDocument();
   const initialSearch = '?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(resourceID) + '&q=payments&sync=OutOfSync&account=210987654321';
@@ -5674,7 +5704,7 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
 (async () => {
   const ecsDeploymentURL = '/v1/overview/deployments/payments-api-staging';
   const ecsLogsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service';
-  const ecsInspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service';
+  const ecsInspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10';
 
   let resolveInspection;
   const loadingFetchCalls = [];
@@ -6148,7 +6178,7 @@ const resourceID = 'ecsService::payments-api-staging-service::Primary ECS servic
 const initialSearch = '?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(resourceID);
 const deploymentURL = '/v1/overview/deployments/payments-api-staging';
 const logsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service';
-const inspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service';
+const inspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10';
 const unavailableLogsPayload = {
   available: false,
   source: '',
@@ -6190,7 +6220,7 @@ const scenarios = [
     status: 401,
     body: 'unauthenticated: operator identity missing',
     expectedHeading: 'Authenticated operator required',
-    expectedMessage: 'Tenet rejected GET /v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service because authenticated identity is required on this operator read route. Tenet does not start a built-in GitHub OAuth login, enterprise SSO login, or Tenet-managed browser session from this page; reopen this same bookmarkable URL through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.',
+    expectedMessage: 'Tenet rejected GET /v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10 because authenticated identity is required on this operator read route. Tenet does not start a built-in GitHub OAuth login, enterprise SSO login, or Tenet-managed browser session from this page; reopen this same bookmarkable URL through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.',
     unexpectedText: 'Failed to load live inspection:',
     buttonLabel: 'Refresh live inspection',
   },
@@ -6200,7 +6230,7 @@ const scenarios = [
     status: 403,
     body: 'forbidden: operator does not have access to this deployment',
     expectedHeading: 'Operator access denied',
-    expectedMessage: 'Tenet rejected GET /v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.',
+    expectedMessage: 'Tenet rejected GET /v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10 after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.',
     unexpectedText: 'Failed to load live inspection:',
     buttonLabel: 'Refresh live inspection',
   },
@@ -6556,7 +6586,7 @@ async function settle(count = 1) { for (let i = 0; i < count; i += 1) { await Pr
 const resourceID = 'ecsService::payments-api-staging-service::Primary ECS service';
 const deploymentURL = '/v1/overview/deployments/payments-api-staging';
 const logsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service';
-const inspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service';
+const inspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10';
 const initialSearch = '?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(resourceID);
 const fetchCalls = [];
 let logsFetchCount = 0;

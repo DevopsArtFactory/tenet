@@ -197,6 +197,7 @@
       const deploymentEventsStateByDeployment = new Map();
       const resourceLogStateByKey = new Map();
       const resourceLogLimitByResourceKey = new Map();
+      const resourceInspectionLimitByResourceKey = new Map();
       const resourceInspectionStateByKey = new Map();
       let auditLogsPageState = { status: 'idle', route: '', result: null, error: null, promise: null, requestId: 0 };
       let operatorContextState = { status: 'idle', context: null, error: null, refreshing: false, lastCheckedAt: null };
@@ -1822,6 +1823,7 @@
       };
       const resourceLogCacheKey = (deploymentName, resource) => [deploymentName || '', resource.type || '', resource.name || '', resource.id || '', resource.containerName || ''].join('::');
       const resourceLogRequestCacheKey = (deploymentName, resource, limit = 0) => `${resourceLogCacheKey(deploymentName, resource)}::limit=${normalizeResourceLogsLimit(limit)}`;
+      const resourceInspectionRequestCacheKey = (deploymentName, resource, limit = 0) => `${resourceLogCacheKey(deploymentName, resource)}::inspection-limit=${resource?.type === 'ecsService' ? normalizeResourceInspectionTaskLimit(limit) : 0}`;
       const normalizeResourceLogsLimit = (value) => {
         const limit = Number.parseInt(String(value || '').trim(), 10);
         return Number.isInteger(limit) && limit > 0 ? limit : 0;
@@ -1831,6 +1833,15 @@
         { value: '5', label: '5 entries' },
         { value: '10', label: '10 entries' },
         { value: '25', label: '25 entries' },
+      ];
+      const resourceInspectionTaskDefaultLimit = 10;
+      const normalizeResourceInspectionTaskLimit = (value) => {
+        const limit = Number.parseInt(String(value || '').trim(), 10);
+        return Number.isInteger(limit) && limit > 0 ? limit : resourceInspectionTaskDefaultLimit;
+      };
+      const resourceInspectionLimitOptions = [
+        { value: '10', label: '10 tasks (default)' },
+        { value: '25', label: '25 tasks' },
       ];
       const resourceLogsLimitText = (limit) => {
         const normalized = normalizeResourceLogsLimit(limit);
@@ -4081,27 +4092,46 @@
         return promise;
       };
       const resourceInspectionCacheKey = (deploymentName, resource) => resourceLogCacheKey(deploymentName, resource);
-      const buildResourceInspectionRoute = (deploymentName, resource) => {
+      const selectedResourceInspectionLimit = (deploymentName, resource) => normalizeResourceInspectionTaskLimit(resourceInspectionLimitByResourceKey.get(resourceInspectionCacheKey(deploymentName, resource)) || 0);
+      const buildResourceInspectionRoute = (deploymentName, resource, limit = 0) => {
         const params = new URLSearchParams({
           resourceType: resource?.type || '',
           resourceName: resource?.name || '',
         });
+        const normalizedLimit = resource?.type === 'ecsService' ? normalizeResourceInspectionTaskLimit(limit) : 0;
+        if (normalizedLimit > 0) {
+          params.set('limit', String(normalizedLimit));
+        }
         return `/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-inspection?${params.toString()}`;
       };
-      const resourceInspectionReadRoute = (deploymentName, resource) => `GET ${buildResourceInspectionRoute(deploymentName, resource)}`;
-      const fetchResourceInspection = (deploymentName, resource) => {
-        return fetchResourcePanelJSON(buildResourceInspectionRoute(deploymentName, resource), 'resource inspection request failed');
+      const resourceInspectionReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceInspectionRoute(deploymentName, resource, limit)}`;
+      const fetchResourceInspection = (deploymentName, resource, limit = 0) => {
+        return fetchResourcePanelJSON(buildResourceInspectionRoute(deploymentName, resource, limit), 'resource inspection request failed');
       };
-      const createResourceInspectionActions = (section, detail, resource, isLoading = false) => {
+      const createResourceInspectionLimitControl = (section, detail, resource, isLoading = false) => {
         const deploymentName = detail?.name || currentPageState.deployment || '';
-        return [
-          createRefreshButton(
-            'Refresh live inspection',
-            isLoading || !deploymentName || !resource?.type || !resource?.name,
-            () => renderResourceInspectionSection(section, detail, resource, { force: true }).catch(() => {}),
-          ),
-        ];
+        if (resource?.type !== 'ecsService') return null;
+        const selectedLimit = selectedResourceInspectionLimit(deploymentName, resource);
+        return createSelect(
+          'Task sample limit',
+          String(selectedLimit),
+          resourceInspectionLimitOptions,
+          (event) => {
+            const nextLimit = normalizeResourceInspectionTaskLimit(event.target.value);
+            resourceInspectionLimitByResourceKey.set(resourceInspectionCacheKey(deploymentName, resource), nextLimit);
+            renderResourceInspectionSection(section, detail, resource, { force: true, limit: nextLimit }).catch(() => {});
+          },
+          { disabled: isLoading || !deploymentName || !resource?.type || !resource?.name },
+        );
       };
+      const createResourceInspectionActions = (section, detail, resource, isLoading = false) => [
+        createResourceInspectionLimitControl(section, detail, resource, isLoading),
+        createRefreshButton(
+          'Refresh live inspection',
+          isLoading || !(detail?.name || currentPageState.deployment || '') || !resource?.type || !resource?.name,
+          () => renderResourceInspectionSection(section, detail, resource, { force: true }).catch(() => {}),
+        ),
+      ].filter(Boolean);
       const renderResourceInspectionState = (container, text, className = '', beforeNodes = [], afterNodes = [], actions = []) => {
         const heading = createDetailSectionHeader('Live inspection', actions);
         const stateNode = createElement('div', 'detail-state', text);
@@ -4719,7 +4749,10 @@
       const renderResourceInspectionSection = (section, detail, resource, options = {}) => {
         const deploymentName = detail?.name || currentPageState.deployment || '';
         const force = Boolean(options?.force);
-        const inspectionKey = resourceInspectionCacheKey(deploymentName, resource);
+        const baseInspectionKey = resourceInspectionCacheKey(deploymentName, resource);
+        const selectedLimit = resource?.type === 'ecsService' ? normalizeResourceInspectionTaskLimit(options?.limit ?? resourceInspectionLimitByResourceKey.get(baseInspectionKey) ?? 0) : 0;
+        resourceInspectionLimitByResourceKey.set(baseInspectionKey, selectedLimit);
+        const inspectionKey = resourceInspectionRequestCacheKey(deploymentName, resource, selectedLimit);
         const cached = resourceInspectionStateByKey.get(inspectionKey);
         const loadingActions = createResourceInspectionActions(section, detail, resource, true);
 
@@ -4732,29 +4765,35 @@
           return Promise.resolve(cached.result);
         }
         if (cached?.status === 'loading') {
-          resourceInspectionStateByKey.set(inspectionKey, { ...cached, sections: [...(cached.sections || []), section] });
+          resourceInspectionStateByKey.set(inspectionKey, { ...cached, sections: [...(cached.sections || []), { section, detail, limit: selectedLimit }] });
           renderResourceInspectionState(section, 'Loading live inspection…', '', [], [], loadingActions);
           return cached.promise;
         }
 
         renderResourceInspectionState(section, 'Loading live inspection…', '', [], [], loadingActions);
-        const promise = fetchResourceInspection(deploymentName, resource)
+        const promise = fetchResourceInspection(deploymentName, resource, selectedLimit)
           .then((result) => {
             const current = resourceInspectionStateByKey.get(inspectionKey);
             resourceInspectionStateByKey.set(inspectionKey, { status: 'ready', result });
-            (current?.sections || []).forEach((container) => renderResourceInspectionPayload(container, detail, resource, result));
+            (current?.sections || []).forEach((target) => {
+              const container = target?.section || target;
+              renderResourceInspectionPayload(container, target?.detail || detail, resource, result);
+            });
             scrollToCurrentHashTarget();
             return result;
           })
           .catch((error) => {
             const current = resourceInspectionStateByKey.get(inspectionKey);
             resourceInspectionStateByKey.set(inspectionKey, { status: 'error', error });
-            (current?.sections || []).forEach((container) => {
+            (current?.sections || []).forEach((target) => {
+              const container = target?.section || target;
+              const targetDetail = target?.detail || detail;
+              const targetLimit = target?.limit ?? selectedLimit;
               if (renderOperatorReadFailurePanel(
                 container,
                 'Live inspection',
-                createResourceInspectionActions(container, detail, resource),
-                resourceInspectionReadRoute(deploymentName, resource),
+                createResourceInspectionActions(container, targetDetail, resource),
+                resourceInspectionReadRoute(deploymentName, resource, targetLimit),
                 error,
               )) {
                 return;
@@ -4765,14 +4804,14 @@
                 'error',
                 [],
                 [],
-                createResourceInspectionActions(container, detail, resource),
+                createResourceInspectionActions(container, targetDetail, resource),
               );
             });
             scrollToCurrentHashTarget();
             throw error;
           });
 
-        resourceInspectionStateByKey.set(inspectionKey, { status: 'loading', promise, sections: [section] });
+        resourceInspectionStateByKey.set(inspectionKey, { status: 'loading', promise, sections: [{ section, detail, limit: selectedLimit }] });
         return promise;
       };
       const requestError = (kind, message, status = 0) => {
