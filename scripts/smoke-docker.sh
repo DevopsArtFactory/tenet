@@ -247,6 +247,7 @@ assert enterprise_sso.get('active') is expected_active, payload
 assert enterprise_sso.get('provider') == provider, payload
 assert enterprise_sso.get('loginRoute') == expected_login_route, payload
 assert enterprise_sso.get('callbackRoute') == expected_callback_route, payload
+assert enterprise_sso.get('logoutRoute') == '/auth/logout', payload
 assert enterprise_sso.get('requiredSettings') == expected_required, payload
 assert not enterprise_sso.get('missingSettings'), payload
 assert enterprise_sso.get('stateStoreConfigured') is True, payload

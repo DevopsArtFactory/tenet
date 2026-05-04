@@ -475,6 +475,9 @@ func enterpriseSSODiagnosticFromSettings(provider string, settings map[string]st
 		SessionSecretConfigured: settings["TENET_AUTH_SESSION_SECRET"] != "",
 		UnavailableReason:       "enterprise SSO provider diagnostics are configured, but provider login/callback runtime is not active for this API instance",
 	}
+	if configured {
+		diagnostic.LogoutRoute = "/auth/logout"
+	}
 	if len(missingSettings) > 0 {
 		diagnostic.UnavailableReason = "enterprise SSO provider configuration is incomplete or missing shared managed-session settings"
 	} else if len(invalidSettings) > 0 {
@@ -605,6 +608,7 @@ func configureManagedLoginRuntime(options *api.Options) {
 		options.AuthRuntime.EnterpriseSSO.Active = true
 		options.AuthRuntime.EnterpriseSSO.LoginRoute = loginRoute
 		options.AuthRuntime.EnterpriseSSO.CallbackRoute = callbackRoute
+		options.AuthRuntime.EnterpriseSSO.LogoutRoute = "/auth/logout"
 		options.AuthRuntime.EnterpriseSSO.MissingSettings = []string{}
 		options.AuthRuntime.EnterpriseSSO.UnavailableReason = ""
 	}

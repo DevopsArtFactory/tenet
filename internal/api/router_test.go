@@ -219,7 +219,7 @@ func TestRouterOperatorContextReportsEnterpriseSSORuntimeDiagnostic(t *testing.T
 	if enterpriseSSO["configured"] != true || enterpriseSSO["active"] != false || enterpriseSSO["provider"] != "google" {
 		t.Fatalf("expected configured inactive enterprise SSO diagnostic, got %#v", enterpriseSSO)
 	}
-	if enterpriseSSO["loginRoute"] != "/auth/login/google" || enterpriseSSO["callbackRoute"] != "/auth/callback/google" {
+	if enterpriseSSO["loginRoute"] != "/auth/login/google" || enterpriseSSO["callbackRoute"] != "/auth/callback/google" || enterpriseSSO["logoutRoute"] != "/auth/logout" {
 		t.Fatalf("expected enterprise SSO route diagnostics, got %#v", enterpriseSSO)
 	}
 	if enterpriseSSO["stateStoreConfigured"] != true || enterpriseSSO["identityStoreConfigured"] != true || enterpriseSSO["sessionSecretConfigured"] != true {

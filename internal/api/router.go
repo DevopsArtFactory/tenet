@@ -421,6 +421,7 @@ type EnterpriseSSODiagnostic struct {
 	InvalidSettings         []string `json:"invalidSettings,omitempty"`
 	LoginRoute              string   `json:"loginRoute,omitempty"`
 	CallbackRoute           string   `json:"callbackRoute,omitempty"`
+	LogoutRoute             string   `json:"logoutRoute,omitempty"`
 	StateStoreConfigured    bool     `json:"stateStoreConfigured"`
 	IdentityStoreConfigured bool     `json:"identityStoreConfigured"`
 	SessionSecretConfigured bool     `json:"sessionSecretConfigured"`
@@ -772,6 +773,9 @@ func normalizeAuthRuntimeDiagnostic(diagnostic AuthRuntimeDiagnostic) AuthRuntim
 		}
 		enterpriseSSO.Configured = enterpriseSSO.Configured && len(enterpriseSSO.MissingSettings) == 0 && len(enterpriseSSO.InvalidSettings) == 0
 		enterpriseSSO.Active = enterpriseSSO.Active && enterpriseSSO.Configured
+		if enterpriseSSO.Configured && strings.TrimSpace(enterpriseSSO.LogoutRoute) == "" {
+			enterpriseSSO.LogoutRoute = "/auth/logout"
+		}
 		if enterpriseSSO.Active {
 			enterpriseSSO.UnavailableReason = ""
 		} else if enterpriseSSO.UnavailableReason == "" {
