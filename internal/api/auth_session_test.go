@@ -300,6 +300,45 @@ func TestManagedLoginOperatorContextReportsDisabledLifecycleDefaults(t *testing.
 	assertManagedLoginLifecycleDiagnostics(t, managedLogin, false)
 }
 
+func TestAuthSessionSecureCookieSourcesDeduplicatesDiagnostics(t *testing.T) {
+	t.Run("repeated x-forwarded-proto values report one source", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+		req.Header.Add("X-Forwarded-Proto", "https")
+		req.Header.Add("X-Forwarded-Proto", "https, http, HTTPS")
+
+		got := (authSessionConfig{}).secureCookieSources(req)
+		if !reflect.DeepEqual(got, []string{"x_forwarded_proto_https"}) {
+			t.Fatalf("expected one x-forwarded-proto source, got %#v", got)
+		}
+	})
+
+	t.Run("repeated forwarded proto values report one source", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+		req.Header.Add("Forwarded", "for=192.0.2.1; proto=https")
+		req.Header.Add("Forwarded", "for=192.0.2.2; proto=\"https\", for=192.0.2.3; proto=https")
+
+		got := (authSessionConfig{}).secureCookieSources(req)
+		if !reflect.DeepEqual(got, []string{"forwarded_proto_https"}) {
+			t.Fatalf("expected one forwarded proto source, got %#v", got)
+		}
+	})
+
+	t.Run("distinct secure sources keep stable order", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+		req.TLS = &tls.ConnectionState{}
+		req.Header.Add("X-Forwarded-Proto", "http, https")
+		req.Header.Add("X-Forwarded-Proto", "https")
+		req.Header.Add("Forwarded", "for=192.0.2.4; proto=https")
+		req.Header.Add("Forwarded", "for=192.0.2.5; proto=\"https\"")
+
+		got := (authSessionConfig{CookieSecure: true}).secureCookieSources(req)
+		want := []string{"configured_override", "https_request", "x_forwarded_proto_https", "forwarded_proto_https"}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("expected stable de-duplicated source order %#v, got %#v", want, got)
+		}
+	})
+}
+
 func TestManagedLoginOperatorContextReportsSessionCookieSecurityDiagnostics(t *testing.T) {
 	t.Run("forwarded https request reports secure source", func(t *testing.T) {
 		options, _ := managedLoginTestOptions(t, &fakeAuthProvider{})
