@@ -556,7 +556,7 @@ Behind those routes, the built-in AWS-backed recent-log provider now reuses SDK 
 
 Current provider-backed recent-log support includes:
 - `ecsService` across newest running and recently stopped service tasks
-- `ecsTask` for an exact task ARN, with optional `containerName={container}` to narrow the bounded CloudWatch Logs read to one awslogs-backed container; responses echo that selector as `containerName` when supplied so scripted clients can distinguish container-scoped task lookups from task-wide reads
+- `ecsTask` for an exact task ARN, with optional `containerName={container}` to narrow the bounded CloudWatch Logs read to one awslogs-backed container; responses echo that selector as response-level `containerName` when supplied so scripted clients can distinguish container-scoped task lookups from task-wide reads, while successful ECS task `entries[]` rows may carry additive `containerName` metadata for the resolved per-row log source
 - `candidateAutoScalingGroup`
 - `serviceAutoScalingGroup`
 - `userDataBootstrapSource` via the resolved backing Auto Scaling Group

@@ -108,8 +108,45 @@ func TestServiceRecent(t *testing.T) {
 		if gotLookup.ResourceName != "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123" || gotLookup.ContainerName != "api" || gotLookup.Limit != 2 {
 			t.Fatalf("unexpected ECS task log lookup request: %+v", gotLookup)
 		}
-		if !result.Available || result.Source != SourceCloudWatch || result.ContainerName != "api" || result.ResourceDescription != "ECS task selected from live service inspection" || len(result.Entries) != 1 || result.Entries[0].Stream != "ecs/api/abc123" {
-			t.Fatalf("expected available ECS task logs with echoed container selector and description, got %+v", result)
+		if !result.Available || result.Source != SourceCloudWatch || result.ContainerName != "api" || result.ResourceDescription != "ECS task selected from live service inspection" || len(result.Entries) != 1 || result.Entries[0].Stream != "ecs/api/abc123" || result.Entries[0].ContainerName != "api" {
+			t.Fatalf("expected available ECS task logs with echoed selector, per-entry container metadata, and description, got %+v", result)
+		}
+	})
+
+	t.Run("ecs task all-container reads preserve per-entry container source", func(t *testing.T) {
+		service := NewService(Options{
+			MaxEntries: 5,
+			ListECSLogEvents: func(ctx context.Context, req ECSRequest) ([]CloudWatchEvent, error) {
+				if req.ContainerName != "" {
+					t.Fatalf("expected all-container task lookup without selector, got %q", req.ContainerName)
+				}
+				return []CloudWatchEvent{
+					{Timestamp: time.Date(2026, 4, 16, 7, 12, 0, 0, time.UTC), Message: "worker drained", Stream: "ecs/worker/abc123", ContainerName: "worker"},
+					{Timestamp: time.Date(2026, 4, 16, 7, 11, 0, 0, time.UTC), Message: "api handled request", Stream: "ecs/api/abc123", ContainerName: "api"},
+				}, nil
+			},
+		})
+
+		result, err := service.Recent(context.Background(), Request{
+			DeploymentName:   "payments-api-prod",
+			ResourceType:     "ecsTask",
+			ResourceName:     "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123",
+			ControlAccountID: "123456789012",
+			TargetAccountID:  "123456789012",
+			Region:           "ap-northeast-2",
+		})
+		if err != nil {
+			t.Fatalf("Recent returned error: %v", err)
+		}
+		want := []Entry{
+			{Timestamp: "2026-04-16T07:12:00Z", Message: "worker drained", Stream: "ecs/worker/abc123", ContainerName: "worker"},
+			{Timestamp: "2026-04-16T07:11:00Z", Message: "api handled request", Stream: "ecs/api/abc123", ContainerName: "api"},
+		}
+		if !reflect.DeepEqual(result.Entries, want) {
+			t.Fatalf("unexpected ECS task entries: got %+v want %+v", result.Entries, want)
+		}
+		if result.ContainerName != "" {
+			t.Fatalf("expected response-level selector to be omitted for all-container read, got %q", result.ContainerName)
 		}
 	})
 
