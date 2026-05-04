@@ -382,7 +382,7 @@ func contextWithAuthSession(ctx context.Context, r *http.Request, cfg authSessio
 		Name:          claims.Name,
 		Email:         claims.Email,
 	}
-	return requestactor.WithAuthenticatedIdentityContext(ctx, identity)
+	return requestactor.WithManagedSessionAuthenticatedIdentityContext(ctx, identity)
 }
 
 func firstNonEmpty(values ...string) string {

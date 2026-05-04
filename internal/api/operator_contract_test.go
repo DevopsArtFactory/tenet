@@ -977,7 +977,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"`X-Tenet-Authenticated-Roles: viewer,auditor`",
 		"`roles.recognizedNames=[\"viewer\"]`, `roles.unrecognizedNames=[\"auditor\"]`, `roles.canRead=true`, and `roles.canWrite=false`",
 		"it does not grant Tenet read or write capability",
-		"whether the request used canonical `X-Tenet-Authenticated-*` fields or compatibility `X-User-*` aliases",
+		"whether the request used canonical `X-Tenet-Authenticated-*` fields, compatibility `X-User-*` aliases, or the Tenet-managed `managed_session_cookie` source",
 		"Role forwarding intentionally has no `X-User-*` compatibility alias",
 		"roles.provenance.source=absent` means the front door must forward `X-Tenet-Authenticated-Roles` before role-gated reads or writes can pass",
 		"which forwarded values Tenet recognized versus ignored",
