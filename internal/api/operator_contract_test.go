@@ -1511,6 +1511,8 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		`assert forbidden_events_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_events_body`,
 		`assert allowed_events_read['deploymentName'] == 'payments-api-staging', allowed_events_read`,
 		`assert isinstance(allowed_events_read.get('events'), list), allowed_events_read`,
+		`assert all('controllerRefresh' not in event for event in deployment_events_fixture['events']), deployment_events_fixture`,
+		`assert 'controllerRefresh' not in event, events_payload`,
 	} {
 		if !strings.Contains(localSmoke, fragment) {
 			t.Fatalf("expected smoke-local deployment events auth contract to include %q", fragment)
@@ -1549,6 +1551,7 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		"`200 OK` authorized reads",
 		"`deploymentName` plus `events` list payload contract",
 		"additive `managedDriftSummary` severity counts",
+		"ticker/default controller events do not include `controllerRefresh`",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README deployment events auth contract to include %q", fragment)
@@ -1561,6 +1564,7 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		"`401` / `403` / `200 OK` contract",
 		"`deploymentName` plus `events` list shape",
 		"additive `managedDriftSummary` object carrying explicit zero/non-zero severity counts",
+		"ticker/default controller-event path omit `controllerRefresh`",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
 			t.Fatalf("expected local runtime doc deployment events auth contract to include %q", fragment)
