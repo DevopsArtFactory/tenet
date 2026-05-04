@@ -3101,7 +3101,7 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"successful ECS task `entries[]` rows may carry additive `containerName` metadata for the resolved per-row log source",
 			"with optional `instanceId={i-...}` to narrow the read to a specific current ASG member while preserving the default newest-instance behavior when omitted",
 			"Recent-log payloads also echo the selected rollout execution description as additive `resourceDescription`",
-			"Local and compose smoke lock this alongside the ECS task `containerName` selector",
+			"Local and compose smoke lock this alongside the ECS task `containerName` selector and ASG console `entries[].instanceId` metadata",
 			"Known `unavailableReason` values render friendly operator copy, and unknown provider/internal codes fall back to generic troubleshooting guidance instead of being shown literally",
 		},
 		"../../docs/features/resource-recent-logs.md": {
@@ -3110,6 +3110,8 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"echoes the trimmed selector as response-level `containerName`, including explicit unavailable payloads",
 			"`instanceId` is optional and only meaningful for Auto Scaling Group-backed EC2 console-log reads",
 			"echoes the trimmed selector as response-level `instanceId`, including explicit unavailable payloads",
+			"Successful EC2 console rows also carry additive `entries[].instanceId` metadata for the source ASG member",
+			"Successful rows include `entries[].instanceId` so default ASG reads and selected-instance reads both identify which EC2 member produced each console line",
 			"`available=false` / `unavailableReason=resource_not_found` instead of reading arbitrary instance console output",
 			"Successful ECS task log rows may also carry per-entry `entries[].containerName`",
 			"release guards intentionally lock the response-level selector separately from per-entry/source metadata and separately from rollout `resourceDescription`",
@@ -3130,6 +3132,7 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 		},
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
 			"bounded `resource-logs?limit=1` provider cap plus router fallback truncation/resultScope metadata",
+			"ASG console `entries[].instanceId` metadata",
 			"weighted target-group `no_log_source` recent-log payloads",
 			"the `candidateAutoScalingGroup` bounded `resource-inspection?limit=2` sample with `autoScalingGroup.instancesScope` fields when available plus explicit unavailable semantics without AWS access",
 		},

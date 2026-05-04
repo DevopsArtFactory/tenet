@@ -6332,13 +6332,15 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 
 	t.Run("passes optional instance selector into provider context and raw payload", func(t *testing.T) {
 		expected := resourcelogs.Result{
-			DeploymentName:    "api-prod",
-			ResourceType:      "candidateAutoScalingGroup",
-			ResourceName:      "payments-api-prod-candidate",
-			InstanceID:        "i-0abc123def4567890",
-			Available:         false,
-			Entries:           []resourcelogs.Entry{},
-			UnavailableReason: resourcelogs.UnavailableReasonAWSUnavailable,
+			DeploymentName: "api-prod",
+			ResourceType:   "candidateAutoScalingGroup",
+			ResourceName:   "payments-api-prod-candidate",
+			InstanceID:     "i-0abc123def4567890",
+			Available:      true,
+			Source:         resourcelogs.SourceEC2Console,
+			Entries: []resourcelogs.Entry{
+				{Timestamp: "2026-04-16T07:11:30Z", Message: "selected instance bootstrap output", InstanceID: "i-0abc123def4567890"},
+			},
 		}
 
 		var gotInstanceID string
@@ -6376,8 +6378,19 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		if raw["instanceId"] != "i-0abc123def4567890" {
 			t.Fatalf("expected instanceId to echo selected EC2 instance, got %#v", raw)
 		}
-		if raw["unavailableReason"] != resourcelogs.UnavailableReasonAWSUnavailable {
-			t.Fatalf("expected unavailable reason to survive selected instance payload, got %#v", raw)
+		entries, ok := raw["entries"].([]any)
+		if !ok || len(entries) != 1 {
+			t.Fatalf("expected one selected-instance entry, got %#v", raw["entries"])
+		}
+		entry, ok := entries[0].(map[string]any)
+		if !ok {
+			t.Fatalf("expected selected-instance entry object, got %#v", entries[0])
+		}
+		if entry["instanceId"] != "i-0abc123def4567890" {
+			t.Fatalf("expected entries[].instanceId to identify EC2 console source, got %#v", entry)
+		}
+		if entry["message"] != "selected instance bootstrap output" {
+			t.Fatalf("expected selected-instance entry message to survive, got %#v", entry)
 		}
 	})
 

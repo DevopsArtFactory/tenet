@@ -320,9 +320,9 @@ func TestServiceRecent(t *testing.T) {
 			Available:      true,
 			Source:         SourceEC2Console,
 			Entries: []Entry{
-				{Timestamp: "2026-04-16T07:11:45Z", Message: "bootstrap step one"},
-				{Timestamp: "2026-04-16T07:11:45Z", Message: "bootstrap complete"},
-				{Timestamp: "2026-04-16T07:11:30Z", Message: "bootstrap start"},
+				{Timestamp: "2026-04-16T07:11:45Z", Message: "bootstrap step one", InstanceID: "i-newest"},
+				{Timestamp: "2026-04-16T07:11:45Z", Message: "bootstrap complete", InstanceID: "i-newest"},
+				{Timestamp: "2026-04-16T07:11:30Z", Message: "bootstrap start", InstanceID: "i-newest"},
 			},
 			UnavailableReason: "",
 		}
@@ -368,8 +368,8 @@ func TestServiceRecent(t *testing.T) {
 			Available:      true,
 			Source:         SourceEC2Console,
 			Entries: []Entry{
-				{Timestamp: "2026-04-16T07:11:30Z", Message: "selected start"},
-				{Timestamp: "2026-04-16T07:11:45Z", Message: "selected complete"},
+				{Timestamp: "2026-04-16T07:11:30Z", Message: "selected start", InstanceID: "i-selected"},
+				{Timestamp: "2026-04-16T07:11:45Z", Message: "selected complete", InstanceID: "i-selected"},
 			},
 		}
 		if !reflect.DeepEqual(result, want) {
@@ -454,9 +454,9 @@ func TestServiceRecent(t *testing.T) {
 			Available:      true,
 			Source:         SourceEC2Console,
 			Entries: []Entry{
-				{Timestamp: "2026-04-16T07:11:45Z", Message: "download config"},
-				{Timestamp: "2026-04-16T07:11:45Z", Message: "start services"},
-				{Timestamp: "2026-04-16T07:11:45Z", Message: "bootstrap complete"},
+				{Timestamp: "2026-04-16T07:11:45Z", Message: "download config", InstanceID: "i-newest"},
+				{Timestamp: "2026-04-16T07:11:45Z", Message: "start services", InstanceID: "i-newest"},
+				{Timestamp: "2026-04-16T07:11:45Z", Message: "bootstrap complete", InstanceID: "i-newest"},
 			},
 		}
 		if !reflect.DeepEqual(result, want) {
@@ -545,8 +545,8 @@ func TestServiceRecent(t *testing.T) {
 			Available:      true,
 			Source:         SourceEC2Console,
 			Entries: []Entry{
-				{Timestamp: "2026-04-16T07:11:30Z", Message: "refresh start"},
-				{Timestamp: "2026-04-16T07:11:45Z", Message: "refresh complete"},
+				{Timestamp: "2026-04-16T07:11:30Z", Message: "refresh start", InstanceID: "i-refresh"},
+				{Timestamp: "2026-04-16T07:11:45Z", Message: "refresh complete", InstanceID: "i-refresh"},
 			},
 		}
 		if !reflect.DeepEqual(result, want) {
@@ -602,8 +602,8 @@ func TestServiceRecent(t *testing.T) {
 			Available:           true,
 			Source:              SourceEC2Console,
 			Entries: []Entry{
-				{Timestamp: "2026-04-16T07:11:30Z", Message: "refresh start"},
-				{Timestamp: "2026-04-16T07:11:45Z", Message: "refresh complete"},
+				{Timestamp: "2026-04-16T07:11:30Z", Message: "refresh start", InstanceID: "i-refresh"},
+				{Timestamp: "2026-04-16T07:11:45Z", Message: "refresh complete", InstanceID: "i-refresh"},
 			},
 		}
 		if !reflect.DeepEqual(result, want) {
