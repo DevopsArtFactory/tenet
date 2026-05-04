@@ -1411,8 +1411,11 @@ assert "Task sample scope · returned ${countText(returnedTaskCount)} task(s) fr
 assert "[createECSTaskScopeSummary(service?.tasksScope)]" in ui, ui
 assert 'Auto Scaling Group name' in ui, ui
 assert 'Open EC2 console logs' in ui, ui
+assert "const autoScalingGroupSupportsInstanceHandoff = (resource) => ['candidateAutoScalingGroup', 'serviceAutoScalingGroup'].includes(String(resource?.type || '').trim());" in ui, ui
 assert "const autoScalingGroupRecentLogsHandoff = (deploymentName, resource) => {" in ui, ui
-assert "['candidateAutoScalingGroup', 'serviceAutoScalingGroup'].includes(String(resource?.type || '').trim())" in ui, ui
+assert "const createAutoScalingInstanceHandoffLinks = (deploymentName, resource, instance) => {" in ui, ui
+assert 'Inspect this instance' in ui, ui
+assert 'Open instance logs' in ui, ui
 assert "buildPageSectionURL('resource', 'resource-recent-logs'" in ui, ui
 assert 'Launch template' in ui, ui
 assert 'Target group ARNs' in ui, ui

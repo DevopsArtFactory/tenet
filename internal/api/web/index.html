@@ -1821,7 +1821,7 @@
         const resolvedAlias = bootstrapSourceAliasIdentity(resource.name);
         return Boolean(bookmarkedAlias && resolvedAlias && bookmarkedAlias === resolvedAlias);
       };
-      const resourceLogCacheKey = (deploymentName, resource) => [deploymentName || '', resource.type || '', resource.name || '', resource.id || '', resource.containerName || ''].join('::');
+      const resourceLogCacheKey = (deploymentName, resource) => [deploymentName || '', resource.type || '', resource.name || '', resource.id || '', resource.containerName || '', resource.instanceId || ''].join('::');
       const supportsBoundedResourceInspection = (resource) => ['ecsService', 'candidateAutoScalingGroup', 'serviceAutoScalingGroup'].includes(String(resource?.type || '').trim());
       const resourceLogRequestCacheKey = (deploymentName, resource, limit = 0) => `${resourceLogCacheKey(deploymentName, resource)}::limit=${normalizeResourceLogsLimit(limit)}`;
       const resourceInspectionRequestCacheKey = (deploymentName, resource, limit = 0) => `${resourceLogCacheKey(deploymentName, resource)}::inspection-limit=${supportsBoundedResourceInspection(resource) ? normalizeResourceInspectionTaskLimit(limit) : 0}`;
@@ -2083,6 +2083,7 @@
           resourceType: params.get('resourceType') || '',
           resourceId: params.get('resourceId') || '',
           containerName: params.get('containerName') || '',
+          instanceId: params.get('instanceId') || '',
           auditAction: normalizeAuditAction(params.get('action') || ''),
           auditLimit: normalizeAuditLimit(params.get('limit') || ''),
         };
@@ -2961,7 +2962,12 @@
       };
       const applyResourcePageContainerState = (resource) => {
         const containerName = String(currentPageState.containerName || '').trim();
-        return containerName ? { ...resource, containerName } : resource;
+        const instanceId = String(currentPageState.instanceId || '').trim();
+        return {
+          ...resource,
+          ...(containerName ? { containerName } : {}),
+          ...(instanceId ? { instanceId } : {}),
+        };
       };
       const resolveResourceDetail = (detail) => {
         const resources = groupResourceSections(detail).flatMap((group) => group.resources || []);
@@ -3007,6 +3013,7 @@
           routeResourceType: currentPageState.resourceType || bookmarkedResource.type || resource.type,
           routeResourceId: openedViaAlias ? bookmarkedResource.id : resource.id,
           routeContainerName: String(currentPageState.containerName || resource.containerName || '').trim(),
+          routeInstanceId: String(currentPageState.instanceId || resource.instanceId || '').trim(),
         };
       };
       const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = [], currentSectionEmptyLabel = '') => {
@@ -3390,6 +3397,7 @@
               resourceType: resourceRouteState.routeResourceType,
               resourceId: resourceRouteState.routeResourceId,
               containerName: resourceRouteState.routeContainerName,
+              instanceId: resourceRouteState.routeInstanceId,
             }),
           });
         };
@@ -3883,6 +3891,9 @@
         if (result?.containerName) {
           fields.push(['Selected container', lookupContextText(result.containerName)]);
         }
+        if (result?.instanceId) {
+          fields.push(['Selected instance', lookupContextText(result.instanceId)]);
+        }
         if (result?.backingResourceType) {
           fields.push(['Backing resource type', lookupContextText(result.backingResourceType)]);
         }
@@ -3929,6 +3940,10 @@
         const containerName = String(resource?.containerName || '').trim();
         if (containerName) {
           params.set('containerName', containerName);
+        }
+        const instanceId = String(resource?.instanceId || '').trim();
+        if (instanceId) {
+          params.set('instanceId', instanceId);
         }
         const normalizedLimit = normalizeResourceLogsLimit(limit);
         if (normalizedLimit > 0) {
@@ -4020,6 +4035,9 @@
           if (entry.containerName) {
             logMeta.append(createElement('span', 'detail-condition-meta', `Log container · ${entry.containerName}`));
           }
+          if (entry.instanceId) {
+            logMeta.append(createElement('span', 'detail-condition-meta', `Log instance · ${entry.instanceId}`));
+          }
           logItem.append(logMeta);
           logList.append(logItem);
         });
@@ -4100,6 +4118,10 @@
           resourceType: resource?.type || '',
           resourceName: resource?.name || '',
         });
+        const instanceId = String(resource?.instanceId || '').trim();
+        if (instanceId) {
+          params.set('instanceId', instanceId);
+        }
         const normalizedLimit = supportsBoundedResourceInspection(resource) ? normalizeResourceInspectionTaskLimit(limit) : 0;
         if (normalizedLimit > 0) {
           params.set('limit', String(normalizedLimit));
@@ -4418,14 +4440,31 @@
           `ASG instance sample scope · requested ${countText(scope.requestedLimit)} · effective ${countText(effectiveLimit)} · returned ${countText(returnedInstanceCount)} instance(s) · ${truncationStatus}`,
         );
       };
+      const autoScalingGroupSupportsInstanceHandoff = (resource) => ['candidateAutoScalingGroup', 'serviceAutoScalingGroup'].includes(String(resource?.type || '').trim());
       const autoScalingGroupRecentLogsHandoff = (deploymentName, resource) => {
         if (!deploymentName || !resource?.id) return null;
-        if (!['candidateAutoScalingGroup', 'serviceAutoScalingGroup'].includes(String(resource?.type || '').trim())) return null;
+        if (!autoScalingGroupSupportsInstanceHandoff(resource)) return null;
         return createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', {
           deployment: deploymentName,
           resourceType: resource.type,
           resourceId: resource.id,
         }), 'Open EC2 console logs', '_self');
+      };
+      const createAutoScalingInstanceHandoffLinks = (deploymentName, resource, instance) => {
+        const instanceId = String(instance?.instanceId || '').trim();
+        if (!deploymentName || !resource?.id || !autoScalingGroupSupportsInstanceHandoff(resource) || !instanceId) return null;
+        const links = createElement('div', 'row-links');
+        const routeExtras = {
+          deployment: deploymentName,
+          resourceType: resource.type,
+          resourceId: resource.id,
+          instanceId,
+        };
+        links.append(
+          createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', routeExtras), 'Inspect this instance', '_self'),
+          createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', routeExtras), 'Open instance logs', '_self'),
+        );
+        return links;
       };
       const renderAutoScalingGroupInspection = (section, deploymentName, resource, result) => {
         const group = result?.autoScalingGroup;
@@ -4477,6 +4516,8 @@
               meta.append(createElement('span', 'detail-condition-meta', `Weighted capacity · ${instance.weightedCapacity}`));
             }
             item.append(meta);
+            const handoffs = createAutoScalingInstanceHandoffLinks(deploymentName, resource, instance);
+            if (handoffs) item.append(handoffs);
             return item;
           },
           instanceSampleUnavailable ? 'ASG instance sampling is unavailable for this group; group inspection remains available.' : 'No instances are currently reported for this Auto Scaling Group.',
@@ -4793,9 +4834,13 @@
       const renderResourceInspectionPayload = (section, detail, resource, result) => {
         const deploymentName = detail?.name || currentPageState.deployment || '';
         const actions = createResourceInspectionActions(section, detail, resource);
-        const metadata = createLookupContextGrid(result?.lookupContext, [
+        const inspectionFields = [
           ['Inspection source', metricValue(result?.source)],
-        ]);
+        ];
+        if (result?.instanceId) {
+          inspectionFields.push(['Selected instance', textOrDash(result.instanceId)]);
+        }
+        const metadata = createLookupContextGrid(result?.lookupContext, inspectionFields);
         if (!result?.available) {
           const unavailableReason = resourceInspectionUnavailableReasonText(result?.unavailableReason);
           const details = unavailableReason
