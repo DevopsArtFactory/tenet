@@ -4175,11 +4175,35 @@
         const normalized = String(value || '').trim().replace(/_/g, ' ');
         return normalized || 'unknown truncation status';
       };
+      const ecsTaskScopeUnavailableReasonText = (reason) => {
+        switch (reason) {
+          case 'aws_unavailable':
+            return 'AWS access is currently unavailable for ECS task sampling.';
+          case 'cross_account_not_configured':
+            return 'Cross-account access is not configured for ECS task sampling.';
+          case 'resource_not_found':
+            return 'The ECS task sampling source could not be found.';
+          case 'unsupported_resource_type':
+            return 'Task sampling is not supported for this resource type.';
+          default:
+            return reason ? String(reason).trim().replace(/_/g, ' ') : 'Task sampling is unavailable.';
+        }
+      };
+      const isECSTaskScopeUnavailable = (scope) => scope && typeof scope === 'object' && scope.available === false;
       const createECSTaskScopeSummary = (scope) => {
         if (!scope || typeof scope !== 'object') return null;
         const effectiveLimit = scope.effectiveLimit;
         const returnedTaskCount = scope.returnedTaskCount;
         const truncationStatus = ecsTaskScopeStatusText(scope.truncationStatus);
+        if (isECSTaskScopeUnavailable(scope)) {
+          const summary = String(scope.summary || '').trim();
+          const reasonText = summary || ecsTaskScopeUnavailableReasonText(scope.unavailableReason);
+          return createElement(
+            'p',
+            'detail-section-copy',
+            `Task sample unavailable · ${reasonText} · requested ${countText(scope.requestedLimit)} · effective ${countText(effectiveLimit)}`,
+          );
+        }
         return createElement(
           'p',
           'detail-section-copy',
@@ -4306,11 +4330,12 @@
           },
           'No active ECS deployments are reported for this service.',
         );
+        const taskSampleUnavailable = isECSTaskScopeUnavailable(service?.tasksScope);
         const tasksSection = createInspectionListSection(
           'Recent ECS tasks',
           service?.tasks || [],
           (task) => createECSTaskListItem(deploymentName, task, true),
-          'No recent ECS tasks are reported for this service.',
+          taskSampleUnavailable ? 'Task sampling is unavailable for this service; service inspection remains available.' : 'No recent ECS tasks are reported for this service.',
           [createECSTaskScopeSummary(service?.tasksScope)],
         );
         const eventsSection = createInspectionListSection(
