@@ -30,6 +30,13 @@ type Receipt struct {
 	RequestID string
 }
 
+type Diagnostic struct {
+	Configured bool   `json:"configured"`
+	Available  bool   `json:"available"`
+	Backend    string `json:"backend,omitempty"`
+	Channel    string `json:"channel,omitempty"`
+}
+
 type Message struct {
 	Request Request
 	Err     error
@@ -94,6 +101,15 @@ func (h RedisHandoff) Subscribe(ctx context.Context) (Subscription, error) {
 	}
 	go subscription.run(ctx)
 	return subscription, nil
+}
+
+func (h RedisHandoff) Diagnostic() Diagnostic {
+	return Diagnostic{
+		Configured: h.client != nil,
+		Available:  h.client != nil,
+		Backend:    BackendRedis,
+		Channel:    h.channel(),
+	}
 }
 
 func (h RedisHandoff) channel() string {

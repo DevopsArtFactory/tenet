@@ -399,6 +399,7 @@ type operatorContextResponse struct {
 	DeploymentAccess      operatorContextDeploymentAccess              `json:"deploymentAccess"`
 	AccessVerdicts        operatorContextAccessVerdicts                `json:"accessVerdicts"`
 	RepositoryPolicy      operatorContextRepositoryPolicy              `json:"repositoryPolicy"`
+	DesiredStateSource    operatorContextDesiredStateSource            `json:"desiredStateSource"`
 }
 
 // AuthRuntimeDiagnostic describes optional Tenet-managed authentication runtime capability.
@@ -460,6 +461,37 @@ type TenetManagedLoginDiagnostic struct {
 	IdentityStoreConfigured          bool     `json:"identityStoreConfigured"`
 	SessionSecretConfigured          bool     `json:"sessionSecretConfigured"`
 	UnavailableReason                string   `json:"unavailableReason,omitempty"`
+}
+
+type operatorContextDesiredStateSource struct {
+	Configured                   bool                             `json:"configured"`
+	Kind                         string                           `json:"kind"`
+	Filesystem                   *operatorContextFilesystemSource `json:"filesystem,omitempty"`
+	GitHub                       *operatorContextGitHubSource     `json:"github,omitempty"`
+	ControllerRefresh            operatorContextControllerRefresh `json:"controllerRefresh"`
+	WebhookMatchStatuses         []string                         `json:"webhookMatchStatuses"`
+	WebhookProcessedFalseReasons []string                         `json:"webhookProcessedFalseReasons"`
+}
+
+type operatorContextFilesystemSource struct {
+	Mode string `json:"mode"`
+}
+
+type operatorContextGitHubSource struct {
+	Repository string `json:"repository,omitempty"`
+	Ref        string `json:"ref,omitempty"`
+	Path       string `json:"path,omitempty"`
+	BaseURL    string `json:"baseUrl,omitempty"`
+}
+
+type operatorContextControllerRefresh struct {
+	Configured     bool   `json:"configured"`
+	Available      bool   `json:"available"`
+	Backend        string `json:"backend,omitempty"`
+	Channel        string `json:"channel,omitempty"`
+	Status         string `json:"status"`
+	Reason         string `json:"reason"`
+	DiagnosticOnly bool   `json:"diagnosticOnly"`
 }
 
 type operatorContextTrustedHeaders struct {
@@ -649,9 +681,85 @@ func buildOperatorContextResponse(r *http.Request, options Options) operatorCont
 			},
 			Summary: summary,
 		},
-		AccessVerdicts:   buildOperatorContextAccessVerdicts(options, identity, roles, deployments, scopes, summary),
-		RepositoryPolicy: repositoryPolicy,
+		AccessVerdicts:     buildOperatorContextAccessVerdicts(options, identity, roles, deployments, scopes, summary),
+		RepositoryPolicy:   repositoryPolicy,
+		DesiredStateSource: buildOperatorContextDesiredStateSource(options),
 	}
+}
+
+func buildOperatorContextDesiredStateSource(options Options) operatorContextDesiredStateSource {
+	source := options.GitHubWebhookDesiredStateSource
+	kind := strings.TrimSpace(source.Kind)
+	diagnostic := operatorContextDesiredStateSource{
+		Configured: kind != githubwebhook.DesiredStateSourceKindNone,
+		Kind:       kind,
+		ControllerRefresh: operatorContextControllerRefresh{
+			Configured:     false,
+			Available:      false,
+			Status:         "not_configured",
+			Reason:         "controller refresh handoff is not configured for this API instance",
+			DiagnosticOnly: true,
+		},
+		WebhookMatchStatuses: []string{
+			githubwebhook.DesiredStateSourceMatchStatusMatched,
+			githubwebhook.DesiredStateSourceMatchStatusRepositoryMismatch,
+			githubwebhook.DesiredStateSourceMatchStatusRefMismatch,
+			githubwebhook.DesiredStateSourceMatchStatusPathUntouched,
+			githubwebhook.DesiredStateSourceMatchStatusFilesystemSource,
+			githubwebhook.DesiredStateSourceMatchStatusNotConfigured,
+		},
+		WebhookProcessedFalseReasons: []string{
+			"deleted_ref_ignored",
+			githubwebhook.DesiredStateSourceMatchStatusRepositoryMismatch,
+			githubwebhook.DesiredStateSourceMatchStatusRefMismatch,
+			githubwebhook.DesiredStateSourceMatchStatusPathUntouched,
+			githubwebhook.DesiredStateSourceMatchStatusFilesystemSource,
+			"controller_refresh_unavailable",
+		},
+	}
+
+	switch kind {
+	case githubwebhook.DesiredStateSourceKindFilesystem:
+		diagnostic.Filesystem = &operatorContextFilesystemSource{Mode: "local_repository"}
+		diagnostic.ControllerRefresh.Status = "filesystem_noop"
+		diagnostic.ControllerRefresh.Reason = "desired-state source uses the filesystem catalog, so GitHub webhook controller-refresh handoff is a no-op in this mode"
+	case githubwebhook.DesiredStateSourceKindGitHub:
+		diagnostic.GitHub = &operatorContextGitHubSource{
+			Repository: strings.TrimSpace(source.Repository),
+			Ref:        strings.TrimSpace(source.Ref),
+			Path:       strings.TrimSpace(source.Path),
+			BaseURL:    strings.TrimSpace(source.BaseURL),
+		}
+		diagnostic.ControllerRefresh.Status = "redis_unavailable"
+		diagnostic.ControllerRefresh.Reason = "desired-state source uses GitHub, but Redis controller-refresh handoff is not configured for this API instance"
+		if provider, ok := options.GitHubWebhookRefreshPublisher.(interface {
+			Diagnostic() controllerrefresh.Diagnostic
+		}); ok {
+			refresh := provider.Diagnostic()
+			diagnostic.ControllerRefresh.Configured = refresh.Configured
+			diagnostic.ControllerRefresh.Available = refresh.Available
+			diagnostic.ControllerRefresh.Backend = refresh.Backend
+			diagnostic.ControllerRefresh.Channel = refresh.Channel
+			if refresh.Available {
+				diagnostic.ControllerRefresh.Status = "available"
+				diagnostic.ControllerRefresh.Reason = "GitHub desired-state source can publish accepted matching push webhooks to the Redis controller-refresh handoff"
+			}
+		} else if options.GitHubWebhookRefreshPublisher != nil {
+			diagnostic.ControllerRefresh.Configured = true
+			diagnostic.ControllerRefresh.Available = true
+			diagnostic.ControllerRefresh.Status = "available"
+			diagnostic.ControllerRefresh.Reason = "GitHub desired-state source has a configured controller-refresh handoff publisher"
+		}
+	case githubwebhook.DesiredStateSourceKindNone:
+		diagnostic.ControllerRefresh.Status = "source_not_configured"
+		diagnostic.ControllerRefresh.Reason = "desired-state source is not configured, so webhook refresh relevance is unavailable"
+	default:
+		diagnostic.Configured = false
+		diagnostic.Kind = githubwebhook.DesiredStateSourceKindNone
+		diagnostic.ControllerRefresh.Status = "source_not_configured"
+		diagnostic.ControllerRefresh.Reason = "desired-state source kind is unsupported, so webhook refresh relevance is unavailable"
+	}
+	return diagnostic
 }
 
 func buildOperatorContextRepositoryPolicy(ctx context.Context, options Options, identity requestactor.AuthenticatedIdentity, groups requestactor.AuthenticatedGroups) operatorContextRepositoryPolicy {

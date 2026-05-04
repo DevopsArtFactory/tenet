@@ -166,6 +166,7 @@ func (s apiCatalogSource) webhookDesiredStateSource() githubwebhook.DesiredState
 			Repository: s.githubRequest.Repository,
 			Ref:        s.githubRequest.Ref,
 			Path:       s.githubRequest.Path,
+			BaseURL:    s.githubBaseURL,
 		}
 	default:
 		return githubwebhook.DesiredStateSourceConfig{}
