@@ -1310,6 +1310,8 @@ assert_fragments("ui", ui, (
     "loadOperatorContextBanner().catch(() => {});",
     "loadOperatorContextBanner({ refresh: true });",
     "Refresh context",
+    "Last checked ${timestamp.toLocaleString()}",
+    "lastCheckedAt: new Date()",
     "id=\"operator-context-status\" role=\"status\" aria-live=\"polite\" aria-atomic=\"true\"",
     ".operator-context-live { position: absolute;",
     "liveStatus.setAttribute('aria-live', 'polite');",
