@@ -4750,14 +4750,20 @@ async function render(search, inspectionResult) {
   if (!taskRun.text.includes('Container awslogs')) throw new Error('expected awslogs metadata');
   if (!taskRun.text.includes('/aws/ecs/worker / worker/abc123')) throw new Error('expected task awslogs group/stream');
 
-  const serviceResult = { available: true, source: 'ecs_service', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, ecsService: { serviceName: 'worker-prod-service', status: 'ACTIVE', desiredCount: 1, runningCount: 1, pendingCount: 0, taskDefinition: 'worker:42', deployments: [], events: [], tasks: [{ taskArn, taskId: 'abc123', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containers: [{ name: 'worker', lastStatus: 'RUNNING', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] }] } };
+  const serviceResult = { available: true, source: 'ecs_service', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, ecsService: { serviceName: 'worker-prod-service', status: 'ACTIVE', desiredCount: 1, runningCount: 1, pendingCount: 0, taskDefinition: 'worker:42', deployments: [], events: [], tasksScope: { effectiveLimit: 10, returnedTaskCount: 1, truncationStatus: 'not_truncated' }, tasks: [{ taskArn, taskId: 'abc123', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containers: [{ name: 'worker', lastStatus: 'RUNNING', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] }] } };
   const serviceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId), serviceResult);
   if (!serviceRun.text.includes('Recent ECS tasks')) throw new Error('expected ECS service task list');
+  if (!serviceRun.text.includes('Task sample scope · returned 1 task(s) from effective limit 10 · not truncated')) throw new Error('expected ECS task sample scope text: ' + serviceRun.text);
   if (!serviceRun.text.includes('Task ARN · ' + taskArn)) throw new Error('expected ECS task ARN in service inspection');
   const liveLink = serviceRun.links.find((node) => node.textContent === 'Open task live inspection');
   const logsLink = serviceRun.links.find((node) => node.textContent === 'Open task recent logs');
   if (!liveLink || liveLink.target !== '_self' || !liveLink.href.includes('resourceType=ecsTask') || !liveLink.href.endsWith('#resource-live-inspection')) throw new Error('expected task live-inspection handoff');
   if (!logsLink || logsLink.target !== '_self' || !logsLink.href.includes('resourceType=ecsTask') || !logsLink.href.endsWith('#resource-recent-logs')) throw new Error('expected task recent-logs handoff');
+
+  const legacyServiceResult = JSON.parse(JSON.stringify(serviceResult));
+  delete legacyServiceResult.ecsService.tasksScope;
+  const legacyServiceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId), legacyServiceResult);
+  if (legacyServiceRun.text.includes('Task sample scope')) throw new Error('expected legacy ECS service payload without tasksScope to stay quiet: ' + legacyServiceRun.text);
 })();
 `
 
