@@ -345,7 +345,7 @@ func TestNewAPIOptionsReportsEnterpriseSSODiagnosticForGoogleOIDC(t *testing.T) 
 	if !enterpriseSSO.Configured || !enterpriseSSO.Active || enterpriseSSO.Provider != "google" {
 		t.Fatalf("expected configured and active Google OIDC enterprise SSO diagnostic, got %+v", enterpriseSSO)
 	}
-	if enterpriseSSO.LoginRoute != "/auth/login/google" || enterpriseSSO.CallbackRoute != "/auth/callback/google" {
+	if enterpriseSSO.LoginRoute != "/auth/login/google" || enterpriseSSO.CallbackRoute != "/auth/callback/google" || enterpriseSSO.LogoutRoute != "/auth/logout" {
 		t.Fatalf("unexpected Google OIDC diagnostic routes: %+v", enterpriseSSO)
 	}
 	if !enterpriseSSO.StateStoreConfigured || !enterpriseSSO.IdentityStoreConfigured || !enterpriseSSO.SessionSecretConfigured {
@@ -432,7 +432,7 @@ func TestNewAPIOptionsReportsConfiguredInactiveOktaSAMLWithValidURLDiagnostics(t
 	if len(enterpriseSSO.MissingSettings) != 0 || len(enterpriseSSO.InvalidSettings) != 0 {
 		t.Fatalf("unexpected Okta SAML missing/invalid settings: %+v invalid=%+v", enterpriseSSO.MissingSettings, enterpriseSSO.InvalidSettings)
 	}
-	if enterpriseSSO.LoginRoute != "/auth/login/okta" || enterpriseSSO.CallbackRoute != "/auth/callback/okta/saml" {
+	if enterpriseSSO.LoginRoute != "/auth/login/okta" || enterpriseSSO.CallbackRoute != "/auth/callback/okta/saml" || enterpriseSSO.LogoutRoute != "/auth/logout" {
 		t.Fatalf("unexpected Okta SAML routes: %+v", enterpriseSSO)
 	}
 }
