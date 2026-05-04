@@ -3094,6 +3094,16 @@ func TestDeploymentOverviewEventsRouteIncludesManagedDriftSummary(t *testing.T) 
 					Timestamp: "2026-04-16T06:15:00Z",
 					Source:    "controller",
 					Summary:   "Deployment has managed drift",
+					ControllerRefresh: &domain.ControllerRefreshEvidence{
+						RequestID:    "req-123",
+						DeliveryID:   "delivery-456",
+						Repository:   "DevopsArtFactory/tenet-config",
+						Ref:          "refs/heads/main",
+						After:        "abc123def456",
+						RequestedAt:  "2026-04-16T06:00:00Z",
+						ReceivedAt:   "2026-04-16T06:00:03Z",
+						ReconciledAt: "2026-04-16T06:15:00Z",
+					},
 					ManagedDrift: []domain.ManagedDriftItem{
 						{Field: "artifact", Severity: domain.ManagedDriftSeverityHigh},
 						{Field: "runtimeContext.capacity.min", Severity: domain.ManagedDriftSeverityMedium},
@@ -3122,6 +3132,28 @@ func TestDeploymentOverviewEventsRouteIncludesManagedDriftSummary(t *testing.T) 
 	events, ok := payload["events"].([]any)
 	if !ok || len(events) != 1 {
 		t.Fatalf("expected events array in payload, got %#v", payload["events"])
+	}
+	event, ok := events[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected event object, got %#v", events[0])
+	}
+	refresh, ok := event["controllerRefresh"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected controllerRefresh object in event payload, got %#v", event)
+	}
+	for key, want := range map[string]any{
+		"requestId":    "req-123",
+		"deliveryId":   "delivery-456",
+		"repository":   "DevopsArtFactory/tenet-config",
+		"ref":          "refs/heads/main",
+		"after":        "abc123def456",
+		"requestedAt":  "2026-04-16T06:00:00Z",
+		"receivedAt":   "2026-04-16T06:00:03Z",
+		"reconciledAt": "2026-04-16T06:15:00Z",
+	} {
+		if refresh[key] != want {
+			t.Fatalf("expected controllerRefresh.%s=%#v, got %#v", key, want, refresh[key])
+		}
 	}
 	summary, ok := payload["managedDriftSummary"].(map[string]any)
 	if !ok || summary["total"] != float64(3) || summary["high"] != float64(1) || summary["medium"] != float64(1) || summary["low"] != float64(1) {

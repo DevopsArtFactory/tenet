@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DevopsArtFactory/tenet/internal/controllerrefresh"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/placement"
 	"github.com/DevopsArtFactory/tenet/internal/reconcile"
@@ -54,6 +55,10 @@ type runtimeLiveTrafficRoutingObservation struct {
 var runtimeLiveCapacityLookup = runtimeLiveCapacityLookupFromInspection
 
 func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupConfig, store statusstore.Store) error {
+	return emitRuntimePlansForRefresh(ctx, logger, config, store, nil, time.Time{})
+}
+
+func emitRuntimePlansForRefresh(ctx context.Context, logger *log.Logger, config startupConfig, store statusstore.Store, refresh *controllerrefresh.Request, receivedAt time.Time) error {
 	source := config.catalogSource()
 	if !source.configured() {
 		logger.Printf("controller runtime disabled reason=no_catalog_source")
@@ -126,6 +131,9 @@ func emitRuntimePlans(ctx context.Context, logger *log.Logger, config startupCon
 		status.ManagedDrift = deriveManagedDriftItems(deployment, status, liveCapacity, liveTrafficRouting...)
 		status = applyControllerManagedDriftStatus(status, plan)
 		status.History = appendRuntimeHistory(previousStatus, status)
+		if refresh != nil {
+			status.History = appendControllerRefreshHistory(status.History, status, *refresh, receivedAt, runtimeHistoryNow())
+		}
 		currentStatuses[deployment.Name] = status
 		logger.Printf(
 			"controller reconcile deployment=%s strategy=%s execution_mode=%s desired_generation=%d observed_generation=%d sync_state=%s steps=%s",
@@ -224,6 +232,35 @@ func appendRuntimeHistory(previous domain.DeploymentStatus, current domain.Deplo
 	}
 	history = append(history, entry)
 	return capRuntimeHistory(history)
+}
+
+func appendControllerRefreshHistory(history []domain.StatusHistoryEntry, current domain.DeploymentStatus, request controllerrefresh.Request, receivedAt time.Time, reconciledAt time.Time) []domain.StatusHistoryEntry {
+	entry := deriveRuntimeHistoryEntry(current)
+	if reconciledAt.IsZero() {
+		reconciledAt = runtimeHistoryNow()
+	}
+	entry.Timestamp = reconciledAt.UTC().Format(time.RFC3339)
+	entry.Summary = "Controller reconciled deployment after GitHub desired-state push"
+	entry.Changes = nil
+	entry.ChangeDetails = []string{"GitHub push refresh handoff received by controller"}
+	entry.ControllerRefresh = &domain.ControllerRefreshEvidence{
+		RequestID:    strings.TrimSpace(request.RequestID),
+		DeliveryID:   strings.TrimSpace(request.DeliveryID),
+		Repository:   strings.TrimSpace(request.Repository),
+		Ref:          strings.TrimSpace(request.Ref),
+		After:        strings.TrimSpace(request.After),
+		RequestedAt:  strings.TrimSpace(request.RequestedAt),
+		ReceivedAt:   formatRuntimeHistoryTime(receivedAt),
+		ReconciledAt: formatRuntimeHistoryTime(reconciledAt),
+	}
+	return capRuntimeHistory(append(append([]domain.StatusHistoryEntry(nil), history...), entry))
+}
+
+func formatRuntimeHistoryTime(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339)
 }
 
 func normalizeRuntimeHistoryEntryContext(entry domain.StatusHistoryEntry, fallback domain.StatusHistoryEntry) domain.StatusHistoryEntry {

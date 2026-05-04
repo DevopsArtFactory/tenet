@@ -113,25 +113,38 @@ type RolloutSummary struct {
 	Execution          []RolloutExecutionDetail `json:"execution,omitempty"`
 }
 
+// ControllerRefreshEvidence captures non-secret metadata from a controller refresh handoff.
+type ControllerRefreshEvidence struct {
+	RequestID    string `json:"requestId"`
+	DeliveryID   string `json:"deliveryId"`
+	Repository   string `json:"repository"`
+	Ref          string `json:"ref"`
+	After        string `json:"after,omitempty"`
+	RequestedAt  string `json:"requestedAt"`
+	ReceivedAt   string `json:"receivedAt,omitempty"`
+	ReconciledAt string `json:"reconciledAt,omitempty"`
+}
+
 // StatusHistoryEntry captures one operator-facing runtime history event.
 type StatusHistoryEntry struct {
-	Timestamp          string             `json:"timestamp"`
-	Source             string             `json:"source"`
-	Summary            string             `json:"summary"`
-	Changes            []string           `json:"changes,omitempty"`
-	ChangeDetails      []string           `json:"changeDetails,omitempty"`
-	ManagedDrift       []ManagedDriftItem `json:"managedDrift,omitempty"`
-	DeployedArtifact   DeploymentArtifact `json:"deployedArtifact,omitempty"`
-	Conditions         []Condition        `json:"conditions,omitempty"`
-	Sync               Sync               `json:"sync"`
-	Health             Health             `json:"health"`
-	DesiredGeneration  int64              `json:"desiredGeneration"`
-	ObservedGeneration int64              `json:"observedGeneration"`
-	RolloutPhase       RolloutPhase       `json:"rolloutPhase,omitempty"`
-	CurrentStep        string             `json:"currentStep,omitempty"`
-	TargetType         string             `json:"targetType,omitempty"`
-	Strategy           string             `json:"strategy,omitempty"`
-	ExecutionMode      string             `json:"executionMode,omitempty"`
+	Timestamp          string                     `json:"timestamp"`
+	Source             string                     `json:"source"`
+	Summary            string                     `json:"summary"`
+	Changes            []string                   `json:"changes,omitempty"`
+	ChangeDetails      []string                   `json:"changeDetails,omitempty"`
+	ControllerRefresh  *ControllerRefreshEvidence `json:"controllerRefresh,omitempty"`
+	ManagedDrift       []ManagedDriftItem         `json:"managedDrift,omitempty"`
+	DeployedArtifact   DeploymentArtifact         `json:"deployedArtifact,omitempty"`
+	Conditions         []Condition                `json:"conditions,omitempty"`
+	Sync               Sync                       `json:"sync"`
+	Health             Health                     `json:"health"`
+	DesiredGeneration  int64                      `json:"desiredGeneration"`
+	ObservedGeneration int64                      `json:"observedGeneration"`
+	RolloutPhase       RolloutPhase               `json:"rolloutPhase,omitempty"`
+	CurrentStep        string                     `json:"currentStep,omitempty"`
+	TargetType         string                     `json:"targetType,omitempty"`
+	Strategy           string                     `json:"strategy,omitempty"`
+	ExecutionMode      string                     `json:"executionMode,omitempty"`
 }
 
 // MarshalJSON omits zero-value deployedArtifact while preserving additive status fields.
