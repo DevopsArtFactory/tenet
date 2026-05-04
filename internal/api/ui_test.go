@@ -2445,13 +2445,19 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		}
 	}
 	for _, fragment := range []string{
+		`invalid_resource_log_instance_status=$(curl -sS -o "$INVALID_RESOURCE_LOG_INSTANCE_BODY"`,
+		`resource-logs?resourceType=userDataBootstrapSource&resourceName=git%3Auserdata%2Fpayments-api-prod.sh&instanceId=i-0abc123def4567890`,
+		`resource-logs?resourceType=userDataBootstrapSource&resourceName=git%3Auserdata%2Fpayments-api-prod.sh&instanceId=i-`,
+		`assert selected_bootstrap_resource_logs.get('instanceId') == 'i-0abc123def4567890'`,
+		`assert os.environ['INVALID_RESOURCE_LOG_INSTANCE_STATUS'] == '400'`,
+		`assert invalid_resource_log_instance.strip() == 'invalid instanceId query'`,
 		`invalid_resource_inspection_limit_status=$(curl -sS -o "$INVALID_RESOURCE_INSPECTION_LIMIT_BODY"`,
 		`resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate&limit=0`,
 		`assert os.environ['INVALID_RESOURCE_INSPECTION_LIMIT_STATUS'] == '400'`,
 		`assert invalid_resource_inspection_limit.strip() == 'invalid limit query'`,
 	} {
 		if !strings.Contains(text, fragment) {
-			t.Fatalf("expected smoke-local.sh to assert invalid ASG resource-inspection limit fragment %q", fragment)
+			t.Fatalf("expected smoke-local.sh to assert ASG selector/limit fragment %q", fragment)
 		}
 	}
 
@@ -3376,7 +3382,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"correlated structured `http_request` logs with stable fields such as `request_id`, `method`, `path`, `status`, `duration_ms`, and `result` for the bookmarkable application drill-down shell request, bookmarkable account drill-down shell request, bookmarkable drift workspace request, the deployment-scoped audit workspace request, and the bookmarkable plan/apply workspace shell request",
 			"`Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Resolved backing resource`, `Lookup path ·`, `Lookup region`, `Observer role configured`, and the runtime-events `Open field-level drift` handoff",
 			"temp files through the shared `write_payload` helper",
-			"bookmarkable bootstrap-source resource page plus the paired `userDataBootstrapSource` `resource-logs` and `resource-inspection` routes, the `codeDeployApplication` recent-log route, the `testListener` recent-log backing-resource metadata, weighted target-group `no_log_source` recent-log payloads, the `candidateAutoScalingGroup` bounded `resource-inspection?limit=2` sample with `autoScalingGroup.instancesScope` fields when available plus explicit unavailable semantics without AWS access",
+			"bookmarkable bootstrap-source resource page plus the paired `userDataBootstrapSource` `resource-logs` and `resource-inspection` routes, the `codeDeployApplication` recent-log route, the `testListener` recent-log backing-resource metadata, weighted target-group `no_log_source` recent-log payloads, the selected `userDataBootstrapSource` recent-log probe with `instanceId=i-0abc123def4567890` plus echoed selector/backing-ASG metadata on explicit unavailable payloads, malformed `instanceId=i-` `400 Bad Request` / `invalid instanceId query` validation before provider lookup, the `candidateAutoScalingGroup` bounded `resource-inspection?limit=2` sample with `autoScalingGroup.instancesScope` fields when available plus explicit unavailable semantics without AWS access",
 			"bookmarkable CodeDeploy application, `blueTaskSetTargetGroup`, and `productionListenerRule` resource pages and the local-friendly traffic-routing inspection fallback",
 			"`aws_unavailable` / `no_log_source` unavailable payloads as expected local-runtime outcomes, including route-stable weighted target-group resources that have no independent recent-log stream",
 			"The same raw-shell checks separately lock the ECS service `tasksScope` renderer and `Task sample scope` copy",
