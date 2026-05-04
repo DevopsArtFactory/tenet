@@ -793,6 +793,7 @@ func newOverviewDeploymentResourceLogsProvider(
 			DeploymentName:      request.DeploymentName,
 			ResourceType:        request.ResourceType,
 			ResourceName:        request.ResourceName,
+			ResourceDescription: request.ResourceDescription,
 			BackingResourceType: request.BackingResourceType,
 			BackingResourceName: request.BackingResourceName,
 			ControlAccountID:    request.ControlAccountID,

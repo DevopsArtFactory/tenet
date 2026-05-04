@@ -1000,6 +1000,7 @@ else:
 assert limited_worker_resource_logs['deploymentName'] == 'worker-prod', limited_worker_resource_logs
 assert limited_worker_resource_logs['resourceType'] == 'ecsService', limited_worker_resource_logs
 assert limited_worker_resource_logs['resourceName'] == 'worker-prod-service', limited_worker_resource_logs
+assert isinstance(limited_worker_resource_logs.get('resourceDescription'), str) and limited_worker_resource_logs['resourceDescription'], limited_worker_resource_logs
 assert isinstance(limited_worker_resource_logs['available'], bool), limited_worker_resource_logs
 assert isinstance(limited_worker_resource_logs.get('lookupContext'), dict), limited_worker_resource_logs
 assert limited_worker_resource_logs.get('entries') is None or isinstance(limited_worker_resource_logs.get('entries'), list), limited_worker_resource_logs
@@ -1017,6 +1018,7 @@ else:
 assert ecs_task_resource_logs['deploymentName'] == 'worker-prod', ecs_task_resource_logs
 assert ecs_task_resource_logs['resourceType'] == 'ecsTask', ecs_task_resource_logs
 assert ecs_task_resource_logs['resourceName'] == 'arn:aws:ecs:ap-northeast-2:123456789012:task/worker/abc123', ecs_task_resource_logs
+assert ecs_task_resource_logs.get('resourceDescription') == 'ECS task selected from live service inspection', ecs_task_resource_logs
 assert ecs_task_resource_logs.get('containerName') == 'worker', ecs_task_resource_logs
 assert isinstance(ecs_task_resource_logs['available'], bool), ecs_task_resource_logs
 assert isinstance(ecs_task_resource_logs.get('lookupContext'), dict), ecs_task_resource_logs

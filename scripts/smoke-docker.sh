@@ -976,6 +976,7 @@ else:
 assert limited_worker_resource_logs["deploymentName"] == "worker-prod", limited_worker_resource_logs
 assert limited_worker_resource_logs["resourceType"] == "ecsService", limited_worker_resource_logs
 assert limited_worker_resource_logs["resourceName"] == "worker-prod-service", limited_worker_resource_logs
+assert isinstance(limited_worker_resource_logs.get("resourceDescription"), str) and limited_worker_resource_logs["resourceDescription"], limited_worker_resource_logs
 assert isinstance(limited_worker_resource_logs["available"], bool), limited_worker_resource_logs
 assert isinstance(limited_worker_resource_logs.get("lookupContext"), dict), limited_worker_resource_logs
 assert limited_worker_resource_logs.get("entries") is None or isinstance(limited_worker_resource_logs.get("entries"), list), limited_worker_resource_logs

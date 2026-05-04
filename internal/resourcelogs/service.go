@@ -72,6 +72,7 @@ type Request struct {
 	DeploymentName      string
 	ResourceType        string
 	ResourceName        string
+	ResourceDescription string
 	BackingResourceType string
 	BackingResourceName string
 	ControlAccountID    string
@@ -86,6 +87,7 @@ type Result struct {
 	DeploymentName      string        `json:"deploymentName"`
 	ResourceType        string        `json:"resourceType"`
 	ResourceName        string        `json:"resourceName"`
+	ResourceDescription string        `json:"resourceDescription,omitempty"`
 	BackingResourceType string        `json:"backingResourceType,omitempty"`
 	BackingResourceName string        `json:"backingResourceName,omitempty"`
 	ContainerName       string        `json:"containerName,omitempty"`
@@ -340,6 +342,7 @@ func unavailableResult(req Request, reason string) Result {
 		DeploymentName:      req.DeploymentName,
 		ResourceType:        req.ResourceType,
 		ResourceName:        req.ResourceName,
+		ResourceDescription: resourceDescription(req),
 		BackingResourceType: backingResourceType(req),
 		BackingResourceName: backingResourceName(req),
 		ContainerName:       containerName(req),
@@ -354,6 +357,7 @@ func availableResult(req Request, source string, entries []Entry) Result {
 		DeploymentName:      req.DeploymentName,
 		ResourceType:        req.ResourceType,
 		ResourceName:        req.ResourceName,
+		ResourceDescription: resourceDescription(req),
 		BackingResourceType: backingResourceType(req),
 		BackingResourceName: backingResourceName(req),
 		ContainerName:       containerName(req),
@@ -362,6 +366,10 @@ func availableResult(req Request, source string, entries []Entry) Result {
 		Source:              source,
 		Entries:             entries,
 	}
+}
+
+func resourceDescription(req Request) string {
+	return strings.TrimSpace(req.ResourceDescription)
 }
 
 func backingResourceType(req Request) string {
