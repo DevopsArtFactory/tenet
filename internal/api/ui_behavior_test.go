@@ -8542,6 +8542,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Authenticated operator required')) throw new Error('expected operator-auth heading for unauthorized create');
   if (!text.includes('Tenet rejected POST /v1/plans/deployments/api-prod because authenticated identity is required on operator write routes.')) throw new Error('expected operator-facing create auth explanation');
   if (!text.includes('retry Create Plan for this same bookmarkable workspace through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet sends the write.')) throw new Error('expected trusted front door create guidance');
+  const linksAfterUnauthorizedCreate = collectNodes(root, (node) => node.tagName === 'A');
+  if (linksAfterUnauthorizedCreate.find((node) => node.textContent === 'Sign in with Tenet-managed GitHub login')) throw new Error('front-door-only create 401 should not render managed-login sign-in link');
   if (text.includes('Failed to create a plan preview')) throw new Error('expected unauthorized create to avoid generic fetch-error copy');
   buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
   const createPlanAfter = buttons.find((node) => node.textContent === 'Create Plan');
@@ -8600,6 +8602,13 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Authenticated operator required')) throw new Error('expected operator-auth heading for managed-login unauthorized create');
   if (!text.includes('Tenet-managed GitHub login is active for this API instance; sign in through /auth/login/github, then return to this same bookmarkable workspace and retry Create Plan.')) throw new Error('expected active managed-login create guidance: ' + text);
   if (!text.includes('Trusted front-door X-Tenet-Authenticated-* identity headers still take precedence when present, and Tenet will not send the write until authenticated identity is available.')) throw new Error('expected trusted-front-door precedence reminder for managed-login create');
+  const managedLinks = collectNodes(root, (node) => node.tagName === 'A' && node.textContent === 'Sign in with Tenet-managed GitHub login');
+  if (managedLinks.length !== 1) throw new Error('expected one managed-login sign-in link for create 401, got ' + managedLinks.length);
+  const managedLink = managedLinks[0];
+  if (managedLink.target !== '_self' || managedLink.rel) throw new Error('expected managed-login create sign-in link to stay in-shell');
+  if (!String(managedLink.href || '').startsWith('/auth/login/github?')) throw new Error('expected managed-login create link to use configured login route, got ' + managedLink.href);
+  const managedParams = new URLSearchParams(String(managedLink.href).split('?')[1] || '');
+  if (managedParams.get('returnUrl') !== '/?page=plan&deployment=api-prod') throw new Error('expected managed-login create returnUrl to preserve workspace URL, got ' + managedLink.href);
   if (text.includes('Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page')) throw new Error('did not expect disabled-mode OAuth copy when managed login is active');
   if (text.includes('Failed to create a plan preview')) throw new Error('expected managed-login unauthorized create to avoid generic fetch-error copy');
 })();
@@ -8747,6 +8756,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Auth required')) throw new Error('expected apply auth-required pill copy');
   if (!text.includes('Tenet rejected POST /v1/applies/plans/plan_ready_123 because authenticated identity is required on operator write routes.')) throw new Error('expected operator-facing apply auth explanation');
   if (!text.includes('retry Apply Plan for this same bookmarkable workspace through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet sends the write.')) throw new Error('expected trusted front door apply guidance');
+  const linksAfterUnauthorizedApply = collectNodes(root, (node) => node.tagName === 'A');
+  if (linksAfterUnauthorizedApply.find((node) => node.textContent === 'Sign in with Tenet-managed GitHub login')) throw new Error('front-door-only apply 401 should not render managed-login sign-in link');
   if (text.includes('Failed to create an apply request')) throw new Error('expected unauthorized apply create to avoid generic fetch-error copy');
   buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
   const createPlan = buttons.find((node) => node.textContent === 'Create Plan');
@@ -8809,6 +8820,13 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Authenticated operator required')) throw new Error('expected operator-auth heading for managed-login unauthorized apply create');
   if (!text.includes('Tenet-managed GitHub login is active for this API instance; sign in through /auth/login/github, then return to this same bookmarkable workspace and retry Apply Plan.')) throw new Error('expected active managed-login apply guidance: ' + text);
   if (!text.includes('Trusted front-door X-Tenet-Authenticated-* identity headers still take precedence when present, and Tenet will not send the write until authenticated identity is available.')) throw new Error('expected trusted-front-door precedence reminder for managed-login apply');
+  const managedLinks = collectNodes(root, (node) => node.tagName === 'A' && node.textContent === 'Sign in with Tenet-managed GitHub login');
+  if (managedLinks.length !== 1) throw new Error('expected one managed-login sign-in link for apply 401, got ' + managedLinks.length);
+  const managedLink = managedLinks[0];
+  if (managedLink.target !== '_self' || managedLink.rel) throw new Error('expected managed-login apply sign-in link to stay in-shell');
+  if (!String(managedLink.href || '').startsWith('/auth/login/github?')) throw new Error('expected managed-login apply link to use configured login route, got ' + managedLink.href);
+  const managedParams = new URLSearchParams(String(managedLink.href).split('?')[1] || '');
+  if (managedParams.get('returnUrl') !== '/?page=plan&deployment=api-prod&planId=plan_ready_123') throw new Error('expected managed-login apply returnUrl to preserve workspace URL, got ' + managedLink.href);
   if (text.includes('Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page')) throw new Error('did not expect disabled-mode OAuth copy when managed login is active');
   if (text.includes('Failed to create an apply request')) throw new Error('expected managed-login unauthorized apply create to avoid generic fetch-error copy');
 })();
