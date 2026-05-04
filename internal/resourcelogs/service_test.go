@@ -107,8 +107,8 @@ func TestServiceRecent(t *testing.T) {
 		if gotLookup.ResourceName != "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123" || gotLookup.ContainerName != "api" || gotLookup.Limit != 2 {
 			t.Fatalf("unexpected ECS task log lookup request: %+v", gotLookup)
 		}
-		if !result.Available || result.Source != SourceCloudWatch || len(result.Entries) != 1 || result.Entries[0].Stream != "ecs/api/abc123" {
-			t.Fatalf("expected available ECS task logs, got %+v", result)
+		if !result.Available || result.Source != SourceCloudWatch || result.ContainerName != "api" || len(result.Entries) != 1 || result.Entries[0].Stream != "ecs/api/abc123" {
+			t.Fatalf("expected available ECS task logs with echoed container selector, got %+v", result)
 		}
 	})
 
@@ -912,11 +912,12 @@ func TestServiceRecent(t *testing.T) {
 
 		result, err := service.Recent(context.Background(), Request{
 			DeploymentName:   "payments-api-prod",
-			ResourceType:     "ecsService",
-			ResourceName:     "payments-api-prod-service",
+			ResourceType:     "ecsTask",
+			ResourceName:     "arn:aws:ecs:ap-northeast-2:222222222222:task/payments/abc123",
 			ControlAccountID: "111111111111",
 			TargetAccountID:  "222222222222",
 			Region:           "ap-northeast-2",
+			ContainerName:    "sidecar",
 			ObserverRoleARN:  "",
 		})
 		if err != nil {
@@ -924,8 +925,9 @@ func TestServiceRecent(t *testing.T) {
 		}
 		want := Result{
 			DeploymentName:    "payments-api-prod",
-			ResourceType:      "ecsService",
-			ResourceName:      "payments-api-prod-service",
+			ResourceType:      "ecsTask",
+			ResourceName:      "arn:aws:ecs:ap-northeast-2:222222222222:task/payments/abc123",
+			ContainerName:     "sidecar",
 			LookupContext:     expectedLookupContext("ap-northeast-2", "111111111111", "222222222222", ""),
 			Available:         false,
 			Source:            "",

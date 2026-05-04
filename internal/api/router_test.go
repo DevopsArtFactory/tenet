@@ -6198,8 +6198,9 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 	t.Run("returns resource log payload", func(t *testing.T) {
 		expected := resourcelogs.Result{
 			DeploymentName: "api-prod",
-			ResourceType:   "ecsService",
-			ResourceName:   "payments-api-prod-service",
+			ResourceType:   "ecsTask",
+			ResourceName:   "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123",
+			ContainerName:  "api",
 			LookupContext: resourcelogs.LookupContext{
 				Region:                 "ap-northeast-2",
 				ControlAccountID:       "123456789012",
@@ -6280,10 +6281,13 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
 			t.Fatalf("failed to decode raw resource logs payload: %v", err)
 		}
-		for _, key := range []string{"deploymentName", "resourceType", "resourceName", "lookupContext", "available", "source", "entries", "resultScope", "unavailableReason"} {
+		for _, key := range []string{"deploymentName", "resourceType", "resourceName", "containerName", "lookupContext", "available", "source", "entries", "resultScope", "unavailableReason"} {
 			if _, ok := raw[key]; !ok {
 				t.Fatalf("expected %q field in payload, got %#v", key, raw)
 			}
+		}
+		if raw["containerName"] != "api" {
+			t.Fatalf("expected containerName to echo ECS task selector, got %#v", raw["containerName"])
 		}
 		if _, ok := raw["backingResourceType"]; ok {
 			t.Fatalf("expected backingResourceType to be omitted for direct resource logs, got %#v", raw)
