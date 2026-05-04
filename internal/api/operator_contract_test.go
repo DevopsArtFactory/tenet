@@ -1133,7 +1133,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"When Tenet-managed login is inactive, unauthenticated writes tell operators to retry the same bookmarkable plan/apply action through the trusted front door",
 		"guarded read recovery can offer the configured Tenet-managed GitHub sign-in handoff while preserving the current `returnUrl`",
 		"switches to a same-shell sign-in handoff only when `/v1/operator/context` reports an active same-origin Tenet-managed login or enterprise SSO route",
-		"`authRuntime.enterpriseSso.active=true` plus `loginRoute=/auth/login/okta` produces `Sign in with Okta SSO`, while configured-but-inactive Okta SAML remains non-clickable",
+		"`authRuntime.enterpriseSso.provider=okta_oidc`, `active=true`, and `loginRoute=/auth/login/okta` produces `Sign in with Okta SSO` while preserving the current bookmarkable URL as `returnUrl`; configured-but-inactive Okta diagnostics remain non-clickable",
 		"Inspect the `accessVerdicts` chips and their bounded route examples",
 		"Collection-read chips show `Collection scope: filtered to visible deployments`",
 		"add `Collection result: likely empty` when those grants are expected to produce an empty collection",
