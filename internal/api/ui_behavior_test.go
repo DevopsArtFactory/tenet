@@ -1020,7 +1020,9 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const healthSelect = document.querySelector('[data-toolbar-field="Health"]');
   if (!healthSelect || healthSelect.value !== 'Progressing') throw new Error('expected applications page health filter to restore bookmarkable Progressing state');
   if (!summaryText.includes('Application status overview')) throw new Error('expected applications page overview title');
-  if (!summaryText.includes('Last update')) throw new Error('expected applications page last update column label');
+  if (!summaryText.includes('1 of 2')) throw new Error('expected filtered applications summary to show visible and total counts, got ' + summaryText);
+  if (!summaryText.includes('Visible applications after filters: 1 of 2. Active filters: search “payments” · sync OutOfSync · health Progressing · account staging-core.')) throw new Error('expected filtered applications summary to explain active filters, got ' + summaryText);
+  if (!summaryText.includes('Visible subset last update')) throw new Error('expected filtered applications summary to scope last update to visible subset');
   if (!summaryText.includes('2026-04-16T07:10:00Z')) throw new Error('expected applications page last update value');
   if (!accountsText.includes('payments-api-staging')) throw new Error('expected applications page row text');
   if (!accountsText.includes('More actions')) throw new Error('expected applications page secondary actions disclosure');
