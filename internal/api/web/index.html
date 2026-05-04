@@ -843,7 +843,12 @@
       };
       const operatorContextIdentityProvenanceLabel = (context) => {
         const provenance = context?.identityProvenance || {};
-        const labels = { canonical: 'canonical X-Tenet-Authenticated-*', alias: 'compatibility X-User-*', absent: 'absent' };
+        const labels = {
+          canonical: 'canonical X-Tenet-Authenticated-*',
+          alias: 'compatibility X-User-*',
+          managed_session_cookie: 'Tenet-managed browser session cookie',
+          absent: 'absent',
+        };
         const entries = [
           ['id', provenance.idSource],
           ['name', provenance.nameSource],
