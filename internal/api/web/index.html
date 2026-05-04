@@ -1240,6 +1240,26 @@
         if (managedLogin.unavailableReason) parts.push(`reason ${managedLogin.unavailableReason}`);
         return `Managed login storage/session: ${parts.join('; ')}`;
       };
+      const operatorContextManagedLoginCookieSecureSourceLabel = (source) => {
+        const labels = {
+          configured_override: 'configured secure-cookie override',
+          https_request: 'current request is HTTPS',
+          x_forwarded_proto_https: 'X-Forwarded-Proto=https',
+          forwarded_proto_https: 'Forwarded proto=https',
+        };
+        return labels[source] || source;
+      };
+      const operatorContextManagedLoginCookieAttributesLabel = (context) => {
+        const managedLogin = operatorContextManagedLogin(context);
+        const name = managedLogin.sessionCookieName || 'not reported';
+        const path = managedLogin.sessionCookiePath || 'not reported';
+        const sameSite = managedLogin.sessionCookieSameSite || 'not reported';
+        const secureSources = Array.isArray(managedLogin.sessionCookieSecureSources) ? managedLogin.sessionCookieSecureSources.filter(Boolean) : [];
+        const secureEvidence = secureSources.length
+          ? secureSources.map(operatorContextManagedLoginCookieSecureSourceLabel).join(', ')
+          : 'none; local HTTP without TLS or forwarded HTTPS evidence is expected for development';
+        return `Managed login cookie attributes: name ${name}; path ${path}; HttpOnly ${managedLogin.sessionCookieHttpOnly ? 'yes' : 'no'}; SameSite ${sameSite}; Secure override ${managedLogin.sessionCookieSecureOverride ? 'configured on' : 'not configured'}; Secure for current request ${managedLogin.sessionCookieSecureForRequest ? 'yes' : 'no'}; Secure evidence ${secureEvidence}`;
+      };
       const operatorContextSecondsLabel = (value) => {
         if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
           return `${value} seconds`;
@@ -1386,6 +1406,7 @@
           if (providerBoundaryLabel) detailsMeta.append(createElement('span', '', providerBoundaryLabel));
           detailsMeta.append(createElement('span', operatorContextManagedLoginClass(context), operatorContextManagedLoginSettingsLabel(context)));
           detailsMeta.append(createElement('span', operatorContextManagedLoginClass(context), operatorContextManagedLoginStorageLabel(context)));
+          detailsMeta.append(createElement('span', '', operatorContextManagedLoginCookieAttributesLabel(context)));
           detailsMeta.append(createElement('span', '', operatorContextManagedLoginLifecycleLabel(context)));
           detailsMeta.append(createElement('span', '', operatorContextManagedLoginProviderTokenLabel(context)));
           detailsMeta.append(createElement('span', '', operatorContextManagedLoginLogoutBoundaryLabel(context)));
