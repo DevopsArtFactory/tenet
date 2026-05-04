@@ -106,7 +106,7 @@ The additive `lookupContext` object is always present, including unavailable res
 
 The resource-detail page at `/?page=resource&deployment={name}&resourceType={type}&resourceId={id}` now renders a `Recent logs` section and lazy-loads this route after the deployment detail payload resolves. That section also renders an explicit `Refresh recent logs` button so operators can re-run only this route in place without changing the bookmarkable URL. When the payload reports `backingResourceType` plus `backingResourceName` and the loaded deployment detail can safely resolve that backing resource, the same section renders a `_self` `Resolved backing resource` handoff to the backing resource drill-down instead of forcing operators to copy IDs into a new URL. The section also renders `resultScope` as `Requested cap`, `Effective cap`, `Returned entries`, and `Scope status` so operators can distinguish capped, below-cap, at-cap/unknown-total, and unavailable/not-applicable responses without inferring exact provider totals from AWS. Current backend status values are `truncated`, `not_truncated`, `unknown`, and `not_applicable`; the UI also recognizes the compatibility aliases `capped` and `at_cap_unknown_total` for the same conservative copy.
 
-When the payload arrives, the card first shows a compact `Lookup path · ...` sentence that summarizes the region, control/target account path, same-account versus cross-account mode, and observer-role status at a glance. It then surfaces the backend `lookupContext` directly with operator-friendly labels:
+When the payload arrives, the card first shows a compact `Lookup path · ...` sentence that summarizes the region, control/target account path, same-account versus cross-account mode, and observer-role status at a glance. It then surfaces the backend `resourceDescription` and response-level ECS task `containerName` selector when present, followed by `lookupContext` with operator-friendly labels:
 - `Lookup region`
 - `Control account ID`
 - `Target account ID`
@@ -124,7 +124,7 @@ Rendered states:
 - loading: `Loading recent logs…`
 - unavailable: `Recent logs are unavailable for this resource.` plus the lookup-context fields above and friendly UI copy mapped from known provider `unavailableReason` codes such as `unsupported_resource_type`, `cross_account_not_configured`, `no_log_source`, `no_running_tasks`, `no_instances`, `resource_not_found`, and `aws_unavailable`. For route-stable rollout resources that intentionally have no independent stream yet, `no_log_source` renders as `This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet.` so operators do not confuse a valid drill-down page with an unsupported resource family.
 - empty: `No recent logs are available for this resource.` plus the same lookup-context fields when the backend returns `available=true` with `entries=[]`
-- populated: source metadata, the same lookup-context fields, and per-entry timestamp, optional stream, and message text
+- populated: source metadata, rollout `Resource description` / ECS task `Selected container` metadata when present, the same lookup-context fields, and per-entry timestamp, optional stream, optional container source, and message text. ECS task live-inspection container rows with awslogs evidence also expose an `Open container recent logs` handoff to the same read-only `resource-logs` route with `containerName={name}` added via `URLSearchParams`.
 
 ## Current limitations
 

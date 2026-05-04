@@ -1818,7 +1818,7 @@
         const resolvedAlias = bootstrapSourceAliasIdentity(resource.name);
         return Boolean(bookmarkedAlias && resolvedAlias && bookmarkedAlias === resolvedAlias);
       };
-      const resourceLogCacheKey = (deploymentName, resource) => [deploymentName || '', resource.type || '', resource.name || '', resource.id || ''].join('::');
+      const resourceLogCacheKey = (deploymentName, resource) => [deploymentName || '', resource.type || '', resource.name || '', resource.id || '', resource.containerName || ''].join('::');
       const resourceLogRequestCacheKey = (deploymentName, resource, limit = 0) => `${resourceLogCacheKey(deploymentName, resource)}::limit=${normalizeResourceLogsLimit(limit)}`;
       const normalizeResourceLogsLimit = (value) => {
         const limit = Number.parseInt(String(value || '').trim(), 10);
@@ -3855,6 +3855,12 @@
       const createResourceLogsLookupPathSummary = (lookupContext) => createElement('p', 'detail-section-copy', resourceLogsLookupPathText(lookupContext));
       const resourceLogsBackingResourceFields = (result) => {
         const fields = [];
+        if (result?.resourceDescription) {
+          fields.push(['Resource description', lookupContextText(result.resourceDescription)]);
+        }
+        if (result?.containerName) {
+          fields.push(['Selected container', lookupContextText(result.containerName)]);
+        }
         if (result?.backingResourceType) {
           fields.push(['Backing resource type', lookupContextText(result.backingResourceType)]);
         }
@@ -3898,6 +3904,10 @@
           resourceType: resource?.type || '',
           resourceName: resource?.name || '',
         });
+        const containerName = String(resource?.containerName || '').trim();
+        if (containerName) {
+          params.set('containerName', containerName);
+        }
         const normalizedLimit = normalizeResourceLogsLimit(limit);
         if (normalizedLimit > 0) {
           params.set('limit', String(normalizedLimit));
@@ -3984,6 +3994,9 @@
           logMeta.append(createElement('span', 'detail-condition-meta', `Log timestamp · ${textOrDash(entry.timestamp)}`));
           if (entry.stream) {
             logMeta.append(createElement('span', 'detail-condition-meta', `Log stream · ${entry.stream}`));
+          }
+          if (entry.containerName) {
+            logMeta.append(createElement('span', 'detail-condition-meta', `Log container · ${entry.containerName}`));
           }
           logItem.append(logMeta);
           logList.append(logItem);
@@ -4137,7 +4150,15 @@
         );
         return links;
       };
-      const appendECSTaskContainerRows = (item, containers) => {
+      const createECSTaskContainerLogHandoff = (deploymentName, task, container) => {
+        const taskResource = ecsTaskResource(task);
+        const containerName = String(container?.name || '').trim();
+        if (!deploymentName || !taskResource || !containerName || !container?.awslogs) return null;
+        const link = createNavLink(buildResourceLogsRoute(deploymentName, { ...taskResource, containerName }), 'Open container recent logs', '_blank');
+        link.rel = 'noreferrer noopener';
+        return link;
+      };
+      const appendECSTaskContainerRows = (item, containers, deploymentName = '', task = null) => {
         if (!Array.isArray(containers) || !containers.length) return;
         const containerSection = createElement('div', 'detail-history-meta');
         containers.forEach((container) => {
@@ -4153,6 +4174,8 @@
           }
           if (container?.awslogs?.group || container?.awslogs?.stream) {
             containerSection.append(createElement('span', 'detail-condition-meta', `Container ${name} awslogs · ${textOrDash(container?.awslogs?.group)} / ${textOrDash(container?.awslogs?.stream)}`));
+            const handoff = createECSTaskContainerLogHandoff(deploymentName, task, container);
+            if (handoff) containerSection.append(handoff);
           }
         });
         item.append(containerSection);
@@ -4173,7 +4196,7 @@
         if (task?.clusterArn) meta.append(createElement('span', 'detail-condition-meta', `Cluster ARN · ${task.clusterArn}`));
         if (task?.taskDefinition) meta.append(createElement('span', 'detail-condition-meta', `Task definition · ${task.taskDefinition}`));
         item.append(meta);
-        appendECSTaskContainerRows(item, task?.containers);
+        appendECSTaskContainerRows(item, task?.containers, deploymentName, task);
         if (includeHandoffs) {
           const links = createECSTaskHandoffLinks(deploymentName, task);
           if (links) item.append(links);
@@ -4587,6 +4610,8 @@
             }
             if (container?.awslogs?.group || container?.awslogs?.stream) {
               meta.append(createElement('span', 'detail-condition-meta', `Container awslogs · ${textOrDash(container?.awslogs?.group)} / ${textOrDash(container?.awslogs?.stream)}`));
+              const handoff = createECSTaskContainerLogHandoff(deploymentName, { taskArn: task?.taskArn, taskId: task?.taskId }, container);
+              if (handoff) meta.append(handoff);
             }
             item.append(meta);
             return item;

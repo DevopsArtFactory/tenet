@@ -1657,6 +1657,11 @@ assert 'Capped response; more rows may exist' in ui, ui
 assert 'At cap; provider totals unknown' in ui, ui
 assert 'Backing resource type' in ui, ui
 assert 'Backing resource name' in ui, ui
+assert 'Resource description' in ui, ui
+assert 'Selected container' in ui, ui
+assert 'Log container' in ui, ui
+assert 'Open container recent logs' in ui, ui
+assert "params.set('containerName', containerName);" in ui, ui
 assert 'Lookup path ·' in ui, ui
 assert 'Lookup region' in ui, ui
 assert 'Observer role configured' in ui, ui
