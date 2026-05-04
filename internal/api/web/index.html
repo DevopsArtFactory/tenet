@@ -1191,11 +1191,11 @@
         return Boolean(managedLogin.active && logoutRoute && missing.length === 0);
       };
       const operatorContextAuthenticationBoundaryLabel = (context) => {
-        if (operatorContextManagedLoginActive(context)) {
-          return 'Authentication boundary: Tenet-managed browser login is active for this API instance; guarded read recovery may offer a same-shell sign-in handoff while trusted front-door headers still take precedence when present.';
-        }
         if (operatorContextEnterpriseSSOActive(context)) {
           return 'Authentication boundary: enterprise SSO is active for this API instance; guarded read recovery may offer a provider-neutral same-shell sign-in handoff while trusted front-door headers still take precedence when present.';
+        }
+        if (operatorContextManagedLoginActive(context)) {
+          return 'Authentication boundary: Tenet-managed browser login is active for this API instance; guarded read recovery may offer a same-shell sign-in handoff while trusted front-door headers still take precedence when present.';
         }
         return 'Authentication boundary: this embedded shell consumes trusted front-door headers only; it does not start an in-page GitHub OAuth login, enterprise SSO login, or Tenet-managed browser session from this page unless the optional login/callback/session routes report active.';
       };
@@ -1204,6 +1204,7 @@
         const labels = {
           github: 'GitHub OAuth',
           github_oauth: 'GitHub OAuth',
+          google: 'Google Workspace OIDC',
           google_oidc: 'Google Workspace OIDC',
           google_workspace_oidc: 'Google Workspace OIDC',
           okta_saml: 'Okta SAML',
@@ -1214,6 +1215,7 @@
       const operatorContextEnterpriseSSOProviderLabel = (provider) => {
         const value = String(provider || '').trim().toLowerCase();
         const labels = {
+          google: 'Google Workspace SSO',
           google_oidc: 'Google Workspace SSO',
           google_workspace_oidc: 'Google Workspace SSO',
           google_workspace: 'Google Workspace SSO',
@@ -3552,6 +3554,15 @@
         return `${pathname}${search}${window.location.hash || ''}`;
       };
       const operatorContextSignInRuntime = (context = operatorContextState.context) => {
+        if (operatorContextEnterpriseSSOActive(context)) {
+          const enterpriseSso = operatorContextEnterpriseSSO(context);
+          const providerLabel = operatorContextEnterpriseSSOProviderLabel(enterpriseSso.provider);
+          return {
+            loginRoute: safeManagedLoginRoute(enterpriseSso.loginRoute),
+            label: providerLabel,
+            message: `${providerLabel} is active for this API instance`,
+          };
+        }
         if (operatorContextManagedLoginActive(context)) {
           const managedLogin = operatorContextManagedLogin(context);
           const providerLabel = operatorContextManagedLoginProviderLabel(managedLogin.provider);
@@ -3560,15 +3571,6 @@
             loginRoute: safeManagedLoginRoute(managedLogin.loginRoute),
             label: runtimeLabel,
             message: `${runtimeLabel} is active for this API instance`,
-          };
-        }
-        if (operatorContextEnterpriseSSOActive(context)) {
-          const enterpriseSso = operatorContextEnterpriseSSO(context);
-          const providerLabel = operatorContextEnterpriseSSOProviderLabel(enterpriseSso.provider);
-          return {
-            loginRoute: safeManagedLoginRoute(enterpriseSso.loginRoute),
-            label: providerLabel,
-            message: `${providerLabel} is active for this API instance`,
           };
         }
         return null;

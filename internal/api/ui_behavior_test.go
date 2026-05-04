@@ -186,6 +186,22 @@ const scenarios = [
     unexpected: 'Failed to load overview:',
   },
   {
+    name: 'applications overview 401 prefers enterprise SSO wording when Google runtime reports both diagnostics',
+    search: '?q=payments&sync=OutOfSync&account=210987654321',
+    route: '/v1/overview/applications',
+    status: 401,
+    body: 'unauthenticated: operator identity missing',
+    operatorContext: { authRuntime: { tenetManagedLogin: { configured: true, active: true, provider: 'google', requiredSettings: ['TENET_AUTH_PROVIDER'], missingSettings: [], loginRoute: '/auth/login/google', callbackRoute: '/auth/callback/google', stateStoreConfigured: true, identityStoreConfigured: true, sessionSecretConfigured: true, sessionCookieName: 'tenet_session' }, enterpriseSso: { configured: true, active: true, provider: 'google', requiredSettings: ['TENET_AUTH_PROVIDER'], missingSettings: [], loginRoute: '/auth/login/google', callbackRoute: '/auth/callback/google', stateStoreConfigured: true, identityStoreConfigured: true, sessionSecretConfigured: true } }, trustedHeaders: { enabled: true }, enforcement: { mode: 'trusted_front_door_read_write' }, identity: { authenticated: false }, roles: { canRead: false, canWrite: false }, deploymentAccess: { enforced: true, forwarded: false } },
+    expected: [
+      'Applications overview',
+      'Authenticated operator required',
+      'Google Workspace SSO is active for this API instance; use the sign-in handoff below to authenticate through /auth/login/google and return to this same bookmarkable URL. Trusted front-door X-Tenet-Authenticated-* identity headers still take precedence when present.',
+      'Sign in with Google Workspace SSO',
+    ],
+    forbiddenFragments: ['Sign in with Tenet-managed Google Workspace OIDC login'],
+    unexpected: 'Failed to load overview:',
+  },
+  {
     name: 'applications overview 403 explains operator authorization failure',
     search: '?q=payments',
     route: '/v1/overview/applications',
@@ -329,6 +345,11 @@ const scenarios = [
     scenario.expected.forEach((fragment) => {
       if (!text.includes(fragment)) throw new Error('expected fragment for ' + scenario.name + ': ' + fragment + '\nUI text: ' + text);
     });
+    if (scenario.forbiddenFragments) {
+      scenario.forbiddenFragments.forEach((fragment) => {
+        if (text.includes(fragment)) throw new Error('forbidden fragment for ' + scenario.name + ': ' + fragment + '\nUI text: ' + text);
+      });
+    }
     if (scenario.unexpected && text.includes(scenario.unexpected)) throw new Error('unexpected generic failure copy for ' + scenario.name + ': ' + text);
     const links = [
       ...collectLinks(document.getElementById('toolbar')),
@@ -340,19 +361,19 @@ const scenarios = [
     const enterpriseSignInLink = links.find((link) => link.text.includes('Sign in with Google Workspace SSO'));
     const accessRetryLink = links.find((link) => link.text.includes('Retry current page after access update'));
     const operatorContextLink = links.find((link) => link.text.includes('Open Operator context details'));
-    if (scenario.status === 401 && scenario.operatorContext?.authRuntime?.tenetManagedLogin?.active) {
-      if (!managedSignInLink) throw new Error('expected managed sign-in recovery link for ' + scenario.name + ': ' + JSON.stringify(links));
-      const expectedReturn = encodeURIComponent('/' + initialSearch);
-      if (managedSignInLink.href !== '/auth/login/github?returnUrl=' + expectedReturn) throw new Error('expected managed sign-in link to preserve returnUrl for ' + scenario.name + ', got ' + managedSignInLink.href);
-      if (managedSignInLink.target !== '_self') throw new Error('expected managed sign-in link to stay in same shell for ' + scenario.name);
-      if (signInRetryLink) throw new Error('did not expect front-door retry link when managed login is active for ' + scenario.name);
-      if (accessRetryLink) throw new Error('did not expect access-update retry link for auth-required scenario ' + scenario.name);
-    } else if (scenario.status === 401 && scenario.operatorContext?.authRuntime?.enterpriseSso?.active) {
+    if (scenario.status === 401 && scenario.operatorContext?.authRuntime?.enterpriseSso?.active) {
       if (!enterpriseSignInLink) throw new Error('expected enterprise SSO sign-in recovery link for ' + scenario.name + ': ' + JSON.stringify(links));
       const expectedReturn = encodeURIComponent('/' + initialSearch);
       if (enterpriseSignInLink.href !== '/auth/login/google?returnUrl=' + expectedReturn) throw new Error('expected enterprise sign-in link to preserve returnUrl for ' + scenario.name + ', got ' + enterpriseSignInLink.href);
       if (enterpriseSignInLink.target !== '_self') throw new Error('expected enterprise sign-in link to stay in same shell for ' + scenario.name);
       if (signInRetryLink) throw new Error('did not expect front-door retry link when enterprise SSO is active for ' + scenario.name);
+      if (accessRetryLink) throw new Error('did not expect access-update retry link for auth-required scenario ' + scenario.name);
+    } else if (scenario.status === 401 && scenario.operatorContext?.authRuntime?.tenetManagedLogin?.active) {
+      if (!managedSignInLink) throw new Error('expected managed sign-in recovery link for ' + scenario.name + ': ' + JSON.stringify(links));
+      const expectedReturn = encodeURIComponent('/' + initialSearch);
+      if (managedSignInLink.href !== '/auth/login/github?returnUrl=' + expectedReturn) throw new Error('expected managed sign-in link to preserve returnUrl for ' + scenario.name + ', got ' + managedSignInLink.href);
+      if (managedSignInLink.target !== '_self') throw new Error('expected managed sign-in link to stay in same shell for ' + scenario.name);
+      if (signInRetryLink) throw new Error('did not expect front-door retry link when managed login is active for ' + scenario.name);
       if (accessRetryLink) throw new Error('did not expect access-update retry link for auth-required scenario ' + scenario.name);
     } else if (scenario.status === 401) {
       if (!signInRetryLink) throw new Error('expected front-door sign-in retry recovery link for ' + scenario.name + ': ' + JSON.stringify(links));
@@ -9348,6 +9369,11 @@ const scenarios = [
     scenario.expected.forEach((fragment) => {
       if (!text.includes(fragment)) throw new Error('expected fragment for ' + scenario.name + ': ' + fragment + '\nUI text: ' + text);
     });
+    if (scenario.forbiddenFragments) {
+      scenario.forbiddenFragments.forEach((fragment) => {
+        if (text.includes(fragment)) throw new Error('forbidden fragment for ' + scenario.name + ': ' + fragment + '\nUI text: ' + text);
+      });
+    }
     if (scenario.unexpected && text.includes(scenario.unexpected)) throw new Error('unexpected generic failure copy for ' + scenario.name + ': ' + text);
   }
 })();
