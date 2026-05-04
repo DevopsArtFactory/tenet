@@ -1502,6 +1502,65 @@ func TestResourceDrillDownFrontDoorAuthOperatorContract(t *testing.T) {
 	}
 }
 
+func TestECSTaskSampleUnavailableReleaseGuardOperatorContract(t *testing.T) {
+	documents := map[string][]string{
+		"README.md": {
+			"ECS service resource pages also expose a compact `Task sample limit` control",
+			"sibling `tasksScope` reports `available`, optional `requestedLimit`, `effectiveLimit`, `returnedTaskCount`, `truncationStatus`",
+			"Interpret the scope fields literally: `available=true` with `returnedTaskCount=0` is a complete empty task sample",
+			"`available=false` / `truncationStatus=not_applicable` means the service inspection succeeded but the optional task bridge could not be sampled",
+			"\"unavailableReason\": \"aws_unavailable\"",
+		},
+		"docs/features/overview-dashboard.md": {
+			"`resource-inspection?resourceType=ecsService&resourceName={serviceName}&limit={n}` accepts an optional positive task-sample cap",
+			"`ecsService.tasks[]` renders as `Recent ECS tasks` with task/container/awslogs evidence",
+			"`ecsService.tasksScope` renders as a task-sample scope note with `available`, optional `requestedLimit`, `effectiveLimit`, `returnedTaskCount`",
+			"That separates true empty successful samples (`available=true`, `returnedTaskCount=0`) from partial/unavailable task-bridge evidence",
+			"local and compose smoke also lock the embedded shell helper/copy that renders `ecsService.tasksScope` as either the normal `Task sample scope` note or the distinct `Task sample unavailable` warning",
+		},
+		"docs/architecture/tenet-v1-overview-ui.md": {
+			"`resource-inspection?resourceType=ecsService&resourceName={serviceName}&limit={n}` accepts an optional positive task-sample cap",
+			"sibling `tasksScope` keeps the row cap and sampling state self-describing with `available`, optional `requestedLimit`, `effectiveLimit`, `returnedTaskCount`",
+			"`not_applicable` when the optional task bridge is unavailable",
+			"Empty successful samples remain `available=true` with `returnedTaskCount=0`",
+			"a distinct `Task sample unavailable` warning when `tasksScope.available=false`",
+		},
+	}
+
+	for path, fragments := range documents {
+		body := readRepoFile(t, path)
+		for _, fragment := range fragments {
+			if !strings.Contains(body, fragment) {
+				t.Fatalf("expected %s to lock ECS task-sample release-guard wording %q", path, fragment)
+			}
+		}
+	}
+
+	smokeContracts := map[string][]string{
+		"scripts/smoke-local.sh": {
+			`assert "'Task sample limit'" in body, body`,
+			`assert "Task sample unavailable · ${reasonText} · requested ${countText(scope.requestedLimit)} · effective ${countText(effectiveLimit)}" in body, body`,
+			`assert "Task sampling is unavailable for this service; service inspection remains available." in body, body`,
+			`assert "Task sample scope · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${truncationStatus}" in body, body`,
+		},
+		"scripts/smoke-docker.sh": {
+			`"'Task sample limit'",`,
+			`"Task sample unavailable · ${reasonText} · requested ${countText(scope.requestedLimit)} · effective ${countText(effectiveLimit)}",`,
+			`"Task sampling is unavailable for this service; service inspection remains available.",`,
+			`"Task sample scope · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${truncationStatus}",`,
+		},
+	}
+
+	for path, fragments := range smokeContracts {
+		body := readRepoFile(t, path)
+		for _, fragment := range fragments {
+			if !strings.Contains(body, fragment) {
+				t.Fatalf("expected %s to lock ECS task-sample smoke release-guard fragment %q", path, fragment)
+			}
+		}
+	}
+}
+
 func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 	localSmoke := readRepoFile(t, "scripts/smoke-local.sh")
 	for _, fragment := range []string{
