@@ -5373,6 +5373,7 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   const unavailableText = collectText(unavailableRun.document.getElementById('accounts')).join(' | ');
   if (!unavailableText.includes('Recent logs are unavailable for this resource.')) throw new Error('expected resource page unavailable recent logs state');
   if (!unavailableText.includes('Cross-account access is not configured for this deployment.')) throw new Error('expected unavailable recent logs state to surface friendly provider reason');
+  if (!unavailableText.includes('Lookup path · ap-northeast-2 · control 123456789012 → target 210987654321 · cross-account lookup · observer role not configured')) throw new Error('expected unavailable recent logs state to summarize the lookup path, got ' + unavailableText);
   if (!unavailableText.includes('Lookup region')) throw new Error('expected unavailable recent logs state to label lookup region');
   if (!unavailableText.includes('ap-northeast-2')) throw new Error('expected unavailable recent logs state to show lookup region value');
   if (!unavailableText.includes('Control account ID')) throw new Error('expected unavailable recent logs state to label control account');
@@ -5393,6 +5394,7 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   });
   const emptyText = collectText(emptyRun.document.getElementById('accounts')).join(' | ');
   if (!emptyText.includes('No recent logs are available for this resource.')) throw new Error('expected resource page empty recent logs state');
+  if (!emptyText.includes('Lookup path · ap-northeast-2 · account 210987654321 · same-account lookup · observer role configured')) throw new Error('expected empty recent logs state to summarize same-account lookup path, got ' + emptyText);
   if (!emptyText.includes('Lookup region')) throw new Error('expected empty recent logs state to label lookup region');
   if (!emptyText.includes('Cross-account lookup')) throw new Error('expected empty recent logs state to label cross-account lookup');
   if (!emptyText.includes('Observer role configured')) throw new Error('expected empty recent logs state to label observer role configuration');
@@ -5431,6 +5433,7 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   const populatedText = collectText(populatedRun.document.getElementById('accounts')).join(' | ');
   if (!populatedText.includes('Logs source')) throw new Error('expected populated recent logs section to show source');
   if (!populatedText.includes('cloudwatch')) throw new Error('expected populated recent logs section to show source value');
+  if (!populatedText.includes('Lookup path · ap-northeast-2 · control 123456789012 → target 210987654321 · cross-account lookup · observer role configured')) throw new Error('expected populated recent logs state to summarize the lookup path, got ' + populatedText);
   if (!populatedText.includes('Lookup region')) throw new Error('expected populated recent logs section to label lookup region');
   if (!populatedText.includes('Control account ID')) throw new Error('expected populated recent logs section to label control account');
   if (!populatedText.includes('Target account ID')) throw new Error('expected populated recent logs section to label target account');

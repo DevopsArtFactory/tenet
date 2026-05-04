@@ -3753,6 +3753,32 @@
         ['Cross-account lookup', lookupContextBoolText(lookupContext?.crossAccount)],
         ['Observer role configured', lookupContextBoolText(lookupContext?.observerRoleConfigured)],
       ];
+      const resourceLogsLookupPathText = (lookupContext) => {
+        const parts = [];
+        const region = lookupContextText(lookupContext?.region);
+        if (region !== '—') parts.push(region);
+        const controlAccount = lookupContextText(lookupContext?.controlAccountId);
+        const targetAccount = lookupContextText(lookupContext?.targetAccountId);
+        if (controlAccount !== '—' && targetAccount !== '—') {
+          if (controlAccount === targetAccount) {
+            parts.push(`account ${controlAccount}`);
+          } else {
+            parts.push(`control ${controlAccount} → target ${targetAccount}`);
+          }
+        } else if (controlAccount !== '—') {
+          parts.push(`control ${controlAccount}`);
+        } else if (targetAccount !== '—') {
+          parts.push(`target ${targetAccount}`);
+        }
+        if (typeof lookupContext?.crossAccount === 'boolean') {
+          parts.push(lookupContext.crossAccount ? 'cross-account lookup' : 'same-account lookup');
+        }
+        if (typeof lookupContext?.observerRoleConfigured === 'boolean') {
+          parts.push(lookupContext.observerRoleConfigured ? 'observer role configured' : 'observer role not configured');
+        }
+        return `Lookup path · ${parts.length ? parts.join(' · ') : 'lookup context unavailable'}`;
+      };
+      const createResourceLogsLookupPathSummary = (lookupContext) => createElement('p', 'detail-section-copy', resourceLogsLookupPathText(lookupContext));
       const resourceLogsBackingResourceFields = (result) => {
         const fields = [];
         if (result?.backingResourceType) {
@@ -3846,8 +3872,9 @@
         const actions = createResourceLogsActions(section, deploymentName, resource, false, detail);
         const capNote = createResourceLogsLimitNote(selectedLimit);
         const backingResourceFields = resourceLogsBackingResourceFields(result);
+        const lookupPathSummary = createResourceLogsLookupPathSummary(result?.lookupContext);
         const handoffSection = createResourceLogsBackingResourceHandoffSection(detail, result);
-        const beforeNodes = (metadata) => handoffSection ? [capNote, metadata, handoffSection] : [capNote, metadata];
+        const beforeNodes = (metadata) => handoffSection ? [capNote, lookupPathSummary, metadata, handoffSection] : [capNote, lookupPathSummary, metadata];
         const scopeFields = resourceLogsResultScopeFields(result?.resultScope);
         if (!result?.available) {
           const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, [...backingResourceFields, ...scopeFields]);

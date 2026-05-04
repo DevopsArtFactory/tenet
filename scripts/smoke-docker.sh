@@ -1405,6 +1405,7 @@ for fragment in (
     "Scope status",
     "Capped response; more rows may exist",
     "At cap; provider totals unknown",
+    "Lookup path ·",
     "Lookup region",
     "Observer role configured",
     "This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet.",

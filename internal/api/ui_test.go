@@ -1808,6 +1808,9 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 		"['Target account ID', lookupContextText(lookupContext?.targetAccountId)]",
 		"['Cross-account lookup', lookupContextBoolText(lookupContext?.crossAccount)]",
 		"['Observer role configured', lookupContextBoolText(lookupContext?.observerRoleConfigured)]",
+		"const resourceLogsLookupPathText = (lookupContext) => {",
+		"return `Lookup path · ${parts.length ? parts.join(' · ') : 'lookup context unavailable'}`;",
+		"const createResourceLogsLookupPathSummary = (lookupContext) => createElement('p', 'detail-section-copy', resourceLogsLookupPathText(lookupContext));",
 		"const resourceLogsBackingResourceFields = (result) => {",
 		"if (result?.backingResourceType) {",
 		"fields.push(['Backing resource type', lookupContextText(result.backingResourceType)]);",
@@ -1824,8 +1827,9 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 		"[...extraFields, ...resourceLogsLookupContextFields(lookupContext)].forEach(([label, value]) => {",
 		"const createResourceLogsBackingResourceHandoffSection = (detail, result) => {",
 		"Open the resolved ${handoff.resource.type} drill-down Tenet used for this recent-log lookup.",
+		"const lookupPathSummary = createResourceLogsLookupPathSummary(result?.lookupContext);",
 		"const handoffSection = createResourceLogsBackingResourceHandoffSection(detail, result);",
-		"const beforeNodes = (metadata) => handoffSection ? [capNote, metadata, handoffSection] : [capNote, metadata];",
+		"const beforeNodes = (metadata) => handoffSection ? [capNote, lookupPathSummary, metadata, handoffSection] : [capNote, lookupPathSummary, metadata];",
 		"const scopeFields = resourceLogsResultScopeFields(result?.resultScope);",
 		"[...backingResourceFields, ...scopeFields]",
 		"...scopeFields,",
@@ -1850,6 +1854,9 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 		"createDetailSection('Recent logs');",
 		"Recent logs",
 		"Refresh recent logs",
+		"Lookup path ·",
+		"same-account lookup",
+		"observer role not configured",
 		"Logs source",
 		"Backing resource type",
 		"Backing resource name",
@@ -2334,6 +2341,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert 'Refresh live inspection' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh live inspection")
+	}
+	if !strings.Contains(text, "assert 'Lookup path ·' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains Lookup path summary")
 	}
 	if !strings.Contains(text, "assert 'Lookup region' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Lookup region")
@@ -3109,7 +3119,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"correlated bookmarkable shell reads for the application drill-down, account drill-down, drift workspace, deployment-scoped audit workspace, and bookmarkable plan/apply workspace",
 			"CodeDeploy application, task-set target-group, and weighted production listener-rule resource shells",
 			"bookmarkable application-detail status summary shell",
-			"The raw embedded shell/docs contract also keeps the labels `Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Resolved backing resource`, `Lookup region`, `Observer role configured`, and the runtime-events `Open field-level drift` handoff present",
+			"The raw embedded shell/docs contract also keeps the labels `Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Resolved backing resource`, `Lookup path ·`, `Lookup region`, `Observer role configured`, and the runtime-events `Open field-level drift` handoff present",
 			"resource is a valid drill-down target but has no independent recent-log stream yet",
 			"temp files via the shared `write_payload` helper",
 			"The compose-backed smoke now covers shipped resource drill-down shells directly",
@@ -3190,7 +3200,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"survive the Compose `api` service restart",
 			"`TENET_AWS_ENABLE_APPLY=true make docker-up`",
 			"correlated structured `http_request` logs with stable fields such as `request_id`, `method`, `path`, `status`, `duration_ms`, and `result` for the bookmarkable application drill-down shell request, bookmarkable account drill-down shell request, bookmarkable drift workspace request, the deployment-scoped audit workspace request, and the bookmarkable plan/apply workspace shell request",
-			"`Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Resolved backing resource`, `Lookup region`, `Observer role configured`, and the runtime-events `Open field-level drift` handoff",
+			"`Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Resolved backing resource`, `Lookup path ·`, `Lookup region`, `Observer role configured`, and the runtime-events `Open field-level drift` handoff",
 			"temp files through the shared `write_payload` helper",
 			"bookmarkable bootstrap-source resource page plus the paired `userDataBootstrapSource` `resource-logs` and `resource-inspection` routes, the `codeDeployApplication` recent-log route, the `testListener` recent-log backing-resource metadata, weighted target-group `no_log_source` recent-log payloads, and the `ecsService` bounded `resource-logs?limit=1` resultScope / invalid `limit=0` contract, the `ecsTask` task-ARN drill-down `resource-logs` request with `containerName=worker` and matching live-inspection envelope",
 			"bookmarkable CodeDeploy application, `blueTaskSetTargetGroup`, and `productionListenerRule` resource pages and the local-friendly traffic-routing inspection fallback",

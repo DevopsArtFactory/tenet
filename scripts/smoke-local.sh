@@ -1611,6 +1611,7 @@ assert 'Capped response; more rows may exist' in ui, ui
 assert 'At cap; provider totals unknown' in ui, ui
 assert 'Backing resource type' in ui, ui
 assert 'Backing resource name' in ui, ui
+assert 'Lookup path ·' in ui, ui
 assert 'Lookup region' in ui, ui
 assert 'Observer role configured' in ui, ui
 assert 'This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet.' in ui, ui
