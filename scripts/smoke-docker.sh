@@ -1266,6 +1266,8 @@ assert_fragments("ui", ui, (
     "'Refreshing applications overview from GET /v1/overview/applications…'",
     "Current applications overview remains visible below.",
     "Failed to refresh applications overview:",
+    "Visible applications after filters:",
+    "Visible subset last update",
     "const latestRuntimeSignalParts = (deployment) => {",
     "Latest runtime signal",
     "buildPageSectionURL('application', 'application-runtime-events', { deployment: deployment.name })",

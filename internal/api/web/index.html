@@ -2314,7 +2314,7 @@
         actions.append(clearButton);
         root.replaceChildren(controls, actions);
       };
-      const renderApplicationsSummary = (applications) => {
+      const renderApplicationsSummary = (applications, sourceApplications = applications) => {
         const synced = applications.filter((deployment) => deployment.sync?.state === 'Synced').length;
         const progressingStates = new Set(['Reconciling', 'OutOfSync', 'Drifted']);
         const progressing = applications.filter((deployment) => progressingStates.has(deployment.sync?.state)).length;
@@ -2322,17 +2322,24 @@
         const errored = applications.filter((deployment) => deployment.sync?.state === 'Error').length;
         const latestUpdate = latestRuntimeTimestamp(applications);
         const summary = document.getElementById('summary');
+        const activeFilters = applicationsFilterLabels(sourceApplications, currentViewState);
+        const filtersActive = sourceApplications.length !== applications.length || activeFilters.length > 0;
+        const applicationCount = filtersActive ? `${applications.length} of ${sourceApplications.length}` : String(applications.length);
+        const headerMeta = filtersActive
+          ? `Visible applications after filters: ${applications.length} of ${sourceApplications.length}. ${activeFilters.length ? `Active filters: ${activeFilters.join(' · ')}.` : 'Filters are active.'}`
+          : 'Argo-style first page: show only application state, then drill down into the application detail page.';
         const header = createElement('article', 'card');
         header.append(
           createElement('div', 'label', 'Application status overview'),
-          createElement('div', 'value', String(applications.length)),
-          createElement('div', 'account-meta', 'Argo-style first page: show only application state, then drill down into the application detail page.'),
+          createElement('div', 'value', applicationCount),
+          createElement('div', 'account-meta', headerMeta),
         );
         const statusCard = createElement('article', 'card');
+        const lastUpdateLabel = filtersActive ? 'Visible subset last update' : 'Last update';
         statusCard.append(
           createElement('div', 'label', 'Sync and health summary'),
           createElement('div', 'account-meta', `${synced} synced · ${progressing} progressing · ${paused} paused · ${errored} error`),
-          createElement('div', 'account-meta', `Last update · ${latestUpdate}`),
+          createElement('div', 'account-meta', `${lastUpdateLabel} · ${latestUpdate}`),
         );
         const refreshState = applicationsOverviewRefreshState(applicationsOverviewState);
         const refreshNodes = [];
@@ -2444,7 +2451,7 @@
         setEmbeddedBrowserTitle('Applications overview');
         renderToolbar(allApplications, currentViewState);
         const visibleApplications = applyViewState(applications, currentViewState);
-        renderApplicationsSummary(visibleApplications);
+        renderApplicationsSummary(visibleApplications, applications);
         renderApplicationsTable(visibleApplications, applications);
         restoreToolbarFocus(focusState);
       };

@@ -711,6 +711,8 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"return query ? `${pathname}?${query}` : pathname;",
 		"const renderApplicationsOverview = (applications, focusState = null) => {",
 		"Application status overview",
+		"Visible applications after filters:",
+		"Visible subset last update",
 		"Account detail",
 		"Last update",
 		"Search applications",

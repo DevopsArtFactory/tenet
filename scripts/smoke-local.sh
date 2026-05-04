@@ -1054,6 +1054,8 @@ assert traffic_resource_inspection['trafficRoutingResource'].get('kind') == 'tra
 assert traffic_resource_inspection['trafficRoutingResource'].get('inspectionMode') == 'summary_only', traffic_resource_inspection
 assert isinstance(traffic_resource_inspection['trafficRoutingResource'].get('summary'), str) and traffic_resource_inspection['trafficRoutingResource']['summary'], traffic_resource_inspection
 assert 'Application status overview' in ui, ui
+assert 'Visible applications after filters:' in ui, ui
+assert 'Visible subset last update' in ui, ui
 assert 'Latest runtime signal' in ui, ui
 assert "const latestRuntimeSignalParts = (deployment) => {" in ui, ui
 assert "buildPageSectionURL('application', 'application-runtime-events', { deployment: deployment.name })" in ui, ui
