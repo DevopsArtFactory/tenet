@@ -112,9 +112,10 @@ type ResultScope struct {
 type LookupContext = resourceaws.LookupContext
 
 type Entry struct {
-	Timestamp string `json:"timestamp"`
-	Message   string `json:"message"`
-	Stream    string `json:"stream,omitempty"`
+	Timestamp     string `json:"timestamp"`
+	Message       string `json:"message"`
+	Stream        string `json:"stream,omitempty"`
+	ContainerName string `json:"containerName,omitempty"`
 }
 
 type Options struct {
@@ -209,7 +210,7 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 			}
 			return Result{}, err
 		}
-		entries := formatCloudWatchEntries(events, s.effectiveLimit(req.Limit))
+		entries := formatCloudWatchEntries(events, s.effectiveLimit(req.Limit), req.ContainerName)
 		return availableResult(req, SourceCloudWatch, entries), nil
 	case "candidateAutoScalingGroup", "serviceAutoScalingGroup", "userDataBootstrapSource":
 		resourceName := req.ResourceName
@@ -292,9 +293,10 @@ type ECSRequest struct {
 }
 
 type CloudWatchEvent struct {
-	Timestamp time.Time
-	Message   string
-	Stream    string
+	Timestamp     time.Time
+	Message       string
+	Stream        string
+	ContainerName string
 }
 
 type ASGRequest struct {
@@ -407,17 +409,25 @@ func (s Service) effectiveLimit(requested int) int {
 	return s.maxEntries()
 }
 
-func formatCloudWatchEntries(events []CloudWatchEvent, max int) []Entry {
+func formatCloudWatchEntries(events []CloudWatchEvent, max int, fallbackContainerName ...string) []Entry {
 	sort.SliceStable(events, func(i, j int) bool {
 		return events[i].Timestamp.After(events[j].Timestamp)
 	})
+	containerFallback := ""
+	if len(fallbackContainerName) > 0 {
+		containerFallback = strings.TrimSpace(fallbackContainerName[0])
+	}
 	entries := make([]Entry, 0, min(max, len(events)))
 	for _, event := range events {
 		message := strings.TrimSpace(event.Message)
 		if message == "" {
 			continue
 		}
-		entries = append(entries, Entry{Timestamp: event.Timestamp.UTC().Format(time.RFC3339), Message: message, Stream: strings.TrimSpace(event.Stream)})
+		containerName := strings.TrimSpace(event.ContainerName)
+		if containerName == "" {
+			containerName = containerFallback
+		}
+		entries = append(entries, Entry{Timestamp: event.Timestamp.UTC().Format(time.RFC3339), Message: message, Stream: strings.TrimSpace(event.Stream), ContainerName: containerName})
 		if len(entries) == max {
 			break
 		}
@@ -807,9 +817,10 @@ func fetchTaskLogEvents(ctx context.Context, client cloudWatchLogEventsClient, t
 		}
 		for _, event := range out.Events {
 			events = append(events, CloudWatchEvent{
-				Timestamp: time.UnixMilli(aws.ToInt64(event.Timestamp)).UTC(),
-				Message:   aws.ToString(event.Message),
-				Stream:    streamName,
+				Timestamp:     time.UnixMilli(aws.ToInt64(event.Timestamp)).UTC(),
+				Message:       aws.ToString(event.Message),
+				Stream:        streamName,
+				ContainerName: aws.ToString(container.Name),
 			})
 		}
 	}
@@ -846,7 +857,12 @@ func fetchTaskLogEventsForContainer(ctx context.Context, client cloudWatchLogEve
 			return nil, err
 		}
 		for _, event := range out.Events {
-			events = append(events, CloudWatchEvent{Timestamp: time.UnixMilli(aws.ToInt64(event.Timestamp)).UTC(), Message: aws.ToString(event.Message), Stream: streamName})
+			events = append(events, CloudWatchEvent{
+				Timestamp:     time.UnixMilli(aws.ToInt64(event.Timestamp)).UTC(),
+				Message:       aws.ToString(event.Message),
+				Stream:        streamName,
+				ContainerName: name,
+			})
 		}
 	}
 	return events, nil

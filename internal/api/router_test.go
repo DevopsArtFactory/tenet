@@ -6211,7 +6211,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 			Available: true,
 			Source:    resourcelogs.SourceCloudWatch,
 			Entries: []resourcelogs.Entry{
-				{Timestamp: "2026-04-16T07:10:00Z", Message: "service became healthy", Stream: "ecs/payments-api/service/abc123"},
+				{Timestamp: "2026-04-16T07:10:00Z", Message: "service became healthy", Stream: "ecs/payments-api/service/abc123", ContainerName: "api"},
 				{Timestamp: "2026-04-16T07:09:00Z", Message: "registered 2/2 targets"},
 			},
 			ResultScope: &resourcelogs.ResultScope{
@@ -6288,6 +6288,24 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		}
 		if raw["containerName"] != "api" {
 			t.Fatalf("expected containerName to echo ECS task selector, got %#v", raw["containerName"])
+		}
+		rawEntries, ok := raw["entries"].([]any)
+		if !ok || len(rawEntries) != 2 {
+			t.Fatalf("expected entries array in payload, got %#v", raw["entries"])
+		}
+		firstEntry, ok := rawEntries[0].(map[string]any)
+		if !ok {
+			t.Fatalf("expected first entry object, got %#v", rawEntries[0])
+		}
+		if firstEntry["containerName"] != "api" {
+			t.Fatalf("expected entries[0].containerName to expose resolved ECS task container, got %#v", firstEntry)
+		}
+		secondEntry, ok := rawEntries[1].(map[string]any)
+		if !ok {
+			t.Fatalf("expected second entry object, got %#v", rawEntries[1])
+		}
+		if _, ok := secondEntry["containerName"]; ok {
+			t.Fatalf("expected entries[1].containerName to be omitted when unknown, got %#v", secondEntry)
 		}
 		if _, ok := raw["backingResourceType"]; ok {
 			t.Fatalf("expected backingResourceType to be omitted for direct resource logs, got %#v", raw)
