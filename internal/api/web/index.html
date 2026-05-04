@@ -5383,8 +5383,9 @@
             return entry;
           });
         }
-        if (!detail.executionMode) return [];
-        switch (detail.executionMode) {
+        const context = effectiveRolloutContext(detail);
+        if (!context.executionMode) return [];
+        switch (context.executionMode) {
           case 'ecsCodeDeploy':
             return [
               { resource: 'ecsService', name: `${detail.name}-service` },
@@ -5424,9 +5425,10 @@
           sync: cloneJSONValue(detail.sync || {}),
           health: cloneJSONValue(detail.health || {}),
         };
-        if (detail.targetType) payload.targetType = detail.targetType;
-        if (detail.strategy) payload.strategy = detail.strategy;
-        if (detail.executionMode) payload.executionMode = detail.executionMode;
+        const context = effectiveRolloutContext(detail);
+        if (context.targetType) payload.targetType = context.targetType;
+        if (context.strategy) payload.strategy = context.strategy;
+        if (context.executionMode) payload.executionMode = context.executionMode;
         if (hasArtifactValue(detail.desiredArtifact)) payload.desiredArtifact = cloneJSONValue(detail.desiredArtifact);
         const effectiveDeployedArtifact = hasArtifactValue(detail.deployedArtifact)
           ? detail.deployedArtifact
