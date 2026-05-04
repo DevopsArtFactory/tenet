@@ -53,6 +53,19 @@ The operator contract for these settings is:
 - configured provider metadata is safe to expose only when it is not a credential
 - secret values, raw tokens, SAML assertions, authorization codes, and refresh tokens are never returned from operator diagnostics
 
+## Okta SAML activation checklist
+
+Issue #704 should activate Okta SAML only after the runtime can satisfy the same managed-session boundary that GitHub OAuth and Google Workspace OIDC already use. Reviewers should treat the following as the minimum activation checklist for any backend/API PR that flips Okta SAML from diagnostic-only to active:
+
+- `authRuntime.enterpriseSso.provider` stays `okta_saml`, `configured=true`, and `active=false` until every required non-secret setting and store is complete and same-origin route wiring exists.
+- Complete Okta SAML settings expose same-origin `loginRoute=/auth/login/okta` and `callbackRoute=/auth/callback/okta/saml`; incomplete settings keep those routes diagnostic placeholders only and must not advertise an active sign-in handoff.
+- Active callbacks mint only Tenet-managed session evidence through the signed `tenet_session` cookie, validate safe in-app `returnUrl` values, and keep logout scoped to clearing that local cookie rather than logging the operator out of Okta.
+- SAML `NameID`, email, display-name, and optional group attributes normalize into Tenet identity fields, but raw assertions, metadata documents, private keys, and provider cookies are never persisted in identity/session stores or returned through `GET /v1/operator/context`.
+- Tests use local fake metadata/assertions for successful, malformed, expired, and untrusted assertion paths; CI and smoke remain credential-free and must not contact live Okta.
+- Trusted front-door headers, repository-backed RBAC policy, role checks, deployment/project/environment grants, and immutable plan/apply authorization remain unchanged; Okta SAML authenticates identity only and never grants Tenet access by itself.
+
+Until a PR satisfies that checklist, Okta SAML should remain configured-but-inactive diagnostic evidence so operators can preflight settings without seeing a clickable sign-in path that cannot complete safely.
+
 ## Identity normalization
 
 Provider-specific inputs should normalize into Tenet's authenticated identity shape before route handlers make authorization decisions.

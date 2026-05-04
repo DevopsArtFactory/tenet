@@ -99,6 +99,7 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
 	for _, fragment := range []string{
 		"`docs/architecture/tenet-v1-enterprise-sso.md`",
+		"Okta SAML activation checklist for follow-up work",
 		"full enterprise SSO providers for Okta and repository-backed provider group authorization",
 		"repository-backed RBAC policy evaluation for users/groups",
 	} {
@@ -115,6 +116,13 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 		"human-readable provider labels in operator-facing UI (`Google Workspace OIDC`, `Okta SAML`, `Okta OIDC`)",
 		"provider-boundary copy in the embedded Operator context details",
 		"Okta identity through SAML assertions or OIDC profile claims",
+		"Okta SAML activation checklist",
+		"`authRuntime.enterpriseSso.provider` stays `okta_saml`, `configured=true`, and `active=false` until every required non-secret setting and store is complete and same-origin route wiring exists.",
+		"Complete Okta SAML settings expose same-origin `loginRoute=/auth/login/okta` and `callbackRoute=/auth/callback/okta/saml`",
+		"Active callbacks mint only Tenet-managed session evidence through the signed `tenet_session` cookie, validate safe in-app `returnUrl` values",
+		"raw assertions, metadata documents, private keys, and provider cookies are never persisted in identity/session stores or returned through `GET /v1/operator/context`.",
+		"Tests use local fake metadata/assertions for successful, malformed, expired, and untrusted assertion paths",
+		"Okta SAML authenticates identity only and never grants Tenet access by itself.",
 		"local fake provider/assertion/profile tests instead of live Google or Okta calls",
 		"Trusted front-door identity remains authoritative",
 		"Diagnostics must not expose client secrets, raw ID/access/refresh tokens, SAML assertions, authorization codes, private keys, or provider cookies.",
