@@ -696,6 +696,7 @@ if deployment_history:
 assert deployment_events_fixture['deploymentName'] == 'payments-api-prod', deployment_events_fixture
 assert isinstance(deployment_events_fixture['events'], list), deployment_events_fixture
 assert len(deployment_events_fixture['events']) == 0, deployment_events_fixture
+assert all('controllerRefresh' not in event for event in deployment_events_fixture['events']), deployment_events_fixture
 assert deployment_events_fixture.get('managedDriftSummary') == {'total': 0, 'high': 0, 'medium': 0, 'low': 0}, deployment_events_fixture
 assert plan_preview['deploymentName'] == 'payments-api-prod', plan_preview
 assert plan_preview['status'] == 'ready', plan_preview
@@ -3081,6 +3082,7 @@ assert summary.get('medium', 0) == sum(1 for item in event_managed_drift if item
 assert summary.get('low', 0) == sum(1 for item in event_managed_drift if item.get('severity') == 'low'), (summary, event_managed_drift)
 for event in events_payload['events']:
     assert event.get('source') == 'controller', events_payload
+    assert 'controllerRefresh' not in event, events_payload
 print('smoke-local: controller changeDetails path ok')
 PY
 
