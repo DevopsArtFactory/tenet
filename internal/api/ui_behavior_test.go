@@ -5667,11 +5667,27 @@ func TestResourceDetailPageLiveInspectionWithNodeHarness(t *testing.T) {
 		t.Fatalf("marshal asg detail body: %v", err)
 	}
 
+	genericASGDetailJSON, err := json.Marshal(map[string]any{
+		"name":         "payments-api-prod",
+		"accountName":  "prod-core",
+		"awsAccountId": "123456789012",
+		"region":       "ap-northeast-2",
+		"rollout": map[string]any{
+			"execution": []map[string]any{
+				{"name": "payments-api-prod-generic", "resource": "autoScalingGroup", "description": "Generic ASG resource should not expose recent-log handoffs"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal generic asg detail body: %v", err)
+	}
+
 	nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;
 const ecsDetailBody = ` + string(ecsDetailJSON) + `;
 const unsupportedDetailBody = ` + string(unsupportedDetailJSON) + `;
 const asgDetailBody = ` + string(asgDetailJSON) + `;
+const genericASGDetailBody = ` + string(genericASGDetailJSON) + `;
 class Element {
   constructor(tagName, ownerDocument) {
     this.tagName = String(tagName).toUpperCase();
@@ -5724,6 +5740,7 @@ const summaryResourceID = 'codeDeployDeploymentGroup::payments-api-staging Deplo
 const blueTaskSetTargetGroupResourceID = 'blueTaskSetTargetGroup::payments-api-staging-blue::Blue task-set target group';
 const weightedListenerRuleResourceID = 'productionListenerRule::payments-api-staging-prod-listener::Weighted listener rule';
 const asgResourceID = 'candidateAutoScalingGroup::payments-api-prod-candidate::Candidate capacity';
+const genericASGResourceID = 'autoScalingGroup::payments-api-prod-generic::Generic ASG resource should not expose recent-log handoffs';
 const bootstrapResourceID = 'userDataBootstrapSource::file:userdata/payments-api-prod.sh::Normalized userdata bootstrap source for candidate EC2 capacity';
 const trafficShiftPlanResourceID = 'trafficShiftPlan::payments-api-prod-weighted-routing::Weighted routing plan';
 
@@ -6012,7 +6029,24 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!asgSupportedText.includes('Lifecycle state · InService')) throw new Error('expected ASG inspection to render lifecycle state');
   if (!asgSupportedText.includes('Protected from scale-in · True')) throw new Error('expected ASG inspection to render protected-from-scale-in');
   if (!asgSupportedText.includes('Weighted capacity · 1')) throw new Error('expected ASG inspection to render weighted capacity');
+  if (!asgSupportedText.includes('Open EC2 console logs')) throw new Error('expected ASG inspection to render console-log handoff');
+  const asgConsoleLogLinks = collectNodes(asgSupportedRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open EC2 console logs');
+  if (asgConsoleLogLinks.length !== 1) throw new Error('expected exactly one ASG console-log handoff, got ' + asgConsoleLogLinks.length);
+  const asgConsoleLogLink = asgConsoleLogLinks[0];
+  if (asgConsoleLogLink.target !== '_self') throw new Error('expected ASG console-log handoff to stay inside embedded UI');
+  if (asgConsoleLogLink.rel) throw new Error('expected ASG console-log handoff to avoid new-tab rel attributes');
+  if (asgConsoleLogLink.href !== '/?page=resource&deployment=payments-api-prod&resourceType=candidateAutoScalingGroup&resourceId=candidateAutoScalingGroup%3A%3Apayments-api-prod-candidate%3A%3ACandidate+capacity#resource-recent-logs') throw new Error('expected ASG console-log handoff to preserve resource route and target recent logs, got ' + asgConsoleLogLink.href);
 
+  const genericASGLogsURL = '/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=autoScalingGroup&resourceName=payments-api-prod-generic';
+  const genericASGInspectionURL = '/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=autoScalingGroup&resourceName=payments-api-prod-generic';
+  const genericASGRun = await renderWithFetch('?page=resource&deployment=payments-api-prod&resourceType=autoScalingGroup&resourceId=' + encodeURIComponent(genericASGResourceID), (url) => {
+    if (url === asgDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(genericASGDetailBody) });
+    if (url === genericASGLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === genericASGInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type' }) });
+    throw new Error('unexpected generic asg fetch url: ' + url);
+  });
+  const genericASGText = collectText(genericASGRun.document.getElementById('accounts')).join(' | ');
+  if (genericASGText.includes('Open EC2 console logs')) throw new Error('expected unsupported generic autoScalingGroup to omit ASG console-log handoff');
   const bootstrapLogsURL = '/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=userDataBootstrapSource&resourceName=file%3Auserdata%2Fpayments-api-prod.sh';
   const bootstrapInspectionURL = '/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=userDataBootstrapSource&resourceName=file%3Auserdata%2Fpayments-api-prod.sh';
   const bootstrapSupportedRun = await renderWithFetch('?page=resource&deployment=payments-api-prod&resourceType=userDataBootstrapSource&resourceId=' + encodeURIComponent(bootstrapResourceID), (url) => {

@@ -1667,6 +1667,9 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
         "renderOperatorReadFailurePanel(",
         "'Live inspection'",
         "resourceInspectionReadRoute(deploymentName, resource, targetLimit)",
+        "const autoScalingGroupRecentLogsHandoff = (deploymentName, resource) => {",
+        "Open EC2 console logs",
+        "buildPageSectionURL('resource', 'resource-recent-logs'",
     ))
 
 for fragment in (

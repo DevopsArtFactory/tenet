@@ -1360,6 +1360,10 @@ assert "const createECSTaskScopeSummary = (scope) => {" in ui, ui
 assert "Task sample scope · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${truncationStatus}" in ui, ui
 assert "[createECSTaskScopeSummary(service?.tasksScope)]" in ui, ui
 assert 'Auto Scaling Group name' in ui, ui
+assert 'Open EC2 console logs' in ui, ui
+assert "const autoScalingGroupRecentLogsHandoff = (deploymentName, resource) => {" in ui, ui
+assert "['candidateAutoScalingGroup', 'serviceAutoScalingGroup'].includes(String(resource?.type || '').trim())" in ui, ui
+assert "buildPageSectionURL('resource', 'resource-recent-logs'" in ui, ui
 assert 'Launch template' in ui, ui
 assert 'Target group ARNs' in ui, ui
 assert 'Mixed instances overrides' in ui, ui
