@@ -1823,11 +1823,12 @@
           resource.type === resourceRef.resourceType && resource.name === resourceRef.resourceName
         )) || null;
       };
-      const createSelect = (labelText, value, options, onChange) => {
+      const createSelect = (labelText, value, options, onChange, selectOptions = {}) => {
         const field = createElement('label', 'toolbar-field');
         field.append(createElement('span', 'toolbar-label', labelText));
         const select = createElement('select', 'toolbar-select');
         select.dataset.toolbarField = labelText;
+        if (selectOptions.disabled) select.disabled = true;
         options.forEach((option) => {
           const node = document.createElement('option');
           node.value = option.value;
@@ -3638,6 +3639,7 @@
             resourceLogLimitByResourceKey.set(resourceLogCacheKey(deploymentName, resource), nextLimit);
             renderResourceLogsSection(section, deploymentName, resource, { force: true, detail, limit: nextLimit }).catch(() => {});
           },
+          { disabled: isLoading || !deploymentName || !resource?.type || !resource?.name },
         );
       };
       const createResourceLogsActions = (section, deploymentName, resource, isLoading = false, detail = null) => [
