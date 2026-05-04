@@ -88,6 +88,7 @@ type Result struct {
 	ResourceName        string        `json:"resourceName"`
 	BackingResourceType string        `json:"backingResourceType,omitempty"`
 	BackingResourceName string        `json:"backingResourceName,omitempty"`
+	ContainerName       string        `json:"containerName,omitempty"`
 	LookupContext       LookupContext `json:"lookupContext"`
 	Available           bool          `json:"available"`
 	Source              string        `json:"source"`
@@ -341,6 +342,7 @@ func unavailableResult(req Request, reason string) Result {
 		ResourceName:        req.ResourceName,
 		BackingResourceType: backingResourceType(req),
 		BackingResourceName: backingResourceName(req),
+		ContainerName:       containerName(req),
 		LookupContext:       lookupContext(req),
 		Available:           false,
 		UnavailableReason:   reason,
@@ -354,6 +356,7 @@ func availableResult(req Request, source string, entries []Entry) Result {
 		ResourceName:        req.ResourceName,
 		BackingResourceType: backingResourceType(req),
 		BackingResourceName: backingResourceName(req),
+		ContainerName:       containerName(req),
 		LookupContext:       lookupContext(req),
 		Available:           true,
 		Source:              source,
@@ -367,6 +370,10 @@ func backingResourceType(req Request) string {
 
 func backingResourceName(req Request) string {
 	return strings.TrimSpace(req.BackingResourceName)
+}
+
+func containerName(req Request) string {
+	return strings.TrimSpace(req.ContainerName)
 }
 
 func lookupContext(req Request) LookupContext {
