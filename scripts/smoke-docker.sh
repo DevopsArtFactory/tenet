@@ -1443,6 +1443,8 @@ for fragment in (
     "Controller runtime events",
     "Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.",
     "Managed drift summary · ${counts.total} total · ${counts.high} high · ${counts.medium} medium · ${counts.low} low",
+    "const createControllerRefreshCue = (event) => {",
+    "GitHub refresh evidence · ${fields.join(' · ')}",
     "Recent logs",
     "Requested cap",
     "Effective cap",
