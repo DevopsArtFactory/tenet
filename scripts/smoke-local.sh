@@ -1331,6 +1331,8 @@ assert 'Loading controller runtime events…' in ui, ui
 assert 'No controller runtime events have been persisted yet.' in ui, ui
 assert 'Controller runtime events are currently unavailable.' in ui, ui
 assert 'Managed drift summary · ${counts.total} total · ${counts.high} high · ${counts.medium} medium · ${counts.low} low' in ui, ui
+assert "const createControllerRefreshCue = (event) => {" in ui, ui
+assert 'GitHub refresh evidence · ${fields.join(\' · \')}' in ui, ui
 assert "actions.push(createNavLink(buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName }), 'Open field-level drift', '_self'));" in ui, ui
 assert "const deploymentEventsReadRoute = (deploymentName) => `GET ${buildDeploymentEventsReadRoute(deploymentName)}`;" in ui, ui
 assert "createDeploymentEventsActions(section, deploymentName)," in ui, ui

@@ -2359,7 +2359,10 @@ const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
   if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-  if (url === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
+  if (url === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [
+    { timestamp: '2026-05-04T12:20:00Z', source: 'controller', summary: 'Ticker reconcile complete', sync: { state: 'Synced' }, health: { overall: 'Healthy' } },
+    { timestamp: '2026-05-04T12:30:00Z', source: 'github-webhook', summary: 'GitHub desired-state refresh accepted', sync: { state: 'Reconciling' }, controllerRefresh: { repository: 'acme/platform-config', ref: 'refs/heads/main', after: 'abcdef1234567890abcdef', deliveryId: 'delivery-744', requestId: 'req-744', requestedAt: '2026-05-04T12:29:50Z', receivedAt: '2026-05-04T12:29:51Z', reconciledAt: '2026-05-04T12:30:00Z' } },
+  ] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -2417,6 +2420,10 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('Workloads')) throw new Error('expected application route workloads group');
   if (!accountsText.includes('Traffic routing')) throw new Error('expected application route traffic routing group');
   if (!accountsText.includes('Controller runtime events')) throw new Error('expected application route runtime-events section');
+  if (!accountsText.includes('GitHub refresh evidence · repo acme/platform-config · ref refs/heads/main · revision abcdef123456 · delivery delivery-744 · request req-744')) throw new Error('expected application route GitHub refresh evidence cue');
+  if (!accountsText.includes('requested 2026-05-04T12:29:50Z · received 2026-05-04T12:29:51Z · reconciled 2026-05-04T12:30:00Z')) throw new Error('expected application route GitHub refresh timing evidence');
+  if (!accountsText.includes('Ticker reconcile complete')) throw new Error('expected application route non-webhook runtime event to remain visible');
+  if (accountsText.includes('repo —') || accountsText.includes('delivery —') || accountsText.includes('GitHub refresh evidence · Source · controller')) throw new Error('expected application route to avoid GitHub placeholders on ordinary runtime events');
   if (!accountsText.includes('payments-api-staging-service')) throw new Error('expected application route synthesized workload resource');
   if (!accountsText.includes('payments-api-staging-codedeploy-group')) throw new Error('expected application route synthesized deployment-group resource');
   const sectionLinks = accountLinks.filter((node) => typeof node.href === 'string' && node.href.includes('#application-'));

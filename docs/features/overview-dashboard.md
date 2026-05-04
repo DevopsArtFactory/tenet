@@ -135,6 +135,7 @@ Current behavior:
 - `Controller runtime events` section backed by `GET /v1/overview/deployments/{deploymentName}/events`
 - explicit `Loading controller runtime events…`, empty, unavailable, and generic fetch-error states for non-auth failures on that section
 - event ordering labeled as newest-first with readable time, summary, sync/health context, rollout phase/current step, and optional controller metadata
+- GitHub-triggered controller refresh events render a concise `GitHub refresh evidence` cue with non-secret repository/ref, shortened revision, delivery/request IDs, and requested/received/reconciled timing when those `controllerRefresh` fields are present; ticker reconciles omit that cue instead of showing placeholder labels
 - explicitly labels these as controller-derived runtime events, not audit/auth history
 - the `Controller runtime events` section header now includes an in-place `Refresh runtime events` button that re-runs just that deployment-events route in place, keeps the bookmarkable `/?page=application...` URL stable, and disables only while that section fetch is active
 - when that guarded lazy read returns `401` or `403`, the runtime-events panel keeps its refresh control and bookmarkable route stable but replaces generic fetch-error copy with the same trusted-front-door / access-denied guidance used on the other embedded read paths
@@ -241,7 +242,7 @@ Separate from that controller-runtime timeline, the backend also exposes `GET /v
 Current behavior:
 - returns `deploymentName` plus an explicit `events[]` array
 - returns an additive `managedDriftSummary` object with explicit `total`, `high`, `medium`, and `low` counts derived from the returned history rows; rows with missing/unknown severity count toward `total` only
-- includes additive non-secret `events[].controllerRefresh` metadata (`requestId`, `deliveryId`, `repository`, `ref`, optional `after`, `requestedAt`, `receivedAt`, and `reconciledAt`) only when a Redis controller-refresh handoff from an accepted GitHub desired-state push triggered that reconcile; ticker reconciles omit the object, and deleted-ref webhook pushes still publish no handoff and create no runtime event
+- includes additive non-secret `events[].controllerRefresh` metadata (`requestId`, `deliveryId`, `repository`, `ref`, optional `after`, `requestedAt`, `receivedAt`, and `reconciledAt`) only when a Redis controller-refresh handoff from an accepted GitHub desired-state push triggered that reconcile; the application detail timeline renders those fields as `GitHub refresh evidence` with a shortened revision and no placeholders for ordinary ticker reconciles
 - returns `200 OK` with `events: []` and zero drift-summary counts when the deployment exists but no runtime history has been persisted yet
 - never calls live AWS APIs; it only reflects the stored controller/runtime read model
 - the application detail page consumes the same route directly instead of reusing `history[]` from the deeper deployment-detail payload, renders the additive summary as `Managed drift summary · {total} total · {high} high · {medium} medium · {low} low` above the event list so drift severity is visible without expanding every event, and adds an in-shell `Open field-level drift` handoff to `/?page=drift&deployment={deploymentName}#drift-field-level` when the summary reports managed drift.

@@ -4855,6 +4855,30 @@
         };
       };
       const deploymentEventsHasManagedDrift = (result) => deploymentEventsManagedDriftCounts(result).total > 0;
+      const shortRevision = (value) => {
+        const text = String(value || '').trim();
+        return text ? text.slice(0, 12) : '';
+      };
+      const controllerRefreshFields = (event) => {
+        const refresh = event?.controllerRefresh;
+        if (!refresh || typeof refresh !== 'object') return [];
+        const fields = [];
+        if (refresh.repository) fields.push(`repo ${refresh.repository}`);
+        if (refresh.ref) fields.push(`ref ${refresh.ref}`);
+        const revision = shortRevision(refresh.after);
+        if (revision) fields.push(`revision ${revision}`);
+        if (refresh.deliveryId) fields.push(`delivery ${refresh.deliveryId}`);
+        if (refresh.requestId) fields.push(`request ${refresh.requestId}`);
+        if (refresh.requestedAt) fields.push(`requested ${refresh.requestedAt}`);
+        if (refresh.receivedAt) fields.push(`received ${refresh.receivedAt}`);
+        if (refresh.reconciledAt) fields.push(`reconciled ${refresh.reconciledAt}`);
+        return fields;
+      };
+      const createControllerRefreshCue = (event) => {
+        const fields = controllerRefreshFields(event);
+        if (!fields.length) return null;
+        return createElement('span', 'detail-condition-meta', `GitHub refresh evidence · ${fields.join(' · ')}`);
+      };
       const createDeploymentEventsActions = (section, deploymentName, isLoading = false, result = null) => {
         const actions = [
           createRefreshButton(
@@ -4939,6 +4963,10 @@
           }
           if (event.source) {
             eventMeta.append(createElement('span', 'detail-condition-meta', `Source · ${event.source}`));
+          }
+          const controllerRefreshCue = createControllerRefreshCue(event);
+          if (controllerRefreshCue) {
+            eventMeta.append(controllerRefreshCue);
           }
 
           item.append(eventMeta);
