@@ -2290,6 +2290,13 @@ func TestSmokeDockerScriptLocksOperatorContextRoleDiagnostics(t *testing.T) {
 		"const operatorContextSupportedDeploymentAccessHeadersLabel = (context) => {",
 		"Supported deployment access headers: ${supportedHeaders.join(', ')}",
 		"operatorContextSupportedDeploymentAccessHeadersLabel(context)",
+		"const operatorContextDesiredStateSourceEntries = (context) => {",
+		"Desired-state source:",
+		"Controller refresh:",
+		"Webhook match statuses",
+		"Webhook ignored reasons",
+		"Diagnostic only; no webhook is sent from this page.",
+		"operatorContextDesiredStateSourceEntries(context)",
 		"canonical X-Tenet-Authenticated-Roles",
 		"\"Unsupported forwarded roles ignored for capability checks:\"",
 	} {
