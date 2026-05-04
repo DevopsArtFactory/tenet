@@ -1968,12 +1968,14 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"Cluster ARN",
 		"Service ARN",
 		"Service deployments",
-		"const createECSTaskScopeSummary = (scope) => {",
+		"const ecsTaskScopeUnavailableReasonText = (reason) => {",
+		"return 'AWS access is currently unavailable for ECS task sampling.';",
 		"const isECSTaskScopeUnavailable = (scope) => scope && typeof scope === 'object' && scope.available === false;",
-		"const ecsTaskScopeUnavailableText = (scope) => {",
-		"Task sample unavailable · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${unavailableText}",
+		"const createECSTaskScopeSummary = (scope) => {",
+		"Task sample unavailable · ${reasonText} · requested ${countText(scope.requestedLimit)} · effective ${countText(effectiveLimit)}",
 		"Task sample scope · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${truncationStatus}",
-		"Task sampling could not be completed for this service, so no ECS task handoffs are shown.",
+		"const taskSampleUnavailable = isECSTaskScopeUnavailable(service?.tasksScope);",
+		"Task sampling is unavailable for this service; service inspection remains available.",
 		"[createECSTaskScopeSummary(service?.tasksScope)]",
 		"Recent ECS tasks",
 		"Open task live inspection",
@@ -2415,12 +2417,11 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh live inspection")
 	}
 	for _, fragment := range []string{
+		`assert "const ecsTaskScopeUnavailableReasonText = (reason) => {" in ui, ui`,
+		`assert "Task sample unavailable · ${reasonText} · requested ${countText(scope.requestedLimit)} · effective ${countText(effectiveLimit)}" in ui, ui`,
+		`assert "Task sampling is unavailable for this service; service inspection remains available." in ui, ui`,
 		`assert "const createECSTaskScopeSummary = (scope) => {" in ui, ui`,
-		`assert "const isECSTaskScopeUnavailable = (scope) => scope && typeof scope === 'object' && scope.available === false;" in ui, ui`,
-		`assert "const ecsTaskScopeUnavailableText = (scope) => {" in ui, ui`,
-		`assert "Task sample unavailable · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${unavailableText}" in ui, ui`,
 		`assert "Task sample scope · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${truncationStatus}" in ui, ui`,
-		`assert "Task sampling could not be completed for this service, so no ECS task handoffs are shown." in ui, ui`,
 		`assert "[createECSTaskScopeSummary(service?.tasksScope)]" in ui, ui`,
 	} {
 		if !strings.Contains(text, fragment) {

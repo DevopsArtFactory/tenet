@@ -4737,8 +4737,13 @@ async function render(search, inspectionResult) {
       const route = new URL(String(url), 'http://tenet.local');
       const limit = route.searchParams.get('limit');
       const body = JSON.parse(JSON.stringify(inspectionResult));
-      if (body.ecsService && limit && body.ecsService.tasksScope && (body.ecsService.tasks || []).length) {
-        body.ecsService.tasksScope = { available: true, effectiveLimit: Number(limit), returnedTaskCount: 1, truncationStatus: 'not_truncated' };
+      if (body.ecsService && limit && body.ecsService.tasksScope) {
+        const scoped = Object.assign({}, body.ecsService.tasksScope, { effectiveLimit: Number(limit) });
+        if (scoped.available !== false && Number(limit) !== 10) {
+          scoped.returnedTaskCount = 1;
+          scoped.truncationStatus = 'not_truncated';
+        }
+        body.ecsService.tasksScope = scoped;
       }
       return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
     }
@@ -4764,22 +4769,6 @@ async function render(search, inspectionResult) {
   if (!serviceRun.text.includes('Task sample scope · returned 1 task(s) from effective limit 10 · not truncated')) throw new Error('expected ECS task sample scope text: ' + serviceRun.text);
   if (!serviceRun.text.includes('Task ARN · ' + taskArn)) throw new Error('expected ECS task ARN in service inspection');
 
-  const emptyServiceResult = JSON.parse(JSON.stringify(serviceResult));
-  emptyServiceResult.ecsService.tasks = [];
-  emptyServiceResult.ecsService.tasksScope = { available: true, effectiveLimit: 10, returnedTaskCount: 0, truncationStatus: 'not_truncated' };
-  const emptyServiceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId), emptyServiceResult);
-  if (!emptyServiceRun.text.includes('Task sample scope · returned 0 task(s) from effective limit 10 · not truncated')) throw new Error('expected empty-but-available sample scope text: ' + emptyServiceRun.text);
-  if (!emptyServiceRun.text.includes('No recent ECS tasks are reported for this service.')) throw new Error('expected true empty task sample copy: ' + emptyServiceRun.text);
-  if (emptyServiceRun.text.includes('Task sample unavailable')) throw new Error('expected available empty samples not to render unavailable copy: ' + emptyServiceRun.text);
-
-  const unavailableServiceResult = JSON.parse(JSON.stringify(serviceResult));
-  unavailableServiceResult.ecsService.tasks = [];
-  unavailableServiceResult.ecsService.tasksScope = { available: false, requestedLimit: 5, effectiveLimit: 5, returnedTaskCount: 0, truncationStatus: 'not_applicable', unavailableReason: 'aws_unavailable', summary: 'ECS task sampling is unavailable because AWS access for the task bridge could not be completed.' };
-  const unavailableServiceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId), unavailableServiceResult);
-  if (!unavailableServiceRun.text.includes('Task sample unavailable · returned 0 task(s) from effective limit 5 · AWS access is currently unavailable for live inspection.')) throw new Error('expected task-sample unavailable scope text: ' + unavailableServiceRun.text);
-  if (!unavailableServiceRun.text.includes('ECS task sampling is unavailable because AWS access for the task bridge could not be completed.')) throw new Error('expected backend task-sample summary copy: ' + unavailableServiceRun.text);
-  if (!unavailableServiceRun.text.includes('Task sampling could not be completed for this service, so no ECS task handoffs are shown.')) throw new Error('expected unavailable-vs-empty task copy: ' + unavailableServiceRun.text);
-  if (unavailableServiceRun.text.includes('No recent ECS tasks are reported for this service.')) throw new Error('expected unavailable sample not to look like a true empty sample: ' + unavailableServiceRun.text);
   const taskLimitSelect = collectNodes(serviceRun.document.getElementById('accounts'), (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'Task sample limit')[0];
   if (!taskLimitSelect) throw new Error('expected ECS service live inspection to expose task sample limit select');
   const limitOptionsText = (taskLimitSelect.children || []).map((node) => node.textContent).join(' | ');
@@ -4806,6 +4795,35 @@ async function render(search, inspectionResult) {
   const logsLink = serviceRun.links.find((node) => node.textContent === 'Open task recent logs');
   if (!liveLink || liveLink.target !== '_self' || !liveLink.href.includes('resourceType=ecsTask') || !liveLink.href.endsWith('#resource-live-inspection')) throw new Error('expected task live-inspection handoff');
   if (!logsLink || logsLink.target !== '_self' || !logsLink.href.includes('resourceType=ecsTask') || !logsLink.href.endsWith('#resource-recent-logs')) throw new Error('expected task recent-logs handoff');
+
+  const emptyServiceResult = JSON.parse(JSON.stringify(serviceResult));
+  emptyServiceResult.ecsService.tasks = [];
+  emptyServiceResult.ecsService.tasksScope = { available: true, requestedLimit: 10, effectiveLimit: 10, returnedTaskCount: 0, truncationStatus: 'not_truncated' };
+  const emptyServiceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId), emptyServiceResult);
+  if (!emptyServiceRun.text.includes('Task sample scope · returned 0 task(s) from effective limit 10 · not truncated')) throw new Error('expected true empty task sample scope text: ' + emptyServiceRun.text);
+  if (!emptyServiceRun.text.includes('No recent ECS tasks are reported for this service.')) throw new Error('expected true empty task sample copy: ' + emptyServiceRun.text);
+  if (emptyServiceRun.text.includes('Task sample unavailable')) throw new Error('expected true empty task sample to avoid unavailable copy: ' + emptyServiceRun.text);
+
+  const unavailableServiceResult = JSON.parse(JSON.stringify(serviceResult));
+  unavailableServiceResult.ecsService.tasks = [];
+  unavailableServiceResult.ecsService.tasksScope = { available: false, requestedLimit: 10, effectiveLimit: 10, returnedTaskCount: 0, truncationStatus: 'not_applicable', unavailableReason: 'aws_unavailable', summary: 'Task sampling could not reach ECS tasks after the service lookup succeeded.' };
+  const unavailableServiceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId), unavailableServiceResult);
+  if (!unavailableServiceRun.text.includes('Task sample unavailable · Task sampling could not reach ECS tasks after the service lookup succeeded. · requested 10 · effective 10')) throw new Error('expected task sample unavailable summary: ' + unavailableServiceRun.text);
+  if (!unavailableServiceRun.text.includes('Task sampling is unavailable for this service; service inspection remains available.')) throw new Error('expected unavailable task sample empty-state copy: ' + unavailableServiceRun.text);
+  if (unavailableServiceRun.text.includes('No recent ECS tasks are reported for this service.')) throw new Error('expected unavailable task sample not to look like true empty samples: ' + unavailableServiceRun.text);
+  const unavailableLimitSelect = collectNodes(unavailableServiceRun.document.getElementById('accounts'), (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'Task sample limit')[0];
+  if (!unavailableLimitSelect || unavailableLimitSelect.disabled) throw new Error('expected task sample limit usable after unavailable sample state');
+  unavailableLimitSelect.value = '25';
+  unavailableLimitSelect.dispatch('change');
+  await settle(); await settle(); await settle();
+  const unavailableLimitedURL = inspectionURL.replace('&limit=10', '&limit=25');
+  if (!unavailableServiceRun.fetchCalls.includes(unavailableLimitedURL)) throw new Error('expected unavailable sample limit refresh URL, got ' + JSON.stringify(unavailableServiceRun.fetchCalls));
+  if (unavailableServiceRun.window.location.search !== '?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId)) throw new Error('expected unavailable task sample limit to preserve bookmarkable resource query, got ' + unavailableServiceRun.window.location.search);
+  const unavailableRefreshButton = collectNodes(unavailableServiceRun.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && node.textContent === 'Refresh live inspection')[0];
+  if (!unavailableRefreshButton || unavailableRefreshButton.disabled) throw new Error('expected refresh live inspection usable after unavailable sample state');
+  unavailableRefreshButton.dispatch('click');
+  await settle(); await settle(); await settle();
+  if (unavailableServiceRun.fetchCalls.filter((url) => url === unavailableLimitedURL).length < 2) throw new Error('expected unavailable sample refresh to reuse selected limit');
 
   const legacyServiceResult = JSON.parse(JSON.stringify(serviceResult));
   delete legacyServiceResult.ecsService.tasksScope;

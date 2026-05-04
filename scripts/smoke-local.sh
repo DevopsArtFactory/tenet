@@ -1347,12 +1347,11 @@ assert 'Live inspection is unavailable for this resource.' in ui, ui
 assert 'Refresh live inspection' in ui, ui
 assert 'No live inspection details are available for this resource yet.' in ui, ui
 assert 'Service deployments' in ui, ui
+assert "const ecsTaskScopeUnavailableReasonText = (reason) => {" in ui, ui
+assert "Task sample unavailable · ${reasonText} · requested ${countText(scope.requestedLimit)} · effective ${countText(effectiveLimit)}" in ui, ui
+assert "Task sampling is unavailable for this service; service inspection remains available." in ui, ui
 assert "const createECSTaskScopeSummary = (scope) => {" in ui, ui
-assert "const isECSTaskScopeUnavailable = (scope) => scope && typeof scope === 'object' && scope.available === false;" in ui, ui
-assert "const ecsTaskScopeUnavailableText = (scope) => {" in ui, ui
-assert "Task sample unavailable · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${unavailableText}" in ui, ui
 assert "Task sample scope · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${truncationStatus}" in ui, ui
-assert "Task sampling could not be completed for this service, so no ECS task handoffs are shown." in ui, ui
 assert "[createECSTaskScopeSummary(service?.tasksScope)]" in ui, ui
 assert 'Auto Scaling Group name' in ui, ui
 assert 'Launch template' in ui, ui
@@ -1596,12 +1595,11 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "const resourceInspectionLimitOptions = [" in body, body
     assert "'Task sample limit'" in body, body
     assert "resource?.type !== 'ecsService'" in body, body
+    assert "const ecsTaskScopeUnavailableReasonText = (reason) => {" in body, body
+    assert "Task sample unavailable · ${reasonText} · requested ${countText(scope.requestedLimit)} · effective ${countText(effectiveLimit)}" in body, body
+    assert "Task sampling is unavailable for this service; service inspection remains available." in body, body
     assert "const createECSTaskScopeSummary = (scope) => {" in body, body
-    assert "const isECSTaskScopeUnavailable = (scope) => scope && typeof scope === 'object' && scope.available === false;" in body, body
-    assert "const ecsTaskScopeUnavailableText = (scope) => {" in body, body
-    assert "Task sample unavailable · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${unavailableText}" in body, body
     assert "Task sample scope · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${truncationStatus}" in body, body
-    assert "Task sampling could not be completed for this service, so no ECS task handoffs are shown." in body, body
     assert "[createECSTaskScopeSummary(service?.tasksScope)]" in body, body
     assert "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')" in body, body
     assert "createNavLink(buildPageURL('resource', {" in body, body
