@@ -5255,7 +5255,10 @@
       const renderAuditPageChrome = () => {
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
-        const backLink = createNavLink(buildPageURL('applications'), 'Back to applications', '_self');
+        const deploymentName = auditDeploymentName();
+        const backLink = deploymentName
+          ? createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')
+          : createNavLink(buildPageURL('applications'), 'Back to applications', '_self');
         const controls = createElement('div', 'toolbar-grid');
         controls.append(
           createSelect('Action', currentPageState.auditAction, auditActionOptions, (event) => {
@@ -5295,7 +5298,6 @@
         toolbar.replaceChildren(controls, toolbarActions);
 
         const detailSummary = createElement('article', 'account');
-        const deploymentName = auditDeploymentName();
         detailSummary.append(
           createElement('div', 'label', deploymentName ? 'Deployment audit timeline' : 'Audit timeline'),
           createElement('h2', 'account-name', 'Operator audit log'),

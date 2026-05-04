@@ -371,7 +371,7 @@ The dashboard now exposes the following navigation affordances across the curren
 - account detail page: `Account JSON`, `Group JSON`, `_self` `Open application`
 - application detail page: `_self` `Drift view`, `_self` `Plan/apply`, `_self` `Audit log`, `Open resource`, `Open live inspection`, `Open recent logs`
 - application detail `Audit log` now routes to `/?page=audit&deployment={deploymentName}` so the selected deployment stays visible in the bookmarkable audit slice
-- audit page: `_self` `Back to applications`, `_self` `Open application drill-down`, `_self` `Open drift view`, `_self` `Open plan/apply workspace`
+- audit page: unscoped `_self` `Back to applications`, deployment-scoped `_self` `Back to application`, `_self` `Open application drill-down`, `_self` `Open drift view`, `_self` `Open plan/apply workspace`
 - resource/workspace drill-down pages: embedded back links that keep operators in the same shell
 - account-oriented JSON surfaces remain available through the API routes (`/v1/overview/accounts/{awsAccountId}`, `/v1/overview/accounts/{awsAccountId}/projects/{appRef}/environments/{environmentRef}`, `/v1/overview/deployments/{deploymentName}`, `/v1/status/deployments/{deploymentName}`)
 
