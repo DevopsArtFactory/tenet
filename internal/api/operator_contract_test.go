@@ -1865,8 +1865,8 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		`minimum_healthy_percent = worker_resource_inspection['ecsService'].get('minimumHealthyPercent')`,
 		`maximum_percent = worker_resource_inspection['ecsService'].get('maximumPercent')`,
 		`health_check_grace_period_seconds = worker_resource_inspection['ecsService'].get('healthCheckGracePeriodSeconds')`,
-		`launch_template = candidate_resource_inspection['autoScalingGroup'].get('launchTemplate')`,
-		`mixed_instances_policy = candidate_resource_inspection['autoScalingGroup'].get('mixedInstancesPolicy')`,
+		`launch_template = asg.get('launchTemplate')`,
+		`mixed_instances_policy = asg.get('mixedInstancesPolicy')`,
 		`override_launch_template = override.get('launchTemplate')`,
 	} {
 		if !strings.Contains(localSmoke, fragment) {
@@ -1884,8 +1884,8 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		`minimum_healthy_percent = worker_resource_inspection["ecsService"].get("minimumHealthyPercent")`,
 		`maximum_percent = worker_resource_inspection["ecsService"].get("maximumPercent")`,
 		`health_check_grace_period_seconds = worker_resource_inspection["ecsService"].get("healthCheckGracePeriodSeconds")`,
-		`launch_template = candidate_resource_inspection["autoScalingGroup"].get("launchTemplate")`,
-		`mixed_instances_policy = candidate_resource_inspection["autoScalingGroup"].get("mixedInstancesPolicy")`,
+		`launch_template = asg.get("launchTemplate")`,
+		`mixed_instances_policy = asg.get("mixedInstancesPolicy")`,
 		`override_launch_template = override.get("launchTemplate")`,
 	} {
 		if !strings.Contains(dockerSmoke, fragment) {

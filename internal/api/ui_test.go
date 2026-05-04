@@ -2296,6 +2296,29 @@ func dockerSmokeScopeMatches(patterns []string, changedPath string) bool {
 	return false
 }
 
+func TestSmokeScriptsLockBoundedASGResourceInspectionReleaseGuard(t *testing.T) {
+	for _, script := range []string{"smoke-local.sh", "smoke-docker.sh"} {
+		body, err := os.ReadFile("../../scripts/" + script)
+		if err != nil {
+			t.Fatalf("read %s: %v", script, err)
+		}
+		text := string(body)
+		for _, fragment := range []string{
+			"resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate&limit=2",
+			"resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate&limit=0",
+			"bounded_candidate_resource_inspection_path=$(write_payload bounded-candidate-resource-inspection.json \"$bounded_candidate_resource_inspection\")",
+			"assert_asg_resource_inspection(bounded_candidate_resource_inspection, expect_limit=2)",
+			"requestedLimit",
+			"truncationStatus",
+			"invalid_resource_inspection_limit.strip()",
+		} {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to lock bounded ASG inspection smoke fragment %q", script, fragment)
+			}
+		}
+	}
+}
+
 func TestSmokeDockerScriptLocksOperatorContextRoleDiagnostics(t *testing.T) {
 	body, err := os.ReadFile("../../scripts/smoke-docker.sh")
 	if err != nil {
@@ -2416,12 +2439,12 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	for _, fragment := range []string{
 		`invalid_resource_inspection_limit_status=$(curl -sS -o "$INVALID_RESOURCE_INSPECTION_LIMIT_BODY"`,
-		`resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&limit=0`,
+		`resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate&limit=0`,
 		`assert os.environ['INVALID_RESOURCE_INSPECTION_LIMIT_STATUS'] == '400'`,
 		`assert invalid_resource_inspection_limit.strip() == 'invalid limit query'`,
 	} {
 		if !strings.Contains(text, fragment) {
-			t.Fatalf("expected smoke-local.sh to assert invalid ECS resource-inspection limit fragment %q", fragment)
+			t.Fatalf("expected smoke-local.sh to assert invalid ASG resource-inspection limit fragment %q", fragment)
 		}
 	}
 
@@ -2785,8 +2808,8 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"health_check_grace_period_seconds = worker_resource_inspection['ecsService'].get('healthCheckGracePeriodSeconds')",
 		"assert isinstance(worker_resource_inspection['ecsService'].get('deployments', []), list), worker_resource_inspection",
 		"assert isinstance(worker_resource_inspection['ecsService'].get('events', []), list), worker_resource_inspection",
-		"assert isinstance(candidate_resource_inspection['autoScalingGroup'].get('autoScalingGroupName'), str) and candidate_resource_inspection['autoScalingGroup']['autoScalingGroupName'], candidate_resource_inspection",
-		"assert isinstance(candidate_resource_inspection['autoScalingGroup'].get('instances', []), list), candidate_resource_inspection",
+		"assert isinstance(asg.get('autoScalingGroupName'), str) and asg['autoScalingGroupName'], payload",
+		"assert isinstance(asg.get('instances', []), list), payload",
 		"assert 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.' in ui, ui",
 		"assert 'Refresh runtime events' in ui, ui",
 		"assert 'Loading controller runtime events…' in ui, ui",
@@ -2864,7 +2887,7 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"ecs_task_resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsTask&resourceName=$ecs_task_resource_name&containerName=worker&limit=1\")",
 		"ecs_task_resource_inspection=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsTask&resourceName=$ecs_task_resource_name\")",
 		"invalid_resource_log_limit_status=$(curl -sS -o \"$INVALID_RESOURCE_LOG_LIMIT_BODY\" -w \"%{http_code}\" \"http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&limit=0\")",
-		"invalid_resource_inspection_limit_status=$(curl -sS -o \"$INVALID_RESOURCE_INSPECTION_LIMIT_BODY\" -w \"%{http_code}\" \"http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&limit=0\")",
+		"invalid_resource_inspection_limit_status=$(curl -sS -o \"$INVALID_RESOURCE_INSPECTION_LIMIT_BODY\" -w \"%{http_code}\" \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate&limit=0\")",
 		"ECS_TASK_RESOURCE_LOGS_PATH=\"$ecs_task_resource_logs_path\"",
 		"ECS_TASK_RESOURCE_INSPECTION_PATH=\"$ecs_task_resource_inspection_path\"",
 		"LIMITED_WORKER_RESOURCE_LOGS_PATH=\"$limited_worker_resource_logs_path\"",
@@ -3059,7 +3082,7 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 
 	docs := map[string][]string{
 		"../../README.md": {
-			"bounded `resource-logs?limit=1` provider cap plus router fallback truncation/resultScope metadata and both invalid `resource-logs?limit=0` and ECS `resource-inspection?...&limit=0` rejections",
+			"bounded `resource-logs?limit=1` provider cap plus router fallback truncation/resultScope metadata",
 			"Operators can add an optional positive `limit` query parameter",
 			"Successful responses include additive `resultScope` metadata",
 			"Tenet does not issue extra provider calls solely to prove exact totals beyond the bounded read",
@@ -3095,9 +3118,9 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"the UI also recognizes the compatibility aliases `capped` and `at_cap_unknown_total`",
 		},
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
-			"bounded `resource-logs?limit=1` provider cap plus router fallback truncation/resultScope metadata and both invalid `resource-logs?limit=0` and ECS `resource-inspection?...&limit=0` rejections",
+			"bounded `resource-logs?limit=1` provider cap plus router fallback truncation/resultScope metadata",
 			"weighted target-group `no_log_source` recent-log payloads",
-			"the `ecsService` bounded `resource-logs?limit=1` resultScope plus invalid `resource-logs?limit=0` and ECS `resource-inspection?...&limit=0` contracts",
+			"the `candidateAutoScalingGroup` bounded `resource-inspection?limit=2` sample with `autoScalingGroup.instancesScope` fields when available plus explicit unavailable semantics without AWS access",
 		},
 	}
 	for path, fragments := range docs {
@@ -3142,7 +3165,7 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"ecs_task_resource_logs=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsTask&resourceName=$ecs_task_resource_name&containerName=worker&limit=1\")",
 			"ecs_task_resource_inspection=$(curl -fsS \"http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsTask&resourceName=$ecs_task_resource_name\")",
 			"invalid_resource_log_limit_status=$(curl -sS -o \"$INVALID_RESOURCE_LOG_LIMIT_BODY\" -w \"%{http_code}\" \"http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&limit=0\")",
-			"invalid_resource_inspection_limit_status=$(curl -sS -o \"$INVALID_RESOURCE_INSPECTION_LIMIT_BODY\" -w \"%{http_code}\" \"http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&limit=0\")",
+			"invalid_resource_inspection_limit_status=$(curl -sS -o \"$INVALID_RESOURCE_INSPECTION_LIMIT_BODY\" -w \"%{http_code}\" \"http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate&limit=0\")",
 			"assert limited_scope.get('requestedLimit') == 1",
 			"assert limited_scope.get('effectiveLimit') == 1",
 			"assert limited_scope.get('returnedEntryCount') == len(limited_worker_resource_logs.get('entries') or [])",
@@ -3158,7 +3181,7 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"ecs_task_resource_logs=$(curl -fsS \"$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsTask&resourceName=$ecs_task_resource_name&containerName=worker&limit=1\")",
 			"ecs_task_resource_inspection=$(curl -fsS \"$API_BASE_URL/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsTask&resourceName=$ecs_task_resource_name\")",
 			"invalid_resource_log_limit_status=$(curl -sS -o \"$INVALID_RESOURCE_LOG_LIMIT_BODY\" -w \"%{http_code}\" \"$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&limit=0\")",
-			"invalid_resource_inspection_limit_status=$(curl -sS -o \"$INVALID_RESOURCE_INSPECTION_LIMIT_BODY\" -w \"%{http_code}\" \"$API_BASE_URL/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&limit=0\")",
+			"invalid_resource_inspection_limit_status=$(curl -sS -o \"$INVALID_RESOURCE_INSPECTION_LIMIT_BODY\" -w \"%{http_code}\" \"$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate&limit=0\")",
 			"assert limited_scope.get(\"requestedLimit\") == 1",
 			"assert limited_scope.get(\"effectiveLimit\") == 1",
 			"assert limited_scope.get(\"returnedEntryCount\") == len(limited_worker_resource_logs.get(\"entries\") or [])",
@@ -3243,7 +3266,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"gates guarded application, raw-status collection, account collection, unscoped audit collection, raw-status detail, account detail, grouped-account, immutable plan/apply, deployment-scoped audit reads, plus the exact `GET /v1/overview/deployments/{deploymentName}/resource-logs` and `GET /v1/overview/deployments/{deploymentName}/resource-inspection` drill-down routes.",
 			"the unscoped audit collection still returns `{\"entries\":[]}` when no audit rows are visible",
 			"Use `make smoke-docker` when you need to validate the containerized local stack itself.",
-			"API health, representative endpoints, deployment-events/resource-logs/audit-log JSON shapes, including the compose-backed `codeDeployApplication` recent-log envelope, `testListener` backing-resource metadata, weighted `activeTargetGroup` / `candidateTargetGroup` `no_log_source` recent-log payloads, ECS task drill-down `resource-logs?resourceType=ecsTask&containerName=worker&limit=1` plus paired live-inspection envelope coverage, bounded `resource-logs?limit=1` provider cap plus router fallback truncation/resultScope metadata and both invalid `resource-logs?limit=0` and ECS `resource-inspection?...&limit=0` rejections, and representative `Request-Id` response headers",
+			"API health, representative endpoints, deployment-events/resource-logs/audit-log JSON shapes, including the compose-backed `codeDeployApplication` recent-log envelope, `testListener` backing-resource metadata, weighted `activeTargetGroup` / `candidateTargetGroup` `no_log_source` recent-log payloads, ECS task drill-down `resource-logs?resourceType=ecsTask&containerName=worker&limit=1` plus paired live-inspection envelope coverage, bounded `resource-logs?limit=1` provider cap plus router fallback truncation/resultScope metadata",
 			"The full `GET /v1/audit-logs` collection with expected `plan.created` and `apply.requested` actions present",
 			"The same smoke-created `POST /v1/applies/{applyId}/transitions` route boundaries: `400` malformed JSON, `404` unknown apply, and `409` invalid terminal move with operator-facing text.",
 			"The same actor-header precedence check used by direct-process smoke, including `actorAttribution.precedence`, plus the default disabled immutable apply contract.",
@@ -3339,7 +3362,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"correlated structured `http_request` logs with stable fields such as `request_id`, `method`, `path`, `status`, `duration_ms`, and `result` for the bookmarkable application drill-down shell request, bookmarkable account drill-down shell request, bookmarkable drift workspace request, the deployment-scoped audit workspace request, and the bookmarkable plan/apply workspace shell request",
 			"`Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Resolved backing resource`, `Lookup path ·`, `Lookup region`, `Observer role configured`, and the runtime-events `Open field-level drift` handoff",
 			"temp files through the shared `write_payload` helper",
-			"bookmarkable bootstrap-source resource page plus the paired `userDataBootstrapSource` `resource-logs` and `resource-inspection` routes, the `codeDeployApplication` recent-log route, the `testListener` recent-log backing-resource metadata, weighted target-group `no_log_source` recent-log payloads, and the `ecsService` bounded `resource-logs?limit=1` resultScope plus invalid `resource-logs?limit=0` and ECS `resource-inspection?...&limit=0` contracts, the `ecsTask` task-ARN drill-down `resource-logs` request with `containerName=worker` and matching live-inspection envelope",
+			"bookmarkable bootstrap-source resource page plus the paired `userDataBootstrapSource` `resource-logs` and `resource-inspection` routes, the `codeDeployApplication` recent-log route, the `testListener` recent-log backing-resource metadata, weighted target-group `no_log_source` recent-log payloads, the `candidateAutoScalingGroup` bounded `resource-inspection?limit=2` sample with `autoScalingGroup.instancesScope` fields when available plus explicit unavailable semantics without AWS access",
 			"bookmarkable CodeDeploy application, `blueTaskSetTargetGroup`, and `productionListenerRule` resource pages and the local-friendly traffic-routing inspection fallback",
 			"`aws_unavailable` / `no_log_source` unavailable payloads as expected local-runtime outcomes, including route-stable weighted target-group resources that have no independent recent-log stream",
 			"The same raw-shell checks separately lock the ECS service `tasksScope` renderer and `Task sample scope` copy",
@@ -3777,12 +3800,12 @@ func TestSmokeDockerAssertsInvalidResourceInspectionLimit(t *testing.T) {
 	text := string(body)
 	for _, fragment := range []string{
 		`invalid_resource_inspection_limit_status=$(curl -sS -o "$INVALID_RESOURCE_INSPECTION_LIMIT_BODY"`,
-		`resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&limit=0`,
+		`resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate&limit=0`,
 		`assert os.environ["INVALID_RESOURCE_INSPECTION_LIMIT_STATUS"] == "400"`,
 		`assert invalid_resource_inspection_limit.strip() == "invalid limit query"`,
 	} {
 		if !strings.Contains(text, fragment) {
-			t.Fatalf("expected smoke-docker.sh to assert invalid ECS resource-inspection limit fragment %q", fragment)
+			t.Fatalf("expected smoke-docker.sh to assert invalid ASG resource-inspection limit fragment %q", fragment)
 		}
 	}
 }

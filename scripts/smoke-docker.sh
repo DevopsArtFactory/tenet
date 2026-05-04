@@ -539,7 +539,7 @@ ecs_task_resource_name="arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Atask%2
 ecs_task_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsTask&resourceName=$ecs_task_resource_name&containerName=worker&limit=1")
 ecs_task_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsTask&resourceName=$ecs_task_resource_name")
 invalid_resource_log_limit_status=$(curl -sS -o "$INVALID_RESOURCE_LOG_LIMIT_BODY" -w "%{http_code}" "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&limit=0")
-invalid_resource_inspection_limit_status=$(curl -sS -o "$INVALID_RESOURCE_INSPECTION_LIMIT_BODY" -w "%{http_code}" "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&limit=0")
+invalid_resource_inspection_limit_status=$(curl -sS -o "$INVALID_RESOURCE_INSPECTION_LIMIT_BODY" -w "%{http_code}" "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate&limit=0")
 codedeploy_application_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployApplication&resourceName=payments-api-staging-codedeploy-app")
 test_listener_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=testListener&resourceName=payments-api-staging-test-listener")
 worker_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service")
@@ -550,6 +550,7 @@ active_target_group_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deploym
 candidate_target_group_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=candidateTargetGroup&resourceName=payments-api-prod-candidate")
 bootstrap_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=userDataBootstrapSource&resourceName=git%3Auserdata%2Fpayments-api-prod.sh")
 candidate_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate")
+bounded_candidate_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate&limit=2")
 codedeploy_application_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=codeDeployApplication&resourceName=payments-api-staging-codedeploy-app")
 codedeploy_group_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging-codedeploy-group")
 production_listener_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=productionListener&resourceName=payments-api-staging-prod-listener")
@@ -677,6 +678,7 @@ active_target_group_resource_logs_path=$(write_payload active-target-group-resou
 candidate_target_group_resource_logs_path=$(write_payload candidate-target-group-resource-logs.json "$candidate_target_group_resource_logs")
 bootstrap_resource_inspection_path=$(write_payload bootstrap-resource-inspection.json "$bootstrap_resource_inspection")
 candidate_resource_inspection_path=$(write_payload candidate-resource-inspection.json "$candidate_resource_inspection")
+bounded_candidate_resource_inspection_path=$(write_payload bounded-candidate-resource-inspection.json "$bounded_candidate_resource_inspection")
 codedeploy_application_resource_inspection_path=$(write_payload codedeploy-application-resource-inspection.json "$codedeploy_application_resource_inspection")
 codedeploy_group_resource_inspection_path=$(write_payload codedeploy-group-resource-inspection.json "$codedeploy_group_resource_inspection")
 production_listener_resource_inspection_path=$(write_payload production-listener-resource-inspection.json "$production_listener_resource_inspection")
@@ -706,7 +708,7 @@ drift_ui_path=$(write_payload drift-ui.html "$drift_ui")
 audit_ui_path=$(write_payload audit-ui.html "$audit_ui")
 plan_apply_ui_path=$(write_payload plan-apply-ui.html "$plan_apply_ui")
 
-SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" INVALID_APPLY_TRANSITION_STATUS="$invalid_apply_transition_status" INVALID_APPLY_TRANSITION_PATH="$invalid_apply_transition_path" UNKNOWN_APPLY_TRANSITION_STATUS="$unknown_apply_transition_status" UNKNOWN_APPLY_TRANSITION_PATH="$unknown_apply_transition_path" TERMINAL_APPLY_TRANSITION_STATUS="$terminal_apply_transition_status" TERMINAL_APPLY_TRANSITION_PATH="$terminal_apply_transition_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" DEPLOYMENT_EVENTS_PATH="$deployment_events_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" LIMITED_WORKER_RESOURCE_LOGS_PATH="$limited_worker_resource_logs_path" ECS_TASK_RESOURCE_LOGS_PATH="$ecs_task_resource_logs_path" ECS_TASK_RESOURCE_INSPECTION_PATH="$ecs_task_resource_inspection_path" INVALID_RESOURCE_LOG_LIMIT_STATUS="$invalid_resource_log_limit_status" INVALID_RESOURCE_LOG_LIMIT_PATH="$invalid_resource_log_limit_path" INVALID_RESOURCE_INSPECTION_LIMIT_STATUS="$invalid_resource_inspection_limit_status" INVALID_RESOURCE_INSPECTION_LIMIT_PATH="$invalid_resource_inspection_limit_path" CODEDEPLOY_APPLICATION_RESOURCE_LOGS_PATH="$codedeploy_application_resource_logs_path" TEST_LISTENER_RESOURCE_LOGS_PATH="$test_listener_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" BOOTSTRAP_RESOURCE_LOGS_PATH="$bootstrap_resource_logs_path" TRAFFIC_RESOURCE_LOGS_PATH="$traffic_resource_logs_path" PRODUCTION_LISTENER_RULE_RESOURCE_LOGS_PATH="$production_listener_rule_resource_logs_path" ACTIVE_TARGET_GROUP_RESOURCE_LOGS_PATH="$active_target_group_resource_logs_path" CANDIDATE_TARGET_GROUP_RESOURCE_LOGS_PATH="$candidate_target_group_resource_logs_path" BOOTSTRAP_RESOURCE_INSPECTION_PATH="$bootstrap_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" CODEDEPLOY_APPLICATION_RESOURCE_INSPECTION_PATH="$codedeploy_application_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$blue_task_set_target_group_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" PRODUCTION_LISTENER_RULE_RESOURCE_INSPECTION_PATH="$production_listener_rule_resource_inspection_path" ACTIVE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$active_target_group_resource_inspection_path" CANDIDATE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$candidate_target_group_resource_inspection_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PUSH_STATUS="$webhook_push_status" WEBHOOK_DELETED_PATH="$webhook_deleted_path" WEBHOOK_DELETED_STATUS="$webhook_deleted_status" WEBHOOK_PING_PATH="$webhook_ping_path" WEBHOOK_PING_STATUS="$webhook_ping_status" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" UI_PATH="$ui_path" APPLICATION_UI_PATH="$application_ui_path" ACCOUNT_UI_PATH="$account_ui_path" RESOURCE_UI_PATH="$resource_ui_path" ECS_RESOURCE_UI_PATH="$ecs_resource_ui_path" BOOTSTRAP_RESOURCE_UI_PATH="$bootstrap_resource_ui_path" CODEDEPLOY_APPLICATION_RESOURCE_UI_PATH="$codedeploy_application_resource_ui_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_UI_PATH="$blue_task_set_target_group_resource_ui_path" PRODUCTION_LISTENER_RULE_RESOURCE_UI_PATH="$production_listener_rule_resource_ui_path" DRIFT_UI_PATH="$drift_ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_APPLY_UI_PATH="$plan_apply_ui_path" python3 - <<'PY'
+SUMMARY_PATH="$summary_path" APPLICATIONS_PATH="$applications_path" DEPLOYMENT_DETAIL_PATH="$deployment_detail_path" DEPLOYMENT_SOURCE_FINGERPRINT="$deployment_source_fingerprint" PLAN_PREVIEW_PATH="$plan_preview_path" PLAN_PREVIEW_GET_PATH="$plan_preview_get_path" APPLY_RECORD_PATH="$apply_record_path" APPLY_RECORD_GET_PATH="$apply_record_get_path" INVALID_APPLY_TRANSITION_STATUS="$invalid_apply_transition_status" INVALID_APPLY_TRANSITION_PATH="$invalid_apply_transition_path" UNKNOWN_APPLY_TRANSITION_STATUS="$unknown_apply_transition_status" UNKNOWN_APPLY_TRANSITION_PATH="$unknown_apply_transition_path" TERMINAL_APPLY_TRANSITION_STATUS="$terminal_apply_transition_status" TERMINAL_APPLY_TRANSITION_PATH="$terminal_apply_transition_path" ACTOR_PLAN_PREVIEW_PATH="$actor_plan_preview_path" ACTOR_PLAN_PREVIEW_GET_PATH="$actor_plan_preview_get_path" ACTOR_APPLY_RECORD_PATH="$actor_apply_record_path" ACTOR_APPLY_RECORD_GET_PATH="$actor_apply_record_get_path" DEPLOYMENT_EVENTS_PATH="$deployment_events_path" WORKER_RESOURCE_LOGS_PATH="$worker_resource_logs_path" LIMITED_WORKER_RESOURCE_LOGS_PATH="$limited_worker_resource_logs_path" ECS_TASK_RESOURCE_LOGS_PATH="$ecs_task_resource_logs_path" ECS_TASK_RESOURCE_INSPECTION_PATH="$ecs_task_resource_inspection_path" INVALID_RESOURCE_LOG_LIMIT_STATUS="$invalid_resource_log_limit_status" INVALID_RESOURCE_LOG_LIMIT_PATH="$invalid_resource_log_limit_path" INVALID_RESOURCE_INSPECTION_LIMIT_STATUS="$invalid_resource_inspection_limit_status" INVALID_RESOURCE_INSPECTION_LIMIT_PATH="$invalid_resource_inspection_limit_path" CODEDEPLOY_APPLICATION_RESOURCE_LOGS_PATH="$codedeploy_application_resource_logs_path" TEST_LISTENER_RESOURCE_LOGS_PATH="$test_listener_resource_logs_path" WORKER_RESOURCE_INSPECTION_PATH="$worker_resource_inspection_path" BOOTSTRAP_RESOURCE_LOGS_PATH="$bootstrap_resource_logs_path" TRAFFIC_RESOURCE_LOGS_PATH="$traffic_resource_logs_path" PRODUCTION_LISTENER_RULE_RESOURCE_LOGS_PATH="$production_listener_rule_resource_logs_path" ACTIVE_TARGET_GROUP_RESOURCE_LOGS_PATH="$active_target_group_resource_logs_path" CANDIDATE_TARGET_GROUP_RESOURCE_LOGS_PATH="$candidate_target_group_resource_logs_path" BOOTSTRAP_RESOURCE_INSPECTION_PATH="$bootstrap_resource_inspection_path" CANDIDATE_RESOURCE_INSPECTION_PATH="$candidate_resource_inspection_path" BOUNDED_CANDIDATE_RESOURCE_INSPECTION_PATH="$bounded_candidate_resource_inspection_path" CODEDEPLOY_APPLICATION_RESOURCE_INSPECTION_PATH="$codedeploy_application_resource_inspection_path" CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH="$codedeploy_group_resource_inspection_path" PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH="$production_listener_resource_inspection_path" TEST_LISTENER_RESOURCE_INSPECTION_PATH="$test_listener_resource_inspection_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$blue_task_set_target_group_resource_inspection_path" TRAFFIC_RESOURCE_INSPECTION_PATH="$traffic_resource_inspection_path" PRODUCTION_LISTENER_RULE_RESOURCE_INSPECTION_PATH="$production_listener_rule_resource_inspection_path" ACTIVE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$active_target_group_resource_inspection_path" CANDIDATE_TARGET_GROUP_RESOURCE_INSPECTION_PATH="$candidate_target_group_resource_inspection_path" AUDIT_LOGS_PATH="$audit_logs_path" AUDIT_LOGS_ACTION_FILTERED_PATH="$audit_logs_action_filtered_path" ACTOR_AUDIT_LOGS_PATH="$actor_audit_logs_path" INVALID_AUDIT_ACTION_STATUS="$invalid_audit_action_status" INVALID_AUDIT_ACTION_BODY_PATH="$INVALID_AUDIT_ACTION_BODY" WEBHOOK_PUSH_PATH="$webhook_push_path" WEBHOOK_PUSH_STATUS="$webhook_push_status" WEBHOOK_DELETED_PATH="$webhook_deleted_path" WEBHOOK_DELETED_STATUS="$webhook_deleted_status" WEBHOOK_PING_PATH="$webhook_ping_path" WEBHOOK_PING_STATUS="$webhook_ping_status" INVALID_WEBHOOK_PATH="$invalid_webhook_path" INVALID_WEBHOOK_STATUS="$invalid_webhook_status" UI_PATH="$ui_path" APPLICATION_UI_PATH="$application_ui_path" ACCOUNT_UI_PATH="$account_ui_path" RESOURCE_UI_PATH="$resource_ui_path" ECS_RESOURCE_UI_PATH="$ecs_resource_ui_path" BOOTSTRAP_RESOURCE_UI_PATH="$bootstrap_resource_ui_path" CODEDEPLOY_APPLICATION_RESOURCE_UI_PATH="$codedeploy_application_resource_ui_path" BLUE_TASK_SET_TARGET_GROUP_RESOURCE_UI_PATH="$blue_task_set_target_group_resource_ui_path" PRODUCTION_LISTENER_RULE_RESOURCE_UI_PATH="$production_listener_rule_resource_ui_path" DRIFT_UI_PATH="$drift_ui_path" AUDIT_UI_PATH="$audit_ui_path" PLAN_APPLY_UI_PATH="$plan_apply_ui_path" python3 - <<'PY'
 import json, os
 
 def read_json(path_env):
@@ -756,6 +758,7 @@ active_target_group_resource_logs = read_json("ACTIVE_TARGET_GROUP_RESOURCE_LOGS
 candidate_target_group_resource_logs = read_json("CANDIDATE_TARGET_GROUP_RESOURCE_LOGS_PATH")
 bootstrap_resource_inspection = read_json("BOOTSTRAP_RESOURCE_INSPECTION_PATH")
 candidate_resource_inspection = read_json("CANDIDATE_RESOURCE_INSPECTION_PATH")
+bounded_candidate_resource_inspection = read_json("BOUNDED_CANDIDATE_RESOURCE_INSPECTION_PATH")
 codedeploy_application_resource_inspection = read_json("CODEDEPLOY_APPLICATION_RESOURCE_INSPECTION_PATH")
 codedeploy_group_resource_inspection = read_json("CODEDEPLOY_GROUP_RESOURCE_INSPECTION_PATH")
 production_listener_resource_inspection = read_json("PRODUCTION_LISTENER_RESOURCE_INSPECTION_PATH")
@@ -1157,31 +1160,50 @@ if bootstrap_resource_inspection["available"]:
 else:
     assert bootstrap_resource_inspection.get("unavailableReason") == "aws_unavailable", bootstrap_resource_inspection
 
-assert candidate_resource_inspection["deploymentName"] == "payments-api-prod", candidate_resource_inspection
-assert candidate_resource_inspection["resourceType"] == "candidateAutoScalingGroup", candidate_resource_inspection
-assert candidate_resource_inspection["resourceName"] == "payments-api-prod-candidate", candidate_resource_inspection
-assert isinstance(candidate_resource_inspection["available"], bool), candidate_resource_inspection
-assert isinstance(candidate_resource_inspection.get("lookupContext"), dict), candidate_resource_inspection
-if candidate_resource_inspection["available"]:
-    assert candidate_resource_inspection.get("source") == "auto_scaling_group", candidate_resource_inspection
-    assert isinstance(candidate_resource_inspection.get("autoScalingGroup"), dict), candidate_resource_inspection
-    launch_template = candidate_resource_inspection["autoScalingGroup"].get("launchTemplate")
-    assert launch_template is None or isinstance(launch_template, dict), candidate_resource_inspection
-    if isinstance(launch_template, dict):
-        assert any(isinstance(launch_template.get(key), str) and launch_template.get(key) for key in ("id", "name", "version")), candidate_resource_inspection
-    mixed_instances_policy = candidate_resource_inspection["autoScalingGroup"].get("mixedInstancesPolicy")
-    assert mixed_instances_policy is None or isinstance(mixed_instances_policy, dict), candidate_resource_inspection
-    if isinstance(mixed_instances_policy, dict):
-        base_launch_template = mixed_instances_policy.get("launchTemplate")
-        assert base_launch_template is None or isinstance(base_launch_template, dict), candidate_resource_inspection
-        overrides = mixed_instances_policy.get("overrides")
-        assert overrides is None or isinstance(overrides, list), candidate_resource_inspection
-        for override in overrides or []:
-            assert isinstance(override, dict), candidate_resource_inspection
-            override_launch_template = override.get("launchTemplate")
-            assert override_launch_template is None or isinstance(override_launch_template, dict), candidate_resource_inspection
-else:
-    assert isinstance(candidate_resource_inspection.get("unavailableReason"), str) and candidate_resource_inspection["unavailableReason"], candidate_resource_inspection
+def assert_asg_resource_inspection(payload, *, expect_limit=None):
+    assert payload["deploymentName"] == "payments-api-prod", payload
+    assert payload["resourceType"] == "candidateAutoScalingGroup", payload
+    assert payload["resourceName"] == "payments-api-prod-candidate", payload
+    assert isinstance(payload["available"], bool), payload
+    assert isinstance(payload.get("lookupContext"), dict), payload
+    if payload["available"]:
+        assert payload.get("source") == "auto_scaling_group", payload
+        asg = payload.get("autoScalingGroup")
+        assert isinstance(asg, dict), payload
+        assert isinstance(asg.get("autoScalingGroupName"), str) and asg["autoScalingGroupName"], payload
+        launch_template = asg.get("launchTemplate")
+        assert launch_template is None or isinstance(launch_template, dict), payload
+        if isinstance(launch_template, dict):
+            assert any(isinstance(launch_template.get(key), str) and launch_template.get(key) for key in ("id", "name", "version")), payload
+        mixed_instances_policy = asg.get("mixedInstancesPolicy")
+        assert mixed_instances_policy is None or isinstance(mixed_instances_policy, dict), payload
+        if isinstance(mixed_instances_policy, dict):
+            base_launch_template = mixed_instances_policy.get("launchTemplate")
+            assert base_launch_template is None or isinstance(base_launch_template, dict), payload
+            overrides = mixed_instances_policy.get("overrides")
+            assert overrides is None or isinstance(overrides, list), payload
+            for override in overrides or []:
+                assert isinstance(override, dict), payload
+                override_launch_template = override.get("launchTemplate")
+                assert override_launch_template is None or isinstance(override_launch_template, dict), payload
+        assert isinstance(asg.get("instances", []), list), payload
+        scope = asg.get("instancesScope")
+        if expect_limit is not None:
+            assert isinstance(scope, dict), payload
+            assert isinstance(scope.get("requestedLimit"), int), payload
+            assert isinstance(scope.get("effectiveLimit"), int), payload
+            assert isinstance(scope.get("returnedInstanceCount"), int), payload
+            assert scope.get("truncationStatus") in {"complete", "truncated", "unknown"}, payload
+            assert scope.get("requestedLimit") == expect_limit, payload
+            assert scope.get("effectiveLimit") <= expect_limit, payload
+            assert scope.get("returnedInstanceCount") <= expect_limit, payload
+        else:
+            assert scope is None or isinstance(scope, dict), payload
+    else:
+        assert isinstance(payload.get("unavailableReason"), str) and payload["unavailableReason"], payload
+
+assert_asg_resource_inspection(candidate_resource_inspection)
+assert_asg_resource_inspection(bounded_candidate_resource_inspection, expect_limit=2)
 
 def assert_summary_traffic_routing(payload, deployment_name, resource_type, resource_name):
     assert payload["deploymentName"] == deployment_name, payload
