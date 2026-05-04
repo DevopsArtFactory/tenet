@@ -49,7 +49,8 @@ TENET_AUTH_SESSION_SECRET=<32+ byte session signing secret>
 The operator contract for these settings is:
 
 - unset or incomplete provider settings keep the provider inactive
-- diagnostics list required and missing setting names without returning secret values
+- diagnostics list required, missing, and invalid setting names without returning secret values
+- Okta SAML diagnostics validate metadata/ACS values as absolute HTTP(S) URLs and require the ACS path to remain `/auth/callback/okta/saml` before reporting `configured=true`
 - configured provider metadata is safe to expose only when it is not a credential
 - secret values, raw tokens, SAML assertions, authorization codes, and refresh tokens are never returned from operator diagnostics
 
@@ -57,8 +58,8 @@ The operator contract for these settings is:
 
 Issue #704 should activate Okta SAML only after the runtime can satisfy the same managed-session boundary that GitHub OAuth and Google Workspace OIDC already use. Reviewers should treat the following as the minimum activation checklist for any backend/API PR that flips Okta SAML from diagnostic-only to active:
 
-- `authRuntime.enterpriseSso.provider` stays `okta_saml`, `configured=true`, and `active=false` until every required non-secret setting and store is complete and same-origin route wiring exists.
-- Complete Okta SAML settings expose same-origin `loginRoute=/auth/login/okta` and `callbackRoute=/auth/callback/okta/saml`; incomplete settings keep those routes diagnostic placeholders only and must not advertise an active sign-in handoff.
+- `authRuntime.enterpriseSso.provider` stays `okta_saml`, `configured=true`, and `active=false` until every required non-secret setting and store is complete, every preflighted URL is valid, and same-origin route wiring exists.
+- Complete Okta SAML settings expose same-origin `loginRoute=/auth/login/okta` and `callbackRoute=/auth/callback/okta/saml`; incomplete or invalid settings keep those routes diagnostic placeholders only, populate `missingSettings` or `invalidSettings`, and must not advertise an active sign-in handoff.
 - Active callbacks mint only Tenet-managed session evidence through the signed `tenet_session` cookie, validate safe in-app `returnUrl` values, and keep logout scoped to clearing that local cookie rather than logging the operator out of Okta.
 - SAML `NameID`, email, display-name, and optional group attributes normalize into Tenet identity fields, but raw assertions, metadata documents, private keys, and provider cookies are never persisted in identity/session stores or returned through `GET /v1/operator/context`.
 - Tests use local fake metadata/assertions for successful, malformed, expired, and untrusted assertion paths; CI and smoke remain credential-free and must not contact live Okta.
@@ -100,7 +101,7 @@ Enterprise SSO must not weaken existing fail-safe behavior.
 - human-readable provider labels in operator-facing UI (`Google Workspace OIDC`, `Okta SAML`, `Okta OIDC`) so operators do not need to decode raw enum values during 401/403 recovery
 - provider-boundary copy in the embedded Operator context details that keeps Google Workspace identity separate from Gmail/API access and keeps Okta SSO identity separate from Tenet role/deployment authorization
 - whether managed enterprise SSO is configured and active
-- required setting names and missing setting names
+- required, missing, and invalid setting names
 - normalized identity provider/subject/email/name when an authenticated session exists
 - group claim presence/count or safe group names only when those names are already intended to be operator-visible
 - explicit precedence notes when trusted front-door headers override a Tenet-managed session
