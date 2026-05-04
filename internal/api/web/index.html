@@ -1166,15 +1166,23 @@
         return summary ? `Enforcement summary: ${summary}` : null;
       };
       const operatorContextManagedLogin = (context) => context?.authRuntime?.tenetManagedLogin || {};
+      const operatorContextEnterpriseSSO = (context) => context?.authRuntime?.enterpriseSso || {};
       const safeManagedLoginRoute = (route) => {
         const value = String(route || '');
         return value.startsWith('/') && !value.startsWith('//') ? value : '';
       };
+      const operatorContextRuntimeMissingSettings = (runtime) => Array.isArray(runtime?.missingSettings) ? runtime.missingSettings.filter(Boolean) : [];
       const operatorContextManagedLoginActive = (context = operatorContextState.context) => {
         const managedLogin = operatorContextManagedLogin(context);
-        const missing = Array.isArray(managedLogin.missingSettings) ? managedLogin.missingSettings.filter(Boolean) : [];
+        const missing = operatorContextRuntimeMissingSettings(managedLogin);
         const loginRoute = safeManagedLoginRoute(managedLogin.loginRoute);
         return Boolean(managedLogin.active && loginRoute && missing.length === 0);
+      };
+      const operatorContextEnterpriseSSOActive = (context = operatorContextState.context) => {
+        const enterpriseSso = operatorContextEnterpriseSSO(context);
+        const missing = operatorContextRuntimeMissingSettings(enterpriseSso);
+        const loginRoute = safeManagedLoginRoute(enterpriseSso.loginRoute);
+        return Boolean(enterpriseSso.active && loginRoute && missing.length === 0);
       };
       const operatorContextManagedLoginLogoutActive = (context = operatorContextState.context) => {
         const managedLogin = operatorContextManagedLogin(context);
@@ -1182,9 +1190,15 @@
         const logoutRoute = safeManagedLoginRoute(managedLogin.logoutRoute);
         return Boolean(managedLogin.active && logoutRoute && missing.length === 0);
       };
-      const operatorContextAuthenticationBoundaryLabel = (context) => operatorContextManagedLoginActive(context)
-        ? 'Authentication boundary: Tenet-managed browser login is active for this API instance; guarded read recovery may offer a same-shell sign-in handoff while trusted front-door headers still take precedence when present.'
-        : 'Authentication boundary: this embedded shell consumes trusted front-door headers only; it does not start an in-page GitHub OAuth login or Tenet-managed browser session from this page unless the optional login/callback/session routes report active.';
+      const operatorContextAuthenticationBoundaryLabel = (context) => {
+        if (operatorContextManagedLoginActive(context)) {
+          return 'Authentication boundary: Tenet-managed browser login is active for this API instance; guarded read recovery may offer a same-shell sign-in handoff while trusted front-door headers still take precedence when present.';
+        }
+        if (operatorContextEnterpriseSSOActive(context)) {
+          return 'Authentication boundary: enterprise SSO is active for this API instance; guarded read recovery may offer a provider-neutral same-shell sign-in handoff while trusted front-door headers still take precedence when present.';
+        }
+        return 'Authentication boundary: this embedded shell consumes trusted front-door headers only; it does not start an in-page GitHub OAuth login, enterprise SSO login, or Tenet-managed browser session from this page unless the optional login/callback/session routes report active.';
+      };
       const operatorContextManagedLoginProviderLabel = (provider) => {
         const value = String(provider || '').trim().toLowerCase();
         const labels = {
@@ -1196,6 +1210,18 @@
           okta_oidc: 'Okta OIDC',
         };
         return labels[value] || provider || 'unconfigured';
+      };
+      const operatorContextEnterpriseSSOProviderLabel = (provider) => {
+        const value = String(provider || '').trim().toLowerCase();
+        const labels = {
+          google_oidc: 'Google Workspace SSO',
+          google_workspace_oidc: 'Google Workspace SSO',
+          google_workspace: 'Google Workspace SSO',
+          okta_saml: 'Okta SSO',
+          okta_oidc: 'Okta SSO',
+          okta: 'Okta SSO',
+        };
+        return labels[value] || provider || 'enterprise SSO';
       };
       const operatorContextManagedLoginProviderBoundaryLabel = (context) => {
         const provider = String(operatorContextManagedLogin(context).provider || '').trim().toLowerCase();
@@ -1244,6 +1270,46 @@
         if (managedLogin.sessionCookieName) parts.push(`cookie ${managedLogin.sessionCookieName}`);
         if (managedLogin.unavailableReason) parts.push(`reason ${managedLogin.unavailableReason}`);
         return `Managed login storage/session: ${parts.join('; ')}`;
+      };
+      const operatorContextEnterpriseSSOStateLabel = (context) => {
+        const enterpriseSso = operatorContextEnterpriseSSO(context);
+        const providerLabel = operatorContextEnterpriseSSOProviderLabel(enterpriseSso.provider);
+        if (enterpriseSso.active) {
+          const route = enterpriseSso.loginRoute ? ` via ${enterpriseSso.loginRoute}` : '';
+          return `Enterprise SSO runtime: active ${providerLabel}${route}; guarded read recovery can offer a same-shell sign-in handoff.`;
+        }
+        if (enterpriseSso.configured) {
+          return `Enterprise SSO runtime: configured for ${providerLabel} but inactive; keep using trusted front-door recovery until this API reports active login/callback/session routes.`;
+        }
+        if (enterpriseSso.provider) {
+          return `Enterprise SSO runtime: not configured for ${providerLabel}; Tenet still expects trusted front-door recovery.`;
+        }
+        return 'Enterprise SSO runtime: not configured; Tenet still expects trusted front-door recovery.';
+      };
+      const operatorContextEnterpriseSSOSettingsLabel = (context) => {
+        const enterpriseSso = operatorContextEnterpriseSSO(context);
+        const missing = operatorContextRuntimeMissingSettings(enterpriseSso);
+        const required = Array.isArray(enterpriseSso.requiredSettings) ? enterpriseSso.requiredSettings.filter(Boolean) : [];
+        if (missing.length) return `Enterprise SSO missing settings: ${missing.join(', ')}`;
+        if (required.length) return `Enterprise SSO required settings present: ${required.join(', ')}`;
+        return 'Enterprise SSO required settings: not reported';
+      };
+      const operatorContextEnterpriseSSOStorageLabel = (context) => {
+        const enterpriseSso = operatorContextEnterpriseSSO(context);
+        const parts = [
+          `state store ${enterpriseSso.stateStoreConfigured ? 'configured' : 'missing'}`,
+          `identity store ${enterpriseSso.identityStoreConfigured ? 'configured' : 'missing'}`,
+          `session secret ${enterpriseSso.sessionSecretConfigured ? 'configured' : 'missing'}`,
+        ];
+        if (enterpriseSso.callbackRoute) parts.push(`callback ${enterpriseSso.callbackRoute}`);
+        if (enterpriseSso.unavailableReason) parts.push(`reason ${enterpriseSso.unavailableReason}`);
+        return `Enterprise SSO storage/session: ${parts.join('; ')}`;
+      };
+      const operatorContextEnterpriseSSOClass = (context) => {
+        const enterpriseSso = operatorContextEnterpriseSSO(context);
+        const missing = operatorContextRuntimeMissingSettings(enterpriseSso);
+        if (enterpriseSso.active && !missing.length && safeManagedLoginRoute(enterpriseSso.loginRoute)) return '';
+        return 'operator-context-warning';
       };
       const operatorContextManagedLoginCookieSecureSourceLabel = (source) => {
         const labels = {
@@ -1411,6 +1477,9 @@
           if (providerBoundaryLabel) detailsMeta.append(createElement('span', '', providerBoundaryLabel));
           detailsMeta.append(createElement('span', operatorContextManagedLoginClass(context), operatorContextManagedLoginSettingsLabel(context)));
           detailsMeta.append(createElement('span', operatorContextManagedLoginClass(context), operatorContextManagedLoginStorageLabel(context)));
+          detailsMeta.append(createElement('span', operatorContextEnterpriseSSOClass(context), operatorContextEnterpriseSSOStateLabel(context)));
+          detailsMeta.append(createElement('span', operatorContextEnterpriseSSOClass(context), operatorContextEnterpriseSSOSettingsLabel(context)));
+          detailsMeta.append(createElement('span', operatorContextEnterpriseSSOClass(context), operatorContextEnterpriseSSOStorageLabel(context)));
           detailsMeta.append(createElement('span', '', operatorContextManagedLoginCookieAttributesLabel(context)));
           detailsMeta.append(createElement('span', '', operatorContextManagedLoginLifecycleLabel(context)));
           detailsMeta.append(createElement('span', '', operatorContextManagedLoginProviderTokenLabel(context)));
@@ -3482,12 +3551,37 @@
         if (hashOverride) return `${pathname}${search}#${hashOverride}`;
         return `${pathname}${search}${window.location.hash || ''}`;
       };
+      const operatorContextSignInRuntime = (context = operatorContextState.context) => {
+        if (operatorContextManagedLoginActive(context)) {
+          const managedLogin = operatorContextManagedLogin(context);
+          return {
+            loginRoute: safeManagedLoginRoute(managedLogin.loginRoute),
+            label: 'Tenet-managed GitHub login',
+            message: 'Tenet-managed GitHub login is active for this API instance',
+          };
+        }
+        if (operatorContextEnterpriseSSOActive(context)) {
+          const enterpriseSso = operatorContextEnterpriseSSO(context);
+          const providerLabel = operatorContextEnterpriseSSOProviderLabel(enterpriseSso.provider);
+          return {
+            loginRoute: safeManagedLoginRoute(enterpriseSso.loginRoute),
+            label: providerLabel,
+            message: `${providerLabel} is active for this API instance`,
+          };
+        }
+        return null;
+      };
       const operatorContextManagedLoginSignInURL = (context = operatorContextState.context) => {
-        if (!operatorContextManagedLoginActive(context)) return '';
-        const loginRoute = safeManagedLoginRoute(operatorContextManagedLogin(context).loginRoute);
+        const runtime = operatorContextSignInRuntime(context);
+        if (!runtime?.loginRoute) return '';
+        const loginRoute = runtime.loginRoute;
         const params = new URLSearchParams();
         params.set('returnUrl', currentBookmarkableURL());
         return `${loginRoute}${loginRoute.includes('?') ? '&' : '?'}${params.toString()}`;
+      };
+      const operatorContextSignInLabel = (context = operatorContextState.context) => {
+        const runtime = operatorContextSignInRuntime(context);
+        return runtime?.label ? `Sign in with ${runtime.label}` : 'Sign in';
       };
       const operatorContextManagedLoginSignOutURL = (context = operatorContextState.context) => {
         if (!operatorContextManagedLoginLogoutActive(context)) return '';
@@ -3501,7 +3595,7 @@
         if (operatorReadAuthRequiredState(error)) {
           const managedSignInURL = operatorContextManagedLoginSignInURL();
           if (managedSignInURL) {
-            actionBar.append(createNavLink(managedSignInURL, 'Sign in with Tenet-managed GitHub login', '_self'));
+            actionBar.append(createNavLink(managedSignInURL, operatorContextSignInLabel(), '_self'));
           } else {
             actionBar.append(createNavLink(currentBookmarkableURL(), 'Retry current page after front-door sign-in', '_self'));
           }
@@ -3519,7 +3613,7 @@
         const managedSignInURL = operatorContextManagedLoginSignInURL();
         if (!managedSignInURL) return null;
         const actionBar = createElement('div', 'detail-section-actions operator-write-recovery-actions');
-        actionBar.append(createNavLink(managedSignInURL, 'Sign in with Tenet-managed GitHub login', '_self'));
+        actionBar.append(createNavLink(managedSignInURL, operatorContextSignInLabel(), '_self'));
         return actionBar;
       };
       const renderOperatorReadFailurePage = (pageLabel, route, error) => {
@@ -5584,11 +5678,11 @@
       const operatorReadForbiddenState = (error) => error?.kind === 'fetch-error' && Number(error?.status) === 403;
       const operatorReadRoleRequiredState = (error) => operatorReadForbiddenState(error) && String(error?.message || '').includes('authenticated viewer-capable role is required for this operator read route');
       const operatorReadAuthRequiredMessage = (route, context = operatorContextState.context) => {
-        if (operatorContextManagedLoginActive(context)) {
-          const loginRoute = String(operatorContextManagedLogin(context).loginRoute || '/auth/login');
-          return `Tenet rejected ${route} because authenticated identity is required on this operator read route. Tenet-managed GitHub login is active for this API instance; use the sign-in handoff below to authenticate through ${loginRoute} and return to this same bookmarkable URL. Trusted front-door X-Tenet-Authenticated-* identity headers still take precedence when present.`;
+        const signInRuntime = operatorContextSignInRuntime(context);
+        if (signInRuntime?.loginRoute) {
+          return `Tenet rejected ${route} because authenticated identity is required on this operator read route. ${signInRuntime.message}; use the sign-in handoff below to authenticate through ${signInRuntime.loginRoute} and return to this same bookmarkable URL. Trusted front-door X-Tenet-Authenticated-* identity headers still take precedence when present.`;
         }
-        return `Tenet rejected ${route} because authenticated identity is required on this operator read route. Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page; reopen this same bookmarkable URL through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.`;
+        return `Tenet rejected ${route} because authenticated identity is required on this operator read route. Tenet does not start a built-in GitHub OAuth login, enterprise SSO login, or Tenet-managed browser session from this page; reopen this same bookmarkable URL through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.`;
       };
       const operatorReadRoleRequiredMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity because this operator read route requires a trusted forwarded viewer/operator/admin role. Open Operator context details (#operator-context-access-details-panel) and check roles.provenance.source, roles.canRead, and the forwarded X-Tenet-Authenticated-Roles value; ask the front-door/RBAC admin to forward viewer, operator, or admin, then retry this same bookmarkable page.`;
       const operatorReadForbiddenMessage = (route) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.`;
@@ -5636,11 +5730,11 @@
       const operatorWriteForbiddenState = (state) => state?.request === 'create' && state?.status === 'fetch-error' && Number(state?.error?.status) === 403;
       const operatorWriteRoleRequiredState = (state) => operatorWriteForbiddenState(state) && String(state?.error?.message || '').includes('authenticated operator role is required for this operator write route');
       const operatorWriteAuthRequiredMessage = (route, action, context = operatorContextState.context) => {
-        if (operatorContextManagedLoginActive(context)) {
-          const loginRoute = String(operatorContextManagedLogin(context).loginRoute || '/auth/login');
-          return `Tenet rejected ${route} because authenticated identity is required on operator write routes. Tenet-managed GitHub login is active for this API instance; sign in through ${loginRoute}, then return to this same bookmarkable workspace and retry ${action}. Trusted front-door X-Tenet-Authenticated-* identity headers still take precedence when present, and Tenet will not send the write until authenticated identity is available.`;
+        const signInRuntime = operatorContextSignInRuntime(context);
+        if (signInRuntime?.loginRoute) {
+          return `Tenet rejected ${route} because authenticated identity is required on operator write routes. ${signInRuntime.message}; sign in through ${signInRuntime.loginRoute}, then return to this same bookmarkable workspace and retry ${action}. Trusted front-door X-Tenet-Authenticated-* identity headers still take precedence when present, and Tenet will not send the write until authenticated identity is available.`;
         }
-        return `Tenet rejected ${route} because authenticated identity is required on operator write routes. Tenet does not start a built-in GitHub OAuth login or Tenet-managed browser session from this page; retry ${action} for this same bookmarkable workspace through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet sends the write.`;
+        return `Tenet rejected ${route} because authenticated identity is required on operator write routes. Tenet does not start a built-in GitHub OAuth login, enterprise SSO login, or Tenet-managed browser session from this page; retry ${action} for this same bookmarkable workspace through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet sends the write.`;
       };
       const operatorWriteRoleRequiredMessage = (route, action) => `Tenet rejected ${route} after recognizing the caller's identity because this operator write route requires a trusted forwarded operator/admin role. Retry ${action} through the trusted front door so it can forward X-Tenet-Authenticated-Roles for an operator-capable session.`;
       const operatorWriteForbiddenMessage = (route, action) => `Tenet rejected ${route} after recognizing the caller's identity, but this operator is not authorized to ${action.toLowerCase()} for that deployment through this route. Ask a front-door/RBAC admin to authorize this deployment through either X-Tenet-Authorized-Deployments or matching X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments catalog placement, then retry ${action}. Partial, stale, or unavailable project/environment placement still fails closed, so use the Operator context banner to confirm the forwarded scopes match this deployment.`;
