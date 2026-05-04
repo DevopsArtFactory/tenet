@@ -3515,20 +3515,22 @@ func TestOverviewDocsDescribeECSTaskScopeReleaseGuard(t *testing.T) {
 	files := map[string][]string{
 		"../../README.md": {
 			"operators can request a positive bounded sample with `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType=ecsService&resourceName={serviceName}&limit={n}`",
-			"`requestedLimit` is present only when the operator supplied `limit`",
-			"`effectiveLimit` is the backend cap Tenet applied to the sample",
-			"`unknown` means Tenet hit the cap without enough provider evidence to prove whether more rows exist",
+			"sibling `tasksScope` reports `available`, optional `requestedLimit`, `effectiveLimit`, `returnedTaskCount`, `truncationStatus`",
+			"Interpret the scope fields literally: `available=true` with `returnedTaskCount=0` is a complete empty task sample",
+			"`available=false` / `truncationStatus=not_applicable` means the service inspection succeeded but the optional task bridge could not be sampled",
 		},
 		"../../docs/features/overview-dashboard.md": {
 			"`resource-inspection?resourceType=ecsService&resourceName={serviceName}&limit={n}` accepts an optional positive task-sample cap",
 			"local and compose smoke also lock the embedded shell helper/copy that renders `ecsService.tasksScope` as the `Task sample scope` note",
 			"without needing live AWS task inventory",
-			"conservative `truncationStatus` semantics (`not_truncated` = complete bounded result, `truncated` = more matching tasks existed, `unknown` = Tenet reached the cap without provider proof either way)",
+			"conservative `truncationStatus` semantics (`not_truncated` = complete bounded result, `truncated` = more matching tasks existed, `unknown` = Tenet reached the cap without provider proof either way, `not_applicable` = task bridge unavailable)",
+			"That separates true empty successful samples (`available=true`, `returnedTaskCount=0`) from partial/unavailable task-bridge evidence",
 		},
 		"../../docs/architecture/tenet-v1-overview-ui.md": {
 			"`resource-inspection?resourceType=ecsService&resourceName={serviceName}&limit={n}` accepts an optional positive task-sample cap",
-			"sibling `tasksScope` keeps the row cap self-describing with optional `requestedLimit`, `effectiveLimit`, `returnedTaskCount`, and conservative `truncationStatus` values",
-			"`unknown` when Tenet reaches the cap without provider evidence that proves whether more matching tasks exist",
+			"sibling `tasksScope` keeps the row cap and sampling state self-describing with `available`, optional `requestedLimit`, `effectiveLimit`, `returnedTaskCount`",
+			"`not_applicable` when the optional task bridge is unavailable",
+			"Empty successful samples remain `available=true` with `returnedTaskCount=0`",
 		},
 	}
 

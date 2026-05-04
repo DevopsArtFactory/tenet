@@ -1271,7 +1271,7 @@ func TestECSInspectionFromServiceSortsDeploymentsAndEvents(t *testing.T) {
 		},
 	}
 
-	got := ecsInspectionFromService(service, "arn:cluster", "ghcr.io/devopsartfactory/payments-api:2026-04-18.2", []ECSTaskSummary{{TaskARN: "arn:task/one", TaskID: "one"}}, &ECSTaskSummaryScope{EffectiveLimit: maxECSServiceTaskSummaries, ReturnedTaskCount: 1, TruncationStatus: "not_truncated"})
+	got := ecsInspectionFromService(service, "arn:cluster", "ghcr.io/devopsartfactory/payments-api:2026-04-18.2", []ECSTaskSummary{{TaskARN: "arn:task/one", TaskID: "one"}}, &ECSTaskSummaryScope{Available: true, EffectiveLimit: maxECSServiceTaskSummaries, ReturnedTaskCount: 1, TruncationStatus: "not_truncated"})
 	if len(got.Deployments) != 2 || got.Deployments[0].ID != "primary" {
 		t.Fatalf("expected deployments sorted newest-first, got %+v", got.Deployments)
 	}
@@ -1293,8 +1293,27 @@ func TestECSInspectionFromServiceSortsDeploymentsAndEvents(t *testing.T) {
 	if len(got.Tasks) != 1 || got.Tasks[0].TaskID != "one" {
 		t.Fatalf("expected ECS service task summaries to pass through, got %+v", got.Tasks)
 	}
-	if got.TasksScope == nil || got.TasksScope.EffectiveLimit != maxECSServiceTaskSummaries || got.TasksScope.ReturnedTaskCount != 1 || got.TasksScope.TruncationStatus != "not_truncated" {
+	if got.TasksScope == nil || !got.TasksScope.Available || got.TasksScope.EffectiveLimit != maxECSServiceTaskSummaries || got.TasksScope.ReturnedTaskCount != 1 || got.TasksScope.TruncationStatus != "not_truncated" {
 		t.Fatalf("expected ECS service task scope metadata to pass through, got %+v", got.TasksScope)
+	}
+}
+
+func TestECSServiceTaskSummariesReportsUnavailableScopeWhenTaskBridgeFails(t *testing.T) {
+	const (
+		clusterARN  = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker"
+		serviceName = "worker-prod-service"
+	)
+	client := &fakeECSServiceAPI{listTasksErr: resourceaws.NewUnavailableError(resourceaws.UnavailableReasonAWSUnavailable)}
+
+	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName, 5)
+	if err != nil {
+		t.Fatalf("expected task summary bridge failure to be represented in scope, got error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected unavailable task bridge to return no task rows, got %+v", got)
+	}
+	if scope == nil || scope.Available || scope.RequestedLimit == nil || *scope.RequestedLimit != 5 || scope.EffectiveLimit != 5 || scope.ReturnedTaskCount != 0 || scope.TruncationStatus != "not_applicable" || scope.UnavailableReason != resourceaws.UnavailableReasonAWSUnavailable || scope.Summary == "" {
+		t.Fatalf("expected explicit unavailable task-scope metadata, got %+v", scope)
 	}
 }
 
@@ -1732,6 +1751,8 @@ type fakeECSServiceAPI struct {
 	tasksByARN                map[string]ecstypes.Task
 	taskDefinitions           map[string]ecstypes.TaskDefinition
 	describeTaskDefinitionErr error
+	listTasksErr              error
+	describeTasksErr          error
 	listCalls                 int
 	describeCalls             []string
 	listTaskCalls             []ecstypes.DesiredStatus
@@ -1758,10 +1779,16 @@ func (f *fakeECSServiceAPI) DescribeServices(_ context.Context, input *ecs.Descr
 
 func (f *fakeECSServiceAPI) ListTasks(_ context.Context, input *ecs.ListTasksInput, _ ...func(*ecs.Options)) (*ecs.ListTasksOutput, error) {
 	f.listTaskCalls = append(f.listTaskCalls, input.DesiredStatus)
+	if f.listTasksErr != nil {
+		return nil, f.listTasksErr
+	}
 	return &ecs.ListTasksOutput{TaskArns: append([]string(nil), f.taskARNsByDesired[input.DesiredStatus]...)}, nil
 }
 
 func (f *fakeECSServiceAPI) DescribeTasks(_ context.Context, input *ecs.DescribeTasksInput, _ ...func(*ecs.Options)) (*ecs.DescribeTasksOutput, error) {
+	if f.describeTasksErr != nil {
+		return nil, f.describeTasksErr
+	}
 	tasks := make([]ecstypes.Task, 0, len(input.Tasks))
 	f.describeTaskInputs = append(f.describeTaskInputs, append([]string(nil), input.Tasks...))
 	for _, taskARN := range input.Tasks {
