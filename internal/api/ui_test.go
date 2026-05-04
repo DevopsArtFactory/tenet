@@ -3109,6 +3109,8 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"Recent-log payloads also echo the selected rollout execution description as additive `resourceDescription`",
 			"Local and compose smoke lock this alongside the ECS task `containerName` selector and ASG console `entries[].instanceId` metadata",
 			"Known `unavailableReason` values render friendly operator copy, and unknown provider/internal codes fall back to generic troubleshooting guidance instead of being shown literally",
+			"capture the HTTP `Request-Id` response header next to the `lookupContext` object before escalating",
+			"the request ID anchors Tenet's structured API logs while the lookup context explains which region, control account, target account, and observer-role path the provider attempted",
 		},
 		"../../docs/features/resource-recent-logs.md": {
 			"Both local and compose smoke coverage lock a representative `ecsService` bounded read (`limit=1`), an ECS task/container read (`resourceType=ecsTask&containerName=worker&limit=1`), plus the invalid `limit=0` rejection",
@@ -3131,6 +3133,8 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"Operator troubleshooting examples",
 			"Bounded successful read: `available=true`",
 			"Supported resource, AWS lookup unavailable: `available=false`, `unavailableReason=aws_unavailable`",
+			"Operators should capture the HTTP `Request-Id` response header together with the `lookupContext` object before escalating",
+			"that pair gives reviewers the exact Tenet request log correlation key plus the attempted region/account/observer-role path",
 			"uses generic troubleshooting guidance for unknown provider/internal codes so the operator page does not expose raw machine-code strings",
 			"Route-stable resource with no independent stream: `available=false`, `unavailableReason=no_log_source`",
 			"unavailable/no-log-source responses use `returnedEntryCount=0` and `truncationStatus=not_applicable`",
