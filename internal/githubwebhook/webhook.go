@@ -77,6 +77,7 @@ type DesiredStateSourceConfig struct {
 	Repository string
 	Ref        string
 	Path       string
+	BaseURL    string
 }
 
 type DesiredStateSourceMatch struct {

@@ -98,6 +98,133 @@ func TestRouterHealthz(t *testing.T) {
 	assertResponseRequestID(t, resp)
 }
 
+type diagnosticRefreshPublisher struct {
+	diagnostic controllerrefresh.Diagnostic
+}
+
+func (p diagnosticRefreshPublisher) Publish(context.Context, controllerrefresh.Request) (controllerrefresh.Receipt, error) {
+	return controllerrefresh.Receipt{}, nil
+}
+
+func (p diagnosticRefreshPublisher) Diagnostic() controllerrefresh.Diagnostic {
+	return p.diagnostic
+}
+
+func TestRouterOperatorContextReportsFilesystemDesiredStateSourceDiagnostics(t *testing.T) {
+	router := NewRouter(Options{
+		GitHubWebhookDesiredStateSource: githubwebhook.DesiredStateSourceConfig{Kind: githubwebhook.DesiredStateSourceKindFilesystem},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode operator context response: %v", err)
+	}
+	desiredStateSource, ok := body["desiredStateSource"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected desiredStateSource object, got %#v", body["desiredStateSource"])
+	}
+	if desiredStateSource["configured"] != true || desiredStateSource["kind"] != githubwebhook.DesiredStateSourceKindFilesystem {
+		t.Fatalf("unexpected filesystem desired-state source flags: %#v", desiredStateSource)
+	}
+	filesystem, ok := desiredStateSource["filesystem"].(map[string]any)
+	if !ok || filesystem["mode"] != "local_repository" {
+		t.Fatalf("unexpected filesystem source diagnostic: %#v", desiredStateSource["filesystem"])
+	}
+	if _, ok := desiredStateSource["github"]; ok {
+		t.Fatalf("filesystem diagnostic must not include github source fields: %#v", desiredStateSource)
+	}
+	refresh, ok := desiredStateSource["controllerRefresh"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected controllerRefresh object, got %#v", desiredStateSource["controllerRefresh"])
+	}
+	if refresh["configured"] != false || refresh["available"] != false || refresh["status"] != "filesystem_noop" || refresh["diagnosticOnly"] != true {
+		t.Fatalf("unexpected filesystem refresh diagnostic: %#v", refresh)
+	}
+	if !strings.Contains(fmt.Sprint(refresh["reason"]), "filesystem catalog") || !strings.Contains(fmt.Sprint(refresh["reason"]), "no-op") {
+		t.Fatalf("expected operator-friendly filesystem no-op reason, got %#v", refresh)
+	}
+	statuses := jsonStringSlice(t, desiredStateSource["webhookMatchStatuses"])
+	for _, status := range []string{githubwebhook.DesiredStateSourceMatchStatusMatched, githubwebhook.DesiredStateSourceMatchStatusRepositoryMismatch, githubwebhook.DesiredStateSourceMatchStatusRefMismatch, githubwebhook.DesiredStateSourceMatchStatusPathUntouched} {
+		if !slicesContain(statuses, status) {
+			t.Fatalf("expected webhook match status %q in %#v", status, statuses)
+		}
+	}
+}
+
+func TestRouterOperatorContextReportsGitHubDesiredStateSourceRefreshDiagnostics(t *testing.T) {
+	router := NewRouter(Options{
+		GitHubWebhookDesiredStateSource: githubwebhook.DesiredStateSourceConfig{
+			Kind:       githubwebhook.DesiredStateSourceKindGitHub,
+			Repository: "acme/platform-config",
+			Ref:        "main",
+			Path:       "tenet",
+			BaseURL:    "https://github.example/api/v3",
+		},
+		GitHubWebhookRefreshPublisher: diagnosticRefreshPublisher{diagnostic: controllerrefresh.Diagnostic{
+			Configured: true,
+			Available:  true,
+			Backend:    controllerrefresh.BackendRedis,
+			Channel:    "tenet:test:controller-refresh",
+		}},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode operator context response: %v", err)
+	}
+	desiredStateSource, ok := body["desiredStateSource"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected desiredStateSource object, got %#v", body["desiredStateSource"])
+	}
+	if desiredStateSource["configured"] != true || desiredStateSource["kind"] != githubwebhook.DesiredStateSourceKindGitHub {
+		t.Fatalf("unexpected github desired-state source flags: %#v", desiredStateSource)
+	}
+	github, ok := desiredStateSource["github"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected github source diagnostic, got %#v", desiredStateSource["github"])
+	}
+	if github["repository"] != "acme/platform-config" || github["ref"] != "main" || github["path"] != "tenet" || github["baseUrl"] != "https://github.example/api/v3" {
+		t.Fatalf("unexpected non-secret github source diagnostic: %#v", github)
+	}
+	encodedDesiredStateSource, err := json.Marshal(desiredStateSource)
+	if err != nil {
+		t.Fatalf("encode desired-state source diagnostic: %v", err)
+	}
+	if got := string(encodedDesiredStateSource); strings.Contains(got, "TOKEN") || strings.Contains(strings.ToLower(got), "secret") {
+		t.Fatalf("desired-state source diagnostic leaked token/secret-shaped data: %s", got)
+	}
+	refresh, ok := desiredStateSource["controllerRefresh"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected controllerRefresh object, got %#v", desiredStateSource["controllerRefresh"])
+	}
+	if refresh["configured"] != true || refresh["available"] != true || refresh["backend"] != controllerrefresh.BackendRedis || refresh["channel"] != "tenet:test:controller-refresh" || refresh["status"] != "available" || refresh["diagnosticOnly"] != true {
+		t.Fatalf("unexpected github refresh diagnostic: %#v", refresh)
+	}
+	if !strings.Contains(fmt.Sprint(refresh["reason"]), "accepted matching push") || !strings.Contains(fmt.Sprint(refresh["reason"]), "Redis controller-refresh") {
+		t.Fatalf("expected operator-friendly Redis refresh reason, got %#v", refresh)
+	}
+	reasons := jsonStringSlice(t, desiredStateSource["webhookProcessedFalseReasons"])
+	for _, reason := range []string{"deleted_ref_ignored", githubwebhook.DesiredStateSourceMatchStatusRepositoryMismatch, githubwebhook.DesiredStateSourceMatchStatusRefMismatch, githubwebhook.DesiredStateSourceMatchStatusPathUntouched, "controller_refresh_unavailable"} {
+		if !slicesContain(reasons, reason) {
+			t.Fatalf("expected processed=false reason %q in %#v", reason, reasons)
+		}
+	}
+}
+
 func TestRouterOperatorContextReportsManagedLoginRuntimeDisabledByDefault(t *testing.T) {
 	router := NewRouter(Options{})
 	req := httptest.NewRequest(http.MethodGet, "/v1/operator/context", nil)
@@ -330,6 +457,15 @@ func jsonStringSlice(t *testing.T, value any) []string {
 		result = append(result, text)
 	}
 	return result
+}
+
+func slicesContain(items []string, target string) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
 }
 
 func assertManagedLoginRawLifecycleDiagnostics(t *testing.T, managedLogin map[string]any, expectLogout bool) {

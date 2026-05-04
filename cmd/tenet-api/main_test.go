@@ -647,7 +647,8 @@ func TestNewAPIOptionsRoleAuthorizationAlsoRequiresAuthenticatedIdentity(t *test
 
 func TestNewAPIOptionsWithGitHubCatalogSourceIncludesWebhookDesiredStateSource(t *testing.T) {
 	source := apiCatalogSource{
-		kind: apiCatalogSourceGitHub,
+		kind:          apiCatalogSourceGitHub,
+		githubBaseURL: "https://github.example/api/v3",
 		githubRequest: githubcontents.Request{
 			Repository: "acme/platform-config",
 			Ref:        "main",
@@ -662,6 +663,7 @@ func TestNewAPIOptionsWithGitHubCatalogSourceIncludesWebhookDesiredStateSource(t
 		Repository: "acme/platform-config",
 		Ref:        "main",
 		Path:       "tenet",
+		BaseURL:    "https://github.example/api/v3",
 	}
 	if options.GitHubWebhookDesiredStateSource != want {
 		t.Fatalf("unexpected webhook desired-state source: got %+v want %+v", options.GitHubWebhookDesiredStateSource, want)

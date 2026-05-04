@@ -2622,6 +2622,19 @@ def assert_operator_context_common(payload):
     assert access_verdicts.get('catalogRead', {}).get('exampleRoutes') == ['GET /v1/catalog/deployments', 'GET /v1/catalog/accounts', 'GET /v1/catalog/placements', 'GET /v1/catalog/topology', 'GET /v1/catalog/summary'], payload
     assert access_verdicts.get('catalogRead', {}).get('requiredTrustedHeaders') == identity_headers + role_headers + access_headers, payload
     assert access_verdicts.get('catalogRead', {}).get('acceptedRoleNames') == read_roles, payload
+    desired_state_source = payload.get('desiredStateSource') or {}
+    assert desired_state_source.get('configured') is True, payload
+    assert desired_state_source.get('kind') == 'filesystem', payload
+    assert (desired_state_source.get('filesystem') or {}).get('mode') == 'local_repository', payload
+    assert 'github' not in desired_state_source, payload
+    source_refresh = desired_state_source.get('controllerRefresh') or {}
+    assert source_refresh.get('configured') is False, payload
+    assert source_refresh.get('available') is False, payload
+    assert source_refresh.get('status') == 'filesystem_noop', payload
+    assert source_refresh.get('diagnosticOnly') is True, payload
+    assert 'filesystem catalog' in source_refresh.get('reason', ''), payload
+    assert 'matched' in (desired_state_source.get('webhookMatchStatuses') or []), payload
+    assert 'filesystem_source' in (desired_state_source.get('webhookProcessedFalseReasons') or []), payload
 
 assert_operator_context_common(operator_context_trusted)
 assert operator_context_trusted['identity']['authenticated'] is True, operator_context_trusted
