@@ -75,6 +75,47 @@ func TestDecodeAcceptedPushEvent(t *testing.T) {
 	}
 }
 
+func TestDecodeIgnoredDeletedRefPushEvent(t *testing.T) {
+	const secret = "top-secret"
+	body := `{
+		"ref":"refs/heads/main",
+		"before":"1111111111111111111111111111111111111111",
+		"after":"0000000000000000000000000000000000000000",
+		"repository":{"full_name":"acme/platform-config","default_branch":"main"},
+		"commits":[]
+	}`
+
+	response, err := Decode(context.Background(), Request{
+		Secret: secret,
+		Header: signedHeader(secret, "push", body),
+		Body:   strings.NewReader(body),
+		DesiredStateSource: DesiredStateSourceConfig{
+			Kind:       DesiredStateSourceKindGitHub,
+			Repository: "acme/platform-config",
+			Ref:        "main",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Decode returned error: %v", err)
+	}
+
+	if response.Status != StatusIgnored || response.Processed || !response.Deleted {
+		t.Fatalf("expected ignored deleted-ref response, got %+v", response)
+	}
+	if response.Reason != `github push deleted ref "refs/heads/main"; controller refresh handoff skipped because there is no new desired-state revision to load` {
+		t.Fatalf("unexpected deleted-ref reason: %q", response.Reason)
+	}
+	if response.Repository != "acme/platform-config" || response.Ref != "refs/heads/main" || response.After != deletedRefAfterSHA {
+		t.Fatalf("unexpected deleted-ref summary: %+v", response)
+	}
+	if response.ChangedFiles == nil || len(response.ChangedFiles.All) != 0 {
+		t.Fatalf("expected explicit empty changed-files summary, got %+v", response.ChangedFiles)
+	}
+	if response.DesiredStateSourceMatch == nil || !response.DesiredStateSourceMatch.Matches || response.DesiredStateSourceMatch.MatchStatus != DesiredStateSourceMatchStatusMatched {
+		t.Fatalf("expected desired-state source match to remain visible, got %+v", response.DesiredStateSourceMatch)
+	}
+}
+
 func TestDecodeIgnoredNonPushEvent(t *testing.T) {
 	const secret = "top-secret"
 	body := `{"zen":"keep it logically awesome"}`
