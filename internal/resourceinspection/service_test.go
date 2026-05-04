@@ -324,6 +324,62 @@ func TestServiceInspect(t *testing.T) {
 		}
 	})
 
+	t.Run("auto scaling group focuses selected instance", func(t *testing.T) {
+		var gotLookup AutoScalingGroupRequest
+		service := NewService(Options{
+			InspectAutoScalingGroup: func(ctx context.Context, req AutoScalingGroupRequest) (AutoScalingInspection, error) {
+				gotLookup = req
+				return AutoScalingInspection{
+					AutoScalingGroupName: "payments-api-prod-candidate",
+					LaunchTemplate:       &AutoScalingLaunchTemplateSummary{Name: "payments-api-prod-candidate", Version: "$Default"},
+					Instances: []AutoScalingGroupInstanceSummary{
+						{InstanceID: "i-0missingmember"},
+						{InstanceID: "i-0abc123def4567890", AvailabilityZone: "ap-northeast-2a", LifecycleState: "InService", HealthStatus: "Healthy"},
+					},
+				}, nil
+			},
+		})
+
+		result, err := service.Inspect(context.Background(), Request{
+			ResourceType:    "candidateAutoScalingGroup",
+			ResourceName:    "payments-api-prod-candidate",
+			InstanceID:      " i-0abc123def4567890 ",
+			TargetAccountID: "123456789012",
+			Region:          "ap-northeast-2",
+		})
+		if err != nil {
+			t.Fatalf("Inspect returned error: %v", err)
+		}
+		if gotLookup.InstanceID != "i-0abc123def4567890" {
+			t.Fatalf("expected trimmed selected instance in provider request, got %+v", gotLookup)
+		}
+		if !result.Available || result.InstanceID != "i-0abc123def4567890" || result.AutoScalingGroup == nil {
+			t.Fatalf("expected selected ASG inspection result, got %+v", result)
+		}
+		if got := result.AutoScalingGroup.Instances; len(got) != 1 || got[0].InstanceID != "i-0abc123def4567890" {
+			t.Fatalf("expected only selected ASG instance, got %+v", got)
+		}
+		if scope := result.AutoScalingGroup.InstancesScope; scope == nil || scope.RequestedLimit == nil || *scope.RequestedLimit != 1 || scope.EffectiveLimit != 1 || scope.ReturnedInstanceCount != 1 || scope.TruncationStatus != "not_truncated" {
+			t.Fatalf("unexpected selected ASG instancesScope: %+v", scope)
+		}
+	})
+
+	t.Run("auto scaling group selected instance missing returns unavailable", func(t *testing.T) {
+		service := NewService(Options{
+			InspectAutoScalingGroup: func(ctx context.Context, req AutoScalingGroupRequest) (AutoScalingInspection, error) {
+				return AutoScalingInspection{AutoScalingGroupName: "payments-api-prod-candidate", Instances: []AutoScalingGroupInstanceSummary{{InstanceID: "i-0present123456789"}}}, nil
+			},
+		})
+
+		result, err := service.Inspect(context.Background(), Request{ResourceType: "serviceAutoScalingGroup", ResourceName: "payments-api-prod-asg", InstanceID: "i-0missing12345678", Region: "us-west-2", TargetAccountID: "123456789012"})
+		if err != nil {
+			t.Fatalf("Inspect returned error: %v", err)
+		}
+		if result.Available || result.UnavailableReason != resourceaws.UnavailableReasonResourceNotFound || result.InstanceID != "i-0missing12345678" {
+			t.Fatalf("expected selected instance unavailable response with echoed instanceId, got %+v", result)
+		}
+	})
+
 	t.Run("user data bootstrap source reuses auto scaling inspection evidence", func(t *testing.T) {
 		var gotLookup AutoScalingGroupRequest
 		service := NewService(Options{
@@ -365,12 +421,14 @@ func TestServiceInspect(t *testing.T) {
 			t.Fatalf("unexpected bootstrap-source lookup request: %+v", gotLookup)
 		}
 		want := Result{
-			DeploymentName: "payments-api-prod",
-			ResourceType:   "userDataBootstrapSource",
-			ResourceName:   "file:userdata/payments-api-prod.sh",
-			LookupContext:  expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
-			Available:      true,
-			Source:         SourceAutoScalingGroup,
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "userDataBootstrapSource",
+			ResourceName:        "file:userdata/payments-api-prod.sh",
+			BackingResourceType: "candidateAutoScalingGroup",
+			BackingResourceName: "payments-api-prod-candidate",
+			LookupContext:       expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
+			Available:           true,
+			Source:              SourceAutoScalingGroup,
 			UserDataBootstrapSource: &UserDataBootstrapSourceInspection{
 				DesiredBootstrapSource:  "file:userdata/payments-api-prod.sh",
 				ObservedBootstrapSource: "file:userdata/payments-api-prod-legacy.sh",
@@ -387,6 +445,74 @@ func TestServiceInspect(t *testing.T) {
 		}
 		if !reflect.DeepEqual(result, want) {
 			t.Fatalf("unexpected bootstrap-source inspection result: %+v", result)
+		}
+	})
+
+	t.Run("user data bootstrap source focuses selected ASG instance", func(t *testing.T) {
+		var gotLookup AutoScalingGroupRequest
+		service := NewService(Options{
+			InspectAutoScalingGroup: func(ctx context.Context, req AutoScalingGroupRequest) (AutoScalingInspection, error) {
+				gotLookup = req
+				return AutoScalingInspection{
+					AutoScalingGroupName:          "payments-api-prod-candidate",
+					LaunchTemplateBootstrapSource: "file:userdata/payments-api-prod.sh",
+					LaunchTemplate:                &AutoScalingLaunchTemplateSummary{Name: "payments-api-prod-candidate", Version: "$Default"},
+					Instances: []AutoScalingGroupInstanceSummary{
+						{InstanceID: "i-0oldermember"},
+						{InstanceID: "i-0abc123def4567890", AvailabilityZone: "ap-northeast-2a", LifecycleState: "InService"},
+					},
+				}, nil
+			},
+		})
+
+		result, err := service.Inspect(context.Background(), Request{
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "userDataBootstrapSource",
+			ResourceName:        "file:userdata/payments-api-prod.sh",
+			InstanceID:          " i-0abc123def4567890 ",
+			BackingResourceType: "candidateAutoScalingGroup",
+			BackingResourceName: "payments-api-prod-candidate",
+			TargetAccountID:     "123456789012",
+			Region:              "ap-northeast-2",
+		})
+		if err != nil {
+			t.Fatalf("Inspect returned error: %v", err)
+		}
+		if gotLookup.ResourceName != "payments-api-prod-candidate" || gotLookup.InstanceID != "i-0abc123def4567890" {
+			t.Fatalf("expected selected bootstrap-source lookup to target backing ASG with trimmed instance, got %+v", gotLookup)
+		}
+		if !result.Available || result.InstanceID != "i-0abc123def4567890" || result.BackingResourceType != "candidateAutoScalingGroup" || result.BackingResourceName != "payments-api-prod-candidate" {
+			t.Fatalf("expected selected bootstrap-source result with selector/backing metadata, got %+v", result)
+		}
+		if result.UserDataBootstrapSource == nil || result.UserDataBootstrapSource.LaunchTemplate == nil {
+			t.Fatalf("expected bootstrap-source inspection body to preserve launch-template evidence, got %+v", result.UserDataBootstrapSource)
+		}
+	})
+
+	t.Run("user data bootstrap source selected instance missing returns unavailable with backing metadata", func(t *testing.T) {
+		service := NewService(Options{
+			InspectAutoScalingGroup: func(ctx context.Context, req AutoScalingGroupRequest) (AutoScalingInspection, error) {
+				return AutoScalingInspection{AutoScalingGroupName: "payments-api-prod-candidate", Instances: []AutoScalingGroupInstanceSummary{{InstanceID: "i-0present123456789"}}}, nil
+			},
+		})
+
+		result, err := service.Inspect(context.Background(), Request{
+			ResourceType:        "userDataBootstrapSource",
+			ResourceName:        "file:userdata/payments-api-prod.sh",
+			InstanceID:          "i-0missing12345678",
+			BackingResourceType: "candidateAutoScalingGroup",
+			BackingResourceName: "payments-api-prod-candidate",
+			TargetAccountID:     "123456789012",
+			Region:              "ap-northeast-2",
+		})
+		if err != nil {
+			t.Fatalf("Inspect returned error: %v", err)
+		}
+		if result.Available || result.UnavailableReason != resourceaws.UnavailableReasonResourceNotFound || result.InstanceID != "i-0missing12345678" {
+			t.Fatalf("expected selected bootstrap-source unavailable response with echoed instanceId, got %+v", result)
+		}
+		if result.BackingResourceType != "candidateAutoScalingGroup" || result.BackingResourceName != "payments-api-prod-candidate" {
+			t.Fatalf("expected selected bootstrap-source unavailable response to preserve backing metadata, got %+v", result)
 		}
 	})
 

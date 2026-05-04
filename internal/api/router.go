@@ -2261,11 +2261,19 @@ func NewRouter(options Options) http.Handler {
 					return
 				}
 			}
+			ctx := r.Context()
+			if instanceID := strings.TrimSpace(r.URL.Query().Get("instanceId")); instanceID != "" {
+				if !validEC2InstanceID(instanceID) {
+					http.Error(w, "invalid instanceId query", http.StatusBadRequest)
+					return
+				}
+				ctx = resourceinspection.ContextWithInstanceID(ctx, instanceID)
+			}
 			if _, err := options.OverviewDeployment(r.Context(), name); err != nil {
 				respondReadLookupError(w, err, "overview deployment unavailable")
 				return
 			}
-			result, err := options.OverviewDeploymentResourceInspection(r.Context(), name, resourceType, resourceName, resourceLimit)
+			result, err := options.OverviewDeploymentResourceInspection(ctx, name, resourceType, resourceName, resourceLimit)
 			if err != nil {
 				respondReadLookupError(w, err, "overview deployment resource inspection unavailable")
 				return

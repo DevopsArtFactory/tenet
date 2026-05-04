@@ -1875,6 +1875,26 @@ func TestAPIOptionsOverviewDeploymentResourceInspectionWiresObserverRoleAndPlace
 	}
 }
 
+func TestAPIOptionsOverviewDeploymentResourceInspectionPassesSelectedInstanceID(t *testing.T) {
+	repoRoot := writeCanaryEC2RepositoryFixture(t)
+	provider := &fakeResourceInspectionProvider{result: resourceinspection.Result{Available: true}}
+	restore := stubResourceInspectionProviderFactory(provider)
+	defer restore()
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, nil)
+	ctx := resourceinspection.ContextWithInstanceID(context.Background(), " i-0abc123def4567890 ")
+	_, err := options.OverviewDeploymentResourceInspection(ctx, "api-prod", "candidateAutoScalingGroup", "api-prod-candidate", 0)
+	if err != nil {
+		t.Fatalf("OverviewDeploymentResourceInspection returned error: %v", err)
+	}
+	if provider.calls != 1 {
+		t.Fatalf("expected provider to run once, got %d calls", provider.calls)
+	}
+	if provider.lastRequest.InstanceID != "i-0abc123def4567890" {
+		t.Fatalf("expected selected instanceId to reach resource inspection request, got %+v", provider.lastRequest)
+	}
+}
+
 func TestAPIOptionsOverviewDeploymentResourceInspectionRejectsResourcesOutsideDeploymentExecution(t *testing.T) {
 	repoRoot := writeRepositoryFixture(t)
 	store := &stubStatusStore{
