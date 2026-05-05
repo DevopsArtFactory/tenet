@@ -2780,12 +2780,53 @@
         return null;
       };
       const resourceDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;
-      const createResourceDetailActions = (resourceState = null) => [
+      const clearSelectedClusterRoute = (detail, resource) => {
+        if (!supportsECSServiceClusterScope(resource)) return null;
+        const clusterArn = String(resource?.clusterArn || currentPageState.clusterArn || '').trim();
+        if (!clusterArn) return null;
+        const deploymentName = detail?.name || currentPageState.deployment || '';
+        const routeState = createCurrentResourceRouteState(resource);
+        const nextState = {
+          ...currentPageState,
+          page: 'resource',
+          deployment: deploymentName,
+          resourceType: routeState.routeResourceType || '',
+          resourceId: routeState.routeResourceId || '',
+          containerName: routeState.routeContainerName || '',
+          instanceId: routeState.routeInstanceId || '',
+          clusterArn: '',
+        };
+        currentPageState = nextState;
+        const nextURL = buildPageURL('resource', {
+          deployment: nextState.deployment,
+          resourceType: nextState.resourceType,
+          resourceId: nextState.resourceId,
+          containerName: nextState.containerName,
+          instanceId: nextState.instanceId,
+          resourceLogLimit: nextState.resourceLogLimit,
+          resourceInspectionLimit: nextState.resourceInspectionLimit,
+        });
+        history.replaceState({}, '', `${nextURL}${window.location.hash || ''}`);
+        return nextState;
+      };
+      const createClearSelectedClusterButton = (detail, resource, resourceState = null) => {
+        if (!supportsECSServiceClusterScope(resource) || !String(resource?.clusterArn || '').trim()) return null;
+        const button = createElement('button', 'toolbar-button', 'Clear selected cluster');
+        button.type = 'button';
+        button.disabled = resourceState?.status === 'loading';
+        button.addEventListener('click', () => {
+          if (button.disabled || !clearSelectedClusterRoute(detail, resource)) return;
+          renderResourceDetailPage(detail, resourceState);
+        });
+        return button;
+      };
+      const createResourceDetailActions = (resourceState = null, detail = null, resource = null) => [
         createRefreshButton(
           'Refresh resource detail',
           resourceState?.status === 'loading' || !(resourceState?.detail?.name || currentPageState.deployment),
           () => resourceState?.onRefresh?.().catch(() => {}),
         ),
+        createClearSelectedClusterButton(detail, resource, resourceState),
       ];
       const resourceDetailRefreshState = (resourceState = null) => {
         if (resourceState?.status === 'loading') {
@@ -3511,7 +3552,7 @@
         backLink.rel = '';
         const toolbarActions = createElement('div', 'toolbar-actions');
         toolbarActions.append(backLink);
-        createResourceDetailActions(resourceState).forEach((action) => {
+        createResourceDetailActions(resourceState, detail, resource).forEach((action) => {
           if (action) toolbarActions.append(action);
         });
         toolbar.replaceChildren(toolbarActions);

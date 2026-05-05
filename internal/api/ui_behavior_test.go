@@ -4734,13 +4734,18 @@ class Document {
 const collectText = (node) => node ? [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean) : [];
 const collectNodes = (node, predicate) => node ? [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat() : [];
 async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
-async function render(search, inspectionResult) {
+async function render(search, inspectionResult, hash = '') {
   const document = new Document();
   document.byID.set('toolbar', document.createElement('section'));
   document.byID.set('summary', document.createElement('section'));
   document.byID.set('accounts', document.createElement('section'));
-  const window = { location: { pathname: '/', search, hash: '' }, addEventListener() {} };
-  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  const window = { location: { pathname: '/', search, hash }, addEventListener() {} };
+  const history = { replaceState(_state, _title, url) {
+    const next = new URL(String(url), 'http://tenet.local');
+    window.location.pathname = next.pathname || '/';
+    window.location.search = next.search || '';
+    window.location.hash = next.hash || '';
+  } };
   const fetchCalls = [];
   const fetch = (url) => {
     fetchCalls.push(String(url));
@@ -4764,7 +4769,7 @@ async function render(search, inspectionResult) {
   };
   new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
   await settle(); await settle(); await settle();
-  return { document, window, fetchCalls, text: collectText(document.getElementById('accounts')).join(' | '), links: collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A') };
+  return { document, window, fetchCalls, text: collectText(document.getElementById('accounts')).join(' | '), toolbarText: collectText(document.getElementById('toolbar')).join(' | '), toolbarButtons: collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON'), links: collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A') };
 }
 (async () => {
   const taskResult = { available: true, source: 'ecs_task', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, ecsTask: { taskArn, taskId: 'abc123', clusterArn: 'arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', startedAt: '2026-05-03T04:00:00Z', taskDefinition: 'worker:42', containers: [{ name: 'worker', image: 'ghcr.io/example/worker:v2', lastStatus: 'RUNNING', healthStatus: 'HEALTHY', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] } };
@@ -4791,6 +4796,25 @@ async function render(search, inspectionResult) {
   const restoredLimitSelect = collectNodes(restoredServiceRun.document.getElementById('accounts'), (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'Task sample limit')[0];
   if (!restoredLimitSelect || restoredLimitSelect.value !== '25') throw new Error('expected bookmarked inspection limit to restore select value');
   if (!restoredServiceRun.fetchCalls.includes('/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=' + encodedClusterArn + '&limit=25')) throw new Error('expected bookmarked inspection limit and cluster selector in initial fetch URL, got ' + JSON.stringify(restoredServiceRun.fetchCalls));
+
+  const clearRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId) + '&clusterArn=' + encodedClusterArn + '&q=worker&sync=OutOfSync&account=123456789012&resourceLogLimit=10&resourceInspectionLimit=25', serviceResult, '#resource-live-inspection');
+  if (!clearRun.toolbarText.includes('Clear selected cluster')) throw new Error('expected clear selected cluster action in resource toolbar: ' + clearRun.toolbarText);
+  const clearButton = clearRun.toolbarButtons.find((node) => node.textContent === 'Clear selected cluster');
+  if (!clearButton || clearButton.disabled) throw new Error('expected clear selected cluster button to be enabled');
+  clearButton.dispatch('click');
+  await settle(); await settle(); await settle();
+  if (clearRun.window.location.search.includes('clusterArn=')) throw new Error('expected clear action to remove only selected cluster query, got ' + clearRun.window.location.search);
+  ['page=resource', 'q=worker', 'sync=OutOfSync', 'account=123456789012', 'deployment=worker-prod', 'resourceType=ecsService', 'resourceLogLimit=10', 'resourceInspectionLimit=25'].forEach((fragment) => {
+    if (!clearRun.window.location.search.includes(fragment)) throw new Error('expected clear action to preserve ' + fragment + ', got ' + clearRun.window.location.search);
+  });
+  if (!decodeURIComponent(clearRun.window.location.search.replace(/\+/g, '%20')).includes('resourceId=' + serviceResourceId)) throw new Error('expected clear action to preserve resource id, got ' + clearRun.window.location.search);
+  if (clearRun.window.location.hash !== '#resource-live-inspection') throw new Error('expected clear action to preserve current resource hash, got ' + clearRun.window.location.hash);
+  const clearedText = collectText(clearRun.document.getElementById('accounts')).join(' | ');
+  if (clearedText.includes('Selected cluster | ' + clusterArn) || clearedText.includes('Selected cluster · ' + clusterArn)) throw new Error('expected selected-cluster evidence to disappear after clearing: ' + clearedText);
+  const clearedLogsURL = '/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&limit=10';
+  const clearedInspectionURL = '/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&limit=25';
+  if (!clearRun.fetchCalls.includes(clearedLogsURL)) throw new Error('expected cleared recent-log fetch to omit clusterArn, got ' + JSON.stringify(clearRun.fetchCalls));
+  if (!clearRun.fetchCalls.includes(clearedInspectionURL)) throw new Error('expected cleared inspection fetch to omit clusterArn, got ' + JSON.stringify(clearRun.fetchCalls));
 
   const taskLimitSelect = collectNodes(serviceRun.document.getElementById('accounts'), (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'Task sample limit')[0];
   if (!taskLimitSelect) throw new Error('expected ECS service live inspection to expose task sample limit select');
