@@ -49,6 +49,9 @@ const (
 	UnavailableReasonNoInstances               = resourceaws.UnavailableReasonNoInstances
 	UnavailableReasonResourceNotFound          = resourceaws.UnavailableReasonResourceNotFound
 	UnavailableReasonAWSUnavailable            = resourceaws.UnavailableReasonAWSUnavailable
+
+	EmptyReasonNoRecentEvents     = "no_recent_events"
+	EmptyReasonNoFormattedEntries = "no_formatted_entries"
 )
 
 var ErrNotImplemented = errors.New("resource log service not implemented")
@@ -128,6 +131,7 @@ type Result struct {
 	Entries             []Entry       `json:"entries"`
 	ResultScope         *ResultScope  `json:"resultScope,omitempty"`
 	UnavailableReason   string        `json:"unavailableReason"`
+	EmptyReason         string        `json:"emptyReason,omitempty"`
 }
 
 // ResultScope is additive operator-facing metadata for bounded recent-log reads.
@@ -219,7 +223,7 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 			return Result{}, err
 		}
 		entries := formatCloudWatchEntries(events, s.effectiveLimit(req.Limit))
-		return availableResult(req, SourceCloudWatch, entries), nil
+		return availableResult(req, SourceCloudWatch, entries, emptyReason(len(events), len(entries))), nil
 	case "ecsTask":
 		list := s.options.ListECSLogEvents
 		if list == nil {
@@ -244,7 +248,7 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 			return Result{}, err
 		}
 		entries := formatCloudWatchEntries(events, s.effectiveLimit(req.Limit), req.ContainerName)
-		return availableResult(req, SourceCloudWatch, entries), nil
+		return availableResult(req, SourceCloudWatch, entries, emptyReason(len(events), len(entries))), nil
 	case "candidateAutoScalingGroup", "serviceAutoScalingGroup", "userDataBootstrapSource":
 		resourceName := req.ResourceName
 		if req.ResourceType == "userDataBootstrapSource" {
@@ -280,7 +284,7 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 			return unavailableResult(req, UnavailableReasonResourceNotFound), nil
 		}
 		entries := formatConsoleEntries(consoles, s.effectiveLimit(req.Limit))
-		return availableResult(req, SourceEC2Console, entries), nil
+		return availableResult(req, SourceEC2Console, entries, emptyReason(len(consoles), len(entries))), nil
 	case "trafficShiftPlan", "productionListenerRule", "activeTargetGroup", "candidateTargetGroup":
 		return unavailableResult(req, UnavailableReasonNoLogSource), nil
 	case "codeDeployApplication", "codeDeployDeploymentGroup", "productionListener", "testListener", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup":
@@ -314,7 +318,7 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 			return Result{}, err
 		}
 		entries := formatCodeDeployEntries(events, s.effectiveLimit(req.Limit))
-		return availableResult(req, SourceCodeDeploy, entries), nil
+		return availableResult(req, SourceCodeDeploy, entries, emptyReason(len(events), len(entries))), nil
 	default:
 		return unavailableResult(req, UnavailableReasonUnsupportedResourceType), nil
 	}
@@ -395,7 +399,7 @@ func unavailableResult(req Request, reason string) Result {
 	}
 }
 
-func availableResult(req Request, source string, entries []Entry) Result {
+func availableResult(req Request, source string, entries []Entry, emptyReason string) Result {
 	return Result{
 		DeploymentName:      req.DeploymentName,
 		ResourceType:        req.ResourceType,
@@ -409,7 +413,18 @@ func availableResult(req Request, source string, entries []Entry) Result {
 		Available:           true,
 		Source:              source,
 		Entries:             entries,
+		EmptyReason:         emptyReason,
 	}
+}
+
+func emptyReason(rawCount, entryCount int) string {
+	if entryCount > 0 {
+		return ""
+	}
+	if rawCount > 0 {
+		return EmptyReasonNoFormattedEntries
+	}
+	return EmptyReasonNoRecentEvents
 }
 
 func resourceDescription(req Request) string {
