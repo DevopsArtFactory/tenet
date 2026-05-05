@@ -1189,6 +1189,9 @@ func TestServiceRecent(t *testing.T) {
 				if req.ResourceName != "payments-api-prod-service" {
 					t.Fatalf("unexpected ECS request: %+v", req)
 				}
+				if req.ClusterARN != "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments" {
+					t.Fatalf("expected selected cluster ARN to reach ECS provider, got %+v", req)
+				}
 				return nil, providerErr
 			},
 		})
@@ -1200,6 +1203,7 @@ func TestServiceRecent(t *testing.T) {
 			ControlAccountID: "123456789012",
 			TargetAccountID:  "123456789012",
 			Region:           "ap-northeast-2",
+			ClusterARN:       "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
 		})
 		if !errors.Is(err, providerErr) {
 			t.Fatalf("expected provider error %v, got %v", providerErr, err)
@@ -1305,6 +1309,35 @@ func TestServiceRecent(t *testing.T) {
 			t.Fatalf("unexpected generic asg unavailable result: %+v", result)
 		}
 	})
+}
+
+func TestFindECSServiceUsesSelectedClusterWithoutScanning(t *testing.T) {
+	const (
+		serviceName     = "payments-api-prod-service"
+		selectedCluster = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/selected"
+		otherCluster    = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/other"
+	)
+	client := &fakeECSServiceClient{
+		clusterARNs: []string{otherCluster},
+		servicesByCluster: map[string][]ecstypes.Service{
+			selectedCluster: {{ServiceName: aws.String(serviceName), ServiceArn: aws.String("arn:service/selected")}},
+			otherCluster:    {{ServiceName: aws.String(serviceName), ServiceArn: aws.String("arn:service/other")}},
+		},
+	}
+
+	service, clusterARN, err := findECSService(context.Background(), client, serviceName, selectedCluster)
+	if err != nil {
+		t.Fatalf("findECSService returned error: %v", err)
+	}
+	if service == nil || aws.ToString(clusterARN) != selectedCluster {
+		t.Fatalf("expected selected-cluster lookup to find %s, got service=%+v cluster=%q", selectedCluster, service, aws.ToString(clusterARN))
+	}
+	if client.listCalls != 0 {
+		t.Fatalf("expected selected-cluster lookup to avoid list clusters, got %d", client.listCalls)
+	}
+	if !reflect.DeepEqual(client.describeCalls, []string{selectedCluster}) {
+		t.Fatalf("expected selected cluster to be described exactly once, got %+v", client.describeCalls)
+	}
 }
 
 func TestFindRecentServiceTasksIncludesStoppedTasks(t *testing.T) {
@@ -1416,6 +1449,24 @@ func awsLogsTaskDefinition() ecstypes.TaskDefinition {
 			},
 		},
 	}}}
+}
+
+type fakeECSServiceClient struct {
+	clusterARNs       []string
+	servicesByCluster map[string][]ecstypes.Service
+	listCalls         int
+	describeCalls     []string
+}
+
+func (f *fakeECSServiceClient) ListClusters(context.Context, *ecs.ListClustersInput, ...func(*ecs.Options)) (*ecs.ListClustersOutput, error) {
+	f.listCalls++
+	return &ecs.ListClustersOutput{ClusterArns: append([]string(nil), f.clusterARNs...)}, nil
+}
+
+func (f *fakeECSServiceClient) DescribeServices(_ context.Context, input *ecs.DescribeServicesInput, _ ...func(*ecs.Options)) (*ecs.DescribeServicesOutput, error) {
+	clusterARN := aws.ToString(input.Cluster)
+	f.describeCalls = append(f.describeCalls, clusterARN)
+	return &ecs.DescribeServicesOutput{Services: append([]ecstypes.Service(nil), f.servicesByCluster[clusterARN]...)}, nil
 }
 
 type fakeECSTaskClient struct {

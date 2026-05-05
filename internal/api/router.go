@@ -130,6 +130,30 @@ func validEC2InstanceID(instanceID string) bool {
 	return true
 }
 
+func validECSClusterARN(clusterARN string) bool {
+	clusterARN = strings.TrimSpace(clusterARN)
+	parts := strings.SplitN(clusterARN, ":", 6)
+	if len(parts) != 6 {
+		return false
+	}
+	if parts[0] != "arn" || parts[1] == "" || parts[2] != "ecs" || parts[3] == "" || parts[4] == "" {
+		return false
+	}
+	return strings.HasPrefix(parts[5], "cluster/") && strings.TrimSpace(strings.TrimPrefix(parts[5], "cluster/")) != ""
+}
+
+func parseOptionalECSClusterARN(w http.ResponseWriter, r *http.Request) (string, bool) {
+	clusterARN := strings.TrimSpace(r.URL.Query().Get("clusterArn"))
+	if clusterARN == "" {
+		return "", true
+	}
+	if !validECSClusterARN(clusterARN) {
+		http.Error(w, "invalid clusterArn query", http.StatusBadRequest)
+		return "", false
+	}
+	return clusterARN, true
+}
+
 func parseOptionalPositiveLimit(w http.ResponseWriter, r *http.Request) (limit int, ok bool) {
 	raw := strings.TrimSpace(r.URL.Query().Get("limit"))
 	if raw == "" {
@@ -2220,6 +2244,11 @@ func NewRouter(options Options) http.Handler {
 				}
 				ctx = resourcelogs.ContextWithInstanceID(ctx, instanceID)
 			}
+			if clusterARN, ok := parseOptionalECSClusterARN(w, r); !ok {
+				return
+			} else if resourceType == "ecsService" && clusterARN != "" {
+				ctx = resourcelogs.ContextWithClusterARN(ctx, clusterARN)
+			}
 			if _, err := options.OverviewDeployment(r.Context(), name); err != nil {
 				respondReadLookupError(w, err, "overview deployment unavailable")
 				return
@@ -2268,6 +2297,11 @@ func NewRouter(options Options) http.Handler {
 					return
 				}
 				ctx = resourceinspection.ContextWithInstanceID(ctx, instanceID)
+			}
+			if clusterARN, ok := parseOptionalECSClusterARN(w, r); !ok {
+				return
+			} else if resourceType == "ecsService" && clusterARN != "" {
+				ctx = resourceinspection.ContextWithClusterARN(ctx, clusterARN)
 			}
 			if _, err := options.OverviewDeployment(r.Context(), name); err != nil {
 				respondReadLookupError(w, err, "overview deployment unavailable")

@@ -44,6 +44,7 @@ var ErrNotImplemented = errors.New("resource inspection service not implemented"
 type LookupContext = resourceaws.LookupContext
 
 type instanceIDContextKey struct{}
+type clusterARNContextKey struct{}
 
 func ContextWithInstanceID(ctx context.Context, instanceID string) context.Context {
 	instanceID = strings.TrimSpace(instanceID)
@@ -58,6 +59,19 @@ func InstanceIDFromContext(ctx context.Context) string {
 	return strings.TrimSpace(value)
 }
 
+func ContextWithClusterARN(ctx context.Context, clusterARN string) context.Context {
+	clusterARN = strings.TrimSpace(clusterARN)
+	if clusterARN == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, clusterARNContextKey{}, clusterARN)
+}
+
+func ClusterARNFromContext(ctx context.Context) string {
+	value, _ := ctx.Value(clusterARNContextKey{}).(string)
+	return strings.TrimSpace(value)
+}
+
 type Request struct {
 	DeploymentName           string
 	ResourceType             string
@@ -66,6 +80,7 @@ type Request struct {
 	TaskSummaryLimit         int
 	AutoScalingInstanceLimit int
 	InstanceID               string
+	ClusterARN               string
 	BackingResourceType      string
 	BackingResourceName      string
 	ControlAccountID         string
@@ -553,6 +568,7 @@ type ECSRequest struct {
 	DeploymentName   string
 	ResourceName     string
 	TaskSummaryLimit int
+	ClusterARN       string
 	Region           string
 	TargetAccountID  string
 	ObserverRoleARN  string
@@ -646,6 +662,7 @@ func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
 			DeploymentName:   req.DeploymentName,
 			ResourceName:     req.ResourceName,
 			TaskSummaryLimit: req.TaskSummaryLimit,
+			ClusterARN:       strings.TrimSpace(req.ClusterARN),
 			Region:           req.Region,
 			TargetAccountID:  req.TargetAccountID,
 			ObserverRoleARN:  req.ObserverRoleARN,
@@ -1089,6 +1106,7 @@ func (s Service) inspectECSServiceFromAWS(ctx context.Context, req ECSRequest) (
 		ctx,
 		clients.ECS,
 		req.ResourceName,
+		strings.TrimSpace(req.ClusterARN),
 		s.ecsServiceHints,
 		newECSServiceClusterHintKey(req.Region, req.TargetAccountID, req.ObserverRoleARN, req.ResourceName),
 	)
@@ -1666,7 +1684,19 @@ func autoScalingMixedInstancesPolicy(policy *asgtypes.MixedInstancesPolicy) *Aut
 	return detail
 }
 
-func findECSService(ctx context.Context, client ecsServiceAPI, serviceName string, hints *ecsServiceClusterHintCache, key ecsServiceClusterHintKey) (*ecstypes.Service, *string, error) {
+func findECSService(ctx context.Context, client ecsServiceAPI, serviceName, selectedClusterARN string, hints *ecsServiceClusterHintCache, key ecsServiceClusterHintKey) (*ecstypes.Service, *string, error) {
+	selectedClusterARN = strings.TrimSpace(selectedClusterARN)
+	if selectedClusterARN != "" {
+		service, err := describeECSServiceInCluster(ctx, client, selectedClusterARN, serviceName)
+		if err != nil {
+			return nil, nil, err
+		}
+		if service == nil {
+			return nil, nil, nil
+		}
+		return service, aws.String(selectedClusterARN), nil
+	}
+
 	skipClusterARN := ""
 	if cachedClusterARN, ok := hints.Get(key); ok {
 		service, err := describeECSServiceInCluster(ctx, client, cachedClusterARN, serviceName)

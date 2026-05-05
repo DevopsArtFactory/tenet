@@ -6443,6 +6443,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 
 		var providerCalls int
 		var gotLimit int
+		var gotClusterARN string
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
@@ -6451,9 +6452,10 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 				}
 				return catalog.DeploymentOverviewDetail{Name: name}, nil
 			},
-			OverviewDeploymentResourceLogs: func(_ context.Context, deploymentName, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
+			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
 				providerCalls++
 				gotLimit = limit
+				gotClusterARN = resourcelogs.ClusterARNFromContext(ctx)
 				if deploymentName != "api-prod" || resourceType != "ecsService" || resourceName != "payments-api-prod-service" {
 					t.Fatalf("unexpected provider request: deployment=%q type=%q name=%q", deploymentName, resourceType, resourceName)
 				}
@@ -6461,7 +6463,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 			},
 		})
 
-		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service&limit=2", nil)
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service&limit=2&clusterArn=+arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments+", nil)
 		resp := httptest.NewRecorder()
 		router.ServeHTTP(resp, req)
 
@@ -6473,6 +6475,9 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		}
 		if gotLimit != 2 {
 			t.Fatalf("expected provider limit 2, got %d", gotLimit)
+		}
+		if gotClusterARN != "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments" {
+			t.Fatalf("expected provider context cluster ARN, got %q", gotClusterARN)
 		}
 
 		var got resourcelogs.Result
@@ -6528,6 +6533,38 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		}
 		if overviewCalls != 0 || providerCalls != 0 {
 			t.Fatalf("expected invalid limit to short-circuit providers, got overview=%d resourceLogs=%d", overviewCalls, providerCalls)
+		}
+	})
+
+	t.Run("rejects invalid ECS cluster selector before resource log provider lookup", func(t *testing.T) {
+		var overviewCalls int
+		var providerCalls int
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(context.Context, string) (catalog.DeploymentOverviewDetail, error) {
+				overviewCalls++
+				return catalog.DeploymentOverviewDetail{}, nil
+			},
+			OverviewDeploymentResourceLogs: func(context.Context, string, string, string, int) (resourcelogs.Result, error) {
+				providerCalls++
+				return resourcelogs.Result{}, nil
+			},
+		})
+
+		for _, rawClusterARN := range []string{"not-an-arn", "arn:aws:sqs:ap-northeast-2:123456789012:queue/name", "arn:aws:ecs:ap-northeast-2:123456789012:service/cluster/name"} {
+			t.Run(rawClusterARN, func(t *testing.T) {
+				resp := httptest.NewRecorder()
+				router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=api-prod-service&clusterArn="+url.QueryEscape(rawClusterARN), nil))
+				if resp.Code != http.StatusBadRequest {
+					t.Fatalf("expected 400, got %d with body %q", resp.Code, resp.Body.String())
+				}
+				if body := resp.Body.String(); body != "invalid clusterArn query\n" {
+					t.Fatalf("unexpected invalid clusterArn response: %q", body)
+				}
+			})
+		}
+		if overviewCalls != 0 || providerCalls != 0 {
+			t.Fatalf("expected invalid clusterArn to short-circuit providers, got overview=%d resourceLogs=%d", overviewCalls, providerCalls)
 		}
 	})
 
@@ -7235,6 +7272,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 			resourceType   string
 			resourceName   string
 			limit          int
+			clusterARN     string
 			requestID      string
 		}
 		router := NewRouter(Options{
@@ -7250,12 +7288,13 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				gotRequest.resourceType = resourceType
 				gotRequest.resourceName = resourceName
 				gotRequest.limit = limit
+				gotRequest.clusterARN = resourceinspection.ClusterARNFromContext(ctx)
 				gotRequest.requestID = RequestIDFromContext(ctx)
 				return expected, nil
 			},
 		})
 
-		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service&limit=3", nil)
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=payments-api-prod-service&limit=3&clusterArn=arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments", nil)
 		resp := httptest.NewRecorder()
 
 		router.ServeHTTP(resp, req)
@@ -7269,8 +7308,9 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 			resourceType   string
 			resourceName   string
 			limit          int
+			clusterARN     string
 			requestID      string
-		}{deploymentName: "api-prod", resourceType: "ecsService", resourceName: "payments-api-prod-service", limit: 3, requestID: responseRequestID}) {
+		}{deploymentName: "api-prod", resourceType: "ecsService", resourceName: "payments-api-prod-service", limit: 3, clusterARN: "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments", requestID: responseRequestID}) {
 			t.Fatalf("unexpected provider request: %+v", gotRequest)
 		}
 
@@ -7306,6 +7346,34 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 		if tasksScope["available"] != true || tasksScope["requestedLimit"] != float64(3) || tasksScope["effectiveLimit"] != float64(3) || tasksScope["returnedTaskCount"] != float64(1) || tasksScope["truncationStatus"] != "not_truncated" {
 			t.Fatalf("unexpected tasksScope payload: %#v", tasksScope)
+		}
+	})
+
+	t.Run("rejects invalid ECS cluster selector before resource inspection provider lookup", func(t *testing.T) {
+		var overviewCalls int
+		var providerCalls int
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(context.Context, string) (catalog.DeploymentOverviewDetail, error) {
+				overviewCalls++
+				return catalog.DeploymentOverviewDetail{}, nil
+			},
+			OverviewDeploymentResourceInspection: func(context.Context, string, string, string, int) (resourceinspection.Result, error) {
+				providerCalls++
+				return resourceinspection.Result{}, nil
+			},
+		})
+
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=api-prod-service&clusterArn="+url.QueryEscape("arn:aws:ecs:ap-northeast-2:123456789012:service/cluster/name"), nil))
+		if resp.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if body := resp.Body.String(); body != "invalid clusterArn query\n" {
+			t.Fatalf("unexpected invalid clusterArn response: %q", body)
+		}
+		if overviewCalls != 0 || providerCalls != 0 {
+			t.Fatalf("expected invalid clusterArn to short-circuit providers, got overview=%d resourceInspection=%d", overviewCalls, providerCalls)
 		}
 	})
 

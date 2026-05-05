@@ -1424,7 +1424,8 @@ func TestAPIOptionsOverviewDeploymentResourceLogsWiresObserverRoleAndPlacement(t
 		t.Fatalf("expected overview deployment resource logs provider")
 	}
 
-	result, err := options.OverviewDeploymentResourceLogs(context.Background(), "api-prod", "ecsService", "api-prod-live-service", 7)
+	ctx := resourcelogs.ContextWithClusterARN(context.Background(), " arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments ")
+	result, err := options.OverviewDeploymentResourceLogs(ctx, "api-prod", "ecsService", "api-prod-live-service", 7)
 	if err != nil {
 		t.Fatalf("OverviewDeploymentResourceLogs returned error: %v", err)
 	}
@@ -1440,6 +1441,7 @@ func TestAPIOptionsOverviewDeploymentResourceLogsWiresObserverRoleAndPlacement(t
 		TargetAccountID:     "123456789012",
 		Region:              "ap-northeast-2",
 		ObserverRoleARN:     "arn:aws:iam::123456789012:role/TenetObserverRole",
+		ClusterARN:          "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
 		Limit:               7,
 	}
 	if !reflect.DeepEqual(provider.lastRequest, want) {
@@ -1851,7 +1853,8 @@ func TestAPIOptionsOverviewDeploymentResourceInspectionWiresObserverRoleAndPlace
 		t.Fatalf("expected overview deployment resource inspection provider")
 	}
 
-	result, err := options.OverviewDeploymentResourceInspection(context.Background(), "api-prod", "ecsService", "api-prod-live-service", 7)
+	ctx := resourceinspection.ContextWithClusterARN(context.Background(), " arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments ")
+	result, err := options.OverviewDeploymentResourceInspection(ctx, "api-prod", "ecsService", "api-prod-live-service", 7)
 	if err != nil {
 		t.Fatalf("OverviewDeploymentResourceInspection returned error: %v", err)
 	}
@@ -1867,6 +1870,7 @@ func TestAPIOptionsOverviewDeploymentResourceInspectionWiresObserverRoleAndPlace
 		TargetAccountID:          "123456789012",
 		Region:                   "ap-northeast-2",
 		ObserverRoleARN:          "arn:aws:iam::123456789012:role/TenetObserverRole",
+		ClusterARN:               "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
 		TaskSummaryLimit:         7,
 		AutoScalingInstanceLimit: 7,
 	}
