@@ -24,6 +24,20 @@ gh run view <run-id> --json databaseId,name,status,conclusion,headSha,url,jobs \
 gh run view <run-id> --log-failed
 ```
 
+Capture the check-run annotations too, because GitHub often puts the account-level billing or spending-limit reason there instead of in downloadable logs:
+
+```bash
+SHA=$(gh run view <run-id> --json headSha --jq .headSha)
+gh api "repos/:owner/:repo/commits/${SHA}/check-runs" \
+  --jq '.check_runs[] | select(.name == "Fast smoke" or .name == "Docker smoke scope") | {id,name,status,conclusion,details_url,annotations_count:(.annotations_count // 0)}'
+
+for id in $(gh api "repos/:owner/:repo/commits/${SHA}/check-runs" \
+  --jq '.check_runs[] | select(.name == "Fast smoke" or .name == "Docker smoke scope") | .id'); do
+  gh api "repos/:owner/:repo/check-runs/${id}/annotations" \
+    --jq '.[] | {path,start_line,annotation_level,message}'
+done
+```
+
 If the run is attached to a PR, also inspect the PR check rollup so reviewers can see that the failure happened before the lane reached repository commands:
 
 ```bash
