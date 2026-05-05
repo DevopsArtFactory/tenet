@@ -2346,6 +2346,31 @@ func TestSmokeScriptsLockBoundedASGResourceInspectionReleaseGuard(t *testing.T) 
 	}
 }
 
+func TestSmokeScriptsAssertRecentLogEmptyReasonReleaseGuard(t *testing.T) {
+	for _, script := range []string{"smoke-local.sh", "smoke-docker.sh"} {
+		body, err := os.ReadFile("../../scripts/" + script)
+		if err != nil {
+			t.Fatalf("read %s: %v", script, err)
+		}
+
+		text := string(body)
+		for _, fragment := range []string{
+			"def assert_recent_log_empty_reason_contract(label, payload):",
+			"no_recent_events",
+			"no_formatted_entries",
+			"emptyReason",
+			"assert_recent_log_empty_reason_contract(label, payload)",
+			"const resourceLogsEmptyReasonText = (reason) => {",
+			"Tenet reached the recent-log provider, but no events were found in the selected bounded window.",
+			"Tenet found provider records, but none could be formatted into operator-visible recent-log rows.",
+		} {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to lock recent-log empty-reason release guard fragment %q", script, fragment)
+			}
+		}
+	}
+}
+
 func TestSmokeDockerScriptLocksOperatorContextRoleDiagnostics(t *testing.T) {
 	body, err := os.ReadFile("../../scripts/smoke-docker.sh")
 	if err != nil {
@@ -2515,6 +2540,16 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert 'Lookup region' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Lookup region")
+	}
+	for _, fragment := range []string{
+		`assert_recent_log_empty_reason_contract(label, payload)`,
+		`assert "const resourceLogsEmptyReasonText = (reason) => {" in ui, ui`,
+		`assert 'Tenet reached the recent-log provider, but no events were found in the selected bounded window.' in ui, ui`,
+		`assert 'Tenet found provider records, but none could be formatted into operator-visible recent-log rows.' in ui, ui`,
+	} {
+		if !strings.Contains(text, fragment) {
+			t.Fatalf("expected smoke-local.sh to assert recent-log empty-reason shell fragment %q", fragment)
+		}
 	}
 	if !strings.Contains(text, "assert 'Observer role configured' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Observer role configured")
@@ -3135,6 +3170,7 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"with optional `instanceId={i-...}` to narrow the read to a specific current ASG member while preserving the default newest-instance behavior when omitted",
 			"Recent-log payloads also echo the selected rollout execution description as additive `resourceDescription`",
 			"Local and compose smoke lock this alongside the ECS task `containerName` selector, ASG console `entries[].instanceId` metadata, and selected ASG live-inspection `instanceId` echo",
+			"Local and compose smoke now also release-guard successful empty recent-log reads by requiring `emptyReason` (`no_recent_events` or `no_formatted_entries`) only when `available=true` and `entries=[]`",
 			"Known `unavailableReason` values render friendly operator copy, and unknown provider/internal codes fall back to generic troubleshooting guidance instead of being shown literally",
 			"capture the HTTP `Request-Id` response header next to the `lookupContext` object before escalating",
 			"the request ID anchors Tenet's structured API logs while the lookup context explains which region, control account, target account, and observer-role path the provider attempted",
@@ -3155,6 +3191,8 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"`ecsTask` reads recent CloudWatch log events for the exact ECS task ARN or task identifier",
 			"Local and smoke environments may still return explicit unavailable states such as `aws_unavailable`, `resource_not_found`, `cross_account_not_configured`, or `no_log_source`",
 			"shape-focused: it verifies the `resultScope` fields and conservative status vocabulary without requiring live AWS totals",
+			"assert that `available=true` / `entries=[]` payloads carry `emptyReason` (`no_recent_events` or `no_formatted_entries`)",
+			"populated successful payloads omit `emptyReason`, and unavailable payloads keep using explicit `unavailableReason`",
 			"not a pagination cursor or full log-total guarantee",
 			"Tenet does not issue extra AWS calls just to prove total rows beyond the bounded read",
 			"Operator troubleshooting examples",
