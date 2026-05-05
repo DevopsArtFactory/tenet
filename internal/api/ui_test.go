@@ -3835,6 +3835,7 @@ func TestOverviewDocsDescribeECSTaskScopeReleaseGuard(t *testing.T) {
 	files := map[string][]string{
 		"../../README.md": {
 			"operators can request a positive bounded sample with `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType=ecsService&resourceName={serviceName}&limit={n}`",
+			"optional nested `ec2Instance` host detail (`instanceState`, `instanceType`, `imageId`, `privateIpAddress`, `publicIpAddress`, `subnetId`, `vpcId`, `launchTime`) when the resolved EC2 instance identity and best-effort `DescribeInstances` lookup succeed",
 			"sibling `tasksScope` reports `available`, optional `requestedLimit`, `effectiveLimit`, `returnedTaskCount`, `truncationStatus`",
 			"Interpret the scope fields literally: `available=true` with `returnedTaskCount=0` is a complete empty task sample",
 			"`available=false` / `truncationStatus=not_applicable` means the service inspection succeeded but the optional task bridge could not be sampled",
@@ -3843,6 +3844,7 @@ func TestOverviewDocsDescribeECSTaskScopeReleaseGuard(t *testing.T) {
 		},
 		"../../docs/features/overview-dashboard.md": {
 			"`resource-inspection?resourceType=ecsService&resourceName={serviceName}&limit={n}` accepts an optional positive task-sample cap",
+			"`ecsService.tasks[]` rows can also add optional nested `ec2Instance` host details using the same EC2 detail shape",
 			"local and compose smoke also lock the embedded shell helper/copy that renders `ecsService.tasksScope` as either the normal `Task sample scope` note or the distinct `Task sample unavailable` warning",
 			"without needing live AWS task inventory",
 			"conservative `truncationStatus` semantics (`not_truncated` = complete bounded result, `truncated` = more matching tasks existed, `unknown` = Tenet reached the cap without provider proof either way, `not_applicable` = task bridge unavailable)",
@@ -3851,6 +3853,7 @@ func TestOverviewDocsDescribeECSTaskScopeReleaseGuard(t *testing.T) {
 		},
 		"../../docs/architecture/tenet-v1-overview-ui.md": {
 			"`resource-inspection?resourceType=ecsService&resourceName={serviceName}&limit={n}` accepts an optional positive task-sample cap",
+			"sampled task's resolved EC2 instance ID can be described",
 			"sibling `tasksScope` keeps the row cap and sampling state self-describing with `available`, optional `requestedLimit`, `effectiveLimit`, `returnedTaskCount`",
 			"`not_applicable` when the optional task bridge is unavailable",
 			"Empty successful samples remain `available=true` with `returnedTaskCount=0`",

@@ -7487,6 +7487,16 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 					TaskARN:              "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/task-1",
 					TaskID:               "task-1",
 					ContainerInstanceARN: "arn:aws:ecs:ap-northeast-2:123456789012:container-instance/payments/ci-task-1",
+					EC2InstanceID:        "i-0abc123def4567890",
+					EC2Instance: &resourceinspection.EC2InstanceDetail{
+						InstanceState:    "running",
+						InstanceType:     "m6i.large",
+						ImageID:          "ami-abc123",
+						PrivateIPAddress: "10.0.4.12",
+						SubnetID:         "subnet-abc123",
+						VPCID:            "vpc-abc123",
+						LaunchTime:       "2026-05-05T07:30:00Z",
+					},
 					CapacityProviderName: "payments-capacity",
 					AvailabilityZone:     "ap-northeast-2a",
 				}},
@@ -7593,11 +7603,29 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 		for key, want := range map[string]any{
 			"containerInstanceArn": "arn:aws:ecs:ap-northeast-2:123456789012:container-instance/payments/ci-task-1",
+			"ec2InstanceId":        "i-0abc123def4567890",
 			"capacityProviderName": "payments-capacity",
 			"availabilityZone":     "ap-northeast-2a",
 		} {
 			if task[key] != want {
 				t.Fatalf("expected task sample %s=%#v, got %#v", key, want, task)
+			}
+		}
+		ec2Instance, ok := task["ec2Instance"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected optional ECS service task ec2Instance host detail object, got %#v", task["ec2Instance"])
+		}
+		for key, want := range map[string]any{
+			"instanceState":    "running",
+			"instanceType":     "m6i.large",
+			"imageId":          "ami-abc123",
+			"privateIpAddress": "10.0.4.12",
+			"subnetId":         "subnet-abc123",
+			"vpcId":            "vpc-abc123",
+			"launchTime":       "2026-05-05T07:30:00Z",
+		} {
+			if ec2Instance[key] != want {
+				t.Fatalf("expected task ec2Instance %s=%#v, got %#v", key, want, ec2Instance)
 			}
 		}
 	})

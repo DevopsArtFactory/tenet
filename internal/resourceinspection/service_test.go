@@ -1509,7 +1509,7 @@ func TestECSServiceTaskSummariesReportsUnavailableScopeWhenTaskBridgeFails(t *te
 	)
 	client := &fakeECSServiceAPI{listTasksErr: resourceaws.NewUnavailableError(resourceaws.UnavailableReasonAWSUnavailable)}
 
-	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName, 5)
+	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, nil, clusterARN, serviceName, 5)
 	if err != nil {
 		t.Fatalf("expected task summary bridge failure to be represented in scope, got error: %v", err)
 	}
@@ -1577,7 +1577,7 @@ func TestECSServiceTaskSummariesDiscoversBoundedTasksWithContainerLogs(t *testin
 		},
 	}
 
-	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName, 0)
+	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, nil, clusterARN, serviceName, 0)
 	if err != nil {
 		t.Fatalf("ecsServiceTaskSummaries returned error: %v", err)
 	}
@@ -1622,7 +1622,7 @@ func TestECSServiceTaskSummariesHonorsRequestedLimit(t *testing.T) {
 		tasksByARN:        tasks,
 	}
 
-	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName, 2)
+	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, nil, clusterARN, serviceName, 2)
 	if err != nil {
 		t.Fatalf("ecsServiceTaskSummaries returned error: %v", err)
 	}
@@ -1654,7 +1654,7 @@ func TestECSServiceTaskSummariesReportsUnknownWhenExactlyAtLimit(t *testing.T) {
 		tasksByARN:        tasks,
 	}
 
-	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName, 0)
+	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, nil, clusterARN, serviceName, 0)
 	if err != nil {
 		t.Fatalf("ecsServiceTaskSummaries returned error: %v", err)
 	}
@@ -1684,7 +1684,7 @@ func TestECSServiceTaskSummariesOmitLogMetadataWhenTaskDefinitionLookupFails(t *
 		describeTaskDefinitionErr: errors.New("access denied to task definition"),
 	}
 
-	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName, 0)
+	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, nil, clusterARN, serviceName, 0)
 	if err != nil {
 		t.Fatalf("ecsServiceTaskSummaries returned error: %v", err)
 	}
@@ -1787,6 +1787,7 @@ func TestECSServiceTaskSummariesEnrichContainerInstanceEC2HostIdentity(t *testin
 		taskARN              = "arn:aws:ecs:ap-northeast-2:123456789012:task/worker/task-ec2"
 		containerInstanceARN = "arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker/ci-ec2"
 	)
+	launchTime := time.Date(2026, 5, 5, 7, 30, 0, 0, time.UTC)
 	client := &fakeECSServiceAPI{
 		taskARNsByDesired: map[ecstypes.DesiredStatus][]string{ecstypes.DesiredStatusRunning: {taskARN}},
 		tasksByARN: map[string]ecstypes.Task{taskARN: {
@@ -1800,8 +1801,22 @@ func TestECSServiceTaskSummariesEnrichContainerInstanceEC2HostIdentity(t *testin
 			containerInstanceARN: {ContainerInstanceArn: stringPtr(containerInstanceARN), Ec2InstanceId: stringPtr("i-0abc123def4567890")},
 		},
 	}
+	ec2Client := &fakeEC2InstanceAPI{output: &ec2.DescribeInstancesOutput{
+		Reservations: []ec2types.Reservation{{
+			Instances: []ec2types.Instance{{
+				InstanceId:       stringPtr("i-0abc123def4567890"),
+				State:            &ec2types.InstanceState{Name: ec2types.InstanceStateNameRunning},
+				InstanceType:     ec2types.InstanceTypeM6iLarge,
+				ImageId:          stringPtr("ami-abc123"),
+				PrivateIpAddress: stringPtr("10.0.4.12"),
+				SubnetId:         stringPtr("subnet-abc123"),
+				VpcId:            stringPtr("vpc-abc123"),
+				LaunchTime:       &launchTime,
+			}},
+		}},
+	}}
 
-	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName, 0)
+	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, ec2Client, clusterARN, serviceName, 0)
 	if err != nil {
 		t.Fatalf("ecsServiceTaskSummaries returned error: %v", err)
 	}
@@ -1811,8 +1826,31 @@ func TestECSServiceTaskSummariesEnrichContainerInstanceEC2HostIdentity(t *testin
 	if len(got) != 1 || got[0].EC2InstanceID != "i-0abc123def4567890" {
 		t.Fatalf("expected ECS service task sample to include EC2 host identity, got %+v", got)
 	}
+	if got[0].EC2Instance == nil || got[0].EC2Instance.InstanceState != "running" || got[0].EC2Instance.InstanceType != "m6i.large" || got[0].EC2Instance.ImageID != "ami-abc123" || got[0].EC2Instance.PrivateIPAddress != "10.0.4.12" || got[0].EC2Instance.SubnetID != "subnet-abc123" || got[0].EC2Instance.VPCID != "vpc-abc123" || got[0].EC2Instance.LaunchTime != "2026-05-05T07:30:00Z" {
+		t.Fatalf("expected sampled ECS service task row to reuse EC2InstanceDetail host fields, got %+v", got[0].EC2Instance)
+	}
 	if !reflect.DeepEqual(client.describeContainerInstanceInput, [][]string{{containerInstanceARN}}) {
 		t.Fatalf("expected one bounded DescribeContainerInstances lookup, got %+v", client.describeContainerInstanceInput)
+	}
+	if !reflect.DeepEqual(ec2Client.instanceIDs, []string{"i-0abc123def4567890"}) {
+		t.Fatalf("expected one bounded DescribeInstances lookup for the sampled task host, got %+v", ec2Client.instanceIDs)
+	}
+}
+
+func TestECSServiceTaskSummariesOmitEC2HostDetailOnMissingIdentityOrLookupFailure(t *testing.T) {
+	withoutIdentityClient := &fakeEC2InstanceAPI{}
+	withoutIdentity := enrichECSTaskSummariesFromEC2(context.Background(), withoutIdentityClient, []ECSTaskSummary{{TaskARN: "arn:task/fargate", TaskID: "fargate"}})
+	if len(withoutIdentity) != 1 || withoutIdentity[0].EC2Instance != nil || len(withoutIdentityClient.instanceIDs) != 0 {
+		t.Fatalf("expected missing service-task host identity to skip optional EC2 lookup, got rows=%+v calls=%+v", withoutIdentity, withoutIdentityClient.instanceIDs)
+	}
+
+	failureClient := &fakeEC2InstanceAPI{err: resourceaws.NewUnavailableError(resourceaws.UnavailableReasonAWSUnavailable)}
+	failure := enrichECSTaskSummariesFromEC2(context.Background(), failureClient, []ECSTaskSummary{{TaskARN: "arn:task/ec2", TaskID: "ec2", EC2InstanceID: " i-0abc123def4567890 "}})
+	if !reflect.DeepEqual(failureClient.instanceIDs, []string{"i-0abc123def4567890"}) {
+		t.Fatalf("expected one best-effort EC2 lookup before graceful omission, got %+v", failureClient.instanceIDs)
+	}
+	if len(failure) != 1 || failure[0].EC2Instance != nil || failure[0].EC2InstanceID != "i-0abc123def4567890" {
+		t.Fatalf("expected EC2 lookup failure to omit only nested service-task host detail and preserve host identity, got %+v", failure)
 	}
 }
 
