@@ -4583,7 +4583,8 @@ const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
   if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-  if (url === logsURL || url === limitedLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+  if (url === logsURL) return Promise.resolve({ ok: true, headers: { get: (name) => String(name).toLowerCase() === 'request-id' ? 'req-logs-871-success' : '' }, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+  if (url === limitedLogsURL) return Promise.resolve({ ok: false, status: 500, headers: { get: (name) => String(name).toLowerCase() === 'request-id' ? 'req-logs-871-error' : '' }, text: () => Promise.resolve('provider exploded') });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -4598,6 +4599,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
   const summaryText = collectText(document.getElementById('summary')).join(' | ');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
+  if (!accountsText.includes('Tenet request ID | req-logs-871-success')) throw new Error('expected recent-log unavailable card to render Tenet request ID metadata: ' + accountsText);
   if (!toolbarText.includes('Back to application')) throw new Error('expected resource page back link');
   const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
   const pageLinks = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
@@ -4669,6 +4671,9 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   logLimitSelect.dispatch('change');
   await settle(); await settle(); await settle();
   if (!fetchCalls.includes(limitedLogsURL)) throw new Error('expected selected log limit in recent-log fetch URL, got ' + JSON.stringify(fetchCalls));
+  const errorAccountsText = collectText(document.getElementById('accounts')).join(' | ');
+  if (!errorAccountsText.includes('Failed to load recent logs: resource logs request failed (500)')) throw new Error('expected recent-log non-auth error state: ' + errorAccountsText);
+  if (!errorAccountsText.includes('Tenet request ID · req-logs-871-error')) throw new Error('expected recent-log non-auth error to render Tenet request ID metadata: ' + errorAccountsText);
   const expectedLogLimitSearch = '?page=resource&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging&resourceType=codeDeployDeploymentGroup&resourceId=codeDeployDeploymentGroup%3A%3Apayments-api-staging+Deployment+Group%3A%3ALinear+traffic+shifting+deployment+group&resourceLogLimit=5';
   if (window.location.search !== expectedLogLimitSearch) throw new Error('expected log limit select to update bookmarkable resource query without audit limit, got ' + window.location.search);
   if (window.location.search.includes('&limit=')) throw new Error('expected resource log limit not to reuse audit limit param: ' + window.location.search);

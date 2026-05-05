@@ -1597,6 +1597,9 @@ assert "renderResourceDetailPage(detail, resourceState);" in ui, ui
 assert "params.set('resourceLogLimit', String(limit));" in ui, ui
 assert "syncResourcePanelLimitQueryParams(deploymentName, resource);" in ui, ui
 assert "Refresh recent logs" in ui, ui
+assert "const responseRequestID = (response) => {" in ui, ui
+assert "Tenet request ID" in ui, ui
+assert "tenetRequestId: requestId" in ui, ui
 assert "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')" in ui, ui
 assert "createNavLink(buildPageURL('resource', {" in ui, ui
 assert "No sibling linked resources are available for this application." in ui, ui
