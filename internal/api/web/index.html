@@ -5923,6 +5923,12 @@
           if (entry.metadata?.errors?.length) {
             row.append(createElement('div', 'detail-condition-meta', `Errors · ${entry.metadata.errors.join('; ')}`));
           }
+          const sourceLabels = [];
+          if (entry.source?.recordRoute) sourceLabels.push(`Source record · ${entry.source.recordRoute}`);
+          if (entry.source?.sourceRoute) sourceLabels.push(`Source detail · ${entry.source.sourceRoute}`);
+          if (sourceLabels.length) {
+            row.append(createElement('div', 'detail-condition-meta', sourceLabels.join(' · ')));
+          }
 
           const links = createElement('div', 'row-links row-links-shell');
           if (entry.deploymentName) {

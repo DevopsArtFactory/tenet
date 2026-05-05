@@ -230,7 +230,7 @@ Current behavior:
 - renders filter-aware empty-state copy when selected deployment/action filters or a limit cap match no persisted audit entries, while keeping the generic unfiltered empty state unchanged and pointing operators at `Clear audit filters` / `Clear audit controls`
 - keeps the current `/?page=audit...` URL/query state stable while leaving the current audit content visible with explicit loading/error copy during an in-place refresh of the same route
 - keeps entries newest-first even if the client receives an unsorted payload
-- shows explicit labels for action, deployment/app/environment context, timestamp, actor availability, and plan/apply identifiers
+- shows explicit labels for action, deployment/app/environment context, timestamp, actor availability, plan/apply identifiers, and per-row source routes (`Source record` plus `Source detail` when present)
 - keeps actor identity explicit rather than fabricated by rendering `Unavailable` / `Unknown` plus the server-authored reason text
 - exposes `_self` `Open application drill-down` and `_self` `Open drift view` links whenever `deploymentName` is present, plus `_self` `Open plan/apply workspace` when `planId` and `applyId` are present
 

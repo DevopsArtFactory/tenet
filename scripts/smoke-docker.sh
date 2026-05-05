@@ -1683,6 +1683,8 @@ for fragment in (
     "Immutable operator audit log from GET /v1/audit-logs. Newest entries first. Actor identity remains explicit when unavailable or unknown.",
     "Immutable plan preview and apply-request activity for deployment ${deploymentName} rendered from GET /v1/audit-logs.",
     "Current audit read: ${buildEmbeddedPageReadRoute(currentPageState)}",
+    "Source record · ${entry.source.recordRoute}",
+    "Source detail · ${entry.source.sourceRoute}",
     "No audit activity has been persisted yet.",
     "const auditFilterLabels = () => {",
     "const auditEmptyStateText = () => {",

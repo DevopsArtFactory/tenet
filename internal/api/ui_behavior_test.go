@@ -10547,6 +10547,7 @@ func TestAuditTimelinePageWithNodeHarness(t *testing.T) {
 				"source": map[string]any{
 					"kind":        "planPreview",
 					"recordRoute": "/v1/plans/plan_ready_123",
+					"sourceRoute": "/v1/overview/deployments/payments-api-prod",
 				},
 			},
 			{
@@ -10573,6 +10574,7 @@ func TestAuditTimelinePageWithNodeHarness(t *testing.T) {
 				"source": map[string]any{
 					"kind":        "applyRequest",
 					"recordRoute": "/v1/applies/apply_failed_123",
+					"sourceRoute": "/v1/plans/plan_ready_123",
 				},
 			},
 		},
@@ -10672,6 +10674,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!accountsText.includes('Jane Operator')) throw new Error('expected recorded actor details');
   if (!accountsText.includes('Unavailable')) throw new Error('expected unavailable actor state');
   if (!accountsText.includes('apply execution is disabled')) throw new Error('expected apply metadata in audit row');
+  if (!accountsText.includes('Source record · /v1/applies/apply_failed_123 · Source detail · /v1/plans/plan_ready_123')) throw new Error('expected apply audit row to expose persisted source routes, got ' + accountsText);
+  if (!accountsText.includes('Source record · /v1/plans/plan_ready_123 · Source detail · /v1/overview/deployments/payments-api-prod')) throw new Error('expected plan audit row to expose persisted source routes, got ' + accountsText);
   const limitSelect = document.querySelector('[data-toolbar-field="Limit"]');
   if (!limitSelect || limitSelect.value !== '2') throw new Error('expected audit limit select to reflect bookmarkable URL state');
   const refreshButton = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Refresh audit log');
