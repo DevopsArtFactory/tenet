@@ -4082,9 +4082,24 @@
         return `Lookup path · ${parts.length ? parts.join(' · ') : 'lookup context unavailable'}`;
       };
       const createResourceLogsLookupPathSummary = (lookupContext) => createElement('p', 'detail-section-copy', resourceLogsLookupPathText(lookupContext));
+      const resourcePanelFetchedAtText = (result) => {
+        const fetchedAt = result?.tenetFetchedAt;
+        if (!fetchedAt) return '';
+        const timestamp = fetchedAt instanceof Date ? fetchedAt : new Date(fetchedAt);
+        if (Number.isNaN(timestamp.getTime())) return '';
+        return timestamp.toLocaleString();
+      };
+      const withResourcePanelFetchedAt = (result) => {
+        if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
+        return { ...result, tenetFetchedAt: new Date() };
+      };
       const resourcePanelRequestIDFields = (result) => {
+        const fields = [];
         const requestId = String(result?.tenetRequestId || result?.requestId || '').trim();
-        return requestId ? [['Tenet request ID', requestId]] : [];
+        if (requestId) fields.push(['Tenet request ID', requestId]);
+        const fetchedAtText = result?.available === false ? '' : resourcePanelFetchedAtText(result);
+        if (fetchedAtText) fields.push(['Last refreshed', fetchedAtText]);
+        return fields;
       };
       const createResourcePanelRequestIDMeta = (error) => {
         const requestId = String(error?.requestId || '').trim();
@@ -4291,7 +4306,8 @@
 
         renderResourceLogsState(section, 'Loading recent logs…', '', [createResourceLogsLimitNote(selectedLimit)], [], loadingActions);
         const promise = fetchResourceLogs(deploymentName, resource, selectedLimit)
-          .then((result) => {
+          .then((rawResult) => {
+            const result = withResourcePanelFetchedAt(rawResult);
             const current = resourceLogStateByKey.get(logsKey);
             resourceLogStateByKey.set(logsKey, { status: 'ready', result });
             (current?.sections || []).forEach((target) => {
@@ -5215,7 +5231,8 @@
 
         renderResourceInspectionState(section, 'Loading live inspection…', '', [], [], loadingActions);
         const promise = fetchResourceInspection(deploymentName, resource, selectedLimit)
-          .then((result) => {
+          .then((rawResult) => {
+            const result = withResourcePanelFetchedAt(rawResult);
             const current = resourceInspectionStateByKey.get(inspectionKey);
             resourceInspectionStateByKey.set(inspectionKey, { status: 'ready', result });
             (current?.sections || []).forEach((target) => {
