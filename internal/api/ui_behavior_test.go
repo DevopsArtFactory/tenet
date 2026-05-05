@@ -4772,7 +4772,7 @@ async function render(search, inspectionResult, hash = '') {
   return { document, window, fetchCalls, text: collectText(document.getElementById('accounts')).join(' | '), toolbarText: collectText(document.getElementById('toolbar')).join(' | '), toolbarButtons: collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON'), links: collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A') };
 }
 (async () => {
-  const taskResult = { available: true, source: 'ecs_task', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, ecsTask: { taskArn, taskId: 'abc123', clusterArn, lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', startedAt: '2026-05-03T04:00:00Z', taskDefinition: 'worker:42', containers: [{ name: 'worker', image: 'ghcr.io/example/worker:v2', lastStatus: 'RUNNING', healthStatus: 'HEALTHY', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] } };
+  const taskResult = { available: true, source: 'ecs_task', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, ecsTask: { taskArn, taskId: 'abc123', clusterArn, lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containerInstanceArn: 'arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker-prod/ci-abc123', capacityProviderName: 'FARGATE_SPOT', availabilityZone: 'ap-northeast-2a', startedAt: '2026-05-03T04:00:00Z', taskDefinition: 'worker:42', containers: [{ name: 'worker', image: 'ghcr.io/example/worker:v2', lastStatus: 'RUNNING', healthStatus: 'HEALTHY', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] } };
   const scopedTaskSearch = '?page=resource&deployment=worker-prod&resourceType=ecsTask&resourceId=' + encodeURIComponent(taskResourceId) + '&containerName=worker&clusterArn=' + encodedClusterArn + '&resourceLogLimit=10';
   const taskRun = await render(scopedTaskSearch, taskResult, '#resource-recent-logs');
   const taskInspectionURL = '/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsTask&resourceName=' + encodeURIComponent(taskArn) + '&clusterArn=' + encodedClusterArn;
@@ -4783,8 +4783,19 @@ async function render(search, inspectionResult, hash = '') {
   if (!taskRun.text.includes('Task containers')) throw new Error('expected ECS task container section');
   if (!taskRun.text.includes('Container awslogs')) throw new Error('expected awslogs metadata');
   if (!taskRun.text.includes('/aws/ecs/worker / worker/abc123')) throw new Error('expected task awslogs group/stream');
+  if (!taskRun.text.includes('Container instance | arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker-prod/ci-abc123')) throw new Error('expected direct ECS task container instance placement evidence: ' + taskRun.text);
+  if (!taskRun.text.includes('Capacity provider | FARGATE_SPOT')) throw new Error('expected direct ECS task capacity provider placement evidence: ' + taskRun.text);
+  if (!taskRun.text.includes('Availability Zone | ap-northeast-2a')) throw new Error('expected direct ECS task availability-zone placement evidence: ' + taskRun.text);
   if (!taskRun.text.includes('Selected cluster | ' + clusterArn)) throw new Error('expected selected ECS task cluster to render in resource scope evidence: ' + taskRun.text);
   if (!taskRun.text.includes('Selected container | worker')) throw new Error('expected selected ECS task container to render in resource scope evidence: ' + taskRun.text);
+  const noPlacementTaskResult = JSON.parse(JSON.stringify(taskResult));
+  delete noPlacementTaskResult.ecsTask.containerInstanceArn;
+  delete noPlacementTaskResult.ecsTask.capacityProviderName;
+  delete noPlacementTaskResult.ecsTask.availabilityZone;
+  const noPlacementTaskRun = await render(scopedTaskSearch, noPlacementTaskResult, '#resource-live-inspection');
+  ['Container instance |', 'Capacity provider |', 'Availability Zone |'].forEach((fragment) => {
+    if (noPlacementTaskRun.text.includes(fragment)) throw new Error('expected absent direct ECS task placement fields to stay quiet for ' + fragment + ': ' + noPlacementTaskRun.text);
+  });
   const taskSectionLinks = collectNodes(taskRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#resource-'));
   ['#resource-live-inspection', '#resource-recent-logs'].forEach((hashSuffix) => {
     const link = taskSectionLinks.find((node) => node.href.endsWith(hashSuffix));
@@ -4802,11 +4813,14 @@ async function render(search, inspectionResult, hash = '') {
   if (taskRun.window.location.hash !== '#resource-recent-logs') throw new Error('expected ECS task clear action to preserve hash, got ' + taskRun.window.location.hash);
   if (!taskRun.fetchCalls.includes('/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsTask&resourceName=' + encodeURIComponent(taskArn) + '&containerName=worker&limit=10')) throw new Error('expected cleared ECS task recent-log fetch to omit clusterArn, got ' + JSON.stringify(taskRun.fetchCalls));
 
-  const serviceResult = { available: true, source: 'ecs_service', clusterArn, lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn, serviceName: 'worker-prod-service', status: 'ACTIVE', desiredCount: 1, runningCount: 1, pendingCount: 0, taskDefinition: 'worker:42', deployments: [], events: [], tasksScope: { effectiveLimit: 10, returnedTaskCount: 1, truncationStatus: 'not_truncated' }, tasks: [{ taskArn, taskId: 'abc123', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containers: [{ name: 'worker', lastStatus: 'RUNNING', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] }] } };
+  const serviceResult = { available: true, source: 'ecs_service', clusterArn, lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn, serviceName: 'worker-prod-service', status: 'ACTIVE', desiredCount: 1, runningCount: 1, pendingCount: 0, taskDefinition: 'worker:42', deployments: [], events: [], tasksScope: { effectiveLimit: 10, returnedTaskCount: 1, truncationStatus: 'not_truncated' }, tasks: [{ taskArn, taskId: 'abc123', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containerInstanceArn: 'arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker-prod/ci-sample', capacityProviderName: 'worker-capacity', availabilityZone: 'ap-northeast-2c', containers: [{ name: 'worker', lastStatus: 'RUNNING', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] }] } };
   const serviceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId) + '&clusterArn=' + encodedClusterArn, serviceResult);
   if (!serviceRun.text.includes('Recent ECS tasks')) throw new Error('expected ECS service task list');
   if (!serviceRun.text.includes('Task sample scope · returned 1 task(s) from effective limit 10 · not truncated')) throw new Error('expected ECS task sample scope text: ' + serviceRun.text);
   if (!serviceRun.text.includes('Task ARN · ' + taskArn)) throw new Error('expected ECS task ARN in service inspection');
+  if (!serviceRun.text.includes('Container instance · arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker-prod/ci-sample')) throw new Error('expected ECS service task sample container instance placement evidence: ' + serviceRun.text);
+  if (!serviceRun.text.includes('Capacity provider · worker-capacity')) throw new Error('expected ECS service task sample capacity provider placement evidence: ' + serviceRun.text);
+  if (!serviceRun.text.includes('Availability Zone · ap-northeast-2c')) throw new Error('expected ECS service task sample availability-zone placement evidence: ' + serviceRun.text);
   if (!serviceRun.text.includes('Selected cluster | ' + clusterArn)) throw new Error('expected selected ECS cluster to render in resource scope evidence: ' + serviceRun.text);
   if (!serviceRun.text.includes('Selected cluster · ' + clusterArn)) throw new Error('expected selected ECS cluster to render in quick navigation: ' + serviceRun.text);
   const clusterSectionLinks = collectNodes(serviceRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#resource-'));
@@ -4869,6 +4883,15 @@ async function render(search, inspectionResult, hash = '') {
   const logsLink = serviceRun.links.find((node) => node.textContent === 'Open task recent logs');
   if (!liveLink || liveLink.target !== '_self' || !liveLink.href.includes('resourceType=ecsTask') || !liveLink.href.includes('clusterArn=' + encodedClusterArn) || !liveLink.href.endsWith('#resource-live-inspection')) throw new Error('expected selected-cluster task live-inspection handoff, got ' + (liveLink?.href || '<missing>'));
   if (!logsLink || logsLink.target !== '_self' || !logsLink.href.includes('resourceType=ecsTask') || !logsLink.href.includes('clusterArn=' + encodedClusterArn) || !logsLink.href.endsWith('#resource-recent-logs')) throw new Error('expected selected-cluster task recent-logs handoff, got ' + (logsLink?.href || '<missing>'));
+
+  const noPlacementServiceResult = JSON.parse(JSON.stringify(serviceResult));
+  delete noPlacementServiceResult.ecsService.tasks[0].containerInstanceArn;
+  delete noPlacementServiceResult.ecsService.tasks[0].capacityProviderName;
+  delete noPlacementServiceResult.ecsService.tasks[0].availabilityZone;
+  const noPlacementServiceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId) + '&clusterArn=' + encodedClusterArn, noPlacementServiceResult);
+  ['Container instance ·', 'Capacity provider ·', 'Availability Zone ·'].forEach((fragment) => {
+    if (noPlacementServiceRun.text.includes(fragment)) throw new Error('expected absent ECS service task placement fields to stay quiet for ' + fragment + ': ' + noPlacementServiceRun.text);
+  });
 
   const emptyServiceResult = JSON.parse(JSON.stringify(serviceResult));
   emptyServiceResult.ecsService.tasks = [];
