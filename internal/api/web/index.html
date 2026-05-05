@@ -4484,6 +4484,18 @@
           containerName,
         }), 'Open container recent logs', '_self');
       };
+      const appendECSTaskPlacementRows = (meta, task) => {
+        [
+          ['Container instance', task?.containerInstanceArn],
+          ['Capacity provider', task?.capacityProviderName],
+          ['Availability Zone', task?.availabilityZone],
+        ]
+          .map(([label, value]) => [label, String(value || '').trim()])
+          .filter(([, value]) => value)
+          .forEach(([label, value]) => {
+            meta.append(createElement('span', 'detail-condition-meta', `${label} · ${value}`));
+          });
+      };
       const appendECSTaskContainerRows = (item, containers, deploymentName = '', task = null) => {
         if (!Array.isArray(containers) || !containers.length) return;
         const containerSection = createElement('div', 'detail-history-meta');
@@ -4523,6 +4535,7 @@
         if (task?.startedAt) meta.append(createElement('span', 'detail-condition-meta', `Started at · ${task.startedAt}`));
         if (task?.stoppedAt) meta.append(createElement('span', 'detail-condition-meta', `Stopped at · ${task.stoppedAt}`));
         if (task?.stoppedReason) meta.append(createElement('span', 'detail-condition-meta', `Stopped reason · ${task.stoppedReason}`));
+        appendECSTaskPlacementRows(meta, taskWithScope);
         if (taskWithScope?.clusterArn) meta.append(createElement('span', 'detail-condition-meta', `Cluster ARN · ${taskWithScope.clusterArn}`));
         if (task?.taskDefinition) meta.append(createElement('span', 'detail-condition-meta', `Task definition · ${task.taskDefinition}`));
         item.append(meta);
@@ -5006,7 +5019,7 @@
       const renderECSTaskInspection = (section, deploymentName, resource, result) => {
         const task = result?.ecsTask;
         const actions = createResourceInspectionActions(section, deploymentName, resource);
-        const metadata = createLookupContextGrid(result?.lookupContext, [
+        const taskFields = [
           ['Inspection source', metricValue(result?.source)],
           ['Task ID', textOrDash(task?.taskId)],
           ['Task ARN', textOrDash(task?.taskArn)],
@@ -5017,9 +5030,20 @@
           ['Started at', textOrDash(task?.startedAt)],
           ['Stopped at', textOrDash(task?.stoppedAt)],
           ['Stopped reason', textOrDash(task?.stoppedReason)],
+        ];
+        [
+          ['Container instance', task?.containerInstanceArn],
+          ['Capacity provider', task?.capacityProviderName],
+          ['Availability Zone', task?.availabilityZone],
+        ]
+          .map(([label, value]) => [label, String(value || '').trim()])
+          .filter(([, value]) => value)
+          .forEach(([label, value]) => taskFields.push([label, value]));
+        taskFields.push(
           ['Task definition', textOrDash(task?.taskDefinition)],
           ['Cluster ARN', textOrDash(task?.clusterArn)],
-        ]);
+        );
+        const metadata = createLookupContextGrid(result?.lookupContext, taskFields);
         const containersSection = createInspectionListSection(
           'Task containers',
           task?.containers || [],
