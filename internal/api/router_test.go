@@ -6364,6 +6364,59 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 				t.Fatalf("expected lookupContext[%q]=%#v, got %#v", key, want, got)
 			}
 		}
+		if _, ok := raw["emptyReason"]; ok {
+			t.Fatalf("expected emptyReason to be omitted for populated recent-log responses, got %#v", raw)
+		}
+	})
+
+	t.Run("preserves empty reason for successful empty payload", func(t *testing.T) {
+		expected := resourcelogs.Result{
+			DeploymentName: "api-prod",
+			ResourceType:   "ecsService",
+			ResourceName:   "api-prod-service",
+			Available:      true,
+			Source:         resourcelogs.SourceCloudWatch,
+			Entries:        []resourcelogs.Entry{},
+			ResultScope: &resourcelogs.ResultScope{
+				EffectiveLimit:     resourcelogs.DefaultMaxEntries,
+				ReturnedEntryCount: 0,
+				TruncationStatus:   resourcelogs.ScopeTruncationStatusNotTruncated,
+			},
+			EmptyReason: resourcelogs.EmptyReasonNoRecentEvents,
+		}
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "api-prod" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceLogs: func(_ context.Context, deploymentName, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
+				if deploymentName != "api-prod" || resourceType != "ecsService" || resourceName != "api-prod-service" {
+					t.Fatalf("unexpected provider request: deployment=%q type=%q name=%q", deploymentName, resourceType, resourceName)
+				}
+				return expected, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=api-prod-service", nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw empty resource logs payload: %v", err)
+		}
+		if raw["emptyReason"] != resourcelogs.EmptyReasonNoRecentEvents {
+			t.Fatalf("expected emptyReason %q, got %#v", resourcelogs.EmptyReasonNoRecentEvents, raw)
+		}
+		if raw["unavailableReason"] != "" {
+			t.Fatalf("expected unavailableReason to remain empty on available payload, got %#v", raw["unavailableReason"])
+		}
 	})
 
 	t.Run("passes optional instance selector into provider context and raw payload", func(t *testing.T) {

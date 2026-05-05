@@ -262,6 +262,7 @@ func TestServiceRecent(t *testing.T) {
 			Available:      true,
 			Source:         SourceCloudWatch,
 			Entries:        []Entry{},
+			EmptyReason:    EmptyReasonNoFormattedEntries,
 		}
 		if !reflect.DeepEqual(result, want) {
 			t.Fatalf("unexpected empty ECS resource logs result: %+v", result)
@@ -495,6 +496,7 @@ func TestServiceRecent(t *testing.T) {
 			Available:      true,
 			Source:         SourceEC2Console,
 			Entries:        []Entry{},
+			EmptyReason:    EmptyReasonNoFormattedEntries,
 		}
 		if !reflect.DeepEqual(result, want) {
 			t.Fatalf("unexpected empty ASG resource logs result: %+v", result)
@@ -854,6 +856,7 @@ func TestServiceRecent(t *testing.T) {
 			Available:      true,
 			Source:         SourceCodeDeploy,
 			Entries:        []Entry{},
+			EmptyReason:    EmptyReasonNoRecentEvents,
 		}
 		if !reflect.DeepEqual(result, want) {
 			t.Fatalf("unexpected empty CodeDeploy result: %+v", result)
