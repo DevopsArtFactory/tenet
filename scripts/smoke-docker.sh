@@ -803,6 +803,17 @@ drift_ui = read_text("DRIFT_UI_PATH")
 audit_ui = read_text("AUDIT_UI_PATH")
 plan_apply_ui = read_text("PLAN_APPLY_UI_PATH")
 
+def assert_recent_log_empty_reason_contract(label, payload):
+    entries = payload.get("entries") or []
+    assert isinstance(entries, list), {label: payload}
+    if payload.get("available") is True:
+        if entries:
+            assert "emptyReason" not in payload, {label: payload}
+        else:
+            assert payload.get("emptyReason") in {"no_recent_events", "no_formatted_entries"}, {label: payload}
+    else:
+        assert isinstance(payload.get("unavailableReason"), str) and payload["unavailableReason"], {label: payload}
+
 assert summary["accountCount"] == 2, summary
 assert summary["environmentCount"] == 2, summary
 assert summary["deploymentCount"] == 3, summary
@@ -1036,6 +1047,21 @@ if ecs_task_resource_logs["available"]:
     assert ecs_task_resource_logs.get("source") == "cloudwatch", ecs_task_resource_logs
 else:
     assert ecs_task_resource_logs.get("unavailableReason") in {"aws_unavailable", "resource_not_found", "cross_account_not_configured", "no_log_source"}, ecs_task_resource_logs
+for label, payload in (
+    ("worker_resource_logs", worker_resource_logs),
+    ("limited_worker_resource_logs", limited_worker_resource_logs),
+    ("ecs_task_resource_logs", ecs_task_resource_logs),
+    ("codedeploy_application_resource_logs", codedeploy_application_resource_logs),
+    ("test_listener_resource_logs", test_listener_resource_logs),
+    ("bootstrap_resource_logs", bootstrap_resource_logs),
+    ("selected_bootstrap_resource_logs", selected_bootstrap_resource_logs),
+    ("traffic_resource_logs", traffic_resource_logs),
+    ("production_listener_rule_resource_logs", production_listener_rule_resource_logs),
+    ("active_target_group_resource_logs", active_target_group_resource_logs),
+    ("candidate_target_group_resource_logs", candidate_target_group_resource_logs),
+):
+    assert_recent_log_empty_reason_contract(label, payload)
+
 assert ecs_task_resource_inspection["deploymentName"] == "worker-prod", ecs_task_resource_inspection
 assert ecs_task_resource_inspection["resourceType"] == "ecsTask", ecs_task_resource_inspection
 assert ecs_task_resource_inspection["resourceName"] == "arn:aws:ecs:ap-northeast-2:123456789012:task/worker/abc123", ecs_task_resource_inspection
@@ -1532,6 +1558,9 @@ for fragment in (
     "Lookup region",
     "Observer role configured",
     "This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet.",
+    "const resourceLogsEmptyReasonText = (reason) => {",
+    "Tenet reached the recent-log provider, but no events were found in the selected bounded window.",
+    "Tenet found provider records, but none could be formatted into operator-visible recent-log rows.",
     "Resolved backing resource",
     "actions.push(createNavLink(buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName }), 'Open field-level drift', '_self'));",
     "Plan preview actions",
