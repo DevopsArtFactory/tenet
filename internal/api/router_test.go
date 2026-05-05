@@ -7307,6 +7307,86 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 	})
 
+	t.Run("returns selected ASG inspection EC2 detail raw fields", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(context.Context, string) (catalog.DeploymentOverviewDetail, error) {
+				return catalog.DeploymentOverviewDetail{Name: "api-prod"}, nil
+			},
+			OverviewDeploymentResourceInspection: func(ctx context.Context, name, resourceType, resourceName string, limit int) (resourceinspection.Result, error) {
+				instanceID := resourceinspection.InstanceIDFromContext(ctx)
+				return resourceinspection.Result{
+					DeploymentName: name,
+					ResourceType:   resourceType,
+					ResourceName:   resourceName,
+					InstanceID:     instanceID,
+					Available:      true,
+					Source:         resourceinspection.SourceAutoScalingGroup,
+					AutoScalingGroup: &resourceinspection.AutoScalingInspection{
+						AutoScalingGroupName: resourceName,
+						Instances: []resourceinspection.AutoScalingGroupInstanceSummary{{
+							InstanceID:           instanceID,
+							AvailabilityZone:     "ap-northeast-2a",
+							LifecycleState:       "InService",
+							HealthStatus:         "Healthy",
+							ProtectedFromScaleIn: true,
+							EC2Instance: &resourceinspection.EC2InstanceDetail{
+								InstanceState:    "running",
+								InstanceType:     "m6i.large",
+								ImageID:          "ami-abc123",
+								PrivateIPAddress: "10.0.1.24",
+								PublicIPAddress:  "203.0.113.24",
+								SubnetID:         "subnet-abc123",
+								VPCID:            "vpc-abc123",
+								LaunchTime:       "2026-05-05T07:30:00Z",
+							},
+						}},
+					},
+				}, nil
+			},
+		})
+
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=api-prod-candidate&instanceId=i-0abc123def4567890", nil))
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected selected ASG resource inspection EC2 detail to pass, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		var got map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode selected ASG EC2 detail payload: %v", err)
+		}
+		autoScalingGroup, ok := got["autoScalingGroup"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected raw autoScalingGroup object, got %#v", got)
+		}
+		instances, ok := autoScalingGroup["instances"].([]any)
+		if !ok || len(instances) != 1 {
+			t.Fatalf("expected one selected ASG instance in raw payload, got %#v", autoScalingGroup["instances"])
+		}
+		instance, ok := instances[0].(map[string]any)
+		if !ok {
+			t.Fatalf("expected selected ASG instance object, got %#v", instances[0])
+		}
+		ec2Instance, ok := instance["ec2Instance"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected selected ASG instance ec2Instance object, got %#v", instance)
+		}
+		for key, want := range map[string]string{
+			"instanceState":    "running",
+			"instanceType":     "m6i.large",
+			"imageId":          "ami-abc123",
+			"privateIpAddress": "10.0.1.24",
+			"publicIpAddress":  "203.0.113.24",
+			"subnetId":         "subnet-abc123",
+			"vpcId":            "vpc-abc123",
+			"launchTime":       "2026-05-05T07:30:00Z",
+		} {
+			if ec2Instance[key] != want {
+				t.Fatalf("expected ec2Instance.%s=%q, got %#v", key, want, ec2Instance)
+			}
+		}
+	})
+
 	t.Run("rejects invalid ASG inspection instanceId before provider lookup", func(t *testing.T) {
 		for _, rawInstanceID := range []string{"not-an-instance", "i-", "i-abc/def"} {
 			t.Run(rawInstanceID, func(t *testing.T) {

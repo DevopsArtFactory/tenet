@@ -463,7 +463,7 @@ func TestServiceInspect(t *testing.T) {
 					LaunchTemplate:                &AutoScalingLaunchTemplateSummary{Name: "payments-api-prod-candidate", Version: "$Default"},
 					Instances: []AutoScalingGroupInstanceSummary{
 						{InstanceID: "i-0oldermember"},
-						{InstanceID: "i-0abc123def4567890", AvailabilityZone: "ap-northeast-2a", LifecycleState: "InService"},
+						{InstanceID: "i-0abc123def4567890", AvailabilityZone: "ap-northeast-2a", LifecycleState: "InService", EC2Instance: &EC2InstanceDetail{InstanceState: "running", InstanceType: "m6i.large", ImageID: "ami-abc123"}},
 					},
 				}, nil
 			},
@@ -490,6 +490,10 @@ func TestServiceInspect(t *testing.T) {
 		}
 		if result.UserDataBootstrapSource == nil || result.UserDataBootstrapSource.LaunchTemplate == nil {
 			t.Fatalf("expected bootstrap-source inspection body to preserve launch-template evidence, got %+v", result.UserDataBootstrapSource)
+		}
+		selected := result.UserDataBootstrapSource.SelectedInstance
+		if selected == nil || selected.InstanceID != "i-0abc123def4567890" || selected.EC2Instance == nil || selected.EC2Instance.InstanceType != "m6i.large" || selected.EC2Instance.ImageID != "ami-abc123" {
+			t.Fatalf("expected bootstrap-source body to include selected ASG member EC2 detail, got %+v", result.UserDataBootstrapSource)
 		}
 	})
 
@@ -1828,6 +1832,74 @@ func TestAutoScalingObservedLaunchTemplateFromGroupUsesPrimaryLaunchTemplate(t *
 	}
 }
 
+func TestEnrichSelectedAutoScalingInstanceFromEC2(t *testing.T) {
+	launchTime := time.Date(2026, 5, 5, 7, 30, 0, 0, time.UTC)
+	client := &fakeEC2InstanceAPI{
+		output: &ec2.DescribeInstancesOutput{
+			Reservations: []ec2types.Reservation{{
+				Instances: []ec2types.Instance{{
+					InstanceId:       stringPtr("i-0abc123def4567890"),
+					State:            &ec2types.InstanceState{Name: ec2types.InstanceStateNameRunning},
+					InstanceType:     ec2types.InstanceTypeM6iLarge,
+					ImageId:          stringPtr("ami-abc123"),
+					PrivateIpAddress: stringPtr("10.0.1.24"),
+					PublicIpAddress:  stringPtr("203.0.113.24"),
+					SubnetId:         stringPtr("subnet-abc123"),
+					VpcId:            stringPtr("vpc-abc123"),
+					LaunchTime:       &launchTime,
+				}},
+			}},
+		},
+	}
+	detail := AutoScalingInspection{Instances: []AutoScalingGroupInstanceSummary{
+		{InstanceID: "i-0other"},
+		{InstanceID: "i-0abc123def4567890", AvailabilityZone: "ap-northeast-2a", LifecycleState: "InService"},
+	}}
+
+	got := enrichSelectedAutoScalingInstanceFromEC2(context.Background(), client, detail, " i-0abc123def4567890 ")
+	if !reflect.DeepEqual(client.instanceIDs, []string{"i-0abc123def4567890"}) {
+		t.Fatalf("expected selected EC2 DescribeInstances call, got %+v", client.instanceIDs)
+	}
+	if got.Instances[0].EC2Instance != nil {
+		t.Fatalf("expected omitted EC2 detail on non-selected sample row, got %+v", got.Instances[0])
+	}
+	selected := got.Instances[1].EC2Instance
+	if selected == nil {
+		t.Fatalf("expected selected instance EC2 detail, got %+v", got.Instances[1])
+	}
+	if selected.InstanceState != "running" || selected.InstanceType != "m6i.large" || selected.ImageID != "ami-abc123" || selected.PrivateIPAddress != "10.0.1.24" || selected.PublicIPAddress != "203.0.113.24" || selected.SubnetID != "subnet-abc123" || selected.VPCID != "vpc-abc123" || selected.LaunchTime != "2026-05-05T07:30:00Z" {
+		t.Fatalf("unexpected selected EC2 detail: %+v", selected)
+	}
+}
+
+func TestEnrichSelectedAutoScalingInstanceFromEC2PreservesASGOnFailure(t *testing.T) {
+	client := &fakeEC2InstanceAPI{err: resourceaws.NewUnavailableError(resourceaws.UnavailableReasonAWSUnavailable)}
+	detail := AutoScalingInspection{Instances: []AutoScalingGroupInstanceSummary{{InstanceID: "i-0abc123def4567890", LifecycleState: "InService"}}}
+
+	got := enrichSelectedAutoScalingInstanceFromEC2(context.Background(), client, detail, "i-0abc123def4567890")
+	if !reflect.DeepEqual(got, detail) {
+		t.Fatalf("expected ASG membership detail to remain available when EC2 detail lookup fails, got %+v", got)
+	}
+	if !reflect.DeepEqual(client.instanceIDs, []string{"i-0abc123def4567890"}) {
+		t.Fatalf("expected one EC2 lookup attempt before preserving ASG detail, got %+v", client.instanceIDs)
+	}
+}
+
+func TestEnrichSelectedAutoScalingInstanceFromEC2SkipsOmittedOrMissingSelector(t *testing.T) {
+	client := &fakeEC2InstanceAPI{}
+	detail := AutoScalingInspection{Instances: []AutoScalingGroupInstanceSummary{{InstanceID: "i-0present123456789"}}}
+
+	if got := enrichSelectedAutoScalingInstanceFromEC2(context.Background(), client, detail, ""); !reflect.DeepEqual(got, detail) {
+		t.Fatalf("expected omitted selector to preserve bounded ASG sample, got %+v", got)
+	}
+	if got := enrichSelectedAutoScalingInstanceFromEC2(context.Background(), client, detail, "i-0missing12345678"); !reflect.DeepEqual(got, detail) {
+		t.Fatalf("expected non-member selector to preserve ASG evidence for caller-level unavailable handling, got %+v", got)
+	}
+	if len(client.instanceIDs) != 0 {
+		t.Fatalf("expected omitted/missing selectors to skip EC2 calls, got %+v", client.instanceIDs)
+	}
+}
+
 func TestExtractLaunchTemplateBootstrapSourceSupportsCommonMarkers(t *testing.T) {
 	t.Run("environment assignment", func(t *testing.T) {
 		encoded := base64.StdEncoding.EncodeToString([]byte("#!/bin/bash\nexport TENET_BOOTSTRAP_SOURCE=file:userdata/api-prod.sh\n"))
@@ -1997,6 +2069,12 @@ type fakeEC2LaunchTemplateAPI struct {
 	err    error
 }
 
+type fakeEC2InstanceAPI struct {
+	instanceIDs []string
+	output      *ec2.DescribeInstancesOutput
+	err         error
+}
+
 func (f *fakeECSServiceAPI) ListClusters(context.Context, *ecs.ListClustersInput, ...func(*ecs.Options)) (*ecs.ListClustersOutput, error) {
 	f.listCalls++
 	return &ecs.ListClustersOutput{ClusterArns: append([]string(nil), f.clusterARNs...)}, nil
@@ -2052,6 +2130,17 @@ func (f *fakeEC2LaunchTemplateAPI) DescribeLaunchTemplateVersions(_ context.Cont
 	}
 	if f.output == nil {
 		return &ec2.DescribeLaunchTemplateVersionsOutput{}, nil
+	}
+	return f.output, nil
+}
+
+func (f *fakeEC2InstanceAPI) DescribeInstances(_ context.Context, input *ec2.DescribeInstancesInput, _ ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error) {
+	f.instanceIDs = append([]string(nil), input.InstanceIds...)
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.output == nil {
+		return &ec2.DescribeInstancesOutput{}, nil
 	}
 	return f.output, nil
 }
