@@ -220,6 +220,7 @@
         resourceId: '',
         auditAction: '',
         auditLimit: 0,
+        eventLimit: 10,
         resourceLogLimit: 0,
         resourceInspectionLimit: 10,
       };
@@ -2070,6 +2071,17 @@
         const limit = Number.parseInt(String(value || '').trim(), 10);
         return Number.isInteger(limit) && limit > 0 ? limit : 0;
       };
+      const defaultDeploymentEventsLimit = 10;
+      const normalizeDeploymentEventsLimit = (value) => {
+        const limit = Number.parseInt(String(value || '').trim(), 10);
+        return Number.isInteger(limit) && limit > 0 ? limit : defaultDeploymentEventsLimit;
+      };
+      const deploymentEventsLimitOptions = [
+        { value: '5', label: '5 events' },
+        { value: '10', label: '10 events (default)' },
+        { value: '25', label: '25 events' },
+        { value: '50', label: '50 events' },
+      ];
       const auditLimitSelectOptions = (limit) => {
         const presets = [1, 2, 5, 10, 20, 50];
         const options = [{ value: '', label: 'Default window' }];
@@ -2106,6 +2118,7 @@
           containerName: params.get('containerName') || '',
           instanceId: params.get('instanceId') || '',
           clusterArn: params.get('clusterArn') || '',
+          eventLimit: normalizeDeploymentEventsLimit(params.get('eventLimit') || ''),
           resourceLogLimit: normalizeResourceLogsLimit(params.get('resourceLogLimit') || ''),
           resourceInspectionLimit: normalizeResourceInspectionTaskLimit(params.get('resourceInspectionLimit') || ''),
           auditAction: normalizeAuditAction(params.get('action') || ''),
@@ -2230,6 +2243,12 @@
         if (page === 'audit' && currentPageState.page === 'audit') {
           syncAuditQueryParams(params, currentPageState);
         }
+        if (page === 'application' && currentPageState.page === 'application') {
+          const eventLimit = normalizeDeploymentEventsLimit(currentPageState.eventLimit);
+          if (eventLimit !== defaultDeploymentEventsLimit) {
+            params.set('eventLimit', String(eventLimit));
+          }
+        }
         Object.entries(extras).forEach(([key, value]) => {
           if (key === 'limit') {
             const limit = normalizeAuditLimit(value);
@@ -2237,6 +2256,15 @@
               params.set('limit', String(limit));
             } else {
               params.delete('limit');
+            }
+            return;
+          }
+          if (key === 'eventLimit') {
+            const limit = normalizeDeploymentEventsLimit(value);
+            if (limit !== defaultDeploymentEventsLimit) {
+              params.set('eventLimit', String(limit));
+            } else {
+              params.delete('eventLimit');
             }
             return;
           }
@@ -5363,15 +5391,14 @@
           failure: 'audit log request failed',
         });
       };
-      const defaultDeploymentEventsLimit = 10;
       const buildDeploymentEventsReadRoute = (deploymentName, { limit = defaultDeploymentEventsLimit } = {}) => {
         const route = `/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`;
-        const numericLimit = Number(limit);
-        if (!Number.isFinite(numericLimit) || numericLimit <= 0) return route;
-        return `${route}?limit=${Math.floor(numericLimit)}`;
+        const normalizedLimit = normalizeDeploymentEventsLimit(limit);
+        return `${route}?limit=${normalizedLimit}`;
       };
-      const deploymentEventsReadRoute = (deploymentName) => `GET ${buildDeploymentEventsReadRoute(deploymentName)}`;
-      const fetchDeploymentEvents = (deploymentName) => fetchEmbeddedReadRouteJSON(buildDeploymentEventsReadRoute(deploymentName), {
+      const deploymentEventsReadRoute = (deploymentName, limit = currentPageState.eventLimit) => `GET ${buildDeploymentEventsReadRoute(deploymentName, { limit })}`;
+      const deploymentEventsCacheKey = (deploymentName, limit = currentPageState.eventLimit) => `${deploymentName || ''}::limit=${normalizeDeploymentEventsLimit(limit)}`;
+      const fetchDeploymentEvents = (deploymentName, limit = currentPageState.eventLimit) => fetchEmbeddedReadRouteJSON(buildDeploymentEventsReadRoute(deploymentName, { limit }), {
         unavailable: 'deployment events unavailable',
         failure: 'deployment events request failed',
       });
@@ -5421,7 +5448,7 @@
         }
         return null;
       };
-      const createDeploymentEventsIntro = () => createElement('div', 'detail-section-copy', 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events?limit=10. Tenet shows the latest bounded window, newest first; open the raw route with an explicit limit when you need a different slice of controller history. This is not audit/auth history.');
+      const createDeploymentEventsIntro = (limit = currentPageState.eventLimit) => createElement('div', 'detail-section-copy', `Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events?limit=${normalizeDeploymentEventsLimit(limit)}. Tenet shows the selected bounded window, newest first; use Event window to change how much controller history this panel reads without leaving the application drill-down. This is not audit/auth history.`);
       const sortTimelineEvents = (events) => (events || [])
         .map((event, index) => ({
           event,
@@ -5471,8 +5498,31 @@
         if (!fields.length) return null;
         return createElement('span', 'detail-condition-meta', `GitHub refresh evidence · ${fields.join(' · ')}`);
       };
+      const syncApplicationEventLimitPageState = (deploymentName, limit) => {
+        const nextLimit = normalizeDeploymentEventsLimit(limit);
+        currentPageState = {
+          ...currentPageState,
+          page: 'application',
+          deployment: deploymentName || currentPageState.deployment || '',
+          eventLimit: nextLimit,
+        };
+        const nextURL = buildPageURL('application', { deployment: currentPageState.deployment, eventLimit: nextLimit });
+        history.replaceState({}, '', `${nextURL}${window.location.hash || ''}`);
+      };
+      const createDeploymentEventsLimitControl = (section, deploymentName, isLoading = false) => createSelect(
+        'Event window',
+        String(normalizeDeploymentEventsLimit(currentPageState.eventLimit)),
+        deploymentEventsLimitOptions,
+        (event) => {
+          const nextLimit = normalizeDeploymentEventsLimit(event.target.value);
+          syncApplicationEventLimitPageState(deploymentName, nextLimit);
+          renderDeploymentEventsSection(section, deploymentName, { force: true, limit: nextLimit }).catch(() => {});
+        },
+        { disabled: isLoading || !deploymentName },
+      );
       const createDeploymentEventsActions = (section, deploymentName, isLoading = false, result = null) => {
         const actions = [
+          createDeploymentEventsLimitControl(section, deploymentName, isLoading),
           createRefreshButton(
             'Refresh runtime events',
             isLoading || !deploymentName,
@@ -5484,9 +5534,9 @@
         }
         return actions;
       };
-      const renderDeploymentEventsState = (section, deploymentName, text, className = '', detailText = '', isLoading = false) => {
+      const renderDeploymentEventsState = (section, deploymentName, text, className = '', detailText = '', isLoading = false, limit = currentPageState.eventLimit) => {
         const heading = createDetailSectionHeader('Controller runtime events', createDeploymentEventsActions(section, deploymentName, isLoading));
-        const intro = createDeploymentEventsIntro();
+        const intro = createDeploymentEventsIntro(limit);
         const stateNode = createElement('div', 'detail-state', text);
         if (className) stateNode.classList.add(className);
         if (detailText) {
@@ -5499,16 +5549,17 @@
         const counts = deploymentEventsManagedDriftCounts(result);
         return `Managed drift summary · ${counts.total} total · ${counts.high} high · ${counts.medium} medium · ${counts.low} low`;
       };
-      const renderDeploymentEventsPayload = (section, deploymentName, result) => {
+      const renderDeploymentEventsPayload = (section, deploymentName, result, limit = currentPageState.eventLimit) => {
+        const selectedLimit = normalizeDeploymentEventsLimit(limit);
         const events = sortTimelineEvents(result?.events || []);
         if (!events.length) {
-          renderDeploymentEventsState(section, deploymentName, 'No controller runtime events have been persisted yet.');
+          renderDeploymentEventsState(section, deploymentName, `No controller runtime events were returned in the latest ${selectedLimit}-event window.`, '', '', false, selectedLimit);
           return;
         }
 
         const heading = createDetailSectionHeader('Controller runtime events', createDeploymentEventsActions(section, deploymentName, false, result));
-        const intro = createDeploymentEventsIntro();
-        const ordering = createElement('div', 'detail-condition-meta', `${events.length} event${events.length === 1 ? '' : 's'} in latest ${defaultDeploymentEventsLimit}-event window · newest controller event first`);
+        const intro = createDeploymentEventsIntro(selectedLimit);
+        const ordering = createElement('div', 'detail-condition-meta', `${events.length} event${events.length === 1 ? '' : 's'} in latest ${selectedLimit}-event window · newest controller event first`);
         const driftSummary = createElement('div', 'detail-condition-meta', deploymentEventsManagedDriftSummary(result));
         const eventList = createElement('ol', 'detail-list');
 
@@ -5569,69 +5620,72 @@
       };
       const renderDeploymentEventsSection = (section, deploymentName, options = {}) => {
         const force = Boolean(options?.force);
-        const cached = deploymentEventsStateByDeployment.get(deploymentName);
+        const limit = normalizeDeploymentEventsLimit(options?.limit ?? currentPageState.eventLimit);
+        currentPageState = { ...currentPageState, eventLimit: limit };
+        const cacheKey = deploymentEventsCacheKey(deploymentName, limit);
+        const cached = deploymentEventsStateByDeployment.get(cacheKey);
 
         if (!deploymentName) {
-          renderDeploymentEventsState(section, deploymentName, 'Controller runtime events are currently unavailable.', 'error', 'Application detail is missing a deployment name for GET /v1/overview/deployments/{deploymentName}/events.');
+          renderDeploymentEventsState(section, deploymentName, 'Controller runtime events are currently unavailable.', 'error', 'Application detail is missing a deployment name for GET /v1/overview/deployments/{deploymentName}/events.', false, limit);
           return Promise.resolve(null);
         }
         if (!force && cached?.status === 'ready') {
-          renderDeploymentEventsPayload(section, deploymentName, cached.result);
+          renderDeploymentEventsPayload(section, deploymentName, cached.result, limit);
           return Promise.resolve(cached.result);
         }
         if (cached?.status === 'loading') {
-          deploymentEventsStateByDeployment.set(deploymentName, { ...cached, sections: [...(cached.sections || []), section] });
-          renderDeploymentEventsState(section, deploymentName, 'Loading controller runtime events…', '', '', true);
+          deploymentEventsStateByDeployment.set(cacheKey, { ...cached, sections: [...(cached.sections || []), section] });
+          renderDeploymentEventsState(section, deploymentName, 'Loading controller runtime events…', '', '', true, limit);
           return cached.promise;
         }
         if (!force && cached?.status === 'error') {
           if (cached.error?.kind === 'unavailable') {
-            renderDeploymentEventsState(section, deploymentName, 'Controller runtime events are currently unavailable.', 'error', cached.error.message);
+            renderDeploymentEventsState(section, deploymentName, 'Controller runtime events are currently unavailable.', 'error', cached.error.message, false, limit);
           } else if (renderOperatorReadFailurePanel(
             section,
             'Controller runtime events',
             createDeploymentEventsActions(section, deploymentName),
-            deploymentEventsReadRoute(deploymentName),
+            deploymentEventsReadRoute(deploymentName, limit),
             cached.error,
           )) {
             return Promise.reject(cached.error);
           } else {
-            renderDeploymentEventsState(section, deploymentName, `Failed to load controller runtime events: ${cached.error?.message || 'unknown error'}`, 'error');
+            renderDeploymentEventsState(section, deploymentName, `Failed to load controller runtime events: ${cached.error?.message || 'unknown error'}`, 'error', '', false, limit);
           }
           return Promise.reject(cached.error);
         }
 
-        renderDeploymentEventsState(section, deploymentName, 'Loading controller runtime events…', '', '', true);
-        const promise = fetchDeploymentEvents(deploymentName)
+        renderDeploymentEventsState(section, deploymentName, 'Loading controller runtime events…', '', '', true, limit);
+        const promise = fetchDeploymentEvents(deploymentName, limit)
           .then((result) => {
-            const current = deploymentEventsStateByDeployment.get(deploymentName);
-            deploymentEventsStateByDeployment.set(deploymentName, { status: 'ready', result });
-            (current?.sections || []).forEach((container) => renderDeploymentEventsPayload(container, deploymentName, result));
+            const current = deploymentEventsStateByDeployment.get(cacheKey);
+            deploymentEventsStateByDeployment.set(cacheKey, { status: 'ready', result });
+            (current?.sections || []).forEach((container) => renderDeploymentEventsPayload(container, deploymentName, result, limit));
             return result;
           })
           .catch((error) => {
-            const current = deploymentEventsStateByDeployment.get(deploymentName);
-            deploymentEventsStateByDeployment.set(deploymentName, { status: 'error', error });
+            const current = deploymentEventsStateByDeployment.get(cacheKey);
+            deploymentEventsStateByDeployment.set(cacheKey, { status: 'error', error });
             (current?.sections || []).forEach((container) => {
               if (error?.kind === 'unavailable') {
-                renderDeploymentEventsState(container, deploymentName, 'Controller runtime events are currently unavailable.', 'error', error.message);
+                renderDeploymentEventsState(container, deploymentName, 'Controller runtime events are currently unavailable.', 'error', error.message, false, limit);
                 return;
               }
               if (renderOperatorReadFailurePanel(
                 container,
                 'Controller runtime events',
                 createDeploymentEventsActions(container, deploymentName),
-                deploymentEventsReadRoute(deploymentName),
+                deploymentEventsReadRoute(deploymentName, limit),
                 error,
               )) {
                 return;
               }
-              renderDeploymentEventsState(container, deploymentName, `Failed to load controller runtime events: ${error.message}`, 'error');
+              renderDeploymentEventsState(container, deploymentName, `Failed to load controller runtime events: ${error.message}`, 'error', '', false, limit);
             });
             throw error;
           });
 
-        deploymentEventsStateByDeployment.set(deploymentName, { status: 'loading', promise, sections: [section] });
+        deploymentEventsStateByDeployment.set(cacheKey, { status: 'loading', promise, sections: [section] });
         return promise;
       };
       const createAuditLogsIntro = () => {

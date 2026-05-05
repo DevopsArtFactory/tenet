@@ -1575,7 +1575,7 @@ for fragment in (
     "On this page",
     "Linked resources",
     "Controller runtime events",
-    "Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events?limit=10. Tenet shows the latest bounded window, newest first; open the raw route with an explicit limit when you need a different slice of controller history. This is not audit/auth history.",
+    "Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events?limit=${normalizeDeploymentEventsLimit(limit)}. Tenet shows the selected bounded window, newest first; use Event window to change how much controller history this panel reads without leaving the application drill-down. This is not audit/auth history.",
     "Managed drift summary · ${counts.total} total · ${counts.high} high · ${counts.medium} medium · ${counts.low} low",
     "const createControllerRefreshCue = (event) => {",
     "GitHub refresh evidence · ${fields.join(' · ')}",
