@@ -1844,6 +1844,7 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		"capture the HTTP `Request-Id` response header next to the `lookupContext` object before escalating",
 		"the request ID anchors Tenet's structured API logs while the lookup context explains which region, control account, target account, and observer-role path the provider attempted",
 		"resource-logs?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod",
+		"resource-logs?resourceType=ecsTask&resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Atask%2Fworker%2Fabc123&containerName=api&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README resource log contract to include %q", fragment)
@@ -1865,6 +1866,8 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		"echoes it as `resourceDescription` on both available and unavailable payloads",
 		"`ecsTask` reads recent CloudWatch log events for the exact ECS task ARN or task identifier",
 		"resourceType=ecsTask&containerName=worker&clusterArn={ecsClusterArn}&limit=1",
+		"Add `clusterArn={arn:aws:ecs:...:cluster/name}` when the parent service drill-down selected a concrete cluster",
+		"Tenet validates and echoes that selector just like `ecsService`",
 		"`aws_unavailable`, `resource_not_found`, `cross_account_not_configured`, or `no_log_source`",
 		"Current route-stable rollout resources with explicit no-log-source responses",
 		"weighted-target-group traffic-routing resources (`trafficShiftPlan`, `productionListenerRule`, `activeTargetGroup`, and `candidateTargetGroup`)",
@@ -1948,6 +1951,7 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"`listenerRule`",
 		"`ruleArn`, `priority`, `isDefault`, `conditions`, `actions`",
 		"resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod",
+		"resource-inspection?resourceType=ecsTask&resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Atask%2Fworker%2Fabc123&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README resource inspection contract to include %q", fragment)
@@ -1991,6 +1995,9 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"`listenerRule` details",
 		"resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5",
 		"accepted selectors echo as response-level `clusterArn`",
+		"resource-logs?resourceType=ecsTask&resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Atask%2Fworker%2Fabc123&containerName=worker&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=1",
+		"paired `resource-inspection?resourceType=ecsTask&...&clusterArn=...` route",
+		"the clear action removes only `clusterArn` without losing task/container scope",
 		"local/compose smoke lock that backend echo alongside the embedded selected-cluster URL-state guards",
 	} {
 		if !strings.Contains(uiDoc, fragment) {

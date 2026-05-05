@@ -748,9 +748,11 @@ When fixture-backed or early controller payloads have not yet persisted `rollout
 For the ECS rolling fallback service, the recent-log drill-down stays on the same operator workflow. Example route:
 - `GET /v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service`
 
-When a service inspection identifies a concrete ECS task, operators and UI consumers can reuse the same route families with `resourceType=ecsTask`. The task resource name may be an ECS task ARN, and recent-log reads accept optional `containerName` to narrow the CloudWatch Logs lookup to a single container stream:
-- `GET /v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsTask&resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Atask%2Fworker%2Fabc123`
-- `GET /v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsTask&resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Atask%2Fworker%2Fabc123&containerName=api&limit=5`
+When a service inspection identifies a concrete ECS task, operators and UI consumers can reuse the same route families with `resourceType=ecsTask`. The task resource name may be an ECS task ARN, `clusterArn` keeps the selected cluster from the parent ECS service handoff, and recent-log reads accept optional `containerName` to narrow the CloudWatch Logs lookup to a single container stream:
+- `GET /v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsTask&resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Atask%2Fworker%2Fabc123&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod`
+- `GET /v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsTask&resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Atask%2Fworker%2Fabc123&containerName=api&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5`
+
+The embedded task resource page keeps that selected `clusterArn` bookmarkable through section links and lazy refreshes, shows it next to the selected container when present, and lets operators use **Clear selected cluster** to remove only `clusterArn` while preserving the task ARN, `containerName`, limits, filters, and current hash.
 
 The ECS task inspection payload keeps the same explicit envelope as other resource-inspection reads and adds an `ecsTask` object, for example:
 
