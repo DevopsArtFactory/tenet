@@ -4689,6 +4689,28 @@
         );
         return links;
       };
+      const appendAutoScalingEC2InstanceDetail = (item, instance) => {
+        const ec2Instance = instance?.ec2Instance;
+        if (!ec2Instance || typeof ec2Instance !== 'object') return;
+        const rows = [
+          ['EC2 state', ec2Instance.instanceState],
+          ['EC2 instance type', ec2Instance.instanceType],
+          ['AMI image ID', ec2Instance.imageId],
+          ['Private IP', ec2Instance.privateIpAddress],
+          ['Public IP', ec2Instance.publicIpAddress],
+          ['Subnet', ec2Instance.subnetId],
+          ['VPC', ec2Instance.vpcId],
+          ['Launch time', ec2Instance.launchTime],
+        ]
+          .map(([label, value]) => [label, String(value || '').trim()])
+          .filter(([, value]) => value);
+        if (!rows.length) return;
+        const hostMeta = createElement('div', 'detail-history-meta');
+        rows.forEach(([label, value]) => {
+          hostMeta.append(createElement('span', 'detail-condition-meta', `${label} · ${value}`));
+        });
+        item.append(hostMeta);
+      };
       const renderAutoScalingGroupInspection = (section, deploymentName, resource, result) => {
         const group = result?.autoScalingGroup;
         const observedLaunchTemplate = autoScalingObservedLaunchTemplate(group);
@@ -4739,6 +4761,7 @@
               meta.append(createElement('span', 'detail-condition-meta', `Weighted capacity · ${instance.weightedCapacity}`));
             }
             item.append(meta);
+            appendAutoScalingEC2InstanceDetail(item, instance);
             const handoffs = createAutoScalingInstanceHandoffLinks(deploymentName, resource, instance);
             if (handoffs) item.append(handoffs);
             return item;
