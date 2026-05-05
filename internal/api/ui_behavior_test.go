@@ -5148,6 +5148,41 @@ async function renderScenario(hash, fetchImpl) {
   const containerLogsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsTask&resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Atask%2Fpayments-staging%2Fabc123&containerName=worker';
   const containerInspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsTask&resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Atask%2Fpayments-staging%2Fabc123';
   const containerFetches = [];
+  let resolvePendingContainerLogs;
+  let resolvePendingContainerInspection;
+  const pendingContainerRun = await (async () => {
+    const document = createDocument();
+    const initialSearch = '?page=resource&deployment=payments-api-staging&resourceType=ecsTask&resourceId=' + encodeURIComponent(containerTaskResourceID) + '&containerName=worker&q=payments&sync=OutOfSync&account=210987654321';
+    const window = createWindow(initialSearch, '');
+    const history = { replaceState(_state, _title, url) {
+      const [pathAndQuery, nextHash = ''] = String(url).split('#');
+      const [pathname, query = ''] = pathAndQuery.split('?');
+      window.location.pathname = pathname || '/console';
+      window.location.search = query ? '?' + query : '';
+      window.location.hash = nextHash ? '#' + nextHash : '';
+    } };
+    const fetchImpl = (url) => {
+      if (url === deploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+      if (url === containerLogsURL) return new Promise((resolve) => { resolvePendingContainerLogs = resolve; });
+      if (url === containerInspectionURL) return new Promise((resolve) => { resolvePendingContainerInspection = resolve; });
+      throw new Error('unexpected pending container resource fetch url: ' + url);
+    };
+    new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetchImpl, history, Element, InputElement);
+    await settle(); await settle();
+    return { document, window, initialSearch };
+  })();
+  const pendingContainerText = collectText(pendingContainerRun.document.getElementById('accounts')).join(' | ');
+  if (!pendingContainerText.includes('Selected container | worker')) throw new Error('expected bookmarked ECS container scope to appear in resource chrome before lazy panels resolve, got ' + pendingContainerText);
+  if (!pendingContainerText.includes('Selected container · worker')) throw new Error('expected bookmarked ECS container quick-nav chip before lazy panels resolve, got ' + pendingContainerText);
+  const pendingContainerSectionLinks = collectNodes(pendingContainerRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#resource-'));
+  ['#resource-live-inspection', '#resource-recent-logs'].forEach((hashSuffix) => {
+    const link = pendingContainerSectionLinks.find((node) => node.href.endsWith(hashSuffix));
+    if (!link || !link.href.includes('containerName=worker')) throw new Error('expected container section link to preserve containerName for ' + hashSuffix + ', got ' + (link?.href || '<missing>'));
+  });
+  resolvePendingContainerLogs({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'aws_unavailable', entries: [] }) });
+  resolvePendingContainerInspection({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'aws_unavailable' }) });
+  await settle();
+
   const containerRun = await (async () => {
     const document = createDocument();
     const initialSearch = '?page=resource&deployment=payments-api-staging&resourceType=ecsTask&resourceId=' + encodeURIComponent(containerTaskResourceID) + '&containerName=worker&q=payments&sync=OutOfSync&account=210987654321';
@@ -6066,6 +6101,26 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
 
   const selectedInstanceLogsURL = asgLogsURL + '&instanceId=i-abc123';
   const selectedInstanceInspectionURL = asgInspectionURL.replace('&limit=10', '&instanceId=i-abc123&limit=10');
+  let resolvePendingASGLogs;
+  let resolvePendingASGInspection;
+  const pendingSelectedASGRun = await renderWithFetch('?page=resource&deployment=payments-api-prod&resourceType=candidateAutoScalingGroup&resourceId=' + encodeURIComponent(asgResourceID) + '&instanceId=i-abc123', (url) => {
+    if (url === asgDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(asgDetailBody) });
+    if (url === selectedInstanceLogsURL) return new Promise((resolve) => { resolvePendingASGLogs = resolve; });
+    if (url === selectedInstanceInspectionURL) return new Promise((resolve) => { resolvePendingASGInspection = resolve; });
+    throw new Error('unexpected pending selected asg fetch url: ' + url);
+  }, 1);
+  const pendingSelectedASGText = collectText(pendingSelectedASGRun.document.getElementById('accounts')).join(' | ');
+  if (!pendingSelectedASGText.includes('Selected instance | i-abc123')) throw new Error('expected selected ASG instance to appear in resource chrome before lazy panels resolve: ' + pendingSelectedASGText);
+  if (!pendingSelectedASGText.includes('Selected instance · i-abc123')) throw new Error('expected selected ASG instance quick-nav chip before lazy panels resolve: ' + pendingSelectedASGText);
+  const pendingASGSectionLinks = collectNodes(pendingSelectedASGRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#resource-'));
+  ['#resource-live-inspection', '#resource-recent-logs'].forEach((hashSuffix) => {
+    const link = pendingASGSectionLinks.find((node) => node.href.endsWith(hashSuffix));
+    if (!link || !link.href.includes('instanceId=i-abc123')) throw new Error('expected selected ASG section link to preserve instanceId for ' + hashSuffix + ', got ' + (link?.href || '<missing>'));
+  });
+  resolvePendingASGLogs({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'aws_unavailable', entries: [] }) });
+  resolvePendingASGInspection({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'aws_unavailable' }) });
+  await settle();
+
   const selectedASGRun = await renderWithFetch('?page=resource&deployment=payments-api-prod&resourceType=candidateAutoScalingGroup&resourceId=' + encodeURIComponent(asgResourceID) + '&instanceId=i-abc123', (url) => {
     if (url === asgDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(asgDetailBody) });
     if (url === selectedInstanceLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({
