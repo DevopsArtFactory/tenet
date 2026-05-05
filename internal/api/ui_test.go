@@ -3194,7 +3194,7 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"successful ECS task `entries[]` rows may carry additive `containerName` metadata for the resolved per-row log source",
 			"with optional `instanceId={i-...}` to narrow the read to a specific current ASG member while preserving the default newest-instance behavior when omitted",
 			"Recent-log payloads also echo the selected rollout execution description as additive `resourceDescription`",
-			"Local and compose smoke lock this alongside the ECS task `containerName` selector, ASG console `entries[].instanceId` metadata, and selected ASG live-inspection `instanceId` echo",
+			"Local and compose smoke lock this alongside the ECS service selected-cluster `clusterArn` echo, ECS task `containerName` selector, ASG console `entries[].instanceId` metadata, and selected ASG live-inspection `instanceId` echo",
 			"Local and compose smoke now also release-guard successful empty recent-log reads by requiring `emptyReason` (`no_recent_events` or `no_formatted_entries`) only when `available=true` and `entries=[]`",
 			"Known `unavailableReason` values render friendly operator copy, and unknown provider/internal codes fall back to generic troubleshooting guidance instead of being shown literally",
 			"capture the HTTP `Request-Id` response header next to the `lookupContext` object before escalating",
