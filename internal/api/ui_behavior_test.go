@@ -4780,7 +4780,7 @@ async function render(search, inspectionResult, hash = '') {
   return { document, window, fetchCalls, text: collectText(document.getElementById('accounts')).join(' | '), toolbarText: collectText(document.getElementById('toolbar')).join(' | '), toolbarButtons: collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON'), links: collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A') };
 }
 (async () => {
-  const taskResult = { available: true, source: 'ecs_task', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, ecsTask: { taskArn, taskId: 'abc123', clusterArn, lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containerInstanceArn: 'arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker-prod/ci-abc123', ec2InstanceId: 'i-0abc123def4567890', capacityProviderName: 'FARGATE_SPOT', availabilityZone: 'ap-northeast-2a', startedAt: '2026-05-03T04:00:00Z', taskDefinition: 'worker:42', containers: [{ name: 'worker', image: 'ghcr.io/example/worker:v2', lastStatus: 'RUNNING', healthStatus: 'HEALTHY', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] } };
+  const taskResult = { available: true, source: 'ecs_task', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, ecsTask: { taskArn, taskId: 'abc123', clusterArn, lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containerInstanceArn: 'arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker-prod/ci-abc123', ec2InstanceId: 'i-0abc123def4567890', capacityProviderName: 'FARGATE_SPOT', availabilityZone: 'ap-northeast-2a', startedAt: '2026-05-03T04:00:00Z', taskDefinition: 'worker:42', ec2Instance: { instanceState: 'running', instanceType: 'm6i.large', imageId: 'ami-abc123', privateIpAddress: '10.0.4.12', publicIpAddress: '54.1.2.3', subnetId: 'subnet-abc123', vpcId: 'vpc-abc123', launchTime: '2026-05-05T07:30:00Z' }, containers: [{ name: 'worker', image: 'ghcr.io/example/worker:v2', lastStatus: 'RUNNING', healthStatus: 'HEALTHY', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] } };
   const scopedTaskSearch = '?page=resource&deployment=worker-prod&resourceType=ecsTask&resourceId=' + encodeURIComponent(taskResourceId) + '&containerName=worker&clusterArn=' + encodedClusterArn + '&resourceLogLimit=10';
   const taskRun = await render(scopedTaskSearch, taskResult, '#resource-recent-logs');
   const taskInspectionURL = '/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsTask&resourceName=' + encodeURIComponent(taskArn) + '&clusterArn=' + encodedClusterArn;
@@ -4798,13 +4798,17 @@ async function render(search, inspectionResult, hash = '') {
   if (!taskRun.text.includes('Selected cluster | ' + clusterArn)) throw new Error('expected selected ECS task cluster to render in resource scope evidence: ' + taskRun.text);
   if (!taskRun.text.includes('Selected container | worker')) throw new Error('expected selected ECS task container to render in resource scope evidence: ' + taskRun.text);
   if (!taskRun.text.includes('EC2 instance | i-0abc123def4567890')) throw new Error('expected direct ECS task EC2 host identity evidence: ' + taskRun.text);
+  ['EC2 host details', 'EC2 state | running', 'EC2 instance type | m6i.large', 'AMI image ID | ami-abc123', 'Private IP | 10.0.4.12', 'Public IP | 54.1.2.3', 'Subnet | subnet-abc123', 'VPC | vpc-abc123', 'Launch time | 2026-05-05T07:30:00Z'].forEach((fragment) => {
+    if (!taskRun.text.includes(fragment)) throw new Error('expected nested ECS task EC2 host detail fragment ' + fragment + ': ' + taskRun.text);
+  });
   const noPlacementTaskResult = JSON.parse(JSON.stringify(taskResult));
   delete noPlacementTaskResult.ecsTask.containerInstanceArn;
   delete noPlacementTaskResult.ecsTask.ec2InstanceId;
   delete noPlacementTaskResult.ecsTask.capacityProviderName;
   delete noPlacementTaskResult.ecsTask.availabilityZone;
+  delete noPlacementTaskResult.ecsTask.ec2Instance;
   const noPlacementTaskRun = await render(scopedTaskSearch, noPlacementTaskResult, '#resource-live-inspection');
-  ['Container instance |', 'EC2 instance |', 'Capacity provider |', 'Availability Zone |'].forEach((fragment) => {
+  ['Container instance |', 'EC2 instance |', 'Capacity provider |', 'Availability Zone |', 'EC2 host details', 'EC2 state |', 'AMI image ID |', 'Private IP |', 'Public IP |', 'Subnet |', 'VPC |', 'Launch time |'].forEach((fragment) => {
     if (noPlacementTaskRun.text.includes(fragment)) throw new Error('expected absent direct ECS task placement fields to stay quiet for ' + fragment + ': ' + noPlacementTaskRun.text);
   });
   const taskSectionLinks = collectNodes(taskRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#resource-'));
