@@ -1769,6 +1769,8 @@ func TestEmbeddedUIProvidesFilterControlsAndURLSyncedViewState(t *testing.T) {
 		"Filters hid every application",
 		"GET /v1/overview/applications returned no applications for this operator view.",
 		"Check catalog loading, runtime status snapshots, or trusted front-door authorization grants if deployments were expected.",
+		"Open Operator context details",
+		"currentBookmarkableURL(operatorContextAccessDetailsPanelID)",
 		"Clear filters",
 	} {
 		if !strings.Contains(body, fragment) {

@@ -1413,6 +1413,9 @@ assert '/v1/overview/applications' in ui, ui
 assert '/v1/overview/applications/${encodeURIComponent(deploymentName)}' in ui, ui
 assert "const fetchApplicationsOverview = () => fetchEmbeddedReadRouteJSON('/v1/overview/applications', {" in ui, ui
 assert "failure: 'applications overview request failed'," in ui, ui
+assert 'No visible applications' in ui, ui
+assert 'Open Operator context details' in ui, ui
+assert 'currentBookmarkableURL(operatorContextAccessDetailsPanelID)' in ui, ui
 assert "return 'Applications overview';" in ui, ui
 assert "const setEmbeddedBrowserTitle = (...parts) => {" in ui, ui
 assert "document.title = [...titleParts, 'Tenet'].join(' · ');" in ui, ui
