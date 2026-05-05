@@ -3200,6 +3200,86 @@ func TestDeploymentOverviewEventsRouteIncludesManagedDriftSummary(t *testing.T) 
 	}
 }
 
+func TestDeploymentOverviewEventsRouteAppliesLimitToEventsAndSummary(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeploymentEvents: func(_ context.Context, name string) (catalog.DeploymentOverviewEvents, error) {
+			if name != "api-prod" {
+				t.Fatalf("unexpected deployment name %q", name)
+			}
+			return catalog.DeploymentOverviewEvents{
+				DeploymentName: name,
+				Events: []domain.StatusHistoryEntry{
+					{
+						Timestamp:    "2026-05-06T03:00:00Z",
+						Summary:      "Newest controller event",
+						ManagedDrift: []domain.ManagedDriftItem{{Field: "artifact", Severity: domain.ManagedDriftSeverityHigh}},
+					},
+					{
+						Timestamp:    "2026-05-06T02:00:00Z",
+						Summary:      "Older controller event",
+						ManagedDrift: []domain.ManagedDriftItem{{Field: "runtimeContext.capacity.min", Severity: domain.ManagedDriftSeverityMedium}},
+					},
+				},
+				ManagedDriftSummary: catalog.ManagedDriftSummary{Total: 2, High: 1, Medium: 1},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/events?limit=1", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode deployment events payload: %v", err)
+	}
+	events, ok := payload["events"].([]any)
+	if !ok || len(events) != 1 {
+		t.Fatalf("expected bounded events array in payload, got %#v", payload["events"])
+	}
+	event, ok := events[0].(map[string]any)
+	if !ok || event["summary"] != "Newest controller event" {
+		t.Fatalf("expected newest visible event, got %#v", events[0])
+	}
+	summary, ok := payload["managedDriftSummary"].(map[string]any)
+	if !ok || summary["total"] != float64(1) || summary["high"] != float64(1) || summary["medium"] != float64(0) || summary["low"] != float64(0) {
+		t.Fatalf("expected managedDriftSummary counts for returned events only, got %#v", payload["managedDriftSummary"])
+	}
+}
+
+func TestDeploymentOverviewEventsRouteRejectsInvalidLimit(t *testing.T) {
+	for _, rawLimit := range []string{"0", "abc"} {
+		t.Run(rawLimit, func(t *testing.T) {
+			providerCalls := 0
+			router := NewRouter(Options{
+				BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+				OverviewDeploymentEvents: func(_ context.Context, name string) (catalog.DeploymentOverviewEvents, error) {
+					providerCalls++
+					return catalog.DeploymentOverviewEvents{DeploymentName: name}, nil
+				},
+			})
+
+			req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/events?limit="+rawLimit, nil)
+			resp := httptest.NewRecorder()
+			router.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d: %s", resp.Code, resp.Body.String())
+			}
+			if got := strings.TrimSpace(resp.Body.String()); got != "invalid limit query" {
+				t.Fatalf("expected invalid limit query response, got %q", got)
+			}
+			if providerCalls != 0 {
+				t.Fatalf("expected invalid limit to fail before provider call, got %d calls", providerCalls)
+			}
+		})
+	}
+}
+
 func TestRouterDeploymentReadAuthorization(t *testing.T) {
 	newGuardedRouter := func(t *testing.T) (http.Handler, *int) {
 		t.Helper()

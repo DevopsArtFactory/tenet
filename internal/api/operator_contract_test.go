@@ -1590,7 +1590,7 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		`AUTH_UNAUTHENTICATED_EVENTS_BODY=`,
 		`AUTH_FORBIDDEN_EVENTS_BODY=`,
 
-		`"http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/events")`,
+		`"http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/events?limit=1")`,
 		`auth_forbidden_events_status=$(curl -sS -o "$AUTH_FORBIDDEN_EVENTS_BODY" -w "%{http_code}" \`,
 		`allowed_events_read=$(curl -fsS \`,
 		`allowed_events_read_path=$(write_payload allowed-events-read.json "$allowed_events_read")`,
@@ -1616,7 +1616,7 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		`AUTH_UNAUTHENTICATED_EVENTS_BODY=`,
 		`AUTH_FORBIDDEN_EVENTS_BODY=`,
 
-		`"$API_BASE_URL/v1/overview/deployments/payments-api-staging/events")`,
+		`"$API_BASE_URL/v1/overview/deployments/payments-api-staging/events?limit=1")`,
 		`auth_forbidden_events_status=$(curl -sS -o "$AUTH_FORBIDDEN_EVENTS_BODY" -w "%{http_code}" \`,
 		`allowed_events_read=$(curl -fsS \`,
 		`allowed_events_read_path=$(write_payload allowed-events-read.json "$allowed_events_read")`,

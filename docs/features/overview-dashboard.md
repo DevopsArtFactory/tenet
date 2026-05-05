@@ -239,6 +239,7 @@ Current behavior:
 
 Operators can also fetch a read-only deployment event timeline from:
 - `GET /v1/overview/deployments/{deploymentName}/events`
+- `GET /v1/overview/deployments/{deploymentName}/events?limit={n}` for bounded newest-first runtime-event reads
 
 This payload is derived from persisted `status.history` entries the controller authored for runtime changes. It is meant to support operator drill-down and timeline rendering, not to act as a full durable audit system yet.
 
