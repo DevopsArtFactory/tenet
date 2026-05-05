@@ -52,7 +52,19 @@ Local verification on this branch is green:
 
 After the GitHub account condition is cleared:
 
-1. Re-run the latest failed `CI Smoke` workflow on `main` or on the affected PR.
+1. Re-run the latest failed `CI Smoke` workflow on `main` or on the affected PR:
+
+   ```bash
+   gh run rerun <run-id> --failed
+   gh run watch <run-id>
+   ```
+
+   If the old run can no longer be rerun, dispatch a fresh smoke run from the workflow page or the CLI:
+
+   ```bash
+   gh workflow run "CI Smoke" --ref main
+   ```
+
 2. Verify the rerun has non-empty job steps and a real runner assignment.
 3. Confirm the fast lane reaches `go test ./...`, smoke script syntax checks, and `make smoke-local`.
 4. On `main` or Docker-scoped PRs, confirm the Docker lane reaches `make smoke-docker` or produces normal actionable logs.
