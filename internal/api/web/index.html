@@ -4082,14 +4082,18 @@
         return `Lookup path · ${parts.length ? parts.join(' · ') : 'lookup context unavailable'}`;
       };
       const createResourceLogsLookupPathSummary = (lookupContext) => createElement('p', 'detail-section-copy', resourceLogsLookupPathText(lookupContext));
-      const resourceLogsRequestIDFields = (result) => {
+      const resourcePanelRequestIDFields = (result) => {
         const requestId = String(result?.tenetRequestId || result?.requestId || '').trim();
         return requestId ? [['Tenet request ID', requestId]] : [];
       };
-      const createResourceLogsRequestIDMeta = (error) => {
+      const createResourcePanelRequestIDMeta = (error) => {
         const requestId = String(error?.requestId || '').trim();
         return requestId ? createElement('div', 'detail-condition-meta', `Tenet request ID · ${requestId}`) : null;
       };
+      const resourceLogsRequestIDFields = resourcePanelRequestIDFields;
+      const createResourceLogsRequestIDMeta = createResourcePanelRequestIDMeta;
+      const resourceInspectionRequestIDFields = resourcePanelRequestIDFields;
+      const createResourceInspectionRequestIDMeta = createResourcePanelRequestIDMeta;
       const resourceLogsBackingResourceFields = (result) => {
         const fields = [];
         if (result?.resourceDescription) {
@@ -4561,6 +4565,7 @@
         const service = result?.ecsService;
         const actions = createResourceInspectionActions(section, deploymentName, resource);
         const metadata = createLookupContextGrid(result?.lookupContext, [
+          ...resourceInspectionRequestIDFields(result),
           ['Inspection source', metricValue(result?.source)],
           ['Service name', textOrDash(service?.serviceName)],
           ['Service status', textOrDash(service?.status)],
@@ -4743,6 +4748,7 @@
           autoScalingGroupRecentLogsHandoff(deploymentName, resource),
         ].filter(Boolean);
         const metadata = createLookupContextGrid(result?.lookupContext, [
+          ...resourceInspectionRequestIDFields(result),
           ['Inspection source', metricValue(result?.source)],
           ['Auto Scaling Group name', textOrDash(group?.autoScalingGroupName)],
           ['Desired capacity', countText(group?.desiredCapacity)],
@@ -4867,6 +4873,7 @@
         const inspectionDetail = result?.userDataBootstrapSource;
         const actions = createResourceInspectionActions(section, detail, resource);
         const metadata = createLookupContextGrid(result?.lookupContext, [
+          ...resourceInspectionRequestIDFields(result),
           ['Inspection source', metricValue(result?.source)],
           ['Desired bootstrap source', textOrDash(inspectionDetail?.desiredBootstrapSource)],
           ['Observed bootstrap source', textOrDash(inspectionDetail?.observedBootstrapSource)],
@@ -5031,6 +5038,7 @@
         const task = result?.ecsTask;
         const actions = createResourceInspectionActions(section, deploymentName, resource);
         const taskFields = [
+          ...resourceInspectionRequestIDFields(result),
           ['Inspection source', metricValue(result?.source)],
           ['Task ID', textOrDash(task?.taskId)],
           ['Task ARN', textOrDash(task?.taskArn)],
@@ -5092,6 +5100,7 @@
         const trafficRouting = result?.trafficRoutingResource;
         const actions = createResourceInspectionActions(section, deploymentName, resource);
         const metadata = createLookupContextGrid(result?.lookupContext, [
+          ...resourceInspectionRequestIDFields(result),
           ['Inspection source', metricValue(result?.source)],
           ['Resource kind', textOrDash(trafficRouting?.kind)],
           ['Display name', textOrDash(trafficRouting?.displayName)],
@@ -5117,6 +5126,7 @@
         const deploymentName = detail?.name || currentPageState.deployment || '';
         const actions = createResourceInspectionActions(section, detail, resource);
         const inspectionFields = [
+          ...resourceInspectionRequestIDFields(result),
           ['Inspection source', metricValue(result?.source)],
         ];
         if (result?.instanceId) {
@@ -5205,12 +5215,13 @@
               )) {
                 return;
               }
+              const requestIDMeta = createResourceInspectionRequestIDMeta(error);
               renderResourceInspectionState(
                 container,
                 `Failed to load live inspection: ${error.message}`,
                 'error',
                 [],
-                [],
+                requestIDMeta ? [requestIDMeta] : [],
                 createResourceInspectionActions(container, targetDetail, resource),
               );
             });
