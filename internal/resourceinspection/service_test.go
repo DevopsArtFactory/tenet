@@ -76,6 +76,7 @@ func TestServiceInspect(t *testing.T) {
 			ControlAccountID: "123456789012",
 			TargetAccountID:  "123456789012",
 			Region:           "ap-northeast-2",
+			ClusterARN:       " arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments ",
 		})
 		if err != nil {
 			t.Fatalf("Inspect returned error: %v", err)
@@ -83,6 +84,7 @@ func TestServiceInspect(t *testing.T) {
 		if !reflect.DeepEqual(gotLookup, ECSRequest{
 			DeploymentName:  "payments-api-prod",
 			ResourceName:    "payments-api-prod-service",
+			ClusterARN:      "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
 			Region:          "ap-northeast-2",
 			TargetAccountID: "123456789012",
 		}) {
@@ -92,6 +94,7 @@ func TestServiceInspect(t *testing.T) {
 			DeploymentName: "payments-api-prod",
 			ResourceType:   "ecsService",
 			ResourceName:   "payments-api-prod-service",
+			ClusterARN:     "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
 			LookupContext:  expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
 			Available:      true,
 			Source:         SourceECSService,
@@ -1123,11 +1126,12 @@ func TestServiceInspect(t *testing.T) {
 			ControlAccountID: "123456789012",
 			TargetAccountID:  "123456789012",
 			Region:           "ap-northeast-2",
+			ClusterARN:       " arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments ",
 		})
 		if err != nil {
 			t.Fatalf("Inspect returned error: %v", err)
 		}
-		if result.UnavailableReason != "aws_unavailable" || result.Available {
+		if result.UnavailableReason != "aws_unavailable" || result.Available || result.ClusterARN != "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments" {
 			t.Fatalf("unexpected AWS unavailable payload: %+v", result)
 		}
 	})
