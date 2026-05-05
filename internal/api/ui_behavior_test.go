@@ -4756,6 +4756,9 @@ async function render(search, inspectionResult, hash = '') {
     fetchCalls.push(String(url));
     if (url === '/v1/overview/deployments/worker-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
     if (String(url).startsWith('/v1/overview/deployments/worker-prod/resource-inspection?')) {
+      if (inspectionResult && inspectionResult.__errorStatus) {
+        return Promise.resolve({ ok: false, status: inspectionResult.__errorStatus, headers: { get: (name) => String(name).toLowerCase() === 'request-id' ? 'req-inspection-878-error' : '' }, text: () => Promise.resolve(inspectionResult.__errorBody || '') });
+      }
       const route = new URL(String(url), 'http://tenet.local');
       const limit = route.searchParams.get('limit');
       const body = JSON.parse(JSON.stringify(inspectionResult));
@@ -4767,7 +4770,7 @@ async function render(search, inspectionResult, hash = '') {
         }
         body.ecsService.tasksScope = scoped;
       }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+      return Promise.resolve({ ok: true, headers: { get: (name) => String(name).toLowerCase() === 'request-id' ? 'req-inspection-878-success' : '' }, json: () => Promise.resolve(body) });
     }
     if (String(url).startsWith('/v1/overview/deployments/worker-prod/resource-logs?')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'aws_unavailable', entries: [] }) });
     throw new Error('unexpected fetch url: ' + url);
@@ -4785,6 +4788,7 @@ async function render(search, inspectionResult, hash = '') {
   if (!taskRun.fetchCalls.includes(taskInspectionURL)) throw new Error('expected selected-cluster ecsTask inspection fetch URL, got ' + JSON.stringify(taskRun.fetchCalls));
   if (!taskRun.fetchCalls.includes(taskLogsURL)) throw new Error('expected selected-cluster ecsTask recent-log fetch URL, got ' + JSON.stringify(taskRun.fetchCalls));
   if (!taskRun.text.includes('Live ECS task inspection')) throw new Error('expected ECS task inspection panel');
+  if (!taskRun.text.includes('Tenet request ID | req-inspection-878-success')) throw new Error('expected live inspection success to render Tenet Request-Id metadata: ' + taskRun.text);
   if (!taskRun.text.includes('Task containers')) throw new Error('expected ECS task container section');
   if (!taskRun.text.includes('Container awslogs')) throw new Error('expected awslogs metadata');
   if (!taskRun.text.includes('/aws/ecs/worker / worker/abc123')) throw new Error('expected task awslogs group/stream');
@@ -4819,6 +4823,10 @@ async function render(search, inspectionResult, hash = '') {
   if (!decodeURIComponent(taskRun.window.location.search.replace(/\+/g, '%20')).includes('resourceId=' + taskResourceId)) throw new Error('expected ECS task clear action to preserve task resource id, got ' + taskRun.window.location.search);
   if (taskRun.window.location.hash !== '#resource-recent-logs') throw new Error('expected ECS task clear action to preserve hash, got ' + taskRun.window.location.hash);
   if (!taskRun.fetchCalls.includes('/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsTask&resourceName=' + encodeURIComponent(taskArn) + '&containerName=worker&limit=10')) throw new Error('expected cleared ECS task recent-log fetch to omit clusterArn, got ' + JSON.stringify(taskRun.fetchCalls));
+
+  const inspectionErrorRun = await render(scopedTaskSearch, { __errorStatus: 500, __errorBody: 'provider failed' }, '#resource-live-inspection');
+  if (!inspectionErrorRun.text.includes('Failed to load live inspection: resource inspection request failed (500)')) throw new Error('expected live inspection non-auth error state: ' + inspectionErrorRun.text);
+  if (!inspectionErrorRun.text.includes('Tenet request ID · req-inspection-878-error')) throw new Error('expected live inspection non-auth error to render Tenet Request-Id metadata: ' + inspectionErrorRun.text);
 
   const serviceResult = { available: true, source: 'ecs_service', clusterArn, lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn, serviceName: 'worker-prod-service', status: 'ACTIVE', desiredCount: 1, runningCount: 1, pendingCount: 0, taskDefinition: 'worker:42', deployments: [], events: [], tasksScope: { effectiveLimit: 10, returnedTaskCount: 1, truncationStatus: 'not_truncated' }, tasks: [{ taskArn, taskId: 'abc123', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containerInstanceArn: 'arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker-prod/ci-sample', ec2InstanceId: 'i-0sampleec2host', capacityProviderName: 'worker-capacity', availabilityZone: 'ap-northeast-2c', containers: [{ name: 'worker', lastStatus: 'RUNNING', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] }] } };
   const serviceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId) + '&clusterArn=' + encodedClusterArn, serviceResult);
