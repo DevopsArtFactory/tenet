@@ -71,6 +71,17 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 		}
 	}
 
+	centralControlPlaneDoc := readRepoFile(t, "docs/architecture/tenet-v1-aws-central-control-plane.md")
+	for _, fragment := range []string{
+		"If you enable `TENET_API_TRUST_AUTHENTICATED_HEADERS=true`, `TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=true`, and/or `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`, keep that `tenet-api` instance behind the same authenticating front door.",
+		"The proxy/load balancer layer must strip any inbound `X-Tenet-Authenticated-*`, `X-Tenet-Authorized-Deployments`, `X-Tenet-Authorized-Projects`, `X-Tenet-Authorized-Environments`, and trusted-alias `X-User-*` headers from untrusted clients",
+		"or callers can spoof operator identity or deployment access by sending those headers directly.",
+	} {
+		if !strings.Contains(centralControlPlaneDoc, fragment) {
+			t.Fatalf("expected central-control-plane trusted-front-door docs to include warning fragment %q", fragment)
+		}
+	}
+
 	readme := readRepoFile(t, "README.md")
 	if !strings.Contains(readme, "`GET /auth/login/github`, `GET /auth/login/google`, or `GET /auth/login/okta` creates one-time callback state") {
 		t.Fatal("expected README auth runtime boundary to state public GitHub login route is shipped")
