@@ -94,6 +94,7 @@ type Result struct {
 	ResourceType            string                             `json:"resourceType"`
 	ResourceName            string                             `json:"resourceName"`
 	InstanceID              string                             `json:"instanceId,omitempty"`
+	ClusterARN              string                             `json:"clusterArn,omitempty"`
 	BackingResourceType     string                             `json:"backingResourceType,omitempty"`
 	BackingResourceName     string                             `json:"backingResourceName,omitempty"`
 	LookupContext           LookupContext                      `json:"lookupContext"`
@@ -790,6 +791,7 @@ func unavailableResult(req Request, reason string) Result {
 		ResourceType:        req.ResourceType,
 		ResourceName:        req.ResourceName,
 		InstanceID:          strings.TrimSpace(req.InstanceID),
+		ClusterARN:          responseClusterARN(req),
 		BackingResourceType: strings.TrimSpace(req.BackingResourceType),
 		BackingResourceName: strings.TrimSpace(req.BackingResourceName),
 		LookupContext:       lookupContext(req),
@@ -803,12 +805,20 @@ func availableECSResult(req Request, detail ECSServiceInspection) Result {
 		DeploymentName:    req.DeploymentName,
 		ResourceType:      req.ResourceType,
 		ResourceName:      req.ResourceName,
+		ClusterARN:        responseClusterARN(req),
 		LookupContext:     lookupContext(req),
 		Available:         true,
 		Source:            SourceECSService,
 		ECSService:        &detail,
 		UnavailableReason: "",
 	}
+}
+
+func responseClusterARN(req Request) string {
+	if req.ResourceType != "ecsService" {
+		return ""
+	}
+	return strings.TrimSpace(req.ClusterARN)
 }
 
 func availableECSTaskResult(req Request, detail ECSTaskInspection) Result {

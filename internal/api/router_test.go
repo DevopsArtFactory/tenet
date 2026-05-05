@@ -7052,7 +7052,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 	t.Run("enforces deployment read authorization and preserves unavailable payload when authorized", func(t *testing.T) {
 		const (
-			path                 = "/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service"
+			path                 = "/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker"
 			deploymentName       = "worker-prod"
 			resourceType         = "ecsService"
 			resourceName         = "worker-prod-service"
@@ -7068,6 +7068,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 			DeploymentName: deploymentName,
 			ResourceType:   resourceType,
 			ResourceName:   resourceName,
+			ClusterARN:     "arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker",
 			LookupContext: resourceinspection.LookupContext{
 				Region:                 "ap-northeast-2",
 				ControlAccountID:       "123456789012",
@@ -7164,6 +7165,13 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 			}
 			if got.UnavailableReason != unavailableReason {
 				t.Fatalf("expected unavailable reason %q, got %q", unavailableReason, got.UnavailableReason)
+			}
+			var raw map[string]any
+			if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+				t.Fatalf("decode raw resource inspection payload: %v", err)
+			}
+			if raw["clusterArn"] != "arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker" {
+				t.Fatalf("expected unavailable raw payload to echo selected clusterArn, got %#v", raw)
 			}
 		})
 	})
@@ -7321,6 +7329,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 			DeploymentName: "api-prod",
 			ResourceType:   "ecsService",
 			ResourceName:   "payments-api-prod-service",
+			ClusterARN:     "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
 			LookupContext: resourceinspection.LookupContext{
 				Region:                 "ap-northeast-2",
 				ControlAccountID:       "123456789012",
@@ -7425,10 +7434,13 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
 			t.Fatalf("failed to decode raw resource inspection payload: %v", err)
 		}
-		for _, key := range []string{"deploymentName", "resourceType", "resourceName", "lookupContext", "available", "source", "ecsService", "unavailableReason"} {
+		for _, key := range []string{"deploymentName", "resourceType", "resourceName", "clusterArn", "lookupContext", "available", "source", "ecsService", "unavailableReason"} {
 			if _, ok := raw[key]; !ok {
 				t.Fatalf("expected %q field in payload, got %#v", key, raw)
 			}
+		}
+		if raw["clusterArn"] != "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments" {
+			t.Fatalf("expected raw payload to echo selected clusterArn, got %#v", raw)
 		}
 		ecsService, ok := raw["ecsService"].(map[string]any)
 		if !ok {
