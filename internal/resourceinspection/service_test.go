@@ -1864,7 +1864,7 @@ func TestFindECSServiceReusesCachedClusterHintOnRepeatedLookup(t *testing.T) {
 		},
 	}
 
-	service, clusterARN, err := findECSService(context.Background(), client, serviceName, hints, key)
+	service, clusterARN, err := findECSService(context.Background(), client, serviceName, "", hints, key)
 	if err != nil {
 		t.Fatalf("first lookup returned error: %v", err)
 	}
@@ -1881,7 +1881,7 @@ func TestFindECSServiceReusesCachedClusterHintOnRepeatedLookup(t *testing.T) {
 		t.Fatalf("expected cache to store %s, got %q present=%v", clusterB, cachedClusterARN, ok)
 	}
 
-	service, clusterARN, err = findECSService(context.Background(), client, serviceName, hints, key)
+	service, clusterARN, err = findECSService(context.Background(), client, serviceName, "", hints, key)
 	if err != nil {
 		t.Fatalf("second lookup returned error: %v", err)
 	}
@@ -1893,6 +1893,44 @@ func TestFindECSServiceReusesCachedClusterHintOnRepeatedLookup(t *testing.T) {
 	}
 	if !reflect.DeepEqual(client.describeCalls, []string{clusterA, clusterB, clusterB}) {
 		t.Fatalf("expected second lookup to reuse cached cluster only, got %+v", client.describeCalls)
+	}
+}
+
+func TestFindECSServiceUsesSelectedClusterWithoutScanning(t *testing.T) {
+	const (
+		region          = "ap-northeast-2"
+		targetAccountID = "123456789012"
+		serviceName     = "payments-api-prod-service"
+		selectedCluster = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/selected"
+		otherCluster    = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/other"
+	)
+
+	hints := newECSServiceClusterHintCache(4)
+	key := newECSServiceClusterHintKey(region, targetAccountID, "", serviceName)
+	hints.Set(key, otherCluster)
+	client := &fakeECSServiceAPI{
+		clusterARNs: []string{otherCluster},
+		servicesByCluster: map[string][]ecstypes.Service{
+			selectedCluster: {{ServiceName: stringPtr(serviceName), ServiceArn: stringPtr("arn:service/selected")}},
+			otherCluster:    {{ServiceName: stringPtr(serviceName), ServiceArn: stringPtr("arn:service/other")}},
+		},
+	}
+
+	service, clusterARN, err := findECSService(context.Background(), client, serviceName, selectedCluster, hints, key)
+	if err != nil {
+		t.Fatalf("lookup returned error: %v", err)
+	}
+	if service == nil || aws.ToString(clusterARN) != selectedCluster {
+		t.Fatalf("expected selected-cluster lookup to find %s, got service=%+v cluster=%q", selectedCluster, service, aws.ToString(clusterARN))
+	}
+	if client.listCalls != 0 {
+		t.Fatalf("expected selected-cluster lookup to avoid cluster scans, got %d", client.listCalls)
+	}
+	if !reflect.DeepEqual(client.describeCalls, []string{selectedCluster}) {
+		t.Fatalf("expected selected cluster to be described exactly once, got %+v", client.describeCalls)
+	}
+	if cachedClusterARN, ok := hints.Get(key); !ok || cachedClusterARN != otherCluster {
+		t.Fatalf("expected selected-cluster lookup to leave existing hint untouched, got %q present=%v", cachedClusterARN, ok)
 	}
 }
 
@@ -1915,7 +1953,7 @@ func TestFindECSServiceClearsStaleClusterHintAndRecovers(t *testing.T) {
 		},
 	}
 
-	service, clusterARN, err := findECSService(context.Background(), client, serviceName, hints, key)
+	service, clusterARN, err := findECSService(context.Background(), client, serviceName, "", hints, key)
 	if err != nil {
 		t.Fatalf("lookup returned error: %v", err)
 	}

@@ -802,6 +802,7 @@ func newOverviewDeploymentResourceLogsProvider(
 			ObserverRoleARN:     request.ObserverRoleARN,
 			ContainerName:       resourcelogs.ContainerNameFromContext(ctx),
 			InstanceID:          resourcelogs.InstanceIDFromContext(ctx),
+			ClusterARN:          resourcelogs.ClusterARNFromContext(ctx),
 			Limit:               limit,
 		})
 	}
@@ -824,6 +825,7 @@ func newOverviewDeploymentResourceInspectionProvider(
 			TaskSummaryLimit:         limit,
 			AutoScalingInstanceLimit: limit,
 			InstanceID:               resourceinspection.InstanceIDFromContext(ctx),
+			ClusterARN:               resourceinspection.ClusterARNFromContext(ctx),
 			BackingResourceType:      request.BackingResourceType,
 			BackingResourceName:      request.BackingResourceName,
 			ControlAccountID:         request.ControlAccountID,

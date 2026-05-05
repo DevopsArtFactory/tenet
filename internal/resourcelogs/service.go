@@ -55,6 +55,7 @@ var ErrNotImplemented = errors.New("resource log service not implemented")
 
 type containerNameContextKey struct{}
 type instanceIDContextKey struct{}
+type clusterARNContextKey struct{}
 
 func ContextWithContainerName(ctx context.Context, containerName string) context.Context {
 	containerName = strings.TrimSpace(containerName)
@@ -82,6 +83,19 @@ func InstanceIDFromContext(ctx context.Context) string {
 	return strings.TrimSpace(value)
 }
 
+func ContextWithClusterARN(ctx context.Context, clusterARN string) context.Context {
+	clusterARN = strings.TrimSpace(clusterARN)
+	if clusterARN == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, clusterARNContextKey{}, clusterARN)
+}
+
+func ClusterARNFromContext(ctx context.Context) string {
+	value, _ := ctx.Value(clusterARNContextKey{}).(string)
+	return strings.TrimSpace(value)
+}
+
 type Request struct {
 	DeploymentName      string
 	ResourceType        string
@@ -95,6 +109,7 @@ type Request struct {
 	ObserverRoleARN     string
 	ContainerName       string
 	InstanceID          string
+	ClusterARN          string
 	Limit               int
 }
 
@@ -194,6 +209,7 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 			Region:          req.Region,
 			TargetAccountID: req.TargetAccountID,
 			ObserverRoleARN: req.ObserverRoleARN,
+			ClusterARN:      req.ClusterARN,
 			Limit:           req.Limit,
 		})
 		if err != nil {
@@ -311,6 +327,7 @@ type ECSRequest struct {
 	TargetAccountID string
 	ObserverRoleARN string
 	ContainerName   string
+	ClusterARN      string
 	Limit           int
 }
 
@@ -532,7 +549,7 @@ func (s Service) listECSLogEventsFromAWS(ctx context.Context, req ECSRequest) ([
 		return nil, err
 	}
 
-	service, clusterARN, err := findECSService(ctx, clients.ECS, req.ResourceName)
+	service, clusterARN, err := findECSService(ctx, clients.ECS, req.ResourceName, strings.TrimSpace(req.ClusterARN))
 	if err != nil {
 		return nil, err
 	}
@@ -660,7 +677,37 @@ func (s Service) listCodeDeployEventsFromAWS(ctx context.Context, req CodeDeploy
 	return events, nil
 }
 
-func findECSService(ctx context.Context, client *ecs.Client, serviceName string) (*ecstypes.Service, *string, error) {
+type ecsServiceClient interface {
+	ListClusters(context.Context, *ecs.ListClustersInput, ...func(*ecs.Options)) (*ecs.ListClustersOutput, error)
+	DescribeServices(context.Context, *ecs.DescribeServicesInput, ...func(*ecs.Options)) (*ecs.DescribeServicesOutput, error)
+}
+
+func describeECSServiceInCluster(ctx context.Context, client ecsServiceClient, clusterARN, serviceName string) (*ecstypes.Service, error) {
+	out, err := client.DescribeServices(ctx, &ecs.DescribeServicesInput{Cluster: aws.String(clusterARN), Services: []string{serviceName}})
+	if err != nil {
+		return nil, err
+	}
+	for _, service := range out.Services {
+		if aws.ToString(service.ServiceName) == serviceName {
+			return &service, nil
+		}
+	}
+	return nil, nil
+}
+
+func findECSService(ctx context.Context, client ecsServiceClient, serviceName, selectedClusterARN string) (*ecstypes.Service, *string, error) {
+	selectedClusterARN = strings.TrimSpace(selectedClusterARN)
+	if selectedClusterARN != "" {
+		service, err := describeECSServiceInCluster(ctx, client, selectedClusterARN, serviceName)
+		if err != nil {
+			return nil, nil, err
+		}
+		if service == nil {
+			return nil, nil, nil
+		}
+		return service, aws.String(selectedClusterARN), nil
+	}
+
 	clusters := ecs.NewListClustersPaginator(client, &ecs.ListClustersInput{})
 	for clusters.HasMorePages() {
 		page, err := clusters.NextPage(ctx)
@@ -668,14 +715,12 @@ func findECSService(ctx context.Context, client *ecs.Client, serviceName string)
 			return nil, nil, err
 		}
 		for _, clusterARN := range page.ClusterArns {
-			out, err := client.DescribeServices(ctx, &ecs.DescribeServicesInput{Cluster: aws.String(clusterARN), Services: []string{serviceName}})
+			service, err := describeECSServiceInCluster(ctx, client, clusterARN, serviceName)
 			if err != nil {
 				return nil, nil, err
 			}
-			for _, service := range out.Services {
-				if aws.ToString(service.ServiceName) == serviceName {
-					return &service, aws.String(clusterARN), nil
-				}
+			if service != nil {
+				return service, aws.String(clusterARN), nil
 			}
 		}
 	}
