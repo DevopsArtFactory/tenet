@@ -1539,6 +1539,8 @@ assert "Log entry cap · ${resourceLogsLimitText(limit)}" in ui, ui
 assert "'Log limit'" in ui, ui
 assert "params.set('limit', String(normalizedLimit));" in ui, ui
 assert "resourceLogLimit: normalizeResourceLogsLimit(params.get('resourceLogLimit') || '')" in ui, ui
+assert "clusterArn: params.get('clusterArn') || ''" in ui, ui
+assert "routeClusterArn: supportsECSServiceClusterScope(resource) ? String(currentPageState.clusterArn || resource.clusterArn || '').trim() : ''" in ui, ui
 assert "params.set('resourceLogLimit', String(limit));" in ui, ui
 assert "syncResourcePanelLimitQueryParams(deploymentName, resource);" in ui, ui
 assert "Refresh recent logs" in ui, ui
@@ -1701,6 +1703,8 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "Log entry cap · ${resourceLogsLimitText(limit)}" in body, body
     assert "'Log limit'" in body, body
     assert "resourceLogLimit: normalizeResourceLogsLimit(params.get('resourceLogLimit') || '')" in body, body
+    assert "clusterArn: params.get('clusterArn') || ''" in body, body
+    assert "routeClusterArn: supportsECSServiceClusterScope(resource) ? String(currentPageState.clusterArn || resource.clusterArn || '').trim() : ''" in body, body
     assert "params.set('resourceLogLimit', String(limit));" in body, body
     assert "syncResourcePanelLimitQueryParams(deploymentName, resource);" in body, body
     assert "...resourcePanelLimitURLParams(deploymentName, resource)" in body, body
@@ -1804,6 +1808,7 @@ assert 'Backing resource type' in ui, ui
 assert 'Backing resource name' in ui, ui
 assert 'Resource description' in ui, ui
 assert 'Selected container' in ui, ui
+assert 'Selected cluster' in ui, ui
 assert 'Log container' in ui, ui
 assert 'Open container recent logs' in ui, ui
 assert "params.set('containerName', containerName);" in ui, ui
