@@ -5228,13 +5228,17 @@ async function renderScenario(hash, fetchImpl) {
   if (!inspectionChip) throw new Error('expected live inspection hash to render the current-section chip');
   const inspectionScrollsBefore = inspectionRun.document.scrollEvents.filter((event) => event.id === 'resource-live-inspection').length;
   if (inspectionScrollsBefore < 1) throw new Error('expected initial live inspection hash to scroll the matching section into view');
-  resolveInspection({ ok: true, json: () => Promise.resolve({ available: true, source: 'ecs_service', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn: 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-staging', serviceArn: 'arn:aws:ecs:ap-northeast-2:210987654321:service/payments-staging/payments-api-staging-service', serviceName: 'payments-api-staging-service', status: 'ACTIVE', launchType: 'FARGATE', desiredCount: 2, runningCount: 2, pendingCount: 0, minimumHealthyPercent: 100, maximumPercent: 200, healthCheckGracePeriodSeconds: 45, taskDefinition: 'payments-api:42', deployments: [], tasks: [{ taskArn: 'arn:aws:ecs:ap-northeast-2:210987654321:task/payments-staging/abc123', taskId: 'abc123', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containers: [{ name: 'worker', lastStatus: 'RUNNING', healthStatus: 'HEALTHY', image: 'worker:latest', awslogs: { group: '/ecs/payments', stream: 'ecs/worker/abc123' } }] }], events: [] } }) });
+  resolveInspection({ ok: true, json: () => Promise.resolve({ available: true, source: 'ecs_service', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn: 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-staging', serviceArn: 'arn:aws:ecs:ap-northeast-2:210987654321:service/payments-staging/payments-api-staging-service', serviceName: 'payments-api-staging-service', status: 'ACTIVE', launchType: 'FARGATE', desiredCount: 2, runningCount: 2, pendingCount: 0, minimumHealthyPercent: 100, maximumPercent: 200, healthCheckGracePeriodSeconds: 45, taskDefinition: 'payments-api:42', deployments: [], tasks: [{ taskArn: 'arn:aws:ecs:ap-northeast-2:210987654321:task/payments-staging/abc123', taskId: 'abc123', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containerInstanceArn: 'arn:aws:ecs:ap-northeast-2:210987654321:container-instance/payments-staging/ci-abc123', capacityProviderName: 'FARGATE_SPOT', availabilityZone: 'ap-northeast-2a', containers: [{ name: 'worker', lastStatus: 'RUNNING', healthStatus: 'HEALTHY', image: 'worker:latest', awslogs: { group: '/ecs/payments', stream: 'ecs/worker/abc123' } }] }], events: [] } }) });
   await settle();
   await settle();
   const inspectionScrollsAfter = inspectionRun.document.scrollEvents.filter((event) => event.id === 'resource-live-inspection').length;
   if (inspectionScrollsAfter <= inspectionScrollsBefore) throw new Error('expected live inspection hash to re-scroll after lazy panel load');
   if (!inspectionRun.document.lastScrolledTarget || inspectionRun.document.lastScrolledTarget.id !== 'resource-live-inspection') throw new Error('expected live inspection hash to remain the active scroll target after lazy panel load');
   const inspectionRoot = inspectionRun.document.getElementById('accounts');
+  const inspectionText = collectText(inspectionRoot).join(' | ');
+  ['Container instance · arn:aws:ecs:ap-northeast-2:210987654321:container-instance/payments-staging/ci-abc123', 'Capacity provider · FARGATE_SPOT', 'Availability Zone · ap-northeast-2a'].forEach((fragment) => {
+    if (!inspectionText.includes(fragment)) throw new Error('expected ECS service task placement evidence ' + fragment + ', got ' + inspectionText);
+  });
   const containerLogLink = collectNodes(inspectionRoot, (node) => node.tagName === 'A' && node.textContent === 'Open container recent logs')[0];
   if (!containerLogLink) throw new Error('expected ECS task container rows to expose recent-log handoff');
   if (!containerLogLink.href.startsWith('/console?page=resource')) throw new Error('expected container log handoff to stay in the embedded resource shell, got ' + containerLogLink.href);
@@ -5300,7 +5304,7 @@ async function renderScenario(hash, fetchImpl) {
       containerFetches.push(String(url));
       if (url === deploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
       if (url === containerLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', containerName: 'worker', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, resultScope: { effectiveLimit: 100, returnedEntryCount: 1, truncationStatus: 'not_truncated' }, entries: [{ timestamp: '2026-05-03T00:00:00Z', containerName: 'worker', message: 'bookmarked worker log' }] }) });
-      if (url === containerInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'aws_unavailable' }) });
+      if (url === containerInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'ecs_task', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, ecsTask: { clusterArn, taskArn: 'arn:aws:ecs:ap-northeast-2:210987654321:task/payments-staging/abc123', taskId: 'abc123', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containerInstanceArn: 'arn:aws:ecs:ap-northeast-2:210987654321:container-instance/payments-staging/ci-abc123', capacityProviderName: 'FARGATE_SPOT', availabilityZone: 'ap-northeast-2a', taskDefinition: 'payments-api:42', containers: [{ name: 'worker', lastStatus: 'RUNNING', healthStatus: 'HEALTHY', image: 'worker:latest', awslogs: { group: '/ecs/payments', stream: 'ecs/worker/abc123' } }] } }) });
       throw new Error('unexpected container resource fetch url: ' + url);
     };
     new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetchImpl, history, Element, InputElement);
@@ -5311,6 +5315,9 @@ async function renderScenario(hash, fetchImpl) {
   if (!containerFetches.includes(containerLogsURL)) throw new Error('expected bookmarked container route to fetch container-scoped recent logs, got ' + JSON.stringify(containerFetches));
   const containerText = collectText(containerRun.document.getElementById('accounts')).join(' | ');
   if (!containerText.includes('Selected container | worker') || !containerText.includes('bookmarked worker log')) throw new Error('expected bookmarked container route to render container-scoped logs, got ' + containerText);
+  ['Container instance | arn:aws:ecs:ap-northeast-2:210987654321:container-instance/payments-staging/ci-abc123', 'Capacity provider | FARGATE_SPOT', 'Availability Zone | ap-northeast-2a'].forEach((fragment) => {
+    if (!containerText.includes(fragment)) throw new Error('expected direct ECS task placement evidence ' + fragment + ', got ' + containerText);
+  });
 })();
 `
 
