@@ -5553,7 +5553,15 @@
         const selectedLimit = normalizeDeploymentEventsLimit(limit);
         const events = sortTimelineEvents(result?.events || []);
         if (!events.length) {
-          renderDeploymentEventsState(section, deploymentName, `No controller runtime events were returned in the latest ${selectedLimit}-event window.`, '', '', false, selectedLimit);
+          renderDeploymentEventsState(
+            section,
+            deploymentName,
+            `No controller runtime events were returned in the latest ${selectedLimit}-event window. Increase Event window or use Refresh runtime events before treating controller history as absent.`,
+            '',
+            '',
+            false,
+            selectedLimit,
+          );
           return;
         }
 
