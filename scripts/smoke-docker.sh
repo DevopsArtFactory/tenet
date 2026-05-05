@@ -1784,7 +1784,7 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
         "params.set('limit', String(normalizedLimit));",
         "resourceLogLimit: normalizeResourceLogsLimit(params.get('resourceLogLimit') || '')",
         "clusterArn: params.get('clusterArn') || ''",
-        "routeClusterArn: supportsECSServiceClusterScope(resource) ? String(currentPageState.clusterArn || resource.clusterArn || '').trim() : ''",
+        "routeClusterArn: supportsECSClusterScope(resource) ? String(currentPageState.clusterArn || resource.clusterArn || '').trim() : ''",
         "Clear selected cluster",
         "const clearSelectedClusterRoute = (detail, resource) => {",
         "clusterArn: '',",

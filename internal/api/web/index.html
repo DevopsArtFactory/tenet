@@ -1824,7 +1824,7 @@
         return Boolean(bookmarkedAlias && resolvedAlias && bookmarkedAlias === resolvedAlias);
       };
       const resourceLogCacheKey = (deploymentName, resource) => [deploymentName || '', resource.type || '', resource.name || '', resource.id || '', resource.containerName || '', resource.instanceId || '', resource.clusterArn || ''].join('::');
-      const supportsECSServiceClusterScope = (resource) => String(resource?.type || '').trim() === 'ecsService';
+      const supportsECSClusterScope = (resource) => ['ecsService', 'ecsTask'].includes(String(resource?.type || '').trim());
       const supportsBoundedResourceInspection = (resource) => ['ecsService', 'candidateAutoScalingGroup', 'serviceAutoScalingGroup'].includes(String(resource?.type || '').trim());
       const resourceLogRequestCacheKey = (deploymentName, resource, limit = 0) => `${resourceLogCacheKey(deploymentName, resource)}::limit=${normalizeResourceLogsLimit(limit)}`;
       const resourceInspectionRequestCacheKey = (deploymentName, resource, limit = 0) => `${resourceLogCacheKey(deploymentName, resource)}::inspection-limit=${supportsBoundedResourceInspection(resource) ? normalizeResourceInspectionTaskLimit(limit) : 0}`;
@@ -2781,7 +2781,7 @@
       };
       const resourceDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;
       const clearSelectedClusterRoute = (detail, resource) => {
-        if (!supportsECSServiceClusterScope(resource)) return null;
+        if (!supportsECSClusterScope(resource)) return null;
         const clusterArn = String(resource?.clusterArn || currentPageState.clusterArn || '').trim();
         if (!clusterArn) return null;
         const deploymentName = detail?.name || currentPageState.deployment || '';
@@ -2810,7 +2810,7 @@
         return nextState;
       };
       const createClearSelectedClusterButton = (detail, resource, resourceState = null) => {
-        if (!supportsECSServiceClusterScope(resource) || !String(resource?.clusterArn || '').trim()) return null;
+        if (!supportsECSClusterScope(resource) || !String(resource?.clusterArn || '').trim()) return null;
         const button = createElement('button', 'toolbar-button', 'Clear selected cluster');
         button.type = 'button';
         button.disabled = resourceState?.status === 'loading';
@@ -3028,7 +3028,7 @@
       const applyResourcePageContainerState = (resource) => {
         const containerName = String(currentPageState.containerName || '').trim();
         const instanceId = String(currentPageState.instanceId || '').trim();
-        const clusterArn = supportsECSServiceClusterScope(resource) ? String(currentPageState.clusterArn || '').trim() : '';
+        const clusterArn = supportsECSClusterScope(resource) ? String(currentPageState.clusterArn || '').trim() : '';
         return {
           ...resource,
           ...(containerName ? { containerName } : {}),
@@ -3040,7 +3040,7 @@
         const entries = [];
         const instanceId = String(resource?.instanceId || '').trim();
         const containerName = String(resource?.containerName || '').trim();
-        const clusterArn = supportsECSServiceClusterScope(resource) ? String(resource?.clusterArn || '').trim() : '';
+        const clusterArn = supportsECSClusterScope(resource) ? String(resource?.clusterArn || '').trim() : '';
         if (instanceId) {
           entries.push(['Selected instance', instanceId]);
         }
@@ -3100,7 +3100,7 @@
           routeResourceId: openedViaAlias ? bookmarkedResource.id : resource.id,
           routeContainerName: String(currentPageState.containerName || resource.containerName || '').trim(),
           routeInstanceId: String(currentPageState.instanceId || resource.instanceId || '').trim(),
-          routeClusterArn: supportsECSServiceClusterScope(resource) ? String(currentPageState.clusterArn || resource.clusterArn || '').trim() : '',
+          routeClusterArn: supportsECSClusterScope(resource) ? String(currentPageState.clusterArn || resource.clusterArn || '').trim() : '',
         };
       };
       const resourcePanelLimitURLParams = (deploymentName, resource) => {
@@ -4103,7 +4103,7 @@
         if (instanceId) {
           params.set('instanceId', instanceId);
         }
-        const clusterArn = supportsECSServiceClusterScope(resource) ? String(resource?.clusterArn || '').trim() : '';
+        const clusterArn = supportsECSClusterScope(resource) ? String(resource?.clusterArn || '').trim() : '';
         if (clusterArn) {
           params.set('clusterArn', clusterArn);
         }
@@ -4288,7 +4288,7 @@
         if (instanceId) {
           params.set('instanceId', instanceId);
         }
-        const clusterArn = supportsECSServiceClusterScope(resource) ? String(resource?.clusterArn || '').trim() : '';
+        const clusterArn = supportsECSClusterScope(resource) ? String(resource?.clusterArn || '').trim() : '';
         if (clusterArn) {
           params.set('clusterArn', clusterArn);
         }
@@ -4409,19 +4409,26 @@
       const ecsTaskResource = (task) => {
         const taskARN = String(task?.taskArn || '').trim();
         const taskID = String(task?.taskId || '').trim();
+        const clusterArn = String(task?.clusterArn || '').trim();
         const name = taskARN || taskID;
         if (!name) return null;
         const description = taskID ? `ECS task ${taskID}` : 'ECS task';
         const id = stableResourceIdentity({ type: 'ecsTask', name, description });
-        return { id, type: 'ecsTask', name, description };
+        return { id, type: 'ecsTask', name, description, ...(clusterArn ? { clusterArn } : {}) };
       };
+      const ecsTaskResourceURLParams = (taskResource) => ({
+        resourceType: taskResource.type,
+        resourceId: taskResource.id,
+        ...(taskResource.clusterArn ? { clusterArn: taskResource.clusterArn } : {}),
+      });
       const createECSTaskHandoffLinks = (deploymentName, task) => {
         const taskResource = ecsTaskResource(task);
         if (!deploymentName || !taskResource) return null;
         const links = createElement('div', 'row-links');
+        const taskResourceParams = ecsTaskResourceURLParams(taskResource);
         links.append(
-          createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: taskResource.type, resourceId: taskResource.id }), 'Open task live inspection', '_self'),
-          createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: taskResource.type, resourceId: taskResource.id }), 'Open task recent logs', '_self'),
+          createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, ...taskResourceParams }), 'Open task live inspection', '_self'),
+          createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, ...taskResourceParams }), 'Open task recent logs', '_self'),
         );
         return links;
       };
@@ -4431,8 +4438,7 @@
         if (!deploymentName || !taskResource || !containerName || !container?.awslogs) return null;
         return createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', {
           deployment: deploymentName,
-          resourceType: taskResource.type,
-          resourceId: taskResource.id,
+          ...ecsTaskResourceURLParams(taskResource),
           containerName,
         }), 'Open container recent logs', '_self');
       };
@@ -4458,9 +4464,13 @@
         });
         item.append(containerSection);
       };
-      const createECSTaskListItem = (deploymentName, task, includeHandoffs = false) => {
+      const createECSTaskListItem = (deploymentName, task, includeHandoffs = false, fallbackClusterArn = '') => {
+        const taskWithScope = {
+          ...(task || {}),
+          ...(!String(task?.clusterArn || '').trim() && String(fallbackClusterArn || '').trim() ? { clusterArn: String(fallbackClusterArn || '').trim() } : {}),
+        };
         const item = createElement('li');
-        item.append(createElement('strong', '', ecsTaskDisplayName(task)));
+        item.append(createElement('strong', '', ecsTaskDisplayName(taskWithScope)));
         const meta = createElement('div', 'detail-history-meta');
         meta.append(
           createElement('span', 'detail-condition-meta', `Task ARN · ${textOrDash(task?.taskArn)}`),
@@ -4471,12 +4481,12 @@
         if (task?.startedAt) meta.append(createElement('span', 'detail-condition-meta', `Started at · ${task.startedAt}`));
         if (task?.stoppedAt) meta.append(createElement('span', 'detail-condition-meta', `Stopped at · ${task.stoppedAt}`));
         if (task?.stoppedReason) meta.append(createElement('span', 'detail-condition-meta', `Stopped reason · ${task.stoppedReason}`));
-        if (task?.clusterArn) meta.append(createElement('span', 'detail-condition-meta', `Cluster ARN · ${task.clusterArn}`));
+        if (taskWithScope?.clusterArn) meta.append(createElement('span', 'detail-condition-meta', `Cluster ARN · ${taskWithScope.clusterArn}`));
         if (task?.taskDefinition) meta.append(createElement('span', 'detail-condition-meta', `Task definition · ${task.taskDefinition}`));
         item.append(meta);
-        appendECSTaskContainerRows(item, task?.containers, deploymentName, task);
+        appendECSTaskContainerRows(item, taskWithScope?.containers, deploymentName, taskWithScope);
         if (includeHandoffs) {
-          const links = createECSTaskHandoffLinks(deploymentName, task);
+          const links = createECSTaskHandoffLinks(deploymentName, taskWithScope);
           if (links) item.append(links);
         }
         return item;
@@ -4529,7 +4539,7 @@
         const tasksSection = createInspectionListSection(
           'Recent ECS tasks',
           service?.tasks || [],
-          (task) => createECSTaskListItem(deploymentName, task, true),
+          (task) => createECSTaskListItem(deploymentName, task, true, service?.clusterArn || result?.clusterArn || resource?.clusterArn),
           taskSampleUnavailable ? 'Task sampling is unavailable for this service; service inspection remains available.' : 'No recent ECS tasks are reported for this service.',
           [createECSTaskScopeSummary(service?.tasksScope)],
         );
@@ -4962,7 +4972,7 @@
             }
             if (container?.awslogs?.group || container?.awslogs?.stream) {
               meta.append(createElement('span', 'detail-condition-meta', `Container awslogs · ${textOrDash(container?.awslogs?.group)} / ${textOrDash(container?.awslogs?.stream)}`));
-              const handoff = createECSTaskContainerLogHandoff(deploymentName, { taskArn: task?.taskArn, taskId: task?.taskId }, container);
+              const handoff = createECSTaskContainerLogHandoff(deploymentName, { taskArn: task?.taskArn, taskId: task?.taskId, clusterArn: task?.clusterArn || resource?.clusterArn }, container);
               if (handoff) meta.append(handoff);
             }
             item.append(meta);

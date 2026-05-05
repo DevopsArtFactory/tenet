@@ -1873,7 +1873,7 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		"that pair gives reviewers the exact Tenet request log correlation key plus the attempted region/account/observer-role path",
 		"Example selected-cluster service request",
 		"resource-logs?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5",
-		"The embedded resource page also preserves bookmarkable `clusterArn` URL state for ECS service resources",
+		"The embedded resource page also preserves bookmarkable `clusterArn` URL state for ECS service and ECS task resources",
 		"local/compose smoke now lock the response-level `clusterArn` echo",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
