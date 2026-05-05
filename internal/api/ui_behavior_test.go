@@ -4709,6 +4709,8 @@ func TestResourceDetailPageECSTaskInspectionWithNodeHarness(t *testing.T) {
 const scriptContent = ` + string(scriptJSON) + `;
 const detailBody = ` + string(detailJSON) + `;
 const taskArn = 'arn:aws:ecs:ap-northeast-2:123456789012:task/worker/abc123';
+const clusterArn = 'arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker-prod';
+const encodedClusterArn = encodeURIComponent(clusterArn);
 const taskResourceId = 'ecsTask::' + taskArn + '::ECS task abc123';
 const serviceResourceId = 'ecsService::worker-prod-service::Primary worker service';
 class Element {
@@ -4773,15 +4775,22 @@ async function render(search, inspectionResult) {
   if (!taskRun.text.includes('Container awslogs')) throw new Error('expected awslogs metadata');
   if (!taskRun.text.includes('/aws/ecs/worker / worker/abc123')) throw new Error('expected task awslogs group/stream');
 
-  const serviceResult = { available: true, source: 'ecs_service', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, ecsService: { serviceName: 'worker-prod-service', status: 'ACTIVE', desiredCount: 1, runningCount: 1, pendingCount: 0, taskDefinition: 'worker:42', deployments: [], events: [], tasksScope: { effectiveLimit: 10, returnedTaskCount: 1, truncationStatus: 'not_truncated' }, tasks: [{ taskArn, taskId: 'abc123', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containers: [{ name: 'worker', lastStatus: 'RUNNING', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] }] } };
-  const serviceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId), serviceResult);
+  const serviceResult = { available: true, source: 'ecs_service', clusterArn, lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn, serviceName: 'worker-prod-service', status: 'ACTIVE', desiredCount: 1, runningCount: 1, pendingCount: 0, taskDefinition: 'worker:42', deployments: [], events: [], tasksScope: { effectiveLimit: 10, returnedTaskCount: 1, truncationStatus: 'not_truncated' }, tasks: [{ taskArn, taskId: 'abc123', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containers: [{ name: 'worker', lastStatus: 'RUNNING', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] }] } };
+  const serviceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId) + '&clusterArn=' + encodedClusterArn, serviceResult);
   if (!serviceRun.text.includes('Recent ECS tasks')) throw new Error('expected ECS service task list');
   if (!serviceRun.text.includes('Task sample scope · returned 1 task(s) from effective limit 10 · not truncated')) throw new Error('expected ECS task sample scope text: ' + serviceRun.text);
   if (!serviceRun.text.includes('Task ARN · ' + taskArn)) throw new Error('expected ECS task ARN in service inspection');
-  const restoredServiceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId) + '&resourceInspectionLimit=25', serviceResult);
+  if (!serviceRun.text.includes('Selected cluster | ' + clusterArn)) throw new Error('expected selected ECS cluster to render in resource scope evidence: ' + serviceRun.text);
+  if (!serviceRun.text.includes('Selected cluster · ' + clusterArn)) throw new Error('expected selected ECS cluster to render in quick navigation: ' + serviceRun.text);
+  const clusterSectionLinks = collectNodes(serviceRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#resource-'));
+  ['#resource-live-inspection', '#resource-recent-logs'].forEach((hashSuffix) => {
+    const link = clusterSectionLinks.find((node) => node.href.endsWith(hashSuffix));
+    if (!link || !link.href.includes('clusterArn=' + encodedClusterArn)) throw new Error('expected selected ECS cluster to stay in section link for ' + hashSuffix + ', got ' + (link?.href || '<missing>'));
+  });
+  const restoredServiceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId) + '&clusterArn=' + encodedClusterArn + '&resourceInspectionLimit=25', serviceResult);
   const restoredLimitSelect = collectNodes(restoredServiceRun.document.getElementById('accounts'), (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'Task sample limit')[0];
   if (!restoredLimitSelect || restoredLimitSelect.value !== '25') throw new Error('expected bookmarked inspection limit to restore select value');
-  if (!restoredServiceRun.fetchCalls.includes('/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&limit=25')) throw new Error('expected bookmarked inspection limit in initial fetch URL, got ' + JSON.stringify(restoredServiceRun.fetchCalls));
+  if (!restoredServiceRun.fetchCalls.includes('/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=' + encodedClusterArn + '&limit=25')) throw new Error('expected bookmarked inspection limit and cluster selector in initial fetch URL, got ' + JSON.stringify(restoredServiceRun.fetchCalls));
 
   const taskLimitSelect = collectNodes(serviceRun.document.getElementById('accounts'), (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'Task sample limit')[0];
   if (!taskLimitSelect) throw new Error('expected ECS service live inspection to expose task sample limit select');
@@ -4789,14 +4798,17 @@ async function render(search, inspectionResult) {
   ['10 tasks (default)', '25 tasks'].forEach((label) => {
     if (!limitOptionsText.includes(label)) throw new Error('expected task limit option ' + label + ', got ' + limitOptionsText);
   });
-  const inspectionURL = '/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&limit=10';
+  const logsURL = '/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=' + encodedClusterArn;
+  if (!serviceRun.fetchCalls.includes(logsURL)) throw new Error('expected selected ECS cluster in recent-log fetch URL, got ' + JSON.stringify(serviceRun.fetchCalls));
+  const inspectionURL = '/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=' + encodedClusterArn + '&limit=10';
+  if (!serviceRun.fetchCalls.includes(inspectionURL)) throw new Error('expected selected ECS cluster in inspection fetch URL, got ' + JSON.stringify(serviceRun.fetchCalls));
   const fetchesBeforeTaskLimit = serviceRun.fetchCalls.length;
   taskLimitSelect.value = '25';
   taskLimitSelect.dispatch('change');
   await settle(); await settle(); await settle();
   const limitedInspectionURL = inspectionURL.replace('&limit=10', '&limit=25');
   if (!serviceRun.fetchCalls.includes(limitedInspectionURL)) throw new Error('expected selected task sample limit in inspection fetch URL, got ' + JSON.stringify(serviceRun.fetchCalls));
-  const expectedServiceInspectionLimitSearch = '?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=ecsService%3A%3Aworker-prod-service%3A%3APrimary+worker+service&resourceInspectionLimit=25';
+  const expectedServiceInspectionLimitSearch = '?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=ecsService%3A%3Aworker-prod-service%3A%3APrimary+worker+service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&resourceInspectionLimit=25';
   if (serviceRun.window.location.search !== expectedServiceInspectionLimitSearch) throw new Error('expected task sample limit select to update bookmarkable resource query, got ' + serviceRun.window.location.search);
   if (serviceRun.window.location.search.includes('&limit=')) throw new Error('expected resource inspection limit not to reuse audit limit param: ' + serviceRun.window.location.search);
   const limitedInspectionText = collectText(serviceRun.document.getElementById('accounts')).join(' | ');
@@ -4815,7 +4827,7 @@ async function render(search, inspectionResult) {
   const emptyServiceResult = JSON.parse(JSON.stringify(serviceResult));
   emptyServiceResult.ecsService.tasks = [];
   emptyServiceResult.ecsService.tasksScope = { available: true, requestedLimit: 10, effectiveLimit: 10, returnedTaskCount: 0, truncationStatus: 'not_truncated' };
-  const emptyServiceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId), emptyServiceResult);
+  const emptyServiceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId) + '&clusterArn=' + encodedClusterArn, emptyServiceResult);
   if (!emptyServiceRun.text.includes('Task sample scope · returned 0 task(s) from effective limit 10 · not truncated')) throw new Error('expected true empty task sample scope text: ' + emptyServiceRun.text);
   if (!emptyServiceRun.text.includes('No recent ECS tasks are reported for this service.')) throw new Error('expected true empty task sample copy: ' + emptyServiceRun.text);
   if (emptyServiceRun.text.includes('Task sample unavailable')) throw new Error('expected true empty task sample to avoid unavailable copy: ' + emptyServiceRun.text);
@@ -4823,7 +4835,7 @@ async function render(search, inspectionResult) {
   const unavailableServiceResult = JSON.parse(JSON.stringify(serviceResult));
   unavailableServiceResult.ecsService.tasks = [];
   unavailableServiceResult.ecsService.tasksScope = { available: false, requestedLimit: 10, effectiveLimit: 10, returnedTaskCount: 0, truncationStatus: 'not_applicable', unavailableReason: 'aws_unavailable', summary: 'Task sampling could not reach ECS tasks after the service lookup succeeded.' };
-  const unavailableServiceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId), unavailableServiceResult);
+  const unavailableServiceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId) + '&clusterArn=' + encodedClusterArn, unavailableServiceResult);
   if (!unavailableServiceRun.text.includes('Task sample unavailable · Task sampling could not reach ECS tasks after the service lookup succeeded. · requested 10 · effective 10')) throw new Error('expected task sample unavailable summary: ' + unavailableServiceRun.text);
   if (!unavailableServiceRun.text.includes('Task sampling is unavailable for this service; service inspection remains available.')) throw new Error('expected unavailable task sample empty-state copy: ' + unavailableServiceRun.text);
   if (unavailableServiceRun.text.includes('No recent ECS tasks are reported for this service.')) throw new Error('expected unavailable task sample not to look like true empty samples: ' + unavailableServiceRun.text);
@@ -4843,7 +4855,7 @@ async function render(search, inspectionResult) {
 
   const legacyServiceResult = JSON.parse(JSON.stringify(serviceResult));
   delete legacyServiceResult.ecsService.tasksScope;
-  const legacyServiceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId), legacyServiceResult);
+  const legacyServiceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId) + '&clusterArn=' + encodedClusterArn, legacyServiceResult);
   if (legacyServiceRun.text.includes('Task sample scope')) throw new Error('expected legacy ECS service payload without tasksScope to stay quiet: ' + legacyServiceRun.text);
 })();
 `
@@ -5012,12 +5024,14 @@ const collectNodes = (node, predicate) => {
 const collectText = (node) => node ? [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean) : [];
 async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
 const resourceID = 'ecsService::payments-api-staging-service::Primary ECS service';
+const clusterArn = 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-staging';
+const encodedClusterArn = encodeURIComponent(clusterArn);
 const deploymentURL = '/v1/overview/deployments/payments-api-staging';
-const logsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service';
-const inspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10';
+const logsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service&clusterArn=' + encodedClusterArn;
+const inspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&clusterArn=' + encodedClusterArn + '&limit=10';
 async function renderScenario(hash, fetchImpl) {
   const document = createDocument();
-  const initialSearch = '?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(resourceID) + '&q=payments&sync=OutOfSync&account=210987654321';
+  const initialSearch = '?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(resourceID) + '&clusterArn=' + encodedClusterArn + '&q=payments&sync=OutOfSync&account=210987654321';
   const window = createWindow(initialSearch, hash);
   const history = { replaceState(_state, _title, url) {
     const [pathAndQuery, nextHash = ''] = String(url).split('#');
@@ -5067,8 +5081,8 @@ async function renderScenario(hash, fetchImpl) {
     if (!link) throw new Error('missing resource section link ' + text);
     if (!link.href.startsWith('/console?page=resource')) throw new Error('expected resource section link to stay on the resource page for ' + text + ', got ' + link.href);
     const decodedHref = decodeURIComponent(link.href.replace(/\+/g, '%20'));
-    ['q=payments', 'sync=OutOfSync', 'account=210987654321', 'deployment=payments-api-staging', 'resourceType=ecsService', 'resourceId=' + resourceID].forEach((fragment) => {
-      const source = fragment.startsWith('resourceId=') ? decodedHref : link.href;
+    ['q=payments', 'sync=OutOfSync', 'account=210987654321', 'deployment=payments-api-staging', 'resourceType=ecsService', 'resourceId=' + resourceID, 'clusterArn=' + clusterArn].forEach((fragment) => {
+      const source = fragment.startsWith('resourceId=') || fragment.startsWith('clusterArn=') ? decodedHref : link.href;
       if (!source.includes(fragment)) throw new Error('expected resource section link to preserve ' + fragment + ' for ' + text + ', got ' + link.href);
     });
     if (!link.href.endsWith(hashSuffix)) throw new Error('expected resource section link to end with ' + hashSuffix + ' for ' + text + ', got ' + link.href);
@@ -5085,7 +5099,7 @@ async function renderScenario(hash, fetchImpl) {
   if (!recentLogsRun.document.lastScrolledTarget || recentLogsRun.document.lastScrolledTarget.id !== 'resource-recent-logs') throw new Error('expected recent logs hash to remain the active scroll target after lazy panel load');
   const recentLogsText = collectText(recentLogsRoot).join(' | ');
   if (!recentLogsText.includes('Log entry cap · All available entries')) throw new Error('expected recent logs panel to render the default active cap copy');
-  ['Requested cap | All available entries', 'Effective cap | 100 entries', 'Returned entries | 0 entries', 'Scope status | Below cap; no router truncation', 'Resource description | Primary ECS service log stream', 'Selected container | worker'].forEach((fragment) => {
+  ['Requested cap | All available entries', 'Effective cap | 100 entries', 'Returned entries | 0 entries', 'Scope status | Below cap; no router truncation', 'Resource description | Primary ECS service log stream', 'Selected cluster | ' + clusterArn, 'Selected container | worker'].forEach((fragment) => {
     if (!recentLogsText.includes(fragment)) throw new Error('expected recent logs result-scope evidence ' + fragment + ', got ' + recentLogsText);
   });
   const limitSelect = collectNodes(recentLogsRoot, (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'Log limit')[0];
@@ -5101,7 +5115,7 @@ async function renderScenario(hash, fetchImpl) {
   await settle();
   await settle();
   if (!recentLogsFetchCalls.includes(logsURL + '&limit=10')) throw new Error('expected selected log cap to be included in recent-log fetch URL, got ' + JSON.stringify(recentLogsFetchCalls));
-  const expectedRecentLogsLimitSearch = '?page=resource&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging&resourceType=ecsService&resourceId=ecsService%3A%3Apayments-api-staging-service%3A%3APrimary+ECS+service&resourceLogLimit=10';
+  const expectedRecentLogsLimitSearch = '?page=resource&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging&resourceType=ecsService&resourceId=ecsService%3A%3Apayments-api-staging-service%3A%3APrimary+ECS+service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-staging&resourceLogLimit=10';
   if (recentLogsRun.window.location.search !== expectedRecentLogsLimitSearch) throw new Error('expected log limit select to update bookmarkable resource query, got ' + recentLogsRun.window.location.search);
   if (recentLogsRun.window.location.hash !== '#resource-recent-logs') throw new Error('expected log limit select to preserve resource section hash, got ' + recentLogsRun.window.location.hash);
   if (recentLogsFetchCalls.filter((url) => url === inspectionURL).length !== inspectionsBeforeLimit) throw new Error('expected log limit select not to refetch live inspection panel');

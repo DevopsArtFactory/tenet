@@ -1823,7 +1823,8 @@
         const resolvedAlias = bootstrapSourceAliasIdentity(resource.name);
         return Boolean(bookmarkedAlias && resolvedAlias && bookmarkedAlias === resolvedAlias);
       };
-      const resourceLogCacheKey = (deploymentName, resource) => [deploymentName || '', resource.type || '', resource.name || '', resource.id || '', resource.containerName || '', resource.instanceId || ''].join('::');
+      const resourceLogCacheKey = (deploymentName, resource) => [deploymentName || '', resource.type || '', resource.name || '', resource.id || '', resource.containerName || '', resource.instanceId || '', resource.clusterArn || ''].join('::');
+      const supportsECSServiceClusterScope = (resource) => String(resource?.type || '').trim() === 'ecsService';
       const supportsBoundedResourceInspection = (resource) => ['ecsService', 'candidateAutoScalingGroup', 'serviceAutoScalingGroup'].includes(String(resource?.type || '').trim());
       const resourceLogRequestCacheKey = (deploymentName, resource, limit = 0) => `${resourceLogCacheKey(deploymentName, resource)}::limit=${normalizeResourceLogsLimit(limit)}`;
       const resourceInspectionRequestCacheKey = (deploymentName, resource, limit = 0) => `${resourceLogCacheKey(deploymentName, resource)}::inspection-limit=${supportsBoundedResourceInspection(resource) ? normalizeResourceInspectionTaskLimit(limit) : 0}`;
@@ -2086,6 +2087,7 @@
           resourceId: params.get('resourceId') || '',
           containerName: params.get('containerName') || '',
           instanceId: params.get('instanceId') || '',
+          clusterArn: params.get('clusterArn') || '',
           resourceLogLimit: normalizeResourceLogsLimit(params.get('resourceLogLimit') || ''),
           resourceInspectionLimit: normalizeResourceInspectionTaskLimit(params.get('resourceInspectionLimit') || ''),
           auditAction: normalizeAuditAction(params.get('action') || ''),
@@ -2985,21 +2987,27 @@
       const applyResourcePageContainerState = (resource) => {
         const containerName = String(currentPageState.containerName || '').trim();
         const instanceId = String(currentPageState.instanceId || '').trim();
+        const clusterArn = supportsECSServiceClusterScope(resource) ? String(currentPageState.clusterArn || '').trim() : '';
         return {
           ...resource,
           ...(containerName ? { containerName } : {}),
           ...(instanceId ? { instanceId } : {}),
+          ...(clusterArn ? { clusterArn } : {}),
         };
       };
       const selectedResourceScopeEntries = (resource) => {
         const entries = [];
         const instanceId = String(resource?.instanceId || '').trim();
         const containerName = String(resource?.containerName || '').trim();
+        const clusterArn = supportsECSServiceClusterScope(resource) ? String(resource?.clusterArn || '').trim() : '';
         if (instanceId) {
           entries.push(['Selected instance', instanceId]);
         }
         if (containerName) {
           entries.push(['Selected container', containerName]);
+        }
+        if (clusterArn) {
+          entries.push(['Selected cluster', clusterArn]);
         }
         return entries;
       };
@@ -3051,6 +3059,7 @@
           routeResourceId: openedViaAlias ? bookmarkedResource.id : resource.id,
           routeContainerName: String(currentPageState.containerName || resource.containerName || '').trim(),
           routeInstanceId: String(currentPageState.instanceId || resource.instanceId || '').trim(),
+          routeClusterArn: supportsECSServiceClusterScope(resource) ? String(currentPageState.clusterArn || resource.clusterArn || '').trim() : '',
         };
       };
       const resourcePanelLimitURLParams = (deploymentName, resource) => {
@@ -3088,6 +3097,7 @@
           resourceId: routeState.routeResourceId || '',
           containerName: routeState.routeContainerName || '',
           instanceId: routeState.routeInstanceId || '',
+          clusterArn: routeState.routeClusterArn || '',
           resourceLogLimit: limitParams.resourceLogLimit || 0,
           resourceInspectionLimit: limitParams.resourceInspectionLimit || resourceInspectionTaskDefaultLimit,
         };
@@ -3097,6 +3107,7 @@
           resourceId: currentPageState.resourceId,
           containerName: currentPageState.containerName,
           instanceId: currentPageState.instanceId,
+          clusterArn: currentPageState.clusterArn,
           resourceLogLimit: currentPageState.resourceLogLimit,
           resourceInspectionLimit: currentPageState.resourceInspectionLimit,
         });
@@ -3490,6 +3501,7 @@
               resourceId: resourceRouteState.routeResourceId,
               containerName: resourceRouteState.routeContainerName,
               instanceId: resourceRouteState.routeInstanceId,
+              clusterArn: resourceRouteState.routeClusterArn,
               ...resourcePanelLimitURLParams(deploymentName, resource),
             }),
           });
@@ -4050,6 +4062,10 @@
         if (instanceId) {
           params.set('instanceId', instanceId);
         }
+        const clusterArn = supportsECSServiceClusterScope(resource) ? String(resource?.clusterArn || '').trim() : '';
+        if (clusterArn) {
+          params.set('clusterArn', clusterArn);
+        }
         const normalizedLimit = normalizeResourceLogsLimit(limit);
         if (normalizedLimit > 0) {
           params.set('limit', String(normalizedLimit));
@@ -4230,6 +4246,10 @@
         const instanceId = String(resource?.instanceId || '').trim();
         if (instanceId) {
           params.set('instanceId', instanceId);
+        }
+        const clusterArn = supportsECSServiceClusterScope(resource) ? String(resource?.clusterArn || '').trim() : '';
+        if (clusterArn) {
+          params.set('clusterArn', clusterArn);
         }
         const normalizedLimit = supportsBoundedResourceInspection(resource) ? normalizeResourceInspectionTaskLimit(limit) : 0;
         if (normalizedLimit > 0) {
