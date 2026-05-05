@@ -5363,7 +5363,15 @@
           failure: 'audit log request failed',
         });
       };
-      const buildDeploymentEventsReadRoute = (deploymentName) => `/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`;
+      const deploymentEventsDefaultLimit = 10;
+      const buildDeploymentEventsReadRoute = (deploymentName, limit = deploymentEventsDefaultLimit) => {
+        const route = `/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`;
+        const numericLimit = Number(limit);
+        if (!Number.isFinite(numericLimit) || numericLimit <= 0) return route;
+        const params = new URLSearchParams();
+        params.set('limit', String(Math.floor(numericLimit)));
+        return `${route}?${params.toString()}`;
+      };
       const deploymentEventsReadRoute = (deploymentName) => `GET ${buildDeploymentEventsReadRoute(deploymentName)}`;
       const fetchDeploymentEvents = (deploymentName) => fetchEmbeddedReadRouteJSON(buildDeploymentEventsReadRoute(deploymentName), {
         unavailable: 'deployment events unavailable',
@@ -5415,7 +5423,7 @@
         }
         return null;
       };
-      const createDeploymentEventsIntro = () => createElement('div', 'detail-section-copy', 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.');
+      const createDeploymentEventsIntro = () => createElement('div', 'detail-section-copy', 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events?limit=10. Showing the latest bounded window, newest entries first. This is not audit/auth history.');
       const sortTimelineEvents = (events) => (events || [])
         .map((event, index) => ({
           event,
@@ -5502,7 +5510,7 @@
 
         const heading = createDetailSectionHeader('Controller runtime events', createDeploymentEventsActions(section, deploymentName, false, result));
         const intro = createDeploymentEventsIntro();
-        const ordering = createElement('div', 'detail-condition-meta', `${events.length} event${events.length === 1 ? '' : 's'} · newest controller event first`);
+        const ordering = createElement('div', 'detail-condition-meta', `${events.length} event${events.length === 1 ? '' : 's'} · latest ${deploymentEventsDefaultLimit}-event window · newest controller event first`);
         const driftSummary = createElement('div', 'detail-condition-meta', deploymentEventsManagedDriftSummary(result));
         const eventList = createElement('ol', 'detail-list');
 

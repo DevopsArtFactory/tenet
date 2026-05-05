@@ -1575,7 +1575,7 @@ for fragment in (
     "On this page",
     "Linked resources",
     "Controller runtime events",
-    "Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.",
+    "Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events?limit=10. Showing the latest bounded window, newest entries first. This is not audit/auth history.",
     "Managed drift summary · ${counts.total} total · ${counts.high} high · ${counts.medium} medium · ${counts.low} low",
     "const createControllerRefreshCue = (event) => {",
     "GitHub refresh evidence · ${fields.join(' · ')}",

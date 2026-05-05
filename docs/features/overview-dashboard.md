@@ -132,12 +132,12 @@ Current behavior:
 - when one of those application section hashes is active, the current section becomes a non-click chip, disappears from the remaining `On this page` links, and otherwise falls back to the friendly empty state `No section is currently targeted.`
 - the page toolbar now includes an in-place `Refresh application detail` control that re-runs only `GET /v1/overview/applications/{deploymentName}`, disables only while that application-detail fetch is active, keeps the bookmarkable `/?page=application...` URL stable, and leaves the current compact status summary, grouped-resource content, and runtime-events content visible with explicit loading/error copy while the refresh is running or if it fails
 - refresh-time `401` / `403` responses on that application-detail read reuse the same trusted-front-door / access-denied guidance instead of falling back to generic refresh-error text
-- `Controller runtime events` section backed by `GET /v1/overview/deployments/{deploymentName}/events`
+- `Controller runtime events` section backed by `GET /v1/overview/deployments/{deploymentName}/events?limit=10` for the default latest-window UI read
 - explicit `Loading controller runtime events…`, empty, unavailable, and generic fetch-error states for non-auth failures on that section
 - event ordering labeled as newest-first with readable time, summary, sync/health context, rollout phase/current step, and optional controller metadata
 - GitHub-triggered controller refresh events render a concise `GitHub refresh evidence` cue with non-secret repository/ref, shortened revision, delivery/request IDs, and requested/received/reconciled timing when those `controllerRefresh` fields are present; ticker reconciles omit that cue instead of showing placeholder labels
-- explicitly labels these as controller-derived runtime events, not audit/auth history
-- the `Controller runtime events` section header now includes an in-place `Refresh runtime events` button that re-runs just that deployment-events route in place, keeps the bookmarkable `/?page=application...` URL stable, and disables only while that section fetch is active
+- explicitly labels these as controller-derived runtime events, not audit/auth history, and explains that the panel shows the latest bounded window
+- the `Controller runtime events` section header now includes an in-place `Refresh runtime events` button that re-runs just that bounded deployment-events route in place, keeps the bookmarkable `/?page=application...` URL stable, and disables only while that section fetch is active
 - when that guarded lazy read returns `401` or `403`, the runtime-events panel keeps its refresh control and bookmarkable route stable but replaces generic fetch-error copy with the same trusted-front-door / access-denied guidance used on the other embedded read paths
 - grouped resource sections:
   - `Workloads`
