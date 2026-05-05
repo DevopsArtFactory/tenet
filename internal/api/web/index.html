@@ -2969,6 +2969,21 @@
           ...(instanceId ? { instanceId } : {}),
         };
       };
+      const selectedResourceScopeEntries = (resource) => {
+        const entries = [];
+        const instanceId = String(resource?.instanceId || '').trim();
+        const containerName = String(resource?.containerName || '').trim();
+        if (instanceId) {
+          entries.push(['Selected instance', instanceId]);
+        }
+        if (containerName) {
+          entries.push(['Selected container', containerName]);
+        }
+        return entries;
+      };
+      const selectedResourceScopeText = (resource) => selectedResourceScopeEntries(resource)
+        .map(([label, value]) => `${label} · ${value}`)
+        .join(' · ');
       const resolveResourceDetail = (detail) => {
         const resources = groupResourceSections(detail).flatMap((group) => group.resources || []);
         const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);
@@ -3328,9 +3343,14 @@
           shellLinks,
         );
         const currentResourceGroup = createElement('div', 'quick-nav-group');
+        const currentResourceLinks = createElement('div', 'quick-nav-links');
+        currentResourceLinks.append(createQuickNavChip(resource.name, `Current resource: ${resource.name}`));
+        selectedResourceScopeEntries(resource).forEach(([label, value]) => {
+          currentResourceLinks.append(createQuickNavChip(`${label} · ${value}`, `${label}: ${value}`));
+        });
         currentResourceGroup.append(
           createElement('div', 'quick-nav-label', 'Current resource'),
-          createQuickNavChip(resource.name, `Current resource: ${resource.name}`),
+          currentResourceLinks,
         );
         const currentSectionGroup = createElement('div', 'quick-nav-group');
         const sectionGroup = createElement('div', 'quick-nav-group');
@@ -3415,7 +3435,7 @@
           createElement('div', 'label', 'Resource detail'),
           createElement('h2', 'account-name', resource.name),
           createElement('div', 'account-meta', `${resource.type} · ${textOrDash(resource.description)}`),
-          createElement('div', 'account-topology', [detail.name || currentPageState.deployment || 'Application', detail.accountName, detail.region].filter(Boolean).join(' · ')),
+          createElement('div', 'account-topology', [detail.name || currentPageState.deployment || 'Application', detail.accountName, detail.region, selectedResourceScopeText(resource)].filter(Boolean).join(' · ')),
         );
         summary.replaceChildren(detailSummary);
         const page = createElement('article', 'account');
@@ -3439,6 +3459,7 @@
         [
           ['Resource type', resource.type],
           ['Resource id', resource.id],
+          ...selectedResourceScopeEntries(resource),
           ['Deployment', textOrDash(detail.name)],
           ['Desired artifact', artifact(detail.desiredArtifact)],
           ['Deployed artifact', artifact(detail.deployedArtifact)],
