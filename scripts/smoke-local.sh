@@ -1538,6 +1538,9 @@ assert "const resourceLogsLimitOptions = [" in ui, ui
 assert "Log entry cap · ${resourceLogsLimitText(limit)}" in ui, ui
 assert "'Log limit'" in ui, ui
 assert "params.set('limit', String(normalizedLimit));" in ui, ui
+assert "resourceLogLimit: normalizeResourceLogsLimit(params.get('resourceLogLimit') || '')" in ui, ui
+assert "params.set('resourceLogLimit', String(limit));" in ui, ui
+assert "syncResourcePanelLimitQueryParams(deploymentName, resource);" in ui, ui
 assert "Refresh recent logs" in ui, ui
 assert "createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')" in ui, ui
 assert "createNavLink(buildPageURL('resource', {" in ui, ui
@@ -1697,12 +1700,19 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "const resourceLogsLimitOptions = [" in body, body
     assert "Log entry cap · ${resourceLogsLimitText(limit)}" in body, body
     assert "'Log limit'" in body, body
+    assert "resourceLogLimit: normalizeResourceLogsLimit(params.get('resourceLogLimit') || '')" in body, body
+    assert "params.set('resourceLogLimit', String(limit));" in body, body
+    assert "syncResourcePanelLimitQueryParams(deploymentName, resource);" in body, body
+    assert "...resourcePanelLimitURLParams(deploymentName, resource)" in body, body
+    assert "history.replaceState({}, '', `${nextURL}${window.location.hash || ''}`);" in body, body
     assert "const resourceInspectionReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceInspectionRoute(deploymentName, resource, limit)}`;" in body, body
     assert "const resourceInspectionTaskDefaultLimit = 10;" in body, body
     assert "const resourceInspectionLimitOptions = [" in body, body
     assert "resourceInspectionLimitLabel(resource)" in body, body
     assert "'Task sample limit'" in body, body
     assert "'ASG instance sample limit'" in body, body
+    assert "resourceInspectionLimit: normalizeResourceInspectionTaskLimit(params.get('resourceInspectionLimit') || '')" in body, body
+    assert "params.set('resourceInspectionLimit', String(limit));" in body, body
     assert "supportsBoundedResourceInspection(resource)" in body, body
     assert "const ecsTaskScopeUnavailableReasonText = (reason) => {" in body, body
     assert "Task sample unavailable · ${reasonText} · requested ${countText(scope.requestedLimit)} · effective ${countText(effectiveLimit)}" in body, body

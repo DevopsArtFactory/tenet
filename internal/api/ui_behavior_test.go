@@ -362,7 +362,7 @@ const scenarios = [
     document.byID.set('accounts', document.createElement('section'));
     const initialSearch = scenario.search;
     const window = { location: { pathname: '/', search: initialSearch, hash: '' } };
-    const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+    const history = { replaceState(_state, _title, url) { const [pathAndQuery, hash = ''] = String(url).split('#'); const [pathname, query = ''] = pathAndQuery.split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; window.location.hash = hash ? '#' + hash : ''; } };
     let fetchCount = 0;
     const fetch = (url) => {
       fetchCount += 1;
@@ -4576,13 +4576,14 @@ document.byID.set('summary', document.createElement('section'));
 document.byID.set('accounts', document.createElement('section'));
 const fetchCalls = [];
 const window = { location: { pathname: '/', search: '?page=resource&deployment=payments-api-staging&resourceType=codeDeployDeploymentGroup&resourceId=codeDeployDeploymentGroup%3A%3Apayments-api-staging%20Deployment%20Group%3A%3ALinear%20traffic%20shifting%20deployment%20group&q=payments&sync=OutOfSync&account=210987654321', hash: '' } };
-const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const history = { replaceState(_state, _title, url) { const [pathAndQuery, hash = ''] = String(url).split('#'); const [pathname, query = ''] = pathAndQuery.split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; window.location.hash = hash ? '#' + hash : ''; } };
 const logsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging+Deployment+Group';
+const limitedLogsURL = logsURL + '&limit=5';
 const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
   if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-  if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+  if (url === logsURL || url === limitedLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -4662,6 +4663,15 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('Progressing = True · DeploymentStarted')) throw new Error('expected resource page history condition summary');
   if (!accountsText.includes('Conditions')) throw new Error('expected resource page conditions section');
   if (!accountsText.includes('ServiceReady')) throw new Error('expected resource page condition reason');
+  const logLimitSelect = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'Log limit')[0];
+  if (!logLimitSelect) throw new Error('expected resource page recent logs to expose log limit select');
+  logLimitSelect.value = '5';
+  logLimitSelect.dispatch('change');
+  await settle(); await settle(); await settle();
+  if (!fetchCalls.includes(limitedLogsURL)) throw new Error('expected selected log limit in recent-log fetch URL, got ' + JSON.stringify(fetchCalls));
+  const expectedLogLimitSearch = '?page=resource&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging&resourceType=codeDeployDeploymentGroup&resourceId=codeDeployDeploymentGroup%3A%3Apayments-api-staging+Deployment+Group%3A%3ALinear+traffic+shifting+deployment+group&resourceLogLimit=5';
+  if (window.location.search !== expectedLogLimitSearch) throw new Error('expected log limit select to update bookmarkable resource query without audit limit, got ' + window.location.search);
+  if (window.location.search.includes('&limit=')) throw new Error('expected resource log limit not to reuse audit limit param: ' + window.location.search);
 })();
 `
 
@@ -4768,6 +4778,10 @@ async function render(search, inspectionResult) {
   if (!serviceRun.text.includes('Recent ECS tasks')) throw new Error('expected ECS service task list');
   if (!serviceRun.text.includes('Task sample scope · returned 1 task(s) from effective limit 10 · not truncated')) throw new Error('expected ECS task sample scope text: ' + serviceRun.text);
   if (!serviceRun.text.includes('Task ARN · ' + taskArn)) throw new Error('expected ECS task ARN in service inspection');
+  const restoredServiceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId) + '&resourceInspectionLimit=25', serviceResult);
+  const restoredLimitSelect = collectNodes(restoredServiceRun.document.getElementById('accounts'), (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'Task sample limit')[0];
+  if (!restoredLimitSelect || restoredLimitSelect.value !== '25') throw new Error('expected bookmarked inspection limit to restore select value');
+  if (!restoredServiceRun.fetchCalls.includes('/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&limit=25')) throw new Error('expected bookmarked inspection limit in initial fetch URL, got ' + JSON.stringify(restoredServiceRun.fetchCalls));
 
   const taskLimitSelect = collectNodes(serviceRun.document.getElementById('accounts'), (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'Task sample limit')[0];
   if (!taskLimitSelect) throw new Error('expected ECS service live inspection to expose task sample limit select');
@@ -4782,7 +4796,9 @@ async function render(search, inspectionResult) {
   await settle(); await settle(); await settle();
   const limitedInspectionURL = inspectionURL.replace('&limit=10', '&limit=25');
   if (!serviceRun.fetchCalls.includes(limitedInspectionURL)) throw new Error('expected selected task sample limit in inspection fetch URL, got ' + JSON.stringify(serviceRun.fetchCalls));
-  if (serviceRun.window.location.search !== '?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId)) throw new Error('expected task sample limit select to preserve bookmarkable resource query, got ' + serviceRun.window.location.search);
+  const expectedServiceInspectionLimitSearch = '?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=ecsService%3A%3Aworker-prod-service%3A%3APrimary+worker+service&resourceInspectionLimit=25';
+  if (serviceRun.window.location.search !== expectedServiceInspectionLimitSearch) throw new Error('expected task sample limit select to update bookmarkable resource query, got ' + serviceRun.window.location.search);
+  if (serviceRun.window.location.search.includes('&limit=')) throw new Error('expected resource inspection limit not to reuse audit limit param: ' + serviceRun.window.location.search);
   const limitedInspectionText = collectText(serviceRun.document.getElementById('accounts')).join(' | ');
   if (!limitedInspectionText.includes('Task sample scope · returned 1 task(s) from effective limit 25 · not truncated')) throw new Error('expected selected task scope evidence to stay backend-sourced, got ' + limitedInspectionText);
   const refreshInspectionButton = collectNodes(serviceRun.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && node.textContent === 'Refresh live inspection')[0];
@@ -4818,7 +4834,7 @@ async function render(search, inspectionResult) {
   await settle(); await settle(); await settle();
   const unavailableLimitedURL = inspectionURL.replace('&limit=10', '&limit=25');
   if (!unavailableServiceRun.fetchCalls.includes(unavailableLimitedURL)) throw new Error('expected unavailable sample limit refresh URL, got ' + JSON.stringify(unavailableServiceRun.fetchCalls));
-  if (unavailableServiceRun.window.location.search !== '?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId)) throw new Error('expected unavailable task sample limit to preserve bookmarkable resource query, got ' + unavailableServiceRun.window.location.search);
+  if (unavailableServiceRun.window.location.search !== expectedServiceInspectionLimitSearch) throw new Error('expected unavailable task sample limit to update bookmarkable resource query, got ' + unavailableServiceRun.window.location.search);
   const unavailableRefreshButton = collectNodes(unavailableServiceRun.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && node.textContent === 'Refresh live inspection')[0];
   if (!unavailableRefreshButton || unavailableRefreshButton.disabled) throw new Error('expected refresh live inspection usable after unavailable sample state');
   unavailableRefreshButton.dispatch('click');
@@ -5085,7 +5101,9 @@ async function renderScenario(hash, fetchImpl) {
   await settle();
   await settle();
   if (!recentLogsFetchCalls.includes(logsURL + '&limit=10')) throw new Error('expected selected log cap to be included in recent-log fetch URL, got ' + JSON.stringify(recentLogsFetchCalls));
-  if (recentLogsRun.window.location.search !== recentLogsRun.initialSearch) throw new Error('expected log limit select to preserve bookmarkable resource query, got ' + recentLogsRun.window.location.search);
+  const expectedRecentLogsLimitSearch = '?page=resource&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging&resourceType=ecsService&resourceId=ecsService%3A%3Apayments-api-staging-service%3A%3APrimary+ECS+service&resourceLogLimit=10';
+  if (recentLogsRun.window.location.search !== expectedRecentLogsLimitSearch) throw new Error('expected log limit select to update bookmarkable resource query, got ' + recentLogsRun.window.location.search);
+  if (recentLogsRun.window.location.hash !== '#resource-recent-logs') throw new Error('expected log limit select to preserve resource section hash, got ' + recentLogsRun.window.location.hash);
   if (recentLogsFetchCalls.filter((url) => url === inspectionURL).length !== inspectionsBeforeLimit) throw new Error('expected log limit select not to refetch live inspection panel');
   const limitedLogsText = collectText(recentLogsRoot).join(' | ');
   if (!limitedLogsText.includes('Log entry cap · 10 entries')) throw new Error('expected recent logs panel to render selected cap copy');
@@ -5100,7 +5118,8 @@ async function renderScenario(hash, fetchImpl) {
   await settle();
   await settle();
   if (recentLogsFetchCalls.filter((url) => url === logsURL + '&limit=10').length < 2) throw new Error('expected refresh to reuse selected recent-log cap');
-  if (recentLogsRun.window.location.search !== recentLogsRun.initialSearch) throw new Error('expected refresh recent logs to preserve bookmarkable resource query, got ' + recentLogsRun.window.location.search);
+  if (recentLogsRun.window.location.search !== expectedRecentLogsLimitSearch) throw new Error('expected refresh recent logs to preserve resource-panel limit query, got ' + recentLogsRun.window.location.search);
+  if (recentLogsRun.window.location.hash !== '#resource-recent-logs') throw new Error('expected refresh recent logs to preserve resource section hash, got ' + recentLogsRun.window.location.hash);
   if (recentLogsFetchCalls.filter((url) => url === inspectionURL).length !== inspectionsBeforeLimit) throw new Error('expected refresh recent logs not to refetch live inspection panel');
   if (recentLogsFetchCalls.length <= fetchesBeforeLimit) throw new Error('expected log limit/refresh flow to issue additional recent-log fetches');
   recentLogsRun.window.location.hash = '#resource-status-conditions';
@@ -5117,8 +5136,8 @@ async function renderScenario(hash, fetchImpl) {
   let resolveInspection;
   const inspectionRun = await renderScenario('#resource-live-inspection', (url) => {
     if (url === deploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
-    if (url === inspectionURL) return new Promise((resolve) => { resolveInspection = resolve; });
+    if (url === logsURL || url === logsURL + '&limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (String(url).startsWith('/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service')) return new Promise((resolve) => { resolveInspection = resolve; });
     throw new Error('unexpected live-inspection fetch url: ' + url);
   });
   if (inspectionRun.window.location.hash !== '#resource-live-inspection') throw new Error('expected live inspection hash to stay stable, got ' + inspectionRun.window.location.hash);
@@ -6107,7 +6126,8 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   await settle(); await settle(); await settle();
   const limitedASGInspectionURL = asgInspectionURL.replace('&limit=10', '&limit=25');
   if (!asgSupportedRun.fetchCalls.includes(limitedASGInspectionURL)) throw new Error('expected selected ASG instance sample limit in inspection fetch URL, got ' + JSON.stringify(asgSupportedRun.fetchCalls));
-  if (asgSupportedRun.window.location.search !== '?page=resource&deployment=payments-api-prod&resourceType=candidateAutoScalingGroup&resourceId=' + encodeURIComponent(asgResourceID)) throw new Error('expected ASG instance sample limit select to preserve bookmarkable resource query, got ' + asgSupportedRun.window.location.search);
+  const expectedASGInspectionLimitSearch = '?page=resource&deployment=payments-api-prod&resourceType=candidateAutoScalingGroup&resourceId=candidateAutoScalingGroup%3A%3Apayments-api-prod-candidate%3A%3ACandidate+capacity&resourceInspectionLimit=25';
+  if (asgSupportedRun.window.location.search !== expectedASGInspectionLimitSearch) throw new Error('expected ASG instance sample limit select to update bookmarkable resource query, got ' + asgSupportedRun.window.location.search);
   const limitedASGInspectionText = collectText(asgSupportedRun.document.getElementById('accounts')).join(' | ');
   if (!limitedASGInspectionText.includes('ASG instance sample scope · requested 25 · effective 25 · returned 1 instance(s) · not truncated')) throw new Error('expected selected ASG scope evidence to stay backend-sourced, got ' + limitedASGInspectionText);
 
@@ -7034,7 +7054,7 @@ const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
   if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-  if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+  if (url === logsURL || url === limitedLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -7181,7 +7201,7 @@ async function render(search, detailBody) {
     if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
     if (url === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === logsURL || url === limitedLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
     throw new Error('unexpected fetch url: ' + url);
   };
   document.getElementById('toolbar').replaceChildren();
@@ -7430,12 +7450,13 @@ document.byID.set('toolbar', document.createElement('section'));
 document.byID.set('summary', document.createElement('section'));
 document.byID.set('accounts', document.createElement('section'));
 const window = { location: { pathname: '/', search: '?page=resource&deployment=payments-api-staging&resourceType=codeDeployDeploymentGroup&resourceId=' + encodeURIComponent('codeDeployDeploymentGroup::payments-api-staging Deployment Group::Linear traffic shifting deployment group'), hash: '' } };
-const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const history = { replaceState(_state, _title, url) { const [pathAndQuery, hash = ''] = String(url).split('#'); const [pathname, query = ''] = pathAndQuery.split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; window.location.hash = hash ? '#' + hash : ''; } };
 const logsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging+Deployment+Group';
+const limitedLogsURL = logsURL + '&limit=5';
 const fetch = (url) => {
   if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
   if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-  if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+  if (url === logsURL || url === limitedLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -11030,7 +11051,7 @@ async function render(search) {
   const fetch = (url) => {
     fetchCalls.push(String(url));
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === logsURL || url === limitedLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
     throw new Error('unexpected fetch url: ' + url);
   };
   new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
