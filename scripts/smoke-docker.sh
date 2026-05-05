@@ -1627,6 +1627,7 @@ for fragment in (
     "Task sample scope · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${truncationStatus}",
     "[createECSTaskScopeSummary(service?.tasksScope)]",
     "Container instance",
+    "EC2 instance",
     "Capacity provider",
     "Availability Zone",
     "const createAutoScalingInstanceScopeSummary = (scope) => {",

@@ -4487,6 +4487,7 @@
       const appendECSTaskPlacementRows = (meta, task) => {
         [
           ['Container instance', task?.containerInstanceArn],
+          ['EC2 instance', task?.ec2InstanceId],
           ['Capacity provider', task?.capacityProviderName],
           ['Availability Zone', task?.availabilityZone],
         ]
@@ -5033,6 +5034,7 @@
         ];
         [
           ['Container instance', task?.containerInstanceArn],
+          ['EC2 instance', task?.ec2InstanceId],
           ['Capacity provider', task?.capacityProviderName],
           ['Availability Zone', task?.availabilityZone],
         ]
