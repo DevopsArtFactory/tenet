@@ -28,7 +28,7 @@ Example selected-cluster service request when duplicate service names exist acro
 curl 'http://localhost:8080/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5'
 ```
 
-The selected-cluster form is a backend route contract, and local/compose smoke now lock the response-level `clusterArn` echo on both available and explicit unavailable ECS service recent-log payloads. Bookmarkable embedded resource-page `clusterArn` URL state and its post-UI smoke/docs guards are tracked separately in #834 and #838.
+The selected-cluster form is a backend route contract, and local/compose smoke now lock the response-level `clusterArn` echo on both available and explicit unavailable ECS service recent-log payloads. The embedded resource page also preserves bookmarkable `clusterArn` URL state for ECS service resources so saved drill-down links, section jumps, and lazy-panel refreshes keep the same selected cluster scope.
 
 Example ECS task/container-scoped request:
 

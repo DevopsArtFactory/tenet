@@ -1873,7 +1873,7 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		"that pair gives reviewers the exact Tenet request log correlation key plus the attempted region/account/observer-role path",
 		"Example selected-cluster service request",
 		"resource-logs?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5",
-		"embedded resource-page `clusterArn` URL state and its post-UI smoke/docs guards are tracked separately in #834 and #838",
+		"The embedded resource page also preserves bookmarkable `clusterArn` URL state for ECS service resources",
 		"local/compose smoke now lock the response-level `clusterArn` echo",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
@@ -1969,7 +1969,7 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"`listenerRule` metadata",
 		"resource-logs?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5",
 		"resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5",
-		"embedded resource-page selected-cluster URL state remains a separate #834/#838 follow-up",
+		"embedded resource page preserves selected-cluster URL state through bookmarkable ECS service drill-down links",
 		"local and compose smoke now also fetch ECS service selected-cluster backend routes",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
@@ -1991,7 +1991,7 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"`listenerRule` details",
 		"resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5",
 		"accepted selectors echo as response-level `clusterArn`",
-		"local/compose smoke lock that backend echo separately from the future embedded selected-cluster URL-state guards",
+		"local/compose smoke lock that backend echo alongside the embedded selected-cluster URL-state guards",
 	} {
 		if !strings.Contains(uiDoc, fragment) {
 			t.Fatalf("expected overview UI doc to include %q", fragment)
