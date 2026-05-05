@@ -3929,10 +3929,10 @@ const createDocument = () => {
 const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
 const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
 async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
-async function render(fetchImpl) {
+async function render(fetchImpl, initialSearch = '?page=application&deployment=payments-api-staging') {
   const document = createDocument();
   const fetchCalls = [];
-  const window = { location: { pathname: '/', search: '?page=application&deployment=payments-api-staging', hash: '' } };
+  const window = { location: { pathname: '/', search: initialSearch, hash: '' } };
   const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
   const fetch = (url) => {
     fetchCalls.push(String(url));
@@ -3946,8 +3946,10 @@ async function render(fetchImpl) {
 (async () => {
   const detailURL = '/v1/overview/applications/payments-api-staging';
   const eventsURL = '/v1/overview/deployments/payments-api-staging/events?limit=10';
+  const selectedWindowURL = '/v1/overview/deployments/payments-api-staging/events?limit=25';
   const initialSearch = '?page=application&deployment=payments-api-staging';
   let eventsFetchCount = 0;
+  let selectedWindowFetchCount = 0;
   let resolveInitialEvents;
   let resolveRefreshEvents;
   const loadingView = await render((url) => {
@@ -3961,6 +3963,10 @@ async function render(fetchImpl) {
         return new Promise((resolve) => { resolveRefreshEvents = resolve; });
       }
       throw new Error('unexpected deployment events fetch count: ' + eventsFetchCount);
+    }
+    if (url === selectedWindowURL) {
+      selectedWindowFetchCount += 1;
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(eventsBody) });
     }
     throw new Error('unexpected fetch url: ' + url);
   });
@@ -3976,7 +3982,7 @@ async function render(fetchImpl) {
   await settle();
   let readyText = collectText(loadingView.document.getElementById('accounts')).join(' | ');
   if (!readyText.includes('Controller runtime events')) throw new Error('expected controller runtime events section heading');
-  if (!readyText.includes('Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events?limit=10. Tenet shows the latest bounded window, newest first; open the raw route with an explicit limit when you need a different slice of controller history. This is not audit/auth history.')) throw new Error('expected application page to distinguish controller runtime events from audit/auth history');
+  if (!readyText.includes('Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events?limit=10. Tenet shows the selected bounded window, newest first; use Event window to change how much controller history this panel reads without leaving the application drill-down. This is not audit/auth history.')) throw new Error('expected application page to distinguish controller runtime events from audit/auth history');
   if (!readyText.includes('2 events in latest 10-event window · newest controller event first')) throw new Error('expected event ordering guidance');
   if (!readyText.includes('Managed drift summary · 2 total · 1 high · 1 medium · 0 low')) throw new Error('expected managed drift severity summary from deployment events payload');
   if (!readyText.includes('Shifted 50 percent of traffic')) throw new Error('expected newest controller event summary');
@@ -3995,10 +4001,13 @@ async function render(fetchImpl) {
   refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
   if (!refreshEvents) throw new Error('expected runtime-events refresh button after initial response');
   if (refreshEvents.disabled) throw new Error('expected runtime-events refresh button enabled after initial fetch settles');
+  const eventWindowSelect = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'SELECT').find((node) => node.dataset.toolbarField === 'Event window');
+  if (!eventWindowSelect) throw new Error('expected Event window selector on application runtime-events section');
+  if (eventWindowSelect.disabled) throw new Error('expected Event window selector enabled after runtime-events load');
+  if (eventWindowSelect.value !== '10') throw new Error('expected Event window selector to default to 10 events');
   let runtimeEventLinks = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'A');
   const driftHandoff = runtimeEventLinks.find((node) => node.textContent === 'Open field-level drift' && node.href === '/?page=drift&deployment=payments-api-staging#drift-field-level');
   if (!driftHandoff || driftHandoff.target !== '_self' || driftHandoff.rel) throw new Error('expected runtime-events managed-drift handoff to open the field-level drift workspace section in shell');
-
   refreshEvents.dispatch('click');
   await settle();
   buttons = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
@@ -4021,6 +4030,32 @@ async function render(fetchImpl) {
   if (!refreshEvents || refreshEvents.disabled) throw new Error('expected runtime-events refresh button re-enabled after refresh completes');
   runtimeEventLinks = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'A');
   if (runtimeEventLinks.find((node) => node.textContent === 'Open field-level drift' && node.href === '/?page=drift&deployment=payments-api-staging#drift-field-level')) throw new Error('expected zero-drift runtime-events refresh to remove field-level drift workspace handoff');
+  let refreshedWindowSelect = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'SELECT').find((node) => node.dataset.toolbarField === 'Event window');
+  if (!refreshedWindowSelect || refreshedWindowSelect.value !== '10') throw new Error('expected Event window selector to remain on default window after refresh');
+  refreshedWindowSelect.value = '25';
+  refreshedWindowSelect.dispatch('change');
+  await settle();
+  await settle();
+  if (selectedWindowFetchCount !== 1) throw new Error('expected Event window selector change to fetch the selected deployment-events limit once');
+  if (loadingView.fetchCalls[loadingView.fetchCalls.length - 1] !== selectedWindowURL) throw new Error('expected Event window selector change to fetch the selected bounded events route');
+  const changedWindowParams = new URLSearchParams(loadingView.window.location.search);
+  if (changedWindowParams.get('page') !== 'application' || changedWindowParams.get('deployment') !== 'payments-api-staging' || changedWindowParams.get('eventLimit') !== '25') throw new Error('expected Event window selector change to preserve bookmarkable eventLimit URL state');
+  readyText = collectText(loadingView.document.getElementById('accounts')).join(' | ');
+  if (!readyText.includes('2 events in latest 25-event window · newest controller event first')) throw new Error('expected Event window selector change to render the selected event window');
+  refreshedWindowSelect = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'SELECT').find((node) => node.dataset.toolbarField === 'Event window');
+  if (!refreshedWindowSelect || refreshedWindowSelect.value !== '25') throw new Error('expected Event window selector to keep the changed value after re-render');
+
+  const selectedWindowView = await render((url) => {
+    if (url === detailURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === selectedWindowURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(eventsBody) });
+    throw new Error('unexpected selected-window fetch url: ' + url);
+  }, '?page=application&deployment=payments-api-staging&eventLimit=25');
+  const selectedWindowText = collectText(selectedWindowView.document.getElementById('accounts')).join(' | ');
+  if (!selectedWindowText.includes('Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events?limit=25.')) throw new Error('expected bookmarked Event window limit in runtime-events intro');
+  if (!selectedWindowText.includes('2 events in latest 25-event window · newest controller event first')) throw new Error('expected bookmarked Event window size in runtime-events ordering guidance');
+  const selectedWindowSelect = collectNodes(selectedWindowView.document.getElementById('accounts'), (node) => node.tagName === 'SELECT').find((node) => node.dataset.toolbarField === 'Event window');
+  if (!selectedWindowSelect || selectedWindowSelect.value !== '25') throw new Error('expected Event window selector to reflect bookmarked eventLimit query param');
+  if (selectedWindowView.window.location.search !== '?page=application&deployment=payments-api-staging&eventLimit=25') throw new Error('expected bookmarked Event window route to remain stable after rendering');
 
   const emptyView = await render((url) => {
     if (url === detailURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
@@ -4028,7 +4063,7 @@ async function render(fetchImpl) {
     throw new Error('unexpected fetch url: ' + url);
   });
   const emptyText = collectText(emptyView.document.getElementById('accounts')).join(' | ');
-  if (!emptyText.includes('No controller runtime events have been persisted yet.')) throw new Error('expected empty deployment events state');
+  if (!emptyText.includes('No controller runtime events were returned in the latest 10-event window.')) throw new Error('expected empty deployment events state');
   buttons = collectNodes(emptyView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
   refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
   if (!refreshEvents || refreshEvents.disabled) throw new Error('expected runtime-events refresh button enabled in empty state');
