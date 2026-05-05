@@ -5580,11 +5580,13 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
 
   const emptyRun = await renderWithFetch((url) => {
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, resultScope: { effectiveLimit: 100, returnedEntryCount: 0, truncationStatus: 'not_truncated' }, entries: [] }) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, resultScope: { effectiveLimit: 100, returnedEntryCount: 0, truncationStatus: 'not_truncated' }, emptyReason: 'no_recent_events', entries: [] }) });
     throw new Error('unexpected empty fetch url: ' + url);
   });
   const emptyText = collectText(emptyRun.document.getElementById('accounts')).join(' | ');
   if (!emptyText.includes('No recent logs are available for this resource.')) throw new Error('expected resource page empty recent logs state');
+  if (!emptyText.includes('Tenet reached the recent-log provider, but no events were found in the selected bounded window.')) throw new Error('expected empty recent logs state to explain no_recent_events, got ' + emptyText);
+  if (emptyText.includes('no_recent_events')) throw new Error('expected empty recent logs state not to expose raw emptyReason code');
   if (!emptyText.includes('Lookup path · ap-northeast-2 · account 210987654321 · same-account lookup · observer role configured')) throw new Error('expected empty recent logs state to summarize same-account lookup path, got ' + emptyText);
   if (!emptyText.includes('Lookup region')) throw new Error('expected empty recent logs state to label lookup region');
   if (!emptyText.includes('Cross-account lookup')) throw new Error('expected empty recent logs state to label cross-account lookup');
@@ -5594,6 +5596,16 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   ['Requested cap | All available entries', 'Effective cap | 100 entries', 'Returned entries | 0 entries', 'Scope status | Below cap; no router truncation'].forEach((fragment) => {
     if (!emptyText.includes(fragment)) throw new Error('expected empty recent logs scope evidence ' + fragment + ', got ' + emptyText);
   });
+
+  const formattedEmptyRun = await renderWithFetch((url) => {
+    if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, resultScope: { effectiveLimit: 25, returnedEntryCount: 0, truncationStatus: 'not_truncated' }, emptyReason: 'no_formatted_entries', entries: [] }) });
+    throw new Error('unexpected formatted-empty fetch url: ' + url);
+  });
+  const formattedEmptyText = collectText(formattedEmptyRun.document.getElementById('accounts')).join(' | ');
+  if (!formattedEmptyText.includes('No recent logs are available for this resource.')) throw new Error('expected formatted-empty resource page empty recent logs state');
+  if (!formattedEmptyText.includes('Tenet found provider records, but none could be formatted into operator-visible recent-log rows.')) throw new Error('expected formatted-empty recent logs state to explain no_formatted_entries, got ' + formattedEmptyText);
+  if (formattedEmptyText.includes('no_formatted_entries')) throw new Error('expected formatted-empty recent logs state not to expose raw emptyReason code');
 
   const failedStatusRun = await renderWithFetch((url) => {
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
