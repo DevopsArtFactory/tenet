@@ -1825,6 +1825,7 @@
       };
       const resourceLogCacheKey = (deploymentName, resource) => [deploymentName || '', resource.type || '', resource.name || '', resource.id || '', resource.containerName || '', resource.instanceId || '', resource.clusterArn || ''].join('::');
       const supportsECSClusterScope = (resource) => ['ecsService', 'ecsTask'].includes(String(resource?.type || '').trim());
+      const supportsASGInstanceScope = (resource) => ['candidateAutoScalingGroup', 'serviceAutoScalingGroup', 'userDataBootstrapSource'].includes(String(resource?.type || '').trim());
       const supportsBoundedResourceInspection = (resource) => ['ecsService', 'candidateAutoScalingGroup', 'serviceAutoScalingGroup'].includes(String(resource?.type || '').trim());
       const resourceLogRequestCacheKey = (deploymentName, resource, limit = 0) => `${resourceLogCacheKey(deploymentName, resource)}::limit=${normalizeResourceLogsLimit(limit)}`;
       const resourceInspectionRequestCacheKey = (deploymentName, resource, limit = 0) => `${resourceLogCacheKey(deploymentName, resource)}::inspection-limit=${supportsBoundedResourceInspection(resource) ? normalizeResourceInspectionTaskLimit(limit) : 0}`;
@@ -2809,6 +2810,35 @@
         history.replaceState({}, '', `${nextURL}${window.location.hash || ''}`);
         return nextState;
       };
+      const clearSelectedInstanceRoute = (detail, resource) => {
+        if (!supportsASGInstanceScope(resource)) return null;
+        const instanceId = String(resource?.instanceId || currentPageState.instanceId || '').trim();
+        if (!instanceId) return null;
+        const deploymentName = detail?.name || currentPageState.deployment || '';
+        const routeState = createCurrentResourceRouteState(resource);
+        const nextState = {
+          ...currentPageState,
+          page: 'resource',
+          deployment: deploymentName,
+          resourceType: routeState.routeResourceType || '',
+          resourceId: routeState.routeResourceId || '',
+          containerName: routeState.routeContainerName || '',
+          instanceId: '',
+          clusterArn: routeState.routeClusterArn || '',
+        };
+        currentPageState = nextState;
+        const nextURL = buildPageURL('resource', {
+          deployment: nextState.deployment,
+          resourceType: nextState.resourceType,
+          resourceId: nextState.resourceId,
+          containerName: nextState.containerName,
+          clusterArn: nextState.clusterArn,
+          resourceLogLimit: nextState.resourceLogLimit,
+          resourceInspectionLimit: nextState.resourceInspectionLimit,
+        });
+        history.replaceState({}, '', `${nextURL}${window.location.hash || ''}`);
+        return nextState;
+      };
       const createClearSelectedClusterButton = (detail, resource, resourceState = null) => {
         if (!supportsECSClusterScope(resource) || !String(resource?.clusterArn || '').trim()) return null;
         const button = createElement('button', 'toolbar-button', 'Clear selected cluster');
@@ -2820,6 +2850,17 @@
         });
         return button;
       };
+      const createClearSelectedInstanceButton = (detail, resource, resourceState = null) => {
+        if (!supportsASGInstanceScope(resource) || !String(resource?.instanceId || '').trim()) return null;
+        const button = createElement('button', 'toolbar-button', 'Clear selected instance');
+        button.type = 'button';
+        button.disabled = resourceState?.status === 'loading';
+        button.addEventListener('click', () => {
+          if (button.disabled || !clearSelectedInstanceRoute(detail, resource)) return;
+          renderResourceDetailPage(detail, resourceState);
+        });
+        return button;
+      };
       const createResourceDetailActions = (resourceState = null, detail = null, resource = null) => [
         createRefreshButton(
           'Refresh resource detail',
@@ -2827,6 +2868,7 @@
           () => resourceState?.onRefresh?.().catch(() => {}),
         ),
         createClearSelectedClusterButton(detail, resource, resourceState),
+        createClearSelectedInstanceButton(detail, resource, resourceState),
       ];
       const resourceDetailRefreshState = (resourceState = null) => {
         if (resourceState?.status === 'loading') {

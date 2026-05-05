@@ -1582,6 +1582,11 @@ assert "routeClusterArn: supportsECSClusterScope(resource) ? String(currentPageS
 assert "Clear selected cluster" in ui, ui
 assert "const clearSelectedClusterRoute = (detail, resource) => {" in ui, ui
 assert "clusterArn: ''," in ui, ui
+assert "const supportsASGInstanceScope = (resource) => ['candidateAutoScalingGroup', 'serviceAutoScalingGroup', 'userDataBootstrapSource'].includes(String(resource?.type || '').trim());" in ui, ui
+assert "Clear selected instance" in ui, ui
+assert "const clearSelectedInstanceRoute = (detail, resource) => {" in ui, ui
+assert "instanceId: ''," in ui, ui
+assert "createClearSelectedInstanceButton(detail, resource, resourceState)" in ui, ui
 assert "renderResourceDetailPage(detail, resourceState);" in ui, ui
 assert "params.set('resourceLogLimit', String(limit));" in ui, ui
 assert "syncResourcePanelLimitQueryParams(deploymentName, resource);" in ui, ui
