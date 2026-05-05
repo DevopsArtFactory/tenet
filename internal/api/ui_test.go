@@ -3413,6 +3413,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"Unrelated docs-only PRs keep the cheap fast lane without the Docker stack",
 			"`internal/catalog/**`",
 			"`internal/domain/**`",
+			"`internal/resourceaws/**`",
 			"reserved Okta SAML/enterprise runtime paths `internal/authsaml/**` and `internal/authsso/**`",
 			"make smoke-docker",
 		},
