@@ -1584,6 +1584,12 @@ assert "const clearSelectedClusterRoute = (detail, resource) => {" in ui, ui
 assert "clusterArn: ''," in ui, ui
 assert "const supportsASGInstanceScope = (resource) => ['candidateAutoScalingGroup', 'serviceAutoScalingGroup', 'userDataBootstrapSource'].includes(String(resource?.type || '').trim());" in ui, ui
 assert "Clear selected instance" in ui, ui
+assert "const appendAutoScalingEC2InstanceDetail = (item, instance) => {" in ui, ui
+assert "const ec2Instance = instance?.ec2Instance;" in ui, ui
+assert "EC2 instance type" in ui, ui
+assert "AMI image ID" in ui, ui
+assert "Public IP" in ui, ui
+assert "Launch time" in ui, ui
 assert "const clearSelectedInstanceRoute = (detail, resource) => {" in ui, ui
 assert "instanceId: ''," in ui, ui
 assert "createClearSelectedInstanceButton(detail, resource, resourceState)" in ui, ui

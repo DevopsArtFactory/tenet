@@ -1878,6 +1878,8 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		"resource-logs?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5",
 		"The embedded resource page also preserves bookmarkable `clusterArn` URL state for ECS service and ECS task resources",
 		"local/compose smoke now lock the response-level `clusterArn` echo",
+		"optional selected-host `autoScalingGroup.instances[].ec2Instance` facts from live `DescribeInstances`",
+		"local/no-AWS runs may omit those host facts while keeping the membership row and console-log selector useful",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
 			t.Fatalf("expected resource recent logs doc to include %q", fragment)
@@ -1903,6 +1905,10 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		`launch_template = asg.get('launchTemplate')`,
 		`mixed_instances_policy = asg.get('mixedInstancesPolicy')`,
 		`override_launch_template = override.get('launchTemplate')`,
+		`assert "const appendAutoScalingEC2InstanceDetail = (item, instance) => {" in ui, ui`,
+		`assert "const ec2Instance = instance?.ec2Instance;" in ui, ui`,
+		`assert "AMI image ID" in ui, ui`,
+		`assert "Public IP" in ui, ui`,
 	} {
 		if !strings.Contains(localSmoke, fragment) {
 			t.Fatalf("expected smoke-local resource inspection contract to include %q", fragment)
@@ -1926,6 +1932,10 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		`launch_template = asg.get("launchTemplate")`,
 		`mixed_instances_policy = asg.get("mixedInstancesPolicy")`,
 		`override_launch_template = override.get("launchTemplate")`,
+		`"const appendAutoScalingEC2InstanceDetail = (item, instance) => {",`,
+		`"const ec2Instance = instance?.ec2Instance;",`,
+		`"AMI image ID",`,
+		`"Public IP",`,
 	} {
 		if !strings.Contains(dockerSmoke, fragment) {
 			t.Fatalf("expected smoke-docker resource inspection contract to include %q", fragment)
@@ -1952,6 +1962,9 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"`ruleArn`, `priority`, `isDefault`, `conditions`, `actions`",
 		"resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod",
 		"resource-inspection?resourceType=ecsTask&resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Atask%2Fworker%2Fabc123&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod",
+		"Selected ASG host detail is optional live AWS evidence",
+		"`autoScalingGroup.instances[].ec2Instance`",
+		"`EC2 state`, `EC2 instance type`, `AMI image ID`, `Private IP`, `Public IP`, `Subnet`, `VPC`, and `Launch time`",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README resource inspection contract to include %q", fragment)
@@ -1975,6 +1988,9 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5",
 		"embedded resource page preserves selected-cluster URL state through bookmarkable ECS service drill-down links",
 		"local and compose smoke now also fetch ECS service selected-cluster backend routes",
+		"selected ASG EC2 host-detail evidence is optional live AWS evidence",
+		"local and compose runs may omit `autoScalingGroup.instances[].ec2Instance`",
+		"the exact operator labels `EC2 state`, `EC2 instance type`, `AMI image ID`, `Private IP`, `Public IP`, `Subnet`, `VPC`, and `Launch time`",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
 			t.Fatalf("expected overview dashboard doc to include %q", fragment)
