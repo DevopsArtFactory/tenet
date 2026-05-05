@@ -214,7 +214,7 @@ Current behavior:
 - fetches `GET /v1/audit-logs` directly and renders the exact current audit read route (including `deployment`, `action`, and `limit` query params when present) near the timeline intro so operators can confirm what backend collection request is driving a bookmarked view
 - preserves optional `deployment`, `action`, and `limit` URL state when present
 - renders a safe action filter control for exactly `plan.created` and `apply.requested`
-- renders a safe limit selector in the audit toolbar with preset newest-first windows while still honoring bookmarked positive integers such as `limit=2`
+- renders a safe limit selector in the audit toolbar with preset newest-first windows while still honoring bookmarked positive integers such as `limit=2`; when deployment-read authorization is enforced, the backend applies that limit after filtering to the operator's visible deployments so hidden newer records do not mask authorized rows
 - renders an in-place `Refresh audit log` control that re-runs only `GET /v1/audit-logs` for the current bookmarkable audit route, disables only while that audit fetch is active, and preserves the same deployment/action/limit query state
 - renders a conditional `Clear audit filters` / `Clear audit controls` recovery action whenever `deployment`, `action`, or the `limit` cap are active, resets those audit filters back to the default `/?page=audit` slice, and preserves bookmarkable applications-shell state such as `q`, `sync`, and `account`
 - renders explicit `Loading audit log…`, empty, unavailable (`503`), and generic fetch-error states for non-auth failures
