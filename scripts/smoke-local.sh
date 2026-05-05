@@ -1485,8 +1485,18 @@ assert 'Live inspection is unavailable for this resource.' in ui, ui
 assert 'Refresh live inspection' in ui, ui
 assert 'No live inspection details are available for this resource yet.' in ui, ui
 assert 'Service deployments' in ui, ui
+assert 'Container instance' in ui, ui
+assert 'EC2 instance' in ui, ui
+assert 'Capacity provider' in ui, ui
+assert 'Availability Zone' in ui, ui
 assert 'EC2 host details' in ui, ui
 assert 'Optional host evidence resolved from the inspected ECS task.' in ui, ui
+assert 'EC2 state' in ui, ui
+assert 'EC2 instance type' in ui, ui
+assert 'AMI image ID' in ui, ui
+assert 'Private IP' in ui, ui
+assert 'Public IP' in ui, ui
+assert 'Launch time' in ui, ui
 assert "const ecsTaskScopeUnavailableReasonText = (reason) => {" in ui, ui
 assert "Task sample unavailable · ${reasonText} · requested ${countText(scope.requestedLimit)} · effective ${countText(effectiveLimit)}" in ui, ui
 assert "Task sampling is unavailable for this service; service inspection remains available." in ui, ui

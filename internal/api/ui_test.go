@@ -2633,6 +2633,18 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh live inspection")
 	}
 	for _, fragment := range []string{
+		`assert 'Container instance' in ui, ui`,
+		`assert 'EC2 instance' in ui, ui`,
+		`assert 'Capacity provider' in ui, ui`,
+		`assert 'Availability Zone' in ui, ui`,
+		`assert 'EC2 host details' in ui, ui`,
+		`assert 'Optional host evidence resolved from the inspected ECS task.' in ui, ui`,
+		`assert 'EC2 state' in ui, ui`,
+		`assert 'EC2 instance type' in ui, ui`,
+		`assert 'AMI image ID' in ui, ui`,
+		`assert 'Private IP' in ui, ui`,
+		`assert 'Public IP' in ui, ui`,
+		`assert 'Launch time' in ui, ui`,
 		`assert "const ecsTaskScopeUnavailableReasonText = (reason) => {" in ui, ui`,
 		`assert "Task sample unavailable · ${reasonText} · requested ${countText(scope.requestedLimit)} · effective ${countText(effectiveLimit)}" in ui, ui`,
 		`assert "Task sampling is unavailable for this service; service inspection remains available." in ui, ui`,
@@ -3858,6 +3870,8 @@ func TestOverviewDocsDescribeECSTaskScopeReleaseGuard(t *testing.T) {
 			"`not_applicable` when the optional task bridge is unavailable",
 			"Empty successful samples remain `available=true` with `returnedTaskCount=0`",
 			"Exact `ecsTask` inspection keeps those placement fields and can add optional nested `ecsTask.ec2Instance` host facts",
+			"optional ECS-on-EC2 host details render in a separate `EC2 host details` block",
+			"Fargate/no-AWS/no-host cases stay quiet instead of showing empty placeholders",
 		},
 	}
 
