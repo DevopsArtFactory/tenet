@@ -4082,6 +4082,14 @@
         return `Lookup path · ${parts.length ? parts.join(' · ') : 'lookup context unavailable'}`;
       };
       const createResourceLogsLookupPathSummary = (lookupContext) => createElement('p', 'detail-section-copy', resourceLogsLookupPathText(lookupContext));
+      const resourceLogsRequestIDFields = (result) => {
+        const requestId = String(result?.tenetRequestId || result?.requestId || '').trim();
+        return requestId ? [['Tenet request ID', requestId]] : [];
+      };
+      const createResourceLogsRequestIDMeta = (error) => {
+        const requestId = String(error?.requestId || '').trim();
+        return requestId ? createElement('div', 'detail-condition-meta', `Tenet request ID · ${requestId}`) : null;
+      };
       const resourceLogsBackingResourceFields = (result) => {
         const fields = [];
         if (result?.resourceDescription) {
@@ -4202,7 +4210,7 @@
         const beforeNodes = (metadata) => handoffSection ? [capNote, lookupPathSummary, metadata, handoffSection] : [capNote, lookupPathSummary, metadata];
         const scopeFields = resourceLogsResultScopeFields(result?.resultScope);
         if (!result?.available) {
-          const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, [...backingResourceFields, ...scopeFields]);
+          const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, [...resourceLogsRequestIDFields(result), ...backingResourceFields, ...scopeFields]);
           const unavailableReason = resourceLogsUnavailableReasonText(result?.unavailableReason);
           const details = unavailableReason
             ? [createElement('div', 'detail-condition-meta', unavailableReason)]
@@ -4213,7 +4221,7 @@
 
         const entries = result.entries || [];
         if (!entries.length) {
-          const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, [...backingResourceFields, ...scopeFields]);
+          const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, [...resourceLogsRequestIDFields(result), ...backingResourceFields, ...scopeFields]);
           const emptyReason = resourceLogsEmptyReasonText(result?.emptyReason);
           const details = emptyReason
             ? [createElement('div', 'detail-condition-meta', emptyReason)]
@@ -4224,6 +4232,7 @@
 
         const fragment = [];
         const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, [
+          ...resourceLogsRequestIDFields(result),
           ['Logs source', metricValue(result.source)],
           ...scopeFields,
           ...backingResourceFields,
@@ -4302,12 +4311,13 @@
               )) {
                 return;
               }
+              const requestIDMeta = createResourceLogsRequestIDMeta(error);
               renderResourceLogsState(
                 container,
                 `Failed to load recent logs: ${error.message}`,
                 'error',
                 [],
-                [],
+                requestIDMeta ? [requestIDMeta] : [],
                 createResourceLogsActions(container, deploymentName, resource, false, target?.detail || detail),
               );
             });
@@ -5209,10 +5219,11 @@
         resourceInspectionStateByKey.set(inspectionKey, { status: 'loading', promise, sections: [{ section, detail, limit: selectedLimit }] });
         return promise;
       };
-      const requestError = (kind, message, status = 0) => {
+      const requestError = (kind, message, status = 0, requestId = '') => {
         const error = new Error(message);
         error.kind = kind;
         error.status = status;
+        error.requestId = requestId;
         return error;
       };
       const responseErrorMessage = (response, fallback) => {
@@ -5224,17 +5235,30 @@
           })
           .catch(() => fallback);
       };
+      const responseRequestID = (response) => {
+        const headers = response?.headers;
+        if (!headers || typeof headers.get !== 'function') return '';
+        const value = headers.get('Request-Id') || headers.get('request-id') || '';
+        return String(value || '').trim();
+      };
+      const attachResponseRequestID = (value, requestId) => {
+        if (!requestId || !value || typeof value !== 'object' || Array.isArray(value)) return value;
+        return { ...value, tenetRequestId: requestId };
+      };
       const fetchResourcePanelJSON = (route, failureLabel) => Promise.resolve()
         .then(() => fetch(route))
         .then((response) => {
-          if (response.ok) return response.json();
+          const requestId = responseRequestID(response);
+          if (response.ok) return response.json().then((value) => attachResponseRequestID(value, requestId));
           const fallback = `${failureLabel} (${response.status})`;
           if (response.status === 401 || response.status === 403) {
             return responseErrorMessage(response, fallback).then((message) => {
-              throw requestError('fetch-error', message, response.status);
+              throw requestError('fetch-error', message, response.status, requestId);
             });
           }
-          throw new Error(fallback);
+          const error = new Error(fallback);
+          error.requestId = requestId;
+          throw error;
         });
       const fetchEmbeddedReadRouteJSON = (route, labels) => fetch(route)
         .then((response) => {
