@@ -6136,7 +6136,7 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
         },
         targetGroupArns: ['arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-prod-candidate/abc123'],
         instancesScope: { requestedLimit: limit, effectiveLimit: limit, returnedInstanceCount: limit === 25 ? 1 : 10, truncationStatus: limit === 25 ? 'not_truncated' : 'truncated' },
-        instances: [{ instanceId: 'i-abc123', availabilityZone: 'ap-northeast-2a', lifecycleState: 'InService', healthStatus: 'Healthy', protectedFromScaleIn: true, weightedCapacity: '1' }],
+        instances: [{ instanceId: 'i-abc123', availabilityZone: 'ap-northeast-2a', lifecycleState: 'InService', healthStatus: 'Healthy', protectedFromScaleIn: true, weightedCapacity: '1', ec2Instance: { instanceState: 'running', instanceType: 'm6i.large', imageId: 'ami-host123', privateIpAddress: '10.0.1.24', publicIpAddress: '<img src=x onerror=1>', subnetId: 'subnet-abc123', vpcId: 'vpc-abc123', launchTime: '2026-05-05T07:30:00Z' } }],
       },
     }) });
     }
@@ -6162,6 +6162,16 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!asgSupportedText.includes('Lifecycle state · InService')) throw new Error('expected ASG inspection to render lifecycle state');
   if (!asgSupportedText.includes('Protected from scale-in · True')) throw new Error('expected ASG inspection to render protected-from-scale-in');
   if (!asgSupportedText.includes('Weighted capacity · 1')) throw new Error('expected ASG inspection to render weighted capacity');
+  if (!asgSupportedText.includes('EC2 state · running')) throw new Error('expected ASG inspection to render selected EC2 state: ' + asgSupportedText);
+  if (!asgSupportedText.includes('EC2 instance type · m6i.large')) throw new Error('expected ASG inspection to render selected EC2 instance type: ' + asgSupportedText);
+  if (!asgSupportedText.includes('AMI image ID · ami-host123')) throw new Error('expected ASG inspection to render selected EC2 image id: ' + asgSupportedText);
+  if (!asgSupportedText.includes('Private IP · 10.0.1.24')) throw new Error('expected ASG inspection to render selected EC2 private IP: ' + asgSupportedText);
+  if (!asgSupportedText.includes('Public IP · <img src=x onerror=1>')) throw new Error('expected ASG inspection to render selected EC2 public IP text safely: ' + asgSupportedText);
+  if (!asgSupportedText.includes('Subnet · subnet-abc123')) throw new Error('expected ASG inspection to render selected EC2 subnet: ' + asgSupportedText);
+  if (!asgSupportedText.includes('VPC · vpc-abc123')) throw new Error('expected ASG inspection to render selected EC2 VPC: ' + asgSupportedText);
+  if (!asgSupportedText.includes('Launch time · 2026-05-05T07:30:00Z')) throw new Error('expected ASG inspection to render selected EC2 launch time: ' + asgSupportedText);
+  const asgImages = collectNodes(asgSupportedRun.document.getElementById('accounts'), (node) => node.tagName === 'IMG');
+  if (asgImages.length !== 0) throw new Error('expected selected EC2 host fields to remain text content rather than parsed html');
   if (!asgSupportedText.includes('Open EC2 console logs')) throw new Error('expected ASG inspection to render console-log handoff');
   const asgConsoleLogLinks = collectNodes(asgSupportedRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open EC2 console logs');
   if (asgConsoleLogLinks.length !== 1) throw new Error('expected exactly one ASG console-log handoff, got ' + asgConsoleLogLinks.length);
@@ -6230,7 +6240,7 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
       autoScalingGroup: {
         autoScalingGroupName: 'payments-api-prod-candidate',
         instancesScope: { requestedLimit: 10, effectiveLimit: 10, returnedInstanceCount: 1, truncationStatus: 'not_truncated' },
-        instances: [{ instanceId: 'i-abc123', availabilityZone: 'ap-northeast-2a', lifecycleState: 'InService', healthStatus: 'Healthy' }],
+        instances: [{ instanceId: 'i-abc123', availabilityZone: 'ap-northeast-2a', lifecycleState: 'InService', healthStatus: 'Healthy', ec2Instance: { instanceState: 'running', instanceType: 'm6i.large', imageId: 'ami-selected123', privateIpAddress: '10.0.2.24', publicIpAddress: '198.51.100.24', subnetId: 'subnet-selected', vpcId: 'vpc-selected', launchTime: '2026-05-05T08:15:00Z' } }],
       },
     }) });
     throw new Error('unexpected selected asg fetch url: ' + url);
@@ -6239,6 +6249,11 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!selectedASGRun.fetchCalls.includes(selectedInstanceLogsURL)) throw new Error('expected selected ASG logs fetch to include instanceId, got ' + JSON.stringify(selectedASGRun.fetchCalls));
   if (!selectedASGRun.fetchCalls.includes(selectedInstanceInspectionURL)) throw new Error('expected selected ASG inspection fetch to include instanceId before sample limit, got ' + JSON.stringify(selectedASGRun.fetchCalls));
   if (!selectedASGText.includes('Selected instance')) throw new Error('expected selected ASG panels to render selected instance metadata: ' + selectedASGText);
+  if (!selectedASGText.includes('EC2 state · running')) throw new Error('expected selected ASG live inspection to render EC2 host state: ' + selectedASGText);
+  if (!selectedASGText.includes('AMI image ID · ami-selected123')) throw new Error('expected selected ASG live inspection to render EC2 host image: ' + selectedASGText);
+  if (!selectedASGText.includes('Private IP · 10.0.2.24')) throw new Error('expected selected ASG live inspection to render EC2 private IP: ' + selectedASGText);
+  if (!selectedASGText.includes('Public IP · 198.51.100.24')) throw new Error('expected selected ASG live inspection to render EC2 public IP: ' + selectedASGText);
+  if (!selectedASGText.includes('Launch time · 2026-05-05T08:15:00Z')) throw new Error('expected selected ASG live inspection to render EC2 launch time: ' + selectedASGText);
   if (!selectedASGText.includes('Log instance · i-abc123')) throw new Error('expected selected ASG recent logs to render entry instance metadata: ' + selectedASGText);
   const selectedASGRefreshButtons = collectNodes(selectedASGRun.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
   const selectedLogsRefresh = selectedASGRefreshButtons.find((node) => node.textContent === 'Refresh recent logs');
