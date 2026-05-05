@@ -141,12 +141,15 @@ func TestServiceInspect(t *testing.T) {
 				gotLookup = req
 				return ECSTaskInspection{
 					ECSTaskSummary: ECSTaskSummary{
-						TaskARN:       "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123",
-						TaskID:        "abc123",
-						ClusterARN:    "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
-						LastStatus:    "STOPPED",
-						DesiredStatus: "STOPPED",
-						StoppedReason: "Essential container in task exited",
+						TaskARN:              "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123",
+						TaskID:               "abc123",
+						ClusterARN:           "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
+						ContainerInstanceARN: "arn:aws:ecs:ap-northeast-2:123456789012:container-instance/payments/ci-abc123",
+						CapacityProviderName: "payments-ec2",
+						AvailabilityZone:     "ap-northeast-2a",
+						LastStatus:           "STOPPED",
+						DesiredStatus:        "STOPPED",
+						StoppedReason:        "Essential container in task exited",
 						Containers: []ECSTaskContainerInfo{{
 							Name:       "api",
 							Image:      "ghcr.io/devopsartfactory/payments-api:broken",
@@ -181,6 +184,9 @@ func TestServiceInspect(t *testing.T) {
 		}
 		if result.ECSTask.TaskID != "abc123" || len(result.ECSTask.Containers) != 1 || result.ECSTask.Containers[0].AWSLogs == nil {
 			t.Fatalf("expected task/container/awslogs evidence, got %+v", result.ECSTask)
+		}
+		if result.ECSTask.ContainerInstanceARN != "arn:aws:ecs:ap-northeast-2:123456789012:container-instance/payments/ci-abc123" || result.ECSTask.CapacityProviderName != "payments-ec2" || result.ECSTask.AvailabilityZone != "ap-northeast-2a" {
+			t.Fatalf("expected ECS placement evidence on task inspection, got %+v", result.ECSTask)
 		}
 	})
 
@@ -1543,13 +1549,16 @@ func TestECSServiceTaskSummariesDiscoversBoundedTasksWithContainerLogs(t *testin
 	}
 	runningARN := "arn:aws:ecs:ap-northeast-2:123456789012:task/worker/task-11"
 	tasks[runningARN] = ecstypes.Task{
-		TaskArn:           stringPtr(runningARN),
-		ClusterArn:        stringPtr(clusterARN),
-		TaskDefinitionArn: stringPtr(taskDefARN),
-		LastStatus:        stringPtr("RUNNING"),
-		DesiredStatus:     stringPtr("RUNNING"),
-		LaunchType:        ecstypes.LaunchTypeFargate,
-		StartedAt:         timePtr(base.Add(20 * time.Minute)),
+		TaskArn:              stringPtr(runningARN),
+		ClusterArn:           stringPtr(clusterARN),
+		TaskDefinitionArn:    stringPtr(taskDefARN),
+		ContainerInstanceArn: stringPtr("arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker/ci-running"),
+		CapacityProviderName: stringPtr("worker-fargate-spot"),
+		AvailabilityZone:     stringPtr("ap-northeast-2c"),
+		LastStatus:           stringPtr("RUNNING"),
+		DesiredStatus:        stringPtr("RUNNING"),
+		LaunchType:           ecstypes.LaunchTypeFargate,
+		StartedAt:            timePtr(base.Add(20 * time.Minute)),
 		Containers: []ecstypes.Container{
 			{Name: stringPtr("sidecar"), Image: stringPtr("collector:latest"), LastStatus: stringPtr("RUNNING")},
 			{Name: stringPtr("worker"), Image: stringPtr("worker:latest"), LastStatus: stringPtr("RUNNING")},
@@ -1580,6 +1589,9 @@ func TestECSServiceTaskSummariesDiscoversBoundedTasksWithContainerLogs(t *testin
 	}
 	if got[0].TaskID != "task-11" || got[len(got)-1].TaskID != "task-2" {
 		t.Fatalf("expected newest task summaries first and capped to 10, got %+v", got)
+	}
+	if got[0].ContainerInstanceARN != "arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker/ci-running" || got[0].CapacityProviderName != "worker-fargate-spot" || got[0].AvailabilityZone != "ap-northeast-2c" {
+		t.Fatalf("expected ECS service task sample to preserve placement evidence, got %+v", got[0])
 	}
 	if !reflect.DeepEqual(client.listTaskCalls, []ecstypes.DesiredStatus{ecstypes.DesiredStatusRunning, ecstypes.DesiredStatusStopped}) {
 		t.Fatalf("expected running then stopped task discovery, got %+v", client.listTaskCalls)
