@@ -1804,6 +1804,10 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		`assert isinstance(resource_logs['lookupContext'].get('observerRoleConfigured'), bool), resource_logs`,
 		`assert isinstance(worker_resource_logs.get('lookupContext'), dict), worker_resource_logs`,
 		`assert isinstance(worker_resource_logs['lookupContext'].get('observerRoleConfigured'), bool), worker_resource_logs`,
+		`selected_worker_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=1")`,
+		`assert selected_worker_resource_logs.get('clusterArn') == worker_cluster_arn, selected_worker_resource_logs`,
+		`selected_worker_resource_logs_path=$(write_payload selected-worker-resource-logs.json "$selected_worker_resource_logs")`,
+		`SELECTED_WORKER_RESOURCE_LOGS_PATH="$selected_worker_resource_logs_path"`,
 		`traffic_resource_logs=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")`,
 		`assert traffic_resource_logs.get('unavailableReason') == 'no_log_source', traffic_resource_logs`,
 	} {
@@ -1814,6 +1818,10 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 
 	dockerScript := readRepoFile(t, "scripts/smoke-docker.sh")
 	for _, fragment := range []string{
+		`selected_worker_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=1")`,
+		`assert selected_worker_resource_logs.get("clusterArn") == worker_cluster_arn, selected_worker_resource_logs`,
+		`selected_worker_resource_logs_path=$(write_payload selected-worker-resource-logs.json "$selected_worker_resource_logs")`,
+		`SELECTED_WORKER_RESOURCE_LOGS_PATH="$selected_worker_resource_logs_path"`,
 		`traffic_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=trafficShiftPlan&resourceName=payments-api-prod-weighted-routing")`,
 		`assert traffic_resource_logs.get("unavailableReason") == "no_log_source", traffic_resource_logs`,
 	} {
@@ -1865,7 +1873,8 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		"that pair gives reviewers the exact Tenet request log correlation key plus the attempted region/account/observer-role path",
 		"Example selected-cluster service request",
 		"resource-logs?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5",
-		"embedded resource-page `clusterArn` URL state and its post-UI smoke/docs guards are tracked separately in #834 and #838",
+		"The embedded resource page also preserves bookmarkable `clusterArn` URL state for ECS service resources",
+		"local/compose smoke now lock the response-level `clusterArn` echo",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
 			t.Fatalf("expected resource recent logs doc to include %q", fragment)
@@ -1881,6 +1890,10 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		`active_target_group_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=activeTargetGroup&resourceName=payments-api-prod-active")`,
 		`candidate_target_group_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateTargetGroup&resourceName=payments-api-prod-candidate")`,
 		`blue_task_set_target_group_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=blueTaskSetTargetGroup&resourceName=payments-api-staging-blue")`,
+		`selected_worker_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=1")`,
+		`assert selected_worker_resource_inspection.get('clusterArn') == worker_cluster_arn, selected_worker_resource_inspection`,
+		`selected_worker_resource_inspection_path=$(write_payload selected-worker-resource-inspection.json "$selected_worker_resource_inspection")`,
+		`SELECTED_WORKER_RESOURCE_INSPECTION_PATH="$selected_worker_resource_inspection_path"`,
 		`minimum_healthy_percent = worker_resource_inspection['ecsService'].get('minimumHealthyPercent')`,
 		`maximum_percent = worker_resource_inspection['ecsService'].get('maximumPercent')`,
 		`health_check_grace_period_seconds = worker_resource_inspection['ecsService'].get('healthCheckGracePeriodSeconds')`,
@@ -1900,6 +1913,10 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		`active_target_group_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=activeTargetGroup&resourceName=payments-api-prod-active")`,
 		`candidate_target_group_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateTargetGroup&resourceName=payments-api-prod-candidate")`,
 		`blue_task_set_target_group_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=blueTaskSetTargetGroup&resourceName=payments-api-staging-blue")`,
+		`selected_worker_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=1")`,
+		`assert selected_worker_resource_inspection.get("clusterArn") == worker_cluster_arn, selected_worker_resource_inspection`,
+		`selected_worker_resource_inspection_path=$(write_payload selected-worker-resource-inspection.json "$selected_worker_resource_inspection")`,
+		`SELECTED_WORKER_RESOURCE_INSPECTION_PATH="$selected_worker_resource_inspection_path"`,
 		`minimum_healthy_percent = worker_resource_inspection["ecsService"].get("minimumHealthyPercent")`,
 		`maximum_percent = worker_resource_inspection["ecsService"].get("maximumPercent")`,
 		`health_check_grace_period_seconds = worker_resource_inspection["ecsService"].get("healthCheckGracePeriodSeconds")`,
@@ -1952,7 +1969,8 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"`listenerRule` metadata",
 		"resource-logs?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5",
 		"resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5",
-		"embedded resource-page selected-cluster URL state remains a separate #834/#838 follow-up",
+		"embedded resource page preserves selected-cluster URL state through bookmarkable ECS service drill-down links",
+		"local and compose smoke now also fetch ECS service selected-cluster backend routes",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
 			t.Fatalf("expected overview dashboard doc to include %q", fragment)
@@ -1973,6 +1991,7 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"`listenerRule` details",
 		"resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5",
 		"accepted selectors echo as response-level `clusterArn`",
+		"local/compose smoke lock that backend echo alongside the embedded selected-cluster URL-state guards",
 	} {
 		if !strings.Contains(uiDoc, fragment) {
 			t.Fatalf("expected overview UI doc to include %q", fragment)
