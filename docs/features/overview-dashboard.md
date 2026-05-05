@@ -137,7 +137,7 @@ Current behavior:
 - event ordering labeled as newest-first with readable time, summary, sync/health context, rollout phase/current step, and optional controller metadata
 - GitHub-triggered controller refresh events render a concise `GitHub refresh evidence` cue with non-secret repository/ref, shortened revision, delivery/request IDs, and requested/received/reconciled timing when those `controllerRefresh` fields are present; ticker reconciles omit that cue instead of showing placeholder labels
 - explicitly labels these as controller-derived runtime events, not audit/auth history
-- the `Controller runtime events` section header now includes an in-place `Refresh runtime events` button that re-runs just that deployment-events route in place, keeps the bookmarkable `/?page=application...` URL stable, and disables only while that section fetch is active
+- the `Controller runtime events` section header now includes an in-place `Refresh runtime events` button that re-runs just `GET /v1/overview/deployments/{deploymentName}/events?limit=10` in place, keeps the bookmarkable `/?page=application...` URL stable, and disables only while that section fetch is active
 - when that guarded lazy read returns `401` or `403`, the runtime-events panel keeps its refresh control and bookmarkable route stable but replaces generic fetch-error copy with the same trusted-front-door / access-denied guidance used on the other embedded read paths
 - grouped resource sections:
   - `Workloads`
