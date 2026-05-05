@@ -1226,7 +1226,7 @@ func (s Service) inspectECSServiceFromAWS(ctx context.Context, req ECSRequest) (
 			taskDefinitionImage = ecsTaskDefinitionImage(out.TaskDefinition)
 		}
 	}
-	tasks, tasksScope, _ := ecsServiceTaskSummaries(ctx, clients.ECS, aws.ToString(clusterARN), aws.ToString(service.ServiceName), req.TaskSummaryLimit)
+	tasks, tasksScope, _ := ecsServiceTaskSummaries(ctx, clients.ECS, clients.EC2, aws.ToString(clusterARN), aws.ToString(service.ServiceName), req.TaskSummaryLimit)
 	return ecsInspectionFromService(*service, aws.ToString(clusterARN), taskDefinitionImage, tasks, tasksScope), nil
 }
 
@@ -1354,7 +1354,7 @@ func ecsTaskSummaryFromTask(task ecstypes.Task, clusterARN string, definitions m
 	return ECSTaskSummary{TaskARN: strings.TrimSpace(aws.ToString(task.TaskArn)), TaskID: taskID, ClusterARN: strings.TrimSpace(clusterARN), ContainerInstanceARN: containerInstanceARN, EC2InstanceID: strings.TrimSpace(containerInstanceEC2IDs[containerInstanceARN]), CapacityProviderName: strings.TrimSpace(aws.ToString(task.CapacityProviderName)), AvailabilityZone: strings.TrimSpace(aws.ToString(task.AvailabilityZone)), LastStatus: strings.TrimSpace(aws.ToString(task.LastStatus)), DesiredStatus: strings.TrimSpace(aws.ToString(task.DesiredStatus)), HealthStatus: string(task.HealthStatus), LaunchType: string(task.LaunchType), StartedAt: formatTime(aws.ToTime(task.StartedAt)), StoppedAt: formatTime(aws.ToTime(task.StoppedAt)), StoppedReason: strings.TrimSpace(aws.ToString(task.StoppedReason)), Containers: containers}
 }
 
-func ecsServiceTaskSummaries(ctx context.Context, client ecsServiceAPI, clusterARN, serviceName string, limit int) ([]ECSTaskSummary, *ECSTaskSummaryScope, error) {
+func ecsServiceTaskSummaries(ctx context.Context, client ecsServiceAPI, ec2Client ec2InstanceAPI, clusterARN, serviceName string, limit int) ([]ECSTaskSummary, *ECSTaskSummaryScope, error) {
 	clusterARN = strings.TrimSpace(clusterARN)
 	serviceName = strings.TrimSpace(serviceName)
 	if client == nil || clusterARN == "" || serviceName == "" {
@@ -1447,8 +1447,36 @@ func ecsServiceTaskSummaries(ctx context.Context, client ecsServiceAPI, clusterA
 	} else if len(summaries) == effectiveLimit {
 		truncationStatus = "unknown"
 	}
+	summaries = enrichECSTaskSummariesFromEC2(ctx, ec2Client, summaries)
 	scope := &ECSTaskSummaryScope{Available: true, RequestedLimit: requestedLimit, EffectiveLimit: effectiveLimit, ReturnedTaskCount: len(summaries), TruncationStatus: truncationStatus}
 	return summaries, scope, nil
+}
+
+func enrichECSTaskSummariesFromEC2(ctx context.Context, client ec2InstanceAPI, summaries []ECSTaskSummary) []ECSTaskSummary {
+	if client == nil || len(summaries) == 0 {
+		return summaries
+	}
+	details := make(map[string]*EC2InstanceDetail)
+	for idx := range summaries {
+		instanceID := strings.TrimSpace(summaries[idx].EC2InstanceID)
+		if instanceID == "" {
+			continue
+		}
+		summaries[idx].EC2InstanceID = instanceID
+		detail, ok := details[instanceID]
+		if !ok {
+			var err error
+			detail, err = describeEC2InstanceDetail(ctx, client, instanceID)
+			if err != nil {
+				detail = nil
+			}
+			details[instanceID] = detail
+		}
+		if detail != nil {
+			summaries[idx].EC2Instance = detail
+		}
+	}
+	return summaries
 }
 
 func unavailableECSTaskSummaryScope(requestedLimit *int, effectiveLimit int, err error) *ECSTaskSummaryScope {
