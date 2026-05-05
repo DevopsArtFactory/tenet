@@ -2253,6 +2253,8 @@ func TestCISmokeWorkflowSyntaxChecksBothSmokeScriptsInFastLane(t *testing.T) {
 		"scripts/smoke-docker.sh",
 		"scripts/docker-up.sh",
 		"compose.yaml",
+		"examples/local-repo/*|examples/local-repo/**",
+		"examples/local-status/*|examples/local-status/**",
 		"cmd/tenet-api/*|cmd/tenet-api/**",
 		"cmd/tenet-controller/*|cmd/tenet-controller/**",
 		"internal/api/*|internal/api/**",
@@ -2273,12 +2275,32 @@ func TestCISmokeWorkflowSyntaxChecksBothSmokeScriptsInFastLane(t *testing.T) {
 		"internal/planpreview/*|internal/planpreview/**",
 		"internal/applyrequest/*|internal/applyrequest/**",
 		"internal/auditlog/*|internal/auditlog/**",
-		"Docker smoke required because this PR touches a Compose/front-door/auth/API/controller, catalog/domain/placement status read model, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface.",
-		"Docker smoke skipped because this PR does not touch a Compose/front-door/auth/API/controller, catalog/domain/placement status read model, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface.",
+		"Docker smoke required because this PR touches a Compose/front-door/auth/API/controller, local desired-state/status fixture, catalog/domain/placement status read model, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface.",
+		"Docker smoke skipped because this PR does not touch a Compose/front-door/auth/API/controller, local desired-state/status fixture, catalog/domain/placement status read model, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface.",
 	} {
 		if !strings.Contains(scopeJob, fragment) {
 			t.Fatalf("expected docker-smoke-scope job to include %q", fragment)
 		}
+	}
+}
+
+func TestCISmokeWorkflowDockerScopeCoversFixtureEvidenceChanges(t *testing.T) {
+	body, err := os.ReadFile("../../.github/workflows/ci-smoke.yml")
+	if err != nil {
+		t.Fatalf("read ci-smoke workflow: %v", err)
+	}
+
+	patterns := dockerSmokeScopePatterns(t, string(body))
+	for _, changedPath := range []string{
+		"examples/local-repo/deployments/payments-api-prod.json",
+		"examples/local-status/deployments.json",
+	} {
+		if !dockerSmokeScopeMatches(patterns, changedPath) {
+			t.Fatalf("expected fixture-only change %s to trigger docker smoke scope; patterns=%v", changedPath, patterns)
+		}
+	}
+	if dockerSmokeScopeMatches(patterns, "docs/features/overview-dashboard.md") {
+		t.Fatalf("expected unrelated docs-only paths to skip docker smoke scope")
 	}
 }
 
@@ -3444,7 +3466,9 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"Linux CI runners",
 			"syntax-checks both `scripts/smoke-local.sh` and `scripts/smoke-docker.sh` with `bash -n`, then runs `make smoke-local`",
 			"on pull requests, a cheap `docker-smoke-scope` job first checks changed paths",
-			"runs the full `make smoke-docker` container stack only when the PR touches Compose/front-door/auth/API/controller, catalog/domain/placement status read-model contracts, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surfaces",
+			"runs the full `make smoke-docker` container stack only when the PR touches Compose/front-door/auth/API/controller, local desired-state/status fixtures, catalog/domain/placement status read-model contracts, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surfaces",
+			"fixture inputs (`examples/local-repo/**`, `examples/local-status/**`)",
+			"Fixture-only desired-state/status PRs can change release-gated resource evidence, placement, recent-log, managed-drift, and embedded smoke behavior",
 			"Runner-start failures usually show no job steps or downloadable repo logs and may include GitHub account-level annotations such as recent account payments failing or the spending limit needing an increase.",
 			"use local evidence from `go test ./...`, `make smoke-local`, and `make smoke-docker` for code-level confidence",
 			"See `docs/runbooks/ci-smoke-runner-start.md` for the exact `gh run view` evidence checklist and recovery steps for issue #850.",
@@ -3539,7 +3563,9 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"rely on local `go test ./...`, `make smoke-local`, and `make smoke-docker` output for code-level reproduction",
 			"syntax-checks both `scripts/smoke-local.sh` and `scripts/smoke-docker.sh` with `bash -n`, then runs `make smoke-local`",
 			"Pull requests first pass through a cheap `docker-smoke-scope` path filter",
-			"only PRs that touch Compose/front-door/auth/API/controller, catalog/domain/placement status read-model contracts, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surfaces",
+			"only PRs that touch Compose/front-door/auth/API/controller, local desired-state/status fixtures, catalog/domain/placement status read-model contracts, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surfaces",
+			"fixture inputs (`examples/local-repo/**`, `examples/local-status/**`)",
+			"Fixture-only desired-state/status PRs can change release-gated resource evidence, placement, recent-log, managed-drift, and embedded smoke behavior",
 			"`internal/githubwebhook/**`",
 			"`internal/catalog/**`",
 			"`internal/domain/**`",
