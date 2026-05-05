@@ -87,6 +87,7 @@ jobs:
               internal/api/*|internal/api/**|\
               internal/catalog/*|internal/catalog/**|\
               internal/domain/*|internal/domain/**|\
+              internal/placement/*|internal/placement/**|\
               internal/githubwebhook/*|internal/githubwebhook/**|\
               internal/authprovider/*|internal/authprovider/**|\
               internal/authsaml/*|internal/authsaml/**|\
@@ -109,9 +110,9 @@ jobs:
 
           echo "should-run=$should_run" >> "$GITHUB_OUTPUT"
           if [[ "$should_run" == "true" ]]; then
-            echo "Docker smoke required because this PR touches a Compose/front-door/auth/API/controller, catalog/domain status read model, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface."
+            echo "Docker smoke required because this PR touches a Compose/front-door/auth/API/controller, catalog/domain/placement status read model, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface."
           else
-            echo "Docker smoke skipped because this PR does not touch a Compose/front-door/auth/API/controller, catalog/domain status read model, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface."
+            echo "Docker smoke skipped because this PR does not touch a Compose/front-door/auth/API/controller, catalog/domain/placement status read model, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface."
           fi
 
   docker-smoke:

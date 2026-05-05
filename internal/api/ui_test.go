@@ -2247,6 +2247,7 @@ func TestCISmokeWorkflowSyntaxChecksBothSmokeScriptsInFastLane(t *testing.T) {
 		"internal/api/*|internal/api/**",
 		"internal/catalog/*|internal/catalog/**",
 		"internal/domain/*|internal/domain/**",
+		"internal/placement/*|internal/placement/**",
 		"internal/githubwebhook/*|internal/githubwebhook/**",
 		"internal/authprovider/*|internal/authprovider/**",
 		"internal/authsaml/*|internal/authsaml/**",
@@ -2261,8 +2262,8 @@ func TestCISmokeWorkflowSyntaxChecksBothSmokeScriptsInFastLane(t *testing.T) {
 		"internal/planpreview/*|internal/planpreview/**",
 		"internal/applyrequest/*|internal/applyrequest/**",
 		"internal/auditlog/*|internal/auditlog/**",
-		"Docker smoke required because this PR touches a Compose/front-door/auth/API/controller, catalog/domain status read model, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface.",
-		"Docker smoke skipped because this PR does not touch a Compose/front-door/auth/API/controller, catalog/domain status read model, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface.",
+		"Docker smoke required because this PR touches a Compose/front-door/auth/API/controller, catalog/domain/placement status read model, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface.",
+		"Docker smoke skipped because this PR does not touch a Compose/front-door/auth/API/controller, catalog/domain/placement status read model, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surface.",
 	} {
 		if !strings.Contains(scopeJob, fragment) {
 			t.Fatalf("expected docker-smoke-scope job to include %q", fragment)
@@ -2280,6 +2281,7 @@ func TestCISmokeWorkflowDockerScopeCoversStatusReadModelChanges(t *testing.T) {
 	for _, changedPath := range []string{
 		"internal/domain/status.go",
 		"internal/catalog/overview.go",
+		"internal/placement/resolver.go",
 	} {
 		if !dockerSmokeScopeMatches(patterns, changedPath) {
 			t.Fatalf("expected %s to trigger docker smoke scope; patterns=%v", changedPath, patterns)
@@ -3431,13 +3433,14 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"Linux CI runners",
 			"syntax-checks both `scripts/smoke-local.sh` and `scripts/smoke-docker.sh` with `bash -n`, then runs `make smoke-local`",
 			"on pull requests, a cheap `docker-smoke-scope` job first checks changed paths",
-			"runs the full `make smoke-docker` container stack only when the PR touches Compose/front-door/auth/API/controller, catalog/domain status read-model contracts, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surfaces",
+			"runs the full `make smoke-docker` container stack only when the PR touches Compose/front-door/auth/API/controller, catalog/domain/placement status read-model contracts, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surfaces",
 			"Runner-start failures usually show no job steps or downloadable repo logs and may include GitHub account-level annotations such as recent account payments failing or the spending limit needing an increase.",
 			"use local evidence from `go test ./...`, `make smoke-local`, and `make smoke-docker` for code-level confidence",
 			"See `docs/runbooks/ci-smoke-runner-start.md` for the exact `gh run view` evidence checklist and recovery steps for issue #850.",
 			"Unrelated docs-only PRs keep the cheap fast lane without the Docker stack",
 			"`internal/catalog/**`",
 			"`internal/domain/**`",
+			"`internal/placement/**`",
 			"`internal/resourceaws/**`",
 			"reserved Okta SAML/enterprise runtime paths `internal/authsaml/**` and `internal/authsso/**`",
 			"make smoke-docker",
@@ -3525,10 +3528,11 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"rely on local `go test ./...`, `make smoke-local`, and `make smoke-docker` output for code-level reproduction",
 			"syntax-checks both `scripts/smoke-local.sh` and `scripts/smoke-docker.sh` with `bash -n`, then runs `make smoke-local`",
 			"Pull requests first pass through a cheap `docker-smoke-scope` path filter",
-			"only PRs that touch Compose/front-door/auth/API/controller, catalog/domain status read-model contracts, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surfaces",
+			"only PRs that touch Compose/front-door/auth/API/controller, catalog/domain/placement status read-model contracts, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surfaces",
 			"`internal/githubwebhook/**`",
 			"`internal/catalog/**`",
 			"`internal/domain/**`",
+			"`internal/placement/**`",
 			"`internal/resourceaws/**`",
 			"reserved Okta SAML/enterprise runtime paths `internal/authsaml/**` and `internal/authsso/**`",
 			"unrelated docs-only PRs on the cheap fast lane",
