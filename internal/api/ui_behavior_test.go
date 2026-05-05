@@ -21,6 +21,39 @@ func embeddedUIScriptForTest(t *testing.T) string {
 	return string(matches[1])
 }
 
+func TestNodeHarnessFailureMessageIncludesRuntimeAndScriptPath(t *testing.T) {
+	message := nodeHarnessFailureMessage("v25.3.0", "/tmp/node-harness-123.js", "exit status 1", "expected Quick navigation")
+	for _, want := range []string{"node harness failed: exit status 1", "Node.js v25.3.0", "/tmp/node-harness-123.js", "expected Quick navigation"} {
+		if !strings.Contains(message, want) {
+			t.Fatalf("expected diagnostic %q in %q", want, message)
+		}
+	}
+}
+
+func nodeHarnessFailureMessage(nodeVersion, scriptPath, errText, output string) string {
+	parts := []string{
+		"node harness failed: " + strings.TrimSpace(errText),
+		"Node.js " + strings.TrimSpace(nodeVersion),
+		"script: " + scriptPath,
+	}
+	if trimmed := strings.TrimSpace(output); trimmed != "" {
+		parts = append(parts, trimmed)
+	}
+	return strings.Join(parts, "\n")
+}
+
+func nodeHarnessVersion() string {
+	out, err := exec.Command("node", "--version").CombinedOutput()
+	if err != nil {
+		return "unavailable (" + strings.TrimSpace(err.Error()) + ")"
+	}
+	version := strings.TrimSpace(string(out))
+	if version == "" {
+		return "unknown"
+	}
+	return version
+}
+
 func runNodeHarness(t *testing.T, nodeProgram string) {
 	t.Helper()
 
@@ -41,7 +74,7 @@ func runNodeHarness(t *testing.T, nodeProgram string) {
 	cmd := exec.Command("node", scriptFile.Name())
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("node harness failed: %v\n%s", err, strings.TrimSpace(string(out)))
+		t.Fatal(nodeHarnessFailureMessage(nodeHarnessVersion(), scriptFile.Name(), err.Error(), string(out)))
 	}
 }
 
