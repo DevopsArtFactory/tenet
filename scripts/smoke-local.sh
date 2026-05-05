@@ -1467,7 +1467,7 @@ assert 'Visible high' in ui, ui
 assert 'No field-level drift rows match the current filters. Adjust the query or severity filters to inspect reported drift.' in ui, ui
 assert 'Controller runtime events' in ui, ui
 assert 'Refresh runtime events' in ui, ui
-assert 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.' in ui, ui
+assert 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events?limit=10. Tenet shows the latest bounded window, newest first; open the raw route with an explicit limit when you need a different slice of controller history. This is not audit/auth history.' in ui, ui
 assert 'Loading controller runtime events…' in ui, ui
 assert 'No controller runtime events have been persisted yet.' in ui, ui
 assert 'Controller runtime events are currently unavailable.' in ui, ui
@@ -1875,7 +1875,9 @@ assert ": createNavLink(buildPageURL('applications'), 'Back to applications', '_
 assert 'Open application drill-down' in audit_ui, audit_ui
 assert 'Open drift view' in audit_ui, audit_ui
 assert 'Open plan/apply workspace' in audit_ui, audit_ui
-assert "const buildDeploymentEventsReadRoute = (deploymentName) => `/v1/overview/deployments/${encodeURIComponent(deploymentName)}/events`;" in ui, ui
+assert "const defaultDeploymentEventsLimit = 10;" in ui, ui
+assert "const buildDeploymentEventsReadRoute = (deploymentName, { limit = defaultDeploymentEventsLimit } = {}) => {" in ui, ui
+assert "return `${route}?limit=${Math.floor(numericLimit)}`;" in ui, ui
 assert "const fetchDeploymentEvents = (deploymentName) => fetchEmbeddedReadRouteJSON(buildDeploymentEventsReadRoute(deploymentName), {" in ui, ui
 assert "const ifMatch = workspaceDetail.sourceFingerprint || await derivePlanSourceFingerprint(workspaceDetail).catch(() => '') || fallbackIfMatch;" in ui, ui
 assert 'Recent logs' in ui, ui

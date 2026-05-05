@@ -1700,7 +1700,7 @@ async function render(search, fetchImpl) {
 
   const applicationView = await render('?page=application&deployment=payments-api-staging&q=payments&sync=OutOfSync&account=210987654321', (url) => {
     if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(applicationDetail) });
-    if (url === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
+    if (url === '/v1/overview/deployments/payments-api-staging/events?limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
     throw new Error('unexpected application fetch url: ' + url);
   });
   const applicationLinks = collectNodes(applicationView.document.getElementById('accounts'), (node) => node.tagName === 'A');
@@ -2392,7 +2392,7 @@ const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
   if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-  if (url === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [
+  if (url === '/v1/overview/deployments/payments-api-staging/events?limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [
     { timestamp: '2026-05-04T12:20:00Z', source: 'controller', summary: 'Ticker reconcile complete', sync: { state: 'Synced' }, health: { overall: 'Healthy' } },
     { timestamp: '2026-05-04T12:30:00Z', source: 'github-webhook', summary: 'GitHub desired-state refresh accepted', sync: { state: 'Reconciling' }, controllerRefresh: { repository: 'acme/platform-config', ref: 'refs/heads/main', after: 'abcdef1234567890abcdef', deliveryId: 'delivery-744', requestId: 'req-744', requestedAt: '2026-05-04T12:29:50Z', receivedAt: '2026-05-04T12:29:51Z', reconciledAt: '2026-05-04T12:30:00Z' } },
   ] }) });
@@ -2407,7 +2407,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   await settle();
   const expectedFetches = [
     '/v1/overview/applications/payments-api-staging',
-    '/v1/overview/deployments/payments-api-staging/events',
+    '/v1/overview/deployments/payments-api-staging/events?limit=10',
   ];
   if (fetchCalls.length !== expectedFetches.length || expectedFetches.some((url, index) => fetchCalls[index] !== url)) {
     throw new Error('expected application route to load application detail plus deployment events, got ' + fetchCalls.join(', '));
@@ -2613,14 +2613,14 @@ const fetchCalls = [];
 const fetch = (url) => {
   fetchCalls.push(String(url));
   if (String(url) === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-  if (String(url) === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
+  if (String(url) === '/v1/overview/deployments/payments-api-staging/events?limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 (async () => {
   new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
   await settle();
   await settle();
-  if (fetchCalls.join(', ') !== '/v1/overview/applications/payments-api-staging, /v1/overview/deployments/payments-api-staging/events') throw new Error('expected application hash route to load application detail plus deployment events');
+  if (fetchCalls.join(', ') !== '/v1/overview/applications/payments-api-staging, /v1/overview/deployments/payments-api-staging/events?limit=10') throw new Error('expected application hash route to load application detail plus deployment events');
   if (window.location.pathname !== '/console') throw new Error('expected application pathname to stay stable, got ' + window.location.pathname);
   if (window.location.search !== initialSearch) throw new Error('expected application query to stay stable, got ' + window.location.search);
   if (window.location.hash !== '#application-runtime-events') throw new Error('expected application hash to stay stable, got ' + window.location.hash);
@@ -2757,7 +2757,7 @@ const history = { replaceState(_state, _title, url) { const [pathname, query = '
 const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/applications/payments-api-rolling') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-  if (url === '/v1/overview/deployments/payments-api-rolling/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-rolling', events: [] }) });
+  if (url === '/v1/overview/deployments/payments-api-rolling/events?limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-rolling', events: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -2767,7 +2767,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-rolling' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-rolling/events') throw new Error('expected ecs rolling application page to load application detail plus deployment events');
+  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-rolling' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-rolling/events?limit=10') throw new Error('expected ecs rolling application page to load application detail plus deployment events');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   if (!accountsText.includes('payments-api-rolling-service')) throw new Error('expected ecs rolling fallback service resource');
   if (!accountsText.includes('ECS service Tenet updates with native rolling deployment while respecting min healthy 90% and warmup 30s')) throw new Error('expected ecs rolling fallback resource description');
@@ -2894,7 +2894,7 @@ const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
   if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-  if (url === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
+  if (url === '/v1/overview/deployments/payments-api-staging/events?limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -2904,7 +2904,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-staging' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-staging/events') throw new Error('expected ecs fallback page to load application detail plus deployment events');
+  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-staging' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-staging/events?limit=10') throw new Error('expected ecs fallback page to load application detail plus deployment events');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
   const expectedResources = [
@@ -3007,7 +3007,7 @@ const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
   if (url === '/v1/overview/applications/payments-api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-  if (url === '/v1/overview/deployments/payments-api-prod/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-prod', events: [] }) });
+  if (url === '/v1/overview/deployments/payments-api-prod/events?limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-prod', events: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -3017,7 +3017,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-prod' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-prod/events') throw new Error('expected asg fallback page to load application detail plus deployment events');
+  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-prod' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-prod/events?limit=10') throw new Error('expected asg fallback page to load application detail plus deployment events');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
   const expectedResources = [
@@ -3117,7 +3117,7 @@ const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
   if (url === '/v1/overview/applications/payments-api-refresh') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-  if (url === '/v1/overview/deployments/payments-api-refresh/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-refresh', events: [] }) });
+  if (url === '/v1/overview/deployments/payments-api-refresh/events?limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-refresh', events: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -3127,7 +3127,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-refresh' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-refresh/events') throw new Error('expected instance refresh fallback page to load application detail plus deployment events');
+  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-refresh' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-refresh/events?limit=10') throw new Error('expected instance refresh fallback page to load application detail plus deployment events');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
   const expectedResources = [
@@ -3359,7 +3359,7 @@ const history = { replaceState(_state, _title, url) { const [pathname, query = '
 const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-  if (url === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
+  if (url === '/v1/overview/deployments/payments-api-staging/events?limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -3372,7 +3372,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const summaryText = collectText(document.getElementById('summary')).join(' | ');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
-  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-staging' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-staging/events') throw new Error('expected application page to load application detail plus deployment events');
+  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-staging' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-staging/events?limit=10') throw new Error('expected application page to load application detail plus deployment events');
   if (!toolbarText.includes('Back to applications')) throw new Error('expected application page back link');
   if (!summaryText.includes('payments-api-staging')) throw new Error('expected application summary title');
   if (!accountsText.includes('Application resources')) throw new Error('expected application resources heading');
@@ -3585,7 +3585,7 @@ async function render(fetchImpl) {
 }
 (async () => {
   const applicationURL = '/v1/overview/applications/payments-api-staging';
-  const eventsURL = '/v1/overview/deployments/payments-api-staging/events';
+  const eventsURL = '/v1/overview/deployments/payments-api-staging/events?limit=10';
   const initialSearch = '?page=application&deployment=payments-api-staging&q=payments&sync=OutOfSync&account=210987654321';
 
   let refreshFetchCount = 0;
@@ -3760,7 +3760,7 @@ const history = { replaceState(_state, _title, url) { const [pathname, query = '
 const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-  if (url === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
+  if (url === '/v1/overview/deployments/payments-api-staging/events?limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -3769,7 +3769,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-staging' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-staging/events') throw new Error('expected nameless application page to load application detail plus deployment events');
+  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-staging' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-staging/events?limit=10') throw new Error('expected nameless application page to load application detail plus deployment events');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open resource');
   if (links.length !== 0) throw new Error('expected nameless application page to suppress broken resource drill-down links');
 })();
@@ -3945,7 +3945,7 @@ async function render(fetchImpl) {
 }
 (async () => {
   const detailURL = '/v1/overview/applications/payments-api-staging';
-  const eventsURL = '/v1/overview/deployments/payments-api-staging/events';
+  const eventsURL = '/v1/overview/deployments/payments-api-staging/events?limit=10';
   const initialSearch = '?page=application&deployment=payments-api-staging';
   let eventsFetchCount = 0;
   let resolveInitialEvents;
@@ -3976,8 +3976,8 @@ async function render(fetchImpl) {
   await settle();
   let readyText = collectText(loadingView.document.getElementById('accounts')).join(' | ');
   if (!readyText.includes('Controller runtime events')) throw new Error('expected controller runtime events section heading');
-  if (!readyText.includes('Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events. Newest entries first. This is not audit/auth history.')) throw new Error('expected application page to distinguish controller runtime events from audit/auth history');
-  if (!readyText.includes('2 events · newest controller event first')) throw new Error('expected event ordering guidance');
+  if (!readyText.includes('Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events?limit=10. Tenet shows the latest bounded window, newest first; open the raw route with an explicit limit when you need a different slice of controller history. This is not audit/auth history.')) throw new Error('expected application page to distinguish controller runtime events from audit/auth history');
+  if (!readyText.includes('2 events in latest 10-event window · newest controller event first')) throw new Error('expected event ordering guidance');
   if (!readyText.includes('Managed drift summary · 2 total · 1 high · 1 medium · 0 low')) throw new Error('expected managed drift severity summary from deployment events payload');
   if (!readyText.includes('Shifted 50 percent of traffic')) throw new Error('expected newest controller event summary');
   if (!readyText.includes('Time · 2026-04-16T07:10:00Z')) throw new Error('expected newest controller event timestamp');
@@ -4063,7 +4063,7 @@ async function render(fetchImpl) {
   });
   let authText = collectText(unauthorizedView.document.getElementById('accounts')).join(' | ');
   if (!authText.includes('Authenticated operator required')) throw new Error('expected operator auth-required heading for deployment events');
-  if (!authText.includes('Tenet rejected GET /v1/overview/deployments/payments-api-staging/events because authenticated identity is required on this operator read route. Tenet does not start a built-in GitHub OAuth login, enterprise SSO login, or Tenet-managed browser session from this page; reopen this same bookmarkable URL through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.')) throw new Error('expected trusted front door guidance for deployment events 401');
+  if (!authText.includes('Tenet rejected GET /v1/overview/deployments/payments-api-staging/events?limit=10 because authenticated identity is required on this operator read route. Tenet does not start a built-in GitHub OAuth login, enterprise SSO login, or Tenet-managed browser session from this page; reopen this same bookmarkable URL through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.')) throw new Error('expected trusted front door guidance for deployment events 401');
   if (authText.includes('Failed to load controller runtime events:')) throw new Error('expected deployment events 401 to replace generic fetch error copy');
   buttons = collectNodes(unauthorizedView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
   refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
@@ -4090,7 +4090,7 @@ async function render(fetchImpl) {
   });
   const forbiddenText = collectText(forbiddenView.document.getElementById('accounts')).join(' | ');
   if (!forbiddenText.includes('Operator access denied')) throw new Error('expected operator access-denied heading for deployment events');
-  if (!forbiddenText.includes('Tenet rejected GET /v1/overview/deployments/payments-api-staging/events after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.')) throw new Error('expected operator access-denied guidance for deployment events 403');
+  if (!forbiddenText.includes('Tenet rejected GET /v1/overview/deployments/payments-api-staging/events?limit=10 after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.')) throw new Error('expected operator access-denied guidance for deployment events 403');
   if (forbiddenText.includes('Failed to load controller runtime events:')) throw new Error('expected deployment events 403 to replace generic fetch error copy');
   buttons = collectNodes(forbiddenView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
   refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
@@ -4211,7 +4211,7 @@ const history = { replaceState(_state, _title, url) { const [pathname, query = '
 const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/overview/applications/payments-api-empty') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-  if (url === '/v1/overview/deployments/payments-api-empty/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-empty', events: [] }) });
+  if (url === '/v1/overview/deployments/payments-api-empty/events?limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-empty', events: [] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -4221,7 +4221,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 (async () => {
   await settle();
   await settle();
-  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-empty' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-empty/events') throw new Error('expected empty application page to load application detail plus deployment events');
+  if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-empty' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-empty/events?limit=10') throw new Error('expected empty application page to load application detail plus deployment events');
   const accounts = document.getElementById('accounts');
   const accountsText = collectText(accounts).join(' | ');
   if (!accountsText.includes('No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.')) throw new Error('expected explicit application empty-state copy');
@@ -4405,7 +4405,7 @@ const runUI = async (search, detailBody) => {
   const fetch = (url) => {
     fetchCalls.push(String(url));
     if (url === '/v1/overview/applications/payments-api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === '/v1/overview/deployments/payments-api-prod/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-prod', events: [] }) });
+    if (url === '/v1/overview/deployments/payments-api-prod/events?limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-prod', events: [] }) });
     if (url === '/v1/overview/deployments/payments-api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
     if (url === resourceLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
     throw new Error('unexpected fetch url: ' + url);
@@ -4417,7 +4417,7 @@ const runUI = async (search, detailBody) => {
 };
 (async () => {
   const fallbackRun = await runUI('?page=application&deployment=payments-api-prod', fallbackDetailBody);
-  if (fallbackRun.fetchCalls.length !== 2 || fallbackRun.fetchCalls[0] !== '/v1/overview/applications/payments-api-prod' || fallbackRun.fetchCalls[1] !== '/v1/overview/deployments/payments-api-prod/events') throw new Error('expected fallback application page to load application detail plus deployment events');
+  if (fallbackRun.fetchCalls.length !== 2 || fallbackRun.fetchCalls[0] !== '/v1/overview/applications/payments-api-prod' || fallbackRun.fetchCalls[1] !== '/v1/overview/deployments/payments-api-prod/events?limit=10') throw new Error('expected fallback application page to load application detail plus deployment events');
   const fallbackLinks = collectNodes(fallbackRun.document.getElementById('accounts'), (node) => node.tagName === 'A');
   const resourceLinks = fallbackLinks.filter((node) => node.textContent === 'Open resource');
   const liveInspectionLinks = fallbackLinks.filter((node) => node.textContent === 'Open live inspection');
@@ -7391,7 +7391,7 @@ async function render(search, detailBody) {
   const fetch = (url) => {
     if (url === '/v1/overview/accounts') return Promise.resolve({ ok: true, json: () => Promise.resolve(sampleAccounts) });
     if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === '/v1/overview/deployments/payments-api-staging/events') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
+    if (url === '/v1/overview/deployments/payments-api-staging/events?limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
     if (url === logsURL || url === limitedLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
     throw new Error('unexpected fetch url: ' + url);
