@@ -252,6 +252,7 @@ type ECSTaskSummary struct {
 	TaskID               string                 `json:"taskId"`
 	ClusterARN           string                 `json:"clusterArn,omitempty"`
 	ContainerInstanceARN string                 `json:"containerInstanceArn,omitempty"`
+	EC2InstanceID        string                 `json:"ec2InstanceId,omitempty"`
 	CapacityProviderName string                 `json:"capacityProviderName,omitempty"`
 	AvailabilityZone     string                 `json:"availabilityZone,omitempty"`
 	LastStatus           string                 `json:"lastStatus,omitempty"`
@@ -396,6 +397,7 @@ type ecsServiceAPI interface {
 	ListTasks(context.Context, *ecs.ListTasksInput, ...func(*ecs.Options)) (*ecs.ListTasksOutput, error)
 	DescribeTasks(context.Context, *ecs.DescribeTasksInput, ...func(*ecs.Options)) (*ecs.DescribeTasksOutput, error)
 	DescribeTaskDefinition(context.Context, *ecs.DescribeTaskDefinitionInput, ...func(*ecs.Options)) (*ecs.DescribeTaskDefinitionOutput, error)
+	DescribeContainerInstances(context.Context, *ecs.DescribeContainerInstancesInput, ...func(*ecs.Options)) (*ecs.DescribeContainerInstancesOutput, error)
 }
 
 type ec2LaunchTemplateAPI interface {
@@ -1246,7 +1248,8 @@ func (s Service) inspectECSTaskFromAWS(ctx context.Context, req ECSTaskRequest) 
 			definitions[arn] = *out.TaskDefinition
 		}
 	}
-	return ecsTaskInspectionFromTask(*task, clusterARN, definitions), nil
+	containerInstanceEC2IDs := ecsContainerInstanceEC2IDs(ctx, clients.ECS, clusterARN, []string{aws.ToString(task.ContainerInstanceArn)})
+	return ecsTaskInspectionFromTask(*task, clusterARN, definitions, containerInstanceEC2IDs), nil
 }
 
 func findECSTask(ctx context.Context, client ecsTaskAPI, taskARN, selectedClusterARN string) (*ecstypes.Task, string, error) {
@@ -1301,13 +1304,14 @@ type ecsTaskAPI interface {
 	ListClusters(context.Context, *ecs.ListClustersInput, ...func(*ecs.Options)) (*ecs.ListClustersOutput, error)
 	DescribeTasks(context.Context, *ecs.DescribeTasksInput, ...func(*ecs.Options)) (*ecs.DescribeTasksOutput, error)
 	DescribeTaskDefinition(context.Context, *ecs.DescribeTaskDefinitionInput, ...func(*ecs.Options)) (*ecs.DescribeTaskDefinitionOutput, error)
+	DescribeContainerInstances(context.Context, *ecs.DescribeContainerInstancesInput, ...func(*ecs.Options)) (*ecs.DescribeContainerInstancesOutput, error)
 }
 
-func ecsTaskInspectionFromTask(task ecstypes.Task, clusterARN string, definitions map[string]ecstypes.TaskDefinition) ECSTaskInspection {
-	return ECSTaskInspection{ECSTaskSummary: ecsTaskSummaryFromTask(task, clusterARN, definitions), TaskDefinition: strings.TrimSpace(aws.ToString(task.TaskDefinitionArn))}
+func ecsTaskInspectionFromTask(task ecstypes.Task, clusterARN string, definitions map[string]ecstypes.TaskDefinition, containerInstanceEC2IDs map[string]string) ECSTaskInspection {
+	return ECSTaskInspection{ECSTaskSummary: ecsTaskSummaryFromTask(task, clusterARN, definitions, containerInstanceEC2IDs), TaskDefinition: strings.TrimSpace(aws.ToString(task.TaskDefinitionArn))}
 }
 
-func ecsTaskSummaryFromTask(task ecstypes.Task, clusterARN string, definitions map[string]ecstypes.TaskDefinition) ECSTaskSummary {
+func ecsTaskSummaryFromTask(task ecstypes.Task, clusterARN string, definitions map[string]ecstypes.TaskDefinition, containerInstanceEC2IDs map[string]string) ECSTaskSummary {
 	containerDefs := map[string]ecstypes.ContainerDefinition{}
 	if def, ok := definitions[strings.TrimSpace(aws.ToString(task.TaskDefinitionArn))]; ok {
 		for _, container := range def.ContainerDefinitions {
@@ -1330,7 +1334,8 @@ func ecsTaskSummaryFromTask(task ecstypes.Task, clusterARN string, definitions m
 		containers = append(containers, info)
 	}
 	sort.SliceStable(containers, func(i, j int) bool { return containers[i].Name < containers[j].Name })
-	return ECSTaskSummary{TaskARN: strings.TrimSpace(aws.ToString(task.TaskArn)), TaskID: taskID, ClusterARN: strings.TrimSpace(clusterARN), ContainerInstanceARN: strings.TrimSpace(aws.ToString(task.ContainerInstanceArn)), CapacityProviderName: strings.TrimSpace(aws.ToString(task.CapacityProviderName)), AvailabilityZone: strings.TrimSpace(aws.ToString(task.AvailabilityZone)), LastStatus: strings.TrimSpace(aws.ToString(task.LastStatus)), DesiredStatus: strings.TrimSpace(aws.ToString(task.DesiredStatus)), HealthStatus: string(task.HealthStatus), LaunchType: string(task.LaunchType), StartedAt: formatTime(aws.ToTime(task.StartedAt)), StoppedAt: formatTime(aws.ToTime(task.StoppedAt)), StoppedReason: strings.TrimSpace(aws.ToString(task.StoppedReason)), Containers: containers}
+	containerInstanceARN := strings.TrimSpace(aws.ToString(task.ContainerInstanceArn))
+	return ECSTaskSummary{TaskARN: strings.TrimSpace(aws.ToString(task.TaskArn)), TaskID: taskID, ClusterARN: strings.TrimSpace(clusterARN), ContainerInstanceARN: containerInstanceARN, EC2InstanceID: strings.TrimSpace(containerInstanceEC2IDs[containerInstanceARN]), CapacityProviderName: strings.TrimSpace(aws.ToString(task.CapacityProviderName)), AvailabilityZone: strings.TrimSpace(aws.ToString(task.AvailabilityZone)), LastStatus: strings.TrimSpace(aws.ToString(task.LastStatus)), DesiredStatus: strings.TrimSpace(aws.ToString(task.DesiredStatus)), HealthStatus: string(task.HealthStatus), LaunchType: string(task.LaunchType), StartedAt: formatTime(aws.ToTime(task.StartedAt)), StoppedAt: formatTime(aws.ToTime(task.StoppedAt)), StoppedReason: strings.TrimSpace(aws.ToString(task.StoppedReason)), Containers: containers}
 }
 
 func ecsServiceTaskSummaries(ctx context.Context, client ecsServiceAPI, clusterARN, serviceName string, limit int) ([]ECSTaskSummary, *ECSTaskSummaryScope, error) {
@@ -1402,9 +1407,10 @@ func ecsServiceTaskSummaries(ctx context.Context, client ecsServiceAPI, clusterA
 		tasks = append(tasks, out.Tasks...)
 	}
 	definitions := ecsTaskDefinitionsByARN(ctx, client, tasks)
+	containerInstanceEC2IDs := ecsContainerInstanceEC2IDs(ctx, client, clusterARN, ecsTaskContainerInstanceARNs(tasks))
 	summaries := make([]ECSTaskSummary, 0, len(tasks))
 	for _, task := range tasks {
-		summary := ecsTaskSummaryFromTask(task, clusterARN, definitions)
+		summary := ecsTaskSummaryFromTask(task, clusterARN, definitions, containerInstanceEC2IDs)
 		if summary.TaskARN == "" {
 			continue
 		}
@@ -1475,6 +1481,71 @@ func ecsTaskDefinitionsByARN(ctx context.Context, client ecsServiceAPI, tasks []
 		definitions[arn] = *out.TaskDefinition
 	}
 	return definitions
+}
+
+func ecsTaskContainerInstanceARNs(tasks []ecstypes.Task) []string {
+	arns := make([]string, 0, len(tasks))
+	seen := make(map[string]struct{}, len(tasks))
+	for _, task := range tasks {
+		arn := strings.TrimSpace(aws.ToString(task.ContainerInstanceArn))
+		if arn == "" {
+			continue
+		}
+		if _, ok := seen[arn]; ok {
+			continue
+		}
+		seen[arn] = struct{}{}
+		arns = append(arns, arn)
+	}
+	return arns
+}
+
+func ecsContainerInstanceEC2IDs(ctx context.Context, client interface {
+	DescribeContainerInstances(context.Context, *ecs.DescribeContainerInstancesInput, ...func(*ecs.Options)) (*ecs.DescribeContainerInstancesOutput, error)
+}, clusterARN string, containerInstanceARNs []string) map[string]string {
+	clusterARN = strings.TrimSpace(clusterARN)
+	if client == nil || clusterARN == "" || len(containerInstanceARNs) == 0 {
+		return nil
+	}
+	result := make(map[string]string)
+	for start := 0; start < len(containerInstanceARNs); start += 100 {
+		end := start + 100
+		if end > len(containerInstanceARNs) {
+			end = len(containerInstanceARNs)
+		}
+		batch := make([]string, 0, end-start)
+		seen := make(map[string]struct{}, end-start)
+		for _, arn := range containerInstanceARNs[start:end] {
+			arn = strings.TrimSpace(arn)
+			if arn == "" {
+				continue
+			}
+			if _, ok := seen[arn]; ok {
+				continue
+			}
+			seen[arn] = struct{}{}
+			batch = append(batch, arn)
+		}
+		if len(batch) == 0 {
+			continue
+		}
+		out, err := client.DescribeContainerInstances(ctx, &ecs.DescribeContainerInstancesInput{Cluster: aws.String(clusterARN), ContainerInstances: batch})
+		if err != nil {
+			continue
+		}
+		for _, containerInstance := range out.ContainerInstances {
+			arn := strings.TrimSpace(aws.ToString(containerInstance.ContainerInstanceArn))
+			ec2InstanceID := strings.TrimSpace(aws.ToString(containerInstance.Ec2InstanceId))
+			if arn == "" || ec2InstanceID == "" {
+				continue
+			}
+			result[arn] = ec2InstanceID
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 func ecsTaskSummarySortTime(summary ECSTaskSummary) time.Time {

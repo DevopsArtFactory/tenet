@@ -1699,6 +1699,75 @@ func TestECSServiceTaskSummariesOmitLogMetadataWhenTaskDefinitionLookupFails(t *
 	}
 }
 
+func TestECSTaskInspectionIncludesContainerInstanceEC2HostIdentity(t *testing.T) {
+	const (
+		clusterARN           = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker"
+		taskARN              = "arn:aws:ecs:ap-northeast-2:123456789012:task/worker/task-ec2"
+		containerInstanceARN = "arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker/ci-ec2"
+	)
+
+	got := ecsTaskInspectionFromTask(ecstypes.Task{
+		TaskArn:              stringPtr(taskARN),
+		ClusterArn:           stringPtr(clusterARN),
+		ContainerInstanceArn: stringPtr(containerInstanceARN),
+		LaunchType:           ecstypes.LaunchTypeEc2,
+		LastStatus:           stringPtr("RUNNING"),
+	}, clusterARN, nil, map[string]string{containerInstanceARN: "i-0abc123def4567890"})
+
+	if got.EC2InstanceID != "i-0abc123def4567890" {
+		t.Fatalf("expected direct ECS task inspection to expose EC2 host identity, got %+v", got)
+	}
+}
+
+func TestECSServiceTaskSummariesEnrichContainerInstanceEC2HostIdentity(t *testing.T) {
+	const (
+		clusterARN           = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker"
+		serviceName          = "worker-prod-service"
+		taskARN              = "arn:aws:ecs:ap-northeast-2:123456789012:task/worker/task-ec2"
+		containerInstanceARN = "arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker/ci-ec2"
+	)
+	client := &fakeECSServiceAPI{
+		taskARNsByDesired: map[ecstypes.DesiredStatus][]string{ecstypes.DesiredStatusRunning: {taskARN}},
+		tasksByARN: map[string]ecstypes.Task{taskARN: {
+			TaskArn:              stringPtr(taskARN),
+			ClusterArn:           stringPtr(clusterARN),
+			ContainerInstanceArn: stringPtr(containerInstanceARN),
+			LaunchType:           ecstypes.LaunchTypeEc2,
+			LastStatus:           stringPtr("RUNNING"),
+		}},
+		containerInstancesByARN: map[string]ecstypes.ContainerInstance{
+			containerInstanceARN: {ContainerInstanceArn: stringPtr(containerInstanceARN), Ec2InstanceId: stringPtr("i-0abc123def4567890")},
+		},
+	}
+
+	got, scope, err := ecsServiceTaskSummaries(context.Background(), client, clusterARN, serviceName, 0)
+	if err != nil {
+		t.Fatalf("ecsServiceTaskSummaries returned error: %v", err)
+	}
+	if scope == nil || scope.ReturnedTaskCount != 1 {
+		t.Fatalf("expected one task row in scope, got %+v", scope)
+	}
+	if len(got) != 1 || got[0].EC2InstanceID != "i-0abc123def4567890" {
+		t.Fatalf("expected ECS service task sample to include EC2 host identity, got %+v", got)
+	}
+	if !reflect.DeepEqual(client.describeContainerInstanceInput, [][]string{{containerInstanceARN}}) {
+		t.Fatalf("expected one bounded DescribeContainerInstances lookup, got %+v", client.describeContainerInstanceInput)
+	}
+}
+
+func TestECSContainerInstanceEC2IDsOmitFargateAndPartialFailures(t *testing.T) {
+	const clusterARN = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker"
+	if got := ecsTaskSummaryFromTask(ecstypes.Task{LaunchType: ecstypes.LaunchTypeFargate}, clusterARN, nil, nil); got.EC2InstanceID != "" {
+		t.Fatalf("expected Fargate task without container instance to omit EC2 host identity, got %+v", got)
+	}
+
+	client := &fakeECSServiceAPI{describeContainerInstancesErr: resourceaws.NewUnavailableError(resourceaws.UnavailableReasonAWSUnavailable)}
+	got := ecsContainerInstanceEC2IDs(context.Background(), client, clusterARN, []string{"arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker/missing"})
+	if len(got) != 0 {
+		t.Fatalf("expected DescribeContainerInstances failure to omit optional host identity, got %+v", got)
+	}
+}
+
 func TestECSTaskDefinitionImageUsesOnlySingleDeterministicImage(t *testing.T) {
 	if got := ecsTaskDefinitionImage(&ecstypes.TaskDefinition{
 		ContainerDefinitions: []ecstypes.ContainerDefinition{
@@ -2061,18 +2130,21 @@ func TestFindECSServiceClearsStaleClusterHintAndRecovers(t *testing.T) {
 }
 
 type fakeECSServiceAPI struct {
-	clusterARNs               []string
-	servicesByCluster         map[string][]ecstypes.Service
-	taskARNsByDesired         map[ecstypes.DesiredStatus][]string
-	tasksByARN                map[string]ecstypes.Task
-	taskDefinitions           map[string]ecstypes.TaskDefinition
-	describeTaskDefinitionErr error
-	listTasksErr              error
-	describeTasksErr          error
-	listCalls                 int
-	describeCalls             []string
-	listTaskCalls             []ecstypes.DesiredStatus
-	describeTaskInputs        [][]string
+	clusterARNs                    []string
+	servicesByCluster              map[string][]ecstypes.Service
+	taskARNsByDesired              map[ecstypes.DesiredStatus][]string
+	tasksByARN                     map[string]ecstypes.Task
+	taskDefinitions                map[string]ecstypes.TaskDefinition
+	containerInstancesByARN        map[string]ecstypes.ContainerInstance
+	describeTaskDefinitionErr      error
+	listTasksErr                   error
+	describeTasksErr               error
+	describeContainerInstancesErr  error
+	listCalls                      int
+	describeCalls                  []string
+	listTaskCalls                  []ecstypes.DesiredStatus
+	describeTaskInputs             [][]string
+	describeContainerInstanceInput [][]string
 }
 
 type fakeEC2LaunchTemplateAPI struct {
@@ -2131,6 +2203,20 @@ func (f *fakeECSServiceAPI) DescribeTaskDefinition(_ context.Context, input *ecs
 		return &ecs.DescribeTaskDefinitionOutput{TaskDefinition: &copy}, nil
 	}
 	return &ecs.DescribeTaskDefinitionOutput{}, nil
+}
+
+func (f *fakeECSServiceAPI) DescribeContainerInstances(_ context.Context, input *ecs.DescribeContainerInstancesInput, _ ...func(*ecs.Options)) (*ecs.DescribeContainerInstancesOutput, error) {
+	f.describeContainerInstanceInput = append(f.describeContainerInstanceInput, append([]string(nil), input.ContainerInstances...))
+	if f.describeContainerInstancesErr != nil {
+		return nil, f.describeContainerInstancesErr
+	}
+	instances := make([]ecstypes.ContainerInstance, 0, len(input.ContainerInstances))
+	for _, arn := range input.ContainerInstances {
+		if instance, ok := f.containerInstancesByARN[arn]; ok {
+			instances = append(instances, instance)
+		}
+	}
+	return &ecs.DescribeContainerInstancesOutput{ContainerInstances: instances}, nil
 }
 
 func (f *fakeEC2LaunchTemplateAPI) DescribeLaunchTemplateVersions(_ context.Context, input *ec2.DescribeLaunchTemplateVersionsInput, _ ...func(*ec2.Options)) (*ec2.DescribeLaunchTemplateVersionsOutput, error) {
