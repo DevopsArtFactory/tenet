@@ -1838,6 +1838,10 @@ assert 'Source detail · ${entry.source.sourceRoute}' in audit_ui, audit_ui
 assert "createNavLink(entry.source.recordRoute, 'Open source record')" in audit_ui, audit_ui
 assert "createNavLink(entry.source.sourceRoute, 'Open source detail')" in audit_ui, audit_ui
 assert 'Inspect audit sources' in audit_ui, audit_ui
+assert "const auditEntryAnchorID = (entry) => {" in audit_ui, audit_ui
+assert "row.setAttribute('id', auditEntryAnchorID(entry));" in audit_ui, audit_ui
+assert "createNavLink(auditEntryAnchorURL(entry), 'Open audit entry', '_self')" in audit_ui, audit_ui
+assert 'Share or continue in app' in audit_ui, audit_ui
 assert 'No audit activity has been persisted yet.' in audit_ui, audit_ui
 assert "const auditFilterLabels = () => {" in audit_ui, audit_ui
 assert "labels.push(`action ${auditActionLabel(currentPageState.auditAction)}`);" in audit_ui, audit_ui
