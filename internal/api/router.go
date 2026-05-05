@@ -167,6 +167,13 @@ func parseOptionalPositiveLimit(w http.ResponseWriter, r *http.Request) (limit i
 	return limit, true
 }
 
+func applyAuditLogLimit(result auditlog.Result, limit int) auditlog.Result {
+	if limit > 0 && limit < len(result.Entries) {
+		result.Entries = append([]auditlog.Entry(nil), result.Entries[:limit]...)
+	}
+	return result
+}
+
 func applyResourceLogLimit(result resourcelogs.Result, limit int) resourcelogs.Result {
 	effectiveLimit := resourcelogs.DefaultMaxEntries
 	var requestedLimit *int
@@ -2375,7 +2382,11 @@ func NewRouter(options Options) http.Handler {
 		if query.DeploymentName == "" && !requireDeploymentReadIdentity(w, r, options.RequireDeploymentReadAuthorization, options.RequireOperatorRoleForRead) {
 			return
 		}
-		result, err := options.AuditLogs(r.Context(), query)
+		providerQuery := query
+		if query.DeploymentName == "" && options.RequireDeploymentReadAuthorization {
+			providerQuery.Limit = 0
+		}
+		result, err := options.AuditLogs(r.Context(), providerQuery)
 		if err != nil {
 			respondInternalError(w)
 			return
@@ -2386,6 +2397,9 @@ func NewRouter(options Options) http.Handler {
 				authorizedDeploymentNameSet(r.Context(), options, requestactor.AuthorizedDeploymentsFromContext(r.Context()), requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context())),
 				options.RequireDeploymentReadAuthorization,
 			)
+			if options.RequireDeploymentReadAuthorization {
+				result = applyAuditLogLimit(result, query.Limit)
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(result)

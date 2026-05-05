@@ -2996,6 +2996,41 @@ func TestRouterAuditLogs(t *testing.T) {
 	}
 }
 
+func TestRouterAuditLogsFiltersAuthorizationBeforeApplyingCollectionLimit(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo:                          buildinfo.Info{Version: "dev", Commit: "abc123"},
+		TrustAuthenticatedHeaders:          true,
+		RequireDeploymentReadAuthorization: true,
+		AuditLogs: func(ctx context.Context, query auditlog.Query) (auditlog.Result, error) {
+			if query.Limit != 0 || query.DeploymentName != "" || query.Action != auditlog.ActionApplyRequested {
+				t.Fatalf("expected unbounded action-filtered provider query before authorization filter, got %+v", query)
+			}
+			return auditlog.Result{Entries: []auditlog.Entry{
+				{Timestamp: "2026-04-18T09:00:00Z", Action: "apply.requested", DeploymentName: "other-prod", ApplyID: "apply_hidden"},
+				{Timestamp: "2026-04-18T08:00:00Z", Action: "apply.requested", DeploymentName: "api-prod", ApplyID: "apply_visible_newer"},
+				{Timestamp: "2026-04-18T07:00:00Z", Action: "apply.requested", DeploymentName: "api-prod", ApplyID: "apply_visible_older"},
+			}}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/audit-logs?action=apply.requested&limit=1", nil)
+	req.Header.Set(requestactor.AuthenticatedHeaderID, "front-door-123")
+	req.Header.Set(requestactor.AuthorizedDeploymentsHeader, "api-prod")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+	}
+	var result auditlog.Result
+	if err := json.Unmarshal(resp.Body.Bytes(), &result); err != nil {
+		t.Fatalf("failed to decode audit logs: %v", err)
+	}
+	if len(result.Entries) != 1 || result.Entries[0].ApplyID != "apply_visible_newer" {
+		t.Fatalf("expected limit to apply after authorization filtering, got %+v", result.Entries)
+	}
+}
+
 func TestRouterAuditLogsUnavailable(t *testing.T) {
 	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
 	req := httptest.NewRequest(http.MethodGet, "/v1/audit-logs", nil)
