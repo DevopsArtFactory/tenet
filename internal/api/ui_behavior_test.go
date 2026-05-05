@@ -4063,7 +4063,7 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
     throw new Error('unexpected fetch url: ' + url);
   });
   const emptyText = collectText(emptyView.document.getElementById('accounts')).join(' | ');
-  if (!emptyText.includes('No controller runtime events were returned in the latest 10-event window.')) throw new Error('expected empty deployment events state');
+  if (!emptyText.includes('No controller runtime events were returned in the latest 10-event window. Increase Event window or use Refresh runtime events before treating controller history as absent.')) throw new Error('expected empty deployment events state to guide operators toward widening or refreshing the runtime-events window');
   buttons = collectNodes(emptyView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
   refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
   if (!refreshEvents || refreshEvents.disabled) throw new Error('expected runtime-events refresh button enabled in empty state');
