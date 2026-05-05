@@ -125,6 +125,7 @@ type Result struct {
 	BackingResourceName string        `json:"backingResourceName,omitempty"`
 	ContainerName       string        `json:"containerName,omitempty"`
 	InstanceID          string        `json:"instanceId,omitempty"`
+	ClusterARN          string        `json:"clusterArn,omitempty"`
 	LookupContext       LookupContext `json:"lookupContext"`
 	Available           bool          `json:"available"`
 	Source              string        `json:"source"`
@@ -213,7 +214,7 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 			Region:          req.Region,
 			TargetAccountID: req.TargetAccountID,
 			ObserverRoleARN: req.ObserverRoleARN,
-			ClusterARN:      req.ClusterARN,
+			ClusterARN:      clusterARN(req),
 			Limit:           req.Limit,
 		})
 		if err != nil {
@@ -393,6 +394,7 @@ func unavailableResult(req Request, reason string) Result {
 		BackingResourceName: backingResourceName(req),
 		ContainerName:       containerName(req),
 		InstanceID:          instanceID(req),
+		ClusterARN:          clusterARN(req),
 		LookupContext:       lookupContext(req),
 		Available:           false,
 		UnavailableReason:   reason,
@@ -409,6 +411,7 @@ func availableResult(req Request, source string, entries []Entry, emptyReason st
 		BackingResourceName: backingResourceName(req),
 		ContainerName:       containerName(req),
 		InstanceID:          instanceID(req),
+		ClusterARN:          clusterARN(req),
 		LookupContext:       lookupContext(req),
 		Available:           true,
 		Source:              source,
@@ -445,6 +448,13 @@ func containerName(req Request) string {
 
 func instanceID(req Request) string {
 	return strings.TrimSpace(req.InstanceID)
+}
+
+func clusterARN(req Request) string {
+	if req.ResourceType != "ecsService" {
+		return ""
+	}
+	return strings.TrimSpace(req.ClusterARN)
 }
 
 func lookupContext(req Request) LookupContext {
