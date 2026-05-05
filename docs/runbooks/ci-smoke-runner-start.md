@@ -66,7 +66,16 @@ Local verification on this branch is green:
 
 After the GitHub account condition is cleared:
 
-1. Re-run the latest failed `CI Smoke` workflow on `main` or on the affected PR:
+1. Choose the rerun target that proves the signal you are trying to restore:
+
+   ```bash
+   gh run list --workflow "CI Smoke" --branch main --limit 5
+   ```
+
+   - For post-merge release readiness, rerun the newest failed `CI Smoke` run on `main`. Do not use an old PR rerun as evidence that the `main` release signal recovered.
+   - For a still-open affected PR, rerun that PR head run/check so reviewers get signal on the exact branch they are reviewing.
+
+2. Re-run the selected failed workflow run:
 
    ```bash
    gh run rerun <run-id> --failed
@@ -79,7 +88,7 @@ After the GitHub account condition is cleared:
    gh workflow run "CI Smoke" --ref main
    ```
 
-2. Verify the rerun has non-empty job steps and a real runner assignment.
-3. Confirm the fast lane reaches `go test ./...`, smoke script syntax checks, and `make smoke-local`.
-4. On `main` or Docker-scoped PRs, confirm the Docker lane reaches `make smoke-docker` or produces normal actionable logs.
-5. Comment on issue #850 with the recovered run URL and whether the repository commands passed or exposed a new actionable repo-side failure.
+3. Verify the rerun has non-empty job steps and a real runner assignment.
+4. Confirm the fast lane reaches `go test ./...`, smoke script syntax checks, and `make smoke-local`.
+5. On `main` or Docker-scoped PRs, confirm the Docker lane reaches `make smoke-docker` or produces normal actionable logs.
+6. Comment on issue #850 with the recovered run URL and whether the repository commands passed or exposed a new actionable repo-side failure.
