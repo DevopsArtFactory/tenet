@@ -240,6 +240,7 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 			TargetAccountID: req.TargetAccountID,
 			ObserverRoleARN: req.ObserverRoleARN,
 			ContainerName:   req.ContainerName,
+			ClusterARN:      clusterARN(req),
 			Limit:           req.Limit,
 		})
 		if err != nil {
@@ -451,7 +452,7 @@ func instanceID(req Request) string {
 }
 
 func clusterARN(req Request) string {
-	if req.ResourceType != "ecsService" {
+	if req.ResourceType != "ecsService" && req.ResourceType != "ecsTask" {
 		return ""
 	}
 	return strings.TrimSpace(req.ClusterARN)
@@ -604,7 +605,7 @@ func (s Service) listECSTaskLogEventsFromAWS(ctx context.Context, req ECSRequest
 	if err != nil {
 		return nil, err
 	}
-	task, err := findTaskByARN(ctx, clients.ECS, req.ResourceName)
+	task, err := findTaskByARN(ctx, clients.ECS, req.ResourceName, strings.TrimSpace(req.ClusterARN))
 	if err != nil {
 		return nil, err
 	}
@@ -834,12 +835,16 @@ func taskRecency(task ecstypes.Task) time.Time {
 	return time.Time{}
 }
 
-func findTaskByARN(ctx context.Context, client ecsTaskLookupClient, taskARN string) (*ecstypes.Task, error) {
+func findTaskByARN(ctx context.Context, client ecsTaskLookupClient, taskARN, selectedClusterARN string) (*ecstypes.Task, error) {
 	taskARN = strings.TrimSpace(taskARN)
 	if taskARN == "" {
 		return nil, nil
 	}
+	selectedClusterARN = strings.TrimSpace(selectedClusterARN)
 	clusters := candidateClustersFromTaskARN(taskARN)
+	if selectedClusterARN != "" {
+		clusters = []string{selectedClusterARN}
+	}
 	if len(clusters) == 0 {
 		pages := ecs.NewListClustersPaginator(client, &ecs.ListClustersInput{})
 		for pages.HasMorePages() {

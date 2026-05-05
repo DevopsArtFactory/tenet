@@ -540,8 +540,8 @@ worker_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-p
 selected_worker_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=1")
 limited_worker_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&limit=1")
 ecs_task_resource_name="arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Atask%2Fworker%2Fabc123"
-ecs_task_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsTask&resourceName=$ecs_task_resource_name&containerName=worker&limit=1")
-ecs_task_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsTask&resourceName=$ecs_task_resource_name")
+ecs_task_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsTask&resourceName=$ecs_task_resource_name&containerName=worker&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=1")
+ecs_task_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsTask&resourceName=$ecs_task_resource_name&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod")
 invalid_resource_log_limit_status=$(curl -sS -o "$INVALID_RESOURCE_LOG_LIMIT_BODY" -w "%{http_code}" "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&limit=0")
 invalid_resource_inspection_limit_status=$(curl -sS -o "$INVALID_RESOURCE_INSPECTION_LIMIT_BODY" -w "%{http_code}" "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate&limit=0")
 codedeploy_application_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployApplication&resourceName=payments-api-staging-codedeploy-app")
@@ -1051,6 +1051,7 @@ assert ecs_task_resource_logs["resourceType"] == "ecsTask", ecs_task_resource_lo
 assert ecs_task_resource_logs["resourceName"] == "arn:aws:ecs:ap-northeast-2:123456789012:task/worker/abc123", ecs_task_resource_logs
 assert ecs_task_resource_logs.get("resourceDescription") == "ECS task selected from live service inspection", ecs_task_resource_logs
 assert ecs_task_resource_logs.get("containerName") == "worker", ecs_task_resource_logs
+assert ecs_task_resource_logs.get("clusterArn") == worker_cluster_arn, ecs_task_resource_logs
 assert isinstance(ecs_task_resource_logs["available"], bool), ecs_task_resource_logs
 assert isinstance(ecs_task_resource_logs.get("lookupContext"), dict), ecs_task_resource_logs
 assert isinstance(ecs_task_resource_logs["lookupContext"].get("region"), str) and ecs_task_resource_logs["lookupContext"]["region"], ecs_task_resource_logs
@@ -1088,6 +1089,7 @@ for label, payload in (
 assert ecs_task_resource_inspection["deploymentName"] == "worker-prod", ecs_task_resource_inspection
 assert ecs_task_resource_inspection["resourceType"] == "ecsTask", ecs_task_resource_inspection
 assert ecs_task_resource_inspection["resourceName"] == "arn:aws:ecs:ap-northeast-2:123456789012:task/worker/abc123", ecs_task_resource_inspection
+assert ecs_task_resource_inspection.get("clusterArn") == worker_cluster_arn, ecs_task_resource_inspection
 assert isinstance(ecs_task_resource_inspection["available"], bool), ecs_task_resource_inspection
 assert isinstance(ecs_task_resource_inspection.get("lookupContext"), dict), ecs_task_resource_inspection
 assert isinstance(ecs_task_resource_inspection["lookupContext"].get("region"), str) and ecs_task_resource_inspection["lookupContext"]["region"], ecs_task_resource_inspection
