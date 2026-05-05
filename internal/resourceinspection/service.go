@@ -248,17 +248,20 @@ type ECSTaskSummaryScope struct {
 }
 
 type ECSTaskSummary struct {
-	TaskARN       string                 `json:"taskArn"`
-	TaskID        string                 `json:"taskId"`
-	ClusterARN    string                 `json:"clusterArn,omitempty"`
-	LastStatus    string                 `json:"lastStatus,omitempty"`
-	DesiredStatus string                 `json:"desiredStatus,omitempty"`
-	HealthStatus  string                 `json:"healthStatus,omitempty"`
-	LaunchType    string                 `json:"launchType,omitempty"`
-	StartedAt     string                 `json:"startedAt,omitempty"`
-	StoppedAt     string                 `json:"stoppedAt,omitempty"`
-	StoppedReason string                 `json:"stoppedReason,omitempty"`
-	Containers    []ECSTaskContainerInfo `json:"containers,omitempty"`
+	TaskARN              string                 `json:"taskArn"`
+	TaskID               string                 `json:"taskId"`
+	ClusterARN           string                 `json:"clusterArn,omitempty"`
+	ContainerInstanceARN string                 `json:"containerInstanceArn,omitempty"`
+	CapacityProviderName string                 `json:"capacityProviderName,omitempty"`
+	AvailabilityZone     string                 `json:"availabilityZone,omitempty"`
+	LastStatus           string                 `json:"lastStatus,omitempty"`
+	DesiredStatus        string                 `json:"desiredStatus,omitempty"`
+	HealthStatus         string                 `json:"healthStatus,omitempty"`
+	LaunchType           string                 `json:"launchType,omitempty"`
+	StartedAt            string                 `json:"startedAt,omitempty"`
+	StoppedAt            string                 `json:"stoppedAt,omitempty"`
+	StoppedReason        string                 `json:"stoppedReason,omitempty"`
+	Containers           []ECSTaskContainerInfo `json:"containers,omitempty"`
 }
 
 type ECSTaskContainerInfo struct {
@@ -1327,7 +1330,7 @@ func ecsTaskSummaryFromTask(task ecstypes.Task, clusterARN string, definitions m
 		containers = append(containers, info)
 	}
 	sort.SliceStable(containers, func(i, j int) bool { return containers[i].Name < containers[j].Name })
-	return ECSTaskSummary{TaskARN: strings.TrimSpace(aws.ToString(task.TaskArn)), TaskID: taskID, ClusterARN: strings.TrimSpace(clusterARN), LastStatus: strings.TrimSpace(aws.ToString(task.LastStatus)), DesiredStatus: strings.TrimSpace(aws.ToString(task.DesiredStatus)), HealthStatus: string(task.HealthStatus), LaunchType: string(task.LaunchType), StartedAt: formatTime(aws.ToTime(task.StartedAt)), StoppedAt: formatTime(aws.ToTime(task.StoppedAt)), StoppedReason: strings.TrimSpace(aws.ToString(task.StoppedReason)), Containers: containers}
+	return ECSTaskSummary{TaskARN: strings.TrimSpace(aws.ToString(task.TaskArn)), TaskID: taskID, ClusterARN: strings.TrimSpace(clusterARN), ContainerInstanceARN: strings.TrimSpace(aws.ToString(task.ContainerInstanceArn)), CapacityProviderName: strings.TrimSpace(aws.ToString(task.CapacityProviderName)), AvailabilityZone: strings.TrimSpace(aws.ToString(task.AvailabilityZone)), LastStatus: strings.TrimSpace(aws.ToString(task.LastStatus)), DesiredStatus: strings.TrimSpace(aws.ToString(task.DesiredStatus)), HealthStatus: string(task.HealthStatus), LaunchType: string(task.LaunchType), StartedAt: formatTime(aws.ToTime(task.StartedAt)), StoppedAt: formatTime(aws.ToTime(task.StoppedAt)), StoppedReason: strings.TrimSpace(aws.ToString(task.StoppedReason)), Containers: containers}
 }
 
 func ecsServiceTaskSummaries(ctx context.Context, client ecsServiceAPI, clusterARN, serviceName string, limit int) ([]ECSTaskSummary, *ECSTaskSummaryScope, error) {

@@ -7483,7 +7483,13 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 					CreatedAt: "2026-04-18T00:12:00Z",
 					Message:   "service reached steady state",
 				}},
-				Tasks: []resourceinspection.ECSTaskSummary{{TaskARN: "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/task-1", TaskID: "task-1"}},
+				Tasks: []resourceinspection.ECSTaskSummary{{
+					TaskARN:              "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/task-1",
+					TaskID:               "task-1",
+					ContainerInstanceARN: "arn:aws:ecs:ap-northeast-2:123456789012:container-instance/payments/ci-task-1",
+					CapacityProviderName: "payments-capacity",
+					AvailabilityZone:     "ap-northeast-2a",
+				}},
 				TasksScope: &resourceinspection.ECSTaskSummaryScope{
 					Available:         true,
 					RequestedLimit:    &requestedLimit,
@@ -7577,6 +7583,23 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		if tasksScope["available"] != true || tasksScope["requestedLimit"] != float64(3) || tasksScope["effectiveLimit"] != float64(3) || tasksScope["returnedTaskCount"] != float64(1) || tasksScope["truncationStatus"] != "not_truncated" {
 			t.Fatalf("unexpected tasksScope payload: %#v", tasksScope)
 		}
+		tasks, ok := ecsService["tasks"].([]any)
+		if !ok || len(tasks) != 1 {
+			t.Fatalf("expected one task sample in ECS service payload, got %#v", ecsService["tasks"])
+		}
+		task, ok := tasks[0].(map[string]any)
+		if !ok {
+			t.Fatalf("expected task sample object in ECS service payload, got %#v", tasks[0])
+		}
+		for key, want := range map[string]any{
+			"containerInstanceArn": "arn:aws:ecs:ap-northeast-2:123456789012:container-instance/payments/ci-task-1",
+			"capacityProviderName": "payments-capacity",
+			"availabilityZone":     "ap-northeast-2a",
+		} {
+			if task[key] != want {
+				t.Fatalf("expected task sample %s=%#v, got %#v", key, want, task)
+			}
+		}
 	})
 
 	t.Run("passes optional ECS task cluster selector into resource inspection provider", func(t *testing.T) {
@@ -7591,7 +7614,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				if deploymentName != "api-prod" || resourceType != "ecsTask" || resourceName != "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123" {
 					t.Fatalf("unexpected ECS task inspection request: deployment=%q type=%q name=%q", deploymentName, resourceType, resourceName)
 				}
-				return resourceinspection.Result{DeploymentName: deploymentName, ResourceType: resourceType, ResourceName: resourceName, ClusterARN: gotClusterARN, Available: true, Source: resourceinspection.SourceECSService, ECSTask: &resourceinspection.ECSTaskInspection{}}, nil
+				return resourceinspection.Result{DeploymentName: deploymentName, ResourceType: resourceType, ResourceName: resourceName, ClusterARN: gotClusterARN, Available: true, Source: resourceinspection.SourceECSService, ECSTask: &resourceinspection.ECSTaskInspection{ECSTaskSummary: resourceinspection.ECSTaskSummary{TaskARN: resourceName, TaskID: "abc123", ContainerInstanceARN: "arn:aws:ecs:ap-northeast-2:123456789012:container-instance/payments/ci-abc123", CapacityProviderName: "payments-ec2", AvailabilityZone: "ap-northeast-2b"}}}, nil
 			},
 		})
 
@@ -7609,6 +7632,19 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 		if raw["clusterArn"] != "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments" {
 			t.Fatalf("expected raw ECS task inspection payload to echo selected clusterArn, got %#v", raw)
+		}
+		ecsTask, ok := raw["ecsTask"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected ecsTask object in raw ECS task inspection payload, got %#v", raw)
+		}
+		for key, want := range map[string]any{
+			"containerInstanceArn": "arn:aws:ecs:ap-northeast-2:123456789012:container-instance/payments/ci-abc123",
+			"capacityProviderName": "payments-ec2",
+			"availabilityZone":     "ap-northeast-2b",
+		} {
+			if ecsTask[key] != want {
+				t.Fatalf("expected ECS task inspection %s=%#v, got %#v", key, want, ecsTask)
+			}
 		}
 	})
 
