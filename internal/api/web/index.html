@@ -220,6 +220,8 @@
         resourceId: '',
         auditAction: '',
         auditLimit: 0,
+        resourceLogLimit: 0,
+        resourceInspectionLimit: 10,
       };
       const auditActionOptions = [
         { value: '', label: 'All actions' },
@@ -2084,6 +2086,8 @@
           resourceId: params.get('resourceId') || '',
           containerName: params.get('containerName') || '',
           instanceId: params.get('instanceId') || '',
+          resourceLogLimit: normalizeResourceLogsLimit(params.get('resourceLogLimit') || ''),
+          resourceInspectionLimit: normalizeResourceInspectionTaskLimit(params.get('resourceInspectionLimit') || ''),
           auditAction: normalizeAuditAction(params.get('action') || ''),
           auditLimit: normalizeAuditLimit(params.get('limit') || ''),
         };
@@ -2213,6 +2217,24 @@
               params.set('limit', String(limit));
             } else {
               params.delete('limit');
+            }
+            return;
+          }
+          if (key === 'resourceLogLimit') {
+            const limit = normalizeResourceLogsLimit(value);
+            if (limit > 0) {
+              params.set('resourceLogLimit', String(limit));
+            } else {
+              params.delete('resourceLogLimit');
+            }
+            return;
+          }
+          if (key === 'resourceInspectionLimit') {
+            const limit = normalizeResourceInspectionTaskLimit(value);
+            if (limit !== resourceInspectionTaskDefaultLimit) {
+              params.set('resourceInspectionLimit', String(limit));
+            } else {
+              params.delete('resourceInspectionLimit');
             }
             return;
           }
@@ -3031,6 +3053,55 @@
           routeInstanceId: String(currentPageState.instanceId || resource.instanceId || '').trim(),
         };
       };
+      const resourcePanelLimitURLParams = (deploymentName, resource) => {
+        const params = {};
+        const logsLimit = selectedResourceLogsLimit(deploymentName, resource);
+        if (logsLimit > 0) params.resourceLogLimit = logsLimit;
+        const inspectionLimit = supportsBoundedResourceInspection(resource)
+          ? selectedResourceInspectionLimit(deploymentName, resource)
+          : 0;
+        if (inspectionLimit && inspectionLimit !== resourceInspectionTaskDefaultLimit) {
+          params.resourceInspectionLimit = inspectionLimit;
+        }
+        return params;
+      };
+      const applyBookmarkedResourcePanelLimits = (deploymentName, resource) => {
+        if (!deploymentName || !resource?.type || !resource?.name) return;
+        const logsKey = resourceLogCacheKey(deploymentName, resource);
+        const bookmarkedLogsLimit = normalizeResourceLogsLimit(currentPageState.resourceLogLimit);
+        resourceLogLimitByResourceKey.set(logsKey, bookmarkedLogsLimit);
+        if (supportsBoundedResourceInspection(resource)) {
+          const inspectionKey = resourceInspectionCacheKey(deploymentName, resource);
+          const bookmarkedInspectionLimit = normalizeResourceInspectionTaskLimit(currentPageState.resourceInspectionLimit);
+          resourceInspectionLimitByResourceKey.set(inspectionKey, bookmarkedInspectionLimit);
+        }
+      };
+      const syncResourcePanelLimitQueryParams = (deploymentName, resource) => {
+        if (currentPageState.page !== 'resource') return;
+        const routeState = createCurrentResourceRouteState(resource);
+        const limitParams = resourcePanelLimitURLParams(deploymentName, resource);
+        currentPageState = {
+          ...currentPageState,
+          page: 'resource',
+          deployment: deploymentName || currentPageState.deployment || '',
+          resourceType: routeState.routeResourceType || '',
+          resourceId: routeState.routeResourceId || '',
+          containerName: routeState.routeContainerName || '',
+          instanceId: routeState.routeInstanceId || '',
+          resourceLogLimit: limitParams.resourceLogLimit || 0,
+          resourceInspectionLimit: limitParams.resourceInspectionLimit || resourceInspectionTaskDefaultLimit,
+        };
+        const nextURL = buildPageURL('resource', {
+          deployment: currentPageState.deployment,
+          resourceType: currentPageState.resourceType,
+          resourceId: currentPageState.resourceId,
+          containerName: currentPageState.containerName,
+          instanceId: currentPageState.instanceId,
+          resourceLogLimit: currentPageState.resourceLogLimit,
+          resourceInspectionLimit: currentPageState.resourceInspectionLimit,
+        });
+        history.replaceState({}, '', `${nextURL}${window.location.hash || ''}`);
+      };
       const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = [], currentSectionEmptyLabel = '') => {
         if (!deploymentName) return null;
         const strip = createElement('section', 'quick-nav-strip');
@@ -3406,6 +3477,7 @@
         setEmbeddedBrowserTitle(resource?.name, detail.name || currentPageState.deployment, 'Resource detail');
         const resourceRouteState = createCurrentResourceRouteState(resource);
         const deploymentName = detail.name || currentPageState.deployment || '';
+        applyBookmarkedResourcePanelLimits(deploymentName, resource);
         const resourceSectionLinks = [];
         const pushResourceSection = (section, sectionID, label) => {
           section.id = sectionID;
@@ -3418,6 +3490,7 @@
               resourceId: resourceRouteState.routeResourceId,
               containerName: resourceRouteState.routeContainerName,
               instanceId: resourceRouteState.routeInstanceId,
+              ...resourcePanelLimitURLParams(deploymentName, resource),
             }),
           });
         };
@@ -3950,6 +4023,7 @@
           (event) => {
             const nextLimit = normalizeResourceLogsLimit(event.target.value);
             resourceLogLimitByResourceKey.set(resourceLogCacheKey(deploymentName, resource), nextLimit);
+            syncResourcePanelLimitQueryParams(deploymentName, resource);
             renderResourceLogsSection(section, deploymentName, resource, { force: true, detail, limit: nextLimit }).catch(() => {});
           },
           { disabled: isLoading || !deploymentName || !resource?.type || !resource?.name },
@@ -4178,6 +4252,7 @@
           (event) => {
             const nextLimit = normalizeResourceInspectionTaskLimit(event.target.value);
             resourceInspectionLimitByResourceKey.set(resourceInspectionCacheKey(deploymentName, resource), nextLimit);
+            syncResourcePanelLimitQueryParams(deploymentName, resource);
             renderResourceInspectionSection(section, detail, resource, { force: true, limit: nextLimit }).catch(() => {});
           },
           { disabled: isLoading || !deploymentName || !resource?.type || !resource?.name },
