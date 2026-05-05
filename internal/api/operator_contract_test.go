@@ -1533,7 +1533,8 @@ func TestECSTaskSampleUnavailableReleaseGuardOperatorContract(t *testing.T) {
 		},
 		"docs/architecture/tenet-v1-overview-ui.md": {
 			"`resource-inspection?resourceType=ecsService&resourceName={serviceName}&limit={n}` accepts an optional positive task-sample cap",
-			"each task row may also include optional live placement evidence (`containerInstanceArn`, `ec2InstanceId`, `capacityProviderName`, `availabilityZone`) from `DescribeTasks` and the optional ECS-on-EC2 container-instance host lookup, while local/no-AWS payloads simply omit those fields",
+			"each task row may also include optional live placement evidence (`containerInstanceArn`, `ec2InstanceId`, `capacityProviderName`, `availabilityZone`) from `DescribeTasks` and the optional ECS-on-EC2 container-instance host lookup, plus optional nested `ec2Instance` host facts",
+			"local/no-AWS payloads simply omit those optional fields",
 			"sibling `tasksScope` keeps the row cap and sampling state self-describing with `available`, optional `requestedLimit`, `effectiveLimit`, `returnedTaskCount`",
 			"`not_applicable` when the optional task bridge is unavailable",
 			"Empty successful samples remain `available=true` with `returnedTaskCount=0`",
