@@ -1630,6 +1630,8 @@ for fragment in (
     "EC2 instance",
     "Capacity provider",
     "Availability Zone",
+    "EC2 host details",
+    "Optional host evidence resolved from the inspected ECS task.",
     "const createAutoScalingInstanceScopeSummary = (scope) => {",
     "ASG instance sample scope · requested ${countText(scope.requestedLimit)} · effective ${countText(effectiveLimit)} · returned ${countText(returnedInstanceCount)} instance(s) · ${truncationStatus}",
     "ASG instance sampling is unavailable for this group; group inspection remains available.",

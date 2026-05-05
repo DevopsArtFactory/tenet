@@ -5064,6 +5064,31 @@
           ['Cluster ARN', textOrDash(task?.clusterArn)],
         );
         const metadata = createLookupContextGrid(result?.lookupContext, taskFields);
+        const ec2Instance = task?.ec2Instance;
+        const ec2HostSection = ec2Instance ? createElement('section', 'detail-section') : null;
+        if (ec2HostSection) {
+          const ec2HostGrid = createElement('div', 'detail-grid');
+          [
+            ['EC2 state', ec2Instance.instanceState],
+            ['EC2 instance type', ec2Instance.instanceType],
+            ['AMI image ID', ec2Instance.imageId],
+            ['Private IP', ec2Instance.privateIpAddress],
+            ['Public IP', ec2Instance.publicIpAddress],
+            ['Subnet', ec2Instance.subnetId],
+            ['VPC', ec2Instance.vpcId],
+            ['Launch time', ec2Instance.launchTime],
+          ]
+            .map(([label, value]) => [label, String(value || '').trim()])
+            .filter(([, value]) => value)
+            .forEach(([label, value]) => ec2HostGrid.append(createMetric(label, value)));
+          if (ec2HostGrid.children.length) {
+            ec2HostSection.append(
+              createElement('h4', '', 'EC2 host details'),
+              createElement('p', 'detail-section-copy', 'Optional host evidence resolved from the inspected ECS task.'),
+              ec2HostGrid,
+            );
+          }
+        }
         const containersSection = createInspectionListSection(
           'Task containers',
           task?.containers || [],
@@ -5093,6 +5118,7 @@
           createDetailSectionHeader('Live inspection', actions),
           createElement('p', 'detail-section-copy', 'Live ECS task inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
           metadata,
+          ...(ec2HostSection?.children?.length ? [ec2HostSection] : []),
           containersSection,
         );
       };
