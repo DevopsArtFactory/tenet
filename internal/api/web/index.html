@@ -5928,6 +5928,15 @@
           if (entry.source?.sourceRoute) sourceLabels.push(`Source detail · ${entry.source.sourceRoute}`);
           if (sourceLabels.length) {
             row.append(createElement('div', 'detail-condition-meta', sourceLabels.join(' · ')));
+            const sourceLinks = createElement('div', 'row-links row-links-shell');
+            if (entry.source?.recordRoute) {
+              sourceLinks.append(createNavLink(entry.source.recordRoute, 'Open source record'));
+            }
+            if (entry.source?.sourceRoute) {
+              sourceLinks.append(createNavLink(entry.source.sourceRoute, 'Open source detail'));
+            }
+            row.append(createElement('div', 'row-hint', 'Inspect audit sources'));
+            row.append(sourceLinks);
           }
 
           const links = createElement('div', 'row-links row-links-shell');

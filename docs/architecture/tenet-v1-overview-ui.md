@@ -45,7 +45,7 @@ It stays intentionally narrow:
 - preserve optional bookmarkable `action`, `deployment`, and `limit` URL state on the audit route
 - render a safe action filter control for exactly `plan.created` and `apply.requested`
 - render immutable plan/apply activity newest-first
-- show each row's immutable `Source record` route plus `Source detail` route when present so operators can jump from the audit evidence back to the stored plan/apply record or source snapshot they are troubleshooting
+- show each row's immutable `Source record` route plus `Source detail` route when present, with `Open source record` / `Open source detail` raw JSON links, so operators can jump from the audit evidence back to the stored plan/apply record or source snapshot they are troubleshooting
 - make a selected deployment obvious in both the audit chrome and the audit body when `deployment={deploymentName}` is present
 - swap to filter-aware empty-state copy when selected deployment/action filters or a limit cap match no audit entries, while keeping the generic unfiltered empty state unchanged and pointing operators at `Clear audit filters` / `Clear audit controls`
 - keep actor identity explicit as unavailable or unknown instead of inventing names
