@@ -4600,6 +4600,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const summaryText = collectText(document.getElementById('summary')).join(' | ');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   if (!accountsText.includes('Tenet request ID | req-logs-871-success')) throw new Error('expected recent-log unavailable card to render Tenet request ID metadata: ' + accountsText);
+  if (accountsText.includes('Last refreshed |')) throw new Error('expected recent-log unavailable card not to claim fresh evidence: ' + accountsText);
   if (!toolbarText.includes('Back to application')) throw new Error('expected resource page back link');
   const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
   const pageLinks = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
@@ -4789,6 +4790,7 @@ async function render(search, inspectionResult, hash = '') {
   if (!taskRun.fetchCalls.includes(taskLogsURL)) throw new Error('expected selected-cluster ecsTask recent-log fetch URL, got ' + JSON.stringify(taskRun.fetchCalls));
   if (!taskRun.text.includes('Live ECS task inspection')) throw new Error('expected ECS task inspection panel');
   if (!taskRun.text.includes('Tenet request ID | req-inspection-878-success')) throw new Error('expected live inspection success to render Tenet Request-Id metadata: ' + taskRun.text);
+  if (!taskRun.text.includes('Last refreshed |')) throw new Error('expected live inspection success to render last-refreshed metadata: ' + taskRun.text);
   if (!taskRun.text.includes('Task containers')) throw new Error('expected ECS task container section');
   if (!taskRun.text.includes('Container awslogs')) throw new Error('expected awslogs metadata');
   if (!taskRun.text.includes('/aws/ecs/worker / worker/abc123')) throw new Error('expected task awslogs group/stream');
@@ -5216,6 +5218,7 @@ async function renderScenario(hash, fetchImpl) {
   });
   if (!limitedLogsText.includes('limited log row')) throw new Error('expected limited recent logs payload to render');
   if (!limitedLogsText.includes('Log container · worker')) throw new Error('expected limited recent logs payload to render entry container metadata, got ' + limitedLogsText);
+  if (!limitedLogsText.includes('Last refreshed |')) throw new Error('expected successful recent logs payload to render last-refreshed metadata, got ' + limitedLogsText);
   const refreshLogsButton = collectNodes(recentLogsRoot, (node) => node.tagName === 'BUTTON' && node.textContent === 'Refresh recent logs')[0];
   if (!refreshLogsButton) throw new Error('expected refresh recent logs button');
   refreshLogsButton.dispatch('click');
