@@ -6603,6 +6603,39 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		}
 	})
 
+	t.Run("passes optional ECS task cluster selector into resource log provider", func(t *testing.T) {
+		var gotClusterARN string
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceLogs: func(ctx context.Context, deploymentName, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
+				gotClusterARN = resourcelogs.ClusterARNFromContext(ctx)
+				if deploymentName != "api-prod" || resourceType != "ecsTask" || resourceName != "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123" {
+					t.Fatalf("unexpected ECS task log request: deployment=%q type=%q name=%q", deploymentName, resourceType, resourceName)
+				}
+				return resourcelogs.Result{DeploymentName: deploymentName, ResourceType: resourceType, ResourceName: resourceName, ClusterARN: gotClusterARN, Available: true, Source: resourcelogs.SourceCloudWatch, Entries: []resourcelogs.Entry{}}, nil
+			},
+		})
+
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsTask&resourceName="+url.QueryEscape("arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123")+"&clusterArn="+url.QueryEscape(" arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments "), nil))
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if gotClusterARN != "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments" {
+			t.Fatalf("expected provider context cluster ARN, got %q", gotClusterARN)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw ECS task logs payload: %v", err)
+		}
+		if raw["clusterArn"] != "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments" {
+			t.Fatalf("expected raw ECS task payload to echo selected clusterArn, got %#v", raw)
+		}
+	})
+
 	t.Run("rejects invalid limit before provider lookup", func(t *testing.T) {
 		var overviewCalls int
 		var providerCalls int
@@ -6650,17 +6683,23 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 			},
 		})
 
-		for _, rawClusterARN := range []string{"not-an-arn", "arn:aws:sqs:ap-northeast-2:123456789012:queue/name", "arn:aws:ecs:ap-northeast-2:123456789012:service/cluster/name"} {
-			t.Run(rawClusterARN, func(t *testing.T) {
-				resp := httptest.NewRecorder()
-				router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=api-prod-service&clusterArn="+url.QueryEscape(rawClusterARN), nil))
-				if resp.Code != http.StatusBadRequest {
-					t.Fatalf("expected 400, got %d with body %q", resp.Code, resp.Body.String())
-				}
-				if body := resp.Body.String(); body != "invalid clusterArn query\n" {
-					t.Fatalf("unexpected invalid clusterArn response: %q", body)
-				}
-			})
+		for _, resourceType := range []string{"ecsService", "ecsTask"} {
+			for _, rawClusterARN := range []string{"not-an-arn", "arn:aws:sqs:ap-northeast-2:123456789012:queue/name", "arn:aws:ecs:ap-northeast-2:123456789012:service/cluster/name"} {
+				t.Run(resourceType+"/"+rawClusterARN, func(t *testing.T) {
+					resourceName := "api-prod-service"
+					if resourceType == "ecsTask" {
+						resourceName = "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123"
+					}
+					resp := httptest.NewRecorder()
+					router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?resourceType="+resourceType+"&resourceName="+url.QueryEscape(resourceName)+"&clusterArn="+url.QueryEscape(rawClusterARN), nil))
+					if resp.Code != http.StatusBadRequest {
+						t.Fatalf("expected 400, got %d with body %q", resp.Code, resp.Body.String())
+					}
+					if body := resp.Body.String(); body != "invalid clusterArn query\n" {
+						t.Fatalf("unexpected invalid clusterArn response: %q", body)
+					}
+				})
+			}
 		}
 		if overviewCalls != 0 || providerCalls != 0 {
 			t.Fatalf("expected invalid clusterArn to short-circuit providers, got overview=%d resourceLogs=%d", overviewCalls, providerCalls)
@@ -7457,6 +7496,39 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 		if tasksScope["available"] != true || tasksScope["requestedLimit"] != float64(3) || tasksScope["effectiveLimit"] != float64(3) || tasksScope["returnedTaskCount"] != float64(1) || tasksScope["truncationStatus"] != "not_truncated" {
 			t.Fatalf("unexpected tasksScope payload: %#v", tasksScope)
+		}
+	})
+
+	t.Run("passes optional ECS task cluster selector into resource inspection provider", func(t *testing.T) {
+		var gotClusterARN string
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(context.Context, string) (catalog.DeploymentOverviewDetail, error) {
+				return catalog.DeploymentOverviewDetail{Name: "api-prod"}, nil
+			},
+			OverviewDeploymentResourceInspection: func(ctx context.Context, deploymentName, resourceType, resourceName string, limit int) (resourceinspection.Result, error) {
+				gotClusterARN = resourceinspection.ClusterARNFromContext(ctx)
+				if deploymentName != "api-prod" || resourceType != "ecsTask" || resourceName != "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123" {
+					t.Fatalf("unexpected ECS task inspection request: deployment=%q type=%q name=%q", deploymentName, resourceType, resourceName)
+				}
+				return resourceinspection.Result{DeploymentName: deploymentName, ResourceType: resourceType, ResourceName: resourceName, ClusterARN: gotClusterARN, Available: true, Source: resourceinspection.SourceECSService, ECSTask: &resourceinspection.ECSTaskInspection{}}, nil
+			},
+		})
+
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsTask&resourceName="+url.QueryEscape("arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123")+"&clusterArn="+url.QueryEscape(" arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments "), nil))
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if gotClusterARN != "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments" {
+			t.Fatalf("expected provider context cluster ARN, got %q", gotClusterARN)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw ECS task inspection payload: %v", err)
+		}
+		if raw["clusterArn"] != "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments" {
+			t.Fatalf("expected raw ECS task inspection payload to echo selected clusterArn, got %#v", raw)
 		}
 	})
 

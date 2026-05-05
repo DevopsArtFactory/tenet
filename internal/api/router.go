@@ -2253,7 +2253,7 @@ func NewRouter(options Options) http.Handler {
 			}
 			if clusterARN, ok := parseOptionalECSClusterARN(w, r); !ok {
 				return
-			} else if resourceType == "ecsService" && clusterARN != "" {
+			} else if (resourceType == "ecsService" || resourceType == "ecsTask") && clusterARN != "" {
 				ctx = resourcelogs.ContextWithClusterARN(ctx, clusterARN)
 			}
 			if _, err := options.OverviewDeployment(r.Context(), name); err != nil {
@@ -2307,7 +2307,7 @@ func NewRouter(options Options) http.Handler {
 			}
 			if clusterARN, ok := parseOptionalECSClusterARN(w, r); !ok {
 				return
-			} else if resourceType == "ecsService" && clusterARN != "" {
+			} else if (resourceType == "ecsService" || resourceType == "ecsTask") && clusterARN != "" {
 				ctx = resourceinspection.ContextWithClusterARN(ctx, clusterARN)
 			}
 			if _, err := options.OverviewDeployment(r.Context(), name); err != nil {
