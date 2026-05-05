@@ -2018,6 +2018,7 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"Open container recent logs",
 		"const appendECSTaskPlacementRows = (meta, task) => {",
 		"Container instance",
+		"EC2 instance",
 		"Capacity provider",
 		"Availability Zone",
 		"appendECSTaskPlacementRows(meta, taskWithScope);",
