@@ -1719,6 +1719,67 @@ func TestECSTaskInspectionIncludesContainerInstanceEC2HostIdentity(t *testing.T)
 	}
 }
 
+func TestECSTaskInspectionEnrichesResolvedEC2HostDetail(t *testing.T) {
+	launchTime := time.Date(2026, 5, 5, 7, 30, 0, 0, time.UTC)
+	client := &fakeEC2InstanceAPI{
+		output: &ec2.DescribeInstancesOutput{
+			Reservations: []ec2types.Reservation{{
+				Instances: []ec2types.Instance{{
+					InstanceId:       stringPtr("i-0abc123def4567890"),
+					State:            &ec2types.InstanceState{Name: ec2types.InstanceStateNameRunning},
+					InstanceType:     ec2types.InstanceTypeM6iLarge,
+					ImageId:          stringPtr("ami-abc123"),
+					PrivateIpAddress: stringPtr("10.0.4.12"),
+					PublicIpAddress:  stringPtr("198.51.100.12"),
+					SubnetId:         stringPtr("subnet-abc123"),
+					VpcId:            stringPtr("vpc-abc123"),
+					LaunchTime:       &launchTime,
+				}},
+			}},
+		},
+	}
+
+	got := enrichECSTaskInspectionFromEC2(context.Background(), client, ECSTaskInspection{
+		ECSTaskSummary: ECSTaskSummary{
+			TaskARN:       "arn:aws:ecs:ap-northeast-2:123456789012:task/worker/task-ec2",
+			TaskID:        "task-ec2",
+			EC2InstanceID: " i-0abc123def4567890 ",
+		},
+		TaskDefinition: "worker:42",
+	})
+
+	if !reflect.DeepEqual(client.instanceIDs, []string{"i-0abc123def4567890"}) {
+		t.Fatalf("expected ECS task host-detail lookup for resolved EC2 instance ID, got %+v", client.instanceIDs)
+	}
+	if got.EC2Instance == nil {
+		t.Fatalf("expected nested EC2 host detail on ECS task inspection, got %+v", got)
+	}
+	if got.EC2Instance.InstanceState != "running" || got.EC2Instance.InstanceType != "m6i.large" || got.EC2Instance.ImageID != "ami-abc123" || got.EC2Instance.PrivateIPAddress != "10.0.4.12" || got.EC2Instance.PublicIPAddress != "198.51.100.12" || got.EC2Instance.SubnetID != "subnet-abc123" || got.EC2Instance.VPCID != "vpc-abc123" || got.EC2Instance.LaunchTime != "2026-05-05T07:30:00Z" {
+		t.Fatalf("expected EC2 host fields to reuse EC2InstanceDetail semantics, got %+v", got.EC2Instance)
+	}
+}
+
+func TestECSTaskInspectionOmitsEC2HostDetailOnMissingIdentityOrLookupFailure(t *testing.T) {
+	withoutIdentityClient := &fakeEC2InstanceAPI{}
+	withoutIdentity := enrichECSTaskInspectionFromEC2(context.Background(), withoutIdentityClient, ECSTaskInspection{
+		ECSTaskSummary: ECSTaskSummary{TaskARN: "arn:task/fargate", TaskID: "fargate"},
+	})
+	if withoutIdentity.EC2Instance != nil || len(withoutIdentityClient.instanceIDs) != 0 {
+		t.Fatalf("expected missing ECS-on-EC2 identity to skip optional host lookup, got detail=%+v calls=%+v", withoutIdentity.EC2Instance, withoutIdentityClient.instanceIDs)
+	}
+
+	failureClient := &fakeEC2InstanceAPI{err: resourceaws.NewUnavailableError(resourceaws.UnavailableReasonAWSUnavailable)}
+	failure := enrichECSTaskInspectionFromEC2(context.Background(), failureClient, ECSTaskInspection{
+		ECSTaskSummary: ECSTaskSummary{TaskARN: "arn:task/ec2", TaskID: "ec2", EC2InstanceID: "i-0abc123def4567890"},
+	})
+	if !reflect.DeepEqual(failureClient.instanceIDs, []string{"i-0abc123def4567890"}) {
+		t.Fatalf("expected one best-effort EC2 lookup before graceful omission, got %+v", failureClient.instanceIDs)
+	}
+	if failure.EC2Instance != nil || failure.EC2InstanceID != "i-0abc123def4567890" {
+		t.Fatalf("expected EC2 lookup failure to omit only nested host detail and preserve host identity, got %+v", failure)
+	}
+}
+
 func TestECSServiceTaskSummariesEnrichContainerInstanceEC2HostIdentity(t *testing.T) {
 	const (
 		clusterARN           = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker"

@@ -3793,6 +3793,8 @@ func TestOverviewDocsDescribeECSTaskScopeReleaseGuard(t *testing.T) {
 			"sibling `tasksScope` reports `available`, optional `requestedLimit`, `effectiveLimit`, `returnedTaskCount`, `truncationStatus`",
 			"Interpret the scope fields literally: `available=true` with `returnedTaskCount=0` is a complete empty task sample",
 			"`available=false` / `truncationStatus=not_applicable` means the service inspection succeeded but the optional task bridge could not be sampled",
+			"exact task inspection can also include optional nested `ecsTask.ec2Instance` host details",
+			"Fargate tasks, missing host identity, missing EC2 records, and EC2 lookup failures keep task inspection `available=true` and omit only the nested host object",
 		},
 		"../../docs/features/overview-dashboard.md": {
 			"`resource-inspection?resourceType=ecsService&resourceName={serviceName}&limit={n}` accepts an optional positive task-sample cap",
@@ -3800,12 +3802,14 @@ func TestOverviewDocsDescribeECSTaskScopeReleaseGuard(t *testing.T) {
 			"without needing live AWS task inventory",
 			"conservative `truncationStatus` semantics (`not_truncated` = complete bounded result, `truncated` = more matching tasks existed, `unknown` = Tenet reached the cap without provider proof either way, `not_applicable` = task bridge unavailable)",
 			"That separates true empty successful samples (`available=true`, `returnedTaskCount=0`) from partial/unavailable task-bridge evidence",
+			"exact `ecsTask` inspection keeps existing placement fields such as `ec2InstanceId` and can add optional nested `ecsTask.ec2Instance` host details",
 		},
 		"../../docs/architecture/tenet-v1-overview-ui.md": {
 			"`resource-inspection?resourceType=ecsService&resourceName={serviceName}&limit={n}` accepts an optional positive task-sample cap",
 			"sibling `tasksScope` keeps the row cap and sampling state self-describing with `available`, optional `requestedLimit`, `effectiveLimit`, `returnedTaskCount`",
 			"`not_applicable` when the optional task bridge is unavailable",
 			"Empty successful samples remain `available=true` with `returnedTaskCount=0`",
+			"Exact `ecsTask` inspection keeps those placement fields and can add optional nested `ecsTask.ec2Instance` host facts",
 		},
 	}
 
