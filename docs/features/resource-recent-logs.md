@@ -22,6 +22,14 @@ Example limited service request:
 curl 'http://localhost:8080/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&limit=5'
 ```
 
+Example selected-cluster service request when duplicate service names exist across ECS clusters:
+
+```bash
+curl 'http://localhost:8080/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5'
+```
+
+The selected-cluster form is a backend route contract. Bookmarkable embedded resource-page `clusterArn` URL state and its post-UI smoke/docs guards are tracked separately in #834 and #838.
+
 Example ECS task/container-scoped request:
 
 ```bash
