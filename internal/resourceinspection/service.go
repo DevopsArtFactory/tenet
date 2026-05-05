@@ -253,6 +253,7 @@ type ECSTaskSummary struct {
 	ClusterARN           string                 `json:"clusterArn,omitempty"`
 	ContainerInstanceARN string                 `json:"containerInstanceArn,omitempty"`
 	EC2InstanceID        string                 `json:"ec2InstanceId,omitempty"`
+	EC2Instance          *EC2InstanceDetail     `json:"ec2Instance,omitempty"`
 	CapacityProviderName string                 `json:"capacityProviderName,omitempty"`
 	AvailabilityZone     string                 `json:"availabilityZone,omitempty"`
 	LastStatus           string                 `json:"lastStatus,omitempty"`
@@ -1249,7 +1250,8 @@ func (s Service) inspectECSTaskFromAWS(ctx context.Context, req ECSTaskRequest) 
 		}
 	}
 	containerInstanceEC2IDs := ecsContainerInstanceEC2IDs(ctx, clients.ECS, clusterARN, []string{aws.ToString(task.ContainerInstanceArn)})
-	return ecsTaskInspectionFromTask(*task, clusterARN, definitions, containerInstanceEC2IDs), nil
+	inspection := ecsTaskInspectionFromTask(*task, clusterARN, definitions, containerInstanceEC2IDs)
+	return enrichECSTaskInspectionFromEC2(ctx, clients.EC2, inspection), nil
 }
 
 func findECSTask(ctx context.Context, client ecsTaskAPI, taskARN, selectedClusterARN string) (*ecstypes.Task, string, error) {
@@ -1309,6 +1311,20 @@ type ecsTaskAPI interface {
 
 func ecsTaskInspectionFromTask(task ecstypes.Task, clusterARN string, definitions map[string]ecstypes.TaskDefinition, containerInstanceEC2IDs map[string]string) ECSTaskInspection {
 	return ECSTaskInspection{ECSTaskSummary: ecsTaskSummaryFromTask(task, clusterARN, definitions, containerInstanceEC2IDs), TaskDefinition: strings.TrimSpace(aws.ToString(task.TaskDefinitionArn))}
+}
+
+func enrichECSTaskInspectionFromEC2(ctx context.Context, client ec2InstanceAPI, detail ECSTaskInspection) ECSTaskInspection {
+	instanceID := strings.TrimSpace(detail.EC2InstanceID)
+	if client == nil || instanceID == "" {
+		return detail
+	}
+	detail.EC2InstanceID = instanceID
+	ec2Detail, err := describeEC2InstanceDetail(ctx, client, instanceID)
+	if err != nil || ec2Detail == nil {
+		return detail
+	}
+	detail.EC2Instance = ec2Detail
+	return detail
 }
 
 func ecsTaskSummaryFromTask(task ecstypes.Task, clusterARN string, definitions map[string]ecstypes.TaskDefinition, containerInstanceEC2IDs map[string]string) ECSTaskSummary {
