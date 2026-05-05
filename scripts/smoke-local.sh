@@ -1579,6 +1579,10 @@ assert "params.set('limit', String(normalizedLimit));" in ui, ui
 assert "resourceLogLimit: normalizeResourceLogsLimit(params.get('resourceLogLimit') || '')" in ui, ui
 assert "clusterArn: params.get('clusterArn') || ''" in ui, ui
 assert "routeClusterArn: supportsECSServiceClusterScope(resource) ? String(currentPageState.clusterArn || resource.clusterArn || '').trim() : ''" in ui, ui
+assert "Clear selected cluster" in ui, ui
+assert "const clearSelectedClusterRoute = (detail, resource) => {" in ui, ui
+assert "clusterArn: ''," in ui, ui
+assert "renderResourceDetailPage(detail, resourceState);" in ui, ui
 assert "params.set('resourceLogLimit', String(limit));" in ui, ui
 assert "syncResourcePanelLimitQueryParams(deploymentName, resource);" in ui, ui
 assert "Refresh recent logs" in ui, ui
@@ -1720,7 +1724,7 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert 'Opened via bookmarked resource alias.' in body, body
     assert "const renderResourceDetailPage = (detail, resourceState = null) => {" in body, body
     assert "const resourceDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;" in body, body
-    assert "const createResourceDetailActions = (resourceState = null) => [" in body, body
+    assert "const createResourceDetailActions = (resourceState = null, detail = null, resource = null) => [" in body, body
     assert 'Refresh resource detail' in body, body
     assert 'Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…' in body, body
     assert 'Current resource detail remains visible below.' in body, body
@@ -1743,6 +1747,10 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "resourceLogLimit: normalizeResourceLogsLimit(params.get('resourceLogLimit') || '')" in body, body
     assert "clusterArn: params.get('clusterArn') || ''" in body, body
     assert "routeClusterArn: supportsECSServiceClusterScope(resource) ? String(currentPageState.clusterArn || resource.clusterArn || '').trim() : ''" in body, body
+    assert "Clear selected cluster" in body, body
+    assert "const clearSelectedClusterRoute = (detail, resource) => {" in body, body
+    assert "clusterArn: ''," in body, body
+    assert "renderResourceDetailPage(detail, resourceState);" in body, body
     assert "params.set('resourceLogLimit', String(limit));" in body, body
     assert "syncResourcePanelLimitQueryParams(deploymentName, resource);" in body, body
     assert "...resourcePanelLimitURLParams(deploymentName, resource)" in body, body
