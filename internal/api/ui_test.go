@@ -3422,6 +3422,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"runs the full `make smoke-docker` container stack only when the PR touches Compose/front-door/auth/API/controller, catalog/domain status read-model contracts, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surfaces",
 			"Runner-start failures usually show no job steps or downloadable repo logs and may include GitHub account-level annotations such as recent account payments failing or the spending limit needing an increase.",
 			"use local evidence from `go test ./...`, `make smoke-local`, and `make smoke-docker` for code-level confidence",
+			"See `docs/runbooks/ci-smoke-runner-start.md` for the exact `gh run view` evidence checklist and recovery steps for issue #850.",
 			"Unrelated docs-only PRs keep the cheap fast lane without the Docker stack",
 			"`internal/catalog/**`",
 			"`internal/domain/**`",
@@ -3508,6 +3509,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"If GitHub reports a CI Smoke failure before any repository step starts, classify it as a runner-start failure rather than a Tenet smoke result.",
 			"no job steps, no downloadable repo logs",
 			"failed payments or a spending limit that needs to be increased",
+			"The focused runbook in `docs/runbooks/ci-smoke-runner-start.md` shows the exact `gh run view` commands, the `runner_id=0` / `steps=[]` evidence pattern, and the post-recovery rerun expectations for issue #850.",
 			"rely on local `go test ./...`, `make smoke-local`, and `make smoke-docker` output for code-level reproduction",
 			"syntax-checks both `scripts/smoke-local.sh` and `scripts/smoke-docker.sh` with `bash -n`, then runs `make smoke-local`",
 			"Pull requests first pass through a cheap `docker-smoke-scope` path filter",
@@ -3710,6 +3712,49 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 	} {
 		if !strings.Contains(dockerSmoke, fragment) {
 			t.Fatalf("expected smoke-docker.sh to lock resource refresh fragment %q", fragment)
+		}
+	}
+}
+
+func TestDocsDescribeCISmokeRunnerStartRunbook(t *testing.T) {
+	files := map[string][]string{
+		"../../README.md": {
+			"docs/runbooks/ci-smoke-runner-start.md",
+			"exact `gh run view` evidence checklist and recovery steps for issue #850",
+		},
+		"../../docs/architecture/tenet-v1-local-runtime.md": {
+			"docs/runbooks/ci-smoke-runner-start.md",
+			"`runner_id=0` / `steps=[]` evidence pattern",
+			"post-recovery rerun expectations for issue #850",
+		},
+		"../../docs/runbooks/ci-smoke-runner-start.md": {
+			"# CI Smoke runner-start failures",
+			"`runner_id=0`",
+			"`steps=[]`",
+			"gh run view <run-id> --json databaseId,name,status,conclusion,headSha,url,jobs",
+			"gh run view <run-id> --log-failed",
+			"spending limit needs to be increased",
+			"No Tenet command ran.",
+			"classify the incident as external GitHub Actions runner availability",
+			"Re-run the latest failed `CI Smoke` workflow on `main` or on the affected PR:",
+			"gh run rerun <run-id> --failed",
+			"gh run watch <run-id>",
+			"gh workflow run \"CI Smoke\" --ref main",
+			"Confirm the fast lane reaches `go test ./...`, smoke script syntax checks, and `make smoke-local`.",
+			"confirm the Docker lane reaches `make smoke-docker` or produces normal actionable logs",
+		},
+	}
+
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
 		}
 	}
 }

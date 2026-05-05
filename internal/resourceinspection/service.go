@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
 	asgtypes "github.com/aws/aws-sdk-go-v2/service/autoscaling/types"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/ecs"
 	ecstypes "github.com/aws/aws-sdk-go-v2/service/ecs/types"
 
@@ -114,6 +115,7 @@ type UserDataBootstrapSourceInspection struct {
 	BackingResourceType     string                            `json:"backingResourceType,omitempty"`
 	BackingResourceName     string                            `json:"backingResourceName,omitempty"`
 	LaunchTemplate          *AutoScalingLaunchTemplateSummary `json:"launchTemplate,omitempty"`
+	SelectedInstance        *AutoScalingGroupInstanceSummary  `json:"selectedInstance,omitempty"`
 }
 
 type TrafficRoutingInspection struct {
@@ -341,12 +343,24 @@ type AutoScalingLaunchTemplateOverride struct {
 }
 
 type AutoScalingGroupInstanceSummary struct {
-	InstanceID           string `json:"instanceId"`
-	AvailabilityZone     string `json:"availabilityZone,omitempty"`
-	LifecycleState       string `json:"lifecycleState,omitempty"`
-	HealthStatus         string `json:"healthStatus,omitempty"`
-	ProtectedFromScaleIn bool   `json:"protectedFromScaleIn"`
-	WeightedCapacity     string `json:"weightedCapacity,omitempty"`
+	InstanceID           string             `json:"instanceId"`
+	AvailabilityZone     string             `json:"availabilityZone,omitempty"`
+	LifecycleState       string             `json:"lifecycleState,omitempty"`
+	HealthStatus         string             `json:"healthStatus,omitempty"`
+	ProtectedFromScaleIn bool               `json:"protectedFromScaleIn"`
+	WeightedCapacity     string             `json:"weightedCapacity,omitempty"`
+	EC2Instance          *EC2InstanceDetail `json:"ec2Instance,omitempty"`
+}
+
+type EC2InstanceDetail struct {
+	InstanceState    string `json:"instanceState,omitempty"`
+	InstanceType     string `json:"instanceType,omitempty"`
+	ImageID          string `json:"imageId,omitempty"`
+	PrivateIPAddress string `json:"privateIpAddress,omitempty"`
+	PublicIPAddress  string `json:"publicIpAddress,omitempty"`
+	SubnetID         string `json:"subnetId,omitempty"`
+	VPCID            string `json:"vpcId,omitempty"`
+	LaunchTime       string `json:"launchTime,omitempty"`
 }
 
 type Options struct {
@@ -383,6 +397,10 @@ type ecsServiceAPI interface {
 
 type ec2LaunchTemplateAPI interface {
 	DescribeLaunchTemplateVersions(context.Context, *ec2.DescribeLaunchTemplateVersionsInput, ...func(*ec2.Options)) (*ec2.DescribeLaunchTemplateVersionsOutput, error)
+}
+
+type ec2InstanceAPI interface {
+	DescribeInstances(context.Context, *ec2.DescribeInstancesInput, ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error)
 }
 
 type ecsServiceClusterHintKey struct {
@@ -869,6 +887,64 @@ func selectedAutoScalingInstance(detail AutoScalingInspection, instanceID string
 	return AutoScalingGroupInstanceSummary{}, false
 }
 
+func enrichSelectedAutoScalingInstanceFromEC2(ctx context.Context, client ec2InstanceAPI, detail AutoScalingInspection, instanceID string) AutoScalingInspection {
+	instanceID = strings.TrimSpace(instanceID)
+	if client == nil || instanceID == "" {
+		return detail
+	}
+	if _, ok := selectedAutoScalingInstance(detail, instanceID); !ok {
+		return detail
+	}
+	ec2Detail, err := describeEC2InstanceDetail(ctx, client, instanceID)
+	if err != nil || ec2Detail == nil {
+		return detail
+	}
+	for idx := range detail.Instances {
+		if strings.TrimSpace(detail.Instances[idx].InstanceID) == instanceID {
+			detail.Instances[idx].EC2Instance = ec2Detail
+			break
+		}
+	}
+	return detail
+}
+
+func describeEC2InstanceDetail(ctx context.Context, client ec2InstanceAPI, instanceID string) (*EC2InstanceDetail, error) {
+	instanceID = strings.TrimSpace(instanceID)
+	if client == nil || instanceID == "" {
+		return nil, nil
+	}
+	out, err := client.DescribeInstances(ctx, &ec2.DescribeInstancesInput{InstanceIds: []string{instanceID}})
+	if err != nil {
+		return nil, err
+	}
+	for _, reservation := range out.Reservations {
+		for _, instance := range reservation.Instances {
+			if strings.TrimSpace(aws.ToString(instance.InstanceId)) != instanceID {
+				continue
+			}
+			detail := ec2InstanceDetailFromInstance(instance)
+			return &detail, nil
+		}
+	}
+	return nil, nil
+}
+
+func ec2InstanceDetailFromInstance(instance ec2types.Instance) EC2InstanceDetail {
+	detail := EC2InstanceDetail{
+		InstanceType:     strings.TrimSpace(string(instance.InstanceType)),
+		ImageID:          strings.TrimSpace(aws.ToString(instance.ImageId)),
+		PrivateIPAddress: strings.TrimSpace(aws.ToString(instance.PrivateIpAddress)),
+		PublicIPAddress:  strings.TrimSpace(aws.ToString(instance.PublicIpAddress)),
+		SubnetID:         strings.TrimSpace(aws.ToString(instance.SubnetId)),
+		VPCID:            strings.TrimSpace(aws.ToString(instance.VpcId)),
+		LaunchTime:       formatTime(aws.ToTime(instance.LaunchTime)),
+	}
+	if instance.State != nil {
+		detail.InstanceState = strings.TrimSpace(string(instance.State.Name))
+	}
+	return detail
+}
+
 func applyAutoScalingInstanceScope(detail AutoScalingInspection, limit int) AutoScalingInspection {
 	effectiveLimit := maxAutoScalingGroupInstanceSummaries
 	var requestedLimit *int
@@ -905,6 +981,11 @@ func applyAutoScalingInstanceScope(detail AutoScalingInspection, limit int) Auto
 }
 
 func availableUserDataBootstrapSourceResult(req Request, detail AutoScalingInspection) Result {
+	var selectedInstance *AutoScalingGroupInstanceSummary
+	if instance, ok := selectedAutoScalingInstance(detail, req.InstanceID); ok {
+		copy := instance
+		selectedInstance = &copy
+	}
 	return Result{
 		DeploymentName:      req.DeploymentName,
 		ResourceType:        req.ResourceType,
@@ -921,6 +1002,7 @@ func availableUserDataBootstrapSourceResult(req Request, detail AutoScalingInspe
 			BackingResourceType:     strings.TrimSpace(req.BackingResourceType),
 			BackingResourceName:     strings.TrimSpace(req.BackingResourceName),
 			LaunchTemplate:          autoScalingInspectionObservedLaunchTemplate(detail),
+			SelectedInstance:        selectedInstance,
 		},
 		UnavailableReason: "",
 	}
@@ -1428,6 +1510,9 @@ func (s Service) inspectAutoScalingGroupFromAWS(ctx context.Context, req AutoSca
 			}
 		}
 		inspection.LaunchTemplateBootstrapSource = bootstrapSource
+	}
+	if instanceID := strings.TrimSpace(req.InstanceID); instanceID != "" {
+		inspection = enrichSelectedAutoScalingInstanceFromEC2(ctx, clients.EC2, inspection, instanceID)
 	}
 	return inspection, nil
 }
