@@ -2299,7 +2299,7 @@ allowed_events_read=$(curl -fsS \
   -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Projects: payments-api" \
   -H "X-Tenet-Authorized-Environments: staging-apne2" \
-  "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/events")
+  "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/events?limit=1")
 allowed_resource_logs=$(curl -fsS \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \

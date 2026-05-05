@@ -20,6 +20,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/controllerrefresh"
+	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/githubwebhook"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
 	"github.com/DevopsArtFactory/tenet/internal/rbacpolicy"
@@ -172,6 +173,32 @@ func applyAuditLogLimit(result auditlog.Result, limit int) auditlog.Result {
 		result.Entries = append([]auditlog.Entry(nil), result.Entries[:limit]...)
 	}
 	return result
+}
+
+func applyDeploymentEventsLimit(result catalog.DeploymentOverviewEvents, limit int) catalog.DeploymentOverviewEvents {
+	if limit > 0 && limit < len(result.Events) {
+		result.Events = append([]domain.StatusHistoryEntry(nil), result.Events[:limit]...)
+		result.ManagedDriftSummary = summarizeDeploymentEventsManagedDrift(result.Events)
+	}
+	return result
+}
+
+func summarizeDeploymentEventsManagedDrift(events []domain.StatusHistoryEntry) catalog.ManagedDriftSummary {
+	summary := catalog.ManagedDriftSummary{}
+	for _, event := range events {
+		for _, item := range event.ManagedDrift {
+			summary.Total++
+			switch item.Severity {
+			case domain.ManagedDriftSeverityHigh:
+				summary.High++
+			case domain.ManagedDriftSeverityMedium:
+				summary.Medium++
+			case domain.ManagedDriftSeverityLow:
+				summary.Low++
+			}
+		}
+	}
+	return summary
 }
 
 func applyResourceLogLimit(result resourcelogs.Result, limit int) resourcelogs.Result {
@@ -2208,11 +2235,16 @@ func NewRouter(options Options) http.Handler {
 			if !requireDeploymentReadAuthorization(w, r, options, name) {
 				return
 			}
+			eventLimit, ok := parseOptionalPositiveLimit(w, r)
+			if !ok {
+				return
+			}
 			events, err := options.OverviewDeploymentEvents(r.Context(), name)
 			if err != nil {
 				respondReadLookupError(w, err, "overview deployment events unavailable")
 				return
 			}
+			events = applyDeploymentEventsLimit(events, eventLimit)
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(events)
 		case strings.HasSuffix(path, "/resource-logs"):
