@@ -6520,6 +6520,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 			DeploymentName: "api-prod",
 			ResourceType:   "ecsService",
 			ResourceName:   "payments-api-prod-service",
+			ClusterARN:     "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
 			Available:      true,
 			Source:         resourcelogs.SourceCloudWatch,
 			Entries: []resourcelogs.Entry{
@@ -6574,6 +6575,16 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		}
 		if len(got.Entries) != 2 {
 			t.Fatalf("expected two entries after limit, got %+v", got.Entries)
+		}
+		if got.ClusterARN != "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments" {
+			t.Fatalf("expected decoded payload to echo selected clusterArn, got %+v", got)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("failed to decode raw limited resource logs payload: %v", err)
+		}
+		if raw["clusterArn"] != "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments" {
+			t.Fatalf("expected raw payload to echo selected clusterArn, got %#v", raw)
 		}
 		if got.ResultScope == nil {
 			t.Fatalf("expected resultScope in limited resource logs payload")

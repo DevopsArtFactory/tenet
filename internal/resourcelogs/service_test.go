@@ -81,6 +81,37 @@ func TestServiceRecent(t *testing.T) {
 		}
 	})
 
+	t.Run("ecs service echoes accepted cluster selector on available payload", func(t *testing.T) {
+		const selectedClusterARN = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments"
+		service := NewService(Options{
+			ListECSLogEvents: func(ctx context.Context, req ECSRequest) ([]CloudWatchEvent, error) {
+				if req.ClusterARN != selectedClusterARN {
+					t.Fatalf("expected selected cluster ARN to reach ECS provider, got %+v", req)
+				}
+				return []CloudWatchEvent{{Timestamp: time.Date(2026, 4, 16, 7, 11, 0, 0, time.UTC), Message: "selected cluster service event", Stream: "ecs/payments-api/task-a"}}, nil
+			},
+		})
+
+		result, err := service.Recent(context.Background(), Request{
+			DeploymentName:   "payments-api-prod",
+			ResourceType:     "ecsService",
+			ResourceName:     "payments-api-prod-service",
+			ControlAccountID: "123456789012",
+			TargetAccountID:  "123456789012",
+			Region:           "ap-northeast-2",
+			ClusterARN:       " " + selectedClusterARN + " ",
+		})
+		if err != nil {
+			t.Fatalf("Recent returned error: %v", err)
+		}
+		if result.ClusterARN != selectedClusterARN {
+			t.Fatalf("expected response-level clusterArn to echo trimmed selector, got %+v", result)
+		}
+		if !result.Available || len(result.Entries) != 1 || result.Entries[0].Message != "selected cluster service event" {
+			t.Fatalf("expected available selected-cluster logs, got %+v", result)
+		}
+	})
+
 	t.Run("ecs task threads container filter into cloudwatch provider", func(t *testing.T) {
 		var gotLookup ECSRequest
 		service := NewService(Options{
@@ -1067,6 +1098,9 @@ func TestServiceRecent(t *testing.T) {
 				if req.ResourceName != "payments-api-prod-service" {
 					t.Fatalf("unexpected ECS request: %+v", req)
 				}
+				if req.ClusterARN != "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments" {
+					t.Fatalf("expected selected cluster ARN to reach ECS provider, got %+v", req)
+				}
 				return nil, &smithy.OperationError{
 					ServiceID:     "STS",
 					OperationName: "GetCallerIdentity",
@@ -1082,6 +1116,7 @@ func TestServiceRecent(t *testing.T) {
 			ControlAccountID: "123456789012",
 			TargetAccountID:  "123456789012",
 			Region:           "ap-northeast-2",
+			ClusterARN:       "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
 		})
 		if err != nil {
 			t.Fatalf("Recent returned error: %v", err)
@@ -1090,6 +1125,7 @@ func TestServiceRecent(t *testing.T) {
 			DeploymentName:    "payments-api-prod",
 			ResourceType:      "ecsService",
 			ResourceName:      "payments-api-prod-service",
+			ClusterARN:        "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments",
 			LookupContext:     expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", ""),
 			Available:         false,
 			UnavailableReason: UnavailableReasonAWSUnavailable,
