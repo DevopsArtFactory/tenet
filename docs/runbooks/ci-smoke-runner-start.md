@@ -92,3 +92,20 @@ After the GitHub account condition is cleared:
 4. Confirm the fast lane reaches `go test ./...`, smoke script syntax checks, and `make smoke-local`.
 5. On `main` or Docker-scoped PRs, confirm the Docker lane reaches `make smoke-docker` or produces normal actionable logs.
 6. Comment on issue #850 with the recovered run URL and whether the repository commands passed or exposed a new actionable repo-side failure.
+
+## Closeout comment template
+
+Use a closeout comment like this before closing the runner-availability issue:
+
+```text
+Runner availability recovered for CI Smoke run <run-url>.
+
+Evidence:
+- Fast smoke and Docker smoke scope now have non-empty runner assignments and steps[].
+- Fast smoke reached repository commands: go test ./..., smoke script syntax checks, and make smoke-local.
+- Docker smoke reached make smoke-docker or produced normal actionable logs.
+- Outcome: <passed | failed with actionable repo-side failure>.
+- Follow-up: <none | opened issue/PR #... for the new repo-side failure>.
+```
+
+Only close the runner-start blocker when the recovered run proves GitHub assigned runners and reached repository commands. If the rerun exposes a normal Tenet failure, keep that evidence on the runner issue, open or link the repo-side follow-up, and close only the external runner-availability portion.
