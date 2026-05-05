@@ -1778,6 +1778,23 @@
           ? 'Actor identity is unavailable for this record.'
           : 'Actor identity is unknown for this record.';
       };
+      const auditAnchorSlug = (value) => String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'unknown';
+      const auditEntryAnchorID = (entry) => {
+        if (entry?.applyId) return `audit-entry-apply-${auditAnchorSlug(entry.applyId)}`;
+        if (entry?.planId) return `audit-entry-plan-${auditAnchorSlug(entry.planId)}`;
+        if (entry?.timestamp) return `audit-entry-time-${auditAnchorSlug(entry.timestamp)}`;
+        if (entry?.action) return `audit-entry-action-${auditAnchorSlug(entry.action)}`;
+        return 'audit-entry-unknown';
+      };
+      const auditEntryAnchorURL = (entry) => buildPageSectionURL('audit', auditEntryAnchorID(entry), {
+        deployment: currentPageState.deployment,
+        action: currentPageState.auditAction,
+        limit: currentPageState.auditLimit,
+      });
       const stableResourceIdentity = (resource) => {
         const type = resource.type || resource.resource || 'resource';
         const name = resource.name || type;
@@ -5873,6 +5890,7 @@
         const rows = createElement('div', 'rows');
         entries.forEach((entry) => {
           const row = createElement('div', 'row');
+          row.setAttribute('id', auditEntryAnchorID(entry));
           const top = createElement('div', 'row-top');
           const titleWrap = createElement('div');
           const deploymentContext = [
@@ -5940,6 +5958,7 @@
           }
 
           const links = createElement('div', 'row-links row-links-shell');
+          links.append(createNavLink(auditEntryAnchorURL(entry), 'Open audit entry', '_self'));
           if (entry.deploymentName) {
             links.append(createNavLink(buildPageURL('application', { deployment: entry.deploymentName }), 'Open application drill-down', '_self'));
             links.append(createNavLink(buildPageURL('drift', { deployment: entry.deploymentName }), 'Open drift view', '_self'));
@@ -5952,7 +5971,7 @@
             }), 'Open plan/apply workspace', '_self'));
           }
           if (links.children.length) {
-            row.append(createElement('div', 'row-hint', 'Continue in app'));
+            row.append(createElement('div', 'row-hint', 'Share or continue in app'));
             row.append(links);
           }
           rows.append(row);

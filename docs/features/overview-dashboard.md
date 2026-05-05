@@ -231,6 +231,7 @@ Current behavior:
 - keeps the current `/?page=audit...` URL/query state stable while leaving the current audit content visible with explicit loading/error copy during an in-place refresh of the same route
 - keeps entries newest-first even if the client receives an unsorted payload
 - shows explicit labels for action, deployment/app/environment context, timestamp, actor availability, plan/apply identifiers, and per-row source routes (`Source record` plus `Source detail` when present) with `Open source record` / `Open source detail` raw JSON links so operators can inspect the underlying immutable source while keeping the audit page open
+- gives each row a stable `audit-entry-*` anchor and `_self` `Open audit entry` link so operators can share a precise row while preserving the current deployment/action/limit filters
 - keeps actor identity explicit rather than fabricated by rendering `Unavailable` / `Unknown` plus the server-authored reason text
 - exposes `_self` `Open application drill-down` and `_self` `Open drift view` links whenever `deploymentName` is present, plus `_self` `Open plan/apply workspace` when `planId` and `applyId` are present
 

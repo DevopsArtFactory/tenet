@@ -10687,6 +10687,9 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (rows.length < 2) throw new Error('expected audit page rows');
   const rowTexts = rows.map((node) => collectText(node).join(' | '));
   if (!rowTexts[0].includes('Apply requested (apply.requested)')) throw new Error('expected newest audit entry first, got ' + rowTexts.join(' || '));
+  if (rows[0].getAttribute('id') !== 'audit-entry-apply-apply-failed-123') throw new Error('expected apply row to expose stable apply anchor, got ' + rows[0].getAttribute('id'));
+  if (rows[1].getAttribute('id') !== 'audit-entry-plan-plan-ready-123') throw new Error('expected plan row to expose stable plan anchor, got ' + rows[1].getAttribute('id'));
+  if (!accountsText.includes('Share or continue in app')) throw new Error('expected audit row share grouping');
   const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
   const breadcrumbChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className.includes('breadcrumb-current'));
   const applicationsBreadcrumb = links.find((node) => node.href === '/console?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.textContent === 'Applications' && node.target === '_self');
@@ -10705,6 +10708,12 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!driftLink || driftLink.target !== '_self' || driftLink.rel) throw new Error('expected audit drift self link');
   const workspaceLink = links.find((node) => node.href === '/console?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&planId=plan_ready_123&applyId=apply_failed_123' && node.textContent === 'Open plan/apply workspace');
   if (!workspaceLink || workspaceLink.target !== '_self' || workspaceLink.rel) throw new Error('expected audit plan/apply self link');
+  const auditEntryLinks = links.filter((node) => node.textContent === 'Open audit entry');
+  if (auditEntryLinks.length !== 2) throw new Error('expected one shareable self link per audit row, got ' + auditEntryLinks.length);
+  const applyEntryLink = auditEntryLinks.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-entry-apply-apply-failed-123');
+  if (!applyEntryLink || applyEntryLink.target !== '_self' || applyEntryLink.rel) throw new Error('expected apply audit row anchor link to preserve filters');
+  const planEntryLink = auditEntryLinks.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-entry-plan-plan-ready-123');
+  if (!planEntryLink || planEntryLink.target !== '_self' || planEntryLink.rel) throw new Error('expected plan audit row anchor link to preserve filters');
   const sourceRecordLinks = links.filter((node) => node.textContent === 'Open source record');
   if (sourceRecordLinks.length !== 2) throw new Error('expected audit source record links, got ' + sourceRecordLinks.length);
   const applyRecordLink = sourceRecordLinks.find((node) => node.href === '/v1/applies/apply_failed_123');
@@ -10819,7 +10828,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!currentDestinationChip) throw new Error('expected audit hash route to keep current-destination chip');
   const currentSectionChip = quickNavChips.find((node) => node.getAttribute('aria-label') === 'Current section: Audit timeline');
   if (!currentSectionChip) throw new Error('expected audit hash to render the current-section chip');
-  const sectionLinks = collectNodes(accounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#audit-'));
+  const sectionLinks = collectNodes(accounts, (node) => node.tagName === 'A' && ['Deployment context', 'Audit timeline'].includes(node.textContent));
   if (sectionLinks.length !== 1) throw new Error('expected only one remaining audit section link, got ' + sectionLinks.length);
   const deploymentContextLink = sectionLinks.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-deployment-context' && node.textContent === 'Deployment context');
   if (!deploymentContextLink || deploymentContextLink.target !== '_self' || deploymentContextLink.rel) throw new Error('expected audit hash route deployment-context link to stay in-shell');
@@ -10831,7 +10840,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const updatedChips = collectNodes(updatedAccounts, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
   const deploymentContextChip = updatedChips.find((node) => node.getAttribute('aria-label') === 'Current section: Deployment context');
   if (!deploymentContextChip) throw new Error('expected audit hashchange to update the current-section chip');
-  const updatedSectionLinks = collectNodes(updatedAccounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#audit-'));
+  const updatedSectionLinks = collectNodes(updatedAccounts, (node) => node.tagName === 'A' && ['Deployment context', 'Audit timeline'].includes(node.textContent));
   if (updatedSectionLinks.find((node) => node.textContent === 'Deployment context')) throw new Error('expected updated audit current section to be removed from On this page links');
   if (!updatedSectionLinks.find((node) => node.textContent === 'Audit timeline')) throw new Error('expected previous audit current section to return to On this page links after hashchange');
 })();
