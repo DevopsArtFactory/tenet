@@ -1862,6 +1862,9 @@ assert 'Selected container' in ui, ui
 assert 'Selected cluster' in ui, ui
 assert 'Log container' in ui, ui
 assert 'Open container recent logs' in ui, ui
+assert 'Container instance' in ui, ui
+assert 'Capacity provider' in ui, ui
+assert 'Availability Zone' in ui, ui
 assert "params.set('containerName', containerName);" in ui, ui
 assert 'Lookup path ·' in ui, ui
 assert 'Lookup region' in ui, ui
