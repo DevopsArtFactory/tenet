@@ -1864,7 +1864,7 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		"optional `resourceDescription` when Tenet resolved a rollout execution description",
 		"echoes it as `resourceDescription` on both available and unavailable payloads",
 		"`ecsTask` reads recent CloudWatch log events for the exact ECS task ARN or task identifier",
-		"resourceType=ecsTask&containerName=worker&limit=1",
+		"resourceType=ecsTask&containerName=worker&clusterArn={ecsClusterArn}&limit=1",
 		"`aws_unavailable`, `resource_not_found`, `cross_account_not_configured`, or `no_log_source`",
 		"Current route-stable rollout resources with explicit no-log-source responses",
 		"weighted-target-group traffic-routing resources (`trafficShiftPlan`, `productionListenerRule`, `activeTargetGroup`, and `candidateTargetGroup`)",

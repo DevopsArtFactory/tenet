@@ -131,16 +131,18 @@ func TestServiceRecent(t *testing.T) {
 			TargetAccountID:     "123456789012",
 			Region:              "ap-northeast-2",
 			ContainerName:       "api",
+			ClusterARN:          " arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments ",
 			Limit:               2,
 		})
 		if err != nil {
 			t.Fatalf("Recent returned error: %v", err)
 		}
-		if gotLookup.ResourceName != "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123" || gotLookup.ContainerName != "api" || gotLookup.Limit != 2 {
+		const selectedClusterARN = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/payments"
+		if gotLookup.ResourceName != "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123" || gotLookup.ContainerName != "api" || gotLookup.ClusterARN != selectedClusterARN || gotLookup.Limit != 2 {
 			t.Fatalf("unexpected ECS task log lookup request: %+v", gotLookup)
 		}
-		if !result.Available || result.Source != SourceCloudWatch || result.ContainerName != "api" || result.ResourceDescription != "ECS task selected from live service inspection" || len(result.Entries) != 1 || result.Entries[0].Stream != "ecs/api/abc123" || result.Entries[0].ContainerName != "api" {
-			t.Fatalf("expected available ECS task logs with echoed selector, per-entry container metadata, and description, got %+v", result)
+		if !result.Available || result.Source != SourceCloudWatch || result.ContainerName != "api" || result.ClusterARN != selectedClusterARN || result.ResourceDescription != "ECS task selected from live service inspection" || len(result.Entries) != 1 || result.Entries[0].Stream != "ecs/api/abc123" || result.Entries[0].ContainerName != "api" {
+			t.Fatalf("expected available ECS task logs with echoed selectors, per-entry container metadata, and description, got %+v", result)
 		}
 	})
 

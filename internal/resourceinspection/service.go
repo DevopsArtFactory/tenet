@@ -578,6 +578,7 @@ type ECSRequest struct {
 type ECSTaskRequest struct {
 	DeploymentName  string
 	ResourceName    string
+	ClusterARN      string
 	Region          string
 	TargetAccountID string
 	ObserverRoleARN string
@@ -689,6 +690,7 @@ func (s Service) Inspect(ctx context.Context, req Request) (Result, error) {
 		detail, err := inspect(ctx, ECSTaskRequest{
 			DeploymentName:  req.DeploymentName,
 			ResourceName:    req.ResourceName,
+			ClusterARN:      strings.TrimSpace(req.ClusterARN),
 			Region:          req.Region,
 			TargetAccountID: req.TargetAccountID,
 			ObserverRoleARN: req.ObserverRoleARN,
@@ -815,7 +817,7 @@ func availableECSResult(req Request, detail ECSServiceInspection) Result {
 }
 
 func responseClusterARN(req Request) string {
-	if req.ResourceType != "ecsService" {
+	if req.ResourceType != "ecsService" && req.ResourceType != "ecsTask" {
 		return ""
 	}
 	return strings.TrimSpace(req.ClusterARN)
@@ -826,6 +828,7 @@ func availableECSTaskResult(req Request, detail ECSTaskInspection) Result {
 		DeploymentName:    req.DeploymentName,
 		ResourceType:      req.ResourceType,
 		ResourceName:      req.ResourceName,
+		ClusterARN:        responseClusterARN(req),
 		LookupContext:     lookupContext(req),
 		Available:         true,
 		Source:            SourceECSService,
@@ -1144,7 +1147,7 @@ func (s Service) inspectECSTaskFromAWS(ctx context.Context, req ECSTaskRequest) 
 	if err != nil {
 		return ECSTaskInspection{}, err
 	}
-	task, clusterARN, err := findECSTask(ctx, clients.ECS, req.ResourceName)
+	task, clusterARN, err := findECSTask(ctx, clients.ECS, req.ResourceName, strings.TrimSpace(req.ClusterARN))
 	if err != nil {
 		return ECSTaskInspection{}, err
 	}
@@ -1161,12 +1164,16 @@ func (s Service) inspectECSTaskFromAWS(ctx context.Context, req ECSTaskRequest) 
 	return ecsTaskInspectionFromTask(*task, clusterARN, definitions), nil
 }
 
-func findECSTask(ctx context.Context, client ecsTaskAPI, taskARN string) (*ecstypes.Task, string, error) {
+func findECSTask(ctx context.Context, client ecsTaskAPI, taskARN, selectedClusterARN string) (*ecstypes.Task, string, error) {
 	taskARN = strings.TrimSpace(taskARN)
 	if taskARN == "" {
 		return nil, "", nil
 	}
+	selectedClusterARN = strings.TrimSpace(selectedClusterARN)
 	clusters := candidateClustersFromTaskARN(taskARN)
+	if selectedClusterARN != "" {
+		clusters = []string{selectedClusterARN}
+	}
 	if len(clusters) == 0 {
 		pages := ecs.NewListClustersPaginator(client, &ecs.ListClustersInput{})
 		for pages.HasMorePages() {
