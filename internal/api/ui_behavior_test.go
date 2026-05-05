@@ -4772,13 +4772,35 @@ async function render(search, inspectionResult, hash = '') {
   return { document, window, fetchCalls, text: collectText(document.getElementById('accounts')).join(' | '), toolbarText: collectText(document.getElementById('toolbar')).join(' | '), toolbarButtons: collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON'), links: collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A') };
 }
 (async () => {
-  const taskResult = { available: true, source: 'ecs_task', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, ecsTask: { taskArn, taskId: 'abc123', clusterArn: 'arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', startedAt: '2026-05-03T04:00:00Z', taskDefinition: 'worker:42', containers: [{ name: 'worker', image: 'ghcr.io/example/worker:v2', lastStatus: 'RUNNING', healthStatus: 'HEALTHY', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] } };
-  const taskRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsTask&resourceId=' + encodeURIComponent(taskResourceId), taskResult);
-  if (!taskRun.fetchCalls.find((url) => url.includes('resourceType=ecsTask') && url.includes(encodeURIComponent(taskArn).replace(/%20/g, '+')))) throw new Error('expected ecsTask inspection fetch with task ARN resource name: ' + taskRun.fetchCalls.join(','));
+  const taskResult = { available: true, source: 'ecs_task', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, ecsTask: { taskArn, taskId: 'abc123', clusterArn, lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', startedAt: '2026-05-03T04:00:00Z', taskDefinition: 'worker:42', containers: [{ name: 'worker', image: 'ghcr.io/example/worker:v2', lastStatus: 'RUNNING', healthStatus: 'HEALTHY', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] } };
+  const scopedTaskSearch = '?page=resource&deployment=worker-prod&resourceType=ecsTask&resourceId=' + encodeURIComponent(taskResourceId) + '&containerName=worker&clusterArn=' + encodedClusterArn + '&resourceLogLimit=10';
+  const taskRun = await render(scopedTaskSearch, taskResult, '#resource-recent-logs');
+  const taskInspectionURL = '/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsTask&resourceName=' + encodeURIComponent(taskArn) + '&clusterArn=' + encodedClusterArn;
+  const taskLogsURL = '/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsTask&resourceName=' + encodeURIComponent(taskArn) + '&containerName=worker&clusterArn=' + encodedClusterArn + '&limit=10';
+  if (!taskRun.fetchCalls.includes(taskInspectionURL)) throw new Error('expected selected-cluster ecsTask inspection fetch URL, got ' + JSON.stringify(taskRun.fetchCalls));
+  if (!taskRun.fetchCalls.includes(taskLogsURL)) throw new Error('expected selected-cluster ecsTask recent-log fetch URL, got ' + JSON.stringify(taskRun.fetchCalls));
   if (!taskRun.text.includes('Live ECS task inspection')) throw new Error('expected ECS task inspection panel');
   if (!taskRun.text.includes('Task containers')) throw new Error('expected ECS task container section');
   if (!taskRun.text.includes('Container awslogs')) throw new Error('expected awslogs metadata');
   if (!taskRun.text.includes('/aws/ecs/worker / worker/abc123')) throw new Error('expected task awslogs group/stream');
+  if (!taskRun.text.includes('Selected cluster | ' + clusterArn)) throw new Error('expected selected ECS task cluster to render in resource scope evidence: ' + taskRun.text);
+  if (!taskRun.text.includes('Selected container | worker')) throw new Error('expected selected ECS task container to render in resource scope evidence: ' + taskRun.text);
+  const taskSectionLinks = collectNodes(taskRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#resource-'));
+  ['#resource-live-inspection', '#resource-recent-logs'].forEach((hashSuffix) => {
+    const link = taskSectionLinks.find((node) => node.href.endsWith(hashSuffix));
+    if (!link || !link.href.includes('clusterArn=' + encodedClusterArn) || !link.href.includes('containerName=worker')) throw new Error('expected selected ECS task scope to stay in section link for ' + hashSuffix + ', got ' + (link?.href || '<missing>'));
+  });
+  const clearTaskButton = taskRun.toolbarButtons.find((node) => node.textContent === 'Clear selected cluster');
+  if (!clearTaskButton || clearTaskButton.disabled) throw new Error('expected ECS task clear selected cluster action to be enabled: ' + taskRun.toolbarText);
+  clearTaskButton.dispatch('click');
+  await settle(); await settle(); await settle();
+  if (taskRun.window.location.search.includes('clusterArn=')) throw new Error('expected ECS task clear action to remove only selected cluster query, got ' + taskRun.window.location.search);
+  ['page=resource', 'deployment=worker-prod', 'resourceType=ecsTask', 'containerName=worker', 'resourceLogLimit=10'].forEach((fragment) => {
+    if (!taskRun.window.location.search.includes(fragment)) throw new Error('expected ECS task clear action to preserve ' + fragment + ', got ' + taskRun.window.location.search);
+  });
+  if (!decodeURIComponent(taskRun.window.location.search.replace(/\+/g, '%20')).includes('resourceId=' + taskResourceId)) throw new Error('expected ECS task clear action to preserve task resource id, got ' + taskRun.window.location.search);
+  if (taskRun.window.location.hash !== '#resource-recent-logs') throw new Error('expected ECS task clear action to preserve hash, got ' + taskRun.window.location.hash);
+  if (!taskRun.fetchCalls.includes('/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsTask&resourceName=' + encodeURIComponent(taskArn) + '&containerName=worker&limit=10')) throw new Error('expected cleared ECS task recent-log fetch to omit clusterArn, got ' + JSON.stringify(taskRun.fetchCalls));
 
   const serviceResult = { available: true, source: 'ecs_service', clusterArn, lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn, serviceName: 'worker-prod-service', status: 'ACTIVE', desiredCount: 1, runningCount: 1, pendingCount: 0, taskDefinition: 'worker:42', deployments: [], events: [], tasksScope: { effectiveLimit: 10, returnedTaskCount: 1, truncationStatus: 'not_truncated' }, tasks: [{ taskArn, taskId: 'abc123', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containers: [{ name: 'worker', lastStatus: 'RUNNING', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] }] } };
   const serviceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId) + '&clusterArn=' + encodedClusterArn, serviceResult);
@@ -4845,8 +4867,8 @@ async function render(search, inspectionResult, hash = '') {
   if (serviceRun.fetchCalls.length <= fetchesBeforeTaskLimit) throw new Error('expected task limit flow to issue additional inspection fetches');
   const liveLink = serviceRun.links.find((node) => node.textContent === 'Open task live inspection');
   const logsLink = serviceRun.links.find((node) => node.textContent === 'Open task recent logs');
-  if (!liveLink || liveLink.target !== '_self' || !liveLink.href.includes('resourceType=ecsTask') || !liveLink.href.endsWith('#resource-live-inspection')) throw new Error('expected task live-inspection handoff');
-  if (!logsLink || logsLink.target !== '_self' || !logsLink.href.includes('resourceType=ecsTask') || !logsLink.href.endsWith('#resource-recent-logs')) throw new Error('expected task recent-logs handoff');
+  if (!liveLink || liveLink.target !== '_self' || !liveLink.href.includes('resourceType=ecsTask') || !liveLink.href.includes('clusterArn=' + encodedClusterArn) || !liveLink.href.endsWith('#resource-live-inspection')) throw new Error('expected selected-cluster task live-inspection handoff, got ' + (liveLink?.href || '<missing>'));
+  if (!logsLink || logsLink.target !== '_self' || !logsLink.href.includes('resourceType=ecsTask') || !logsLink.href.includes('clusterArn=' + encodedClusterArn) || !logsLink.href.endsWith('#resource-recent-logs')) throw new Error('expected selected-cluster task recent-logs handoff, got ' + (logsLink?.href || '<missing>'));
 
   const emptyServiceResult = JSON.parse(JSON.stringify(serviceResult));
   emptyServiceResult.ecsService.tasks = [];
