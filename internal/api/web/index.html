@@ -3869,6 +3869,16 @@
             return reason ? 'Tenet returned an unavailable recent-log state. Use the lookup context above to continue provider troubleshooting.' : '';
         }
       };
+      const resourceLogsEmptyReasonText = (reason) => {
+        switch (reason) {
+          case 'no_recent_events':
+            return 'Tenet reached the recent-log provider, but no events were found in the selected bounded window.';
+          case 'no_formatted_entries':
+            return 'Tenet found provider records, but none could be formatted into operator-visible recent-log rows.';
+          default:
+            return reason ? 'Tenet returned an empty recent-log state. Use the lookup context above to continue provider troubleshooting.' : '';
+        }
+      };
       const lookupContextText = (value) => value == null || value === '' ? '—' : String(value);
       const lookupContextBoolText = (value) => typeof value === 'boolean' ? boolLabel(value) : '—';
       const resourceLogsLookupContextFields = (lookupContext) => [
@@ -4031,7 +4041,11 @@
         const entries = result.entries || [];
         if (!entries.length) {
           const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, [...backingResourceFields, ...scopeFields]);
-          renderResourceLogsState(section, 'No recent logs are available for this resource.', '', beforeNodes(metadata), [], actions);
+          const emptyReason = resourceLogsEmptyReasonText(result?.emptyReason);
+          const details = emptyReason
+            ? [createElement('div', 'detail-condition-meta', emptyReason)]
+            : [];
+          renderResourceLogsState(section, 'No recent logs are available for this resource.', '', beforeNodes(metadata), details, actions);
           return;
         }
 
