@@ -1835,6 +1835,7 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		"`unavailableReason=no_log_source`",
 		"capture the HTTP `Request-Id` response header next to the `lookupContext` object before escalating",
 		"the request ID anchors Tenet's structured API logs while the lookup context explains which region, control account, target account, and observer-role path the provider attempted",
+		"resource-logs?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README resource log contract to include %q", fragment)
@@ -1862,6 +1863,9 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		"This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet.",
 		"Operators should capture the HTTP `Request-Id` response header together with the `lookupContext` object before escalating",
 		"that pair gives reviewers the exact Tenet request log correlation key plus the attempted region/account/observer-role path",
+		"Example selected-cluster service request",
+		"resource-logs?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5",
+		"embedded resource-page `clusterArn` URL state and its post-UI smoke/docs guards are tracked separately in #834 and #838",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
 			t.Fatalf("expected resource recent logs doc to include %q", fragment)
@@ -1926,6 +1930,7 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"`launchTemplate.instanceType`",
 		"`listenerRule`",
 		"`ruleArn`, `priority`, `isDefault`, `conditions`, `actions`",
+		"resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README resource inspection contract to include %q", fragment)
@@ -1945,6 +1950,9 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"`launchTemplate.imageId`",
 		"`launchTemplate.instanceType`",
 		"`listenerRule` metadata",
+		"resource-logs?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5",
+		"resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5",
+		"embedded resource-page selected-cluster URL state remains a separate #834/#838 follow-up",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
 			t.Fatalf("expected overview dashboard doc to include %q", fragment)
@@ -1963,6 +1971,8 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"`launchTemplate.imageId`",
 		"`launchTemplate.instanceType`",
 		"`listenerRule` details",
+		"resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5",
+		"accepted selectors echo as response-level `clusterArn`",
 	} {
 		if !strings.Contains(uiDoc, fragment) {
 			t.Fatalf("expected overview UI doc to include %q", fragment)
