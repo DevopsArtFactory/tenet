@@ -6253,6 +6253,36 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (selectedInspectionFetchCount < 2) throw new Error('expected selected ASG inspection refresh to reuse instanceId, got ' + JSON.stringify(selectedASGRun.fetchCalls));
   if (selectedASGRun.window.location.search !== '?page=resource&deployment=payments-api-prod&resourceType=candidateAutoScalingGroup&resourceId=' + encodeURIComponent(asgResourceID) + '&instanceId=i-abc123') throw new Error('expected selected ASG refreshes to preserve bookmarkable instance query, got ' + selectedASGRun.window.location.search);
 
+  const clearSelectedInstanceLogsURL = asgLogsURL + '&instanceId=i-abc123&limit=5';
+  const clearSelectedInstanceInspectionURL = asgInspectionURL.replace('&limit=10', '&instanceId=i-abc123&limit=25');
+  const clearUnscopedASGLogsURL = asgLogsURL + '&limit=5';
+  const clearUnscopedASGInspectionURL = asgInspectionURL.replace('&limit=10', '&limit=25');
+  const clearSelectedASGRun = await renderWithFetch('?page=resource&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&resourceType=candidateAutoScalingGroup&resourceId=' + encodeURIComponent(asgResourceID) + '&instanceId=i-abc123&resourceLogLimit=5&resourceInspectionLimit=25', (url) => {
+    if (url === asgDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(asgDetailBody) });
+    if (url === clearSelectedInstanceLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'ec2_console', instanceId: 'i-abc123', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, entries: [{ timestamp: '2026-04-16T07:11:30Z', instanceId: 'i-abc123', message: 'selected candidate bootstrap output' }] }) });
+    if (url === clearSelectedInstanceInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'auto_scaling_group', instanceId: 'i-abc123', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, autoScalingGroup: { autoScalingGroupName: 'payments-api-prod-candidate', instancesScope: { requestedLimit: 25, effectiveLimit: 25, returnedInstanceCount: 1, truncationStatus: 'not_truncated' }, instances: [{ instanceId: 'i-abc123', availabilityZone: 'ap-northeast-2a', lifecycleState: 'InService', healthStatus: 'Healthy' }] } }) });
+    if (url === clearUnscopedASGLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'ec2_console', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, entries: [{ timestamp: '2026-04-16T07:12:30Z', instanceId: 'i-def456', message: 'unscoped candidate bootstrap output' }] }) });
+    if (url === clearUnscopedASGInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'auto_scaling_group', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, autoScalingGroup: { autoScalingGroupName: 'payments-api-prod-candidate', instancesScope: { requestedLimit: 25, effectiveLimit: 25, returnedInstanceCount: 1, truncationStatus: 'not_truncated' }, instances: [{ instanceId: 'i-def456', availabilityZone: 'ap-northeast-2b', lifecycleState: 'InService', healthStatus: 'Healthy' }] } }) });
+    throw new Error('unexpected clear selected asg fetch url: ' + url);
+  }, 3, '#resource-recent-logs');
+  const clearSelectedASGToolbarButtons = collectNodes(clearSelectedASGRun.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+  const clearSelectedInstanceButton = clearSelectedASGToolbarButtons.find((node) => node.textContent === 'Clear selected instance');
+  if (!clearSelectedInstanceButton || clearSelectedInstanceButton.disabled) throw new Error('expected selected ASG clear selected instance action to be enabled');
+  clearSelectedASGRun.window.location.hash = '#resource-recent-logs';
+  clearSelectedInstanceButton.dispatch('click');
+  await settle(); await settle(); await settle();
+  if (clearSelectedASGRun.window.location.search.includes('instanceId=')) throw new Error('expected clear selected instance action to remove only instanceId, got ' + clearSelectedASGRun.window.location.search);
+  ['page=resource', 'q=payments', 'sync=OutOfSync', 'account=210987654321', 'deployment=payments-api-prod', 'resourceType=candidateAutoScalingGroup', 'resourceLogLimit=5', 'resourceInspectionLimit=25'].forEach((fragment) => {
+    if (!clearSelectedASGRun.window.location.search.includes(fragment)) throw new Error('expected clear selected instance action to preserve ' + fragment + ', got ' + clearSelectedASGRun.window.location.search);
+  });
+  if (clearSelectedASGRun.window.location.hash !== '#resource-recent-logs') throw new Error('expected clear selected instance action to preserve resource section hash, got ' + clearSelectedASGRun.window.location.hash);
+  if (!clearSelectedASGRun.fetchCalls.includes(clearUnscopedASGLogsURL)) throw new Error('expected clear selected instance to refresh recent logs without instanceId, got ' + JSON.stringify(clearSelectedASGRun.fetchCalls));
+  if (!clearSelectedASGRun.fetchCalls.includes(clearUnscopedASGInspectionURL)) throw new Error('expected clear selected instance to refresh live inspection without instanceId, got ' + JSON.stringify(clearSelectedASGRun.fetchCalls));
+  const clearedASGText = collectText(clearSelectedASGRun.document.getElementById('accounts')).join(' | ');
+  if (clearedASGText.includes('Selected instance | i-abc123') || clearedASGText.includes('Selected instance · i-abc123')) throw new Error('expected selected ASG chrome to disappear after clearing, got ' + clearedASGText);
+  if (!clearedASGText.includes('Log instance · i-def456')) throw new Error('expected unscoped ASG logs to repaint after clearing, got ' + clearedASGText);
+  if (collectText(clearSelectedASGRun.document.getElementById('toolbar')).join(' | ').includes('Clear selected instance')) throw new Error('expected clear selected instance action to disappear after the selected instance is cleared');
+
   const genericASGLogsURL = '/v1/overview/deployments/payments-api-prod/resource-logs?resourceType=autoScalingGroup&resourceName=payments-api-prod-generic';
   const genericASGInspectionURL = '/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=autoScalingGroup&resourceName=payments-api-prod-generic';
   const genericASGRun = await renderWithFetch('?page=resource&deployment=payments-api-prod&resourceType=autoScalingGroup&resourceId=' + encodeURIComponent(genericASGResourceID), (url) => {
