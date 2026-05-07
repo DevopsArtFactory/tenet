@@ -3090,7 +3090,10 @@
           pushApplicationSectionLink(groupSection.id, group.title);
         });
         if (!resourceGroups.length) {
-          rows.append(createElement('div', 'detail-state', 'No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.'));
+          const emptyState = createElement('div', 'detail-state', 'No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.');
+          const emptyStateActions = createElement('div', 'row-links row-links-shell');
+          emptyStateActions.append(createNavLink(buildPageSectionURL('application', 'application-runtime-events', { deployment: deploymentName }), 'Jump to runtime events', '_self'));
+          rows.append(emptyState, emptyStateActions);
         }
         const eventsSection = createDetailSection('Controller runtime events');
         eventsSection.id = 'application-runtime-events';

@@ -466,6 +466,7 @@ func TestEmbeddedUIIncludesQuickLinksToDeploymentReadModels(t *testing.T) {
 		"const resourceGroups = nonEmptyResourceSections(detail);",
 		"if (!resourceGroups.length) {",
 		"'No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.'",
+		"emptyStateActions.append(createNavLink(buildPageSectionURL('application', 'application-runtime-events', { deployment: deploymentName }), 'Jump to runtime events', '_self'));",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include %q", fragment)
@@ -2901,6 +2902,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert 'No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.' in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page empty-state copy")
+	}
+	if !strings.Contains(text, "assert 'Jump to runtime events' in application_ui, application_ui") || !strings.Contains(text, "assert \"emptyStateActions.append(createNavLink(buildPageSectionURL('application', 'application-runtime-events', { deployment: deploymentName }), 'Jump to runtime events', '_self'));\" in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert application page direct runtime-events handoff contract")
 	}
 	if !strings.Contains(text, "assert 'Quick navigation' in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page quick navigation copy")
