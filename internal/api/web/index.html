@@ -2241,11 +2241,11 @@
         const nextURL = query ? `${window.location.pathname}?${query}${hash}` : `${window.location.pathname}${hash}`;
         history.replaceState({}, '', nextURL);
       };
-      const clearAuditPageFilters = () => {
+      const clearAuditPageFilters = ({ preserveDeployment = false } = {}) => {
         currentPageState = {
           ...currentPageState,
           page: 'audit',
-          deployment: '',
+          deployment: preserveDeployment ? currentPageState.deployment : '',
           auditAction: '',
           auditLimit: 0,
         };
@@ -5885,7 +5885,7 @@
         if (!filters.length) {
           return `No audit entries are visible with the current limit cap (${auditLimitLabel()}). Increase the limit or clear audit controls to return to the full audit timeline.`;
         }
-        return `No audit entries match the current filters (${filters.join(' · ')}${hasLimit ? `; ${auditLimitLabel()}` : ''}). Clear audit controls to return to the full audit timeline.`;
+        return `No audit entries match the current filters (${filters.join(' · ')}${hasLimit ? `; ${auditLimitLabel()}` : ''}). ${currentPageState.deployment && (currentPageState.auditAction || hasLimit) ? 'Clear action/limit to stay scoped to this deployment, or view the global audit log to remove the deployment scope.' : 'Clear audit controls to return to the full audit timeline.'}`;
       };
       const createAuditDeploymentContextCallout = () => {
         const deploymentName = auditDeploymentName();
@@ -6016,7 +6016,16 @@
           createElement('div', 'toolbar-active', `${activeFilters.length ? `Audit filters: ${activeFilters.join(' · ')}` : 'Audit filters: none'} · ${auditLimitLabel()}`),
         );
         if (activeControls.length) {
-          const clearFiltersButton = createElement('button', 'toolbar-button', activeFilters.length ? 'Clear audit filters' : 'Clear audit controls');
+          const auditHasNonDeploymentControls = Boolean(currentPageState.auditAction || currentPageState.auditLimit > 0);
+          if (currentPageState.deployment && auditHasNonDeploymentControls) {
+            const clearScopedControlsButton = createElement('button', 'toolbar-button', 'Clear action/limit');
+            clearScopedControlsButton.type = 'button';
+            clearScopedControlsButton.addEventListener('click', () => {
+              clearAuditPageFilters({ preserveDeployment: true });
+            });
+            toolbarActions.append(clearScopedControlsButton);
+          }
+          const clearFiltersButton = createElement('button', 'toolbar-button', currentPageState.deployment ? 'View global audit log' : (activeFilters.length ? 'Clear audit filters' : 'Clear audit controls'));
           clearFiltersButton.type = 'button';
           clearFiltersButton.addEventListener('click', () => {
             clearAuditPageFilters();

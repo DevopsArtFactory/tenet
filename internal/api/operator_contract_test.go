@@ -846,7 +846,8 @@ func TestAuditLogOperatorContract(t *testing.T) {
 		"`/?page=audit` route now renders that audit timeline directly",
 		"`Audit filters: action Apply requested (apply.requested) · Limit cap: latest 2`",
 		"accepts optional `&action={action}` / `&limit={n}`",
-		"`Clear audit filters` / `Clear audit controls` recovery action",
+		"`Clear action/limit`",
+		"`View global audit log`",
 	} {
 		if !strings.Contains(overviewUIDoc, fragment) {
 			t.Fatalf("expected overview UI doc to include %q", fragment)
