@@ -5612,6 +5612,14 @@
         });
         return summary;
       };
+      const withDeploymentEventsFetchedAt = (result) => {
+        if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
+        return { ...result, tenetFetchedAt: new Date() };
+      };
+      const createDeploymentEventsFreshnessMeta = (result) => {
+        const fetchedAt = resourcePanelFetchedAtText(result);
+        return fetchedAt ? createElement('div', 'detail-condition-meta deployment-events-freshness', `Last refreshed · ${fetchedAt}`) : null;
+      };
       const shortRevision = (value) => {
         const text = String(value || '').trim();
         return text ? text.slice(0, 12) : '';
@@ -5691,11 +5699,12 @@
         const selectedLimit = normalizeDeploymentEventsLimit(limit);
         const events = sortTimelineEvents(result?.events || []);
         const scopeSummary = createDeploymentEventsResultScopeSummary(result?.resultScope);
+        const freshnessMeta = createDeploymentEventsFreshnessMeta(result);
         if (!events.length) {
           const heading = createDetailSectionHeader('Controller runtime events', createDeploymentEventsActions(section, deploymentName, false, result));
           const intro = createDeploymentEventsIntro(selectedLimit);
           const stateNode = createElement('div', 'detail-state', `No controller runtime events were returned in the latest ${selectedLimit}-event window. Increase Event window or use Refresh runtime events before treating controller history as absent.`);
-          section.replaceChildren(heading, intro, ...(scopeSummary ? [scopeSummary] : []), stateNode);
+          section.replaceChildren(heading, intro, ...(scopeSummary ? [scopeSummary] : []), ...(freshnessMeta ? [freshnessMeta] : []), stateNode);
           return;
         }
 
@@ -5767,7 +5776,7 @@
           eventList.append(item);
         });
 
-        section.replaceChildren(heading, intro, ...(scopeSummary ? [scopeSummary] : []), ordering, driftSummary, eventList);
+        section.replaceChildren(heading, intro, ...(scopeSummary ? [scopeSummary] : []), ...(freshnessMeta ? [freshnessMeta] : []), ordering, driftSummary, eventList);
       };
       const renderDeploymentEventsSection = (section, deploymentName, options = {}) => {
         const force = Boolean(options?.force);
@@ -5808,7 +5817,8 @@
 
         renderDeploymentEventsState(section, deploymentName, 'Loading controller runtime events…', '', '', true, limit);
         const promise = fetchDeploymentEvents(deploymentName, limit)
-          .then((result) => {
+          .then((rawResult) => {
+            const result = withDeploymentEventsFetchedAt(rawResult);
             const current = deploymentEventsStateByDeployment.get(cacheKey);
             deploymentEventsStateByDeployment.set(cacheKey, { status: 'ready', result });
             (current?.sections || []).forEach((container) => renderDeploymentEventsPayload(container, deploymentName, result, limit));

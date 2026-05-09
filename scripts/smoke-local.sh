@@ -1550,6 +1550,9 @@ assert 'Refresh runtime events' in ui, ui
 assert 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events?limit=${normalizeDeploymentEventsLimit(limit)}. Tenet shows the selected bounded window, newest first; use Event window to change how much controller history this panel reads without leaving the application drill-down. This is not audit/auth history.' in ui, ui
 assert 'Loading controller runtime events…' in ui, ui
 assert 'No controller runtime events were returned in the latest ${selectedLimit}-event window. Increase Event window or use Refresh runtime events before treating controller history as absent.' in ui, ui
+assert "const createDeploymentEventsFreshnessMeta = (result) => {" in ui, ui
+assert "deployment-events-freshness" in ui, ui
+assert 'Last refreshed · ${fetchedAt}' in ui, ui
 assert 'Controller runtime events are currently unavailable.' in ui, ui
 assert 'Managed drift summary · ${counts.total} total · ${counts.high} high · ${counts.medium} medium · ${counts.low} low' in ui, ui
 assert "const deploymentEventsResultScopeFields = (scope) => {" in ui, ui
