@@ -541,11 +541,11 @@ func withRuntimeEventIDs(deploymentName string, history []domain.StatusHistoryEn
 	}
 	seen := map[string]int{}
 	for i := range events {
+		base := runtimeEventIdentityBase(deploymentName, events[i])
+		seen[base]++
 		if events[i].EventID != "" {
 			continue
 		}
-		base := runtimeEventIdentityBase(deploymentName, events[i])
-		seen[base]++
 		events[i].EventID = deriveRuntimeEventID(base, seen[base])
 	}
 	return events

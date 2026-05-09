@@ -1073,6 +1073,44 @@ func TestBuildDeploymentOverviewEvents(t *testing.T) {
 	}
 }
 
+func TestRuntimeEventIDsKeepDuplicateOrdinalsWhenEarlierIDAlreadyExists(t *testing.T) {
+	history := []domain.StatusHistoryEntry{
+		{
+			Timestamp:          "2026-04-16T06:15:00Z",
+			Source:             "controller",
+			Sync:               domain.Sync{State: domain.SyncStateReconciling},
+			Health:             domain.Health{Overall: domain.HealthProgressing},
+			DesiredGeneration:  7,
+			ObservedGeneration: 6,
+			RolloutPhase:       domain.RolloutPhaseAccepted,
+			TargetType:         "ecs",
+			ExecutionMode:      "ecsCodeDeploy",
+		},
+		{
+			Timestamp:          "2026-04-16T06:15:00Z",
+			Source:             "controller",
+			Sync:               domain.Sync{State: domain.SyncStateReconciling},
+			Health:             domain.Health{Overall: domain.HealthProgressing},
+			DesiredGeneration:  7,
+			ObservedGeneration: 6,
+			RolloutPhase:       domain.RolloutPhaseAccepted,
+			TargetType:         "ecs",
+			ExecutionMode:      "ecsCodeDeploy",
+		},
+	}
+
+	initial := withRuntimeEventIDs("payments-api-prod", history)
+	if len(initial) != 2 || initial[0].EventID == "" || initial[1].EventID == "" || initial[0].EventID == initial[1].EventID {
+		t.Fatalf("expected unique derived IDs for duplicate events, got %+v", initial)
+	}
+
+	history[0].EventID = initial[0].EventID
+	rebuilt := withRuntimeEventIDs("payments-api-prod", history)
+	if rebuilt[0].EventID != initial[0].EventID || rebuilt[1].EventID != initial[1].EventID {
+		t.Fatalf("expected later duplicate ID to keep its ordinal when an earlier matching event already has an ID, before %+v after %+v", initial, rebuilt)
+	}
+}
+
 func TestBuildDeploymentOverviewEventsReturnsEmptyListWhenHistoryMissing(t *testing.T) {
 	catalog := manifest.Catalog{
 		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
