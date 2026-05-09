@@ -5855,6 +5855,11 @@
           isLoading,
           () => loadAuditLogsPage({ force: true }).catch(() => {}),
         ),
+        createNavLink(buildAuditLogsRoute({
+          deploymentName: currentPageState.deployment,
+          action: currentPageState.auditAction,
+          limit: currentPageState.auditLimit,
+        }), 'Audit JSON'),
       ];
       const auditLogsRefreshStateText = (auditState) => {
         if (auditState?.status === 'loading') {
