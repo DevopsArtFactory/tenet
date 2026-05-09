@@ -999,6 +999,8 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"createNavLink(buildPageURL('plan', {",
 		"const createAuditLogsActions = (isLoading = false) => [",
 		"'Refresh audit log'",
+		"createNavLink(buildAuditLogsRoute({",
+		"'Audit JSON'",
 		"const auditLogsRefreshStateText = (auditState) => {",
 		"const loadAuditLogsPage = (options = {}) => {",
 		"deploymentName: currentPageState.deployment,",

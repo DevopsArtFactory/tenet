@@ -50,6 +50,7 @@ It stays intentionally narrow:
 - make a selected deployment obvious in both the audit chrome and the audit body when `deployment={deploymentName}` is present, with deployment-context callout `_self` links to application detail and plan/apply so the next action is visible even before rows exist
 - swap to filter-aware empty-state copy when selected deployment/action filters or a limit cap match no audit entries, while keeping the generic unfiltered empty state unchanged; deployment-scoped pages point operators at `Clear action/limit` to stay in context or `View global audit log` to remove the deployment scope, while unscoped action/limit states keep the `Clear audit filters` / `Clear audit controls` recovery path
 - keep actor identity explicit as unavailable or unknown instead of inventing names
+- expose an `Audit JSON` handoff from the audit timeline header that mirrors the current deployment/action/limit scope, so operators can open the raw `GET /v1/audit-logs...` response and inspect `resultScope` metadata without reconstructing query parameters manually
 - provide `_self` links back into the existing `application` drill-down and `plan` workspace when deployment / plan / apply identifiers exist
 
 This page is for immutable operator activity. It is separate from the controller-derived runtime events rendered on the application detail page.

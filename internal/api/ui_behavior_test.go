@@ -10893,6 +10893,9 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!limitSelect || limitSelect.value !== '2') throw new Error('expected audit limit select to reflect bookmarkable URL state');
   const refreshButton = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Refresh audit log');
   if (!refreshButton || refreshButton.disabled) throw new Error('expected enabled audit refresh button after initial render');
+  const auditJSONLink = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A')
+    .find((node) => node.href === '/v1/audit-logs?deployment=payments-api-prod&limit=2' && node.textContent === 'Audit JSON');
+  if (!auditJSONLink || auditJSONLink.target !== '_blank' || auditJSONLink.rel !== 'noreferrer noopener') throw new Error('expected scoped audit JSON handoff link');
   const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
   const backLink = toolbarLinks.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Back to application' && node.target === '_self');
   if (!backLink || backLink.rel) throw new Error('expected deployment-scoped audit toolbar back link to return to application while preserving filters');
