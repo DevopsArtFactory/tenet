@@ -1827,6 +1827,7 @@ assert "createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { 
 assert 'Open live inspection' in application_ui, application_ui
 assert 'Open recent logs' in application_ui, application_ui
 assert 'Application resources' in application_ui, application_ui
+assert 'Grouped linked resources for the selected application. Open drift, plan/apply, or audit log from here before the final resource page.' in application_ui, application_ui
 assert 'No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.' in application_ui, application_ui
 assert 'Jump to runtime events' in application_ui, application_ui
 assert "emptyStateActions.append(createNavLink(buildPageSectionURL('application', 'application-runtime-events', { deployment: deploymentName }), 'Jump to runtime events', '_self'));" in application_ui, application_ui
