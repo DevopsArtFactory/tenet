@@ -51,6 +51,7 @@ It stays intentionally narrow:
 - swap to filter-aware empty-state copy when selected deployment/action filters or a limit cap match no audit entries, while keeping the generic unfiltered empty state unchanged; deployment-scoped pages point operators at `Clear action/limit` to stay in context or `View global audit log` to remove the deployment scope, while unscoped action/limit states keep the `Clear audit filters` / `Clear audit controls` recovery path
 - keep actor identity explicit as unavailable or unknown instead of inventing names
 - expose an `Audit JSON` handoff from the audit timeline header that mirrors the current deployment/action/limit scope, so operators can open the raw `GET /v1/audit-logs...` response and inspect `resultScope` metadata without reconstructing query parameters manually
+- show a `Last refreshed` cue beside the rendered timeline summary after successful audit reads so manual refreshes have an operator-visible freshness marker without changing the `/v1/audit-logs` payload contract
 - provide `_self` links back into the existing `application` drill-down and `plan` workspace when deployment / plan / apply identifiers exist
 
 This page is for immutable operator activity. It is separate from the controller-derived runtime events rendered on the application detail page.

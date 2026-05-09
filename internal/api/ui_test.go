@@ -1004,6 +1004,10 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"createNavLink(buildAuditLogsRoute({",
 		"'Audit JSON'",
 		"const auditLogsRefreshStateText = (auditState) => {",
+		"const auditLogsFetchedAtText = (result) => {",
+		"const withAuditLogsFetchedAt = (result) => {",
+		"const createAuditLogsFreshnessMeta = (result) => {",
+		"Last refreshed · ${fetchedAt}",
 		"const loadAuditLogsPage = (options = {}) => {",
 		"deploymentName: currentPageState.deployment,",
 		"action: currentPageState.auditAction,",
@@ -3085,6 +3089,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Failed to refresh audit log:' in audit_ui, audit_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains audit refresh error copy")
 	}
+	if !strings.Contains(text, "assert 'audit-freshness' in audit_ui, audit_ui") || !strings.Contains(text, "assert 'Last refreshed · ${fetchedAt}' in audit_ui, audit_ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains audit freshness copy")
+	}
 	for _, fragment := range []string{
 		"json_string_field_from_path() {",
 		"response_path=$(write_payload wait-for-apply-status.json \"$response\")",
@@ -3216,6 +3223,10 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"assert 'Refresh audit log' in audit_ui, audit_ui",
 		"assert 'Refreshing audit log from GET /v1/audit-logs…' in audit_ui, audit_ui",
 		"assert 'Failed to refresh audit log:' in audit_ui, audit_ui",
+		"assert 'audit-freshness' in audit_ui, audit_ui",
+		"assert 'const auditLogsFetchedAtText = (result) => {' in audit_ui, audit_ui",
+		"assert 'const withAuditLogsFetchedAt = (result) => {' in audit_ui, audit_ui",
+		"assert 'Last refreshed · ${fetchedAt}' in audit_ui, audit_ui",
 		"assert \"const createAuditLogsActions = (isLoading = false) => [\" in audit_ui, audit_ui",
 		"assert \"const auditLogsRefreshStateText = (auditState) => {\" in audit_ui, audit_ui",
 		"assert \"const fetchAuditLogs = ({ deploymentName = '', action = '', limit = 0 } = {}) => {\" in audit_ui, audit_ui",
