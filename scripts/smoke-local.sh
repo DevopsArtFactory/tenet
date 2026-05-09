@@ -1810,7 +1810,9 @@ assert "const resourceGroups = nonEmptyResourceSections(detail);" in application
 assert 'Current application status' in application_ui, application_ui
 assert 'Application rollout context:' in application_ui, application_ui
 assert "['Runtime events', applicationRuntimeEventSummary(detail)]," in application_ui, application_ui
-assert "page.append(createApplicationStatusSummary(detail, resourceGroups));" in application_ui, application_ui
+assert "const applicationStatusSectionID = 'application-current-status';" in application_ui, application_ui
+assert "applicationStatusSection.id = applicationStatusSectionID;" in application_ui, application_ui
+assert "pushApplicationSectionLink(applicationStatusSectionID, 'Current application status');" in application_ui, application_ui
 assert "createNavLink(buildPageURL('resource', { deployment: detail.name, resourceType: resource.type, resourceId: resource.id }), 'Open resource', '_self')" in application_ui, application_ui
 assert "const resourceSupportsLiveInspection = (resource) => {" in application_ui, application_ui
 assert "const resourceSupportsRecentLogs = (resource) => {" in application_ui, application_ui
