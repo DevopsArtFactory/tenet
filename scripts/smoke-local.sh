@@ -1942,6 +1942,9 @@ assert "const syncAuditQueryParams = (params, pageState) => {" in audit_ui, audi
 assert "const clearAuditPageFilters = () => {" in audit_ui, audit_ui
 assert "createElement('button', 'toolbar-button', activeFilters.length ? 'Clear audit filters' : 'Clear audit controls')" in audit_ui, audit_ui
 assert "createSelect('Action', currentPageState.auditAction, auditActionOptions, (event) => {" in audit_ui, audit_ui
+assert "const syncAuditPageState = ({ clearAuditHash = false } = {}) => {" in audit_ui, audit_ui
+assert "const hash = clearAuditHash && currentHash.startsWith('#audit-') ? '' : currentHash;" in audit_ui, audit_ui
+assert "syncAuditPageState({ clearAuditHash: true });" in audit_ui, audit_ui
 assert "createSelect('Limit', String(currentPageState.auditLimit || ''), auditLimitSelectOptions(currentPageState.auditLimit), (event) => {" in audit_ui, audit_ui
 assert "const deploymentName = auditDeploymentName();" in audit_ui, audit_ui
 assert "? createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application', '_self')" in audit_ui, audit_ui

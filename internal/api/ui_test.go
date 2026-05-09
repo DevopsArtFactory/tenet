@@ -899,6 +899,9 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"'Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…'",
 		"Current resource detail remains visible below.",
 		"Failed to refresh resource detail:",
+		"const syncAuditPageState = ({ clearAuditHash = false } = {}) => {",
+		"const hash = clearAuditHash && currentHash.startsWith('#audit-') ? '' : currentHash;",
+		"syncAuditPageState({ clearAuditHash: true });",
 		"const buildAuditLogsRoute = ({ deploymentName = '', action = '', limit = 0 } = {}) => {",
 		"const params = new URLSearchParams();",
 		"if (deploymentName) params.set('deployment', deploymentName);",
@@ -3174,6 +3177,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"assert \"const normalizeAuditLimit = (value) => {\" in audit_ui, audit_ui",
 		"assert \"const auditLimitSelectOptions = (limit) => {\" in audit_ui, audit_ui",
 		"assert \"const syncAuditQueryParams = (params, pageState) => {\" in audit_ui, audit_ui",
+		"assert \"const syncAuditPageState = ({ clearAuditHash = false } = {}) => {\" in audit_ui, audit_ui",
+		"assert \"const hash = clearAuditHash && currentHash.startsWith('#audit-') ? '' : currentHash;\" in audit_ui, audit_ui",
+		"assert \"syncAuditPageState({ clearAuditHash: true });\" in audit_ui, audit_ui",
 		"assert \"createSelect('Limit', String(currentPageState.auditLimit || ''), auditLimitSelectOptions(currentPageState.auditLimit), (event) => {\" in audit_ui, audit_ui",
 		"assert 'Open drift view' in audit_ui, audit_ui",
 		"assert \"const defaultDeploymentEventsLimit = 10;\" in ui, ui",
@@ -4079,15 +4085,15 @@ func TestOverviewDocsDescribeAuditFilterReset(t *testing.T) {
 	files := map[string][]string{
 		"../../README.md": {
 			"`Clear audit filters`",
-			"operators can recover to the unfiltered `/?page=audit` slice without dropping bookmarkable `q` / `sync` / `account` state",
+			"removing stale `#audit-*` section anchors",
 		},
 		"../../docs/features/overview-dashboard.md": {
 			"`Clear audit filters`",
-			"resets those audit filters back to the default `/?page=audit` slice",
+			"removes stale `#audit-*` section anchors from deployment-scoped audit views",
 		},
 		"../../docs/architecture/tenet-v1-overview-ui.md": {
 			"`Clear audit filters` / `Clear audit controls` recovery action",
-			"without dropping bookmarkable applications-shell query state such as `q`, `sync`, or `account`",
+			"removes stale `#audit-*` section anchors during that reset",
 		},
 	}
 

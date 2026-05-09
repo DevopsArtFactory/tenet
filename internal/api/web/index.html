@@ -2206,7 +2206,7 @@
           params.delete('limit');
         }
       };
-      const syncAuditPageState = () => {
+      const syncAuditPageState = ({ clearAuditHash = false } = {}) => {
         const params = new URLSearchParams(window.location.search);
         params.set('page', 'audit');
         if (currentViewState.query) {
@@ -2236,7 +2236,8 @@
         params.delete('resourceType');
         params.delete('resourceId');
         const query = params.toString();
-        const hash = window.location.hash || '';
+        const currentHash = window.location.hash || '';
+        const hash = clearAuditHash && currentHash.startsWith('#audit-') ? '' : currentHash;
         const nextURL = query ? `${window.location.pathname}?${query}${hash}` : `${window.location.pathname}${hash}`;
         history.replaceState({}, '', nextURL);
       };
@@ -2248,7 +2249,7 @@
           auditAction: '',
           auditLimit: 0,
         };
-        syncAuditPageState();
+        syncAuditPageState({ clearAuditHash: true });
         loadAuditLogsPage().catch(() => {});
       };
       const normalizeViewState = (applications, state) => {
