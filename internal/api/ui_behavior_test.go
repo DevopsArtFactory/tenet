@@ -10835,6 +10835,9 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!accountsText.includes('2 entries')) throw new Error('expected audit entry count copy');
   if (!accountsText.includes('deployment payments-api-prod')) throw new Error('expected audit deployment copy');
   if (!accountsText.includes('Limit cap: latest 2')) throw new Error('expected audit limit cap copy');
+  if (!accountsText.includes('Showing the latest 2-entry capped audit window. Older matching audit entries may be hidden; increase Limit or clear audit controls before concluding no earlier activity exists.')) throw new Error('expected capped audit-window hint when visible entries reach the selected limit');
+  const limitCapHints = collectNodes(document.getElementById('accounts'), (node) => node.className === 'detail-condition-meta audit-limit-cap-hint');
+  if (limitCapHints.length !== 1) throw new Error('expected one safe DOM audit limit-cap hint, got ' + limitCapHints.length);
   if (!accountsText.includes('Actor detail')) throw new Error('expected explicit actor label');
   if (!accountsText.includes('Recorded')) throw new Error('expected recorded actor state');
   if (!accountsText.includes('Jane Operator')) throw new Error('expected recorded actor details');
@@ -11182,6 +11185,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!clearFiltersButton || clearFiltersButton.disabled) throw new Error('expected enabled clear audit filters recovery action while filters are active');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   if (!accountsText.includes('1 entry · newest record first · deployment payments-api-prod · action Apply requested (apply.requested) · Limit cap: latest 2')) throw new Error('expected active deployment, action, and limit filter copy in audit timeline');
+  if (accountsText.includes('capped audit window')) throw new Error('did not expect capped-window hint when visible entries are below the selected limit');
   const auditQuickNavLink = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A').find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&action=apply.requested&limit=2' && node.textContent === 'Audit log');
   const auditQuickNavChip = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip').find((node) => node.textContent === 'Audit log');
   if (auditQuickNavLink) throw new Error('expected audit quick navigation to render active workspace as a chip while preserving URL state');

@@ -1717,6 +1717,8 @@ for fragment in (
     "Current audit read: ${buildEmbeddedPageReadRoute(currentPageState)}",
     "Source record · ${entry.source.recordRoute}",
     "Source detail · ${entry.source.sourceRoute}",
+    "Showing the latest ${limit}-entry capped audit window. Older matching audit entries may be hidden; increase Limit or clear audit controls before concluding no earlier activity exists.",
+    "audit-limit-cap-hint",
     "createNavLink(entry.source.recordRoute, 'Open source record')",
     "createNavLink(entry.source.sourceRoute, 'Open source detail')",
     "Inspect audit sources",
