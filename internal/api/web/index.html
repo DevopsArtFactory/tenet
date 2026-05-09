@@ -3067,6 +3067,7 @@
         setEmbeddedBrowserTitle(deploymentName, 'Application detail');
         const eventsDeploymentName = deploymentName;
         const resourceGroups = nonEmptyResourceSections(detail);
+        const applicationStatusSectionID = 'application-current-status';
         const applicationSectionIDs = {
           'Workloads': 'application-workloads',
           'Traffic routing': 'application-traffic-routing',
@@ -3111,7 +3112,10 @@
           createElement('h2', 'account-name', 'Application resources'),
           createElement('div', 'account-meta', 'Grouped linked resources for the selected application. Open drift or plan/apply from here before the final resource page.'),
         );
-        page.append(createApplicationStatusSummary(detail, resourceGroups));
+        const applicationStatusSection = createApplicationStatusSummary(detail, resourceGroups);
+        applicationStatusSection.id = applicationStatusSectionID;
+        page.append(applicationStatusSection);
+        pushApplicationSectionLink(applicationStatusSectionID, 'Current application status');
         const workspaceLinks = createElement('div', 'row-links row-links-shell');
         if (deploymentName) {
           workspaceLinks.append(

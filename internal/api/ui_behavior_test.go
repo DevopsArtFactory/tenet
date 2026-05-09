@@ -2540,18 +2540,19 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('payments-api-staging-codedeploy-group')) throw new Error('expected application route synthesized deployment-group resource');
   const sectionLinks = accountLinks.filter((node) => typeof node.href === 'string' && node.href.includes('#application-'));
   const expectedSectionLinks = [
+    ['/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-current-status', 'Current application status'],
     ['/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-workloads', 'Workloads'],
     ['/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-traffic-routing', 'Traffic routing'],
     ['/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-runtime-events', 'Controller runtime events'],
   ];
-  if (sectionLinks.length !== expectedSectionLinks.length) throw new Error('expected three application section links, got ' + sectionLinks.length);
+  if (sectionLinks.length !== expectedSectionLinks.length) throw new Error('expected four application section links, got ' + sectionLinks.length);
   expectedSectionLinks.forEach(([href, text]) => {
     const link = sectionLinks.find((node) => node.href === href && node.textContent === text);
     if (!link) throw new Error('missing application section link ' + text + ' -> ' + href);
     if (link.target !== '_self' || link.rel) throw new Error('expected application section link to stay in-shell for ' + text);
   });
   const sectionIDs = collectNodes(document.getElementById('accounts'), (node) => typeof node.id === 'string' && node.id.startsWith('application-')).map((node) => node.id).sort();
-  const expectedSectionIDs = ['application-runtime-events', 'application-traffic-routing', 'application-workloads'];
+  const expectedSectionIDs = ['application-current-status', 'application-runtime-events', 'application-traffic-routing', 'application-workloads'];
   if (JSON.stringify(sectionIDs) !== JSON.stringify(expectedSectionIDs)) throw new Error('unexpected application section ids: ' + JSON.stringify(sectionIDs));
   if (accountsText.includes('Create Plan')) throw new Error('application route should not render plan workspace actions');
   if (accountsText.includes('Field-level drift')) throw new Error('application route should not render drift workspace sections');
@@ -2712,10 +2713,11 @@ const fetch = (url) => {
   if (!currentSectionChip) throw new Error('expected application hash to render the current-section chip');
   const sectionLinks = collectNodes(accounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#application-'));
   const expectedLinks = [
+    ['/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-current-status', 'Current application status'],
     ['/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-workloads', 'Workloads'],
     ['/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-traffic-routing', 'Traffic routing'],
   ];
-  if (sectionLinks.length !== expectedLinks.length) throw new Error('expected two remaining application section links, got ' + sectionLinks.length);
+  if (sectionLinks.length !== expectedLinks.length) throw new Error('expected three remaining application section links, got ' + sectionLinks.length);
   expectedLinks.forEach(([href, text]) => {
     const link = sectionLinks.find((node) => node.href === href && node.textContent === text);
     if (!link) throw new Error('missing application hash link ' + text + ' -> ' + href);
@@ -4360,13 +4362,15 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (accountsText.includes('Config and access')) throw new Error('expected empty application page to hide config and access group');
   const links = collectNodes(accounts, (node) => node.tagName === 'A');
   const sectionLinks = links.filter((node) => typeof node.href === 'string' && node.href.includes('#application-'));
-  if (sectionLinks.length !== 2) throw new Error('expected empty application page to expose quick-nav and direct runtime-events section links, got ' + sectionLinks.length);
+  if (sectionLinks.length !== 3) throw new Error('expected empty application page to expose status quick-nav, runtime quick-nav, and direct runtime-events section links, got ' + sectionLinks.length);
+  const statusLink = sectionLinks.find((node) => node.href === '/?page=application&deployment=payments-api-empty#application-current-status' && node.textContent === 'Current application status');
+  if (!statusLink || statusLink.target !== '_self' || statusLink.rel) throw new Error('expected empty application page status quick-nav link to stay in shell');
   const runtimeEventsLink = sectionLinks.find((node) => node.href === '/?page=application&deployment=payments-api-empty#application-runtime-events' && node.textContent === 'Controller runtime events');
   if (!runtimeEventsLink || runtimeEventsLink.target !== '_self' || runtimeEventsLink.rel) throw new Error('expected empty application page runtime-events quick-nav link to stay in shell');
   const runtimeEventsJumpLink = sectionLinks.find((node) => node.href === '/?page=application&deployment=payments-api-empty#application-runtime-events' && node.textContent === 'Jump to runtime events');
   if (!runtimeEventsJumpLink || runtimeEventsJumpLink.target !== '_self' || runtimeEventsJumpLink.rel) throw new Error('expected empty application page direct runtime-events handoff link to stay in shell');
   const sectionIDs = collectNodes(accounts, (node) => typeof node.id === 'string' && node.id.startsWith('application-')).map((node) => node.id).sort();
-  if (JSON.stringify(sectionIDs) !== JSON.stringify(['application-runtime-events'])) throw new Error('expected only runtime-events section id for empty application page, got ' + JSON.stringify(sectionIDs));
+  if (JSON.stringify(sectionIDs) !== JSON.stringify(['application-current-status', 'application-runtime-events'])) throw new Error('expected status plus runtime-events section ids for empty application page, got ' + JSON.stringify(sectionIDs));
 })();
 `
 
