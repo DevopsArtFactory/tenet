@@ -5909,6 +5909,12 @@
         });
         return summary;
       };
+      const auditLimitCapHintText = (entries) => {
+        const visibleEntries = Array.isArray(entries) ? entries : [];
+        const limit = normalizeAuditLimit(currentPageState.auditLimit);
+        if (limit <= 0 || visibleEntries.length < limit) return '';
+        return `Showing the latest ${limit}-entry capped audit window. Older matching audit entries may be hidden; increase Limit or clear audit controls before concluding no earlier activity exists.`;
+      };
       const renderAuditPageChrome = () => {
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
@@ -6089,6 +6095,10 @@
           createAuditTimelineSummary(entries),
           createElement('div', 'detail-condition-meta', timelineMeta.join(' · ')),
         );
+        const limitCapHint = auditLimitCapHintText(entries);
+        if (limitCapHint) {
+          timelineSection.append(createElement('div', 'detail-condition-meta audit-limit-cap-hint', limitCapHint));
+        }
         const rows = createElement('div', 'rows');
         entries.forEach((entry) => {
           const row = createElement('div', 'row');
