@@ -1640,6 +1640,10 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		`AUTH_FORBIDDEN_EVENTS_BODY=`,
 
 		`"http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/events?limit=1")`,
+		`deployment_events_fixture_limited=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/events?limit=1")`,
+		`DEPLOYMENT_EVENTS_FIXTURE_LIMITED_PATH="$deployment_events_fixture_limited_path"`,
+		`assert fixture_events_scope.get('returnedEventCount') == 0, deployment_events_fixture_limited`,
+		`assert fixture_events_scope.get('truncationStatus') == 'not_truncated', deployment_events_fixture_limited`,
 		`auth_forbidden_events_status=$(curl -sS -o "$AUTH_FORBIDDEN_EVENTS_BODY" -w "%{http_code}" \`,
 		`allowed_events_read=$(curl -fsS \`,
 		`allowed_events_read_path=$(write_payload allowed-events-read.json "$allowed_events_read")`,
@@ -1675,6 +1679,10 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		`AUTH_FORBIDDEN_EVENTS_BODY=`,
 
 		`"$API_BASE_URL/v1/overview/deployments/payments-api-staging/events?limit=1")`,
+		`deployment_events=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/events?limit=1")`,
+		`events_scope = deployment_events.get("resultScope") or {}`,
+		`assert events_scope.get("returnedEventCount") == len(deployment_events["events"]), deployment_events`,
+		`assert events_scope.get("limited") == (events_scope.get("totalEventCount") > events_scope.get("returnedEventCount")), deployment_events`,
 		`auth_forbidden_events_status=$(curl -sS -o "$AUTH_FORBIDDEN_EVENTS_BODY" -w "%{http_code}" \`,
 		`allowed_events_read=$(curl -fsS \`,
 		`allowed_events_read_path=$(write_payload allowed-events-read.json "$allowed_events_read")`,
