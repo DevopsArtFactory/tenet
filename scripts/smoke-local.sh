@@ -1616,6 +1616,8 @@ assert "'Log limit'" in ui, ui
 assert "params.set('limit', String(normalizedLimit));" in ui, ui
 assert "resourceLogLimit: normalizeResourceLogsLimit(params.get('resourceLogLimit') || '')" in ui, ui
 assert "const resourceLogAnchorBase = (entry) => {" in ui, ui
+assert "const backendID = auditAnchorSlug(entry?.entryId);" in ui, ui
+assert "return `resource-log-${backendID}`;" in ui, ui
 assert "const resourceLogAnchorURL = (deploymentName, resource, logID, limit = 0) => buildPageSectionURL('resource', logID, {" in ui, ui
 assert "containerName: String(currentPageState.containerName || resource?.containerName || '').trim()," in ui, ui
 assert "instanceId: String(currentPageState.instanceId || resource?.instanceId || '').trim()," in ui, ui

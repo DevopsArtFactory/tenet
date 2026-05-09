@@ -5925,7 +5925,7 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
 
   const populatedRun = await renderWithFetch((url) => {
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, resultScope: { requestedLimit: 5, effectiveLimit: 5, returnedEntryCount: 5, truncationStatus: 'unknown' }, entries: [{ timestamp: '2026-04-16T07:11:00Z', stream: 'codedeploy/bluegreen/1', message: '<img src=x onerror=1> rollback check passed' }] }) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, resultScope: { requestedLimit: 5, effectiveLimit: 5, returnedEntryCount: 5, truncationStatus: 'unknown' }, entries: [{ entryId: 'rlog_backend_opaque_1', timestamp: '2026-04-16T07:11:00Z', stream: 'codedeploy/bluegreen/1', message: '<img src=x onerror=1> rollback check passed' }] }) });
     throw new Error('unexpected populated fetch url: ' + url);
   });
   await settle();
@@ -5947,16 +5947,30 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   if (!populatedText.includes('Log timestamp · 2026-04-16T07:11:00Z')) throw new Error('expected populated recent logs section to show timestamp');
   const shareLinks = collectNodes(populatedRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Share log entry');
   if (shareLinks.length !== 1) throw new Error('expected one share link for the rendered log entry, got ' + shareLinks.length);
-  const expectedLogAnchor = 'resource-log-2026-04-16t07-11-00z-codedeploy-bluegreen-1-img-src-x-onerror-1-rollback-check-passed';
+  const expectedBackendLogAnchor = 'resource-log-rlog-backend-opaque-1';
+  const expectedLegacyLogAnchor = 'resource-log-2026-04-16t07-11-00z-codedeploy-bluegreen-1-img-src-x-onerror-1-rollback-check-passed';
   const expectedResourceRoute = '/?page=resource&deployment=payments-api-staging&resourceType=codeDeployDeploymentGroup&resourceId=codeDeployDeploymentGroup%3A%3Apayments-api-staging+Deployment+Group%3A%3ALinear+traffic+shifting+deployment+group';
-  if (shareLinks[0].href !== expectedResourceRoute + '#' + expectedLogAnchor) throw new Error('expected share link to preserve resource route and point at stable log anchor, got ' + shareLinks[0].href);
+  if (shareLinks[0].href !== expectedResourceRoute + '#' + expectedBackendLogAnchor) throw new Error('expected share link to prefer backend entryId anchor, got ' + shareLinks[0].href);
+  if (shareLinks[0].href.includes(expectedLegacyLogAnchor)) throw new Error('expected backend entryId to replace client-derived fallback anchor, got ' + shareLinks[0].href);
   if (shareLinks[0].target !== '_self') throw new Error('expected share log link to stay in embedded UI flow');
   if (shareLinks[0].rel) throw new Error('expected share log link not to carry new-tab rel attributes');
-  const anchoredLogEntry = collectNodes(populatedRun.document.getElementById('accounts'), (node) => node.tagName === 'LI' && node.getAttribute('id') === expectedLogAnchor)[0];
-  if (!anchoredLogEntry) throw new Error('expected rendered log row to expose stable anchor id ' + expectedLogAnchor);
+  const anchoredLogEntry = collectNodes(populatedRun.document.getElementById('accounts'), (node) => node.tagName === 'LI' && node.getAttribute('id') === expectedBackendLogAnchor)[0];
+  if (!anchoredLogEntry) throw new Error('expected rendered log row to expose backend entryId anchor id ' + expectedBackendLogAnchor);
   if (!populatedText.includes('<img src=x onerror=1> rollback check passed')) throw new Error('expected populated recent logs section to render raw log message text safely');
   const images = collectNodes(populatedRun.document.getElementById('accounts'), (node) => node.tagName === 'IMG');
   if (images.length !== 0) throw new Error('expected log messages to remain text content rather than parsed html');
+
+  const legacyRun = await renderWithFetch((url) => {
+    if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', entries: [{ timestamp: '2026-04-16T07:11:00Z', stream: 'codedeploy/bluegreen/1', message: '<img src=x onerror=1> rollback check passed' }] }) });
+    throw new Error('unexpected legacy fetch url: ' + url);
+  });
+  await settle();
+  const legacyShareLinks = collectNodes(legacyRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Share log entry');
+  if (legacyShareLinks.length !== 1) throw new Error('expected one legacy share link, got ' + legacyShareLinks.length);
+  if (legacyShareLinks[0].href !== expectedResourceRoute + '#' + expectedLegacyLogAnchor) throw new Error('expected legacy recent-log payloads without entryId to keep deterministic fallback anchor, got ' + legacyShareLinks[0].href);
+  const legacyAnchoredLogEntry = collectNodes(legacyRun.document.getElementById('accounts'), (node) => node.tagName === 'LI' && node.getAttribute('id') === expectedLegacyLogAnchor)[0];
+  if (!legacyAnchoredLogEntry) throw new Error('expected legacy recent-log row to expose fallback anchor id ' + expectedLegacyLogAnchor);
 })();
 `
 
