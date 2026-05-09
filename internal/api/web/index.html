@@ -1796,6 +1796,22 @@
         action: currentPageState.auditAction,
         limit: currentPageState.auditLimit,
       });
+      const runtimeEventAnchorBase = (event) => {
+        const parts = [event?.timestamp, event?.currentStep, event?.summary, event?.source]
+          .map((value) => auditAnchorSlug(value))
+          .filter((value) => value && value !== 'unknown');
+        return parts.length ? `runtime-event-${parts.join('-')}` : 'runtime-event-unknown';
+      };
+      const uniqueRuntimeEventAnchorID = (event, seenAnchors) => {
+        const base = runtimeEventAnchorBase(event);
+        const seen = seenAnchors.get(base) || 0;
+        seenAnchors.set(base, seen + 1);
+        return seen ? `${base}-${seen + 1}` : base;
+      };
+      const runtimeEventAnchorURL = (deploymentName, eventID, limit = currentPageState.eventLimit) => buildPageSectionURL('application', eventID, {
+        deployment: deploymentName,
+        eventLimit: limit,
+      });
       const stableResourceIdentity = (resource) => {
         const type = resource.type || resource.resource || 'resource';
         const name = resource.name || type;
@@ -5623,11 +5639,20 @@
         const ordering = createElement('div', 'detail-condition-meta', `${events.length} event${events.length === 1 ? '' : 's'} in latest ${selectedLimit}-event window · newest controller event first`);
         const driftSummary = createElement('div', 'detail-condition-meta', deploymentEventsManagedDriftSummary(result));
         const eventList = createElement('ol', 'detail-list');
+        const seenEventAnchors = new Map();
 
         events.forEach((event) => {
           const item = createElement('li');
+          const eventID = uniqueRuntimeEventAnchorID(event, seenEventAnchors);
+          item.id = eventID;
+          item.setAttribute('id', eventID);
           const summaryText = textOrDash(event.summary) === '—' ? 'Controller runtime event' : textOrDash(event.summary);
-          item.append(createElement('strong', '', summaryText));
+          const eventHeading = createElement('div', 'detail-history-meta');
+          eventHeading.append(
+            createElement('strong', '', summaryText),
+            createNavLink(runtimeEventAnchorURL(deploymentName, eventID, selectedLimit), 'Share event', '_self'),
+          );
+          item.append(eventHeading);
 
           const eventMeta = createElement('div', 'detail-history-meta');
           eventMeta.append(createElement('span', 'detail-condition-meta', `Time · ${textOrDash(event.timestamp)}`));
