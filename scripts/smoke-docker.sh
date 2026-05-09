@@ -924,6 +924,14 @@ assert any(entry["action"] == "plan.created" for entry in audit_logs["entries"])
 assert isinstance(audit_logs_action_filtered.get("entries"), list), audit_logs_action_filtered
 assert 1 <= len(audit_logs_action_filtered["entries"]) <= 2, audit_logs_action_filtered
 assert all(entry["action"] == "apply.requested" for entry in audit_logs_action_filtered["entries"]), audit_logs_action_filtered
+assert isinstance(audit_logs.get("resultScope"), dict), audit_logs
+assert audit_logs["resultScope"]["returnedEntryCount"] == len(audit_logs["entries"]), audit_logs
+assert audit_logs["resultScope"]["totalEntryCount"] >= audit_logs["resultScope"]["returnedEntryCount"], audit_logs
+assert audit_logs["resultScope"]["limited"] is False, audit_logs
+assert isinstance(audit_logs_action_filtered.get("resultScope"), dict), audit_logs_action_filtered
+assert audit_logs_action_filtered["resultScope"]["action"] == "apply.requested", audit_logs_action_filtered
+assert audit_logs_action_filtered["resultScope"]["limit"] == 2, audit_logs_action_filtered
+assert audit_logs_action_filtered["resultScope"]["returnedEntryCount"] == len(audit_logs_action_filtered["entries"]), audit_logs_action_filtered
 assert os.environ["INVALID_AUDIT_ACTION_STATUS"] == "400", os.environ["INVALID_AUDIT_ACTION_STATUS"]
 assert "invalid action query" in invalid_audit_action_body, invalid_audit_action_body
 assert os.environ["WEBHOOK_PUSH_STATUS"] == "202", os.environ["WEBHOOK_PUSH_STATUS"]
@@ -982,6 +990,10 @@ for entry in fallback_entries:
     assert "no authenticated request context" in entry["actor"]["reason"], entry
 assert isinstance(actor_audit_logs.get("entries"), list), actor_audit_logs
 assert len(actor_audit_logs["entries"]) == 1, actor_audit_logs
+assert actor_audit_logs["resultScope"]["deploymentName"] == "payments-api-staging", actor_audit_logs
+assert actor_audit_logs["resultScope"]["action"] == "apply.requested", actor_audit_logs
+assert actor_audit_logs["resultScope"]["limit"] == 1, actor_audit_logs
+assert actor_audit_logs["resultScope"]["returnedEntryCount"] == 1, actor_audit_logs
 assert actor_audit_logs["entries"][0]["deploymentName"] == "payments-api-staging", actor_audit_logs
 assert actor_audit_logs["entries"][0]["actor"]["available"] is True, actor_audit_logs
 assert actor_audit_logs["entries"][0]["actor"]["id"] == "explicit-456", actor_audit_logs

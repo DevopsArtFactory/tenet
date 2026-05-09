@@ -168,10 +168,12 @@ func parseOptionalPositiveLimit(w http.ResponseWriter, r *http.Request) (limit i
 	return limit, true
 }
 
-func applyAuditLogLimit(result auditlog.Result, limit int) auditlog.Result {
-	if limit > 0 && limit < len(result.Entries) {
-		result.Entries = append([]auditlog.Entry(nil), result.Entries[:limit]...)
+func applyAuditLogLimit(result auditlog.Result, query auditlog.Query) auditlog.Result {
+	totalEntryCount := len(result.Entries)
+	if query.Limit > 0 && query.Limit < len(result.Entries) {
+		result.Entries = append([]auditlog.Entry(nil), result.Entries[:query.Limit]...)
 	}
+	result.ResultScope = auditlog.BuildResultScope(query, totalEntryCount, len(result.Entries))
 	return result
 }
 
@@ -2489,7 +2491,7 @@ func NewRouter(options Options) http.Handler {
 				options.RequireDeploymentReadAuthorization,
 			)
 			if options.RequireDeploymentReadAuthorization {
-				result = applyAuditLogLimit(result, query.Limit)
+				result = applyAuditLogLimit(result, query)
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")

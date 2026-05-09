@@ -75,6 +75,12 @@ func TestServiceListProjectsImmutableRecordsIntoNewestFirstTimeline(t *testing.T
 	if len(result.Entries) != 2 {
 		t.Fatalf("expected two limited entries, got %+v", result.Entries)
 	}
+	if result.ResultScope.ReturnedEntryCount != 2 || result.ResultScope.TotalEntryCount != 3 || !result.ResultScope.Limited {
+		t.Fatalf("expected capped result scope for limited audit window, got %+v", result.ResultScope)
+	}
+	if result.ResultScope.Limit == nil || *result.ResultScope.Limit != 2 {
+		t.Fatalf("expected applied audit limit in result scope, got %+v", result.ResultScope)
+	}
 
 	newest := result.Entries[0]
 	if newest.Action != "apply.requested" || newest.ApplyID != "apply_newest" {
@@ -152,6 +158,15 @@ func TestServiceListAssignsStableEntryIDsAcrossFiltersAndLimits(t *testing.T) {
 	}
 	if len(all.Entries) != 2 || len(filtered.Entries) != 1 {
 		t.Fatalf("expected two full entries and one filtered entry, all=%+v filtered=%+v", all.Entries, filtered.Entries)
+	}
+	if all.ResultScope.ReturnedEntryCount != 2 || all.ResultScope.TotalEntryCount != 2 || all.ResultScope.Limited {
+		t.Fatalf("expected uncapped all-entry result scope, got %+v", all.ResultScope)
+	}
+	if filtered.ResultScope.ReturnedEntryCount != 1 || filtered.ResultScope.TotalEntryCount != 1 || filtered.ResultScope.Limited {
+		t.Fatalf("expected filtered result scope to describe matched rows before cap, got %+v", filtered.ResultScope)
+	}
+	if filtered.ResultScope.DeploymentName != "api-prod" || filtered.ResultScope.Action != string(ActionApplyRequested) || filtered.ResultScope.Limit == nil || *filtered.ResultScope.Limit != 1 {
+		t.Fatalf("expected applied filters in filtered result scope, got %+v", filtered.ResultScope)
 	}
 	if all.Entries[0].EntryID != filtered.Entries[0].EntryID {
 		t.Fatalf("expected filtered apply entryId to stay stable, all=%q filtered=%q", all.Entries[0].EntryID, filtered.Entries[0].EntryID)
@@ -295,6 +310,9 @@ func TestServiceListReturnsExplicitEmptyEntriesForDeploymentWithoutAuditRecords(
 	}
 	if len(result.Entries) != 0 {
 		t.Fatalf("expected explicit empty audit result, got %+v", result.Entries)
+	}
+	if result.ResultScope.ReturnedEntryCount != 0 || result.ResultScope.TotalEntryCount != 0 || result.ResultScope.DeploymentName != "worker-prod" || result.ResultScope.Limited {
+		t.Fatalf("expected empty scoped result metadata, got %+v", result.ResultScope)
 	}
 }
 
