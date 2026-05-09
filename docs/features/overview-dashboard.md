@@ -251,7 +251,7 @@ Separate from that controller-runtime timeline, the backend also exposes `GET /v
 Current behavior:
 - returns `deploymentName` plus an explicit `events[]` array
 - returns an additive `managedDriftSummary` object with explicit `total`, `high`, `medium`, and `low` counts derived from the returned history rows; rows with missing/unknown severity count toward `total` only
-- bounded `?limit={n}` reads include additive `resultScope` metadata (`requestedLimit`, `effectiveLimit`, `returnedEventCount`, and `truncationStatus`); the embedded application runtime-events panel renders that as `Requested window` / `Effective window` / `Returned events` / `Window status` so operators can distinguish capped, below-cap, and at-cap/unknown-total windows without inspecting raw JSON
+- successful reads include additive `resultScope` metadata (`requestedLimit` when supplied, `effectiveLimit`, `returnedEventCount`, `totalEventCount`, `limited`, and `truncationStatus`); default unbounded reads report `effectiveLimit: 0`, omit `requestedLimit`, and mark `truncationStatus: "not_truncated"`, while bounded `?limit={n}` reads describe the selected newest-first window. The embedded application runtime-events panel renders that as `Requested window` / `Effective window` / `Returned events` / `Window status` so operators can distinguish uncapped, capped, below-cap, and at-cap/unknown-total windows without inspecting raw JSON
 - includes additive non-secret `events[].controllerRefresh` metadata (`requestId`, `deliveryId`, `repository`, `ref`, optional `after`, `requestedAt`, `receivedAt`, and `reconciledAt`) only when a Redis controller-refresh handoff from an accepted GitHub desired-state push triggered that reconcile; the application detail timeline renders those fields as `GitHub refresh evidence` with a shortened revision and no placeholders for ordinary ticker reconciles
 - returns `200 OK` with `events: []` and zero drift-summary counts when the deployment exists but no runtime history has been persisted yet
 - never calls live AWS APIs; it only reflects the stored controller/runtime read model
@@ -282,7 +282,14 @@ Example response shape:
       ]
     }
   ],
-  "managedDriftSummary": {"total": 1, "high": 1, "medium": 0, "low": 0}
+  "managedDriftSummary": {"total": 1, "high": 1, "medium": 0, "low": 0},
+  "resultScope": {
+    "effectiveLimit": 0,
+    "returnedEventCount": 1,
+    "totalEventCount": 1,
+    "limited": false,
+    "truncationStatus": "not_truncated"
+  }
 }
 ```
 

@@ -1732,7 +1732,7 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		"`401` / `403` / `200 OK` contract",
 		"`deploymentName` plus `events` list shape",
 		"additive `managedDriftSummary` object carrying explicit zero/non-zero severity counts",
-		"router-authored `resultScope` object (`requestedLimit`, `effectiveLimit`, `returnedEventCount`, `totalEventCount`, `limited`, `truncationStatus`) for bounded `?limit=` reads",
+		"router-authored `resultScope` object (`requestedLimit`, `effectiveLimit`, `returnedEventCount`, `totalEventCount`, `limited`, `truncationStatus`) for both default and bounded `?limit=` reads",
 		"ticker/default controller-event path omit `controllerRefresh`",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
