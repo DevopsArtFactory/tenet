@@ -1,6 +1,12 @@
 package domain
 
-import "encoding/json"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"strings"
+)
 
 // SyncState summarizes whether desired and actual state are aligned.
 type SyncState string
@@ -92,11 +98,69 @@ type ManagedDriftResourceRef struct {
 
 // ManagedDriftItem captures one controller-authored field-level drift item for Tenet-managed runtime fields.
 type ManagedDriftItem struct {
+	DriftID     string                   `json:"driftId,omitempty"`
 	Field       string                   `json:"field"`
 	Desired     string                   `json:"desired,omitempty"`
 	Actual      string                   `json:"actual,omitempty"`
 	Severity    ManagedDriftSeverity     `json:"severity,omitempty"`
 	ResourceRef *ManagedDriftResourceRef `json:"resourceRef,omitempty"`
+}
+
+// AssignManagedDriftIDs returns a defensive copy of items with deterministic
+// backend-authored row identifiers. The identifier is intentionally opaque and
+// derived only from stable row inputs plus a duplicate-row ordinal, so legacy
+// persisted rows can gain IDs at projection time without additional storage.
+func AssignManagedDriftIDs(items []ManagedDriftItem) []ManagedDriftItem {
+	if len(items) == 0 {
+		return nil
+	}
+	assigned := make([]ManagedDriftItem, len(items))
+	seen := make(map[string]int, len(items))
+	for i, item := range items {
+		assigned[i] = cloneManagedDriftItem(item)
+		key := managedDriftStableKey(assigned[i])
+		ordinal := seen[key]
+		seen[key] = ordinal + 1
+		if strings.TrimSpace(assigned[i].DriftID) != "" {
+			assigned[i].DriftID = strings.TrimSpace(assigned[i].DriftID)
+			continue
+		}
+		assigned[i].DriftID = managedDriftIDForKey(key, ordinal)
+	}
+	return assigned
+}
+
+func cloneManagedDriftItem(item ManagedDriftItem) ManagedDriftItem {
+	clone := item
+	if item.ResourceRef != nil {
+		ref := *item.ResourceRef
+		clone.ResourceRef = &ref
+	}
+	return clone
+}
+
+func managedDriftStableKey(item ManagedDriftItem) string {
+	refType := ""
+	refName := ""
+	if item.ResourceRef != nil {
+		refType = strings.TrimSpace(item.ResourceRef.ResourceType)
+		refName = strings.TrimSpace(item.ResourceRef.ResourceName)
+	}
+	parts := []string{
+		strings.TrimSpace(item.Field),
+		strings.TrimSpace(item.Desired),
+		strings.TrimSpace(item.Actual),
+		strings.TrimSpace(string(item.Severity)),
+		refType,
+		refName,
+	}
+	return strings.Join(parts, "\x00")
+}
+
+func managedDriftIDForKey(key string, ordinal int) string {
+	content := fmt.Sprintf("managed-drift-row\x00%s\x00%d", key, ordinal)
+	sum := sha256.Sum256([]byte(content))
+	return "drift_" + hex.EncodeToString(sum[:])[:20]
 }
 
 // RolloutSummary captures the controller-owned rollout view for a deployment.

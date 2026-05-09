@@ -1673,6 +1673,29 @@ func filterAuthorizedStatusSnapshots(snapshots []statusstore.Snapshot, visible m
 	return filtered
 }
 
+func assignManagedDriftIDsToSnapshots(snapshots []statusstore.Snapshot) []statusstore.Snapshot {
+	if len(snapshots) == 0 {
+		return snapshots
+	}
+	assigned := make([]statusstore.Snapshot, len(snapshots))
+	copy(assigned, snapshots)
+	for i := range assigned {
+		assigned[i].Status = assignManagedDriftIDsToStatus(assigned[i].Status)
+	}
+	return assigned
+}
+
+func assignManagedDriftIDsToStatus(status domain.DeploymentStatus) domain.DeploymentStatus {
+	status.ManagedDrift = domain.AssignManagedDriftIDs(status.ManagedDrift)
+	if len(status.History) > 0 {
+		status.History = append([]domain.StatusHistoryEntry(nil), status.History...)
+		for i := range status.History {
+			status.History[i].ManagedDrift = domain.AssignManagedDriftIDs(status.History[i].ManagedDrift)
+		}
+	}
+	return status
+}
+
 func filterAuthorizedAuditEntries(entries []auditlog.Entry, visible map[string]struct{}, enabled bool) []auditlog.Entry {
 	if !enabled {
 		return entries
@@ -2681,6 +2704,7 @@ func NewRouter(options Options) http.Handler {
 			return
 		}
 		snapshots = filterAuthorizedStatusSnapshots(snapshots, authorizedDeploymentNameSet(r.Context(), options, requestactor.AuthorizedDeploymentsFromContext(r.Context()), requestactor.AuthorizedProjectEnvironmentScopesFromContext(r.Context())), options.RequireDeploymentReadAuthorization)
+		snapshots = assignManagedDriftIDsToSnapshots(snapshots)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(snapshots)
 	})
@@ -2705,6 +2729,7 @@ func NewRouter(options Options) http.Handler {
 			respondReadLookupError(w, err, "deployment status unavailable")
 			return
 		}
+		snapshot.Status = assignManagedDriftIDsToStatus(snapshot.Status)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(snapshot)
 	})

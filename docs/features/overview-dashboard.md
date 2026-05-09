@@ -276,7 +276,7 @@ Example response shape:
         "reconciledAt": "2026-04-16T06:15:00Z"
       },
       "managedDrift": [
-        {"field": "runtimeContext.capacity.desired", "desired": "6", "actual": "4", "severity": "high"}
+        {"driftId": "drift_...", "field": "runtimeContext.capacity.desired", "desired": "6", "actual": "4", "severity": "high"}
       ]
     }
   ],
