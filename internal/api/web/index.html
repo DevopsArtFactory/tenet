@@ -5870,6 +5870,21 @@
         }
         return '';
       };
+      const auditLogsFetchedAtText = (result) => {
+        const fetchedAt = result?.tenetFetchedAt;
+        if (!fetchedAt) return '';
+        const timestamp = fetchedAt instanceof Date ? fetchedAt : new Date(fetchedAt);
+        if (Number.isNaN(timestamp.getTime())) return '';
+        return timestamp.toLocaleString();
+      };
+      const withAuditLogsFetchedAt = (result) => {
+        if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
+        return { ...result, tenetFetchedAt: new Date() };
+      };
+      const createAuditLogsFreshnessMeta = (result) => {
+        const fetchedAt = auditLogsFetchedAtText(result);
+        return fetchedAt ? createElement('div', 'detail-condition-meta audit-freshness', `Last refreshed · ${fetchedAt}`) : null;
+      };
       const auditFilterLabels = () => {
         const labels = [];
         if (currentPageState.deployment) labels.push(`deployment ${currentPageState.deployment}`);
@@ -6162,6 +6177,10 @@
         if (resultScopeSummary) {
           timelineSection.append(resultScopeSummary);
         }
+        const freshnessMeta = createAuditLogsFreshnessMeta(result);
+        if (freshnessMeta) {
+          timelineSection.append(freshnessMeta);
+        }
         if (!entries.length) {
           timelineSection.append(createElement('div', 'detail-state', auditEmptyStateText()));
           page.append(timelineSection);
@@ -6320,7 +6339,8 @@
           action: currentPageState.auditAction,
           limit: currentPageState.auditLimit,
         })
-          .then((result) => {
+          .then((rawResult) => {
+            const result = withAuditLogsFetchedAt(rawResult);
             if (auditLogsPageState.requestId !== requestId || auditLogsPageState.route !== route) {
               return result;
             }
