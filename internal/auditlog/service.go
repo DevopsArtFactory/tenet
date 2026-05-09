@@ -66,9 +66,20 @@ type Entry struct {
 	Source         Source   `json:"source"`
 }
 
+// ResultScope describes the bounded audit timeline window returned by the API.
+type ResultScope struct {
+	ReturnedEntryCount int    `json:"returnedEntryCount"`
+	TotalEntryCount    int    `json:"totalEntryCount"`
+	Limited            bool   `json:"limited"`
+	Limit              *int   `json:"limit,omitempty"`
+	DeploymentName     string `json:"deploymentName,omitempty"`
+	Action             string `json:"action,omitempty"`
+}
+
 // Result is the read-only audit timeline payload.
 type Result struct {
-	Entries []Entry `json:"entries"`
+	Entries     []Entry     `json:"entries"`
+	ResultScope ResultScope `json:"resultScope"`
 }
 
 // Service projects immutable plan preview and apply request records into an audit timeline.
@@ -133,10 +144,27 @@ func (s Service) List(ctx context.Context, query Query) (Result, error) {
 		return entries[i].stableID() > entries[j].stableID()
 	})
 
+	totalEntryCount := len(entries)
 	if query.Limit > 0 && query.Limit < len(entries) {
 		entries = entries[:query.Limit]
 	}
-	return Result{Entries: entries}, nil
+	return Result{Entries: entries, ResultScope: BuildResultScope(query, totalEntryCount, len(entries))}, nil
+}
+
+// BuildResultScope returns operator-facing metadata for the filtered, optionally limited window.
+func BuildResultScope(query Query, totalEntryCount, returnedEntryCount int) ResultScope {
+	scope := ResultScope{
+		ReturnedEntryCount: returnedEntryCount,
+		TotalEntryCount:    totalEntryCount,
+		Limited:            query.Limit > 0 && returnedEntryCount < totalEntryCount,
+		DeploymentName:     query.DeploymentName,
+		Action:             string(query.Action),
+	}
+	if query.Limit > 0 {
+		limit := query.Limit
+		scope.Limit = &limit
+	}
+	return scope
 }
 
 func (s Service) loadDeployments(ctx context.Context) (map[string]catalog.DeploymentView, error) {

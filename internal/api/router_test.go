@@ -2976,6 +2976,7 @@ func TestRouterAuditLogs(t *testing.T) {
 					Metadata:       auditlog.Metadata{Status: "failed", PlanStatus: "ready", Error: "apply execution is disabled"},
 					Source:         auditlog.Source{Kind: "applyRequest", Store: "applyRequestStore", RecordRoute: "/v1/applies/apply_5678", SourceRoute: "/v1/plans/plan_1234"},
 				}},
+				ResultScope: auditlog.BuildResultScope(query, 1, 1),
 			}, nil
 		},
 	})
@@ -2995,6 +2996,12 @@ func TestRouterAuditLogs(t *testing.T) {
 	if len(result.Entries) != 1 || result.Entries[0].ApplyID != "apply_5678" {
 		t.Fatalf("unexpected audit logs payload: %+v", result)
 	}
+	if result.ResultScope.ReturnedEntryCount != 1 || result.ResultScope.TotalEntryCount != 1 || result.ResultScope.Limited || result.ResultScope.DeploymentName != "api-prod" || result.ResultScope.Action != string(auditlog.ActionApplyRequested) {
+		t.Fatalf("unexpected audit result scope: %+v", result.ResultScope)
+	}
+	if result.ResultScope.Limit == nil || *result.ResultScope.Limit != 2 {
+		t.Fatalf("expected audit result scope to echo applied limit, got %+v", result.ResultScope)
+	}
 	var raw map[string]any
 	if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
 		t.Fatalf("failed to decode raw audit logs: %v", err)
@@ -3006,6 +3013,10 @@ func TestRouterAuditLogs(t *testing.T) {
 	rawEntry, ok := rawEntries[0].(map[string]any)
 	if !ok || rawEntry["entryId"] != "audit_apply_testopaque" {
 		t.Fatalf("expected raw audit entryId field, got %#v", rawEntries[0])
+	}
+	rawScope, ok := raw["resultScope"].(map[string]any)
+	if !ok || rawScope["returnedEntryCount"] != float64(1) || rawScope["totalEntryCount"] != float64(1) || rawScope["limited"] != false || rawScope["limit"] != float64(2) || rawScope["deploymentName"] != "api-prod" || rawScope["action"] != "apply.requested" {
+		t.Fatalf("expected raw audit resultScope contract, got %#v", raw["resultScope"])
 	}
 }
 
@@ -3041,6 +3052,12 @@ func TestRouterAuditLogsFiltersAuthorizationBeforeApplyingCollectionLimit(t *tes
 	}
 	if len(result.Entries) != 1 || result.Entries[0].ApplyID != "apply_visible_newer" {
 		t.Fatalf("expected limit to apply after authorization filtering, got %+v", result.Entries)
+	}
+	if result.ResultScope.ReturnedEntryCount != 1 || result.ResultScope.TotalEntryCount != 2 || !result.ResultScope.Limited || result.ResultScope.Action != string(auditlog.ActionApplyRequested) {
+		t.Fatalf("expected authorized collection result scope after filtering and limit, got %+v", result.ResultScope)
+	}
+	if result.ResultScope.Limit == nil || *result.ResultScope.Limit != 1 {
+		t.Fatalf("expected authorized collection result scope limit echo, got %+v", result.ResultScope)
 	}
 }
 

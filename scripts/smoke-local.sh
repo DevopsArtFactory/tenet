@@ -846,6 +846,13 @@ assert any(entry['action'] == 'plan.created' for entry in audit_logs['entries'])
 assert isinstance(audit_logs_action_filtered.get('entries', []), list), audit_logs_action_filtered
 assert len(audit_logs_action_filtered['entries']) >= 2, audit_logs_action_filtered
 assert all(entry['action'] == 'apply.requested' for entry in audit_logs_action_filtered['entries']), audit_logs_action_filtered
+assert isinstance(audit_logs.get('resultScope'), dict), audit_logs
+assert audit_logs['resultScope']['returnedEntryCount'] == len(audit_logs['entries']), audit_logs
+assert audit_logs['resultScope']['totalEntryCount'] >= audit_logs['resultScope']['returnedEntryCount'], audit_logs
+assert audit_logs['resultScope']['limited'] is False, audit_logs
+assert isinstance(audit_logs_action_filtered.get('resultScope'), dict), audit_logs_action_filtered
+assert audit_logs_action_filtered['resultScope']['action'] == 'apply.requested', audit_logs_action_filtered
+assert audit_logs_action_filtered['resultScope']['returnedEntryCount'] == len(audit_logs_action_filtered['entries']), audit_logs_action_filtered
 for entry in audit_logs['entries']:
     assert isinstance(entry.get('entryId'), str) and entry['entryId'].startswith('audit_'), entry
     assert entry['appRef'] == 'payments-api', entry
@@ -859,6 +866,10 @@ for entry in fallback_entries:
     assert 'no authenticated request context' in entry['actor']['reason'], entry
 assert isinstance(actor_audit_logs.get('entries', []), list), actor_audit_logs
 assert len(actor_audit_logs['entries']) == 1, actor_audit_logs
+assert actor_audit_logs['resultScope']['deploymentName'] == 'payments-api-staging', actor_audit_logs
+assert actor_audit_logs['resultScope']['action'] == 'apply.requested', actor_audit_logs
+assert actor_audit_logs['resultScope']['limit'] == 1, actor_audit_logs
+assert actor_audit_logs['resultScope']['returnedEntryCount'] == 1, actor_audit_logs
 assert actor_audit_logs['entries'][0]['deploymentName'] == 'payments-api-staging', actor_audit_logs
 assert actor_audit_logs['entries'][0]['actor']['available'] is True, actor_audit_logs
 assert actor_audit_logs['entries'][0]['actor']['id'] == 'explicit-456', actor_audit_logs
@@ -867,8 +878,14 @@ assert actor_audit_logs['entries'][0]['actor']['email'] == 'alex.explicit@exampl
 assert isinstance(audit_logs_filtered.get('entries', []), list), audit_logs_filtered
 assert len(audit_logs_filtered['entries']) == 1, audit_logs_filtered
 assert audit_logs_filtered['entries'][0]['deploymentName'] == 'payments-api-prod', audit_logs_filtered
+assert audit_logs_filtered['resultScope']['deploymentName'] == 'payments-api-prod', audit_logs_filtered
+assert audit_logs_filtered['resultScope']['limit'] == 1, audit_logs_filtered
+assert audit_logs_filtered['resultScope']['returnedEntryCount'] == 1, audit_logs_filtered
 assert isinstance(audit_logs_empty.get('entries', []), list), audit_logs_empty
 assert audit_logs_empty['entries'] == [], audit_logs_empty
+assert audit_logs_empty['resultScope']['deploymentName'] == 'worker-prod', audit_logs_empty
+assert audit_logs_empty['resultScope']['returnedEntryCount'] == 0, audit_logs_empty
+assert audit_logs_empty['resultScope']['totalEntryCount'] == 0, audit_logs_empty
 assert os.environ['INVALID_AUDIT_ACTION_STATUS'] == '400', os.environ['INVALID_AUDIT_ACTION_STATUS']
 invalid_audit_action = read_text('INVALID_AUDIT_ACTION_BODY_PATH')
 assert 'invalid action query' in invalid_audit_action, invalid_audit_action
@@ -3233,7 +3250,10 @@ assert empty_applications_collection == [], empty_applications_collection
 assert empty_status_collection == [], empty_status_collection
 assert empty_catalog_deployments == [], empty_catalog_deployments
 assert empty_accounts_collection == [], empty_accounts_collection
-assert empty_audit_collection == {'entries': []}, empty_audit_collection
+assert empty_audit_collection['entries'] == [], empty_audit_collection
+assert empty_audit_collection['resultScope']['returnedEntryCount'] == 0, empty_audit_collection
+assert empty_audit_collection['resultScope']['totalEntryCount'] == 0, empty_audit_collection
+assert empty_audit_collection['resultScope']['action'] == 'apply.requested', empty_audit_collection
 assert os.environ['AUTH_FORBIDDEN_AUDIT_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_AUDIT_STATUS']
 assert forbidden_audit_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_audit_body
 assert len(allowed_scoped_audit['entries']) == 1, allowed_scoped_audit
