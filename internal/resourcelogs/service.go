@@ -148,6 +148,7 @@ type ResultScope struct {
 type LookupContext = resourceaws.LookupContext
 
 type Entry struct {
+	EntryID       string `json:"entryId,omitempty"`
 	Timestamp     string `json:"timestamp"`
 	Message       string `json:"message"`
 	Stream        string `json:"stream,omitempty"`
@@ -429,6 +430,51 @@ func emptyReason(rawCount, entryCount int) string {
 		return EmptyReasonNoFormattedEntries
 	}
 	return EmptyReasonNoRecentEvents
+}
+
+func AssignEntryIDs(req Request, source string, entries []Entry) []Entry {
+	if len(entries) == 0 {
+		return entries
+	}
+	withIDs := make([]Entry, len(entries))
+	copy(withIDs, entries)
+	seen := make(map[string]int, len(entries))
+	for i := range withIDs {
+		base := entryIdentityBase(req, source, withIDs[i])
+		seen[base]++
+		withIDs[i].EntryID = stableEntryID(base, seen[base])
+	}
+	return withIDs
+}
+
+func entryIdentityBase(req Request, source string, entry Entry) string {
+	parts := []string{
+		"v1",
+		strings.TrimSpace(req.DeploymentName),
+		strings.TrimSpace(req.ResourceType),
+		strings.TrimSpace(req.ResourceName),
+		strings.TrimSpace(req.ResourceDescription),
+		strings.TrimSpace(req.BackingResourceType),
+		strings.TrimSpace(req.BackingResourceName),
+		strings.TrimSpace(req.Region),
+		strings.TrimSpace(req.ControlAccountID),
+		strings.TrimSpace(req.TargetAccountID),
+		strings.TrimSpace(req.ContainerName),
+		strings.TrimSpace(req.InstanceID),
+		strings.TrimSpace(req.ClusterARN),
+		strings.TrimSpace(source),
+		strings.TrimSpace(entry.Timestamp),
+		strings.TrimSpace(entry.Stream),
+		strings.TrimSpace(entry.InstanceID),
+		strings.TrimSpace(entry.ContainerName),
+		strings.TrimSpace(entry.Message),
+	}
+	return strings.Join(parts, "\x00")
+}
+
+func stableEntryID(base string, duplicateOrdinal int) string {
+	hash := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%d", base, duplicateOrdinal)))
+	return "rlog_" + hex.EncodeToString(hash[:12])
 }
 
 func resourceDescription(req Request) string {

@@ -6403,8 +6403,18 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
 			t.Fatalf("failed to decode resource logs payload: %v", err)
 		}
-		if !reflect.DeepEqual(got, expected) {
-			t.Fatalf("unexpected resource logs payload: %+v", got)
+		expectedWithIDs := expected
+		expectedWithIDs.Entries = resourcelogs.AssignEntryIDs(resourcelogs.Request{
+			DeploymentName:   "api-prod",
+			ResourceType:     "ecsTask",
+			ResourceName:     "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123",
+			ControlAccountID: expected.LookupContext.ControlAccountID,
+			TargetAccountID:  expected.LookupContext.TargetAccountID,
+			Region:           expected.LookupContext.Region,
+			ContainerName:    "api",
+		}, expected.Source, expected.Entries)
+		if !reflect.DeepEqual(got, expectedWithIDs) {
+			t.Fatalf("unexpected resource logs payload: got %+v want %+v", got, expectedWithIDs)
 		}
 
 		var raw map[string]any
@@ -6430,9 +6440,17 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		if firstEntry["containerName"] != "api" {
 			t.Fatalf("expected entries[0].containerName to expose resolved ECS task container, got %#v", firstEntry)
 		}
+		firstEntryID, ok := firstEntry["entryId"].(string)
+		if !ok || !strings.HasPrefix(firstEntryID, "rlog_") {
+			t.Fatalf("expected backend-authored entries[0].entryId, got %#v", firstEntry)
+		}
 		secondEntry, ok := rawEntries[1].(map[string]any)
 		if !ok {
 			t.Fatalf("expected second entry object, got %#v", rawEntries[1])
+		}
+		secondEntryID, ok := secondEntry["entryId"].(string)
+		if !ok || !strings.HasPrefix(secondEntryID, "rlog_") || secondEntryID == firstEntryID {
+			t.Fatalf("expected unique backend-authored entries[1].entryId, got first=%q second=%#v", firstEntryID, secondEntry)
 		}
 		if _, ok := secondEntry["containerName"]; ok {
 			t.Fatalf("expected entries[1].containerName to be omitted when unknown, got %#v", secondEntry)
@@ -6955,8 +6973,20 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
 			t.Fatalf("failed to decode bootstrap-source resource logs payload: %v", err)
 		}
-		if !reflect.DeepEqual(got, expected) {
-			t.Fatalf("unexpected bootstrap-source resource logs payload: %+v", got)
+		expectedWithIDs := expected
+		expectedWithIDs.Entries = resourcelogs.AssignEntryIDs(resourcelogs.Request{
+			DeploymentName:      "api-prod",
+			ResourceType:        "userDataBootstrapSource",
+			ResourceName:        "file:userdata/api-prod.sh",
+			ResourceDescription: expected.ResourceDescription,
+			BackingResourceType: expected.BackingResourceType,
+			BackingResourceName: expected.BackingResourceName,
+			ControlAccountID:    expected.LookupContext.ControlAccountID,
+			TargetAccountID:     expected.LookupContext.TargetAccountID,
+			Region:              expected.LookupContext.Region,
+		}, expected.Source, expected.Entries)
+		if !reflect.DeepEqual(got, expectedWithIDs) {
+			t.Fatalf("unexpected bootstrap-source resource logs payload: got %+v want %+v", got, expectedWithIDs)
 		}
 
 		var raw map[string]any
@@ -6976,6 +7006,10 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		first, ok := entries[0].(map[string]any)
 		if !ok || first["timestamp"] != "2026-04-16T07:11:30Z" || first["message"] != "bootstrap start" {
 			t.Fatalf("expected first bootstrap-source entry shape, got %#v", entries[0])
+		}
+		firstEntryID, ok := first["entryId"].(string)
+		if !ok || !strings.HasPrefix(firstEntryID, "rlog_") {
+			t.Fatalf("expected first bootstrap-source entry ID, got %#v", first)
 		}
 	})
 

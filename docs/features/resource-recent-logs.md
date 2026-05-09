@@ -16,6 +16,8 @@ Tenet now exposes a read-only recent-log slice for resource-detail drill-down pa
 
 Every successful route response also includes additive `resultScope` metadata. This is bounded-read evidence for operators and UI clients, not a pagination cursor or full log-total guarantee: Tenet reports the requested cap when one was provided, the effective cap it applied after defaulting, the number of entries returned in this response, and a conservative `truncationStatus` (`truncated`, `not_truncated`, `unknown`, or `not_applicable`). Tenet does not issue extra AWS calls just to prove total rows beyond the bounded read.
 
+Each returned recent-log row now carries additive `entries[].entryId`, a backend-authored stable row identifier derived from the deployment/resource route, provider source, normalized row metadata, and a duplicate-row ordinal. It is intentionally opaque (`rlog_...`), requires no persistence layer, and lets operators/reviewers hand off one specific row without depending on mutable UI formatting around timestamps, messages, streams, containers, or instance IDs. Empty and unavailable payloads keep the existing `entries=[]` semantics and therefore have no row IDs to render.
+
 Example limited service request:
 
 ```bash
@@ -57,6 +59,7 @@ Response fields:
 - `available`
 - `source`
 - `entries[]`
+  - `entryId` (`rlog_...`, backend-authored stable row identifier for row-level handoffs)
   - `timestamp`
   - `message`
   - optional `stream`
