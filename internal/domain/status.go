@@ -127,6 +127,7 @@ type ControllerRefreshEvidence struct {
 
 // StatusHistoryEntry captures one operator-facing runtime history event.
 type StatusHistoryEntry struct {
+	EventID            string                     `json:"eventId,omitempty"`
 	Timestamp          string                     `json:"timestamp"`
 	Source             string                     `json:"source"`
 	Summary            string                     `json:"summary"`

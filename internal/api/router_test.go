@@ -3127,6 +3127,7 @@ func TestDeploymentOverviewEventsRouteIncludesManagedDriftSummary(t *testing.T) 
 			return catalog.DeploymentOverviewEvents{
 				DeploymentName: name,
 				Events: []domain.StatusHistoryEntry{{
+					EventID:   "evt_test_runtime_event",
 					Timestamp: "2026-04-16T06:15:00Z",
 					Source:    "controller",
 					Summary:   "Deployment has managed drift",
@@ -3172,6 +3173,9 @@ func TestDeploymentOverviewEventsRouteIncludesManagedDriftSummary(t *testing.T) 
 	event, ok := events[0].(map[string]any)
 	if !ok {
 		t.Fatalf("expected event object, got %#v", events[0])
+	}
+	if event["eventId"] != "evt_test_runtime_event" {
+		t.Fatalf("expected eventId JSON field in runtime event payload, got %#v", event)
 	}
 	refresh, ok := event["controllerRefresh"].(map[string]any)
 	if !ok {

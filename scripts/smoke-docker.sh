@@ -1588,6 +1588,8 @@ for fragment in (
     "const createControllerRefreshCue = (event) => {",
     "GitHub refresh evidence · ${fields.join(' · ')}",
     "const runtimeEventAnchorBase = (event) => {",
+    "const backendID = auditAnchorSlug(event?.eventId);",
+    "if (backendID && backendID !== 'unknown') return `runtime-event-${backendID}`;",
     "const uniqueRuntimeEventAnchorID = (event, seenAnchors) => {",
     "createNavLink(runtimeEventAnchorURL(deploymentName, eventID, selectedLimit), 'Share event', '_self')",
     "Recent logs",

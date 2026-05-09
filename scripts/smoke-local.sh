@@ -1483,6 +1483,8 @@ assert "At cap; older history may exist" in ui, ui
 assert "const createControllerRefreshCue = (event) => {" in ui, ui
 assert 'GitHub refresh evidence · ${fields.join(\' · \')}' in ui, ui
 assert "const runtimeEventAnchorBase = (event) => {" in ui, ui
+assert "const backendID = auditAnchorSlug(event?.eventId);" in ui, ui
+assert "if (backendID && backendID !== 'unknown') return `runtime-event-${backendID}`;" in ui, ui
 assert "const uniqueRuntimeEventAnchorID = (event, seenAnchors) => {" in ui, ui
 assert "createNavLink(runtimeEventAnchorURL(deploymentName, eventID, selectedLimit), 'Share event', '_self')" in ui, ui
 assert "actions.push(createNavLink(buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName }), 'Open field-level drift', '_self'));" in ui, ui

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/DevopsArtFactory/tenet/internal/domain"
@@ -1044,6 +1045,10 @@ func TestBuildDeploymentOverviewEvents(t *testing.T) {
 	if len(events.Events) != 1 || events.Events[0].Summary != "Accepted rollout for r7" || events.Events[0].Source != "controller" {
 		t.Fatalf("expected controller-derived runtime events, got %+v", events.Events)
 	}
+	eventID := events.Events[0].EventID
+	if !strings.HasPrefix(eventID, "evt_") {
+		t.Fatalf("expected backend-authored stable event ID, got %q in %+v", eventID, events.Events[0])
+	}
 	if events.ManagedDriftSummary != (ManagedDriftSummary{Total: 4, High: 1, Medium: 1, Low: 1}) {
 		t.Fatalf("expected managed drift summary to count events by severity, got %+v", events.ManagedDriftSummary)
 	}
@@ -1053,11 +1058,56 @@ func TestBuildDeploymentOverviewEvents(t *testing.T) {
 	if events.Events[0].Summary != "Accepted rollout for r7" || events.Events[0].ChangeDetails[0] != "Summary changed to Accepted rollout for r7" {
 		t.Fatalf("expected runtime events to be cloned defensively, got %+v", events.Events)
 	}
+	rebuilt, err := BuildDeploymentOverviewEvents(catalog, snapshots, "payments-api-prod")
+	if err != nil {
+		t.Fatalf("BuildDeploymentOverviewEvents after summary mutation returned error: %v", err)
+	}
+	if rebuilt.Events[0].EventID != eventID {
+		t.Fatalf("expected event ID to survive summary/detail wording changes, before %q after %q", eventID, rebuilt.Events[0].EventID)
+	}
 
 	events.Events[0].Summary = "mutated-by-caller"
 	events.Events[0].ChangeDetails[0] = "mutated-by-caller"
 	if snapshots[0].Status.History[0].Summary != "mutated" || snapshots[0].Status.History[0].ChangeDetails[0] != "mutated" {
 		t.Fatalf("expected caller mutations to avoid mutating stored history, got %+v", snapshots[0].Status.History)
+	}
+}
+
+func TestRuntimeEventIDsKeepDuplicateOrdinalsWhenEarlierIDAlreadyExists(t *testing.T) {
+	history := []domain.StatusHistoryEntry{
+		{
+			Timestamp:          "2026-04-16T06:15:00Z",
+			Source:             "controller",
+			Sync:               domain.Sync{State: domain.SyncStateReconciling},
+			Health:             domain.Health{Overall: domain.HealthProgressing},
+			DesiredGeneration:  7,
+			ObservedGeneration: 6,
+			RolloutPhase:       domain.RolloutPhaseAccepted,
+			TargetType:         "ecs",
+			ExecutionMode:      "ecsCodeDeploy",
+		},
+		{
+			Timestamp:          "2026-04-16T06:15:00Z",
+			Source:             "controller",
+			Sync:               domain.Sync{State: domain.SyncStateReconciling},
+			Health:             domain.Health{Overall: domain.HealthProgressing},
+			DesiredGeneration:  7,
+			ObservedGeneration: 6,
+			RolloutPhase:       domain.RolloutPhaseAccepted,
+			TargetType:         "ecs",
+			ExecutionMode:      "ecsCodeDeploy",
+		},
+	}
+
+	initial := withRuntimeEventIDs("payments-api-prod", history)
+	if len(initial) != 2 || initial[0].EventID == "" || initial[1].EventID == "" || initial[0].EventID == initial[1].EventID {
+		t.Fatalf("expected unique derived IDs for duplicate events, got %+v", initial)
+	}
+
+	history[0].EventID = initial[0].EventID
+	rebuilt := withRuntimeEventIDs("payments-api-prod", history)
+	if rebuilt[0].EventID != initial[0].EventID || rebuilt[1].EventID != initial[1].EventID {
+		t.Fatalf("expected later duplicate ID to keep its ordinal when an earlier matching event already has an ID, before %+v after %+v", initial, rebuilt)
 	}
 }
 
