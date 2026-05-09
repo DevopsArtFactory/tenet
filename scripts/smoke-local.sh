@@ -847,6 +847,7 @@ assert isinstance(audit_logs_action_filtered.get('entries', []), list), audit_lo
 assert len(audit_logs_action_filtered['entries']) >= 2, audit_logs_action_filtered
 assert all(entry['action'] == 'apply.requested' for entry in audit_logs_action_filtered['entries']), audit_logs_action_filtered
 for entry in audit_logs['entries']:
+    assert isinstance(entry.get('entryId'), str) and entry['entryId'].startswith('audit_'), entry
     assert entry['appRef'] == 'payments-api', entry
     assert entry['environmentRef'] in {'prod-apne2', 'staging-apne2'}, entry
     assert isinstance(entry.get('metadata', {}), dict), entry

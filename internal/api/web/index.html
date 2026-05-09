@@ -1787,6 +1787,8 @@
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '') || 'unknown';
       const auditEntryAnchorID = (entry) => {
+        const backendID = auditAnchorSlug(entry?.entryId);
+        if (backendID && backendID !== 'unknown') return `audit-entry-${backendID}`;
         if (entry?.applyId) return `audit-entry-apply-${auditAnchorSlug(entry.applyId)}`;
         if (entry?.planId) return `audit-entry-plan-${auditAnchorSlug(entry.planId)}`;
         if (entry?.timestamp) return `audit-entry-time-${auditAnchorSlug(entry.timestamp)}`;

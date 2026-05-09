@@ -2,6 +2,8 @@ package auditlog
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"sort"
 
@@ -51,6 +53,7 @@ type Source struct {
 
 // Entry is one local-friendly audit timeline row projected from persisted records.
 type Entry struct {
+	EntryID        string   `json:"entryId"`
 	Timestamp      string   `json:"timestamp"`
 	Action         string   `json:"action"`
 	DeploymentName string   `json:"deploymentName,omitempty"`
@@ -154,6 +157,7 @@ func (s Service) loadDeployments(ctx context.Context) (map[string]catalog.Deploy
 func projectPlan(record planpreview.Record, deployment catalog.DeploymentView) Entry {
 	approvalRequired := record.Approval.Required
 	return Entry{
+		EntryID:        stableAuditEntryID("plan", record.ID),
 		Timestamp:      record.CreatedAt,
 		Action:         "plan.created",
 		DeploymentName: record.DeploymentName,
@@ -179,6 +183,7 @@ func projectPlan(record planpreview.Record, deployment catalog.DeploymentView) E
 
 func projectApply(record applyrequest.Record, deployment catalog.DeploymentView) Entry {
 	return Entry{
+		EntryID:        stableAuditEntryID("apply", record.ID),
 		Timestamp:      record.CreatedAt,
 		Action:         "apply.requested",
 		DeploymentName: record.DeploymentName,
@@ -204,10 +209,18 @@ func projectApply(record applyrequest.Record, deployment catalog.DeploymentView)
 }
 
 func (e Entry) stableID() string {
+	if e.EntryID != "" {
+		return e.EntryID
+	}
 	if e.ApplyID != "" {
 		return e.ApplyID
 	}
 	return e.PlanID
+}
+
+func stableAuditEntryID(kind, id string) string {
+	digest := sha256.Sum256([]byte(kind + "\x00" + id))
+	return "audit_" + kind + "_" + hex.EncodeToString(digest[:8])
 }
 
 // ValidAction reports whether the provided query value is one of the supported audit actions.
