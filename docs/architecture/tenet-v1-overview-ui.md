@@ -47,7 +47,7 @@ It stays intentionally narrow:
 - render immutable plan/apply activity newest-first
 - show each row's immutable `Source record` route plus `Source detail` route when present, with `Open source record` / `Open source detail` raw JSON links, so operators can jump from the audit evidence back to the stored plan/apply record or source snapshot they are troubleshooting
 - give each audit row a stable `audit-entry-*` anchor plus an `_self` `Open audit entry` link that preserves deployment/action/limit filters, so incident handoffs can point at one immutable row instead of the whole filtered timeline
-- make a selected deployment obvious in both the audit chrome and the audit body when `deployment={deploymentName}` is present
+- make a selected deployment obvious in both the audit chrome and the audit body when `deployment={deploymentName}` is present, with deployment-context callout `_self` links to application detail and plan/apply so the next action is visible even before rows exist
 - swap to filter-aware empty-state copy when selected deployment/action filters or a limit cap match no audit entries, while keeping the generic unfiltered empty state unchanged and pointing operators at `Clear audit filters` / `Clear audit controls`
 - keep actor identity explicit as unavailable or unknown instead of inventing names
 - provide `_self` links back into the existing `application` drill-down and `plan` workspace when deployment / plan / apply identifiers exist

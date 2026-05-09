@@ -5882,11 +5882,17 @@
       const createAuditDeploymentContextCallout = () => {
         const deploymentName = auditDeploymentName();
         if (!deploymentName) return null;
+        const contextLinks = createElement('div', 'row-links');
+        contextLinks.append(
+          createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Open application drill-down', '_self'),
+          createNavLink(buildPageURL('plan', { deployment: deploymentName }), 'Open plan/apply workspace', '_self'),
+        );
         const callout = createElement('div', 'workspace-callout');
         callout.append(
           createElement('div', 'workspace-callout-label', 'Active deployment context'),
           createElement('div', 'workspace-callout-copy', deploymentName),
           createElement('div', 'workspace-callout-factors', 'Audit rows, in-app drill-down links, and empty-state copy remain scoped to this deployment until the filter is cleared.'),
+          contextLinks,
         );
         return callout;
       };

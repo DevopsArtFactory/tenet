@@ -10832,6 +10832,14 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!accountsText.includes('Current audit read: GET /v1/audit-logs?deployment=payments-api-prod&limit=2')) throw new Error('expected scoped audit read route copy, got ' + accountsText);
   if (!accountsText.includes('Active deployment context')) throw new Error('expected deployment context callout');
   if (!accountsText.includes('payments-api-prod')) throw new Error('expected deployment context value');
+  const deploymentContextCallout = collectNodes(document.getElementById('accounts'), (node) => node.className === 'workspace-callout')
+    .find((node) => collectText(node).join(' | ').includes('Active deployment context'));
+  if (!deploymentContextCallout) throw new Error('expected deployment context callout node');
+  const deploymentContextLinks = collectNodes(deploymentContextCallout, (node) => node.tagName === 'A');
+  const contextApplicationLink = deploymentContextLinks.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Open application drill-down' && node.target === '_self');
+  if (!contextApplicationLink || contextApplicationLink.rel) throw new Error('expected deployment context application handoff link');
+  const contextPlanLink = deploymentContextLinks.find((node) => node.href === '/console?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Open plan/apply workspace' && node.target === '_self');
+  if (!contextPlanLink || contextPlanLink.rel) throw new Error('expected deployment context plan/apply handoff link');
   if (!accountsText.includes('Apply requested (apply.requested)')) throw new Error('expected newest audit entry label');
   if (!accountsText.includes('Plan preview created (plan.created)')) throw new Error('expected older audit entry label');
   if (!accountsText.includes('Visible audit entries | 2 entries')) throw new Error('expected visible audit summary count label/value');
