@@ -1825,6 +1825,8 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
         "params.set('limit', String(normalizedLimit));",
         "resourceLogLimit: normalizeResourceLogsLimit(params.get('resourceLogLimit') || '')",
         "const resourceLogAnchorBase = (entry) => {",
+        "const backendID = auditAnchorSlug(entry?.entryId);",
+        "return `resource-log-${backendID}`;",
         "const resourceLogAnchorURL = (deploymentName, resource, logID, limit = 0) => buildPageSectionURL('resource', logID, {",
         "containerName: String(currentPageState.containerName || resource?.containerName || '').trim(),",
         "instanceId: String(currentPageState.instanceId || resource?.instanceId || '').trim(),",

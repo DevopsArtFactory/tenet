@@ -1868,6 +1868,8 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 		"return `/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-logs?${params.toString()}`;",
 		"const resourceLogsReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceLogsRoute(deploymentName, resource, limit)}`;",
 		"const resourceLogAnchorBase = (entry) => {",
+		"const backendID = auditAnchorSlug(entry?.entryId);",
+		"return `resource-log-${backendID}`;",
 		"return parts.length ? `resource-log-${parts.join('-')}` : 'resource-log-unknown';",
 		"const uniqueResourceLogAnchorID = (entry, seenAnchors) => {",
 		"const resourceLogAnchorURL = (deploymentName, resource, logID, limit = 0) => buildPageSectionURL('resource', logID, {",

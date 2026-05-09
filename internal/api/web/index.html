@@ -1815,6 +1815,10 @@
         eventLimit: limit,
       });
       const resourceLogAnchorBase = (entry) => {
+        const backendID = auditAnchorSlug(entry?.entryId);
+        if (backendID && backendID !== 'unknown') {
+          return `resource-log-${backendID}`;
+        }
         const parts = [entry?.timestamp, entry?.stream, entry?.containerName, entry?.instanceId, entry?.message]
           .map((value) => auditAnchorSlug(value))
           .filter((value) => value && value !== 'unknown');
