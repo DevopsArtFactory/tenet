@@ -1602,6 +1602,12 @@ assert "Log entry cap · ${resourceLogsLimitText(limit)}" in ui, ui
 assert "'Log limit'" in ui, ui
 assert "params.set('limit', String(normalizedLimit));" in ui, ui
 assert "resourceLogLimit: normalizeResourceLogsLimit(params.get('resourceLogLimit') || '')" in ui, ui
+assert "const resourceLogAnchorBase = (entry) => {" in ui, ui
+assert "const resourceLogAnchorURL = (deploymentName, resource, logID, limit = 0) => buildPageSectionURL('resource', logID, {" in ui, ui
+assert "containerName: String(currentPageState.containerName || resource?.containerName || '').trim()," in ui, ui
+assert "instanceId: String(currentPageState.instanceId || resource?.instanceId || '').trim()," in ui, ui
+assert "clusterArn: supportsECSClusterScope(resource) ? String(currentPageState.clusterArn || resource?.clusterArn || '').trim() : ''," in ui, ui
+assert "createNavLink(resourceLogAnchorURL(deploymentName, resource, logID, selectedLimit), 'Share log entry', '_self')" in ui, ui
 assert "clusterArn: params.get('clusterArn') || ''" in ui, ui
 assert "routeClusterArn: supportsECSClusterScope(resource) ? String(currentPageState.clusterArn || resource.clusterArn || '').trim() : ''" in ui, ui
 assert "Clear selected cluster" in ui, ui

@@ -1812,6 +1812,27 @@
         deployment: deploymentName,
         eventLimit: limit,
       });
+      const resourceLogAnchorBase = (entry) => {
+        const parts = [entry?.timestamp, entry?.stream, entry?.containerName, entry?.instanceId, entry?.message]
+          .map((value) => auditAnchorSlug(value))
+          .filter((value) => value && value !== 'unknown');
+        return parts.length ? `resource-log-${parts.join('-')}` : 'resource-log-unknown';
+      };
+      const uniqueResourceLogAnchorID = (entry, seenAnchors) => {
+        const base = resourceLogAnchorBase(entry);
+        const seen = seenAnchors.get(base) || 0;
+        seenAnchors.set(base, seen + 1);
+        return seen ? `${base}-${seen + 1}` : base;
+      };
+      const resourceLogAnchorURL = (deploymentName, resource, logID, limit = 0) => buildPageSectionURL('resource', logID, {
+        deployment: deploymentName,
+        resourceType: resource?.type,
+        resourceId: resource?.id,
+        containerName: String(currentPageState.containerName || resource?.containerName || '').trim(),
+        instanceId: String(currentPageState.instanceId || resource?.instanceId || '').trim(),
+        clusterArn: supportsECSClusterScope(resource) ? String(currentPageState.clusterArn || resource?.clusterArn || '').trim() : '',
+        resourceLogLimit: limit,
+      });
       const stableResourceIdentity = (resource) => {
         const type = resource.type || resource.resource || 'resource';
         const name = resource.name || type;
@@ -4330,8 +4351,11 @@
         fragment.push(...beforeNodes(metadata));
 
         const logList = createElement('ol', 'detail-list');
+        const seenLogAnchors = new Map();
         entries.forEach((entry) => {
+          const logID = uniqueResourceLogAnchorID(entry, seenLogAnchors);
           const logItem = createElement('li');
+          logItem.setAttribute('id', logID);
           const message = createElement('strong', '', textOrDash(entry.message));
           logItem.append(message);
           const logMeta = createElement('div', 'detail-history-meta');
@@ -4345,7 +4369,9 @@
           if (entry.instanceId) {
             logMeta.append(createElement('span', 'detail-condition-meta', `Log instance · ${entry.instanceId}`));
           }
-          logItem.append(logMeta);
+          const rowLinks = createElement('div', 'row-links');
+          rowLinks.append(createNavLink(resourceLogAnchorURL(deploymentName, resource, logID, selectedLimit), 'Share log entry', '_self'));
+          logItem.append(logMeta, rowLinks);
           logList.append(logItem);
         });
         fragment.push(logList);

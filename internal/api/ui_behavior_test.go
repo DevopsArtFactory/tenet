@@ -5830,6 +5830,7 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   const loadingText = collectText(loadingRun.document.getElementById('accounts')).join(' | ');
   if (!loadingText.includes('Recent logs')) throw new Error('expected resource page to render recent logs section heading while loading');
   if (!loadingText.includes('Loading recent logs…')) throw new Error('expected resource page to render loading state for recent logs');
+  if (loadingText.includes('Share log entry')) throw new Error('expected loading recent logs state not to render share links');
   const loadingLimitSelect = collectNodes(loadingRun.document.getElementById('accounts'), (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'Log limit')[0];
   if (!loadingLimitSelect) throw new Error('expected recent logs panel to expose the log limit select while loading');
   if (!loadingLimitSelect.disabled) throw new Error('expected recent logs limit select to be disabled while logs are loading');
@@ -5844,6 +5845,7 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   });
   const unavailableText = collectText(unavailableRun.document.getElementById('accounts')).join(' | ');
   if (!unavailableText.includes('Recent logs are unavailable for this resource.')) throw new Error('expected resource page unavailable recent logs state');
+  if (unavailableText.includes('Share log entry')) throw new Error('expected unavailable recent logs state not to render share links');
   if (!unavailableText.includes('Cross-account access is not configured for this deployment.')) throw new Error('expected unavailable recent logs state to surface friendly provider reason');
   if (!unavailableText.includes('Lookup path · ap-northeast-2 · control 123456789012 → target 210987654321 · cross-account lookup · observer role not configured')) throw new Error('expected unavailable recent logs state to summarize the lookup path, got ' + unavailableText);
   if (!unavailableText.includes('Lookup region')) throw new Error('expected unavailable recent logs state to label lookup region');
@@ -5876,6 +5878,7 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   });
   const emptyText = collectText(emptyRun.document.getElementById('accounts')).join(' | ');
   if (!emptyText.includes('No recent logs are available for this resource.')) throw new Error('expected resource page empty recent logs state');
+  if (emptyText.includes('Share log entry')) throw new Error('expected empty recent logs state not to render share links');
   if (!emptyText.includes('Tenet reached the recent-log provider, but no events were found in the selected bounded window.')) throw new Error('expected empty recent logs state to explain no_recent_events, got ' + emptyText);
   if (emptyText.includes('no_recent_events')) throw new Error('expected empty recent logs state not to expose raw emptyReason code');
   if (!emptyText.includes('Lookup path · ap-northeast-2 · account 210987654321 · same-account lookup · observer role configured')) throw new Error('expected empty recent logs state to summarize same-account lookup path, got ' + emptyText);
@@ -5940,6 +5943,15 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   if (populatedText.includes('Backing resource name')) throw new Error('expected direct recent-log sources to avoid backing resource metadata values');
   if (!populatedText.includes('Log stream · codedeploy/bluegreen/1')) throw new Error('expected populated recent logs section to show stream');
   if (!populatedText.includes('Log timestamp · 2026-04-16T07:11:00Z')) throw new Error('expected populated recent logs section to show timestamp');
+  const shareLinks = collectNodes(populatedRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Share log entry');
+  if (shareLinks.length !== 1) throw new Error('expected one share link for the rendered log entry, got ' + shareLinks.length);
+  const expectedLogAnchor = 'resource-log-2026-04-16t07-11-00z-codedeploy-bluegreen-1-img-src-x-onerror-1-rollback-check-passed';
+  const expectedResourceRoute = '/?page=resource&deployment=payments-api-staging&resourceType=codeDeployDeploymentGroup&resourceId=codeDeployDeploymentGroup%3A%3Apayments-api-staging+Deployment+Group%3A%3ALinear+traffic+shifting+deployment+group';
+  if (shareLinks[0].href !== expectedResourceRoute + '#' + expectedLogAnchor) throw new Error('expected share link to preserve resource route and point at stable log anchor, got ' + shareLinks[0].href);
+  if (shareLinks[0].target !== '_self') throw new Error('expected share log link to stay in embedded UI flow');
+  if (shareLinks[0].rel) throw new Error('expected share log link not to carry new-tab rel attributes');
+  const anchoredLogEntry = collectNodes(populatedRun.document.getElementById('accounts'), (node) => node.tagName === 'LI' && node.getAttribute('id') === expectedLogAnchor)[0];
+  if (!anchoredLogEntry) throw new Error('expected rendered log row to expose stable anchor id ' + expectedLogAnchor);
   if (!populatedText.includes('<img src=x onerror=1> rollback check passed')) throw new Error('expected populated recent logs section to render raw log message text safely');
   const images = collectNodes(populatedRun.document.getElementById('accounts'), (node) => node.tagName === 'IMG');
   if (images.length !== 0) throw new Error('expected log messages to remain text content rather than parsed html');
