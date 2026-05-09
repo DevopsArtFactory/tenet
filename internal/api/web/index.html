@@ -5454,12 +5454,13 @@
         });
       const fetchEmbeddedReadRouteJSON = (route, labels) => fetch(route)
         .then((response) => {
-          if (response.ok) return response.json();
+          const requestId = responseRequestID(response);
+          if (response.ok) return response.json().then((value) => attachResponseRequestID(value, requestId));
           const fallback = response.status === 503
             ? `${labels.unavailable} (${response.status})`
             : `${labels.failure} (${response.status})`;
           return responseErrorMessage(response, fallback).then((message) => {
-            throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);
+            throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status, requestId);
           });
         });
       const fetchApplicationsOverview = () => fetchEmbeddedReadRouteJSON('/v1/overview/applications', {
@@ -6757,17 +6758,23 @@
         }
         return '';
       };
+      const operatorReadFailureMessageWithRequestID = (message, error) => {
+        const requestId = String(error?.requestId || '').trim();
+        if (!requestId) return message;
+        return `${message} Tenet request ID · ${requestId}`;
+      };
       const operatorReadFailureMessage = (route, error) => {
+        let message = '';
         if (operatorReadAuthRequiredState(error)) {
-          return operatorReadAuthRequiredMessage(route);
+          message = operatorReadAuthRequiredMessage(route);
+        } else if (operatorReadRoleRequiredState(error)) {
+          message = operatorReadRoleRequiredMessage(route);
+        } else if (operatorReadForbiddenState(error)) {
+          message = operatorReadForbiddenMessage(route);
+        } else {
+          message = error?.message || 'unknown error';
         }
-        if (operatorReadRoleRequiredState(error)) {
-          return operatorReadRoleRequiredMessage(route);
-        }
-        if (operatorReadForbiddenState(error)) {
-          return operatorReadForbiddenMessage(route);
-        }
-        return error?.message || 'unknown error';
+        return operatorReadFailureMessageWithRequestID(message, error);
       };
       const operatorContextFailureHeading = (error) => operatorReadFailureHeading(error);
       const operatorContextFailureMessage = (error) => {
