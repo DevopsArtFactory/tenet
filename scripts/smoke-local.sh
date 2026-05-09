@@ -1884,6 +1884,7 @@ assert "row.setAttribute('id', auditEntryAnchorID(entry));" in audit_ui, audit_u
 assert "createNavLink(auditEntryAnchorURL(entry), 'Open audit entry', '_self')" in audit_ui, audit_ui
 assert 'Share or continue in app' in audit_ui, audit_ui
 assert 'No audit activity has been persisted yet.' in audit_ui, audit_ui
+assert 'No audit activity has been persisted yet for deployment ${currentPageState.deployment}. Create a plan preview or apply request from the plan/apply workspace to add immutable audit rows for this deployment.' in audit_ui, audit_ui
 assert "const auditFilterLabels = () => {" in audit_ui, audit_ui
 assert "labels.push(`action ${auditActionLabel(currentPageState.auditAction)}`);" in audit_ui, audit_ui
 assert "const auditEmptyStateText = () => {" in audit_ui, audit_ui

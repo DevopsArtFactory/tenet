@@ -11269,6 +11269,16 @@ async function renderWithFetch(fetchImpl, search = '?page=audit') {
   if (!emptyText.includes('No audit activity has been persisted yet.')) throw new Error('expected audit empty state after resolve');
   if (emptyText.includes('Quick navigation')) throw new Error('did not expect audit quick navigation without a deployment filter');
 
+  const deploymentOnlyRun = await renderWithFetch((url) => {
+    if (url !== '/v1/audit-logs?deployment=payments-api-prod') throw new Error('unexpected deployment-only audit fetch: ' + url);
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({ entries: [] }) });
+  }, '?page=audit&deployment=payments-api-prod');
+  await settle();
+  await settle();
+  const deploymentOnlyText = collectText(deploymentOnlyRun.document.getElementById('accounts')).join(' | ');
+  if (!deploymentOnlyText.includes('No audit activity has been persisted yet for deployment payments-api-prod. Create a plan preview or apply request from the plan/apply workspace to add immutable audit rows for this deployment.')) throw new Error('expected deployment-only audit empty-state guidance, got ' + deploymentOnlyText);
+  if (deploymentOnlyText.includes('No audit entries match the current filters')) throw new Error('expected deployment-only audit empty state to avoid generic filtered copy');
+
   const limitOnlyRun = await renderWithFetch((url) => {
     if (url !== '/v1/audit-logs?limit=2') throw new Error('unexpected limit-only audit fetch: ' + url);
     return Promise.resolve({ ok: true, json: () => Promise.resolve({ entries: [] }) });
