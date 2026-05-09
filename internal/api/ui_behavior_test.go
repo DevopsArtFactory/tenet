@@ -4932,7 +4932,12 @@ async function render(search, inspectionResult, hash = '') {
       }
       return Promise.resolve({ ok: true, headers: { get: (name) => String(name).toLowerCase() === 'request-id' ? 'req-inspection-878-success' : '' }, json: () => Promise.resolve(body) });
     }
-    if (String(url).startsWith('/v1/overview/deployments/worker-prod/resource-logs?')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'aws_unavailable', entries: [] }) });
+    if (String(url).startsWith('/v1/overview/deployments/worker-prod/resource-logs?')) {
+      if (inspectionResult && inspectionResult.__logsErrorStatus) {
+        return Promise.resolve({ ok: false, status: inspectionResult.__logsErrorStatus, headers: { get: (name) => String(name).toLowerCase() === 'request-id' ? 'req-logs-951-denied' : '' }, text: () => Promise.resolve(inspectionResult.__logsErrorBody || '') });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'aws_unavailable', entries: [] }) });
+    }
     throw new Error('unexpected fetch url: ' + url);
   };
   new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -4993,6 +4998,14 @@ async function render(search, inspectionResult, hash = '') {
   const inspectionErrorRun = await render(scopedTaskSearch, { __errorStatus: 500, __errorBody: 'provider failed' }, '#resource-live-inspection');
   if (!inspectionErrorRun.text.includes('Failed to load live inspection: resource inspection request failed (500)')) throw new Error('expected live inspection non-auth error state: ' + inspectionErrorRun.text);
   if (!inspectionErrorRun.text.includes('Tenet request ID · req-inspection-878-error')) throw new Error('expected live inspection non-auth error to render Tenet Request-Id metadata: ' + inspectionErrorRun.text);
+
+  const inspectionDeniedRun = await render(scopedTaskSearch, { __errorStatus: 403, __errorBody: 'forbidden: deployment access denied' }, '#resource-live-inspection');
+  if (!inspectionDeniedRun.text.includes('Operator access denied')) throw new Error('expected live inspection 403 guidance to stay visible: ' + inspectionDeniedRun.text);
+  if (!inspectionDeniedRun.text.includes('Tenet request ID · req-inspection-878-error')) throw new Error('expected live inspection 403 to render Tenet Request-Id metadata: ' + inspectionDeniedRun.text);
+
+  const logsDeniedRun = await render(scopedTaskSearch, { ...taskResult, __logsErrorStatus: 401, __logsErrorBody: 'unauthenticated: operator identity missing' }, '#resource-recent-logs');
+  if (!logsDeniedRun.text.includes('Authenticated operator required')) throw new Error('expected recent logs 401 guidance to stay visible: ' + logsDeniedRun.text);
+  if (!logsDeniedRun.text.includes('Tenet request ID · req-logs-951-denied')) throw new Error('expected recent logs 401 to render Tenet Request-Id metadata: ' + logsDeniedRun.text);
 
   const serviceResult = { available: true, source: 'ecs_service', clusterArn, lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn, serviceName: 'worker-prod-service', status: 'ACTIVE', desiredCount: 1, runningCount: 1, pendingCount: 0, taskDefinition: 'worker:42', deployments: [], events: [], tasksScope: { effectiveLimit: 10, returnedTaskCount: 1, truncationStatus: 'not_truncated' }, tasks: [{ taskArn, taskId: 'abc123', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containerInstanceArn: 'arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker-prod/ci-sample', ec2InstanceId: 'i-0sampleec2host', capacityProviderName: 'worker-capacity', availabilityZone: 'ap-northeast-2c', containers: [{ name: 'worker', lastStatus: 'RUNNING', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] }] } };
   const serviceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId) + '&clusterArn=' + encodedClusterArn, serviceResult);
