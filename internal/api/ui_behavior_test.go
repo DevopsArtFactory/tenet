@@ -10694,6 +10694,13 @@ func TestAuditTimelinePageWithNodeHarness(t *testing.T) {
 	}
 
 	auditLogsJSON, err := json.Marshal(map[string]any{
+		"resultScope": map[string]any{
+			"deploymentName":     "payments-api-prod",
+			"limit":              2,
+			"limited":            true,
+			"returnedEntryCount": 2,
+			"totalEntryCount":    5,
+		},
 		"entries": []map[string]any{
 			{
 				"timestamp":      "2026-04-17T09:00:00Z",
@@ -10828,6 +10835,13 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!accountsText.includes('Apply requested (apply.requested)')) throw new Error('expected newest audit entry label');
   if (!accountsText.includes('Plan preview created (plan.created)')) throw new Error('expected older audit entry label');
   if (!accountsText.includes('Visible audit entries | 2 entries')) throw new Error('expected visible audit summary count label/value');
+  if (!accountsText.includes('Returned entries | 2 entries')) throw new Error('expected audit resultScope returned count');
+  if (!accountsText.includes('Matching entries | 5 entries')) throw new Error('expected audit resultScope total matching count');
+  if (!accountsText.includes('Router limit | 2 entries')) throw new Error('expected audit resultScope router limit');
+  if (!accountsText.includes('Window status | Capped response; older matching audit entries may exist')) throw new Error('expected audit resultScope capped-window status');
+  if (!accountsText.includes('Applied scope · deployment payments-api-prod')) throw new Error('expected audit resultScope deployment scope copy');
+  const resultScopeStrips = collectNodes(document.getElementById('accounts'), (node) => node.className === 'metrics audit-result-scope-strip');
+  if (resultScopeStrips.length !== 1) throw new Error('expected one safe DOM audit result-scope strip, got ' + resultScopeStrips.length);
   if (!accountsText.includes('Plan previews | 1')) throw new Error('expected plan-created audit summary count');
   if (!accountsText.includes('Apply requests | 1')) throw new Error('expected apply-requested audit summary count');
   if (!accountsText.includes('Actor recorded | 1')) throw new Error('expected recorded actor audit summary count');
