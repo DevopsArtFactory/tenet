@@ -5891,6 +5891,52 @@
         return callout;
       };
       const auditEntryCountLabel = (count) => `${count} entr${count === 1 ? 'y' : 'ies'}`;
+      const auditResultScopeCount = (value, fallback = 0) => {
+        const count = Number(value);
+        return Number.isFinite(count) && count >= 0 ? count : fallback;
+      };
+      const auditResultScopeLimit = (scope) => normalizeAuditLimit(scope?.limit ?? currentPageState.auditLimit);
+      const auditResultScopeStatusText = (scope) => {
+        const limit = auditResultScopeLimit(scope);
+        if (scope?.limited === true) {
+          return 'Capped response; older matching audit entries may exist';
+        }
+        if (limit > 0) {
+          return 'Below cap; all matching audit entries returned';
+        }
+        return 'Uncapped read; all matching audit entries returned';
+      };
+      const auditResultScopeFiltersText = (scope) => {
+        const filters = [];
+        const deploymentName = scope?.deploymentName || currentPageState.deployment;
+        const action = scope?.action || currentPageState.auditAction;
+        if (deploymentName) filters.push(`deployment ${deploymentName}`);
+        if (action) filters.push(`action ${auditActionLabel(action)}`);
+        return filters.length ? `Applied scope · ${filters.join(' · ')}` : 'Applied scope · all audit entries';
+      };
+      const createAuditResultScopeSummary = (result, entries) => {
+        const scope = result?.resultScope;
+        if (!scope || typeof scope !== 'object') return null;
+        const visibleEntries = Array.isArray(entries) ? entries : [];
+        const returnedCount = auditResultScopeCount(scope.returnedEntryCount, visibleEntries.length);
+        const totalCount = auditResultScopeCount(scope.totalEntryCount, returnedCount);
+        const limit = auditResultScopeLimit(scope);
+        const summary = createElement('div', 'metrics audit-result-scope-strip');
+        [
+          ['Returned entries', auditEntryCountLabel(returnedCount)],
+          ['Matching entries', auditEntryCountLabel(totalCount)],
+          ['Router limit', limit > 0 ? auditEntryCountLabel(limit) : 'No cap'],
+          ['Window status', auditResultScopeStatusText(scope)],
+        ].forEach(([label, value]) => {
+          summary.append(createMetric(label, value));
+        });
+        const wrap = createElement('div', 'audit-result-scope');
+        wrap.append(
+          summary,
+          createElement('div', 'detail-condition-meta', auditResultScopeFiltersText(scope)),
+        );
+        return wrap;
+      };
       const createAuditTimelineSummary = (entries) => {
         const visibleEntries = Array.isArray(entries) ? entries : [];
         const planCount = visibleEntries.filter((entry) => entry?.action === 'plan.created').length;
@@ -5909,9 +5955,14 @@
         });
         return summary;
       };
-      const auditLimitCapHintText = (entries) => {
+      const auditLimitCapHintText = (entries, result = null) => {
+        const scope = result?.resultScope;
         const visibleEntries = Array.isArray(entries) ? entries : [];
-        const limit = normalizeAuditLimit(currentPageState.auditLimit);
+        const limit = auditResultScopeLimit(scope);
+        if (scope && typeof scope === 'object') {
+          if (scope.limited !== true) return '';
+          return `Showing the latest ${limit}-entry capped audit window. Older matching audit entries may be hidden; increase Limit or clear audit controls before concluding no earlier activity exists.`;
+        }
         if (limit <= 0 || visibleEntries.length < limit) return '';
         return `Showing the latest ${limit}-entry capped audit window. Older matching audit entries may be hidden; increase Limit or clear audit controls before concluding no earlier activity exists.`;
       };
@@ -6075,6 +6126,10 @@
         if (refreshStateText) {
           timelineSection.append(createElement('div', auditState?.status === 'error' ? 'detail-state error' : 'detail-state', refreshStateText));
         }
+        const resultScopeSummary = createAuditResultScopeSummary(result, entries);
+        if (resultScopeSummary) {
+          timelineSection.append(resultScopeSummary);
+        }
         if (!entries.length) {
           timelineSection.append(createElement('div', 'detail-state', auditEmptyStateText()));
           page.append(timelineSection);
@@ -6095,7 +6150,7 @@
           createAuditTimelineSummary(entries),
           createElement('div', 'detail-condition-meta', timelineMeta.join(' · ')),
         );
-        const limitCapHint = auditLimitCapHintText(entries);
+        const limitCapHint = auditLimitCapHintText(entries, result);
         if (limitCapHint) {
           timelineSection.append(createElement('div', 'detail-condition-meta audit-limit-cap-hint', limitCapHint));
         }
