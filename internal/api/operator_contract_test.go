@@ -1656,6 +1656,10 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		`assert allowed_events_scope.get('requestedLimit') == 1, allowed_events_read`,
 		`assert allowed_events_scope.get('effectiveLimit') == 1, allowed_events_read`,
 		`assert allowed_events_scope.get('returnedEventCount') == len(allowed_events_read['events']), allowed_events_read`,
+		`assert isinstance(allowed_events_scope.get('totalEventCount'), int), allowed_events_read`,
+		`assert allowed_events_scope.get('totalEventCount') >= allowed_events_scope.get('returnedEventCount'), allowed_events_read`,
+		`assert isinstance(allowed_events_scope.get('limited'), bool), allowed_events_read`,
+		`assert allowed_events_scope.get('limited') == (allowed_events_scope.get('totalEventCount') > allowed_events_scope.get('returnedEventCount')), allowed_events_read`,
 		`assert allowed_events_scope.get('truncationStatus') in {'truncated', 'not_truncated', 'unknown'}, allowed_events_read`,
 		`assert all('controllerRefresh' not in event for event in deployment_events_fixture['events']), deployment_events_fixture`,
 		`assert 'controllerRefresh' not in event, events_payload`,
@@ -1687,6 +1691,10 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		`assert allowed_events_scope.get("requestedLimit") == 1, allowed_events_read`,
 		`assert allowed_events_scope.get("effectiveLimit") == 1, allowed_events_read`,
 		`assert allowed_events_scope.get("returnedEventCount") == len(allowed_events_read["events"]), allowed_events_read`,
+		`assert isinstance(allowed_events_scope.get("totalEventCount"), int), allowed_events_read`,
+		`assert allowed_events_scope.get("totalEventCount") >= allowed_events_scope.get("returnedEventCount"), allowed_events_read`,
+		`assert isinstance(allowed_events_scope.get("limited"), bool), allowed_events_read`,
+		`assert allowed_events_scope.get("limited") == (allowed_events_scope.get("totalEventCount") > allowed_events_scope.get("returnedEventCount")), allowed_events_read`,
 		`assert allowed_events_scope.get("truncationStatus") in {"truncated", "not_truncated", "unknown"}, allowed_events_read`,
 	} {
 		if !strings.Contains(dockerSmoke, fragment) {
@@ -1702,7 +1710,7 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		"`200 OK` authorized reads",
 		"`deploymentName` plus `events` list payload contract",
 		"additive `managedDriftSummary` severity counts",
-		"router-authored `resultScope` metadata (`requestedLimit`, `effectiveLimit`, `returnedEventCount`, `truncationStatus`)",
+		"router-authored `resultScope` metadata (`requestedLimit`, `effectiveLimit`, `returnedEventCount`, `totalEventCount`, `limited`, `truncationStatus`)",
 		"ticker/default controller events do not include `controllerRefresh`",
 	} {
 		if !strings.Contains(readme, fragment) {
@@ -1716,7 +1724,7 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		"`401` / `403` / `200 OK` contract",
 		"`deploymentName` plus `events` list shape",
 		"additive `managedDriftSummary` object carrying explicit zero/non-zero severity counts",
-		"router-authored `resultScope` object (`requestedLimit`, `effectiveLimit`, `returnedEventCount`, `truncationStatus`) for bounded `?limit=` reads",
+		"router-authored `resultScope` object (`requestedLimit`, `effectiveLimit`, `returnedEventCount`, `totalEventCount`, `limited`, `truncationStatus`) for bounded `?limit=` reads",
 		"ticker/default controller-event path omit `controllerRefresh`",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {

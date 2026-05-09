@@ -3290,7 +3290,7 @@ func TestDeploymentOverviewEventsRouteAppliesLimitToEventsAndSummary(t *testing.
 		t.Fatalf("expected managedDriftSummary counts for returned events only, got %#v", payload["managedDriftSummary"])
 	}
 	scope, ok := payload["resultScope"].(map[string]any)
-	if !ok || scope["requestedLimit"] != float64(1) || scope["effectiveLimit"] != float64(1) || scope["returnedEventCount"] != float64(1) || scope["truncationStatus"] != "truncated" {
+	if !ok || scope["requestedLimit"] != float64(1) || scope["effectiveLimit"] != float64(1) || scope["returnedEventCount"] != float64(1) || scope["totalEventCount"] != float64(2) || scope["limited"] != true || scope["truncationStatus"] != "truncated" {
 		t.Fatalf("expected bounded resultScope for returned events only, got %#v", payload["resultScope"])
 	}
 }
