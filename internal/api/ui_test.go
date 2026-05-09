@@ -980,7 +980,9 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"const auditControlLabels = () => {",
 		"const auditEmptyStateText = () => {",
 		"No audit entries are visible with the current limit cap (${auditLimitLabel()}). Increase the limit or clear audit controls to return to the full audit timeline.",
-		"No audit entries match the current filters (${filters.join(' · ')}${hasLimit ? `; ${auditLimitLabel()}` : ''}). Clear audit controls to return to the full audit timeline.",
+		"No audit entries match the current filters (${filters.join(' · ')}${hasLimit ? `; ${auditLimitLabel()}` : ''}). ${currentPageState.deployment && (currentPageState.auditAction || hasLimit) ? 'Clear action/limit to stay scoped to this deployment, or view the global audit log to remove the deployment scope.' : 'Clear audit controls to return to the full audit timeline.'}",
+		"'Clear action/limit'",
+		"'View global audit log'",
 		"Open drift view",
 		"Open plan/apply workspace",
 		"const contextLinks = createElement('div', 'row-links');",
@@ -3193,7 +3195,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"assert 'No audit activity has been persisted yet for deployment ${currentPageState.deployment}. Create a plan preview or apply request from the plan/apply workspace to add immutable audit rows for this deployment.' in audit_ui, audit_ui",
 		"assert \"const auditFilterLabels = () => {\" in audit_ui, audit_ui",
 		"assert \"const auditEmptyStateText = () => {\" in audit_ui, audit_ui",
-		"assert \"No audit entries match the current filters (${filters.join(' · ')}${hasLimit ? `; ${auditLimitLabel()}` : ''}). Clear audit controls to return to the full audit timeline.\" in audit_ui, audit_ui",
+		"assert \"No audit entries match the current filters (${filters.join(' · ')}${hasLimit ? `; ${auditLimitLabel()}` : ''}). ${currentPageState.deployment && (currentPageState.auditAction || hasLimit) ? 'Clear action/limit to stay scoped to this deployment, or view the global audit log to remove the deployment scope.' : 'Clear audit controls to return to the full audit timeline.'}\" in audit_ui, audit_ui",
+		"assert \"'Clear action/limit'\" in audit_ui, audit_ui",
+		"assert \"'View global audit log'\" in audit_ui, audit_ui",
 		"assert 'Loading audit log…' in audit_ui, audit_ui",
 		"assert 'Audit log is currently unavailable.' in audit_ui, audit_ui",
 		"assert 'Refresh audit log' in audit_ui, audit_ui",
@@ -4115,16 +4119,19 @@ func TestOverviewDocsDescribeAccountDetailRefresh(t *testing.T) {
 func TestOverviewDocsDescribeAuditFilterReset(t *testing.T) {
 	files := map[string][]string{
 		"../../README.md": {
-			"`Clear audit filters`",
+			"`Clear action/limit`",
+			"`View global audit log`",
 			"removing stale `#audit-*` section anchors",
 		},
 		"../../docs/features/overview-dashboard.md": {
-			"`Clear audit filters`",
-			"removes stale `#audit-*` section anchors from deployment-scoped audit views",
+			"`Clear action/limit`",
+			"`View global audit log`",
+			"remove stale `#audit-*` section anchors",
 		},
 		"../../docs/architecture/tenet-v1-overview-ui.md": {
-			"`Clear audit filters` / `Clear audit controls` recovery action",
-			"removes stale `#audit-*` section anchors during that reset",
+			"`Clear action/limit`",
+			"`View global audit log`",
+			"`Clear audit filters` / `Clear audit controls` recovery path",
 		},
 	}
 

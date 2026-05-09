@@ -1951,7 +1951,9 @@ assert 'No audit activity has been persisted yet for deployment ${currentPageSta
 assert "const auditFilterLabels = () => {" in audit_ui, audit_ui
 assert "labels.push(`action ${auditActionLabel(currentPageState.auditAction)}`);" in audit_ui, audit_ui
 assert "const auditEmptyStateText = () => {" in audit_ui, audit_ui
-assert "No audit entries match the current filters (${filters.join(' · ')}${hasLimit ? `; ${auditLimitLabel()}` : ''}). Clear audit controls to return to the full audit timeline." in audit_ui, audit_ui
+assert "No audit entries match the current filters (${filters.join(' · ')}${hasLimit ? `; ${auditLimitLabel()}` : ''}). ${currentPageState.deployment && (currentPageState.auditAction || hasLimit) ? 'Clear action/limit to stay scoped to this deployment, or view the global audit log to remove the deployment scope.' : 'Clear audit controls to return to the full audit timeline.'}" in audit_ui, audit_ui
+assert "'Clear action/limit'" in audit_ui, audit_ui
+assert "'View global audit log'" in audit_ui, audit_ui
 assert 'Loading audit log…' in audit_ui, audit_ui
 assert 'Audit log is currently unavailable.' in audit_ui, audit_ui
 assert 'Refresh audit log' in audit_ui, audit_ui
@@ -1970,8 +1972,9 @@ assert "const auditActionLabel = (value) => {" in audit_ui, audit_ui
 assert "labels.push(`action ${auditActionLabel(currentPageState.auditAction)}`);" in audit_ui, audit_ui
 assert "const auditLimitSelectOptions = (limit) => {" in audit_ui, audit_ui
 assert "const syncAuditQueryParams = (params, pageState) => {" in audit_ui, audit_ui
-assert "const clearAuditPageFilters = () => {" in audit_ui, audit_ui
-assert "createElement('button', 'toolbar-button', activeFilters.length ? 'Clear audit filters' : 'Clear audit controls')" in audit_ui, audit_ui
+assert "const clearAuditPageFilters = ({ preserveDeployment = false } = {}) => {" in audit_ui, audit_ui
+assert "clearAuditPageFilters({ preserveDeployment: true });" in audit_ui, audit_ui
+assert "createElement('button', 'toolbar-button', currentPageState.deployment ? 'View global audit log' : (activeFilters.length ? 'Clear audit filters' : 'Clear audit controls'))" in audit_ui, audit_ui
 assert "createSelect('Action', currentPageState.auditAction, auditActionOptions, (event) => {" in audit_ui, audit_ui
 assert "const syncAuditPageState = ({ clearAuditHash = false } = {}) => {" in audit_ui, audit_ui
 assert "const hash = clearAuditHash && currentHash.startsWith('#audit-') ? '' : currentHash;" in audit_ui, audit_ui
