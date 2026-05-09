@@ -565,7 +565,7 @@ actor_apply_record=$(curl -fsS -X POST \
 actor_apply_record_extract_path=$(write_payload actor-apply-record.extract.json "$actor_apply_record")
 actor_apply_id=$(json_string_field_from_path "$actor_apply_record_extract_path" id)
 actor_apply_record_get=$(curl -fsS "$API_BASE_URL/v1/applies/$actor_apply_id")
-deployment_events=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/events")
+deployment_events=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/events?limit=1")
 worker_cluster_arn="arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker-prod"
 worker_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 selected_worker_resource_logs=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=1")
@@ -1033,6 +1033,15 @@ assert actor_audit_logs["entries"][0]["actor"]["email"] == "alex.explicit@exampl
 
 assert deployment_events["deploymentName"] == "payments-api-prod", deployment_events
 assert isinstance(deployment_events.get("events"), list), deployment_events
+events_scope = deployment_events.get("resultScope") or {}
+assert events_scope.get("requestedLimit") == 1, deployment_events
+assert events_scope.get("effectiveLimit") == 1, deployment_events
+assert events_scope.get("returnedEventCount") == len(deployment_events["events"]), deployment_events
+assert isinstance(events_scope.get("totalEventCount"), int), deployment_events
+assert events_scope.get("totalEventCount") >= events_scope.get("returnedEventCount"), deployment_events
+assert isinstance(events_scope.get("limited"), bool), deployment_events
+assert events_scope.get("limited") == (events_scope.get("totalEventCount") > events_scope.get("returnedEventCount")), deployment_events
+assert events_scope.get("truncationStatus") in {"truncated", "not_truncated", "unknown"}, deployment_events
 event_managed_drift = [item for event in deployment_events["events"] for item in event.get("managedDrift", [])]
 events_drift_summary = deployment_events.get("managedDriftSummary") or {}
 assert events_drift_summary.get("total") == len(event_managed_drift), (events_drift_summary, event_managed_drift)
