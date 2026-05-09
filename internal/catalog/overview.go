@@ -160,6 +160,8 @@ type DeploymentEventsResultScope struct {
 	RequestedLimit     *int   `json:"requestedLimit,omitempty"`
 	EffectiveLimit     int    `json:"effectiveLimit"`
 	ReturnedEventCount int    `json:"returnedEventCount"`
+	TotalEventCount    int    `json:"totalEventCount"`
+	Limited            bool   `json:"limited"`
 	TruncationStatus   string `json:"truncationStatus"`
 }
 

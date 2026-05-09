@@ -182,12 +182,15 @@ func applyDeploymentEventsLimit(result catalog.DeploymentOverviewEvents, limit i
 		return result
 	}
 
+	totalEventCount := len(result.Events)
 	effectiveLimit := limit
 	requested := limit
+	limited := false
 	truncationStatus := resourcelogs.ScopeTruncationStatusNotTruncated
 	if len(result.Events) > limit {
 		result.Events = append([]domain.StatusHistoryEntry(nil), result.Events[:limit]...)
 		result.ManagedDriftSummary = summarizeDeploymentEventsManagedDrift(result.Events)
+		limited = true
 		truncationStatus = resourcelogs.ScopeTruncationStatusTruncated
 	} else if len(result.Events) == limit {
 		truncationStatus = resourcelogs.ScopeTruncationStatusUnknown
@@ -196,6 +199,8 @@ func applyDeploymentEventsLimit(result catalog.DeploymentOverviewEvents, limit i
 		RequestedLimit:     &requested,
 		EffectiveLimit:     effectiveLimit,
 		ReturnedEventCount: len(result.Events),
+		TotalEventCount:    totalEventCount,
+		Limited:            limited,
 		TruncationStatus:   truncationStatus,
 	}
 	return result
