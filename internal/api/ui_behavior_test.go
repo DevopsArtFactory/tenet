@@ -2466,7 +2466,7 @@ const fetch = (url) => {
   if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
   if (url === '/v1/overview/deployments/payments-api-staging/events?limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [
     { timestamp: '2026-05-04T12:20:00Z', source: 'controller', summary: 'Ticker reconcile complete', sync: { state: 'Synced' }, health: { overall: 'Healthy' } },
-    { timestamp: '2026-05-04T12:30:00Z', source: 'github-webhook', summary: 'GitHub desired-state refresh accepted', sync: { state: 'Reconciling' }, controllerRefresh: { repository: 'acme/platform-config', ref: 'refs/heads/main', after: 'abcdef1234567890abcdef', deliveryId: 'delivery-744', requestId: 'req-744', requestedAt: '2026-05-04T12:29:50Z', receivedAt: '2026-05-04T12:29:51Z', reconciledAt: '2026-05-04T12:30:00Z' } },
+    { eventId: 'evt_backend_744', timestamp: '2026-05-04T12:30:00Z', source: 'github-webhook', summary: 'GitHub desired-state refresh accepted', sync: { state: 'Reconciling' }, controllerRefresh: { repository: 'acme/platform-config', ref: 'refs/heads/main', after: 'abcdef1234567890abcdef', deliveryId: 'delivery-744', requestId: 'req-744', requestedAt: '2026-05-04T12:29:50Z', receivedAt: '2026-05-04T12:29:51Z', reconciledAt: '2026-05-04T12:30:00Z' } },
   ] }) });
   throw new Error('unexpected fetch url: ' + url);
 };
@@ -2526,6 +2526,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('Traffic routing')) throw new Error('expected application route traffic routing group');
   if (!accountsText.includes('Controller runtime events')) throw new Error('expected application route runtime-events section');
   if (!accountsText.includes('GitHub refresh evidence · repo acme/platform-config · ref refs/heads/main · revision abcdef123456 · delivery delivery-744 · request req-744')) throw new Error('expected application route GitHub refresh evidence cue');
+  const backendEventShare = accountLinks.find((node) => node.href.includes('page=application') && node.href.includes('deployment=payments-api-staging') && node.href.endsWith('#runtime-event-evt-backend-744') && node.textContent === 'Share event' && node.target === '_self');
+  if (!backendEventShare || backendEventShare.rel) throw new Error('expected runtime event share link to prefer backend eventId anchors, got ' + accountLinks.filter((node) => node.textContent === 'Share event').map((node) => node.href).join(', '));
   if (!accountsText.includes('requested 2026-05-04T12:29:50Z · received 2026-05-04T12:29:51Z · reconciled 2026-05-04T12:30:00Z')) throw new Error('expected application route GitHub refresh timing evidence');
   if (!accountsText.includes('Ticker reconcile complete')) throw new Error('expected application route non-webhook runtime event to remain visible');
   if (accountsText.includes('repo —') || accountsText.includes('delivery —') || accountsText.includes('GitHub refresh evidence · Source · controller')) throw new Error('expected application route to avoid GitHub placeholders on ordinary runtime events');

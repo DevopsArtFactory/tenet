@@ -1797,6 +1797,8 @@
         limit: currentPageState.auditLimit,
       });
       const runtimeEventAnchorBase = (event) => {
+        const backendID = auditAnchorSlug(event?.eventId);
+        if (backendID && backendID !== 'unknown') return `runtime-event-${backendID}`;
         const parts = [event?.timestamp, event?.currentStep, event?.summary, event?.source]
           .map((value) => auditAnchorSlug(value))
           .filter((value) => value && value !== 'unknown');

@@ -1,6 +1,8 @@
 package catalog
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sort"
@@ -520,7 +522,7 @@ func BuildDeploymentOverviewEvents(c manifest.Catalog, snapshots []statusstore.S
 		return DeploymentOverviewEvents{}, err
 	}
 
-	events := detail.History
+	events := withRuntimeEventIDs(detail.Name, detail.History)
 	if len(events) == 0 {
 		events = []domain.StatusHistoryEntry{}
 	}
@@ -530,6 +532,43 @@ func BuildDeploymentOverviewEvents(c manifest.Catalog, snapshots []statusstore.S
 		Events:              events,
 		ManagedDriftSummary: summarizeManagedDriftEvents(events),
 	}, nil
+}
+
+func withRuntimeEventIDs(deploymentName string, history []domain.StatusHistoryEntry) []domain.StatusHistoryEntry {
+	events := cloneStatusHistory(history)
+	if len(events) == 0 {
+		return nil
+	}
+	seen := map[string]int{}
+	for i := range events {
+		if events[i].EventID != "" {
+			continue
+		}
+		base := runtimeEventIdentityBase(deploymentName, events[i])
+		seen[base]++
+		events[i].EventID = deriveRuntimeEventID(base, seen[base])
+	}
+	return events
+}
+
+func runtimeEventIdentityBase(deploymentName string, event domain.StatusHistoryEntry) string {
+	return fmt.Sprintf("%s\n%s\n%s\n%d\n%d\n%s\n%s\n%s\n%s\n%s",
+		deploymentName,
+		event.Timestamp,
+		event.Source,
+		event.DesiredGeneration,
+		event.ObservedGeneration,
+		event.Sync.State,
+		event.Health.Overall,
+		event.RolloutPhase,
+		event.TargetType,
+		event.ExecutionMode,
+	)
+}
+
+func deriveRuntimeEventID(base string, ordinal int) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s\n%d", base, ordinal)))
+	return "evt_" + hex.EncodeToString(sum[:])[:16]
 }
 
 func summarizeManagedDriftEvents(events []domain.StatusHistoryEntry) ManagedDriftSummary {
