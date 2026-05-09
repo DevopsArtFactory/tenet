@@ -632,6 +632,35 @@ func TestManagedLiveDriftDocsPreferFocusedContractCoverageOverLocalSmoke(t *test
 	}
 }
 
+func TestDriftRowShareLinkDocsContract(t *testing.T) {
+	documents := map[string][]string{
+		"README.md": {
+			"`Share drift row` link to a stable `#drift-row-...` anchor",
+			"prefers backend `driftId` and falls back to a deterministic legacy row identity",
+		},
+		"docs/features/overview-dashboard.md": {
+			"renders an `_self` `Share drift row` action for every field-level row",
+			"stable row-level `#drift-row-...` anchor",
+			"anchors prefer backend `driftId` / `id` / `entryId` values",
+			"fall back deterministically from rendered row content plus original row order",
+		},
+		"docs/architecture/tenet-v1-overview-ui.md": {
+			"Field-level rows also expose `_self` `Share drift row` links",
+			"stable row-level `#drift-row-...` anchors",
+			"preferring backend row identifiers when present and falling back deterministically for legacy derived rows",
+		},
+	}
+
+	for path, fragments := range documents {
+		body := readRepoFile(t, path)
+		for _, fragment := range fragments {
+			if !strings.Contains(body, fragment) {
+				t.Fatalf("expected %s drift-row share-link docs to include %q", path, fragment)
+			}
+		}
+	}
+}
+
 func TestDesiredStateSourceOperatorDocsContract(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
 	for _, fragment := range []string{
