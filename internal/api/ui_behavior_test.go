@@ -178,11 +178,13 @@ const scenarios = [
     route: '/v1/overview/applications',
     status: 401,
     body: 'unauthenticated: operator identity missing',
+    requestId: 'req-apps-953-auth',
     expected: [
       'Applications overview',
       'Authenticated operator required',
       'Tenet rejected GET /v1/overview/applications because authenticated identity is required on this operator read route.',
       'Tenet does not start a built-in GitHub OAuth login, enterprise SSO login, or Tenet-managed browser session from this page; reopen this same bookmarkable URL through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.',
+      'Tenet request ID · req-apps-953-auth',
     ],
     unexpected: 'Failed to load overview:',
   },
@@ -378,9 +380,11 @@ const scenarios = [
     route: '/v1/audit-logs?deployment=api-prod&action=apply.requested&limit=2',
     status: 403,
     body: 'forbidden: operator does not have access to this deployment',
+    requestId: 'req-audit-953-denied',
     expected: [
       'Operator access denied',
       'Tenet rejected GET /v1/audit-logs?deployment=api-prod&action=apply.requested&limit=2 after recognizing the caller\'s identity, but this operator is not authorized for that route or deployment. Open Operator context details (#operator-context-access-details-panel) and compare deploymentAccess.summary, access verdicts, stale/unmatched deployment/project/environment grants, and the required trusted headers for this route; ask an admin to grant the matching deployment, project, or environment scope, then retry this same bookmarkable page.',
+      'Tenet request ID · req-audit-953-denied',
     ],
     unexpected: 'Failed to load audit log:',
   },
@@ -406,6 +410,7 @@ const scenarios = [
       return Promise.resolve({
         ok: false,
         status: scenario.status,
+        headers: { get: (name) => String(name).toLowerCase() === 'request-id' ? (scenario.requestId || '') : '' },
         text: () => Promise.resolve(scenario.body),
       });
     };
