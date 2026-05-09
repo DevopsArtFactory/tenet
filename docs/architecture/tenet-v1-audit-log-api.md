@@ -42,6 +42,7 @@ The response shape is:
 {
   "entries": [
     {
+      "entryId": "audit_apply_4f7a1b2c3d4e5f60",
       "timestamp": "2026-04-18T08:00:00Z",
       "action": "apply.requested",
       "deploymentName": "payments-api-prod",
@@ -76,6 +77,7 @@ The response shape is:
 ```
 
 Important details:
+- `entryId` is a backend-authored opaque stable row identifier derived from the immutable plan/apply source identity; it is unique across `plan.created` and `apply.requested` rows and remains stable across filtering, sorting, and `limit` windows so UI anchors can prefer it over client-derived fallbacks
 - `action` is stable and action-oriented (`plan.created`, `apply.requested`)
 - the optional query `action` filter only supports those two exact values and rejects anything else with `400 Bad Request`
 - `timestamp` is copied from the persisted immutable record

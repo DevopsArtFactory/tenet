@@ -2964,6 +2964,7 @@ func TestRouterAuditLogs(t *testing.T) {
 			}
 			return auditlog.Result{
 				Entries: []auditlog.Entry{{
+					EntryID:        "audit_apply_testopaque",
 					Timestamp:      "2026-04-18T08:00:00Z",
 					Action:         "apply.requested",
 					DeploymentName: "api-prod",
@@ -2993,6 +2994,18 @@ func TestRouterAuditLogs(t *testing.T) {
 	}
 	if len(result.Entries) != 1 || result.Entries[0].ApplyID != "apply_5678" {
 		t.Fatalf("unexpected audit logs payload: %+v", result)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("failed to decode raw audit logs: %v", err)
+	}
+	rawEntries, ok := raw["entries"].([]any)
+	if !ok || len(rawEntries) != 1 {
+		t.Fatalf("expected raw entries array, got %#v", raw["entries"])
+	}
+	rawEntry, ok := rawEntries[0].(map[string]any)
+	if !ok || rawEntry["entryId"] != "audit_apply_testopaque" {
+		t.Fatalf("expected raw audit entryId field, got %#v", rawEntries[0])
 	}
 }
 

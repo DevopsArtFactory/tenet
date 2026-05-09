@@ -969,6 +969,7 @@ expected_audit_refs = {
     "worker-prod": ("worker", "prod-apne2"),
 }
 for entry in audit_logs["entries"]:
+    assert isinstance(entry.get("entryId"), str) and entry["entryId"].startswith("audit_"), entry
     app_ref, environment_ref = expected_audit_refs[entry["deploymentName"]]
     assert entry["appRef"] == app_ref, entry
     assert entry["environmentRef"] == environment_ref, entry

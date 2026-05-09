@@ -92,6 +92,9 @@ func TestServiceListProjectsImmutableRecordsIntoNewestFirstTimeline(t *testing.T
 	if !newest.Actor.Available || newest.Actor.Name != "Jane Operator" || newest.Actor.Email != "jane@example.com" {
 		t.Fatalf("expected projected available actor contract, got %+v", newest.Actor)
 	}
+	if !strings.HasPrefix(newest.EntryID, "audit_apply_") {
+		t.Fatalf("expected backend-authored apply audit entryId, got %q", newest.EntryID)
+	}
 
 	second := result.Entries[1]
 	if second.Action != "plan.created" || second.PlanID != "plan_new" {
@@ -105,6 +108,61 @@ func TestServiceListProjectsImmutableRecordsIntoNewestFirstTimeline(t *testing.T
 	}
 	if second.Actor.Available || second.Actor.Reason != requestactor.UnavailableReason {
 		t.Fatalf("expected explicit unavailable fallback actor, got %+v", second.Actor)
+	}
+	if !strings.HasPrefix(second.EntryID, "audit_plan_") || second.EntryID == newest.EntryID {
+		t.Fatalf("expected unique backend-authored plan audit entryId, newest=%q second=%q", newest.EntryID, second.EntryID)
+	}
+}
+
+func TestServiceListAssignsStableEntryIDsAcrossFiltersAndLimits(t *testing.T) {
+	service := Service{
+		ListPlanPreviews: func() ([]planpreview.Record, error) {
+			return []planpreview.Record{{
+				ID:             "shared_source",
+				DeploymentName: "api-prod",
+				Status:         planpreview.StatusReady,
+				CreatedAt:      "2026-04-17T08:00:00Z",
+				Approval:       planpreview.Approval{Required: true},
+				Source:         planpreview.SourceContext{Route: "/v1/overview/deployments/api-prod", Fingerprint: "fp_plan"},
+			}}, nil
+		},
+		ListApplyRequests: func() ([]applyrequest.Record, error) {
+			return []applyrequest.Record{{
+				ID:             "shared_source",
+				PlanID:         "shared_source",
+				DeploymentName: "api-prod",
+				Status:         applyrequest.StatusFailed,
+				CreatedAt:      "2026-04-18T08:30:00Z",
+				Source: applyrequest.SourceContext{
+					Route:       "/v1/plans/shared_source",
+					PlanStatus:  "ready",
+					Fingerprint: "fp_plan",
+				},
+			}}, nil
+		},
+	}
+
+	all, err := service.List(context.Background(), Query{})
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	filtered, err := service.List(context.Background(), Query{DeploymentName: "api-prod", Action: ActionApplyRequested, Limit: 1})
+	if err != nil {
+		t.Fatalf("filtered List returned error: %v", err)
+	}
+	if len(all.Entries) != 2 || len(filtered.Entries) != 1 {
+		t.Fatalf("expected two full entries and one filtered entry, all=%+v filtered=%+v", all.Entries, filtered.Entries)
+	}
+	if all.Entries[0].EntryID != filtered.Entries[0].EntryID {
+		t.Fatalf("expected filtered apply entryId to stay stable, all=%q filtered=%q", all.Entries[0].EntryID, filtered.Entries[0].EntryID)
+	}
+	if all.Entries[0].EntryID == all.Entries[1].EntryID {
+		t.Fatalf("expected action-specific entryIds to disambiguate shared immutable IDs, got %+v", all.Entries)
+	}
+	for _, entry := range all.Entries {
+		if !strings.HasPrefix(entry.EntryID, "audit_") {
+			t.Fatalf("expected audit entryId prefix, got %+v", entry)
+		}
 	}
 }
 

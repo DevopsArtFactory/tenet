@@ -843,6 +843,8 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"'Actor identity is unavailable for this record.'",
 		"'Actor identity is unknown for this record.'",
 		"const auditEntryAnchorID = (entry) => {",
+		"const backendID = auditAnchorSlug(entry?.entryId);",
+		"if (backendID && backendID !== 'unknown') return `audit-entry-${backendID}`;",
 		"if (entry?.applyId) return `audit-entry-apply-${auditAnchorSlug(entry.applyId)}`;",
 		"const auditEntryAnchorURL = (entry) => buildPageSectionURL('audit', auditEntryAnchorID(entry), {",
 		"const normalizeAuditLimit = (value) => {",
