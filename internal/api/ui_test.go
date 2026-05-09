@@ -2555,6 +2555,29 @@ func TestSmokeScriptsLockBoundedASGResourceInspectionReleaseGuard(t *testing.T) 
 	}
 }
 
+func TestSmokeScriptsAssertGuardedResourceEvidenceRequestIDHeaders(t *testing.T) {
+	for _, script := range []string{"smoke-local.sh", "smoke-docker.sh"} {
+		body, err := os.ReadFile("../../scripts/" + script)
+		if err != nil {
+			t.Fatalf("read %s: %v", script, err)
+		}
+
+		text := string(body)
+		for _, fragment := range []string{
+			"curl_status_body_request_id",
+			"AUTH_UNAUTHENTICATED_RESOURCE_LOGS_REQUEST_ID",
+			"AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_REQUEST_ID",
+			"AUTH_FORBIDDEN_RESOURCE_LOGS_REQUEST_ID",
+			"AUTH_FORBIDDEN_RESOURCE_INSPECTION_REQUEST_ID",
+			"guarded resource evidence reads must include Request-Id",
+		} {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to lock guarded resource Request-Id smoke fragment %q", script, fragment)
+			}
+		}
+	}
+}
+
 func TestSmokeScriptsAssertRecentLogEmptyReasonReleaseGuard(t *testing.T) {
 	for _, script := range []string{"smoke-local.sh", "smoke-docker.sh"} {
 		body, err := os.ReadFile("../../scripts/" + script)

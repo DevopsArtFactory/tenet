@@ -136,6 +136,37 @@ assert headers.get("request-id"), headers
 PY
 }
 
+curl_status_body_request_id() {
+  local body_path=$1
+  shift
+  local headers_path
+  local status
+  local request_id
+
+  headers_path=$(mktemp)
+  status=$(curl -sS -D "$headers_path" -o "$body_path" -w "%{http_code}" "$@")
+  request_id=$(python3 - "$headers_path" <<'PY'
+import sys
+from pathlib import Path
+
+headers = {}
+for raw in Path(sys.argv[1]).read_text(encoding='utf-8').splitlines():
+    line = raw.rstrip("\r\n")
+    if not line or ":" not in line:
+        continue
+    name, value = line.split(":", 1)
+    headers[name.strip().lower()] = value.strip()
+
+request_id = headers.get("request-id", "").strip()
+assert request_id, headers
+print(request_id)
+PY
+)
+  rm -f "$headers_path"
+  CURL_STATUS_BODY_REQUEST_ID_STATUS="$status"
+  CURL_STATUS_BODY_REQUEST_ID_REQUEST_ID="$request_id"
+}
+
 wait_for_apply_status() {
   local apply_id=$1
   local expected_status=$2
@@ -2239,10 +2270,14 @@ auth_unauthenticated_status_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_STA
   "http://$HOST:$PORT/v1/status/deployments/payments-api-staging")
 auth_unauthenticated_events_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_EVENTS_BODY" -w "%{http_code}" \
   "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/events")
-auth_unauthenticated_resource_logs_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" -w "%{http_code}" \
-  "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
-auth_unauthenticated_resource_inspection_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" -w "%{http_code}" \
-  "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service")
+curl_status_body_request_id "$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" \
+  "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service"
+auth_unauthenticated_resource_logs_status="$CURL_STATUS_BODY_REQUEST_ID_STATUS"
+auth_unauthenticated_resource_logs_request_id="$CURL_STATUS_BODY_REQUEST_ID_REQUEST_ID"
+curl_status_body_request_id "$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" \
+  "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service"
+auth_unauthenticated_resource_inspection_status="$CURL_STATUS_BODY_REQUEST_ID_STATUS"
+auth_unauthenticated_resource_inspection_request_id="$CURL_STATUS_BODY_REQUEST_ID_REQUEST_ID"
 auth_unauthenticated_plan_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_PLAN_READ_BODY" -w "%{http_code}" \
   "http://$HOST:$PORT/v1/plans/$frontdoor_plan_id")
 auth_unauthenticated_apply_read_status=$(curl -sS -o "$AUTH_UNAUTHENTICATED_APPLY_READ_BODY" -w "%{http_code}" \
@@ -2313,20 +2348,24 @@ auth_forbidden_events_status=$(curl -sS -o "$AUTH_FORBIDDEN_EVENTS_BODY" -w "%{h
   -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: worker-prod" \
   "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/events")
-auth_forbidden_resource_logs_status=$(curl -sS -o "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" -w "%{http_code}" \
+curl_status_body_request_id "$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-staging" \
-  "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
-auth_forbidden_resource_inspection_status=$(curl -sS -o "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" -w "%{http_code}" \
+  "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service"
+auth_forbidden_resource_logs_status="$CURL_STATUS_BODY_REQUEST_ID_STATUS"
+auth_forbidden_resource_logs_request_id="$CURL_STATUS_BODY_REQUEST_ID_REQUEST_ID"
+curl_status_body_request_id "$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
   -H "X-Tenet-Authenticated-Email: frontdoor@example.com" \
   -H "X-Tenet-Authenticated-Roles: viewer" \
   -H "X-Tenet-Authorized-Deployments: payments-api-staging" \
-  "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service")
+  "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service"
+auth_forbidden_resource_inspection_status="$CURL_STATUS_BODY_REQUEST_ID_STATUS"
+auth_forbidden_resource_inspection_request_id="$CURL_STATUS_BODY_REQUEST_ID_REQUEST_ID"
 auth_forbidden_account_detail_status=$(curl -sS -o "$AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY" -w "%{http_code}" \
   -H "X-Tenet-Authenticated-Id: front-door-123" \
   -H "X-Tenet-Authenticated-Name: Front Door Operator" \
@@ -2590,8 +2629,10 @@ AUTH_UNAUTHENTICATED_EVENTS_STATUS="$auth_unauthenticated_events_status" \
 AUTH_UNAUTHENTICATED_EVENTS_BODY_PATH="$AUTH_UNAUTHENTICATED_EVENTS_BODY" \
 AUTH_UNAUTHENTICATED_RESOURCE_LOGS_STATUS="$auth_unauthenticated_resource_logs_status" \
 AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY_PATH="$AUTH_UNAUTHENTICATED_RESOURCE_LOGS_BODY" \
+AUTH_UNAUTHENTICATED_RESOURCE_LOGS_REQUEST_ID="$auth_unauthenticated_resource_logs_request_id" \
 AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_STATUS="$auth_unauthenticated_resource_inspection_status" \
 AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY_PATH="$AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_BODY" \
+AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_REQUEST_ID="$auth_unauthenticated_resource_inspection_request_id" \
 AUTH_FORBIDDEN_ACCOUNT_DETAIL_STATUS="$auth_forbidden_account_detail_status" \
 AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY_PATH="$AUTH_FORBIDDEN_ACCOUNT_DETAIL_BODY" \
 AUTH_FORBIDDEN_GROUP_DETAIL_STATUS="$auth_forbidden_group_detail_status" \
@@ -2620,8 +2661,10 @@ AUTH_FORBIDDEN_EVENTS_STATUS="$auth_forbidden_events_status" \
 AUTH_FORBIDDEN_EVENTS_BODY_PATH="$AUTH_FORBIDDEN_EVENTS_BODY" \
 AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS="$auth_forbidden_resource_logs_status" \
 AUTH_FORBIDDEN_RESOURCE_LOGS_BODY_PATH="$AUTH_FORBIDDEN_RESOURCE_LOGS_BODY" \
+AUTH_FORBIDDEN_RESOURCE_LOGS_REQUEST_ID="$auth_forbidden_resource_logs_request_id" \
 AUTH_FORBIDDEN_RESOURCE_INSPECTION_STATUS="$auth_forbidden_resource_inspection_status" \
 AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY_PATH="$AUTH_FORBIDDEN_RESOURCE_INSPECTION_BODY" \
+AUTH_FORBIDDEN_RESOURCE_INSPECTION_REQUEST_ID="$auth_forbidden_resource_inspection_request_id" \
 AUTH_FORBIDDEN_PLAN_READ_STATUS="$auth_forbidden_plan_read_status" \
 AUTH_FORBIDDEN_PLAN_READ_BODY_PATH="$AUTH_FORBIDDEN_PLAN_READ_BODY" \
 AUTH_FORBIDDEN_APPLY_READ_STATUS="$auth_forbidden_apply_read_status" \
@@ -2819,8 +2862,10 @@ assert os.environ['AUTH_UNAUTHENTICATED_EVENTS_STATUS'] == '401', os.environ['AU
 assert unauthenticated_events_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_events_body
 assert os.environ['AUTH_UNAUTHENTICATED_RESOURCE_LOGS_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_RESOURCE_LOGS_STATUS']
 assert unauthenticated_resource_logs_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_resource_logs_body
+assert os.environ['AUTH_UNAUTHENTICATED_RESOURCE_LOGS_REQUEST_ID'], 'guarded resource evidence reads must include Request-Id'
 assert os.environ['AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_STATUS'] == '401', os.environ['AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_STATUS']
 assert unauthenticated_resource_inspection_body.strip() == 'unauthenticated: authenticated identity is required for this operator read route', unauthenticated_resource_inspection_body
+assert os.environ['AUTH_UNAUTHENTICATED_RESOURCE_INSPECTION_REQUEST_ID'], 'guarded resource evidence reads must include Request-Id'
 assert os.environ['AUTH_FORBIDDEN_ACCOUNT_DETAIL_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_ACCOUNT_DETAIL_STATUS']
 assert forbidden_account_detail_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_account_detail_body
 assert os.environ['AUTH_FORBIDDEN_GROUP_DETAIL_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_GROUP_DETAIL_STATUS']
@@ -2849,8 +2894,10 @@ assert os.environ['AUTH_FORBIDDEN_EVENTS_STATUS'] == '403', os.environ['AUTH_FOR
 assert forbidden_events_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_events_body
 assert os.environ['AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_RESOURCE_LOGS_STATUS']
 assert forbidden_resource_logs_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_resource_logs_body
+assert os.environ['AUTH_FORBIDDEN_RESOURCE_LOGS_REQUEST_ID'], 'guarded resource evidence reads must include Request-Id'
 assert os.environ['AUTH_FORBIDDEN_RESOURCE_INSPECTION_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_RESOURCE_INSPECTION_STATUS']
 assert forbidden_resource_inspection_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_resource_inspection_body
+assert os.environ['AUTH_FORBIDDEN_RESOURCE_INSPECTION_REQUEST_ID'], 'guarded resource evidence reads must include Request-Id'
 assert os.environ['AUTH_FORBIDDEN_PLAN_READ_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_PLAN_READ_STATUS']
 assert forbidden_plan_read_body.strip() == 'forbidden: operator does not have access to this deployment', forbidden_plan_read_body
 assert os.environ['AUTH_FORBIDDEN_APPLY_READ_STATUS'] == '403', os.environ['AUTH_FORBIDDEN_APPLY_READ_STATUS']
