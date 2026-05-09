@@ -1787,6 +1787,10 @@ assert "createQuickNavChip('Account detail', 'Current destination: Account detai
 assert 'Refresh account detail' in account_ui, account_ui
 assert 'Refreshing account detail from GET /v1/overview/accounts/{awsAccountId}…' in account_ui, account_ui
 assert 'Failed to refresh account detail:' in account_ui, account_ui
+assert 'No deployments are currently associated with this account.' in account_ui, account_ui
+assert 'Use the applications overview to confirm whether filters hide deployments, or open the account JSON payload to inspect the raw catalog response.' in account_ui, account_ui
+assert "emptyStateActions.append(createNavLink(buildPageURL('applications'), 'Applications overview', '_self'));" in account_ui, account_ui
+assert "emptyStateActions.append(createNavLink(`/v1/overview/accounts/${encodeURIComponent(account.awsAccountId)}`, 'Account JSON'));" in account_ui, account_ui
 assert "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)" in account_ui, account_ui
 assert "detailSummary.id = 'account-summary';" in account_ui, account_ui
 assert "const accountGroupSectionLabel = (group) => {" in account_ui, account_ui

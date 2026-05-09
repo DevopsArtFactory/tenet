@@ -634,6 +634,8 @@ func TestEmbeddedUIIncludesAccountQuickNavigation(t *testing.T) {
 		"return region === '—' ? `${app} · ${environment}` : `${app} · ${environment} · ${region}`;",
 		"groupSection.id = accountGroupSectionID(group);",
 		"pushAccountSectionLink(groupSection.id, accountGroupSectionLabel(group));",
+		"No deployments are currently associated with this account.",
+		"Use the applications overview to confirm whether filters hide deployments, or open the account JSON payload to inspect the raw catalog response.",
 		"const overviewArticle = createAccountOverviewArticle(account, accountSectionLinks);",
 		"const quickNav = createAccountQuickNav(account, accountSectionLinks);",
 		"const accountDetailSection = createElement('section', 'detail-section');",

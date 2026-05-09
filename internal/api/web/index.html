@@ -7843,6 +7843,15 @@
           head.append(titleWrap, accountLinks, pills);
 
           const rows = createElement('div', 'rows');
+          if (!topology.groups.length) {
+            const emptyState = createElement('div', 'detail-state', 'No deployments are currently associated with this account. Use the applications overview to confirm whether filters hide deployments, or open the account JSON payload to inspect the raw catalog response.');
+            const emptyStateActions = createElement('div', 'row-links row-links-shell');
+            emptyStateActions.append(createNavLink(buildPageURL('applications'), 'Applications overview', '_self'));
+            if (account.awsAccountId) {
+              emptyStateActions.append(createNavLink(`/v1/overview/accounts/${encodeURIComponent(account.awsAccountId)}`, 'Account JSON'));
+            }
+            rows.append(emptyState, emptyStateActions);
+          }
           topology.groups.forEach((group) => {
             const groupSection = createElement('section', 'deployment-group');
             groupSection.id = accountGroupSectionID(group);
