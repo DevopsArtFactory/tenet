@@ -853,6 +853,7 @@ assert isinstance(runtime_managed_drift, list) and runtime_managed_drift, deploy
 assert runtime_managed_drift == managed_drift, deployment_detail
 assert all(isinstance(row, dict) for row in managed_drift), managed_drift
 assert all(isinstance(row.get("field"), str) and row["field"] for row in managed_drift), managed_drift
+assert all(isinstance(row.get("driftId"), str) and row["driftId"].startswith("drift_") for row in managed_drift), managed_drift
 assert all(isinstance(row.get("desired"), str) and row["desired"] for row in managed_drift), managed_drift
 assert all(isinstance(row.get("actual"), str) and row["actual"] for row in managed_drift), managed_drift
 assert all(row.get("severity") in {"high", "medium", "low"} for row in managed_drift), managed_drift

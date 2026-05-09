@@ -3363,6 +3363,7 @@ assert managed_drift, payload
 assert runtime_managed_drift == managed_drift, payload
 assert history_managed_drift == managed_drift, payload
 assert all(isinstance(item.get('field'), str) and item['field'] for item in managed_drift), managed_drift
+assert all(isinstance(item.get('driftId'), str) and item['driftId'].startswith('drift_') for item in managed_drift), managed_drift
 assert all(item.get('severity') in {'high', 'medium', 'low'} for item in managed_drift), managed_drift
 assert events_payload['deploymentName'] == 'payments-api-prod', events_payload
 assert isinstance(events_payload['events'], list) and events_payload['events'], events_payload

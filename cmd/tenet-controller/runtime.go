@@ -760,7 +760,7 @@ func normalizeManagedDriftItems(items []domain.ManagedDriftItem) []domain.Manage
 	sort.Slice(normalized, func(i, j int) bool {
 		return managedDriftItemLess(normalized[i], normalized[j])
 	})
-	return normalized
+	return domain.AssignManagedDriftIDs(normalized)
 }
 
 func managedDriftItemLess(left domain.ManagedDriftItem, right domain.ManagedDriftItem) bool {

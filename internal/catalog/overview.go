@@ -686,7 +686,7 @@ func cloneManagedDrift(items []domain.ManagedDriftItem) []domain.ManagedDriftIte
 	if len(items) == 0 {
 		return nil
 	}
-	return append([]domain.ManagedDriftItem(nil), items...)
+	return domain.AssignManagedDriftIDs(items)
 }
 
 func cloneDeploymentOverview(deployment DeploymentOverview) DeploymentOverview {

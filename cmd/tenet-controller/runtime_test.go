@@ -2061,7 +2061,7 @@ func TestDeriveManagedDriftItemsCoversArtifactGenerationAndRuntimeIntent(t *test
 		{Field: "runtimeContext.strategy", Desired: "canary", Actual: "blueGreen", Severity: domain.ManagedDriftSeverityMedium},
 		{Field: "runtimeContext.targetType", Desired: "ec2", Actual: "ecs-service", Severity: domain.ManagedDriftSeverityMedium},
 	}
-	if !reflect.DeepEqual(got, want) {
+	if !reflect.DeepEqual(clearManagedDriftIDs(got), want) {
 		t.Fatalf("expected deterministic managed drift items, got %+v", got)
 	}
 }
@@ -2086,7 +2086,7 @@ func TestDeriveManagedDriftItemsAddsLiveEC2CapacityEvidence(t *testing.T) {
 			{Field: "runtimeContext.capacity.max", Desired: "8", Actual: "6", Severity: domain.ManagedDriftSeverityMedium},
 			{Field: "runtimeContext.capacity.min", Desired: "2", Actual: "1", Severity: domain.ManagedDriftSeverityMedium},
 		}
-		if !reflect.DeepEqual(got, want) {
+		if !reflect.DeepEqual(clearManagedDriftIDs(got), want) {
 			t.Fatalf("expected live EC2 capacity drift evidence, got %+v", got)
 		}
 	})
@@ -2108,7 +2108,7 @@ func TestDeriveManagedDriftItemsAddsLiveEC2CapacityEvidence(t *testing.T) {
 		want := []domain.ManagedDriftItem{
 			{Field: "runtimeContext.capacity.max", Desired: "3", Actual: "5", Severity: domain.ManagedDriftSeverityMedium},
 		}
-		if !reflect.DeepEqual(got, want) {
+		if !reflect.DeepEqual(clearManagedDriftIDs(got), want) {
 			t.Fatalf("expected instance refresh live capacity drift evidence, got %+v", got)
 		}
 	})
@@ -2138,7 +2138,7 @@ func TestDeriveManagedDriftItemsAddsLiveEC2BootstrapSourceEvidence(t *testing.T)
 				Actual:   "file:userdata/api-prod-legacy.sh",
 				Severity: domain.ManagedDriftSeverityHigh,
 			}}
-			if !reflect.DeepEqual(got, want) {
+			if !reflect.DeepEqual(clearManagedDriftIDs(got), want) {
 				t.Fatalf("expected live EC2 bootstrap-source drift evidence, got %+v", got)
 			}
 		})
@@ -2178,7 +2178,7 @@ func TestDeriveManagedDriftItemsAddsLiveEC2LaunchTemplateIntentEvidence(t *testi
 					Severity: domain.ManagedDriftSeverityHigh,
 				},
 			}
-			if !reflect.DeepEqual(got, want) {
+			if !reflect.DeepEqual(clearManagedDriftIDs(got), want) {
 				t.Fatalf("expected live EC2 launch-template drift evidence, got %+v", got)
 			}
 		})
@@ -2218,7 +2218,7 @@ func TestDeriveManagedDriftItemsAddsLiveTrafficRoutingEvidence(t *testing.T) {
 				ResourceName: "payments-api-prod-prod-listener",
 			},
 		}}
-		if !reflect.DeepEqual(got, want) {
+		if !reflect.DeepEqual(clearManagedDriftIDs(got), want) {
 			t.Fatalf("expected live EC2 traffic-routing drift evidence, got %+v", got)
 		}
 	})
@@ -2249,7 +2249,7 @@ func TestDeriveManagedDriftItemsAddsLiveTrafficRoutingEvidence(t *testing.T) {
 				ResourceName: "payments-worker-prod-codedeploy-group",
 			},
 		}}
-		if !reflect.DeepEqual(got, want) {
+		if !reflect.DeepEqual(clearManagedDriftIDs(got), want) {
 			t.Fatalf("expected live ECS traffic-routing drift evidence, got %+v", got)
 		}
 	})
@@ -2289,7 +2289,7 @@ func TestDeriveManagedDriftItemsAddsLiveECSDesiredCapacityEvidence(t *testing.T)
 			want := []domain.ManagedDriftItem{
 				{Field: "runtimeContext.capacity.desired", Desired: "3", Actual: "2", Severity: domain.ManagedDriftSeverityMedium},
 			}
-			if !reflect.DeepEqual(got, want) {
+			if !reflect.DeepEqual(clearManagedDriftIDs(got), want) {
 				t.Fatalf("expected live ECS desired-capacity drift evidence, got %+v", got)
 			}
 		})
@@ -2319,7 +2319,7 @@ func TestDeriveManagedDriftItemsAddsLiveECSDeploymentConfigEvidence(t *testing.T
 				{Field: "runtimeContext.deploymentConfig.maximumPercent", Desired: "200", Actual: "150", Severity: domain.ManagedDriftSeverityMedium},
 				{Field: "runtimeContext.deploymentConfig.minimumHealthyPercent", Desired: "80", Actual: "100", Severity: domain.ManagedDriftSeverityMedium},
 			}
-			if !reflect.DeepEqual(got, want) {
+			if !reflect.DeepEqual(clearManagedDriftIDs(got), want) {
 				t.Fatalf("expected live ECS deployment-config drift evidence, got %+v", got)
 			}
 		})
@@ -2347,7 +2347,7 @@ func TestDeriveManagedDriftItemsAddsLiveECSTaskDefinitionImageEvidence(t *testin
 			want := []domain.ManagedDriftItem{
 				{Field: "runtimeContext.taskDefinition.image", Desired: "ghcr.io/devopsartfactory/payments-worker:1.2.3", Actual: "ghcr.io/devopsartfactory/payments-worker:1.2.2", Severity: domain.ManagedDriftSeverityHigh},
 			}
-			if !reflect.DeepEqual(got, want) {
+			if !reflect.DeepEqual(clearManagedDriftIDs(got), want) {
 				t.Fatalf("expected live ECS task-definition image drift evidence, got %+v", got)
 			}
 		})
@@ -2430,6 +2430,18 @@ func TestDeriveManagedDriftItemsAddsLiveResourceRefs(t *testing.T) {
 			}
 		}
 	})
+}
+
+func clearManagedDriftIDs(items []domain.ManagedDriftItem) []domain.ManagedDriftItem {
+	if len(items) == 0 {
+		return nil
+	}
+	cleared := make([]domain.ManagedDriftItem, len(items))
+	for i, item := range items {
+		cleared[i] = item
+		cleared[i].DriftID = ""
+	}
+	return cleared
 }
 
 func managedDriftItemByField(items []domain.ManagedDriftItem, field string) *domain.ManagedDriftItem {
@@ -2999,10 +3011,10 @@ func TestEmitRuntimePlansPersistsLiveEC2LaunchTemplateManagedDriftInStatusAndHis
 		{Field: "runtimeContext.launchTemplate.imageId", Desired: "ami-1234567890abcdef0", Actual: "ami-fffffffffffffffff", Severity: domain.ManagedDriftSeverityHigh},
 		{Field: "runtimeContext.launchTemplate.instanceType", Desired: "t3.medium", Actual: "m6i.large", Severity: domain.ManagedDriftSeverityHigh},
 	}
-	if !reflect.DeepEqual(status.ManagedDrift, want) {
+	if !reflect.DeepEqual(clearManagedDriftIDs(status.ManagedDrift), want) {
 		t.Fatalf("expected live EC2 launch-template managed drift on status, got %+v", status.ManagedDrift)
 	}
-	if len(status.History) != 1 || !reflect.DeepEqual(status.History[0].ManagedDrift, want) {
+	if len(status.History) != 1 || !reflect.DeepEqual(clearManagedDriftIDs(status.History[0].ManagedDrift), want) {
 		t.Fatalf("expected bootstrapped history to capture launch-template managed drift, got %+v", status.History)
 	}
 

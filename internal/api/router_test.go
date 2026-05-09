@@ -4356,6 +4356,10 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 	if _, exists := driftItem["resourceRef"]; exists {
 		t.Fatalf("expected read-model-only artifact drift to omit resourceRef, got %#v", driftItem)
 	}
+	driftID, ok := driftItem["driftId"].(string)
+	if !ok || !strings.HasPrefix(driftID, "drift_") {
+		t.Fatalf("expected raw status managedDrift row to include backend-authored driftId, got %#v", driftItem)
+	}
 	if desiredCapacityDrift := requireManagedDriftItemByField(t, managedDrift, "runtimeContext.capacity.desired"); desiredCapacityDrift["desired"] != "6" || desiredCapacityDrift["actual"] != "4" || desiredCapacityDrift["severity"] != string(domain.ManagedDriftSeverityHigh) {
 		t.Fatalf("expected managedDrift desired-capacity item fields, got %#v", desiredCapacityDrift)
 	} else {
@@ -4383,6 +4387,10 @@ func TestRouterDeploymentStatusByNameUsesStableJSONFieldNames(t *testing.T) {
 	if historyDesiredCapacityDrift := requireManagedDriftItemByField(t, historyManagedDrift, "runtimeContext.capacity.desired"); historyDesiredCapacityDrift["desired"] != "6" || historyDesiredCapacityDrift["actual"] != "4" {
 		t.Fatalf("expected history managedDrift desired-capacity item fields, got %#v", historyDesiredCapacityDrift)
 	} else {
+		historyDriftID, ok := historyDesiredCapacityDrift["driftId"].(string)
+		if !ok || !strings.HasPrefix(historyDriftID, "drift_") {
+			t.Fatalf("expected history managedDrift row to include backend-authored driftId, got %#v", historyDesiredCapacityDrift)
+		}
 		ref, ok := historyDesiredCapacityDrift["resourceRef"].(map[string]any)
 		if !ok || ref["resourceType"] != "candidateAutoScalingGroup" || ref["resourceName"] != "payments-api-prod-candidate" {
 			t.Fatalf("expected history managedDrift desired-capacity resourceRef, got %#v", historyDesiredCapacityDrift["resourceRef"])

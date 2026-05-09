@@ -978,6 +978,10 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	if !ok || driftItem["field"] != "artifact" || driftItem["severity"] != string(domain.ManagedDriftSeverityHigh) || driftItem["desired"] != "s3://releases.example.com/payments-api/prod/payments-api-linux-amd64-r7" {
 		t.Fatalf("expected deployment detail managed drift item fields, got %#v", managedDrift[0])
 	}
+	driftID, ok := driftItem["driftId"].(string)
+	if !ok || !strings.HasPrefix(driftID, "drift_") {
+		t.Fatalf("expected deployment detail managed drift row to include backend-authored driftId, got %#v", driftItem)
+	}
 	runtimeSummary, ok := decoded["runtimeSummary"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected runtimeSummary object, got %#v", decoded["runtimeSummary"])
@@ -985,6 +989,10 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	runtimeManagedDrift, ok := runtimeSummary["managedDrift"].([]any)
 	if !ok || len(runtimeManagedDrift) != 3 {
 		t.Fatalf("expected runtimeSummary.managedDrift array, got %#v", runtimeSummary["managedDrift"])
+	}
+	runtimeDriftItem, ok := runtimeManagedDrift[0].(map[string]any)
+	if !ok || runtimeDriftItem["driftId"] != driftID {
+		t.Fatalf("expected runtimeSummary managed drift to carry matching driftId %q, got %#v", driftID, runtimeManagedDrift[0])
 	}
 	history, ok := decoded["history"].([]any)
 	if !ok || len(history) != 2 {
@@ -997,6 +1005,10 @@ func TestBuildDeploymentOverviewDetail(t *testing.T) {
 	historyManagedDrift, ok := historyEntry["managedDrift"].([]any)
 	if !ok || len(historyManagedDrift) != 3 {
 		t.Fatalf("expected history managedDrift array, got %#v", historyEntry["managedDrift"])
+	}
+	historyDriftItem, ok := historyManagedDrift[0].(map[string]any)
+	if !ok || historyDriftItem["driftId"] != driftID {
+		t.Fatalf("expected history managed drift to carry matching driftId %q, got %#v", driftID, historyManagedDrift[0])
 	}
 	if _, exists := decoded["ManagedDrift"]; exists {
 		t.Fatalf("unexpected Go-style managed drift field name in %#v", decoded)
