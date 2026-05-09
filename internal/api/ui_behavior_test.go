@@ -1881,10 +1881,24 @@ async function render(search, fetchImpl) {
 			t.Fatalf("marshal broken account detail: %v", err)
 		}
 
+		emptyAccountDetailJSON, err := json.Marshal(map[string]any{
+			"name":             "sandbox-core",
+			"awsAccountId":     "333333333333",
+			"allowedRegions":   []string{"us-west-2"},
+			"deploymentCount":  0,
+			"projectCount":     0,
+			"environmentCount": 0,
+			"deployments":      []map[string]any{},
+		})
+		if err != nil {
+			t.Fatalf("marshal empty account detail: %v", err)
+		}
+
 		nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;
 const brokenApplications = ` + string(brokenApplicationsJSON) + `;
 const brokenAccountDetail = ` + string(brokenAccountDetailJSON) + `;
+const emptyAccountDetail = ` + string(emptyAccountDetailJSON) + `;
 class Element {
   constructor(tagName, ownerDocument) {
     this.tagName = String(tagName).toUpperCase();
@@ -1930,6 +1944,7 @@ const createDocument = () => {
 };
 async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
 const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
 
 async function render(search, fetchImpl) {
   const document = createDocument();
@@ -1962,6 +1977,18 @@ async function render(search, fetchImpl) {
   if (accountLinks.find((node) => node.textContent === 'Open application' && node.href === '/?page=application')) {
     throw new Error('expected account detail page to suppress application drill-down without deployment name');
   }
+
+  const emptyAccountDocument = await render('?page=account&accountId=333333333333&q=sandbox&sync=Synced&account=333333333333', (url) => {
+    if (url === '/v1/overview/accounts/333333333333') return Promise.resolve({ ok: true, json: () => Promise.resolve(emptyAccountDetail) });
+    throw new Error('unexpected empty account fetch url: ' + url);
+  });
+  const emptyAccountText = collectText(emptyAccountDocument.getElementById('accounts')).join(' | ');
+  if (!emptyAccountText.includes('No deployments are currently associated with this account.')) throw new Error('expected empty account drill-down explanation');
+  if (!emptyAccountText.includes('Use the applications overview to confirm whether filters hide deployments, or open the account JSON payload to inspect the raw catalog response.')) throw new Error('expected empty account recovery guidance');
+  const emptyAccountLinks = collectNodes(emptyAccountDocument.getElementById('accounts'), (node) => node.tagName === 'A');
+  if (!emptyAccountLinks.find((node) => node.href === '/?page=applications&q=sandbox&sync=Synced&account=333333333333' && node.textContent === 'Applications overview' && node.target === '_self')) throw new Error('expected empty account applications overview handoff');
+  if (!emptyAccountLinks.find((node) => node.href === '/v1/overview/accounts/333333333333' && node.textContent === 'Account JSON')) throw new Error('expected empty account JSON handoff');
+  if (emptyAccountText.includes('Group JSON')) throw new Error('expected empty account page not to render group links');
 })();
 `
 
