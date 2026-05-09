@@ -4111,13 +4111,19 @@
         }
         return button;
       };
+      const createOperatorReadFailureRequestIDMeta = (error) => {
+        const requestId = String(error?.requestId || '').trim();
+        return requestId ? createElement('div', 'detail-condition-meta', `Tenet request ID · ${requestId}`) : null;
+      };
       const renderOperatorReadFailurePanel = (container, title, actions, route, error) => {
         const heading = operatorReadFailureHeading(error);
         if (!heading) return false;
+        const requestIdMeta = createOperatorReadFailureRequestIDMeta(error);
         container.replaceChildren(
           createDetailSectionHeader(title, actions),
           createElement('div', 'detail-state error', heading),
           createElement('div', 'detail-condition-meta', operatorReadFailureMessage(route, error)),
+          ...(requestIdMeta ? [requestIdMeta] : []),
           createOperatorReadFailureActions(error),
         );
         return true;
