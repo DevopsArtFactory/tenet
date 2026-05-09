@@ -176,9 +176,25 @@ func applyAuditLogLimit(result auditlog.Result, limit int) auditlog.Result {
 }
 
 func applyDeploymentEventsLimit(result catalog.DeploymentOverviewEvents, limit int) catalog.DeploymentOverviewEvents {
-	if limit > 0 && limit < len(result.Events) {
+	if limit <= 0 {
+		return result
+	}
+
+	effectiveLimit := limit
+	requested := limit
+	truncationStatus := resourcelogs.ScopeTruncationStatusNotTruncated
+	if len(result.Events) > limit {
 		result.Events = append([]domain.StatusHistoryEntry(nil), result.Events[:limit]...)
 		result.ManagedDriftSummary = summarizeDeploymentEventsManagedDrift(result.Events)
+		truncationStatus = resourcelogs.ScopeTruncationStatusTruncated
+	} else if len(result.Events) == limit {
+		truncationStatus = resourcelogs.ScopeTruncationStatusUnknown
+	}
+	result.ResultScope = &catalog.DeploymentEventsResultScope{
+		RequestedLimit:     &requested,
+		EffectiveLimit:     effectiveLimit,
+		ReturnedEventCount: len(result.Events),
+		TruncationStatus:   truncationStatus,
 	}
 	return result
 }

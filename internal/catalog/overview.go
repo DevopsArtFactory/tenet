@@ -145,9 +145,20 @@ type ManagedDriftSummary struct {
 
 // DeploymentOverviewEvents exposes controller-derived runtime history for one deployment.
 type DeploymentOverviewEvents struct {
-	DeploymentName      string                      `json:"deploymentName"`
-	Events              []domain.StatusHistoryEntry `json:"events"`
-	ManagedDriftSummary ManagedDriftSummary         `json:"managedDriftSummary"`
+	DeploymentName      string                       `json:"deploymentName"`
+	Events              []domain.StatusHistoryEntry  `json:"events"`
+	ManagedDriftSummary ManagedDriftSummary          `json:"managedDriftSummary"`
+	ResultScope         *DeploymentEventsResultScope `json:"resultScope,omitempty"`
+}
+
+// DeploymentEventsResultScope describes the bounded runtime-event window returned
+// by GET /v1/overview/deployments/{deploymentName}/events without promising an
+// expensive provider-wide total count.
+type DeploymentEventsResultScope struct {
+	RequestedLimit     *int   `json:"requestedLimit,omitempty"`
+	EffectiveLimit     int    `json:"effectiveLimit"`
+	ReturnedEventCount int    `json:"returnedEventCount"`
+	TruncationStatus   string `json:"truncationStatus"`
 }
 
 // ApplicationOverviewDetail makes the application page contract explicit while preserving deployment detail semantics.

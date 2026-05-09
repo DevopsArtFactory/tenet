@@ -3195,8 +3195,14 @@ func TestDeploymentOverviewEventsRouteIncludesManagedDriftSummary(t *testing.T) 
 	if !ok || summary["total"] != float64(3) || summary["high"] != float64(1) || summary["medium"] != float64(1) || summary["low"] != float64(1) {
 		t.Fatalf("expected managedDriftSummary counts in events payload, got %#v", payload["managedDriftSummary"])
 	}
+	if _, exists := payload["resultScope"]; exists {
+		t.Fatalf("expected unbounded events payload to omit router-authored resultScope, got %#v", payload["resultScope"])
+	}
 	if _, exists := payload["ManagedDriftSummary"]; exists {
 		t.Fatalf("unexpected Go-style managed drift summary field in %#v", payload)
+	}
+	if _, exists := payload["ResultScope"]; exists {
+		t.Fatalf("unexpected Go-style result scope field in %#v", payload)
 	}
 }
 
@@ -3248,6 +3254,10 @@ func TestDeploymentOverviewEventsRouteAppliesLimitToEventsAndSummary(t *testing.
 	summary, ok := payload["managedDriftSummary"].(map[string]any)
 	if !ok || summary["total"] != float64(1) || summary["high"] != float64(1) || summary["medium"] != float64(0) || summary["low"] != float64(0) {
 		t.Fatalf("expected managedDriftSummary counts for returned events only, got %#v", payload["managedDriftSummary"])
+	}
+	scope, ok := payload["resultScope"].(map[string]any)
+	if !ok || scope["requestedLimit"] != float64(1) || scope["effectiveLimit"] != float64(1) || scope["returnedEventCount"] != float64(1) || scope["truncationStatus"] != "truncated" {
+		t.Fatalf("expected bounded resultScope for returned events only, got %#v", payload["resultScope"])
 	}
 }
 
