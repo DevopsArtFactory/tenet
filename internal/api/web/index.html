@@ -411,13 +411,15 @@
         if (!field) return null;
         const severity = typeof row.severity === 'string' ? row.severity.toLowerCase() : '';
         const resourceRef = normalizeManagedDriftResourceRef(row.resourceRef);
+        const driftID = typeof row.driftId === 'string' ? row.driftId.trim() : '';
         return {
           field,
           desired: driftValueText(row.desired),
           actual: driftValueText(row.actual),
           severity: ['high', 'medium', 'low'].includes(severity) ? severity : 'low',
           resourceRef,
-          search: [field, row.desired, row.actual, row.severity, resourceRef?.resourceType, resourceRef?.resourceName].filter((value) => value != null && value !== '').join(' '),
+          driftId: driftID,
+          search: [field, row.desired, row.actual, row.severity, driftID, resourceRef?.resourceType, resourceRef?.resourceName].filter((value) => value != null && value !== '').join(' '),
         };
       };
       const managedDeploymentDriftRows = (detail) => {
@@ -1830,6 +1832,23 @@
         seenAnchors.set(base, seen + 1);
         return seen ? `${base}-${seen + 1}` : base;
       };
+      const managedDriftAnchorBase = (row) => {
+        const backendID = auditAnchorSlug(row?.driftId);
+        if (backendID && backendID !== 'unknown') return `drift-row-${backendID}`;
+        const parts = [row?.field, row?.desired, row?.actual, row?.severity]
+          .map((value) => auditAnchorSlug(value))
+          .filter((value) => value && value !== 'unknown');
+        return parts.length ? `drift-row-${parts.join('-')}` : 'drift-row-unknown';
+      };
+      const uniqueManagedDriftAnchorID = (row, seenAnchors) => {
+        const base = managedDriftAnchorBase(row);
+        const seen = seenAnchors.get(base) || 0;
+        seenAnchors.set(base, seen + 1);
+        return seen ? `${base}-${seen + 1}` : base;
+      };
+      const managedDriftAnchorURL = (deploymentName, rowID) => buildPageSectionURL('drift', rowID, {
+        deployment: deploymentName,
+      });
       const resourceLogAnchorURL = (deploymentName, resource, logID, limit = 0) => buildPageSectionURL('resource', logID, {
         deployment: deploymentName,
         resourceType: resource?.type,
@@ -7243,6 +7262,9 @@
             },
           );
           const renderDriftRows = () => {
+            const driftAnchorIDs = new Map();
+            const seenAllDriftAnchors = new Map();
+            driftRows.forEach((row) => driftAnchorIDs.set(row, uniqueManagedDriftAnchorID(row, seenAllDriftAnchors)));
             const searchNeedle = driftQuery.trim().toLowerCase();
             const filteredRows = driftRows
               .filter((row) => driftSeverity === 'all' || row.severity === driftSeverity)
@@ -7293,7 +7315,10 @@
             thead.append(headerRow);
             const tbody = createElement('tbody');
             filteredRows.forEach((row) => {
+              const rowID = driftAnchorIDs.get(row) || managedDriftAnchorBase(row);
               const tableRow = createElement('tr');
+              tableRow.id = rowID;
+              tableRow.setAttribute('id', rowID);
               tableRow.append(
                 createElement('td', 'drift-field', row.field),
                 createElement('td', '', row.desired),
@@ -7303,13 +7328,20 @@
               severityCell.append(createElement('span', `severity-indicator severity-indicator-${row.severity}`, row.severity));
               tableRow.append(severityCell);
               const evidenceCell = createElement('td');
+              const rowLinks = createElement('div', 'row-links');
+              if (detail.name) {
+                rowLinks.append(createNavLink(managedDriftAnchorURL(detail.name, rowID), 'Share drift row', '_self'));
+              }
               const evidenceResource = resolveManagedDriftResourceRef(detail, row.resourceRef);
               if (evidenceResource && detail.name) {
-                evidenceCell.append(createNavLink(buildPageURL('resource', {
+                rowLinks.append(createNavLink(buildPageURL('resource', {
                   deployment: detail.name,
                   resourceType: evidenceResource.type,
                   resourceId: evidenceResource.id,
                 }), 'Open resource evidence', '_self'));
+              }
+              if (rowLinks.children.length) {
+                evidenceCell.append(rowLinks);
               } else {
                 evidenceCell.append(createElement('span', 'muted', '—'));
               }

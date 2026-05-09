@@ -7955,12 +7955,14 @@ func TestDeploymentWorkspaceDriftViewWithNodeHarness(t *testing.T) {
 		"deployedArtifact":   map[string]any{"image": "ghcr.io/example/payments:v7"},
 		"managedDrift": []map[string]any{
 			{
+				"driftId":  "md-row-listener-weight",
 				"field":    "listener.weight",
 				"desired":  "stable=100 canary=0",
 				"actual":   "<script>alert('xss')</script> stable=80 canary=20",
 				"severity": "high",
 			},
 			{
+				"driftId":  "md-row-task-definition",
 				"field":    "service.taskDefinition",
 				"desired":  "payments:42",
 				"actual":   "payments:41",
@@ -8278,6 +8280,14 @@ async function render(detail) {
   if (!managedRows.some((row) => row.includes('runtimeContext.capacity.desired') && row.includes("<script>alert('capacity')</script> 4") && row.includes('Open resource evidence'))) throw new Error('expected managed drift capacity row to render safe text plus resource evidence handoff');
   if (managedRows.some((row) => row.includes('listener.weight') && row.includes('Open resource evidence'))) throw new Error('expected unmanaged drift row without resourceRef to keep no-handoff rendering');
   const managedEvidenceLink = managedLinks.find((node) => node.textContent === 'Open resource evidence');
+  const managedShareLinks = managedLinks.filter((node) => node.textContent === 'Share drift row');
+  if (managedShareLinks.length !== 5) throw new Error('expected every managed drift row to expose a share link, got ' + managedShareLinks.length);
+  const backendShareLink = managedShareLinks.find((node) => node.href === '/?page=drift&deployment=api-managed#drift-row-md-row-listener-weight');
+  if (!backendShareLink || backendShareLink.target !== '_self' || backendShareLink.rel) throw new Error('expected managed drift share link to prefer backend driftId anchors, got ' + managedShareLinks.map((node) => node.href).join(', '));
+  const backendAnchoredRow = collectNodes(managedRun.document.getElementById('accounts'), (node) => node.tagName === 'TR' && node.getAttribute('id') === 'drift-row-md-row-listener-weight')[0];
+  if (!backendAnchoredRow) throw new Error('expected managed drift table row to expose backend driftId anchor');
+  const legacyShareLink = managedShareLinks.find((node) => node.href.includes('#drift-row-runtimecontext-capacity-desired-6-script-alert-capacity-script-4-low'));
+  if (!legacyShareLink) throw new Error('expected managed drift row without driftId to expose deterministic legacy fallback anchor, got ' + managedShareLinks.map((node) => node.href).join(', '));
   const expectedManagedEvidenceHref = '/?page=resource&deployment=api-managed&resourceType=candidateAutoScalingGroup&resourceId=candidateAutoScalingGroup%3A%3Aapi-managed-candidate%3A%3ACandidate+Auto+Scaling+Group+Tenet+creates+for+managed+drift+evidence';
   if (!managedEvidenceLink || managedEvidenceLink.href !== expectedManagedEvidenceHref || managedEvidenceLink.target !== '_self' || managedEvidenceLink.rel) throw new Error('expected managed drift resource evidence link to target normalized resource route, got ' + (managedEvidenceLink ? managedEvidenceLink.href + ' target=' + managedEvidenceLink.target + ' rel=' + managedEvidenceLink.rel : 'none'));
   if (!managedRows.some((row) => row.includes('runtimeContext.launchTemplate.imageId') && row.includes("<script>alert('ami')</script> ami-fffffffffffffffff"))) throw new Error('expected managed drift launch-template imageId row to render as safe text');
@@ -8303,6 +8313,9 @@ async function render(detail) {
   if (!managedHighRows[0].includes('listener.weight')) throw new Error('expected managed drift severity filter to retain the high severity row');
   if (!managedHighRows.some((row) => row.includes('runtimeContext.launchTemplate.imageId'))) throw new Error('expected managed drift severity filter to retain the launch-template imageId row');
   if (!managedHighText.includes('Showing 2 drift rows out of 5 drift rows after filters.')) throw new Error('expected managed drift summary to reflect high filter impact');
+  const managedHighShareLinks = collectNodes(managedRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Share drift row');
+  if (!managedHighShareLinks.find((node) => node.href === '/?page=drift&deployment=api-managed#drift-row-md-row-listener-weight')) throw new Error('expected filtered drift rows to keep backend share anchor stable');
+  if (!managedHighShareLinks.find((node) => node.href.includes('#drift-row-runtimecontext-launchtemplate-imageid-ami-1234567890abcdef0-script-alert-ami-script-ami-fffffffffffffffff-high'))) throw new Error('expected filtered drift rows to keep legacy fallback share anchor stable');
 
   const managedEmptyRun = await render(managedEmptyDetail);
   const managedEmptyText = collectText(managedEmptyRun.document.getElementById('accounts')).join(' | ');
@@ -8682,7 +8695,7 @@ const fetch = (url) => {
   const quickNavChips = collectNodes(accounts, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
   const currentSectionChip = quickNavChips.find((node) => node.getAttribute('aria-label') === 'Current section: Status conditions');
   if (!currentSectionChip) throw new Error('expected drift hash to render the current-section chip');
-  const sectionLinks = collectNodes(accounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#drift-'));
+  const sectionLinks = collectNodes(accounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#drift-') && node.textContent !== 'Share drift row');
   const expectedLinks = [
     ['/console?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod#drift-runtime-signals', 'Runtime signals'],
     ['/console?page=drift&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod#drift-rollout-execution', 'Rollout execution'],
@@ -8695,7 +8708,7 @@ const fetch = (url) => {
     if (link.target !== '_self' || link.rel) throw new Error('expected drift section link to stay in-shell for ' + text);
   });
   if (sectionLinks.find((node) => node.textContent === 'Status conditions')) throw new Error('expected active drift section to be removed from On this page links');
-  const sectionIDs = collectNodes(accounts, (node) => typeof node.id === 'string' && node.id.startsWith('drift-')).map((node) => node.id).sort();
+  const sectionIDs = collectNodes(accounts, (node) => typeof node.id === 'string' && node.id.startsWith('drift-') && !node.id.startsWith('drift-row-')).map((node) => node.id).sort();
   const expectedSectionIDs = ['drift-field-level', 'drift-rollout-execution', 'drift-runtime-signals', 'drift-status-conditions'];
   if (JSON.stringify(sectionIDs) !== JSON.stringify(expectedSectionIDs)) throw new Error('unexpected drift section ids: ' + JSON.stringify(sectionIDs));
   if (!document.lastScrolledTarget || document.lastScrolledTarget.id !== 'drift-status-conditions') throw new Error('expected initial drift workspace hash to scroll the matching section into view');
@@ -8706,7 +8719,7 @@ const fetch = (url) => {
   const updatedChips = collectNodes(updatedAccounts, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
   const fieldLevelChip = updatedChips.find((node) => node.getAttribute('aria-label') === 'Current section: Field-level drift');
   if (!fieldLevelChip) throw new Error('expected drift hashchange to update the current-section chip');
-  const updatedSectionLinks = collectNodes(updatedAccounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#drift-'));
+  const updatedSectionLinks = collectNodes(updatedAccounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#drift-') && node.textContent !== 'Share drift row');
   if (updatedSectionLinks.find((node) => node.textContent === 'Field-level drift')) throw new Error('expected updated drift current section to be removed from On this page links');
   if (!updatedSectionLinks.find((node) => node.textContent === 'Status conditions')) throw new Error('expected previous drift current section to return to On this page links after hashchange');
   if (!document.lastScrolledTarget || document.lastScrolledTarget.id !== 'drift-field-level') throw new Error('expected drift hashchange to scroll the new current section into view');

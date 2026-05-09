@@ -1468,6 +1468,11 @@ assert 'Current source: derived fallback read-model heuristics.' in ui, ui
 assert 'Severity' in ui, ui
 assert 'Evidence' in ui, ui
 assert 'Open resource evidence' in ui, ui
+assert 'Share drift row' in ui, ui
+assert "const managedDriftAnchorBase = (row) => {" in ui, ui
+assert "const backendID = auditAnchorSlug(row?.driftId);" in ui, ui
+assert "managedDriftAnchorURL(detail.name, rowID)" in ui, ui
+assert "tableRow.setAttribute('id', rowID);" in ui, ui
 assert "resolveManagedDriftResourceRef(detail, row.resourceRef)" in ui, ui
 assert 'Drift summary' in ui, ui
 assert 'Refresh drift workspace' in ui, ui
