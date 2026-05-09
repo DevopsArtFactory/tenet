@@ -11186,8 +11186,14 @@ document.byID.set('toolbar', document.createElement('section'));
 document.byID.set('summary', document.createElement('section'));
 document.byID.set('accounts', document.createElement('section'));
 const fetchCalls = [];
-const window = { location: { pathname: '/console', search: '?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&action=apply.requested&limit=2', hash: '' } };
-const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/console'; window.location.search = query ? '?' + query : ''; } };
+const window = { location: { pathname: '/console', search: '?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&action=apply.requested&limit=2', hash: '#audit-deployment-context' } };
+const history = { replaceState(_state, _title, url) {
+  const [pathAndQuery, nextHash = ''] = String(url).split('#');
+  const [pathname, query = ''] = pathAndQuery.split('?');
+  window.location.pathname = pathname || '/console';
+  window.location.search = query ? '?' + query : '';
+  window.location.hash = nextHash ? '#' + nextHash : '';
+} };
 const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/audit-logs?deployment=payments-api-prod&action=apply.requested&limit=2') return Promise.resolve({ ok: true, json: () => Promise.resolve(filteredAuditLogs) });
@@ -11235,6 +11241,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   await settle();
   if (fetchCalls.length !== 4 || fetchCalls[3] !== '/v1/audit-logs') throw new Error('expected clear audit filters to reload the unfiltered audit route');
   if (window.location.search !== '?page=audit&q=payments&sync=OutOfSync&account=210987654321') throw new Error('expected clear audit filters to preserve q/sync/account and reset audit filters, got ' + window.location.search);
+  if (window.location.hash !== '') throw new Error('expected clear audit filters to remove stale audit section hash, got ' + window.location.hash);
   if (window.location.pathname !== '/console') throw new Error('expected clear audit filters to stay on the audit page shell');
   const clearedActionSelect = document.querySelector('[data-toolbar-field="Action"]');
   if (!clearedActionSelect || clearedActionSelect.value !== '') throw new Error('expected action select to reset after clearing audit filters');
