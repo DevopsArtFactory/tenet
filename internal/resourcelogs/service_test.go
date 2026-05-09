@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +25,35 @@ func expectedLookupContext(region, controlAccountID, targetAccountID, observerRo
 		TargetAccountID:        targetAccountID,
 		CrossAccount:           controlAccountID != "" && targetAccountID != "" && controlAccountID != targetAccountID,
 		ObserverRoleConfigured: observerRoleARN != "",
+	}
+}
+
+func TestAssignEntryIDsDerivesStableUniqueRowAnchors(t *testing.T) {
+	entries := []Entry{
+		{Timestamp: "2026-05-09T10:00:00Z", Message: "same message", Stream: "ecs/api/task-a", ContainerName: "api"},
+		{Timestamp: "2026-05-09T10:00:00Z", Message: "same message", Stream: "ecs/api/task-a", ContainerName: "api"},
+		{Timestamp: "2026-05-09T10:01:00Z", Message: "next message", InstanceID: "i-0123456789abcdef0"},
+	}
+	req := Request{DeploymentName: "payments-api-prod", ResourceType: "ecsService", ResourceName: "payments-api-prod-service"}
+
+	withIDs := AssignEntryIDs(req, SourceCloudWatch, entries)
+	again := AssignEntryIDs(req, SourceCloudWatch, entries)
+
+	if !reflect.DeepEqual(withIDs, again) {
+		t.Fatalf("expected stable entry IDs, got %+v then %+v", withIDs, again)
+	}
+	if entries[0].EntryID != "" {
+		t.Fatalf("expected AssignEntryIDs to leave caller entries unmodified, got %+v", entries)
+	}
+	seen := map[string]bool{}
+	for _, entry := range withIDs {
+		if !strings.HasPrefix(entry.EntryID, "rlog_") {
+			t.Fatalf("expected backend recent-log ID prefix, got %+v", entry)
+		}
+		if seen[entry.EntryID] {
+			t.Fatalf("expected duplicate rows to receive unique IDs, got %+v", withIDs)
+		}
+		seen[entry.EntryID] = true
 	}
 }
 

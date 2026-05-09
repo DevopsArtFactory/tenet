@@ -2289,20 +2289,26 @@ func NewRouter(options Options) http.Handler {
 				return
 			}
 			ctx := r.Context()
-			if containerName := strings.TrimSpace(r.URL.Query().Get("containerName")); containerName != "" {
+			containerName := strings.TrimSpace(r.URL.Query().Get("containerName"))
+			if containerName != "" {
 				ctx = resourcelogs.ContextWithContainerName(ctx, containerName)
 			}
-			if instanceID := strings.TrimSpace(r.URL.Query().Get("instanceId")); instanceID != "" {
+			instanceID := strings.TrimSpace(r.URL.Query().Get("instanceId"))
+			if instanceID != "" {
 				if !validEC2InstanceID(instanceID) {
 					http.Error(w, "invalid instanceId query", http.StatusBadRequest)
 					return
 				}
 				ctx = resourcelogs.ContextWithInstanceID(ctx, instanceID)
 			}
-			if clusterARN, ok := parseOptionalECSClusterARN(w, r); !ok {
+			clusterARN := ""
+			if parsedClusterARN, ok := parseOptionalECSClusterARN(w, r); !ok {
 				return
-			} else if (resourceType == "ecsService" || resourceType == "ecsTask") && clusterARN != "" {
-				ctx = resourcelogs.ContextWithClusterARN(ctx, clusterARN)
+			} else if resourceType == "ecsService" || resourceType == "ecsTask" {
+				clusterARN = parsedClusterARN
+				if clusterARN != "" {
+					ctx = resourcelogs.ContextWithClusterARN(ctx, clusterARN)
+				}
 			}
 			if _, err := options.OverviewDeployment(r.Context(), name); err != nil {
 				respondReadLookupError(w, err, "overview deployment unavailable")
@@ -2314,6 +2320,20 @@ func NewRouter(options Options) http.Handler {
 				return
 			}
 			result = applyResourceLogLimit(result, resourceLimit)
+			result.Entries = resourcelogs.AssignEntryIDs(resourcelogs.Request{
+				DeploymentName:      name,
+				ResourceType:        resourceType,
+				ResourceName:        resourceName,
+				ResourceDescription: result.ResourceDescription,
+				BackingResourceType: result.BackingResourceType,
+				BackingResourceName: result.BackingResourceName,
+				ControlAccountID:    result.LookupContext.ControlAccountID,
+				TargetAccountID:     result.LookupContext.TargetAccountID,
+				Region:              result.LookupContext.Region,
+				ContainerName:       containerName,
+				InstanceID:          instanceID,
+				ClusterARN:          clusterARN,
+			}, result.Source, result.Entries)
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(result)
 		case strings.HasSuffix(path, "/resource-inspection"):

@@ -687,6 +687,16 @@ def assert_recent_log_empty_reason_contract(label, payload):
     else:
         assert isinstance(payload.get('unavailableReason'), str) and payload['unavailableReason'], {label: payload}
 
+
+def assert_recent_log_entry_ids(label, payload):
+    entries = payload.get('entries') or []
+    seen = set()
+    for entry in entries:
+        entry_id = entry.get('entryId')
+        assert isinstance(entry_id, str) and entry_id.startswith('rlog_'), {label: payload}
+        assert entry_id not in seen, {label: payload}
+        seen.add(entry_id)
+
 assert summary['accountCount'] == 2, summary
 assert summary['environmentCount'] == 2, summary
 assert summary['deploymentCount'] == 3, summary
@@ -1130,6 +1140,7 @@ for label, payload in (
     ('candidate_target_group_resource_logs', candidate_target_group_resource_logs),
 ):
     assert_recent_log_empty_reason_contract(label, payload)
+    assert_recent_log_entry_ids(label, payload)
 
 assert ecs_task_resource_inspection['deploymentName'] == 'worker-prod', ecs_task_resource_inspection
 assert ecs_task_resource_inspection['resourceType'] == 'ecsTask', ecs_task_resource_inspection
