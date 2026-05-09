@@ -1724,6 +1724,7 @@ for fragment in (
     "createNavLink(auditEntryAnchorURL(entry), 'Open audit entry', '_self')",
     "Share or continue in app",
     "No audit activity has been persisted yet.",
+    "No audit activity has been persisted yet for deployment ${currentPageState.deployment}. Create a plan preview or apply request from the plan/apply workspace to add immutable audit rows for this deployment.",
     "const auditFilterLabels = () => {",
     "const auditEmptyStateText = () => {",
     "No audit entries match the current filters (${filters.join(' · ')}${hasLimit ? `; ${auditLimitLabel()}` : ''}). Clear audit controls to return to the full audit timeline.",

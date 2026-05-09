@@ -5869,6 +5869,9 @@
         if (!filters.length && !hasLimit) {
           return 'No audit activity has been persisted yet.';
         }
+        if (currentPageState.deployment && !currentPageState.auditAction && !hasLimit) {
+          return `No audit activity has been persisted yet for deployment ${currentPageState.deployment}. Create a plan preview or apply request from the plan/apply workspace to add immutable audit rows for this deployment.`;
+        }
         if (!filters.length) {
           return `No audit entries are visible with the current limit cap (${auditLimitLabel()}). Increase the limit or clear audit controls to return to the full audit timeline.`;
         }

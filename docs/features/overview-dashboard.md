@@ -338,6 +338,7 @@ Current deployment-scoped audit behavior:
 - adds the same compact quick-navigation strip as the drift/plan workspaces when `deployment={name}` is present
 - keeps that strip bookmarkable by routing through `buildPageURL(...)`, so `q`, `sync`, `account`, `deployment`, and current audit `action` / `limit` state survive `_self` navigation
 - adds a compact visible-entry summary above the timeline rows so operators can immediately see total visible audit rows, `plan.created` rows, `apply.requested` rows, recorded actors, and unavailable/unknown actors for the current deployment/action/limit result set
+- uses deployment-specific no-activity copy when only `deployment={name}` is selected and no immutable plan/apply rows exist yet, while preserving filter-recovery guidance when an action filter or limit cap hides matching rows
 
 ### Plan/apply workspace
 
