@@ -1482,6 +1482,9 @@ assert "Capped response; more controller history may exist" in ui, ui
 assert "At cap; older history may exist" in ui, ui
 assert "const createControllerRefreshCue = (event) => {" in ui, ui
 assert 'GitHub refresh evidence · ${fields.join(\' · \')}' in ui, ui
+assert "const runtimeEventAnchorBase = (event) => {" in ui, ui
+assert "const uniqueRuntimeEventAnchorID = (event, seenAnchors) => {" in ui, ui
+assert "createNavLink(runtimeEventAnchorURL(deploymentName, eventID, selectedLimit), 'Share event', '_self')" in ui, ui
 assert "actions.push(createNavLink(buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName }), 'Open field-level drift', '_self'));" in ui, ui
 assert "const deploymentEventsReadRoute = (deploymentName, limit = currentPageState.eventLimit) => `GET ${buildDeploymentEventsReadRoute(deploymentName, { limit })}`;" in ui, ui
 assert "createDeploymentEventsActions(section, deploymentName)," in ui, ui

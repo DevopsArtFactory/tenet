@@ -4083,6 +4083,13 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   let runtimeEventLinks = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'A');
   const driftHandoff = runtimeEventLinks.find((node) => node.textContent === 'Open field-level drift' && node.href === '/?page=drift&deployment=payments-api-staging#drift-field-level');
   if (!driftHandoff || driftHandoff.target !== '_self' || driftHandoff.rel) throw new Error('expected runtime-events managed-drift handoff to open the field-level drift workspace section in shell');
+  const expectedEventAnchor = 'runtime-event-2026-04-16t07-10-00z-shifttrafficlinear-shifted-50-percent-of-traffic-controller';
+  const runtimeEventItems = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'LI');
+  if (!runtimeEventItems.find((node) => node.id === expectedEventAnchor)) throw new Error('expected runtime event row to expose a stable timestamp/step/summary/source anchor id');
+  const shareEventLinks = runtimeEventLinks.filter((node) => node.textContent === 'Share event');
+  if (shareEventLinks.length !== 2) throw new Error('expected every runtime event row to expose a share event link');
+  const firstShareLink = shareEventLinks.find((node) => node.href === '/?page=application&deployment=payments-api-staging#' + expectedEventAnchor);
+  if (!firstShareLink || firstShareLink.target !== '_self' || firstShareLink.rel) throw new Error('expected share event link to preserve the application route and stay in the embedded flow');
   refreshEvents.dispatch('click');
   await settle();
   buttons = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
@@ -4131,6 +4138,8 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   if (!selectedWindowText.includes('2 events in latest 25-event window · newest controller event first')) throw new Error('expected bookmarked Event window size in runtime-events ordering guidance');
   const selectedWindowSelect = collectNodes(selectedWindowView.document.getElementById('accounts'), (node) => node.tagName === 'SELECT').find((node) => node.dataset.toolbarField === 'Event window');
   if (!selectedWindowSelect || selectedWindowSelect.value !== '25') throw new Error('expected Event window selector to reflect bookmarked eventLimit query param');
+  const selectedWindowShareLink = collectNodes(selectedWindowView.document.getElementById('accounts'), (node) => node.tagName === 'A').find((node) => node.textContent === 'Share event' && node.href === '/?page=application&eventLimit=25&deployment=payments-api-staging#' + expectedEventAnchor);
+  if (!selectedWindowShareLink) throw new Error('expected bookmarked Event window share links to preserve the non-default eventLimit');
   if (selectedWindowView.window.location.search !== '?page=application&deployment=payments-api-staging&eventLimit=25') throw new Error('expected bookmarked Event window route to remain stable after rendering');
 
   const emptyView = await render((url) => {
