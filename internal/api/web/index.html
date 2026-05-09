@@ -5489,6 +5489,48 @@
         };
       };
       const deploymentEventsHasManagedDrift = (result) => deploymentEventsManagedDriftCounts(result).total > 0;
+      const deploymentEventsCountText = (value) => {
+        const count = Number(value);
+        return Number.isFinite(count) && count >= 0 ? `${count} ${count === 1 ? 'event' : 'events'}` : '—';
+      };
+      const deploymentEventsScopeLimitText = (value) => {
+        const limit = Number(value);
+        return Number.isFinite(limit) && limit > 0 ? `${limit} events` : 'All available events';
+      };
+      const deploymentEventsTruncationStatusText = (status) => {
+        switch (status) {
+          case 'truncated':
+          case 'capped':
+            return 'Capped response; more controller history may exist';
+          case 'not_truncated':
+            return 'Below cap; no router truncation';
+          case 'unknown':
+          case 'at_cap_unknown_total':
+            return 'At cap; older history may exist';
+          case 'not_applicable':
+            return 'Not applicable for this response';
+          default:
+            return status ? String(status) : '—';
+        }
+      };
+      const deploymentEventsResultScopeFields = (scope) => {
+        if (!scope) return [];
+        return [
+          ['Requested window', scope.requestedLimit == null ? 'All available events' : deploymentEventsScopeLimitText(scope.requestedLimit)],
+          ['Effective window', deploymentEventsScopeLimitText(scope.effectiveLimit)],
+          ['Returned events', deploymentEventsCountText(scope.returnedEventCount)],
+          ['Window status', deploymentEventsTruncationStatusText(scope.truncationStatus)],
+        ];
+      };
+      const createDeploymentEventsResultScopeSummary = (scope) => {
+        const fields = deploymentEventsResultScopeFields(scope);
+        if (!fields.length) return null;
+        const summary = createElement('div', 'detail-history-meta');
+        fields.forEach(([label, value]) => {
+          summary.append(createElement('span', 'detail-condition-meta', `${label} · ${value}`));
+        });
+        return summary;
+      };
       const shortRevision = (value) => {
         const text = String(value || '').trim();
         return text ? text.slice(0, 12) : '';
@@ -5567,16 +5609,12 @@
       const renderDeploymentEventsPayload = (section, deploymentName, result, limit = currentPageState.eventLimit) => {
         const selectedLimit = normalizeDeploymentEventsLimit(limit);
         const events = sortTimelineEvents(result?.events || []);
+        const scopeSummary = createDeploymentEventsResultScopeSummary(result?.resultScope);
         if (!events.length) {
-          renderDeploymentEventsState(
-            section,
-            deploymentName,
-            `No controller runtime events were returned in the latest ${selectedLimit}-event window. Increase Event window or use Refresh runtime events before treating controller history as absent.`,
-            '',
-            '',
-            false,
-            selectedLimit,
-          );
+          const heading = createDetailSectionHeader('Controller runtime events', createDeploymentEventsActions(section, deploymentName, false, result));
+          const intro = createDeploymentEventsIntro(selectedLimit);
+          const stateNode = createElement('div', 'detail-state', `No controller runtime events were returned in the latest ${selectedLimit}-event window. Increase Event window or use Refresh runtime events before treating controller history as absent.`);
+          section.replaceChildren(heading, intro, ...(scopeSummary ? [scopeSummary] : []), stateNode);
           return;
         }
 
@@ -5639,7 +5677,7 @@
           eventList.append(item);
         });
 
-        section.replaceChildren(heading, intro, ordering, driftSummary, eventList);
+        section.replaceChildren(heading, intro, ...(scopeSummary ? [scopeSummary] : []), ordering, driftSummary, eventList);
       };
       const renderDeploymentEventsSection = (section, deploymentName, options = {}) => {
         const force = Boolean(options?.force);
