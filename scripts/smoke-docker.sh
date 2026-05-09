@@ -2719,6 +2719,11 @@ assert forbidden_resource_inspection_body.strip() == "forbidden: operator does n
 assert allowed_status_read["deploymentName"] == "payments-api-staging", allowed_status_read
 assert allowed_events_read["deploymentName"] == "payments-api-staging", allowed_events_read
 assert isinstance(allowed_events_read.get("events"), list), allowed_events_read
+allowed_events_scope = allowed_events_read.get("resultScope") or {}
+assert allowed_events_scope.get("requestedLimit") == 1, allowed_events_read
+assert allowed_events_scope.get("effectiveLimit") == 1, allowed_events_read
+assert allowed_events_scope.get("returnedEventCount") == len(allowed_events_read["events"]), allowed_events_read
+assert allowed_events_scope.get("truncationStatus") in {"truncated", "not_truncated", "unknown"}, allowed_events_read
 assert allowed_resource_logs["deploymentName"] == "worker-prod", allowed_resource_logs
 assert allowed_resource_logs["resourceType"] == "ecsService", allowed_resource_logs
 assert allowed_resource_logs["resourceName"] == "worker-prod-service", allowed_resource_logs

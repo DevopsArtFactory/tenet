@@ -1101,6 +1101,9 @@ func TestBuildDeploymentOverviewEventsReturnsEmptyListWhenHistoryMissing(t *test
 	if !ok || summary["total"] != float64(0) || summary["high"] != float64(0) || summary["medium"] != float64(0) || summary["low"] != float64(0) {
 		t.Fatalf("expected managedDriftSummary zero counts in JSON payload, got %#v", decoded["managedDriftSummary"])
 	}
+	if _, exists := decoded["resultScope"]; exists {
+		t.Fatalf("expected catalog-built events payload to omit router-authored resultScope, got %#v", decoded["resultScope"])
+	}
 	if _, exists := decoded["DeploymentName"]; exists {
 		t.Fatalf("unexpected Go-style field names in %#v", decoded)
 	}
