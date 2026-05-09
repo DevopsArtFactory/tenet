@@ -1475,6 +1475,11 @@ assert 'Loading controller runtime events…' in ui, ui
 assert 'No controller runtime events were returned in the latest ${selectedLimit}-event window. Increase Event window or use Refresh runtime events before treating controller history as absent.' in ui, ui
 assert 'Controller runtime events are currently unavailable.' in ui, ui
 assert 'Managed drift summary · ${counts.total} total · ${counts.high} high · ${counts.medium} medium · ${counts.low} low' in ui, ui
+assert "const deploymentEventsResultScopeFields = (scope) => {" in ui, ui
+assert "Requested window" in ui, ui
+assert "Window status" in ui, ui
+assert "Capped response; more controller history may exist" in ui, ui
+assert "At cap; older history may exist" in ui, ui
 assert "const createControllerRefreshCue = (event) => {" in ui, ui
 assert 'GitHub refresh evidence · ${fields.join(\' · \')}' in ui, ui
 assert "actions.push(createNavLink(buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName }), 'Open field-level drift', '_self'));" in ui, ui

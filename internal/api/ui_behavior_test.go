@@ -3886,6 +3886,7 @@ func TestApplicationDetailPageDeploymentEventsTimelineStatesWithNodeHarness(t *t
 	eventsJSON, err := json.Marshal(map[string]any{
 		"deploymentName":      "payments-api-staging",
 		"managedDriftSummary": map[string]any{"total": 2, "high": 1, "medium": 1, "low": 0},
+		"resultScope":         map[string]any{"requestedLimit": 10, "effectiveLimit": 10, "returnedEventCount": 2, "truncationStatus": "truncated"},
 		"events": []map[string]any{
 			{
 				"timestamp":     "2026-04-16T07:05:00Z",
@@ -3926,6 +3927,7 @@ func TestApplicationDetailPageDeploymentEventsTimelineStatesWithNodeHarness(t *t
 	refreshedEventsJSON, err := json.Marshal(map[string]any{
 		"deploymentName":      "payments-api-staging",
 		"managedDriftSummary": map[string]any{"total": 0, "high": 0, "medium": 0, "low": 0},
+		"resultScope":         map[string]any{"requestedLimit": 10, "effectiveLimit": 10, "returnedEventCount": 1, "truncationStatus": "not_truncated"},
 		"events": []map[string]any{
 			{
 				"timestamp":          "2026-04-16T07:14:00Z",
@@ -4056,6 +4058,7 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   if (!readyText.includes('Controller runtime events')) throw new Error('expected controller runtime events section heading');
   if (!readyText.includes('Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events?limit=10. Tenet shows the selected bounded window, newest first; use Event window to change how much controller history this panel reads without leaving the application drill-down. This is not audit/auth history.')) throw new Error('expected application page to distinguish controller runtime events from audit/auth history');
   if (!readyText.includes('2 events in latest 10-event window · newest controller event first')) throw new Error('expected event ordering guidance');
+  if (!readyText.includes('Requested window · 10 events') || !readyText.includes('Effective window · 10 events') || !readyText.includes('Returned events · 2 events') || !readyText.includes('Window status · Capped response; more controller history may exist')) throw new Error('expected runtime-events resultScope summary from bounded deployment events payload');
   if (!readyText.includes('Managed drift summary · 2 total · 1 high · 1 medium · 0 low')) throw new Error('expected managed drift severity summary from deployment events payload');
   if (!readyText.includes('Shifted 50 percent of traffic')) throw new Error('expected newest controller event summary');
   if (!readyText.includes('Time · 2026-04-16T07:10:00Z')) throw new Error('expected newest controller event timestamp');
@@ -4095,6 +4098,7 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   await settle();
   readyText = collectText(loadingView.document.getElementById('accounts')).join(' | ');
   if (!readyText.includes('Completed traffic shift for v2')) throw new Error('expected refreshed deployment events payload to render in place');
+  if (!readyText.includes('Returned events · 1 event') || !readyText.includes('Window status · Below cap; no router truncation')) throw new Error('expected refreshed deployment events resultScope summary to replace stale bounded-read metadata');
   if (!readyText.includes('Managed drift summary · 0 total · 0 high · 0 medium · 0 low')) throw new Error('expected refreshed managed drift summary to replace stale counts');
   if (readyText.includes('Shifted 50 percent of traffic')) throw new Error('expected refreshed deployment events payload to replace stale ready-state content');
   buttons = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
@@ -4131,11 +4135,12 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
 
   const emptyView = await render((url) => {
     if (url === detailURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === eventsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', events: [] }) });
+    if (url === eventsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', resultScope: { requestedLimit: 10, effectiveLimit: 10, returnedEventCount: 0, truncationStatus: 'unknown' }, events: [] }) });
     throw new Error('unexpected fetch url: ' + url);
   });
   const emptyText = collectText(emptyView.document.getElementById('accounts')).join(' | ');
   if (!emptyText.includes('No controller runtime events were returned in the latest 10-event window. Increase Event window or use Refresh runtime events before treating controller history as absent.')) throw new Error('expected empty deployment events state to guide operators toward widening or refreshing the runtime-events window');
+  if (!emptyText.includes('Returned events · 0 events') || !emptyText.includes('Window status · At cap; older history may exist')) throw new Error('expected empty deployment events resultScope summary to explain the bounded window');
   buttons = collectNodes(emptyView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
   refreshEvents = buttons.find((node) => node.textContent === 'Refresh runtime events');
   if (!refreshEvents || refreshEvents.disabled) throw new Error('expected runtime-events refresh button enabled in empty state');

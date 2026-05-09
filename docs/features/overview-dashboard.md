@@ -138,6 +138,7 @@ Current behavior:
 - GitHub-triggered controller refresh events render a concise `GitHub refresh evidence` cue with non-secret repository/ref, shortened revision, delivery/request IDs, and requested/received/reconciled timing when those `controllerRefresh` fields are present; ticker reconciles omit that cue instead of showing placeholder labels
 - explicitly labels these as controller-derived runtime events, not audit/auth history
 - the `Controller runtime events` section header now includes a bookmarkable `Event window` selector plus an in-place `Refresh runtime events` button; changing the selector writes `eventLimit` into `/?page=application&deployment=...`, re-runs `GET /v1/overview/deployments/{deploymentName}/events?limit={n}` in place, keeps the default window at 10 events, and disables only while that section fetch is active
+- when the events response includes bounded-read `resultScope` metadata, the panel renders a compact window summary (`Requested window`, `Effective window`, `Returned events`, and `Window status`) before the timeline or empty state so operators can tell whether the selected event window was capped, below the cap, or at an unknown older-history boundary
 - when that guarded lazy read returns `401` or `403`, the runtime-events panel keeps its refresh control and bookmarkable route stable but replaces generic fetch-error copy with the same trusted-front-door / access-denied guidance used on the other embedded read paths
 - grouped resource sections:
   - `Workloads`
@@ -248,6 +249,7 @@ Separate from that controller-runtime timeline, the backend also exposes `GET /v
 Current behavior:
 - returns `deploymentName` plus an explicit `events[]` array
 - returns an additive `managedDriftSummary` object with explicit `total`, `high`, `medium`, and `low` counts derived from the returned history rows; rows with missing/unknown severity count toward `total` only
+- bounded `?limit={n}` reads include additive `resultScope` metadata (`requestedLimit`, `effectiveLimit`, `returnedEventCount`, and `truncationStatus`); the embedded application runtime-events panel renders that as `Requested window` / `Effective window` / `Returned events` / `Window status` so operators can distinguish capped, below-cap, and at-cap/unknown-total windows without inspecting raw JSON
 - includes additive non-secret `events[].controllerRefresh` metadata (`requestId`, `deliveryId`, `repository`, `ref`, optional `after`, `requestedAt`, `receivedAt`, and `reconciledAt`) only when a Redis controller-refresh handoff from an accepted GitHub desired-state push triggered that reconcile; the application detail timeline renders those fields as `GitHub refresh evidence` with a shortened revision and no placeholders for ordinary ticker reconciles
 - returns `200 OK` with `events: []` and zero drift-summary counts when the deployment exists but no runtime history has been persisted yet
 - never calls live AWS APIs; it only reflects the stored controller/runtime read model
