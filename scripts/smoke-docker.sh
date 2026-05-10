@@ -1054,7 +1054,7 @@ assert isinstance(events_scope.get("totalEventCount"), int), deployment_events
 assert events_scope.get("totalEventCount") >= events_scope.get("returnedEventCount"), deployment_events
 assert isinstance(events_scope.get("limited"), bool), deployment_events
 assert events_scope.get("limited") == (events_scope.get("totalEventCount") > events_scope.get("returnedEventCount")), deployment_events
-assert events_scope.get("truncationStatus") in {"truncated", "not_truncated", "unknown"}, deployment_events
+assert events_scope.get("truncationStatus") in {"truncated", "not_truncated"}, deployment_events
 assert os.environ["INVALID_DEPLOYMENT_EVENTS_LIMIT_STATUS"] == "400", os.environ["INVALID_DEPLOYMENT_EVENTS_LIMIT_STATUS"]
 assert invalid_deployment_events_limit.strip() == "invalid limit query", invalid_deployment_events_limit
 event_managed_drift = [item for event in deployment_events["events"] for item in event.get("managedDrift", [])]
@@ -2900,7 +2900,7 @@ assert isinstance(allowed_events_scope.get("totalEventCount"), int), allowed_eve
 assert allowed_events_scope.get("totalEventCount") >= allowed_events_scope.get("returnedEventCount"), allowed_events_read
 assert isinstance(allowed_events_scope.get("limited"), bool), allowed_events_read
 assert allowed_events_scope.get("limited") == (allowed_events_scope.get("totalEventCount") > allowed_events_scope.get("returnedEventCount")), allowed_events_read
-assert allowed_events_scope.get("truncationStatus") in {"truncated", "not_truncated", "unknown"}, allowed_events_read
+assert allowed_events_scope.get("truncationStatus") in {"truncated", "not_truncated"}, allowed_events_read
 assert allowed_resource_logs["deploymentName"] == "worker-prod", allowed_resource_logs
 assert allowed_resource_logs["resourceType"] == "ecsService", allowed_resource_logs
 assert allowed_resource_logs["resourceName"] == "worker-prod-service", allowed_resource_logs
