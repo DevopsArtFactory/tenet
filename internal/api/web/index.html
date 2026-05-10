@@ -1982,6 +1982,8 @@
           ['Requested cap', scope.requestedLimit == null ? 'All available entries' : resourceLogsScopeLimitText(scope.requestedLimit)],
           ['Effective cap', resourceLogsScopeLimitText(scope.effectiveLimit)],
           ['Returned entries', resourceLogsCountText(scope.returnedEntryCount)],
+          ['Newest entry', textOrDash(scope.newestEntryTimestamp)],
+          ['Oldest entry', textOrDash(scope.oldestEntryTimestamp)],
           ['Scope status', resourceLogsTruncationStatusText(scope.truncationStatus)],
         ];
       };

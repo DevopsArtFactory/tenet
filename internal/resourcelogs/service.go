@@ -139,10 +139,12 @@ type Result struct {
 // It describes the cap Tenet applied to this response without promising an
 // expensive provider-wide total count.
 type ResultScope struct {
-	RequestedLimit     *int   `json:"requestedLimit,omitempty"`
-	EffectiveLimit     int    `json:"effectiveLimit"`
-	ReturnedEntryCount int    `json:"returnedEntryCount"`
-	TruncationStatus   string `json:"truncationStatus"`
+	RequestedLimit       *int   `json:"requestedLimit,omitempty"`
+	EffectiveLimit       int    `json:"effectiveLimit"`
+	ReturnedEntryCount   int    `json:"returnedEntryCount"`
+	NewestEntryTimestamp string `json:"newestEntryTimestamp,omitempty"`
+	OldestEntryTimestamp string `json:"oldestEntryTimestamp,omitempty"`
+	TruncationStatus     string `json:"truncationStatus"`
 }
 
 type LookupContext = resourceaws.LookupContext

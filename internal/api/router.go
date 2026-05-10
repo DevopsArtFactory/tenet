@@ -245,13 +245,58 @@ func applyResourceLogLimit(result resourcelogs.Result, limit int) resourcelogs.R
 		}
 	}
 
+	newestEntryTimestamp, oldestEntryTimestamp := resourceLogEntryWindow(result.Entries)
 	result.ResultScope = &resourcelogs.ResultScope{
-		RequestedLimit:     requestedLimit,
-		EffectiveLimit:     effectiveLimit,
-		ReturnedEntryCount: len(result.Entries),
-		TruncationStatus:   truncationStatus,
+		RequestedLimit:       requestedLimit,
+		EffectiveLimit:       effectiveLimit,
+		ReturnedEntryCount:   len(result.Entries),
+		NewestEntryTimestamp: newestEntryTimestamp,
+		OldestEntryTimestamp: oldestEntryTimestamp,
+		TruncationStatus:     truncationStatus,
 	}
 	return result
+}
+
+func resourceLogEntryWindow(entries []resourcelogs.Entry) (string, string) {
+	var newest string
+	var newestTime time.Time
+	var oldest string
+	var oldestTime time.Time
+	var sawParsed bool
+	var fallbackTimestamps []string
+
+	for _, entry := range entries {
+		timestamp := strings.TrimSpace(entry.Timestamp)
+		if timestamp == "" {
+			continue
+		}
+		parsed, err := time.Parse(time.RFC3339Nano, timestamp)
+		if err != nil {
+			fallbackTimestamps = append(fallbackTimestamps, timestamp)
+			continue
+		}
+		if !sawParsed || parsed.After(newestTime) {
+			newestTime = parsed
+			newest = timestamp
+		}
+		if !sawParsed || parsed.Before(oldestTime) {
+			oldestTime = parsed
+			oldest = timestamp
+		}
+		sawParsed = true
+	}
+	if sawParsed {
+		return newest, oldest
+	}
+	for _, timestamp := range fallbackTimestamps {
+		if newest == "" || timestamp > newest {
+			newest = timestamp
+		}
+		if oldest == "" || timestamp < oldest {
+			oldest = timestamp
+		}
+	}
+	return newest, oldest
 }
 
 func requireAuthenticatedIdentity(w http.ResponseWriter, r *http.Request) bool {

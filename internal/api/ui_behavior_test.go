@@ -5395,7 +5395,7 @@ async function renderScenario(hash, fetchImpl) {
     recentLogsFetchCalls.push(String(url));
     if (url === deploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
     if (url === logsURL) return new Promise((resolve) => { resolveLogs = resolve; });
-    if (url === logsURL + '&limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', resourceDescription: 'Primary ECS service log stream', containerName: 'worker', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, resultScope: { requestedLimit: 10, effectiveLimit: 10, returnedEntryCount: 1, truncationStatus: 'not_truncated' }, entries: [{ timestamp: '2026-05-03T00:00:00Z', stream: 'svc/task/1', containerName: 'worker', message: 'limited log row' }] }) });
+    if (url === logsURL + '&limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', resourceDescription: 'Primary ECS service log stream', containerName: 'worker', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, resultScope: { requestedLimit: 10, effectiveLimit: 10, returnedEntryCount: 1, newestEntryTimestamp: '2026-05-03T00:00:00Z', oldestEntryTimestamp: '2026-05-03T00:00:00Z', truncationStatus: 'not_truncated' }, entries: [{ timestamp: '2026-05-03T00:00:00Z', stream: 'svc/task/1', containerName: 'worker', message: 'limited log row' }] }) });
     if (url === inspectionURL) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'ecs_service', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn: 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-staging', serviceArn: 'arn:aws:ecs:ap-northeast-2:210987654321:service/payments-staging/payments-api-staging-service', serviceName: 'payments-api-staging-service', status: 'ACTIVE', launchType: 'FARGATE', desiredCount: 2, runningCount: 2, pendingCount: 0, minimumHealthyPercent: 100, maximumPercent: 200, healthCheckGracePeriodSeconds: 45, taskDefinition: 'payments-api:42', deployments: [], events: [] } }) });
     }
@@ -5442,7 +5442,7 @@ async function renderScenario(hash, fetchImpl) {
   if (!recentLogsRun.document.lastScrolledTarget || recentLogsRun.document.lastScrolledTarget.id !== 'resource-recent-logs') throw new Error('expected recent logs hash to remain the active scroll target after lazy panel load');
   const recentLogsText = collectText(recentLogsRoot).join(' | ');
   if (!recentLogsText.includes('Log entry cap · All available entries')) throw new Error('expected recent logs panel to render the default active cap copy');
-  ['Recent logs request | GET ' + logsURL, 'Requested cap | All available entries', 'Effective cap | 100 entries', 'Returned entries | 0 entries', 'Scope status | Below cap; no router truncation', 'Resource description | Primary ECS service log stream', 'Selected cluster | ' + clusterArn, 'Selected container | worker'].forEach((fragment) => {
+  ['Recent logs request | GET ' + logsURL, 'Requested cap | All available entries', 'Effective cap | 100 entries', 'Returned entries | 0 entries', 'Newest entry | —', 'Oldest entry | —', 'Scope status | Below cap; no router truncation', 'Resource description | Primary ECS service log stream', 'Selected cluster | ' + clusterArn, 'Selected container | worker'].forEach((fragment) => {
     if (!recentLogsText.includes(fragment)) throw new Error('expected recent logs result-scope evidence ' + fragment + ', got ' + recentLogsText);
   });
   const limitSelect = collectNodes(recentLogsRoot, (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'Log limit')[0];
@@ -5464,7 +5464,7 @@ async function renderScenario(hash, fetchImpl) {
   if (recentLogsFetchCalls.filter((url) => url === inspectionURL).length !== inspectionsBeforeLimit) throw new Error('expected log limit select not to refetch live inspection panel');
   const limitedLogsText = collectText(recentLogsRoot).join(' | ');
   if (!limitedLogsText.includes('Log entry cap · 10 entries')) throw new Error('expected recent logs panel to render selected cap copy');
-  ['Recent logs request | GET ' + logsURL + '&limit=10', 'Requested cap | 10 entries', 'Effective cap | 10 entries', 'Returned entries | 1 entry', 'Scope status | Below cap; no router truncation'].forEach((fragment) => {
+  ['Recent logs request | GET ' + logsURL + '&limit=10', 'Requested cap | 10 entries', 'Effective cap | 10 entries', 'Returned entries | 1 entry', 'Newest entry | 2026-05-03T00:00:00Z', 'Oldest entry | 2026-05-03T00:00:00Z', 'Scope status | Below cap; no router truncation'].forEach((fragment) => {
     if (!limitedLogsText.includes(fragment)) throw new Error('expected limited recent logs result-scope evidence ' + fragment + ', got ' + limitedLogsText);
   });
   if (!limitedLogsText.includes('limited log row')) throw new Error('expected limited recent logs payload to render');
