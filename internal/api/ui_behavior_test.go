@@ -4990,6 +4990,9 @@ async function render(search, inspectionResult, hash = '') {
         }
         body.ecsService.tasksScope = scoped;
       }
+      if (body.resultScope && limit) {
+        body.resultScope = Object.assign({}, body.resultScope, { effectiveLimit: Number(limit) });
+      }
       return Promise.resolve({ ok: true, headers: { get: (name) => String(name).toLowerCase() === 'request-id' ? 'req-inspection-878-success' : '' }, json: () => Promise.resolve(body) });
     }
     if (String(url).startsWith('/v1/overview/deployments/worker-prod/resource-logs?')) {
@@ -5067,9 +5070,12 @@ async function render(search, inspectionResult, hash = '') {
   if (!logsDeniedRun.text.includes('Authenticated operator required')) throw new Error('expected recent logs 401 guidance to stay visible: ' + logsDeniedRun.text);
   if (!logsDeniedRun.text.includes('Tenet request ID · req-logs-951-denied')) throw new Error('expected recent logs 401 to render Tenet Request-Id metadata: ' + logsDeniedRun.text);
 
-  const serviceResult = { available: true, source: 'ecs_service', clusterArn, lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn, serviceName: 'worker-prod-service', status: 'ACTIVE', desiredCount: 1, runningCount: 1, pendingCount: 0, taskDefinition: 'worker:42', deployments: [], events: [], tasksScope: { effectiveLimit: 10, returnedTaskCount: 1, truncationStatus: 'not_truncated' }, tasks: [{ taskArn, taskId: 'abc123', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containerInstanceArn: 'arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker-prod/ci-sample', ec2InstanceId: 'i-0sampleec2host', capacityProviderName: 'worker-capacity', availabilityZone: 'ap-northeast-2c', containers: [{ name: 'worker', lastStatus: 'RUNNING', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] }] } };
+  const serviceResult = { available: true, source: 'ecs_service', clusterArn, lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, resultScope: { sampleType: 'ecsTasks', requestedLimit: 10, effectiveLimit: 10, returnedItemCount: 1, truncationStatus: 'not_truncated' }, ecsService: { clusterArn, serviceName: 'worker-prod-service', status: 'ACTIVE', desiredCount: 1, runningCount: 1, pendingCount: 0, taskDefinition: 'worker:42', deployments: [], events: [], tasksScope: { effectiveLimit: 10, returnedTaskCount: 1, truncationStatus: 'not_truncated' }, tasks: [{ taskArn, taskId: 'abc123', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containerInstanceArn: 'arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker-prod/ci-sample', ec2InstanceId: 'i-0sampleec2host', capacityProviderName: 'worker-capacity', availabilityZone: 'ap-northeast-2c', containers: [{ name: 'worker', lastStatus: 'RUNNING', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] }] } };
   const serviceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId) + '&clusterArn=' + encodedClusterArn, serviceResult);
   if (!serviceRun.text.includes('Recent ECS tasks')) throw new Error('expected ECS service task list');
+  ['Sample type | ECS tasks', 'Requested sample cap | 10 items', 'Effective sample cap | 10 items', 'Returned sample items | 1 item', 'Scope status | Below cap; no router truncation'].forEach((fragment) => {
+    if (!serviceRun.text.includes(fragment)) throw new Error('expected top-level live inspection result-scope evidence ' + fragment + ': ' + serviceRun.text);
+  });
   if (!serviceRun.text.includes('Task sample scope · returned 1 task(s) from effective limit 10 · not truncated')) throw new Error('expected ECS task sample scope text: ' + serviceRun.text);
   if (!serviceRun.text.includes('Task ARN · ' + taskArn)) throw new Error('expected ECS task ARN in service inspection');
   if (!serviceRun.text.includes('Container instance · arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker-prod/ci-sample')) throw new Error('expected ECS service task sample container instance placement evidence: ' + serviceRun.text);
@@ -5128,6 +5134,7 @@ async function render(search, inspectionResult, hash = '') {
   if (serviceRun.window.location.search.includes('&limit=')) throw new Error('expected resource inspection limit not to reuse audit limit param: ' + serviceRun.window.location.search);
   const limitedInspectionText = collectText(serviceRun.document.getElementById('accounts')).join(' | ');
   if (!limitedInspectionText.includes('Task sample scope · returned 1 task(s) from effective limit 25 · not truncated')) throw new Error('expected selected task scope evidence to stay backend-sourced, got ' + limitedInspectionText);
+  if (!limitedInspectionText.includes('Effective sample cap | 25 items')) throw new Error('expected top-level live inspection result-scope effective cap to follow selected limit, got ' + limitedInspectionText);
   const refreshInspectionButton = collectNodes(serviceRun.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && node.textContent === 'Refresh live inspection')[0];
   if (!refreshInspectionButton || refreshInspectionButton.disabled) throw new Error('expected refresh live inspection button usable after task limit change');
   refreshInspectionButton.dispatch('click');
@@ -5180,8 +5187,12 @@ async function render(search, inspectionResult, hash = '') {
 
   const legacyServiceResult = JSON.parse(JSON.stringify(serviceResult));
   delete legacyServiceResult.ecsService.tasksScope;
+  delete legacyServiceResult.resultScope;
   const legacyServiceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId) + '&clusterArn=' + encodedClusterArn, legacyServiceResult);
   if (legacyServiceRun.text.includes('Task sample scope')) throw new Error('expected legacy ECS service payload without tasksScope to stay quiet: ' + legacyServiceRun.text);
+  ['Sample type |', 'Requested sample cap |', 'Effective sample cap |', 'Returned sample items |'].forEach((fragment) => {
+    if (legacyServiceRun.text.includes(fragment)) throw new Error('expected legacy ECS service payload without top-level resultScope to stay quiet for ' + fragment + ': ' + legacyServiceRun.text);
+  });
 })();
 `
 

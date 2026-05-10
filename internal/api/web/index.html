@@ -1985,6 +1985,34 @@
           ['Scope status', resourceLogsTruncationStatusText(scope.truncationStatus)],
         ];
       };
+      const resourceInspectionSampleTypeText = (value) => {
+        switch (value) {
+          case 'ecsTasks':
+            return 'ECS tasks';
+          case 'autoScalingInstances':
+            return 'Auto Scaling instances';
+          default:
+            return textOrDash(value);
+        }
+      };
+      const resourceInspectionResultScopeLimitText = (value) => {
+        const limit = Number(value);
+        return Number.isFinite(limit) && limit > 0 ? `${limit} items` : 'All available items';
+      };
+      const resourceInspectionResultScopeCountText = (value) => {
+        const count = Number(value);
+        return Number.isFinite(count) && count >= 0 ? `${count} ${count === 1 ? 'item' : 'items'}` : '—';
+      };
+      const resourceInspectionResultScopeFields = (scope) => {
+        if (!scope) return [];
+        return [
+          ['Sample type', resourceInspectionSampleTypeText(scope.sampleType)],
+          ['Requested sample cap', scope.requestedLimit == null ? 'All available items' : resourceInspectionResultScopeLimitText(scope.requestedLimit)],
+          ['Effective sample cap', resourceInspectionResultScopeLimitText(scope.effectiveLimit)],
+          ['Returned sample items', resourceInspectionResultScopeCountText(scope.returnedItemCount)],
+          ['Scope status', resourceLogsTruncationStatusText(scope.truncationStatus)],
+        ];
+      };
       const canonicalUserDataBootstrapSource = (userData) => {
         if (!userData || (!userData.type && !userData.path)) return 'unspecified';
         if (!userData.path) return userData.type || 'unspecified';
@@ -4814,6 +4842,7 @@
         const metadata = createLookupContextGrid(result?.lookupContext, [
           ...resourceInspectionRequestIDFields(result),
           ['Inspection source', metricValue(result?.source)],
+          ...resourceInspectionResultScopeFields(result?.resultScope),
           ['Service name', textOrDash(service?.serviceName)],
           ['Service status', textOrDash(service?.status)],
           ['Launch type', textOrDash(service?.launchType)],
@@ -4999,6 +5028,7 @@
         const metadata = createLookupContextGrid(result?.lookupContext, [
           ...resourceInspectionRequestIDFields(result),
           ['Inspection source', metricValue(result?.source)],
+          ...resourceInspectionResultScopeFields(result?.resultScope),
           ['Auto Scaling Group name', textOrDash(group?.autoScalingGroupName)],
           ['Desired capacity', countText(group?.desiredCapacity)],
           ['Min size', countText(group?.minSize)],
@@ -5125,6 +5155,7 @@
         const metadata = createLookupContextGrid(result?.lookupContext, [
           ...resourceInspectionRequestIDFields(result),
           ['Inspection source', metricValue(result?.source)],
+          ...resourceInspectionResultScopeFields(result?.resultScope),
           ['Desired bootstrap source', textOrDash(inspectionDetail?.desiredBootstrapSource)],
           ['Observed bootstrap source', textOrDash(inspectionDetail?.observedBootstrapSource)],
           ['Backing resource type', textOrDash(inspectionDetail?.backingResourceType)],
@@ -5291,6 +5322,7 @@
         const taskFields = [
           ...resourceInspectionRequestIDFields(result),
           ['Inspection source', metricValue(result?.source)],
+          ...resourceInspectionResultScopeFields(result?.resultScope),
           ['Task ID', textOrDash(task?.taskId)],
           ['Task ARN', textOrDash(task?.taskArn)],
           ['Last status', textOrDash(task?.lastStatus)],
@@ -5380,6 +5412,7 @@
         const metadata = createLookupContextGrid(result?.lookupContext, [
           ...resourceInspectionRequestIDFields(result),
           ['Inspection source', metricValue(result?.source)],
+          ...resourceInspectionResultScopeFields(result?.resultScope),
           ['Resource kind', textOrDash(trafficRouting?.kind)],
           ['Display name', textOrDash(trafficRouting?.displayName)],
           ['Inspection mode', trafficRoutingInspectionModeText(trafficRouting?.inspectionMode)],
@@ -5407,6 +5440,7 @@
         const inspectionFields = [
           ...resourceInspectionRequestIDFields(result),
           ['Inspection source', metricValue(result?.source)],
+          ...resourceInspectionResultScopeFields(result?.resultScope),
         ];
         if (result?.instanceId) {
           inspectionFields.push(['Selected instance', textOrDash(result.instanceId)]);
