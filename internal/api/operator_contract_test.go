@@ -524,6 +524,9 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"Tenet-authored stable operation `id` values aligned",
 		"non-empty `op_...` values",
 		"preserved when plan operations project into apply operations",
+		"future UI anchors can target",
+		"row-anchor follow-up in #986",
+		"section-level hashes such as `#plan-operations` and `#plan-apply-operations`",
 		"additive `lifecycle` block",
 		"`updatedAt` / `startedAt` / `finishedAt`",
 		"`400 Bad Request`",
@@ -551,6 +554,8 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"smoke-created terminal `applyId`",
 		"unique non-empty `op_...` IDs",
 		"must keep the reviewed plan operation IDs instead of falling back to array position",
+		"backend/read-model identity only until the #986 UI follow-up lands",
+		"not per-operation row share links",
 		"`TENET_PLAN_STORE_PATH=/tmp/tenet/plan-previews.json`",
 		"`TENET_APPLY_STORE_PATH=/tmp/tenet/apply-requests.json`",
 		"survive the Compose `api` service restart",
@@ -580,6 +585,8 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"`400 Bad Request`",
 		"`409 Conflict`",
 		"does not persist a new apply record",
+		"current UI navigation is section-level (`#plan-operations` / `#plan-apply-operations`)",
+		"per-operation row anchors/share links remain follow-up UI work tracked in #986",
 	} {
 		if !strings.Contains(uiDoc, fragment) {
 			t.Fatalf("expected overview UI doc apply contract to include %q", fragment)
