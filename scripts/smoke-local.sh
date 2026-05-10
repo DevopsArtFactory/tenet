@@ -1983,6 +1983,10 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "Task sampling is unavailable for this service; service inspection remains available." in body, body
     assert "const createECSTaskScopeSummary = (scope) => {" in body, body
     assert "Task sample scope · returned ${countText(returnedTaskCount)} task(s) from effective limit ${countText(effectiveLimit)} · ${truncationStatus}" in body, body
+    assert "const resourceInspectionResultScopeFields = (scope) => {" in body, body
+    assert "'Requested sample cap'" in body, body
+    assert "'Effective sample cap'" in body, body
+    assert "'Returned sample items'" in body, body
     assert "[createECSTaskScopeSummary(service?.tasksScope)]" in body, body
     assert "const createAutoScalingInstanceScopeSummary = (scope) => {" in body, body
     assert "ASG instance sample scope · requested ${countText(scope.requestedLimit)} · effective ${countText(effectiveLimit)} · returned ${countText(returnedInstanceCount)} instance(s) · ${truncationStatus}" in body, body
