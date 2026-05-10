@@ -67,6 +67,16 @@ Local verification on this branch is green:
 - unset GOROOT GOPATH; export PATH=/opt/homebrew/bin:$PATH; make smoke-docker   # when the slice touches Docker-smoke scope
 ```
 
+## Avoid false recovery signals
+
+A rerun request alone is not recovery evidence. Before closing #850 or telling a reviewer that hosted CI recovered, verify the current run or replacement run has all of these signals:
+
+- at least one real runner assignment (`runner_id` is not `0`, or `runner_name` is populated)
+- non-empty `steps[]` that include repository setup or checkout work
+- either passing checks or normal downloadable/actionable repository logs from failed commands
+
+If the rerun still shows `runner_id=0`, `steps=[]`, or only account-level billing/spending-limit annotations, keep the incident classified as external runner-start availability. Do not open repo-side product fixes from a run that never reached repository commands.
+
 ## Recovery after billing/spending-limit is fixed
 
 After the GitHub account condition is cleared:
@@ -84,7 +94,7 @@ After the GitHub account condition is cleared:
 
    ```bash
    gh run rerun <run-id> --failed
-   gh run watch <run-id>
+   gh run watch <run-id> --exit-status
    ```
 
    If the old run can no longer be rerun, dispatch a fresh smoke run from the workflow page or the CLI:
