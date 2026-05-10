@@ -3299,6 +3299,44 @@ func TestDeploymentOverviewEventsRouteAppliesLimitToEventsAndSummary(t *testing.
 	}
 }
 
+func TestDeploymentOverviewEventsRouteReportsExactLimitAsNotTruncated(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeploymentEvents: func(_ context.Context, name string) (catalog.DeploymentOverviewEvents, error) {
+			if name != "api-prod" {
+				t.Fatalf("unexpected deployment name %q", name)
+			}
+			return catalog.DeploymentOverviewEvents{
+				DeploymentName: name,
+				Events: []domain.StatusHistoryEntry{{
+					Timestamp: "2026-05-06T03:00:00Z",
+					Summary:   "Only controller event",
+				}},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/events?limit=1", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode deployment events payload: %v", err)
+	}
+	events, ok := payload["events"].([]any)
+	if !ok || len(events) != 1 {
+		t.Fatalf("expected exact-limit events array in payload, got %#v", payload["events"])
+	}
+	scope, ok := payload["resultScope"].(map[string]any)
+	if !ok || scope["requestedLimit"] != float64(1) || scope["effectiveLimit"] != float64(1) || scope["returnedEventCount"] != float64(1) || scope["totalEventCount"] != float64(1) || scope["limited"] != false || scope["truncationStatus"] != "not_truncated" {
+		t.Fatalf("expected exact-limit resultScope to be deterministic and not truncated, got %#v", payload["resultScope"])
+	}
+}
+
 func TestDeploymentOverviewEventsRouteRejectsInvalidLimit(t *testing.T) {
 	for _, rawLimit := range []string{"0", "abc"} {
 		t.Run(rawLimit, func(t *testing.T) {

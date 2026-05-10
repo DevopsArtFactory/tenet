@@ -1692,7 +1692,7 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		`assert allowed_events_scope.get('totalEventCount') >= allowed_events_scope.get('returnedEventCount'), allowed_events_read`,
 		`assert isinstance(allowed_events_scope.get('limited'), bool), allowed_events_read`,
 		`assert allowed_events_scope.get('limited') == (allowed_events_scope.get('totalEventCount') > allowed_events_scope.get('returnedEventCount')), allowed_events_read`,
-		`assert allowed_events_scope.get('truncationStatus') in {'truncated', 'not_truncated', 'unknown'}, allowed_events_read`,
+		`assert allowed_events_scope.get('truncationStatus') in {'truncated', 'not_truncated'}, allowed_events_read`,
 		`assert all('controllerRefresh' not in event for event in deployment_events_fixture['events']), deployment_events_fixture`,
 		`assert 'controllerRefresh' not in event, events_payload`,
 	} {
@@ -1731,7 +1731,7 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		`assert allowed_events_scope.get("totalEventCount") >= allowed_events_scope.get("returnedEventCount"), allowed_events_read`,
 		`assert isinstance(allowed_events_scope.get("limited"), bool), allowed_events_read`,
 		`assert allowed_events_scope.get("limited") == (allowed_events_scope.get("totalEventCount") > allowed_events_scope.get("returnedEventCount")), allowed_events_read`,
-		`assert allowed_events_scope.get("truncationStatus") in {"truncated", "not_truncated", "unknown"}, allowed_events_read`,
+		`assert allowed_events_scope.get("truncationStatus") in {"truncated", "not_truncated"}, allowed_events_read`,
 	} {
 		if !strings.Contains(dockerSmoke, fragment) {
 			t.Fatalf("expected smoke-docker deployment events auth contract to include %q", fragment)
