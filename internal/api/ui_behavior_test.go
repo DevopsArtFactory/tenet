@@ -4801,13 +4801,19 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('Tenet request ID | req-logs-871-success')) throw new Error('expected recent-log unavailable card to render Tenet request ID metadata: ' + accountsText);
   if (!accountsText.includes('Selected resource context')) throw new Error('expected resource page selected-resource context callout: ' + accountsText);
   if (!accountsText.includes('payments-api-staging Deployment Group · deployment payments-api-staging')) throw new Error('expected selected-resource callout to summarize resource and deployment: ' + accountsText);
-  if (!accountsText.includes('Use the Live inspection and Recent logs sections below to refresh focused evidence for this exact resource selection.')) throw new Error('expected selected-resource callout to explain evidence refresh surfaces: ' + accountsText);
+  if (!accountsText.includes('Use the Live inspection and Recent logs handoffs below to refresh focused evidence for this exact resource selection.')) throw new Error('expected selected-resource callout to explain evidence refresh handoffs: ' + accountsText);
   if (!accountsText.includes('GET /v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging+Deployment+Group')) throw new Error('expected selected-resource callout to expose live-inspection route intent: ' + accountsText);
   if (!accountsText.includes('GET /v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging+Deployment+Group')) throw new Error('expected selected-resource callout to expose recent-log route intent: ' + accountsText);
+  if (!accountsText.includes('Jump to live inspection') || !accountsText.includes('Jump to recent logs')) throw new Error('expected selected-resource callout to expose direct evidence handoffs: ' + accountsText);
   if (accountsText.includes('Last refreshed |')) throw new Error('expected recent-log unavailable card not to claim fresh evidence: ' + accountsText);
   if (!toolbarText.includes('Back to application')) throw new Error('expected resource page back link');
   const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
   const pageLinks = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
+  const selectedContextLiveLink = pageLinks.find((node) => node.textContent === 'Jump to live inspection');
+  const selectedContextLogsLink = pageLinks.find((node) => node.textContent === 'Jump to recent logs');
+  const encodedResourceID = 'codeDeployDeploymentGroup%3A%3Apayments-api-staging+Deployment+Group%3A%3ALinear+traffic+shifting+deployment+group';
+  if (!selectedContextLiveLink || selectedContextLiveLink.target !== '_self' || !selectedContextLiveLink.href.includes('resourceId=' + encodedResourceID) || !selectedContextLiveLink.href.endsWith('#resource-live-inspection')) throw new Error('expected selected-resource live-inspection handoff to preserve resource route and section hash');
+  if (!selectedContextLogsLink || selectedContextLogsLink.target !== '_self' || !selectedContextLogsLink.href.includes('resourceId=' + encodedResourceID) || !selectedContextLogsLink.href.endsWith('#resource-recent-logs')) throw new Error('expected selected-resource recent-logs handoff to preserve resource route and section hash');
   const quickNavChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
   const breadcrumbChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className.includes('breadcrumb-current'));
   const backLink = toolbarLinks.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.target === '_self');
@@ -5378,13 +5384,14 @@ async function renderScenario(hash, fetchImpl) {
   if (JSON.stringify(sectionIDs) !== JSON.stringify(expectedSectionIDs)) throw new Error('unexpected resource section ids: ' + JSON.stringify(sectionIDs));
   const recentLogsChip = collectNodes(recentLogsRoot, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip').find((node) => node.getAttribute('aria-label') === 'Current section: Recent logs');
   if (!recentLogsChip) throw new Error('expected recent logs hash to render the current-section chip');
-  const sectionLinks = collectNodes(recentLogsRoot, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#resource-'));
   const expectedLinks = [
     ['#resource-runtime-history', 'Runtime history'],
     ['#resource-rollout-execution', 'Rollout execution'],
     ['#resource-status-conditions', 'Conditions'],
     ['#resource-live-inspection', 'Live inspection'],
   ];
+  const expectedSectionLinkLabels = expectedLinks.map(([, text]) => text);
+  const sectionLinks = collectNodes(recentLogsRoot, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#resource-') && expectedSectionLinkLabels.includes(node.textContent));
   if (sectionLinks.length !== expectedLinks.length) throw new Error('expected four remaining resource section links, got ' + sectionLinks.length);
   expectedLinks.forEach(([hashSuffix, text]) => {
     const link = sectionLinks.find((node) => node.textContent === text);

@@ -3015,13 +3015,33 @@
           createElement('span', 'pill target', resource.type || 'resource'),
         );
         const summaryParts = [resource.name, deploymentName ? `deployment ${deploymentName}` : '', scopeText].filter(Boolean);
+        const evidenceLinks = createElement('div', 'row-links selected-resource-context-links');
+        const routeState = createCurrentResourceRouteState(resource);
+        const routeParams = {
+          deployment: deploymentName,
+          resourceType: routeState.routeResourceType,
+          resourceId: routeState.routeResourceId,
+          containerName: routeState.routeContainerName,
+          instanceId: routeState.routeInstanceId,
+          clusterArn: routeState.routeClusterArn,
+          ...resourcePanelLimitURLParams(deploymentName, resource),
+        };
+        if (resourceSupportsLiveInspection(resource)) {
+          evidenceLinks.append(createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', routeParams), 'Jump to live inspection', '_self'));
+        }
+        if (resourceSupportsRecentLogs(resource)) {
+          evidenceLinks.append(createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', routeParams), 'Jump to recent logs', '_self'));
+        }
         callout.append(
           head,
           createElement('div', 'workspace-callout-copy', summaryParts.length ? summaryParts.join(' · ') : 'Resource selection is derived from the current bookmarkable route.'),
           createElement('div', 'workspace-callout-factors', routeBits.length
-            ? `Use the Live inspection and Recent logs sections below to refresh focused evidence for this exact resource selection. Backing reads: ${routeBits.join(' and ')}.`
-            : 'Use the Live inspection and Recent logs sections below to refresh focused evidence for this exact resource selection.'),
+            ? `Use the Live inspection and Recent logs handoffs below to refresh focused evidence for this exact resource selection. Backing reads: ${routeBits.join(' and ')}.`
+            : 'Use the Live inspection and Recent logs handoffs below to refresh focused evidence for this exact resource selection.'),
         );
+        if (evidenceLinks.children.length) {
+          callout.append(evidenceLinks);
+        }
         return callout;
       };
       const resourceDetailRefreshState = (resourceState = null) => {
