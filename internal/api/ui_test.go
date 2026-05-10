@@ -1247,6 +1247,8 @@ func TestEmbeddedUIIncludesOperatorReadAuthGuidanceContract(t *testing.T) {
 		"const buildResourceLogsRoute = (deploymentName, resource, limit = 0) => {",
 		"params.set('containerName', containerName);",
 		"const resourceLogsReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceLogsRoute(deploymentName, resource, limit)}`;",
+		"const resourceLogsRequestRouteFields = (deploymentName, resource, limit = 0) => {",
+		"return [['Recent logs request', resourceLogsReadRoute(deploymentName, resource, limit)]];",
 		"const buildResourceInspectionRoute = (deploymentName, resource, limit = 0) => {",
 		"const resourceInspectionReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceInspectionRoute(deploymentName, resource, limit)}`;",
 		"if (renderOperatorReadFailurePanel(",
@@ -1971,6 +1973,8 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 		"params.set('limit', String(normalizedLimit));",
 		"return `/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-logs?${params.toString()}`;",
 		"const resourceLogsReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceLogsRoute(deploymentName, resource, limit)}`;",
+		"const resourceLogsRequestRouteFields = (deploymentName, resource, limit = 0) => {",
+		"return [['Recent logs request', resourceLogsReadRoute(deploymentName, resource, limit)]];",
 		"const resourceLogAnchorBase = (entry) => {",
 		"const backendID = auditAnchorSlug(entry?.entryId);",
 		"return `resource-log-${backendID}`;",
@@ -2056,11 +2060,13 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 		"const handoffSection = createResourceLogsBackingResourceHandoffSection(detail, result);",
 		"const beforeNodes = (metadata) => handoffSection ? [capNote, lookupPathSummary, metadata, handoffSection] : [capNote, lookupPathSummary, metadata];",
 		"const scopeFields = resourceLogsResultScopeFields(result?.resultScope);",
-		"[...resourceLogsRequestIDFields(result), ...backingResourceFields, ...scopeFields]",
+		"const requestRouteFields = resourceLogsRequestRouteFields(deploymentName, resource, selectedLimit);",
+		"[...resourceLogsRequestIDFields(result), ...requestRouteFields, ...backingResourceFields, ...scopeFields]",
 		"...resourceLogsRequestIDFields(result),",
+		"...requestRouteFields,",
 		"...scopeFields,",
 		"const unavailableReason = resourceLogsUnavailableReasonText(result?.unavailableReason);",
-		"const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, [...resourceLogsRequestIDFields(result), ...backingResourceFields, ...scopeFields]);",
+		"const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, [...resourceLogsRequestIDFields(result), ...requestRouteFields, ...backingResourceFields, ...scopeFields]);",
 		"const details = unavailableReason",
 		"renderResourceLogsState(section, 'Recent logs are unavailable for this resource.', '', beforeNodes(metadata), details, actions);",
 		"const emptyReason = resourceLogsEmptyReasonText(result?.emptyReason);",
@@ -2085,6 +2091,7 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 		"Lookup path ·",
 		"same-account lookup",
 		"observer role not configured",
+		"Recent logs request",
 		"Logs source",
 		"Tenet request ID",
 		"Last refreshed",
@@ -2801,6 +2808,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	text := string(body)
 	if !strings.Contains(text, "assert 'Recent logs' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Recent logs")
+	}
+	if !strings.Contains(text, "assert 'Recent logs request' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains Recent logs request")
 	}
 	if !strings.Contains(text, "assert 'Refresh recent logs' in ui, ui") && !strings.Contains(text, "assert \"Refresh recent logs\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh recent logs")
