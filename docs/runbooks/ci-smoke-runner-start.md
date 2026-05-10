@@ -93,6 +93,17 @@ After the GitHub account condition is cleared:
 5. On `main` or Docker-scoped PRs, confirm the Docker lane reaches `make smoke-docker` or produces normal actionable logs.
 6. Comment on issue #850 with the recovered run URL and whether the repository commands passed or exposed a new actionable repo-side failure.
 
+## Post-recovery release-health checklist
+
+Use this checklist for the first `main` run that starts after the account-level runner blocker is fixed. The goal is to prove the hosted release signal recovered before anyone treats remaining red checks as product regressions or closes issue #850.
+
+- Rerun the newest failed `main` `CI Smoke` run, or dispatch a fresh `CI Smoke` run on `main` if GitHub no longer allows rerunning the old run.
+- Confirm `Fast smoke` and `Docker smoke scope` have non-empty `steps[]` plus a real runner assignment. A recovered run must show repository steps such as checkout/setup instead of the pre-runner `runner_id=0` / `steps=[]` pattern.
+- Confirm the fast lane reaches the repository commands documented in `.github/workflows/ci-smoke.yml`: `go test ./...`, `bash -n scripts/smoke-local.sh`, `bash -n scripts/smoke-docker.sh`, and `make smoke-local`.
+- For `main`, confirm the Docker lane either reaches `make smoke-docker` or fails with normal downloadable logs from repository commands. Do not require the Docker lane on unrelated PRs just to prove runner recovery; keep the existing CI cost profile intact.
+- If any command fails after steps are non-empty, classify it as a normal actionable CI failure: read the logs, reproduce locally, and open or link the repo-side follow-up. Do not keep labeling post-recovery command failures as the billing/spending-limit blocker.
+- Leave one concrete #850 comment with the run URL, the non-empty `steps[]` evidence, the first repository command reached in each lane, and the follow-up issue/PR for any remaining product failure. Close #850 only after this evidence is recorded.
+
 ## Closeout comment template
 
 Use a closeout comment like this before closing the runner-availability issue:
