@@ -3819,7 +3819,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"including the current local Node.js 25 runtime",
 			"the Go test diagnostic prints the Node.js version and the temporary harness script path",
 			"go test ./internal/api -run 'TestResourceDetailPageWithNodeHarness|TestAuditTimelinePageWithNodeHarness' -count=1",
-			"See `docs/runbooks/ci-smoke-runner-start.md` for the exact `gh run view` plus Actions jobs API evidence checklist, rerun-target selection, post-recovery release-health checklist, recovery steps, and closeout comment template for issue #850.",
+			"See `docs/runbooks/ci-smoke-runner-start.md` and `scripts/ci-smoke-runner-evidence.sh <run-id>` for the exact `gh run view` plus Actions jobs API evidence checklist, rerun-target selection, post-recovery release-health checklist, recovery steps, and closeout comment template for issue #850.",
 			"The post-recovery checklist requires non-empty `steps[]`, a real runner assignment, fast-lane evidence that `go test ./...`, smoke-script syntax checks, and `make smoke-local` were reached",
 			"classify any remaining failures as normal actionable CI failures rather than continuing to label them as the billing/spending-limit blocker",
 			"Unrelated docs-only PRs keep the cheap fast lane without the Docker stack",
@@ -3909,7 +3909,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"If GitHub reports a CI Smoke failure before any repository step starts, classify it as a runner-start failure rather than a Tenet smoke result.",
 			"no job steps, no downloadable repo logs",
 			"failed payments or a spending limit that needs to be increased",
-			"The focused runbook in `docs/runbooks/ci-smoke-runner-start.md` shows the exact `gh run view` plus Actions jobs API commands, the `runner_id=0` / `steps=[]` evidence pattern, rerun-target selection, post-recovery release-health checklist, and closeout comment template for issue #850.",
+			"The focused runbook in `docs/runbooks/ci-smoke-runner-start.md` and helper `scripts/ci-smoke-runner-evidence.sh <run-id>` show the exact `gh run view` plus Actions jobs API commands, the `runner_id=0` / `steps=[]` evidence pattern, rerun-target selection, post-recovery release-health checklist, and closeout comment template for issue #850.",
 			"For the first recovered `main` run, require non-empty `steps[]`, real runner assignment, fast-lane evidence that `go test ./...`, smoke-script syntax checks, and `make smoke-local` were reached",
 			"remaining red checks are normal actionable CI failures: inspect logs, reproduce locally, and link the repo-side follow-up",
 			"rely on local `go test ./...`, `make smoke-local`, and `make smoke-docker` output for code-level reproduction",
@@ -4129,12 +4129,14 @@ func TestDocsDescribeCISmokeRunnerStartRunbook(t *testing.T) {
 	files := map[string][]string{
 		"../../README.md": {
 			"docs/runbooks/ci-smoke-runner-start.md",
+			"scripts/ci-smoke-runner-evidence.sh <run-id>",
 			"exact `gh run view` plus Actions jobs API evidence checklist, rerun-target selection, post-recovery release-health checklist, recovery steps, and closeout comment template for issue #850",
 			"The post-recovery checklist requires non-empty `steps[]`, a real runner assignment",
 			"A rerun is not recovery evidence until the current run or replacement run shows real runner assignment",
 		},
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
 			"docs/runbooks/ci-smoke-runner-start.md",
+			"scripts/ci-smoke-runner-evidence.sh <run-id>",
 			"`runner_id=0` / `steps=[]` evidence pattern",
 			"rerun-target selection, post-recovery release-health checklist, and closeout comment template for issue #850",
 			"remaining red checks are normal actionable CI failures",
@@ -4142,6 +4144,10 @@ func TestDocsDescribeCISmokeRunnerStartRunbook(t *testing.T) {
 		},
 		"../../docs/runbooks/ci-smoke-runner-start.md": {
 			"# CI Smoke runner-start failures",
+			"scripts/ci-smoke-runner-evidence.sh <run-id>",
+			"The helper below prints the same evidence bundle",
+			"treats missing downloadable failed logs as a runner-start signal to record rather than as a script failure",
+			"If you need to collect each piece manually or paste individual commands into a PR comment",
 			"`runner_id=0`",
 			"`steps=[]`",
 			"gh run view <run-id> --json databaseId,name,status,conclusion,headSha,url",
@@ -4180,6 +4186,18 @@ func TestDocsDescribeCISmokeRunnerStartRunbook(t *testing.T) {
 			"Outcome: <passed | failed with actionable repo-side failure>",
 			"Follow-up: <none | opened issue/PR #... for the new repo-side failure>",
 			"Only close the runner-start blocker when the recovered run proves GitHub assigned runners and reached repository commands.",
+		},
+		"../../scripts/ci-smoke-runner-evidence.sh": {
+			"Usage: scripts/ci-smoke-runner-evidence.sh <run-id>",
+			"set -euo pipefail",
+			"gh run view \"$RUN_ID\" --json databaseId,name,status,conclusion,headSha,url",
+			"gh api \"repos/:owner/:repo/actions/runs/${RUN_ID}/jobs\"",
+			"runner_id,runner_name,steps",
+			"gh run view \"$RUN_ID\" --log-failed",
+			"did not return downloadable failed logs",
+			"gh api \"repos/:owner/:repo/commits/${SHA}/check-runs\"",
+			"select(.name == \"Fast smoke\" or .name == \"Docker smoke scope\" or .name == \"Docker smoke\")",
+			"gh api \"repos/:owner/:repo/check-runs/${id}/annotations\"",
 		},
 	}
 

@@ -15,7 +15,13 @@ When those signals are present, do not treat the red check as evidence that `go 
 
 ## Collect evidence
 
-From the repository checkout, capture the workflow summary, failed logs, Actions job assignment evidence, and annotations before commenting on a PR or issue:
+From the repository checkout, capture the workflow summary, failed logs, Actions job assignment evidence, and annotations before commenting on a PR or issue. The helper below prints the same evidence bundle and treats missing downloadable failed logs as a runner-start signal to record rather than as a script failure:
+
+```bash
+scripts/ci-smoke-runner-evidence.sh <run-id>
+```
+
+If you need to collect each piece manually or paste individual commands into a PR comment, use the same sequence:
 
 ```bash
 gh run view <run-id> --json databaseId,name,status,conclusion,headSha,url \
