@@ -116,9 +116,8 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 
 		"keeps GitHub OAuth, Google Workspace OIDC, and Okta OIDC as active managed-login providers only when explicitly configured",
 		"keeps Okta SAML diagnostic-only",
-		"Okta SAML activation and repository-backed provider group authorization",
-
-		"repository-backed RBAC policy evaluation for users/groups",
+		"repository-backed RBAC policy diagnostics as the shipped first policy foundation",
+		"policy-backed route enforcement remain future work",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README enterprise SSO boundary to include %q", fragment)
@@ -156,8 +155,11 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 		"Trusted front-door identity remains authoritative",
 		"Diagnostics must not expose client secrets, raw ID/access/refresh tokens, SAML assertions, authorization codes, private keys, or provider cookies.",
 		"Group claims are identity input only.",
+		"repository-backed RBAC policy diagnostics that can map users/groups to Tenet roles and deployment/project/environment scopes",
+		"Route authorization still depends on Tenet's existing trusted role/deployment/project/environment enforcement toggles",
 		"This issue is not the RBAC policy redesign.",
-		"Repository-backed policy mapping for users/groups, Tenet roles, and deployment/project/environment scopes belongs to issue #663",
+		"Repository-backed policy parsing/evaluation for users/groups, Tenet roles, and deployment/project/environment scopes is already shipped as the first diagnostic policy foundation",
+		"Remaining work is provider-token/group lifecycle hardening and an explicit future decision to wire policy-derived grants into route enforcement.",
 	} {
 		if !strings.Contains(doc, fragment) {
 			t.Fatalf("expected enterprise SSO docs to include %q", fragment)
