@@ -15,24 +15,29 @@ When those signals are present, do not treat the red check as evidence that `go 
 
 ## Collect evidence
 
-From the repository checkout, capture the workflow, job step, and annotation evidence before commenting on a PR or issue:
+From the repository checkout, capture the workflow summary, failed logs, Actions job assignment evidence, and annotations before commenting on a PR or issue:
 
 ```bash
-gh run view <run-id> --json databaseId,name,status,conclusion,headSha,url,jobs \
-  --jq '{id:.databaseId,name,status,conclusion,headSha,url,jobs:[.jobs[]|{name,status,conclusion,runner_id,steps}]}'
+gh run view <run-id> --json databaseId,name,status,conclusion,headSha,url \
+  --jq '{id:.databaseId,name,status,conclusion,headSha,url}'
+
+gh api "repos/:owner/:repo/actions/runs/<run-id>/jobs" \
+  --jq '.jobs[] | {name,status,conclusion,runner_id,runner_name,steps}'
 
 gh run view <run-id> --log-failed
 ```
+
+Use the Actions jobs API for `runner_id` / `runner_name` evidence; `gh run view --json jobs` is still useful for a compact step list, but it does not expose the runner assignment fields needed to prove the pre-runner failure mode.
 
 Capture the check-run annotations too, because GitHub often puts the account-level billing or spending-limit reason there instead of in downloadable logs:
 
 ```bash
 SHA=$(gh run view <run-id> --json headSha --jq .headSha)
 gh api "repos/:owner/:repo/commits/${SHA}/check-runs" \
-  --jq '.check_runs[] | select(.name == "Fast smoke" or .name == "Docker smoke scope") | {id,name,status,conclusion,details_url}'
+  --jq '.check_runs[] | select(.name == "Fast smoke" or .name == "Docker smoke scope" or .name == "Docker smoke") | {id,name,status,conclusion,details_url}'
 
 for id in $(gh api "repos/:owner/:repo/commits/${SHA}/check-runs" \
-  --jq '.check_runs[] | select(.name == "Fast smoke" or .name == "Docker smoke scope") | .id'); do
+  --jq '.check_runs[] | select(.name == "Fast smoke" or .name == "Docker smoke scope" or .name == "Docker smoke") | .id'); do
   gh api "repos/:owner/:repo/check-runs/${id}/annotations" \
     --jq '.[] | {path,start_line,annotation_level,message}'
 done
