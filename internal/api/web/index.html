@@ -2867,6 +2867,17 @@
         if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return detail;
         return { ...detail, tenetFetchedAt: new Date() };
       };
+      const resourceDetailFetchedAtText = (detail) => {
+        const fetchedAt = detail?.tenetFetchedAt;
+        if (!fetchedAt) return '';
+        const timestamp = fetchedAt instanceof Date ? fetchedAt : new Date(fetchedAt);
+        if (Number.isNaN(timestamp.getTime())) return '';
+        return timestamp.toLocaleString();
+      };
+      const withResourceDetailFetchedAt = (detail) => {
+        if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return detail;
+        return { ...detail, tenetFetchedAt: new Date() };
+      };
       const createApplicationDetailFreshnessMeta = (applicationState = null, detail = null) => {
         const fetchedAt = applicationDetailFetchedAtText(applicationState?.detail || detail);
         const meta = createElement('div', 'account-topology application-detail-freshness', fetchedAt
@@ -2877,6 +2888,17 @@
         meta.setAttribute('aria-atomic', 'true');
         return meta;
       };
+      const createResourceDetailFreshnessMeta = (resourceState = null, detail = null) => {
+        const fetchedAt = resourceDetailFetchedAtText(resourceState?.detail || detail);
+        const meta = createElement('div', 'account-topology resource-detail-freshness', fetchedAt
+          ? `Resource detail read refreshed · ${fetchedAt}`
+          : 'Resource detail read not refreshed yet');
+        meta.setAttribute('role', 'status');
+        meta.setAttribute('aria-live', 'polite');
+        meta.setAttribute('aria-atomic', 'true');
+        return meta;
+      };
+
       const applicationManagedDriftCounts = (detail) => {
         const summary = detail?.managedDriftSummary;
         if (summary && typeof summary === 'object' && Number.isFinite(summary.total)) {
@@ -3849,8 +3871,10 @@
           createElement('h2', 'account-name', resource.name),
           createElement('div', 'account-meta', `${resource.type} · ${textOrDash(resource.description)}`),
           createElement('div', 'account-topology', [detail.name || currentPageState.deployment || 'Application', detail.accountName, detail.region, selectedResourceScopeText(resource)].filter(Boolean).join(' · ')),
+          createResourceDetailFreshnessMeta(resourceState, detail),
         );
         summary.replaceChildren(detailSummary);
+
         const page = createElement('article', 'account');
         const breadcrumb = createDeploymentBreadcrumb({
           deploymentName: detail.name || currentPageState.deployment || '',
@@ -8412,7 +8436,7 @@
               if (currentPageState.page === 'resource') {
                 const resourceState = {
                   status: 'idle',
-                  detail,
+                  detail: withResourceDetailFetchedAt(detail),
                   error: null,
                   onRefresh: null,
                 };
@@ -8428,10 +8452,10 @@
                   return fetchDeploymentDetail(deploymentName)
                     .then((nextDetail) => {
                       resourceState.status = 'idle';
-                      resourceState.detail = nextDetail;
+                      resourceState.detail = withResourceDetailFetchedAt(nextDetail);
                       resourceState.error = null;
                       renderResourceWorkspace();
-                      return nextDetail;
+                      return resourceState.detail;
                     })
                     .catch((error) => {
                       resourceState.status = 'error';
