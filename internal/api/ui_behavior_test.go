@@ -2071,6 +2071,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!backLink) throw new Error('expected account page back link to preserve filters');
   if (!summaryText.includes('Account deployment overview')) throw new Error('expected account page summary title');
   if (!summaryText.includes('staging-core')) throw new Error('expected account page account name');
+  if (!summaryText.includes('Account detail read refreshed ·')) throw new Error('expected account page to show account-detail read freshness');
+  if (summaryText.includes('Account detail read not refreshed yet')) throw new Error('expected account page initial successful read to include freshness timestamp');
   if (!accountsText.includes('Quick navigation')) throw new Error('expected account page quick navigation');
   if (!accountsText.includes('Refresh account detail')) throw new Error('expected account page refresh control');
   if (!accountsText.includes('Hierarchy')) throw new Error('expected account page hierarchy quick-nav group');
@@ -2219,7 +2221,9 @@ async function render(fetchImpl) {
   let refreshButton = buttons.find((node) => node.textContent === 'Refresh account detail');
   if (!refreshButton || refreshButton.disabled) throw new Error('expected account refresh button enabled after initial render');
   let text = collectText(loadingView.document.getElementById('accounts')).join(' | ');
+  let summaryText = collectText(loadingView.document.getElementById('summary')).join(' | ');
   if (!text.includes('payments-api-staging')) throw new Error('expected initial account deployment before refresh');
+  if (!summaryText.includes('Account detail read refreshed ·')) throw new Error('expected initial account detail freshness cue');
   refreshButton.dispatch('click');
   await settle();
   buttons = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
@@ -2234,8 +2238,11 @@ async function render(fetchImpl) {
   await settle();
   await settle();
   text = collectText(loadingView.document.getElementById('accounts')).join(' | ');
+  summaryText = collectText(loadingView.document.getElementById('summary')).join(' | ');
   if (!text.includes('payments-api-canary')) throw new Error('expected refreshed account detail to render in place');
   if (text.includes('payments-api-staging')) throw new Error('expected refreshed account detail to replace stale deployment content');
+  if (!summaryText.includes('Account detail read refreshed ·')) throw new Error('expected refreshed account detail to keep freshness cue');
+  if (summaryText.includes('Account detail read not refreshed yet')) throw new Error('expected refreshed account detail not to show missing freshness fallback');
   buttons = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
   refreshButton = buttons.find((node) => node.textContent === 'Refresh account detail');
   if (!refreshButton || refreshButton.disabled) throw new Error('expected account refresh button re-enabled after refresh completes');
