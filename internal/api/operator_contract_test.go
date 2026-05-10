@@ -173,6 +173,8 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 	}{
 		{name: "README.md", body: readme},
 		{name: "docs/architecture/tenet-v1-enterprise-sso.md", body: doc},
+		{name: "scripts/smoke-local.sh", body: readRepoFile(t, "scripts/smoke-local.sh")},
+		{name: "scripts/smoke-docker.sh", body: readRepoFile(t, "scripts/smoke-docker.sh")},
 	} {
 		if strings.Contains(source.body, "TENET_AUTH_PROVIDER=***") {
 			t.Fatalf("expected %s to use concrete non-secret auth provider examples", source.name)
@@ -247,6 +249,9 @@ func TestEnterpriseSSOSmokeContracts(t *testing.T) {
 		"scripts/smoke-local.sh": {
 			`assert_enterprise_sso_diagnostic() {`,
 			`assert_enterprise_sso_logout_boundary() {`,
+			`TENET_AUTH_PROVIDER=google_oidc \`,
+			`TENET_AUTH_PROVIDER=okta_oidc \`,
+			`TENET_AUTH_PROVIDER=okta_saml \`,
 			`enterprise_sso_google_context=$(curl -fsS "http://$HOST:$PORT/v1/operator/context")`,
 			`assert_enterprise_sso_diagnostic "$enterprise_sso_google_context_path" google /auth/login/google /auth/callback/google true`,
 			`enterprise_sso_okta_oidc_context=$(curl -fsS "http://$HOST:$PORT/v1/operator/context")`,
@@ -271,6 +276,9 @@ func TestEnterpriseSSOSmokeContracts(t *testing.T) {
 			`assert_enterprise_sso_diagnostic() {`,
 			`assert_enterprise_sso_logout_boundary() {`,
 			`restart_api_with_enterprise_sso() {`,
+			`TENET_AUTH_PROVIDER=google_oidc \`,
+			`TENET_AUTH_PROVIDER=okta_oidc \`,
+			`TENET_AUTH_PROVIDER=okta_saml \`,
 			`restart_api_with_enterprise_sso google_oidc`,
 			`restart_api_with_enterprise_sso okta_oidc`,
 			`restart_api_with_enterprise_sso okta_saml`,
