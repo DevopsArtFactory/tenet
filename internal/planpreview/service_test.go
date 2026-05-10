@@ -233,6 +233,59 @@ func TestServiceCreateReturnsStableRecordIDEncodingErrors(t *testing.T) {
 	}
 }
 
+func TestNormalizeRecordBackfillsStableOperationIDs(t *testing.T) {
+	record := Record{Operations: []Operation{
+		{Kind: "ShiftTraffic", Status: "pending", Phase: "Promoting", Target: "listener", Summary: "shift traffic"},
+		{Kind: "ShiftTraffic", Status: "current", Phase: "Promoting", Target: "listener", Summary: "shift traffic"},
+		{ID: "operator-authored-anchor", Kind: "Verify", Status: "pending", Phase: "Verifying", Target: "service", Summary: "verify service"},
+	}}
+
+	normalized := NormalizeRecord(record)
+	if len(normalized.Operations) != 3 {
+		t.Fatalf("expected normalized operations, got %+v", normalized.Operations)
+	}
+	firstID := normalized.Operations[0].ID
+	if firstID == "" || !strings.HasPrefix(firstID, "operation-") {
+		t.Fatalf("expected deterministic generated operation id, got %+v", normalized.Operations)
+	}
+	if normalized.Operations[1].ID != firstID+"-2" {
+		t.Fatalf("expected duplicate operation id suffix, got %+v", normalized.Operations)
+	}
+	if normalized.Operations[2].ID != "operator-authored-anchor" {
+		t.Fatalf("expected existing operation id to be preserved, got %+v", normalized.Operations)
+	}
+	if record.Operations[0].ID != "" {
+		t.Fatalf("NormalizeRecord should not mutate caller-owned operation slices, got %+v", record.Operations)
+	}
+}
+
+func TestStableRecordIDIgnoresAdditiveOperationIDs(t *testing.T) {
+	base := Record{
+		DeploymentName: "api-prod",
+		Status:         StatusReady,
+		Operations: []Operation{
+			{Kind: "ShiftTraffic", Status: "current", Phase: "Promoting", Target: "listener", Summary: "shift traffic"},
+		},
+		Source: SourceContext{DeploymentName: "api-prod", Route: "/v1/overview/deployments/api-prod", Fingerprint: "fingerprint"},
+	}
+	withID := base
+	withID.Operations = []Operation{
+		{ID: "operation-custom-anchor", Kind: "ShiftTraffic", Status: "current", Phase: "Promoting", Target: "listener", Summary: "shift traffic"},
+	}
+
+	baseID, err := stableRecordID(base)
+	if err != nil {
+		t.Fatalf("stableRecordID(base) returned error: %v", err)
+	}
+	withIDValue, err := stableRecordID(withID)
+	if err != nil {
+		t.Fatalf("stableRecordID(withID) returned error: %v", err)
+	}
+	if baseID != withIDValue {
+		t.Fatalf("expected additive operation ids to be excluded from stable plan id, got %s vs %s", baseID, withIDValue)
+	}
+}
+
 func TestServiceCreatePersistsAvailableActorFromRequestContext(t *testing.T) {
 	store := &memoryStore{}
 	service := Service{

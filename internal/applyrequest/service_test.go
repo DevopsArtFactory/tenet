@@ -178,6 +178,59 @@ func TestServiceCreatePersistsImmutableQueuedApplyRequestWhenExecutionIsEnabled(
 	}
 }
 
+func TestServiceCreateCarriesPlanOperationIDsIntoApplyRows(t *testing.T) {
+	store := &memoryStore{}
+	plan := planpreview.Record{
+		ID:             "plan_ready_with_operation_ids",
+		DeploymentName: "api-prod",
+		Status:         planpreview.StatusReady,
+		CreatedAt:      "2026-04-17T08:00:00Z",
+		Operations: []planpreview.Operation{
+			{ID: "operation-shift-traffic", Status: "current", Phase: "Promoting", Target: "listener", Summary: "shift traffic"},
+		},
+		Source: planpreview.SourceContext{DeploymentName: "api-prod", Route: "/v1/overview/deployments/api-prod", Fingerprint: "plan_input"},
+	}
+	service := Service{
+		LoadPlan: func(context.Context, string) (planpreview.Record, error) { return plan, nil },
+		Store:    store,
+		Now:      func() time.Time { return time.Date(2026, 4, 18, 8, 6, 0, 0, time.UTC) },
+	}
+
+	result, err := service.Create(context.Background(), plan.ID)
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	if len(result.Record.Operations) != 1 || result.Record.Operations[0].ID != "operation-shift-traffic" {
+		t.Fatalf("expected apply operation to preserve plan operation id, got %+v", result.Record.Operations)
+	}
+}
+
+func TestNormalizeRecordBackfillsStableApplyOperationIDs(t *testing.T) {
+	record := Record{Operations: []Operation{
+		{Status: OperationStatusPending, Phase: "Promoting", Target: "listener", Summary: "shift traffic"},
+		{Status: OperationStatusRunning, Phase: "Promoting", Target: "listener", Summary: "shift traffic"},
+		{ID: "operation-existing", Status: OperationStatusPending, Phase: "Verifying", Target: "service", Summary: "verify service"},
+	}}
+
+	normalized := NormalizeRecord(record)
+	if len(normalized.Operations) != 3 {
+		t.Fatalf("expected normalized operations, got %+v", normalized.Operations)
+	}
+	firstID := normalized.Operations[0].ID
+	if firstID == "" || !strings.HasPrefix(firstID, "operation-") {
+		t.Fatalf("expected deterministic generated operation id, got %+v", normalized.Operations)
+	}
+	if normalized.Operations[1].ID != firstID+"-2" {
+		t.Fatalf("expected duplicate operation id suffix, got %+v", normalized.Operations)
+	}
+	if normalized.Operations[2].ID != "operation-existing" {
+		t.Fatalf("expected existing operation id to be preserved, got %+v", normalized.Operations)
+	}
+	if record.Operations[0].ID != "" {
+		t.Fatalf("NormalizeRecord should not mutate caller-owned operation slices, got %+v", record.Operations)
+	}
+}
+
 func TestServiceCreateReturnsNotFoundWhenPlanIsMissing(t *testing.T) {
 	service := Service{
 		LoadPlan: func(context.Context, string) (planpreview.Record, error) {

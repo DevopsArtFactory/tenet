@@ -176,7 +176,7 @@ The current UI also still exposes supporting operator surfaces beyond the main d
 - account-oriented views for grouped project/environment context
 - audit timeline for immutable plan/apply history
 - drift workspace for troubleshooting, explicitly labeling whether field-level drift is rendering from deployment-detail `managedDrift[]` rows or from the current derived fallback read-model heuristics during mixed-mode migration
-- plan/apply workspace for read-only rollout planning context, including immutable plan-preview actions, explicit in-place refresh controls for bookmarkable `planId` / `applyId` records, and a persisted apply-operations table when a bookmarkable `applyId` is loaded
+- plan/apply workspace for read-only rollout planning context, including immutable plan-preview actions, explicit in-place refresh controls for bookmarkable `planId` / `applyId` records, and persisted plan/apply operation tables with stable per-row anchors when bookmarkable records are loaded
 
 These should remain secondary to the main applications -> application -> resource flow, but they are still important operator tools.
 

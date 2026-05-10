@@ -85,7 +85,7 @@ func (s Service) Create(ctx context.Context, planID string) (CreateResult, error
 
 	existing, err := s.Store.Get(ctx, record.ID)
 	if err == nil {
-		return CreateResult{Record: existing, Created: false}, nil
+		return CreateResult{Record: NormalizeRecord(existing), Created: false}, nil
 	}
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return CreateResult{}, err
@@ -97,7 +97,7 @@ func (s Service) Create(ctx context.Context, planID string) (CreateResult, error
 	if err != nil {
 		return CreateResult{}, err
 	}
-	return CreateResult{Record: stored, Created: true}, nil
+	return CreateResult{Record: NormalizeRecord(stored), Created: true}, nil
 }
 
 func (s Service) validateCurrentFingerprint(ctx context.Context, plan planpreview.Record) error {
@@ -128,7 +128,11 @@ func (s Service) Get(ctx context.Context, id string) (Record, error) {
 	if s.Store == nil {
 		return Record{}, fmt.Errorf("apply request store is required")
 	}
-	return s.Store.Get(ctx, id)
+	record, err := s.Store.Get(ctx, id)
+	if err != nil {
+		return Record{}, err
+	}
+	return NormalizeRecord(record), nil
 }
 
 // Transition advances one persisted apply request to a validated lifecycle state without changing
@@ -162,7 +166,11 @@ func (s Service) Transition(ctx context.Context, id string, request TransitionRe
 	if err := s.Store.Update(ctx, record); err != nil {
 		return Record{}, err
 	}
-	return s.Store.Get(ctx, id)
+	updated, err := s.Store.Get(ctx, id)
+	if err != nil {
+		return Record{}, err
+	}
+	return NormalizeRecord(updated), nil
 }
 
 func (s Service) now() time.Time {
@@ -237,13 +245,61 @@ func deriveOperations(plan planpreview.Record, status OperationStatus) []Operati
 	operations := make([]Operation, 0, len(plan.Operations))
 	for _, operation := range plan.Operations {
 		operations = append(operations, Operation{
+			ID:      operation.ID,
 			Status:  status,
 			Phase:   operation.Phase,
 			Target:  operation.Target,
 			Summary: operation.Summary,
 		})
 	}
-	return operations
+	return assignOperationIDs(operations)
+}
+
+// NormalizeRecord backfills additive read-model fields for legacy immutable apply records.
+func NormalizeRecord(record Record) Record {
+	record.Operations = assignOperationIDs(record.Operations)
+	return record
+}
+
+func assignOperationIDs(operations []Operation) []Operation {
+	if len(operations) == 0 {
+		return nil
+	}
+	normalized := make([]Operation, len(operations))
+	copy(normalized, operations)
+	seen := map[string]int{}
+	for index := range normalized {
+		if normalized[index].ID != "" {
+			seen[normalized[index].ID]++
+			continue
+		}
+		base := operationIDBase(normalized[index])
+		seen[base]++
+		if seen[base] == 1 {
+			normalized[index].ID = base
+		} else {
+			normalized[index].ID = fmt.Sprintf("%s-%d", base, seen[base])
+		}
+	}
+	return normalized
+}
+
+func operationIDBase(operation Operation) string {
+	payload := struct {
+		Phase   string `json:"phase,omitempty"`
+		Target  string `json:"target,omitempty"`
+		Summary string `json:"summary,omitempty"`
+	}{
+		Phase:   operation.Phase,
+		Target:  operation.Target,
+		Summary: operation.Summary,
+	}
+	content, err := json.Marshal(payload)
+	if err != nil {
+		return "operation-unknown"
+	}
+	sum := sha256.Sum256(content)
+	return "operation-" + hex.EncodeToString(sum[:6])
 }
 
 func initialLifecycle(record Record) Lifecycle {

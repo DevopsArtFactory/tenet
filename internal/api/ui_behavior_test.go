@@ -9059,6 +9059,7 @@ func TestDeploymentWorkspacePlanViewWithNodeHarness(t *testing.T) {
 		"status":         "ready",
 		"createdAt":      "2026-04-17T09:00:00Z",
 		"operations": []map[string]any{{
+			"id":      "operation-shift-canary",
 			"kind":    "ShiftTrafficCanary",
 			"status":  "current",
 			"phase":   "Promoting",
@@ -9134,6 +9135,7 @@ func TestDeploymentWorkspacePlanViewWithNodeHarness(t *testing.T) {
 			"Live execution is intentionally disabled by default for this backend slice.",
 		},
 		"operations": []map[string]any{{
+			"id":      "operation-shift-canary",
 			"status":  "pending",
 			"phase":   "Promoting",
 			"target":  "server-preview-target",
@@ -9171,8 +9173,19 @@ class Element {
     this.autocomplete = '';
     this.selectionStart = null;
     this.selectionEnd = null;
+    this._id = '';
+    Object.defineProperty(this, 'id', {
+      get: () => this._id,
+      set: (value) => {
+        const next = String(value || '');
+        if (this._id && this.ownerDocument?.byID?.get(this._id) === this) this.ownerDocument.byID.delete(this._id);
+        this._id = next;
+        if (next && this.ownerDocument?.byID) this.ownerDocument.byID.set(next, this);
+      },
+    });
     this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
   }
+  scrollIntoView() { this.ownerDocument.scrolledTo = this.id; }
   append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
   replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
   addEventListener(type, handler) { this.listeners[type] = handler; }
@@ -9209,7 +9222,7 @@ const fetchCalls = [];
 let createRequestOptions = null;
 let createApplyRequestOptions = null;
 const window = { location: { pathname: '/', search: '?page=plan&deployment=api-prod', hash: '' } };
-const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+const history = { replaceState(_state, _title, url) { const [withoutHash, hash = ''] = String(url).split('#'); const [pathname, query = ''] = withoutHash.split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; window.location.hash = hash ? '#' + hash : ''; } };
 let detailFetchCount = 0;
 const fetch = (url, options = {}) => {
   fetchCalls.push(String(url));
@@ -9221,8 +9234,14 @@ const fetch = (url, options = {}) => {
     createRequestOptions = options;
     return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
   }
+  if (url === '/v1/plans/plan_ready_123') {
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+  }
   if (url === '/v1/applies/plans/plan_ready_123') {
     createApplyRequestOptions = options;
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(applyRecord) });
+  }
+  if (url === '/v1/applies/apply_failed_123') {
     return Promise.resolve({ ok: true, json: () => Promise.resolve(applyRecord) });
   }
   throw new Error('unexpected fetch url: ' + url);
@@ -9393,6 +9412,10 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!workspaceLink || workspaceLink.target !== '_self' || workspaceLink.rel) throw new Error('expected bookmarked workspace self link after create');
   const planJSONLink = links.find((node) => node.href === '/v1/plans/plan_ready_123' && node.textContent === 'Plan JSON');
   if (!planJSONLink || planJSONLink.target !== '_blank' || planJSONLink.rel !== 'noreferrer noopener') throw new Error('expected plan json read-model link after create');
+  const planOperationRow = collectNodes(root, (node) => node.tagName === 'TR' && node.id === 'operation-plan-operation-shift-canary')[0];
+  if (!planOperationRow || !String(planOperationRow.className || '').includes('operation-anchor-row')) throw new Error('expected plan operation row to expose a stable anchor id');
+  const planOperationShare = links.find((node) => node.href === '/?page=plan&deployment=api-prod&planId=plan_ready_123#operation-plan-operation-shift-canary' && node.textContent === 'Share operation');
+  if (!planOperationShare || planOperationShare.target !== '_self' || planOperationShare.rel) throw new Error('expected plan operation share link to preserve planId and target the operation anchor');
   buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
   createPlan = buttons.find((node) => node.textContent === 'Create Plan');
   applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');
@@ -9451,6 +9474,12 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!bookmarkedApplyLink || bookmarkedApplyLink.target !== '_self' || bookmarkedApplyLink.rel) throw new Error('expected bookmarked apply self link after apply create');
   const applyJSONLink = applyLinks.find((node) => node.href === '/v1/applies/apply_failed_123' && node.textContent === 'Apply JSON');
   if (!applyJSONLink || applyJSONLink.target !== '_blank' || applyJSONLink.rel !== 'noreferrer noopener') throw new Error('expected apply json read-model link after apply create');
+  const applyOperationRow = collectNodes(root, (node) => node.tagName === 'TR' && node.id === 'operation-apply-operation-shift-canary')[0];
+  if (!applyOperationRow || !String(applyOperationRow.className || '').includes('operation-anchor-row')) throw new Error('expected apply operation row to expose a stable anchor id');
+  const applyOperationShare = applyLinks.find((node) => node.href === '/?page=plan&deployment=api-prod&planId=plan_ready_123&applyId=apply_failed_123#operation-apply-operation-shift-canary' && node.textContent === 'Share operation');
+  if (!applyOperationShare || applyOperationShare.target !== '_self' || applyOperationShare.rel) throw new Error('expected apply operation share link to preserve plan/apply ids and target the operation anchor');
+  window.location.hash = '#operation-apply-operation-shift-canary';
+  document.scrolledTo = '';
   buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
   refreshPlan = buttons.find((node) => node.textContent === 'Refresh plan preview');
   refreshApply = buttons.find((node) => node.textContent === 'Refresh apply request');
@@ -9459,11 +9488,20 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!refreshPlan || !refreshApply || !refreshWorkspace) throw new Error('expected refresh buttons after apply create');
   if (refreshPlan.disabled || refreshApply.disabled || refreshWorkspace.disabled) throw new Error('expected refresh buttons enabled after apply create');
   const bookmarkedPlanApplySearch = window.location.search;
+  refreshApply.dispatch('click');
+  await settle();
+  await settle();
+  if (window.location.search !== bookmarkedPlanApplySearch) throw new Error('expected apply-record refresh to preserve plan/apply query, got ' + window.location.search);
+  if (window.location.hash !== '#operation-apply-operation-shift-canary') throw new Error('expected apply-record refresh to preserve operation hash, got ' + window.location.hash);
+  if (document.scrolledTo !== 'operation-apply-operation-shift-canary') throw new Error('expected apply-record refresh to scroll back to bookmarked operation row, got ' + document.scrolledTo);
+  document.scrolledTo = '';
   refreshWorkspace.dispatch('click');
   await settle();
   await settle();
   if (detailFetchCount !== 3) throw new Error('expected plan workspace refresh after apply to re-fetch deployment detail in place');
   if (window.location.search !== bookmarkedPlanApplySearch) throw new Error('expected plan workspace refresh to preserve plan/apply bookmark, got ' + window.location.search);
+  if (window.location.hash !== '#operation-apply-operation-shift-canary') throw new Error('expected plan workspace refresh to preserve operation hash, got ' + window.location.hash);
+  if (document.scrolledTo !== 'operation-apply-operation-shift-canary') throw new Error('expected plan workspace refresh to re-scroll to bookmarked operation row, got ' + document.scrolledTo);
 })();
 `
 		runNodeHarness(t, nodeProgram)
