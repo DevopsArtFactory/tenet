@@ -2006,7 +2006,7 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 		"const withResourcePanelFetchedAt = (result) => {",
 		"const resourcePanelRequestIDFields = (result) => {",
 		"['Tenet request ID', requestId]",
-		"result?.available === false ? '' : resourcePanelFetchedAtText(result)",
+		"const fetchedAtText = resourcePanelFetchedAtText(result)",
 		"['Last refreshed', fetchedAtText]",
 		"const createResourcePanelRequestIDMeta = (error) => {",
 		"`Tenet request ID · ${requestId}`",
