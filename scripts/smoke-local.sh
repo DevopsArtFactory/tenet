@@ -1774,6 +1774,9 @@ assert "clusterArn: supportsECSClusterScope(resource) ? String(currentPageState.
 assert "createNavLink(resourceLogAnchorURL(deploymentName, resource, logID, selectedLimit), 'Share log entry', '_self')" in ui, ui
 assert "clusterArn: params.get('clusterArn') || ''" in ui, ui
 assert "routeClusterArn: supportsECSClusterScope(resource) ? String(currentPageState.clusterArn || resource.clusterArn || '').trim() : ''" in ui, ui
+assert "Clear selected container" in ui, ui
+assert "const clearSelectedContainerRoute = (detail, resource) => {" in ui, ui
+assert "containerName: ''," in ui, ui
 assert "Clear selected cluster" in ui, ui
 assert "const clearSelectedClusterRoute = (detail, resource) => {" in ui, ui
 assert "clusterArn: ''," in ui, ui
@@ -1985,6 +1988,9 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "resourceLogLimit: normalizeResourceLogsLimit(params.get('resourceLogLimit') || '')" in body, body
     assert "clusterArn: params.get('clusterArn') || ''" in body, body
     assert "routeClusterArn: supportsECSClusterScope(resource) ? String(currentPageState.clusterArn || resource.clusterArn || '').trim() : ''" in body, body
+    assert "Clear selected container" in body, body
+    assert "const clearSelectedContainerRoute = (detail, resource) => {" in body, body
+    assert "containerName: ''," in body, body
     assert "Clear selected cluster" in body, body
     assert "const clearSelectedClusterRoute = (detail, resource) => {" in body, body
     assert "clusterArn: ''," in body, body
