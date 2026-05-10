@@ -78,6 +78,9 @@ The response shape is:
     "totalEntryCount": 3,
     "limited": true,
     "limit": 1,
+    "requestedLimit": 1,
+    "effectiveLimit": 1,
+    "truncationStatus": "truncated",
     "deploymentName": "payments-api-prod",
     "action": "apply.requested"
   }
@@ -85,7 +88,7 @@ The response shape is:
 ```
 
 Important details:
-- `resultScope` is server-authored bounded-read metadata for the exact response: `returnedEntryCount` is the number of rows in `entries`, `totalEntryCount` is the number of matching rows after deployment/action/authorization filtering but before the requested `limit`, `limited` is true only when the returned window is capped, `limit` echoes the positive applied cap when present, and `deploymentName` / `action` echo the normalized filters that Tenet applied
+- `resultScope` is server-authored bounded-read metadata for the exact response: `returnedEntryCount` is the number of rows in `entries`, `totalEntryCount` is the number of matching rows after deployment/action/authorization filtering but before the requested `limit`, `limited` is true only when the returned window is capped, legacy `limit` and additive `requestedLimit` echo the positive requested cap when present, `effectiveLimit` is the cap Tenet applied (or `0` for uncapped reads), `truncationStatus` is `truncated` or `not_truncated` for known-complete local reads, and `deploymentName` / `action` echo the normalized filters that Tenet applied
 - `entryId` is a backend-authored opaque stable row identifier derived from the immutable plan/apply source identity; it is unique across `plan.created` and `apply.requested` rows and remains stable across filtering, sorting, and `limit` windows so UI anchors can prefer it over client-derived fallbacks
 - `action` is stable and action-oriented (`plan.created`, `apply.requested`)
 - the optional query `action` filter only supports those two exact values and rejects anything else with `400 Bad Request`

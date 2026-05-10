@@ -916,6 +916,9 @@ assert isinstance(audit_logs.get('resultScope'), dict), audit_logs
 assert audit_logs['resultScope']['returnedEntryCount'] == len(audit_logs['entries']), audit_logs
 assert audit_logs['resultScope']['totalEntryCount'] >= audit_logs['resultScope']['returnedEntryCount'], audit_logs
 assert audit_logs['resultScope']['limited'] is False, audit_logs
+assert audit_logs['resultScope']['effectiveLimit'] == 0, audit_logs
+assert audit_logs['resultScope']['truncationStatus'] == 'not_truncated', audit_logs
+assert 'requestedLimit' not in audit_logs['resultScope'], audit_logs
 assert isinstance(audit_logs_action_filtered.get('resultScope'), dict), audit_logs_action_filtered
 assert audit_logs_action_filtered['resultScope']['action'] == 'apply.requested', audit_logs_action_filtered
 assert audit_logs_action_filtered['resultScope']['returnedEntryCount'] == len(audit_logs_action_filtered['entries']), audit_logs_action_filtered
@@ -935,6 +938,9 @@ assert len(actor_audit_logs['entries']) == 1, actor_audit_logs
 assert actor_audit_logs['resultScope']['deploymentName'] == 'payments-api-staging', actor_audit_logs
 assert actor_audit_logs['resultScope']['action'] == 'apply.requested', actor_audit_logs
 assert actor_audit_logs['resultScope']['limit'] == 1, actor_audit_logs
+assert actor_audit_logs['resultScope']['requestedLimit'] == 1, actor_audit_logs
+assert actor_audit_logs['resultScope']['effectiveLimit'] == 1, actor_audit_logs
+assert actor_audit_logs['resultScope']['truncationStatus'] == 'not_truncated', actor_audit_logs
 assert actor_audit_logs['resultScope']['returnedEntryCount'] == 1, actor_audit_logs
 assert actor_audit_logs['entries'][0]['deploymentName'] == 'payments-api-staging', actor_audit_logs
 assert actor_audit_logs['entries'][0]['actor']['available'] is True, actor_audit_logs
@@ -946,12 +952,18 @@ assert len(audit_logs_filtered['entries']) == 1, audit_logs_filtered
 assert audit_logs_filtered['entries'][0]['deploymentName'] == 'payments-api-prod', audit_logs_filtered
 assert audit_logs_filtered['resultScope']['deploymentName'] == 'payments-api-prod', audit_logs_filtered
 assert audit_logs_filtered['resultScope']['limit'] == 1, audit_logs_filtered
+assert audit_logs_filtered['resultScope']['requestedLimit'] == 1, audit_logs_filtered
+assert audit_logs_filtered['resultScope']['effectiveLimit'] == 1, audit_logs_filtered
+assert audit_logs_filtered['resultScope']['truncationStatus'] in {'truncated', 'not_truncated'}, audit_logs_filtered
+assert audit_logs_filtered['resultScope']['truncationStatus'] == ('truncated' if audit_logs_filtered['resultScope']['totalEntryCount'] > audit_logs_filtered['resultScope']['returnedEntryCount'] else 'not_truncated'), audit_logs_filtered
 assert audit_logs_filtered['resultScope']['returnedEntryCount'] == 1, audit_logs_filtered
 assert isinstance(audit_logs_empty.get('entries', []), list), audit_logs_empty
 assert audit_logs_empty['entries'] == [], audit_logs_empty
 assert audit_logs_empty['resultScope']['deploymentName'] == 'worker-prod', audit_logs_empty
 assert audit_logs_empty['resultScope']['returnedEntryCount'] == 0, audit_logs_empty
 assert audit_logs_empty['resultScope']['totalEntryCount'] == 0, audit_logs_empty
+assert audit_logs_empty['resultScope']['effectiveLimit'] == 0, audit_logs_empty
+assert audit_logs_empty['resultScope']['truncationStatus'] == 'not_truncated', audit_logs_empty
 assert os.environ['INVALID_AUDIT_ACTION_STATUS'] == '400', os.environ['INVALID_AUDIT_ACTION_STATUS']
 invalid_audit_action = read_text('INVALID_AUDIT_ACTION_BODY_PATH')
 assert 'invalid action query' in invalid_audit_action, invalid_audit_action
