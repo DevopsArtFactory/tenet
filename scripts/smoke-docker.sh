@@ -1577,6 +1577,7 @@ assert_fragments("ui", ui, (
     "fetchApplicationsOverview()",
     "const applicationsOverviewReadRoute = () => 'GET /v1/overview/applications';",
     "const createApplicationsOverviewActions = (overviewState = null) => [",
+    "createNavLink('/v1/overview/applications', 'Applications JSON')",
     "'Refresh applications overview'",
     "overviewState?.status === 'loading'",
     "() => overviewState?.onRefresh?.().catch(() => {})",
