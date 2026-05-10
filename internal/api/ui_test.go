@@ -671,6 +671,11 @@ func TestEmbeddedUIIncludesPlanSectionNavigation(t *testing.T) {
 	body := string(indexHTML)
 
 	for _, fragment := range []string{
+		"const createWorkspaceDetailFreshnessMeta = (detail = null, workspaceLabel = 'Workspace') => {",
+		"workspace-detail-freshness",
+		"${workspaceLabel} read refreshed · ${fetchedAt}",
+		"${workspaceLabel} read not refreshed yet",
+		"createWorkspaceDetailFreshnessMeta(detail, workspaceTitle)",
 		"const planSectionLinks = [];",
 		"const pushPlanSection = (section, sectionID, label) => {",
 		"section.id = sectionID;",
@@ -1589,7 +1594,7 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"return `Failed to refresh ${workspaceLabel}: ${workspaceState.error?.message || 'unknown error'}`;",
 		"renderDeploymentWorkspace('plan', workspaceDetail,",
 		"workspaceState.onRefresh = () => {",
-		"workspaceDetail = nextDetail;",
+		"workspaceDetail = withResourceDetailFetchedAt(nextDetail);",
 		"Plan preview actions",
 		"createOperatorWriteAuthRequiredActions(planState)",
 		"Apply request actions",

@@ -1609,6 +1609,10 @@ assert "tableRow.setAttribute('id', rowID);" in ui, ui
 assert "resolveManagedDriftResourceRef(detail, row.resourceRef)" in ui, ui
 assert 'Drift summary' in ui, ui
 assert 'Refresh drift workspace' in ui, ui
+assert "const createWorkspaceDetailFreshnessMeta = (detail = null, workspaceLabel = 'Workspace') => {" in ui, ui
+assert 'workspace-detail-freshness' in ui, ui
+assert '${workspaceLabel} read refreshed · ${fetchedAt}' in ui, ui
+assert '${workspaceLabel} read not refreshed yet' in ui, ui
 assert 'Clear drift filters' in ui, ui
 assert "const workspaceLabel = mode === 'plan' ? 'plan workspace' : 'drift workspace';" in ui, ui
 assert 'Refreshing ${workspaceLabel} from GET /v1/overview/deployments/{deploymentName}…' in ui, ui

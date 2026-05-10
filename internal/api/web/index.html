@@ -2919,6 +2919,16 @@
         meta.setAttribute('aria-atomic', 'true');
         return meta;
       };
+      const createWorkspaceDetailFreshnessMeta = (detail = null, workspaceLabel = 'Workspace') => {
+        const fetchedAt = resourceDetailFetchedAtText(detail);
+        const meta = createElement('div', 'account-topology workspace-detail-freshness', fetchedAt
+          ? `${workspaceLabel} read refreshed · ${fetchedAt}`
+          : `${workspaceLabel} read not refreshed yet`);
+        meta.setAttribute('role', 'status');
+        meta.setAttribute('aria-live', 'polite');
+        meta.setAttribute('aria-atomic', 'true');
+        return meta;
+      };
 
       const applicationManagedDriftCounts = (detail) => {
         const summary = detail?.managedDriftSummary;
@@ -7477,6 +7487,7 @@
           createElement('h2', 'account-name', workspaceTitle),
           createElement('div', 'account-meta', detail.name || currentPageState.deployment || 'Unknown deployment'),
           createElement('div', 'account-topology', [detail.accountName, detail.awsAccountId, detail.region].filter(Boolean).join(' · ') || '—'),
+          createWorkspaceDetailFreshnessMeta(detail, workspaceTitle),
         );
         const pills = createElement('div', 'pills');
         [
@@ -8529,7 +8540,7 @@
               if (currentPageState.page === 'drift') {
                 const workspaceState = {
                   status: 'idle',
-                  detail,
+                  detail: withResourceDetailFetchedAt(detail),
                   error: null,
                   filters: {
                     query: '',
@@ -8550,7 +8561,7 @@
                   return fetchDeploymentDetail(deploymentName)
                     .then((nextDetail) => {
                       workspaceState.status = 'idle';
-                      workspaceState.detail = nextDetail;
+                      workspaceState.detail = withResourceDetailFetchedAt(nextDetail);
                       workspaceState.error = null;
                       renderDriftWorkspace();
                       return nextDetail;
@@ -8566,7 +8577,7 @@
                 return;
               }
               if (currentPageState.page === 'plan') {
-                let workspaceDetail = detail;
+                let workspaceDetail = withResourceDetailFetchedAt(detail);
                 const workspaceState = {
                   status: 'idle',
                   detail: workspaceDetail,
@@ -8776,9 +8787,9 @@
                   renderPlanWorkspace();
                   return fetchDeploymentDetail(deploymentName)
                     .then((nextDetail) => {
-                      workspaceDetail = nextDetail;
+                      workspaceDetail = withResourceDetailFetchedAt(nextDetail);
                       workspaceState.status = 'idle';
-                      workspaceState.detail = nextDetail;
+                      workspaceState.detail = workspaceDetail;
                       workspaceState.error = null;
                       renderPlanWorkspace();
                       return nextDetail;
