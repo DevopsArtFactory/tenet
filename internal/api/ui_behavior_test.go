@@ -5066,6 +5066,12 @@ async function render(search, inspectionResult, hash = '') {
   if (!inspectionDeniedRun.text.includes('Operator access denied')) throw new Error('expected live inspection 403 guidance to stay visible: ' + inspectionDeniedRun.text);
   if (!inspectionDeniedRun.text.includes('Tenet request ID · req-inspection-878-error')) throw new Error('expected live inspection 403 to render Tenet Request-Id metadata: ' + inspectionDeniedRun.text);
 
+  const unknownUnavailableRun = await render(scopedTaskSearch, { available: false, source: '', unavailableReason: 'provider_rate_limited', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true } }, '#resource-live-inspection');
+  if (!unknownUnavailableRun.text.includes('Live inspection is unavailable for this resource.')) throw new Error('expected live inspection unavailable state: ' + unknownUnavailableRun.text);
+  if (!unknownUnavailableRun.text.includes('Tenet returned an unavailable live-inspection state. Use the lookup context above to continue provider troubleshooting.')) throw new Error('expected friendly live inspection fallback copy: ' + unknownUnavailableRun.text);
+  if (unknownUnavailableRun.text.includes('provider_rate_limited')) throw new Error('expected raw live-inspection unavailable code to stay hidden from operator copy: ' + unknownUnavailableRun.text);
+  if (!unknownUnavailableRun.text.includes('Inspection path · ap-northeast-2 · account 123456789012 · same-account lookup · observer role configured')) throw new Error('expected live inspection lookup context to remain visible: ' + unknownUnavailableRun.text);
+
   const logsDeniedRun = await render(scopedTaskSearch, { ...taskResult, __logsErrorStatus: 401, __logsErrorBody: 'unauthenticated: operator identity missing' }, '#resource-recent-logs');
   if (!logsDeniedRun.text.includes('Authenticated operator required')) throw new Error('expected recent logs 401 guidance to stay visible: ' + logsDeniedRun.text);
   if (!logsDeniedRun.text.includes('Tenet request ID · req-logs-951-denied')) throw new Error('expected recent logs 401 to render Tenet Request-Id metadata: ' + logsDeniedRun.text);

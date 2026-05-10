@@ -4684,7 +4684,7 @@
           case 'aws_unavailable':
             return 'AWS access is currently unavailable for live inspection.';
           default:
-            return reason || '';
+            return reason ? 'Tenet returned an unavailable live-inspection state. Use the lookup context above to continue provider troubleshooting.' : '';
         }
       };
       const createInspectionListSection = (title, items, renderItem, emptyText, beforeListNodes = []) => {

@@ -2155,6 +2155,7 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"return 'No running tasks were found for this ECS service.';",
 		"return 'No instances were found in this Auto Scaling Group.';",
 		"return 'AWS access is currently unavailable for live inspection.';",
+		"Tenet returned an unavailable live-inspection state. Use the lookup context above to continue provider troubleshooting.",
 		"const resourceLogsLookupContextFields = (lookupContext) => [",
 		"const lookupContextFields = (lookupContext) => resourceLogsLookupContextFields(lookupContext);",
 		"Inspection path ·",
