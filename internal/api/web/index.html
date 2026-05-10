@@ -2518,6 +2518,7 @@
       };
       const applicationsOverviewReadRoute = () => 'GET /v1/overview/applications';
       const createApplicationsOverviewActions = (overviewState = null) => [
+        createNavLink('/v1/overview/applications', 'Applications JSON'),
         createRefreshButton(
           'Refresh applications overview',
           overviewState?.status === 'loading',

@@ -757,6 +757,8 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"return matchesAccount && matchesState && matchesHealth && matchesQuery;",
 		"currentViewState = { query: '', syncState: 'all', healthState: 'all', account: 'all' };",
 		"Open audit log",
+		"Applications JSON",
+		"/v1/overview/applications",
 		"Open account",
 		"More actions",
 		"row-primary-action",
@@ -866,6 +868,7 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"return `${message} Tenet request ID · ${requestId}`;",
 		"const applicationsOverviewReadRoute = () => 'GET /v1/overview/applications';",
 		"const createApplicationsOverviewActions = (overviewState = null) => [",
+		"createNavLink('/v1/overview/applications', 'Applications JSON'),",
 		"'Refresh applications overview'",
 		"const applicationsOverviewRefreshState = (overviewState = null) => {",
 		"'Refreshing applications overview from GET /v1/overview/applications…'",
@@ -2834,6 +2837,12 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert 'Refresh applications overview' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh applications overview")
+	}
+	if !strings.Contains(text, "assert 'Applications JSON' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains applications overview JSON handoff")
+	}
+	if !strings.Contains(text, "assert \"createNavLink('/v1/overview/applications', 'Applications JSON')\" in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert applications overview JSON route contract")
 	}
 	if !strings.Contains(text, "assert 'Latest runtime signal' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Latest runtime signal")
