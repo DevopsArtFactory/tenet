@@ -3028,6 +3028,34 @@
         return null;
       };
       const resourceDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;
+      const clearSelectedContainerRoute = (detail, resource) => {
+        const containerName = String(resource?.containerName || currentPageState.containerName || '').trim();
+        if (!containerName) return null;
+        const deploymentName = detail?.name || currentPageState.deployment || '';
+        const routeState = createCurrentResourceRouteState(resource);
+        const nextState = {
+          ...currentPageState,
+          page: 'resource',
+          deployment: deploymentName,
+          resourceType: routeState.routeResourceType || '',
+          resourceId: routeState.routeResourceId || '',
+          containerName: '',
+          instanceId: routeState.routeInstanceId || '',
+          clusterArn: routeState.routeClusterArn || '',
+        };
+        currentPageState = nextState;
+        const nextURL = buildPageURL('resource', {
+          deployment: nextState.deployment,
+          resourceType: nextState.resourceType,
+          resourceId: nextState.resourceId,
+          instanceId: nextState.instanceId,
+          clusterArn: nextState.clusterArn,
+          resourceLogLimit: nextState.resourceLogLimit,
+          resourceInspectionLimit: nextState.resourceInspectionLimit,
+        });
+        history.replaceState({}, '', `${nextURL}${window.location.hash || ''}`);
+        return nextState;
+      };
       const clearSelectedClusterRoute = (detail, resource) => {
         if (!supportsECSClusterScope(resource)) return null;
         const clusterArn = String(resource?.clusterArn || currentPageState.clusterArn || '').trim();
@@ -3086,6 +3114,17 @@
         history.replaceState({}, '', `${nextURL}${window.location.hash || ''}`);
         return nextState;
       };
+      const createClearSelectedContainerButton = (detail, resource, resourceState = null) => {
+        if (!String(resource?.containerName || '').trim()) return null;
+        const button = createElement('button', 'toolbar-button', 'Clear selected container');
+        button.type = 'button';
+        button.disabled = resourceState?.status === 'loading';
+        button.addEventListener('click', () => {
+          if (button.disabled || !clearSelectedContainerRoute(detail, resource)) return;
+          renderResourceDetailPage(detail, resourceState);
+        });
+        return button;
+      };
       const createClearSelectedClusterButton = (detail, resource, resourceState = null) => {
         if (!supportsECSClusterScope(resource) || !String(resource?.clusterArn || '').trim()) return null;
         const button = createElement('button', 'toolbar-button', 'Clear selected cluster');
@@ -3114,6 +3153,7 @@
           resourceState?.status === 'loading' || !(resourceState?.detail?.name || currentPageState.deployment),
           () => resourceState?.onRefresh?.().catch(() => {}),
         ),
+        createClearSelectedContainerButton(detail, resource, resourceState),
         createClearSelectedClusterButton(detail, resource, resourceState),
         createClearSelectedInstanceButton(detail, resource, resourceState),
       ];

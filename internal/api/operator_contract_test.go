@@ -2167,7 +2167,8 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"may include additive `resourceDescription` when Tenet resolved rollout execution context",
 		"resource-logs?resourceType=ecsTask&resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Atask%2Fworker%2Fabc123&containerName=worker&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=1",
 		"paired `resource-inspection?resourceType=ecsTask&...&clusterArn=...` route",
-		"the clear action removes only `clusterArn` without losing task/container scope",
+		"**Clear selected container** removes only `containerName`",
+		"**Clear selected cluster** removes only `clusterArn` without losing the other task scope",
 		"local/compose smoke lock that backend echo alongside the embedded selected-cluster URL-state guards",
 	} {
 		if !strings.Contains(uiDoc, fragment) {

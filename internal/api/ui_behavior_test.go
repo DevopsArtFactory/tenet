@@ -5060,6 +5060,18 @@ async function render(search, inspectionResult, hash = '') {
     const link = taskSectionLinks.find((node) => node.href.endsWith(hashSuffix));
     if (!link || !link.href.includes('clusterArn=' + encodedClusterArn) || !link.href.includes('containerName=worker')) throw new Error('expected selected ECS task scope to stay in section link for ' + hashSuffix + ', got ' + (link?.href || '<missing>'));
   });
+  const containerScopedRun = await render(scopedTaskSearch, taskResult, '#resource-recent-logs');
+  const clearContainerButton = containerScopedRun.toolbarButtons.find((node) => node.textContent === 'Clear selected container');
+  if (!clearContainerButton || clearContainerButton.disabled) throw new Error('expected ECS task clear selected container action to be enabled: ' + containerScopedRun.toolbarText);
+  clearContainerButton.dispatch('click');
+  await settle(); await settle(); await settle();
+  if (containerScopedRun.window.location.search.includes('containerName=')) throw new Error('expected clear selected container action to remove only selected container query, got ' + containerScopedRun.window.location.search);
+  ['page=resource', 'deployment=worker-prod', 'resourceType=ecsTask', 'clusterArn=' + encodedClusterArn, 'resourceLogLimit=10'].forEach((fragment) => {
+    if (!containerScopedRun.window.location.search.includes(fragment)) throw new Error('expected clear selected container action to preserve ' + fragment + ', got ' + containerScopedRun.window.location.search);
+  });
+  if (!decodeURIComponent(containerScopedRun.window.location.search.replace(/\+/g, '%20')).includes('resourceId=' + taskResourceId)) throw new Error('expected clear selected container action to preserve task resource id, got ' + containerScopedRun.window.location.search);
+  if (containerScopedRun.window.location.hash !== '#resource-recent-logs') throw new Error('expected clear selected container action to preserve hash, got ' + containerScopedRun.window.location.hash);
+  if (!containerScopedRun.fetchCalls.includes('/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsTask&resourceName=' + encodeURIComponent(taskArn) + '&clusterArn=' + encodedClusterArn + '&limit=10')) throw new Error('expected cleared ECS task recent-log fetch to omit containerName, got ' + JSON.stringify(containerScopedRun.fetchCalls));
   const clearTaskButton = taskRun.toolbarButtons.find((node) => node.textContent === 'Clear selected cluster');
   if (!clearTaskButton || clearTaskButton.disabled) throw new Error('expected ECS task clear selected cluster action to be enabled: ' + taskRun.toolbarText);
   clearTaskButton.dispatch('click');
