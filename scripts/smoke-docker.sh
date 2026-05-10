@@ -963,9 +963,15 @@ assert isinstance(audit_logs.get("resultScope"), dict), audit_logs
 assert audit_logs["resultScope"]["returnedEntryCount"] == len(audit_logs["entries"]), audit_logs
 assert audit_logs["resultScope"]["totalEntryCount"] >= audit_logs["resultScope"]["returnedEntryCount"], audit_logs
 assert audit_logs["resultScope"]["limited"] is False, audit_logs
+assert audit_logs["resultScope"]["effectiveLimit"] == 0, audit_logs
+assert audit_logs["resultScope"]["truncationStatus"] == "not_truncated", audit_logs
+assert "requestedLimit" not in audit_logs["resultScope"], audit_logs
 assert isinstance(audit_logs_action_filtered.get("resultScope"), dict), audit_logs_action_filtered
 assert audit_logs_action_filtered["resultScope"]["action"] == "apply.requested", audit_logs_action_filtered
 assert audit_logs_action_filtered["resultScope"]["limit"] == 2, audit_logs_action_filtered
+assert audit_logs_action_filtered["resultScope"]["requestedLimit"] == 2, audit_logs_action_filtered
+assert audit_logs_action_filtered["resultScope"]["effectiveLimit"] == 2, audit_logs_action_filtered
+assert audit_logs_action_filtered["resultScope"].get("truncationStatus") in {"truncated", "not_truncated"}, audit_logs_action_filtered
 assert audit_logs_action_filtered["resultScope"]["returnedEntryCount"] == len(audit_logs_action_filtered["entries"]), audit_logs_action_filtered
 assert os.environ["INVALID_AUDIT_ACTION_STATUS"] == "400", os.environ["INVALID_AUDIT_ACTION_STATUS"]
 assert "invalid action query" in invalid_audit_action_body, invalid_audit_action_body
@@ -1028,6 +1034,9 @@ assert len(actor_audit_logs["entries"]) == 1, actor_audit_logs
 assert actor_audit_logs["resultScope"]["deploymentName"] == "payments-api-staging", actor_audit_logs
 assert actor_audit_logs["resultScope"]["action"] == "apply.requested", actor_audit_logs
 assert actor_audit_logs["resultScope"]["limit"] == 1, actor_audit_logs
+assert actor_audit_logs["resultScope"]["requestedLimit"] == 1, actor_audit_logs
+assert actor_audit_logs["resultScope"]["effectiveLimit"] == 1, actor_audit_logs
+assert actor_audit_logs["resultScope"]["truncationStatus"] == "not_truncated", actor_audit_logs
 assert actor_audit_logs["resultScope"]["returnedEntryCount"] == 1, actor_audit_logs
 assert actor_audit_logs["entries"][0]["deploymentName"] == "payments-api-staging", actor_audit_logs
 assert actor_audit_logs["entries"][0]["actor"]["available"] is True, actor_audit_logs

@@ -72,6 +72,9 @@ type ResultScope struct {
 	TotalEntryCount    int    `json:"totalEntryCount"`
 	Limited            bool   `json:"limited"`
 	Limit              *int   `json:"limit,omitempty"`
+	RequestedLimit     *int   `json:"requestedLimit,omitempty"`
+	EffectiveLimit     int    `json:"effectiveLimit"`
+	TruncationStatus   string `json:"truncationStatus"`
 	DeploymentName     string `json:"deploymentName,omitempty"`
 	Action             string `json:"action,omitempty"`
 }
@@ -153,16 +156,24 @@ func (s Service) List(ctx context.Context, query Query) (Result, error) {
 
 // BuildResultScope returns operator-facing metadata for the filtered, optionally limited window.
 func BuildResultScope(query Query, totalEntryCount, returnedEntryCount int) ResultScope {
+	limited := query.Limit > 0 && returnedEntryCount < totalEntryCount
 	scope := ResultScope{
 		ReturnedEntryCount: returnedEntryCount,
 		TotalEntryCount:    totalEntryCount,
-		Limited:            query.Limit > 0 && returnedEntryCount < totalEntryCount,
+		Limited:            limited,
+		EffectiveLimit:     0,
+		TruncationStatus:   "not_truncated",
 		DeploymentName:     query.DeploymentName,
 		Action:             string(query.Action),
+	}
+	if limited {
+		scope.TruncationStatus = "truncated"
 	}
 	if query.Limit > 0 {
 		limit := query.Limit
 		scope.Limit = &limit
+		scope.RequestedLimit = &limit
+		scope.EffectiveLimit = limit
 	}
 	return scope
 }
