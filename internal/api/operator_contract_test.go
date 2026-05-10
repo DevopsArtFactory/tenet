@@ -111,6 +111,15 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 
 func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
+	for _, placeholder := range []string{
+		"TENET_AUTH_PROVIDER=***",
+		"TENET_AUTH_PROVIDER=<",
+		"TENET_AUTH_PROVIDER=REDACTED",
+	} {
+		if strings.Contains(readme, placeholder) {
+			t.Fatalf("expected README to use concrete non-secret provider modes instead of placeholder %q", placeholder)
+		}
+	}
 	for _, fragment := range []string{
 		"`docs/architecture/tenet-v1-enterprise-sso.md`",
 
@@ -118,6 +127,10 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 		"keeps Okta SAML diagnostic-only",
 		"repository-backed RBAC policy diagnostics as the shipped first policy foundation",
 		"policy-backed route enforcement remain future work",
+		"`TENET_AUTH_PROVIDER=github`",
+		"`TENET_AUTH_PROVIDER=google_oidc`",
+		"`TENET_AUTH_PROVIDER=okta_oidc`",
+		"`TENET_AUTH_PROVIDER=okta_saml`",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README enterprise SSO boundary to include %q", fragment)
