@@ -1956,6 +1956,8 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 		"['Requested cap', scope.requestedLimit == null ? 'All available entries' : resourceLogsScopeLimitText(scope.requestedLimit)]",
 		"['Effective cap', resourceLogsScopeLimitText(scope.effectiveLimit)]",
 		"['Returned entries', resourceLogsCountText(scope.returnedEntryCount)]",
+		"['Newest entry', textOrDash(scope.newestEntryTimestamp)]",
+		"['Oldest entry', textOrDash(scope.oldestEntryTimestamp)]",
 		"['Scope status', resourceLogsTruncationStatusText(scope.truncationStatus)]",
 		"const resourceInspectionResultScopeFields = (scope) => {",
 		"['Sample type', resourceInspectionSampleTypeText(scope.sampleType)]",
@@ -3550,14 +3552,14 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 
 func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 	statusVocabulary := []string{"truncated", "not_truncated", "unknown", "not_applicable"}
-	fieldFragments := []string{"requestedLimit", "effectiveLimit", "returnedEntryCount", "truncationStatus"}
+	fieldFragments := []string{"requestedLimit", "effectiveLimit", "returnedEntryCount", "newestEntryTimestamp", "oldestEntryTimestamp", "truncationStatus"}
 
 	docs := map[string][]string{
 		"../../README.md": {
 			"bounded `resource-logs?limit=1` provider cap plus router fallback truncation/resultScope metadata",
 			"Operators can add an optional positive `limit` query parameter",
 			"Successful responses include additive `resultScope` metadata",
-			"Tenet does not issue extra provider calls solely to prove exact totals beyond the bounded read",
+			"Tenet does not issue extra provider calls solely to prove exact totals or provider-wide time ranges beyond the bounded read",
 			"Tenet threads that cap into providers that can limit natively",
 			"router-level truncation to `entries[]` as a safety fallback",
 			"Local and compose smoke prove the provider-cap/router-fallback contract shape without requiring live CloudWatch rows",
@@ -3593,7 +3595,7 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"assert that `available=true` / `entries=[]` payloads carry `emptyReason` (`no_recent_events` or `no_formatted_entries`)",
 			"populated successful payloads omit `emptyReason`, and unavailable payloads keep using explicit `unavailableReason`",
 			"not a pagination cursor or full log-total guarantee",
-			"Tenet does not issue extra AWS calls just to prove total rows beyond the bounded read",
+			"Tenet does not issue extra AWS calls just to prove total rows or provider-wide time ranges beyond the bounded read",
 			"Operator troubleshooting examples",
 			"Bounded successful read: `available=true`",
 			"Supported resource, AWS lookup unavailable: `available=false`, `unavailableReason=aws_unavailable`",

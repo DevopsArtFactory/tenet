@@ -735,6 +735,18 @@ def assert_recent_log_entry_ids(label, payload):
         assert entry_id not in seen, {label: payload}
         seen.add(entry_id)
 
+
+def assert_recent_log_result_window(label, payload):
+    scope = payload.get('resultScope') or {}
+    entries = payload.get('entries') or []
+    timestamps = [str(entry.get('timestamp')).strip() for entry in entries if str(entry.get('timestamp') or '').strip()]
+    if timestamps:
+        assert scope.get('newestEntryTimestamp') == max(timestamps), {label: payload}
+        assert scope.get('oldestEntryTimestamp') == min(timestamps), {label: payload}
+    else:
+        assert 'newestEntryTimestamp' not in scope, {label: payload}
+        assert 'oldestEntryTimestamp' not in scope, {label: payload}
+
 assert summary['accountCount'] == 2, summary
 assert summary['environmentCount'] == 2, summary
 assert summary['deploymentCount'] == 3, summary
@@ -1237,6 +1249,7 @@ for label, payload in (
 ):
     assert_recent_log_empty_reason_contract(label, payload)
     assert_recent_log_entry_ids(label, payload)
+    assert_recent_log_result_window(label, payload)
 
 assert ecs_task_resource_inspection['deploymentName'] == 'worker-prod', ecs_task_resource_inspection
 assert ecs_task_resource_inspection['resourceType'] == 'ecsTask', ecs_task_resource_inspection
