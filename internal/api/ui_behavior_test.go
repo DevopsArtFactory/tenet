@@ -2541,6 +2541,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountBreadcrumb || accountBreadcrumb.rel) throw new Error('expected application route account breadcrumb link');
   if (!breadcrumbChips.find((node) => node.textContent === 'payments-api-staging')) throw new Error('expected application route current breadcrumb chip');
   if (!summaryText.includes('payments-api-staging')) throw new Error('expected application route summary title');
+  if (!summaryText.includes('Application detail read refreshed ·')) throw new Error('expected application route read freshness cue, got ' + summaryText);
+  if (summaryText.includes('Application detail read not refreshed yet')) throw new Error('expected loaded application route to replace not-refreshed fallback');
   if (!summaryText.includes('Application detail page: show only application-linked resources before the final resource-detail page.')) throw new Error('expected application route drill-down guidance');
   if (!accountsText.includes('Application resources')) throw new Error('expected application route resources body');
   if (!accountsText.includes('Quick navigation')) throw new Error('expected application route quick navigation');
