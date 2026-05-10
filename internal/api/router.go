@@ -196,15 +196,60 @@ func applyDeploymentEventsLimit(result catalog.DeploymentOverviewEvents, limit i
 		}
 	}
 
+	newestEventTimestamp, oldestEventTimestamp := deploymentEventWindow(result.Events)
 	result.ResultScope = &catalog.DeploymentEventsResultScope{
-		RequestedLimit:     requestedLimit,
-		EffectiveLimit:     effectiveLimit,
-		ReturnedEventCount: len(result.Events),
-		TotalEventCount:    totalEventCount,
-		Limited:            limited,
-		TruncationStatus:   truncationStatus,
+		RequestedLimit:       requestedLimit,
+		EffectiveLimit:       effectiveLimit,
+		ReturnedEventCount:   len(result.Events),
+		TotalEventCount:      totalEventCount,
+		Limited:              limited,
+		NewestEventTimestamp: newestEventTimestamp,
+		OldestEventTimestamp: oldestEventTimestamp,
+		TruncationStatus:     truncationStatus,
 	}
 	return result
+}
+
+func deploymentEventWindow(events []domain.StatusHistoryEntry) (string, string) {
+	var newest string
+	var newestTime time.Time
+	var oldest string
+	var oldestTime time.Time
+	var sawParsed bool
+	var fallbackTimestamps []string
+
+	for _, event := range events {
+		timestamp := strings.TrimSpace(event.Timestamp)
+		if timestamp == "" {
+			continue
+		}
+		parsed, err := time.Parse(time.RFC3339Nano, timestamp)
+		if err != nil {
+			fallbackTimestamps = append(fallbackTimestamps, timestamp)
+			continue
+		}
+		if !sawParsed || parsed.After(newestTime) {
+			newestTime = parsed
+			newest = timestamp
+		}
+		if !sawParsed || parsed.Before(oldestTime) {
+			oldestTime = parsed
+			oldest = timestamp
+		}
+		sawParsed = true
+	}
+	if sawParsed {
+		return newest, oldest
+	}
+	for _, timestamp := range fallbackTimestamps {
+		if newest == "" || timestamp > newest {
+			newest = timestamp
+		}
+		if oldest == "" || timestamp < oldest {
+			oldest = timestamp
+		}
+	}
+	return newest, oldest
 }
 
 func summarizeDeploymentEventsManagedDrift(events []domain.StatusHistoryEntry) catalog.ManagedDriftSummary {

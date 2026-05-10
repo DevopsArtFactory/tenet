@@ -806,6 +806,8 @@ assert fixture_events_default_scope.get('returnedEventCount') == len(deployment_
 assert fixture_events_default_scope.get('totalEventCount') == len(deployment_events_fixture['events']), deployment_events_fixture
 assert fixture_events_default_scope.get('limited') is False, deployment_events_fixture
 assert fixture_events_default_scope.get('truncationStatus') == 'not_truncated', deployment_events_fixture
+assert 'newestEventTimestamp' not in fixture_events_default_scope, deployment_events_fixture
+assert 'oldestEventTimestamp' not in fixture_events_default_scope, deployment_events_fixture
 assert deployment_events_fixture_limited['deploymentName'] == 'payments-api-prod', deployment_events_fixture_limited
 assert deployment_events_fixture_limited['events'] == [], deployment_events_fixture_limited
 fixture_events_scope = deployment_events_fixture_limited.get('resultScope') or {}
@@ -815,6 +817,8 @@ assert fixture_events_scope.get('returnedEventCount') == 0, deployment_events_fi
 assert fixture_events_scope.get('totalEventCount') == 0, deployment_events_fixture_limited
 assert fixture_events_scope.get('limited') is False, deployment_events_fixture_limited
 assert fixture_events_scope.get('truncationStatus') == 'not_truncated', deployment_events_fixture_limited
+assert 'newestEventTimestamp' not in fixture_events_scope, deployment_events_fixture_limited
+assert 'oldestEventTimestamp' not in fixture_events_scope, deployment_events_fixture_limited
 assert os.environ['INVALID_DEPLOYMENT_EVENTS_LIMIT_STATUS'] == '400', os.environ['INVALID_DEPLOYMENT_EVENTS_LIMIT_STATUS']
 assert invalid_deployment_events_limit.strip() == 'invalid limit query', invalid_deployment_events_limit
 assert plan_preview['deploymentName'] == 'payments-api-prod', plan_preview
@@ -3386,6 +3390,13 @@ assert allowed_events_scope.get('totalEventCount') >= allowed_events_scope.get('
 assert isinstance(allowed_events_scope.get('limited'), bool), allowed_events_read
 assert allowed_events_scope.get('limited') == (allowed_events_scope.get('totalEventCount') > allowed_events_scope.get('returnedEventCount')), allowed_events_read
 assert allowed_events_scope.get('truncationStatus') in {'truncated', 'not_truncated'}, allowed_events_read
+event_timestamps = [event.get('timestamp') for event in allowed_events_read['events'] if event.get('timestamp')]
+if event_timestamps:
+    assert allowed_events_scope.get('newestEventTimestamp') == max(event_timestamps), allowed_events_read
+    assert allowed_events_scope.get('oldestEventTimestamp') == min(event_timestamps), allowed_events_read
+else:
+    assert 'newestEventTimestamp' not in allowed_events_scope, allowed_events_read
+    assert 'oldestEventTimestamp' not in allowed_events_scope, allowed_events_read
 assert allowed_resource_logs['deploymentName'] == 'worker-prod', allowed_resource_logs
 assert allowed_resource_logs['resourceType'] == 'ecsService', allowed_resource_logs
 assert allowed_resource_logs['resourceName'] == 'worker-prod-service', allowed_resource_logs

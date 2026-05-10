@@ -1755,7 +1755,7 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		"`200 OK` authorized reads",
 		"`deploymentName` plus `events` list payload contract",
 		"additive `managedDriftSummary` severity counts",
-		"router-authored `resultScope` metadata (`requestedLimit`, `effectiveLimit`, `returnedEventCount`, `totalEventCount`, `limited`, `truncationStatus`)",
+		"router-authored `resultScope` metadata (`requestedLimit`, `effectiveLimit`, `returnedEventCount`, `totalEventCount`, `limited`, optional `newestEventTimestamp` / `oldestEventTimestamp` from the returned window, and `truncationStatus`)",
 		"ticker/default controller events do not include `controllerRefresh`",
 	} {
 		if !strings.Contains(readme, fragment) {
@@ -1769,7 +1769,7 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		"`401` / `403` / `200 OK` contract",
 		"`deploymentName` plus `events` list shape",
 		"additive `managedDriftSummary` object carrying explicit zero/non-zero severity counts",
-		"router-authored `resultScope` object (`requestedLimit`, `effectiveLimit`, `returnedEventCount`, `totalEventCount`, `limited`, `truncationStatus`) for both default and bounded `?limit=` reads",
+		"router-authored `resultScope` object (`requestedLimit`, `effectiveLimit`, optional `newestEventTimestamp` / `oldestEventTimestamp` from the returned window, `returnedEventCount`, `totalEventCount`, `limited`, `truncationStatus`) for both default and bounded `?limit=` reads",
 		"ticker/default controller-event path omit `controllerRefresh`",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
