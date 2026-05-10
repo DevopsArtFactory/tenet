@@ -1241,6 +1241,7 @@ for label, payload in (
 assert ecs_task_resource_inspection['deploymentName'] == 'worker-prod', ecs_task_resource_inspection
 assert ecs_task_resource_inspection['resourceType'] == 'ecsTask', ecs_task_resource_inspection
 assert ecs_task_resource_inspection['resourceName'] == 'arn:aws:ecs:ap-northeast-2:123456789012:task/worker/abc123', ecs_task_resource_inspection
+assert ecs_task_resource_inspection.get('resourceDescription') == 'ECS task selected from live service inspection', ecs_task_resource_inspection
 assert ecs_task_resource_inspection.get('clusterArn') == worker_cluster_arn, ecs_task_resource_inspection
 assert isinstance(ecs_task_resource_inspection['available'], bool), ecs_task_resource_inspection
 assert isinstance(ecs_task_resource_inspection.get('lookupContext'), dict), ecs_task_resource_inspection

@@ -94,6 +94,7 @@ type Result struct {
 	DeploymentName          string                             `json:"deploymentName"`
 	ResourceType            string                             `json:"resourceType"`
 	ResourceName            string                             `json:"resourceName"`
+	ResourceDescription     string                             `json:"resourceDescription,omitempty"`
 	InstanceID              string                             `json:"instanceId,omitempty"`
 	ClusterARN              string                             `json:"clusterArn,omitempty"`
 	BackingResourceType     string                             `json:"backingResourceType,omitempty"`
@@ -816,6 +817,7 @@ func unavailableResult(req Request, reason string) Result {
 		DeploymentName:      req.DeploymentName,
 		ResourceType:        req.ResourceType,
 		ResourceName:        req.ResourceName,
+		ResourceDescription: strings.TrimSpace(req.ResourceDescription),
 		InstanceID:          strings.TrimSpace(req.InstanceID),
 		ClusterARN:          responseClusterARN(req),
 		BackingResourceType: strings.TrimSpace(req.BackingResourceType),
@@ -828,15 +830,16 @@ func unavailableResult(req Request, reason string) Result {
 
 func availableECSResult(req Request, detail ECSServiceInspection) Result {
 	return Result{
-		DeploymentName:    req.DeploymentName,
-		ResourceType:      req.ResourceType,
-		ResourceName:      req.ResourceName,
-		ClusterARN:        responseClusterARN(req),
-		LookupContext:     lookupContext(req),
-		Available:         true,
-		Source:            SourceECSService,
-		ECSService:        &detail,
-		UnavailableReason: "",
+		DeploymentName:      req.DeploymentName,
+		ResourceType:        req.ResourceType,
+		ResourceName:        req.ResourceName,
+		ResourceDescription: strings.TrimSpace(req.ResourceDescription),
+		ClusterARN:          responseClusterARN(req),
+		LookupContext:       lookupContext(req),
+		Available:           true,
+		Source:              SourceECSService,
+		ECSService:          &detail,
+		UnavailableReason:   "",
 	}
 }
 
@@ -849,15 +852,16 @@ func responseClusterARN(req Request) string {
 
 func availableECSTaskResult(req Request, detail ECSTaskInspection) Result {
 	return Result{
-		DeploymentName:    req.DeploymentName,
-		ResourceType:      req.ResourceType,
-		ResourceName:      req.ResourceName,
-		ClusterARN:        responseClusterARN(req),
-		LookupContext:     lookupContext(req),
-		Available:         true,
-		Source:            SourceECSService,
-		ECSTask:           &detail,
-		UnavailableReason: "",
+		DeploymentName:      req.DeploymentName,
+		ResourceType:        req.ResourceType,
+		ResourceName:        req.ResourceName,
+		ResourceDescription: strings.TrimSpace(req.ResourceDescription),
+		ClusterARN:          responseClusterARN(req),
+		LookupContext:       lookupContext(req),
+		Available:           true,
+		Source:              SourceECSService,
+		ECSTask:             &detail,
+		UnavailableReason:   "",
 	}
 }
 
@@ -868,15 +872,16 @@ func availableAutoScalingResult(req Request, detail AutoScalingInspection) Resul
 	}
 	detail = applyAutoScalingInstanceScope(detail, instanceLimit)
 	return Result{
-		DeploymentName:    req.DeploymentName,
-		ResourceType:      req.ResourceType,
-		ResourceName:      req.ResourceName,
-		InstanceID:        strings.TrimSpace(req.InstanceID),
-		LookupContext:     lookupContext(req),
-		Available:         true,
-		Source:            SourceAutoScalingGroup,
-		AutoScalingGroup:  &detail,
-		UnavailableReason: "",
+		DeploymentName:      req.DeploymentName,
+		ResourceType:        req.ResourceType,
+		ResourceName:        req.ResourceName,
+		ResourceDescription: strings.TrimSpace(req.ResourceDescription),
+		InstanceID:          strings.TrimSpace(req.InstanceID),
+		LookupContext:       lookupContext(req),
+		Available:           true,
+		Source:              SourceAutoScalingGroup,
+		AutoScalingGroup:    &detail,
+		UnavailableReason:   "",
 	}
 }
 
@@ -996,6 +1001,7 @@ func availableUserDataBootstrapSourceResult(req Request, detail AutoScalingInspe
 		DeploymentName:      req.DeploymentName,
 		ResourceType:        req.ResourceType,
 		ResourceName:        req.ResourceName,
+		ResourceDescription: strings.TrimSpace(req.ResourceDescription),
 		InstanceID:          strings.TrimSpace(req.InstanceID),
 		BackingResourceType: strings.TrimSpace(req.BackingResourceType),
 		BackingResourceName: strings.TrimSpace(req.BackingResourceName),
@@ -1023,6 +1029,7 @@ func availableTrafficRoutingResult(req Request, detail TrafficRoutingInspection)
 		DeploymentName:         req.DeploymentName,
 		ResourceType:           req.ResourceType,
 		ResourceName:           req.ResourceName,
+		ResourceDescription:    strings.TrimSpace(req.ResourceDescription),
 		LookupContext:          lookupContext(req),
 		Available:              true,
 		Source:                 source,

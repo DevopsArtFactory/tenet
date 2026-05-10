@@ -7274,10 +7274,11 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		)
 
 		expected := resourceinspection.Result{
-			DeploymentName: deploymentName,
-			ResourceType:   resourceType,
-			ResourceName:   resourceName,
-			ClusterARN:     "arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker",
+			DeploymentName:      deploymentName,
+			ResourceType:        resourceType,
+			ResourceName:        resourceName,
+			ResourceDescription: "ECS service Tenet updates with native rolling deployment",
+			ClusterARN:          "arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker",
 			LookupContext: resourceinspection.LookupContext{
 				Region:                 "ap-northeast-2",
 				ControlAccountID:       "123456789012",
@@ -7381,6 +7382,9 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 			}
 			if raw["clusterArn"] != "arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker" {
 				t.Fatalf("expected unavailable raw payload to echo selected clusterArn, got %#v", raw)
+			}
+			if raw["resourceDescription"] != "ECS service Tenet updates with native rolling deployment" {
+				t.Fatalf("expected unavailable raw payload to echo selected resourceDescription, got %#v", raw)
 			}
 		})
 	})

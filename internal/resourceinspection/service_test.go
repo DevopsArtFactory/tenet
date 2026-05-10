@@ -594,12 +594,13 @@ func TestServiceInspect(t *testing.T) {
 				t.Fatalf("Inspect returned error for %s/%s: %v", tc.resourceType, tc.resourceName, err)
 			}
 			want := Result{
-				DeploymentName: "payments-api-prod",
-				ResourceType:   tc.resourceType,
-				ResourceName:   tc.resourceName,
-				LookupContext:  expectedLookupContext("ap-northeast-2", "111111111111", "222222222222", ""),
-				Available:      true,
-				Source:         SourceRolloutSummary,
+				DeploymentName:      "payments-api-prod",
+				ResourceType:        tc.resourceType,
+				ResourceName:        tc.resourceName,
+				ResourceDescription: tc.summary,
+				LookupContext:       expectedLookupContext("ap-northeast-2", "111111111111", "222222222222", ""),
+				Available:           true,
+				Source:              SourceRolloutSummary,
 				TrafficRoutingResource: &TrafficRoutingInspection{
 					Kind:           tc.resourceType,
 					DisplayName:    tc.displayName,
@@ -1172,12 +1173,13 @@ func TestServiceInspect(t *testing.T) {
 			t.Fatalf("Inspect returned error: %v", err)
 		}
 		want := Result{
-			DeploymentName: "payments-api-prod",
-			ResourceType:   "codeDeployDeploymentGroup",
-			ResourceName:   "payments-api-prod-codedeploy-group",
-			LookupContext:  expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", "arn:aws:iam::123456789012:role/TenetObserverRole"),
-			Available:      true,
-			Source:         SourceRolloutSummary,
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "codeDeployDeploymentGroup",
+			ResourceName:        "payments-api-prod-codedeploy-group",
+			ResourceDescription: "CodeDeploy deployment group Tenet targets for ECS rollout (style: linear)",
+			LookupContext:       expectedLookupContext("ap-northeast-2", "123456789012", "123456789012", "arn:aws:iam::123456789012:role/TenetObserverRole"),
+			Available:           true,
+			Source:              SourceRolloutSummary,
 			TrafficRoutingResource: &TrafficRoutingInspection{
 				Kind:           "codeDeployDeploymentGroup",
 				DisplayName:    "CodeDeploy deployment group",
