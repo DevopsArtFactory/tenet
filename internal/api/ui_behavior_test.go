@@ -6010,7 +6010,7 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
 
   const populatedRun = await renderWithFetch((url) => {
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, resultScope: { requestedLimit: 5, effectiveLimit: 5, returnedEntryCount: 5, truncationStatus: 'unknown' }, entries: [{ entryId: 'rlog_backend_opaque_1', timestamp: '2026-04-16T07:11:00Z', stream: 'codedeploy/bluegreen/1', message: '<img src=x onerror=1> rollback check passed' }] }) });
+    if (url === logsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'cloudwatch', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, resultScope: { requestedLimit: 5, effectiveLimit: 5, returnedEntryCount: 5, truncationStatus: 'unknown' }, entries: [{ entryId: 'rlog_backend_opaque_1', timestamp: '2026-04-16T07:11:00Z', stream: 'codedeploy/bluegreen/1', logGroup: '/aws/ecs/payments-api-staging', message: '<img src=x onerror=1> rollback check passed' }] }) });
     throw new Error('unexpected populated fetch url: ' + url);
   });
   await settle();
@@ -6029,6 +6029,7 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   if (populatedText.includes('Backing resource type')) throw new Error('expected direct recent-log sources to avoid backing resource metadata labels');
   if (populatedText.includes('Backing resource name')) throw new Error('expected direct recent-log sources to avoid backing resource metadata values');
   if (!populatedText.includes('Log stream · codedeploy/bluegreen/1')) throw new Error('expected populated recent logs section to show stream');
+  if (!populatedText.includes('Log group · /aws/ecs/payments-api-staging')) throw new Error('expected populated recent logs section to show optional CloudWatch log group');
   if (!populatedText.includes('Log timestamp · 2026-04-16T07:11:00Z')) throw new Error('expected populated recent logs section to show timestamp');
   const shareLinks = collectNodes(populatedRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Share log entry');
   if (shareLinks.length !== 1) throw new Error('expected one share link for the rendered log entry, got ' + shareLinks.length);
@@ -6051,6 +6052,8 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
     throw new Error('unexpected legacy fetch url: ' + url);
   });
   await settle();
+  const legacyText = collectText(legacyRun.document.getElementById('accounts')).join(' | ');
+  if (legacyText.includes('Log group ·')) throw new Error('expected legacy recent-log rows without logGroup to omit the log-group metadata chip');
   const legacyShareLinks = collectNodes(legacyRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Share log entry');
   if (legacyShareLinks.length !== 1) throw new Error('expected one legacy share link, got ' + legacyShareLinks.length);
   if (legacyShareLinks[0].href !== expectedResourceRoute + '#' + expectedLegacyLogAnchor) throw new Error('expected legacy recent-log payloads without entryId to keep deterministic fallback anchor, got ' + legacyShareLinks[0].href);

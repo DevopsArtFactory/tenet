@@ -4525,6 +4525,9 @@
           if (entry.stream) {
             logMeta.append(createElement('span', 'detail-condition-meta', `Log stream · ${entry.stream}`));
           }
+          if (entry.logGroup) {
+            logMeta.append(createElement('span', 'detail-condition-meta', `Log group · ${entry.logGroup}`));
+          }
           if (entry.containerName) {
             logMeta.append(createElement('span', 'detail-condition-meta', `Log container · ${entry.containerName}`));
           }
