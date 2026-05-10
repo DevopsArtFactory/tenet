@@ -4289,7 +4289,7 @@
         const fields = [];
         const requestId = String(result?.tenetRequestId || result?.requestId || '').trim();
         if (requestId) fields.push(['Tenet request ID', requestId]);
-        const fetchedAtText = result?.available === false ? '' : resourcePanelFetchedAtText(result);
+        const fetchedAtText = resourcePanelFetchedAtText(result);
         if (fetchedAtText) fields.push(['Last refreshed', fetchedAtText]);
         return fields;
       };

@@ -4805,7 +4805,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('GET /v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging+Deployment+Group')) throw new Error('expected selected-resource callout to expose live-inspection route intent: ' + accountsText);
   if (!accountsText.includes('GET /v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging+Deployment+Group')) throw new Error('expected selected-resource callout to expose recent-log route intent: ' + accountsText);
   if (!accountsText.includes('Jump to live inspection') || !accountsText.includes('Jump to recent logs')) throw new Error('expected selected-resource callout to expose direct evidence handoffs: ' + accountsText);
-  if (accountsText.includes('Last refreshed |')) throw new Error('expected recent-log unavailable card not to claim fresh evidence: ' + accountsText);
+  if (!accountsText.includes('Last refreshed |')) throw new Error('expected recent-log unavailable card to show when unavailable evidence was refreshed: ' + accountsText);
   if (!toolbarText.includes('Back to application')) throw new Error('expected resource page back link');
   const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
   const pageLinks = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
