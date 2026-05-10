@@ -1882,6 +1882,33 @@ func TestAPIOptionsOverviewDeploymentResourceInspectionWiresObserverRoleAndPlace
 	}
 }
 
+func TestAPIOptionsOverviewDeploymentResourceInspectionPreservesProviderDescription(t *testing.T) {
+	repoRoot := writeRepositoryFixture(t)
+	store := &stubStatusStore{
+		getSnapshot: statusstore.Snapshot{
+			DeploymentName: "api-prod",
+			Status: domain.DeploymentStatus{
+				Rollout: &domain.RolloutSummary{Execution: []domain.RolloutExecutionDetail{{Resource: "ecsService", Name: "api-prod-live-service", Description: "live ECS service"}}},
+			},
+		},
+	}
+	provider := &fakeResourceInspectionProvider{result: resourceinspection.Result{Available: true, ResourceDescription: "provider-authored context"}}
+	restore := stubResourceInspectionProviderFactory(provider)
+	defer restore()
+
+	options := newAPIOptions(buildinfo.Info{Version: "dev", Commit: "abc123"}, repoRoot, store)
+	result, err := options.OverviewDeploymentResourceInspection(context.Background(), "api-prod", "ecsService", "api-prod-live-service", 0)
+	if err != nil {
+		t.Fatalf("OverviewDeploymentResourceInspection returned error: %v", err)
+	}
+	if result.ResourceDescription != "provider-authored context" {
+		t.Fatalf("expected provider-authored resourceDescription to be preserved, got %+v", result)
+	}
+	if provider.lastRequest.ResourceDescription != "live ECS service" {
+		t.Fatalf("expected resolved rollout resource description to reach provider request, got %+v", provider.lastRequest)
+	}
+}
+
 func TestAPIOptionsOverviewDeploymentResourceInspectionPassesSelectedInstanceID(t *testing.T) {
 	repoRoot := writeCanaryEC2RepositoryFixture(t)
 	provider := &fakeResourceInspectionProvider{result: resourceinspection.Result{Available: true}}
