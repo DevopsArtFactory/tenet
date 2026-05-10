@@ -4863,6 +4863,12 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!summaryText.includes('payments-api-staging Deployment Group')) throw new Error('expected resource page resource title');
   if (!summaryText.includes('codeDeployDeploymentGroup')) throw new Error('expected resource page resource type');
   if (!summaryText.includes('payments-api-staging')) throw new Error('expected resource page deployment context');
+  if (!summaryText.includes('Resource detail read refreshed ·')) throw new Error('expected resource page summary to show detail read freshness: ' + summaryText);
+  const freshnessMeta = collectNodes(document.getElementById('summary'), (node) => node.className === 'account-topology resource-detail-freshness')[0];
+  if (!freshnessMeta) throw new Error('expected resource detail freshness meta element');
+  if (freshnessMeta.getAttribute('role') !== 'status') throw new Error('expected freshness meta to be a status region');
+  if (freshnessMeta.getAttribute('aria-live') !== 'polite') throw new Error('expected freshness meta to announce politely');
+  if (freshnessMeta.getAttribute('aria-atomic') !== 'true') throw new Error('expected freshness meta to announce atomically');
   if (!accountsText.includes('Desired artifact')) throw new Error('expected resource page desired artifact context');
   if (!accountsText.includes('ghcr.io/example/payments:v2')) throw new Error('expected resource page desired artifact value');
   if (!accountsText.includes('Deployed artifact')) throw new Error('expected resource page deployed artifact context');
