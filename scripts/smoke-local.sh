@@ -1876,6 +1876,9 @@ assert "const createAccountQuickNav = (account, sectionLinks = []) => {" in acco
 assert "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')" in account_ui, account_ui
 assert "createQuickNavChip('Account detail', 'Current destination: Account detail')" in account_ui, account_ui
 assert 'Refresh account detail' in account_ui, account_ui
+assert 'Account detail read refreshed ·' in account_ui, account_ui
+assert 'Account detail read not refreshed yet' in account_ui, account_ui
+assert 'account-detail-freshness' in account_ui, account_ui
 assert 'Refreshing account detail from GET /v1/overview/accounts/{awsAccountId}…' in account_ui, account_ui
 assert 'Failed to refresh account detail:' in account_ui, account_ui
 assert 'No deployments are currently associated with this account.' in account_ui, account_ui

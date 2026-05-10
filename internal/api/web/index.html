@@ -2867,6 +2867,17 @@
         if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return detail;
         return { ...detail, tenetFetchedAt: new Date() };
       };
+      const accountDetailFetchedAtText = (account) => {
+        const fetchedAt = account?.tenetFetchedAt;
+        if (!fetchedAt) return '';
+        const timestamp = fetchedAt instanceof Date ? fetchedAt : new Date(fetchedAt);
+        if (Number.isNaN(timestamp.getTime())) return '';
+        return timestamp.toLocaleString();
+      };
+      const withAccountDetailFetchedAt = (account) => {
+        if (!account || typeof account !== 'object' || Array.isArray(account)) return account;
+        return { ...account, tenetFetchedAt: new Date() };
+      };
       const resourceDetailFetchedAtText = (detail) => {
         const fetchedAt = detail?.tenetFetchedAt;
         if (!fetchedAt) return '';
@@ -2893,6 +2904,16 @@
         const meta = createElement('div', 'account-topology resource-detail-freshness', fetchedAt
           ? `Resource detail read refreshed · ${fetchedAt}`
           : 'Resource detail read not refreshed yet');
+        meta.setAttribute('role', 'status');
+        meta.setAttribute('aria-live', 'polite');
+        meta.setAttribute('aria-atomic', 'true');
+        return meta;
+      };
+      const createAccountDetailFreshnessMeta = (accountState = null, account = null) => {
+        const fetchedAt = accountDetailFetchedAtText(accountState?.account || account);
+        const meta = createElement('div', 'account-topology account-detail-freshness', fetchedAt
+          ? `Account detail read refreshed · ${fetchedAt}`
+          : 'Account detail read not refreshed yet');
         meta.setAttribute('role', 'status');
         meta.setAttribute('aria-live', 'polite');
         meta.setAttribute('aria-atomic', 'true');
@@ -5677,7 +5698,7 @@
       const fetchAccountDetail = (accountID) => fetchEmbeddedReadRouteJSON(`/v1/overview/accounts/${encodeURIComponent(accountID)}`, {
         unavailable: 'account detail unavailable',
         failure: 'account detail request failed',
-      });
+      }).then(withAccountDetailFetchedAt);
       const accountDetailReadRoute = (accountID) => `GET /v1/overview/accounts/${accountID || '{awsAccountId}'}`;
       const fetchApplicationDetail = (deploymentName) => fetchEmbeddedReadRouteJSON(`/v1/overview/applications/${encodeURIComponent(deploymentName)}`, {
         unavailable: 'application detail unavailable',
@@ -8271,6 +8292,7 @@
           createElement('h2', 'account-name', account.name || currentPageState.accountId || 'Account'),
           createElement('div', 'account-meta', `AWS account ${metricValue(account.awsAccountId)} · Regions: ${(account.allowedRegions || []).join(', ') || '—'}`),
           createElement('div', 'account-topology', `${account.projectCount ?? deriveProjectEnvironmentGroups(account).projectCount} projects · ${account.environmentCount ?? deriveProjectEnvironmentGroups(account).environmentCount} environments`),
+          createAccountDetailFreshnessMeta(accountState, account),
         );
         summary.replaceChildren(detailSummary);
         const accountID = currentPageState.accountId || account.awsAccountId || '';
