@@ -4415,6 +4415,26 @@
         });
         return metadata;
       };
+      const resourcePanelSelectedResourceFields = (deploymentName, resource) => {
+        const fields = [
+          ['Selected deployment', textOrDash(deploymentName)],
+          ['Selected resource type', textOrDash(resource?.type)],
+          ['Selected resource name', textOrDash(resource?.name)],
+        ];
+        const scopeText = selectedResourceScopeText(resource);
+        if (scopeText) fields.push(['Selected resource scope', scopeText]);
+        if (resource?.clusterArn) fields.push(['Selected cluster', resource.clusterArn]);
+        if (resource?.containerName) fields.push(['Selected container', resource.containerName]);
+        if (resource?.instanceId) fields.push(['Selected instance', resource.instanceId]);
+        return fields;
+      };
+      const createResourcePanelRequestContextGrid = (deploymentName, resource, routeFields = []) => {
+        const metadata = createElement('div', 'detail-grid resource-panel-request-context');
+        [...resourcePanelSelectedResourceFields(deploymentName, resource), ...routeFields].forEach(([label, value]) => {
+          metadata.append(createMetric(label, value));
+        });
+        return metadata;
+      };
       const selectedResourceLogsLimit = (deploymentName, resource) => normalizeResourceLogsLimit(resourceLogLimitByResourceKey.get(resourceLogCacheKey(deploymentName, resource)) || 0);
       const createResourceLogsLimitControl = (section, deploymentName, resource, isLoading = false, detail = null) => {
         const selectedLimit = selectedResourceLogsLimit(deploymentName, resource);
@@ -4467,6 +4487,11 @@
         if (!deploymentName || !resource?.type || !resource?.name) return [];
         return [['Recent logs request', resourceLogsReadRoute(deploymentName, resource, limit)]];
       };
+      const createResourceLogsRequestContext = (deploymentName, resource, limit = 0) => createResourcePanelRequestContextGrid(
+        deploymentName,
+        resource,
+        resourceLogsRequestRouteFields(deploymentName, resource, limit),
+      );
       const lookupContextFields = (lookupContext) => resourceLogsLookupContextFields(lookupContext);
       const createLookupContextGrid = (lookupContext, extraFields = []) => {
         const metadata = createElement('div', 'detail-grid');
@@ -4583,9 +4608,10 @@
         const logsKey = resourceLogRequestCacheKey(deploymentName, resource, selectedLimit);
         const cached = resourceLogStateByKey.get(logsKey);
         const loadingActions = createResourceLogsActions(section, deploymentName, resource, true, detail);
+        const pendingContext = () => [createResourceLogsLimitNote(selectedLimit), createResourceLogsRequestContext(deploymentName, resource, selectedLimit)];
 
         if (!deploymentName || !resource?.type || !resource?.name) {
-          renderResourceLogsState(section, 'Recent logs are unavailable for this resource.', '', [createResourceLogsLimitNote(selectedLimit)], [], createResourceLogsActions(section, deploymentName, resource, false, detail));
+          renderResourceLogsState(section, 'Recent logs are unavailable for this resource.', '', pendingContext(), [], createResourceLogsActions(section, deploymentName, resource, false, detail));
           return Promise.resolve(null);
         }
         if (!force && cached?.status === 'ready') {
@@ -4594,11 +4620,11 @@
         }
         if (cached?.status === 'loading') {
           resourceLogStateByKey.set(logsKey, { ...cached, sections: [...(cached.sections || []), { section, detail, limit: selectedLimit }] });
-          renderResourceLogsState(section, 'Loading recent logs…', '', [createResourceLogsLimitNote(selectedLimit)], [], loadingActions);
+          renderResourceLogsState(section, 'Loading recent logs…', '', pendingContext(), [], loadingActions);
           return cached.promise;
         }
 
-        renderResourceLogsState(section, 'Loading recent logs…', '', [createResourceLogsLimitNote(selectedLimit)], [], loadingActions);
+        renderResourceLogsState(section, 'Loading recent logs…', '', pendingContext(), [], loadingActions);
         const promise = fetchResourceLogs(deploymentName, resource, selectedLimit)
           .then((rawResult) => {
             const result = withResourcePanelFetchedAt(rawResult);
@@ -4626,11 +4652,12 @@
                 return;
               }
               const requestIDMeta = createResourceLogsRequestIDMeta(error);
+              const targetLimit = target?.limit ?? selectedLimit;
               renderResourceLogsState(
                 container,
                 `Failed to load recent logs: ${error.message}`,
                 'error',
-                [],
+                [createResourceLogsLimitNote(targetLimit), createResourceLogsRequestContext(deploymentName, resource, targetLimit)],
                 requestIDMeta ? [requestIDMeta] : [],
                 createResourceLogsActions(container, deploymentName, resource, false, target?.detail || detail),
               );
@@ -4668,6 +4695,15 @@
       const fetchResourceInspection = (deploymentName, resource, limit = 0) => {
         return fetchResourcePanelJSON(buildResourceInspectionRoute(deploymentName, resource, limit), 'resource inspection request failed');
       };
+      const resourceInspectionRequestRouteFields = (deploymentName, resource, limit = 0) => {
+        if (!deploymentName || !resource?.type || !resource?.name) return [];
+        return [['Live inspection request', resourceInspectionReadRoute(deploymentName, resource, limit)]];
+      };
+      const createResourceInspectionRequestContext = (deploymentName, resource, limit = 0) => createResourcePanelRequestContextGrid(
+        deploymentName,
+        resource,
+        resourceInspectionRequestRouteFields(deploymentName, resource, limit),
+      );
       const createResourceInspectionLimitControl = (section, detail, resource, isLoading = false) => {
         const deploymentName = detail?.name || currentPageState.deployment || '';
         if (!supportsBoundedResourceInspection(resource)) return null;
@@ -5520,9 +5556,10 @@
         const inspectionKey = resourceInspectionRequestCacheKey(deploymentName, resource, selectedLimit);
         const cached = resourceInspectionStateByKey.get(inspectionKey);
         const loadingActions = createResourceInspectionActions(section, detail, resource, true);
+        const pendingContext = () => [createResourceInspectionRequestContext(deploymentName, resource, selectedLimit)];
 
         if (!deploymentName || !resource?.type || !resource?.name) {
-          renderResourceInspectionState(section, 'Live inspection is unavailable for this resource.', '', [], [], createResourceInspectionActions(section, detail, resource));
+          renderResourceInspectionState(section, 'Live inspection is unavailable for this resource.', '', pendingContext(), [], createResourceInspectionActions(section, detail, resource));
           return Promise.resolve(null);
         }
         if (!force && cached?.status === 'ready') {
@@ -5531,11 +5568,11 @@
         }
         if (cached?.status === 'loading') {
           resourceInspectionStateByKey.set(inspectionKey, { ...cached, sections: [...(cached.sections || []), { section, detail, limit: selectedLimit }] });
-          renderResourceInspectionState(section, 'Loading live inspection…', '', [], [], loadingActions);
+          renderResourceInspectionState(section, 'Loading live inspection…', '', pendingContext(), [], loadingActions);
           return cached.promise;
         }
 
-        renderResourceInspectionState(section, 'Loading live inspection…', '', [], [], loadingActions);
+        renderResourceInspectionState(section, 'Loading live inspection…', '', pendingContext(), [], loadingActions);
         const promise = fetchResourceInspection(deploymentName, resource, selectedLimit)
           .then((rawResult) => {
             const result = withResourcePanelFetchedAt(rawResult);
@@ -5569,7 +5606,7 @@
                 container,
                 `Failed to load live inspection: ${error.message}`,
                 'error',
-                [],
+                [createResourceInspectionRequestContext(deploymentName, resource, targetLimit)],
                 requestIDMeta ? [requestIDMeta] : [],
                 createResourceInspectionActions(container, targetDetail, resource),
               );
