@@ -3,6 +3,7 @@ package api
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -167,6 +168,7 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 			t.Fatalf("expected enterprise SSO docs to include %q", fragment)
 		}
 	}
+	providerPlaceholderPattern := regexp.MustCompile(`TENET_AUTH_PROVIDER=\*{3}(?:\s|` + "`" + `|$)`)
 	for _, source := range []struct {
 		name string
 		body string
@@ -176,7 +178,7 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 		{name: "scripts/smoke-local.sh", body: readRepoFile(t, "scripts/smoke-local.sh")},
 		{name: "scripts/smoke-docker.sh", body: readRepoFile(t, "scripts/smoke-docker.sh")},
 	} {
-		if strings.Contains(source.body, "TENET_AUTH_PROVIDER=***") {
+		if providerPlaceholderPattern.MatchString(source.body) {
 			t.Fatalf("expected %s to use concrete non-secret auth provider examples", source.name)
 		}
 	}
