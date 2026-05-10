@@ -2580,6 +2580,26 @@ func TestSmokeScriptsLockBoundedASGResourceInspectionReleaseGuard(t *testing.T) 
 	}
 }
 
+func TestSmokeScriptsLockDeploymentEventsInvalidLimitReleaseGuard(t *testing.T) {
+	for _, script := range []string{"smoke-local.sh", "smoke-docker.sh"} {
+		body, err := os.ReadFile("../../scripts/" + script)
+		if err != nil {
+			t.Fatalf("read %s: %v", script, err)
+		}
+		text := string(body)
+		for _, fragment := range []string{
+			"/v1/overview/deployments/payments-api-prod/events?limit=0",
+			"INVALID_DEPLOYMENT_EVENTS_LIMIT_STATUS",
+			"invalid_deployment_events_limit.strip() == ",
+			"invalid limit query",
+		} {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to lock invalid deployment-events limit smoke fragment %q", script, fragment)
+			}
+		}
+	}
+}
+
 func TestSmokeScriptsAssertGuardedResourceEvidenceRequestIDHeaders(t *testing.T) {
 	for _, script := range []string{"smoke-local.sh", "smoke-docker.sh"} {
 		body, err := os.ReadFile("../../scripts/" + script)
