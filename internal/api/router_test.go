@@ -7423,6 +7423,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 
 	t.Run("passes explicit ASG inspection limit to provider", func(t *testing.T) {
 		var gotLimit int
+		requestedLimit := 4
 		router := NewRouter(Options{
 			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 			OverviewDeployment: func(context.Context, string) (catalog.DeploymentOverviewDetail, error) {
@@ -7430,7 +7431,24 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 			},
 			OverviewDeploymentResourceInspection: func(_ context.Context, name, resourceType, resourceName string, limit int) (resourceinspection.Result, error) {
 				gotLimit = limit
-				return resourceinspection.Result{DeploymentName: name, ResourceType: resourceType, ResourceName: resourceName, Available: true}, nil
+				return resourceinspection.Result{
+					DeploymentName: name,
+					ResourceType:   resourceType,
+					ResourceName:   resourceName,
+					Available:      true,
+					Source:         resourceinspection.SourceAutoScalingGroup,
+					AutoScalingGroup: &resourceinspection.AutoScalingInspection{
+						AutoScalingGroupName: resourceName,
+						InstancesScope: &resourceinspection.AutoScalingInstanceScope{
+							Available:             true,
+							RequestedLimit:        &requestedLimit,
+							EffectiveLimit:        4,
+							ReturnedInstanceCount: 2,
+							TruncationStatus:      "not_truncated",
+							Summary:               "Returned 2 Auto Scaling instance(s) within the effective limit 4.",
+						},
+					},
+				}, nil
 			},
 		})
 
@@ -7441,6 +7459,30 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 		if gotLimit != 4 {
 			t.Fatalf("expected ASG resource inspection limit 4, got %d", gotLimit)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("decode ASG resource inspection payload: %v", err)
+		}
+		autoScalingGroup, ok := raw["autoScalingGroup"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected autoScalingGroup object in raw payload, got %#v", raw["autoScalingGroup"])
+		}
+		instancesScope, ok := autoScalingGroup["instancesScope"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected instancesScope object in raw payload, got %#v", autoScalingGroup["instancesScope"])
+		}
+		for key, want := range map[string]any{
+			"available":             true,
+			"effectiveLimit":        float64(4),
+			"requestedLimit":        float64(4),
+			"returnedInstanceCount": float64(2),
+			"truncationStatus":      "not_truncated",
+			"summary":               "Returned 2 Auto Scaling instance(s) within the effective limit 4.",
+		} {
+			if !reflect.DeepEqual(instancesScope[key], want) {
+				t.Fatalf("expected instancesScope[%q]=%#v, got %#v in %#v", key, want, instancesScope[key], instancesScope)
+			}
 		}
 	})
 
