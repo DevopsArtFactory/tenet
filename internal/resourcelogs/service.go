@@ -152,6 +152,7 @@ type Entry struct {
 	Timestamp     string `json:"timestamp"`
 	Message       string `json:"message"`
 	Stream        string `json:"stream,omitempty"`
+	LogGroup      string `json:"logGroup,omitempty"`
 	ContainerName string `json:"containerName,omitempty"`
 	InstanceID    string `json:"instanceId,omitempty"`
 }
@@ -342,6 +343,7 @@ type CloudWatchEvent struct {
 	Timestamp     time.Time
 	Message       string
 	Stream        string
+	LogGroup      string
 	ContainerName string
 }
 
@@ -545,7 +547,7 @@ func formatCloudWatchEntries(events []CloudWatchEvent, max int, fallbackContaine
 		if containerName == "" {
 			containerName = containerFallback
 		}
-		entries = append(entries, Entry{Timestamp: event.Timestamp.UTC().Format(time.RFC3339), Message: message, Stream: strings.TrimSpace(event.Stream), ContainerName: containerName})
+		entries = append(entries, Entry{Timestamp: event.Timestamp.UTC().Format(time.RFC3339), Message: message, Stream: strings.TrimSpace(event.Stream), LogGroup: strings.TrimSpace(event.LogGroup), ContainerName: containerName})
 		if len(entries) == max {
 			break
 		}
@@ -992,6 +994,7 @@ func fetchTaskLogEvents(ctx context.Context, client cloudWatchLogEventsClient, t
 				Timestamp:     time.UnixMilli(aws.ToInt64(event.Timestamp)).UTC(),
 				Message:       aws.ToString(event.Message),
 				Stream:        streamName,
+				LogGroup:      groupName,
 				ContainerName: aws.ToString(container.Name),
 			})
 		}
@@ -1033,6 +1036,7 @@ func fetchTaskLogEventsForContainer(ctx context.Context, client cloudWatchLogEve
 				Timestamp:     time.UnixMilli(aws.ToInt64(event.Timestamp)).UTC(),
 				Message:       aws.ToString(event.Message),
 				Stream:        streamName,
+				LogGroup:      groupName,
 				ContainerName: name,
 			})
 		}

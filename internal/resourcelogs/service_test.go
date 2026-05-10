@@ -30,8 +30,8 @@ func expectedLookupContext(region, controlAccountID, targetAccountID, observerRo
 
 func TestAssignEntryIDsDerivesStableUniqueRowAnchors(t *testing.T) {
 	entries := []Entry{
-		{Timestamp: "2026-05-09T10:00:00Z", Message: "same message", Stream: "ecs/api/task-a", ContainerName: "api"},
-		{Timestamp: "2026-05-09T10:00:00Z", Message: "same message", Stream: "ecs/api/task-a", ContainerName: "api"},
+		{Timestamp: "2026-05-09T10:00:00Z", Message: "same message", Stream: "ecs/api/task-a", LogGroup: "/aws/ecs/payments-api-a", ContainerName: "api"},
+		{Timestamp: "2026-05-09T10:00:00Z", Message: "same message", Stream: "ecs/api/task-a", LogGroup: "/aws/ecs/payments-api-b", ContainerName: "api"},
 		{Timestamp: "2026-05-09T10:01:00Z", Message: "next message", InstanceID: "i-0123456789abcdef0"},
 	}
 	req := Request{DeploymentName: "payments-api-prod", ResourceType: "ecsService", ResourceName: "payments-api-prod-service"}
@@ -45,6 +45,18 @@ func TestAssignEntryIDsDerivesStableUniqueRowAnchors(t *testing.T) {
 	if entries[0].EntryID != "" {
 		t.Fatalf("expected AssignEntryIDs to leave caller entries unmodified, got %+v", entries)
 	}
+	withoutLogGroup := []Entry{
+		{Timestamp: "2026-05-09T10:00:00Z", Message: "same message", Stream: "ecs/api/task-a", ContainerName: "api"},
+		{Timestamp: "2026-05-09T10:00:00Z", Message: "same message", Stream: "ecs/api/task-a", ContainerName: "api"},
+		{Timestamp: "2026-05-09T10:01:00Z", Message: "next message", InstanceID: "i-0123456789abcdef0"},
+	}
+	withoutLogGroupIDs := AssignEntryIDs(req, SourceCloudWatch, withoutLogGroup)
+	for i := range withIDs {
+		if withIDs[i].EntryID != withoutLogGroupIDs[i].EntryID {
+			t.Fatalf("expected logGroup metadata not to change stable entry ID at index %d: with=%q without=%q", i, withIDs[i].EntryID, withoutLogGroupIDs[i].EntryID)
+		}
+	}
+
 	seen := map[string]bool{}
 	for _, entry := range withIDs {
 		if !strings.HasPrefix(entry.EntryID, "rlog_") {
@@ -66,7 +78,7 @@ func TestServiceRecent(t *testing.T) {
 				gotLookup = req
 				return []CloudWatchEvent{
 					{Timestamp: time.Date(2026, 4, 16, 7, 8, 0, 0, time.UTC), Message: "older event", Stream: "ecs/payments-api/old-task"},
-					{Timestamp: time.Date(2026, 4, 16, 7, 11, 0, 0, time.UTC), Message: "newest event", Stream: "ecs/payments-api/new-task"},
+					{Timestamp: time.Date(2026, 4, 16, 7, 11, 0, 0, time.UTC), Message: "newest event", Stream: "ecs/payments-api/new-task", LogGroup: " /aws/ecs/payments-api "},
 					{Timestamp: time.Date(2026, 4, 16, 7, 9, 0, 0, time.UTC), Message: "middle event"},
 					{Timestamp: time.Date(2026, 4, 16, 7, 10, 0, 0, time.UTC), Message: "recent event", Stream: "ecs/payments-api/new-task"},
 				}, nil
@@ -100,7 +112,7 @@ func TestServiceRecent(t *testing.T) {
 			Available:      true,
 			Source:         SourceCloudWatch,
 			Entries: []Entry{
-				{Timestamp: "2026-04-16T07:11:00Z", Message: "newest event", Stream: "ecs/payments-api/new-task"},
+				{Timestamp: "2026-04-16T07:11:00Z", Message: "newest event", Stream: "ecs/payments-api/new-task", LogGroup: "/aws/ecs/payments-api"},
 				{Timestamp: "2026-04-16T07:10:00Z", Message: "recent event", Stream: "ecs/payments-api/new-task"},
 				{Timestamp: "2026-04-16T07:09:00Z", Message: "middle event"},
 			},
@@ -1501,7 +1513,7 @@ func TestFetchRecentServiceTaskLogEventsSkipsMissingStoppedTaskStreams(t *testin
 	if len(events) != 1 {
 		t.Fatalf("expected only the available stopped-task stream, got %+v", events)
 	}
-	if events[0].Message != "stopped task failure" || events[0].Stream != "ecs/payments-api/app/stopped-good" {
+	if events[0].Message != "stopped task failure" || events[0].Stream != "ecs/payments-api/app/stopped-good" || events[0].LogGroup != "/aws/ecs/payments-api" {
 		t.Fatalf("unexpected stopped-task log event: %+v", events[0])
 	}
 	if got := logsClient.limitsByStream["ecs/payments-api/app/stopped-good"]; got != 5 {
