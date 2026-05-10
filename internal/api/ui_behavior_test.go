@@ -10969,6 +10969,96 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); await Promise.resolve(); }
 `
 
+	t.Run("audit page renders apply transition rows and action filter", func(t *testing.T) {
+		transitionAuditLogsJSON, err := json.Marshal(map[string]any{
+			"entries": []map[string]any{
+				{
+					"entryId":        "audit_apply_transition_123",
+					"timestamp":      "2026-04-18T09:15:00Z",
+					"action":         "apply.transitioned",
+					"deploymentName": "payments-api-prod",
+					"appRef":         "payments-api",
+					"environmentRef": "prod-apne2",
+					"planId":         "plan_ready_123",
+					"applyId":        "apply_running_123",
+					"actor": map[string]any{
+						"available": true,
+						"id":        "operator-123",
+						"name":      "Jane Operator",
+						"email":     "jane@example.com",
+					},
+					"metadata": map[string]any{
+						"status":            "running",
+						"previousStatus":    "queued",
+						"newStatus":         "running",
+						"step":              2,
+						"currentStep":       2,
+						"completedSteps":    1,
+						"totalSteps":        4,
+						"planStatus":        "ready",
+						"sourceFingerprint": "fp_plan_ready",
+						"details":           []string{"Executor started traffic-shift operation."},
+					},
+					"source": map[string]any{
+						"kind":        "applyTransition",
+						"recordRoute": "/v1/applies/apply_running_123",
+						"sourceRoute": "/v1/plans/plan_ready_123",
+					},
+				},
+			},
+			"resultScope": map[string]any{
+				"returnedEntryCount": 1,
+				"totalEntryCount":    1,
+				"effectiveLimit":     0,
+				"truncationStatus":   "not_truncated",
+				"deploymentName":     "payments-api-prod",
+				"action":             "apply.transitioned",
+			},
+		})
+		if err != nil {
+			t.Fatalf("marshal transition audit logs payload: %v", err)
+		}
+
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const auditLogs = ` + string(transitionAuditLogsJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const window = { location: { pathname: '/console', search: '?page=audit&deployment=payments-api-prod&action=apply.transitioned', hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathAndQuery, hash = ''] = String(url).split('#'); const [pathname, query = ''] = pathAndQuery.split('?'); window.location.pathname = pathname || '/console'; window.location.search = query ? '?' + query : ''; window.location.hash = hash ? '#' + hash : ''; } };
+const fetch = (url) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/audit-logs?deployment=payments-api-prod&action=apply.transitioned') return Promise.resolve({ ok: true, json: () => Promise.resolve(auditLogs) });
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
+  const accountsText = collectText(document.getElementById('accounts')).join(' | ');
+  if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/audit-logs?deployment=payments-api-prod&action=apply.transitioned') throw new Error('expected transition-filtered audit route');
+  if (!toolbarText.includes('Audit filters: deployment payments-api-prod · action Apply lifecycle transitioned (apply.transitioned)')) throw new Error('expected transition filter label, got ' + toolbarText);
+  if (!accountsText.includes('Apply lifecycle transitioned (apply.transitioned)')) throw new Error('expected transition row label');
+  if (!accountsText.includes('Apply transitions | 1')) throw new Error('expected transition summary count');
+  if (!accountsText.includes('Apply requests | 0')) throw new Error('expected apply-request count to stay separate from transition count');
+  if (!accountsText.includes('Transition · queued → running')) throw new Error('expected previous/new transition metadata');
+  if (!accountsText.includes('Transition step · 2')) throw new Error('expected transition step metadata');
+  if (!accountsText.includes('Current step · 2')) throw new Error('expected lifecycle current-step metadata');
+  if (!accountsText.includes('Completed steps · 1 of 4')) throw new Error('expected lifecycle completed/total metadata');
+  if (!accountsText.includes('Executor started traffic-shift operation.')) throw new Error('expected transition detail copy');
+  const actionSelect = document.querySelector('[data-toolbar-field="Action"]');
+  if (!actionSelect || actionSelect.value !== 'apply.transitioned') throw new Error('expected action select to preserve transition action');
+})();
+`
+
+		runNodeHarness(t, nodeProgram)
+	})
+
 	t.Run("bookmarkable audit page renders newest first with self links", func(t *testing.T) {
 		nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;

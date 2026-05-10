@@ -3061,6 +3061,64 @@ func TestRouterAuditLogsFiltersAuthorizationBeforeApplyingCollectionLimit(t *tes
 	}
 }
 
+func TestRouterAuditLogsAcceptsApplyTransitionAction(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		AuditLogs: func(ctx context.Context, query auditlog.Query) (auditlog.Result, error) {
+			if query.Limit != 0 || query.DeploymentName != "api-prod" || query.Action != auditlog.ActionApplyTransitioned {
+				t.Fatalf("expected transition-filtered audit query, got %+v", query)
+			}
+			return auditlog.Result{
+				Entries: []auditlog.Entry{{
+					EntryID:        "audit_transition_testopaque",
+					Timestamp:      "2026-04-18T08:35:00Z",
+					Action:         "apply.transitioned",
+					DeploymentName: "api-prod",
+					PlanID:         "plan_1234",
+					ApplyID:        "apply_5678",
+					Metadata: auditlog.Metadata{
+						PreviousStatus: "queued",
+						NewStatus:      "running",
+						Step:           1,
+						CurrentStep:    1,
+						TotalSteps:     3,
+					},
+					Source: auditlog.Source{Kind: "applyTransition", Store: "applyRequestStore", RecordRoute: "/v1/applies/apply_5678", SourceRoute: "/v1/plans/plan_1234"},
+				}},
+				ResultScope: auditlog.BuildResultScope(query, 1, 1),
+			}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/audit-logs?deployment=api-prod&action=apply.transitioned", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("failed to decode raw audit logs: %v", err)
+	}
+	rawEntries, ok := raw["entries"].([]any)
+	if !ok || len(rawEntries) != 1 {
+		t.Fatalf("expected one transition entry, got %#v", raw["entries"])
+	}
+	rawEntry, ok := rawEntries[0].(map[string]any)
+	if !ok || rawEntry["action"] != "apply.transitioned" || rawEntry["entryId"] != "audit_transition_testopaque" {
+		t.Fatalf("expected raw transition audit entry, got %#v", rawEntries[0])
+	}
+	rawMetadata, ok := rawEntry["metadata"].(map[string]any)
+	if !ok || rawMetadata["previousStatus"] != "queued" || rawMetadata["newStatus"] != "running" || rawMetadata["step"] != float64(1) || rawMetadata["currentStep"] != float64(1) || rawMetadata["totalSteps"] != float64(3) {
+		t.Fatalf("expected raw transition metadata, got %#v", rawEntry["metadata"])
+	}
+	rawScope, ok := raw["resultScope"].(map[string]any)
+	if !ok || rawScope["action"] != "apply.transitioned" || rawScope["deploymentName"] != "api-prod" || rawScope["returnedEntryCount"] != float64(1) {
+		t.Fatalf("expected raw transition result scope, got %#v", raw["resultScope"])
+	}
+}
+
 func TestRouterAuditLogsUnavailable(t *testing.T) {
 	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
 	req := httptest.NewRequest(http.MethodGet, "/v1/audit-logs", nil)

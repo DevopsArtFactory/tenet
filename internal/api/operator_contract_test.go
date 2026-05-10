@@ -841,7 +841,7 @@ func TestAuditLogOperatorContract(t *testing.T) {
 		"`GET /v1/audit-logs?limit={n}`",
 		"`GET /v1/audit-logs?deployment={deploymentName}`",
 		"`GET /v1/audit-logs?deployment={deploymentName}&action={action}`",
-		"`action` is optional and must be exactly `plan.created` or `apply.requested` when present",
+		"`action` is optional and must be exactly `plan.created`, `apply.requested`, or `apply.transitioned` when present",
 		"`GET /v1/audit-logs?deployment={deploymentName}&limit={n}`",
 		"`deployment` is optional and must name exactly one deployment when present",
 		"backend-authored stable `entryId` on each row for shareable UI anchors",
@@ -854,8 +854,8 @@ func TestAuditLogOperatorContract(t *testing.T) {
 		"actor information is unavailable because no authenticated request context was available for this local request",
 		"`Audit filters: action Apply requested (apply.requested) · Limit cap: latest 2`",
 		"`/v1/audit-logs` is the preferred v1 route shape for this local timeline",
-		"full `GET /v1/audit-logs` collection with expected `plan.created` and `apply.requested` actions present",
-		"fetches the full `GET /v1/audit-logs` collection and asserts the expected `plan.created` and `apply.requested` actions are present without depending on `limit=2`",
+		"full `GET /v1/audit-logs` collection with expected `plan.created`, `apply.requested`, and lifecycle `apply.transitioned` action support present",
+		"fetches the full `GET /v1/audit-logs` collection and asserts the expected `plan.created`, `apply.requested`, and lifecycle `apply.transitioned` action support is present without depending on `limit=2`",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README audit contract to include %q", fragment)
@@ -868,13 +868,13 @@ func TestAuditLogOperatorContract(t *testing.T) {
 		"`GET /v1/audit-logs?deployment={deploymentName}`",
 		"`GET /v1/audit-logs?action={action}`",
 		"`limit` is optional and must be a positive integer when present",
-		"`action` is optional and must be exactly `plan.created` or `apply.requested` when present",
+		"`action` is optional and must be exactly `plan.created`, `apply.requested`, or `apply.transitioned` when present",
 		"`deployment` is optional and must name exactly one deployment when present",
 		"`GET /v1/audit-logs?action=apply.requested&limit=2`",
 		"`entryId` is a backend-authored opaque stable row identifier",
 		"`X-Tenet-Actor-Id`",
 		"fetching the full `GET /v1/audit-logs` collection",
-		"asserting the expected `plan.created` and `apply.requested` actions are present without depending on a two-entry window",
+		"asserting the expected `plan.created`, `apply.requested`, and lifecycle `apply.transitioned` action support is present without depending on a two-entry window",
 		"`action=invalid.action` with `400 Bad Request`",
 		"`entries: []` with `200 OK` when the selected deployment exists but has no persisted audit records yet",
 		"`X-Tenet-Actor-Id`",
@@ -895,6 +895,7 @@ func TestAuditLogOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		"`/?page=audit` route now renders that audit timeline directly",
 		"`Audit filters: action Apply requested (apply.requested) · Limit cap: latest 2`",
+		"`apply.transitioned` rows with previous/new status and step metadata",
 		"accepts optional `&action={action}` / `&limit={n}`",
 		"`Clear action/limit`",
 		"`View global audit log`",

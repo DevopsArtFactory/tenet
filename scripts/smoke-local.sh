@@ -2109,6 +2109,9 @@ assert "const createAuditQuickNav = (sectionLinks = []) => createDeploymentQuick
 assert "const normalizeAuditLimit = (value) => {" in audit_ui, audit_ui
 assert "{ value: 'plan.created', label: 'Plan preview created (plan.created)' }," in audit_ui, audit_ui
 assert "{ value: 'apply.requested', label: 'Apply requested (apply.requested)' }," in audit_ui, audit_ui
+assert "{ value: 'apply.transitioned', label: 'Apply lifecycle transitioned (apply.transitioned)' }," in audit_ui, audit_ui
+assert "['Apply transitions', String(transitionCount)]," in audit_ui, audit_ui
+assert "Transition · ${textOrDash(entry.metadata.previousStatus)} → ${textOrDash(entry.metadata.newStatus)}" in audit_ui, audit_ui
 assert "const auditActionLabel = (value) => {" in audit_ui, audit_ui
 assert "labels.push(`action ${auditActionLabel(currentPageState.auditAction)}`);" in audit_ui, audit_ui
 assert "const auditLimitSelectOptions = (limit) => {" in audit_ui, audit_ui

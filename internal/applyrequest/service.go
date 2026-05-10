@@ -163,6 +163,8 @@ func (s Service) Transition(ctx context.Context, id string, request TransitionRe
 		return Record{}, err
 	}
 
+	previousStatus := record.Status
+	now := s.now()
 	record.Status = request.Status
 	if request.Error != "" || request.Status == StatusRunning || request.Status == StatusSucceeded {
 		record.Error = request.Error
@@ -171,7 +173,17 @@ func (s Service) Transition(ctx context.Context, id string, request TransitionRe
 		record.Details = append([]string(nil), request.Details...)
 	}
 	record.Operations = transitionOperations(record.Operations, request.Status, request.Step)
-	record.Lifecycle = transitionLifecycle(record.Lifecycle, len(record.Operations), request, s.now())
+	record.Lifecycle = transitionLifecycle(record.Lifecycle, len(record.Operations), request, now)
+	record.Transitions = appendTransition(record.Transitions, Transition{
+		TransitionedAt: now.UTC().Format(time.RFC3339),
+		PreviousStatus: previousStatus,
+		Status:         request.Status,
+		Step:           request.Step,
+		Actor:          requestactor.FromContext(ctx),
+		Error:          request.Error,
+		Details:        append([]string(nil), request.Details...),
+		Lifecycle:      record.Lifecycle,
+	})
 
 	if err := s.Store.Update(ctx, record); err != nil {
 		return Record{}, err
@@ -433,6 +445,14 @@ func operationTerminalStatus(status Status) OperationStatus {
 	default:
 		return OperationStatusSucceeded
 	}
+}
+
+func appendTransition(existing []Transition, transition Transition) []Transition {
+	transition.Actor = requestactor.Normalize(transition.Actor)
+	transition.Details = append([]string(nil), transition.Details...)
+	updated := append([]Transition(nil), existing...)
+	updated = append(updated, transition)
+	return updated
 }
 
 func transitionLifecycle(lifecycle Lifecycle, totalSteps int, request TransitionRequest, now time.Time) Lifecycle {

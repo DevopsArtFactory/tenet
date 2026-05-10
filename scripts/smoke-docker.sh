@@ -1693,6 +1693,9 @@ assert_fragments("audit_ui", audit_ui, operator_read_auth_fragments + (
     "return `GET ${buildAuditLogsRoute({",
     "{ value: 'plan.created', label: 'Plan preview created (plan.created)' },",
     "{ value: 'apply.requested', label: 'Apply requested (apply.requested)' },",
+    "{ value: 'apply.transitioned', label: 'Apply lifecycle transitioned (apply.transitioned)' },",
+    "['Apply transitions', String(transitionCount)],",
+    "Transition · ${textOrDash(entry.metadata.previousStatus)} → ${textOrDash(entry.metadata.newStatus)}",
     "const auditActionLabel = (value) => {",
     "renderAuditLogsState(operatorReadFailureHeading(error), 'error', operatorReadFailureMessage(buildEmbeddedPageReadRoute(currentPageState), error), [createOperatorReadFailureActions(error)]);",
 ))

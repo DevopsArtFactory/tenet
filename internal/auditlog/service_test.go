@@ -341,3 +341,62 @@ func TestProjectApplyPreservesQueuedLifecycleMetadata(t *testing.T) {
 		t.Fatalf("unexpected queued audit projection: %+v", entry)
 	}
 }
+
+func TestServiceListProjectsApplyTransitionsForAuditTimeline(t *testing.T) {
+	service := Service{
+		ListPlanPreviews: func() ([]planpreview.Record, error) { return nil, nil },
+		ListApplyRequests: func() ([]applyrequest.Record, error) {
+			return []applyrequest.Record{{
+				ID:             "apply_running",
+				PlanID:         "plan_ready",
+				DeploymentName: "api-prod",
+				Status:         applyrequest.StatusRunning,
+				CreatedAt:      "2026-04-18T08:30:00Z",
+				Source: applyrequest.SourceContext{
+					Route:       "/v1/plans/plan_ready",
+					PlanStatus:  "ready",
+					Fingerprint: "fp_plan_ready",
+				},
+				Transitions: []applyrequest.Transition{{
+					TransitionedAt: "2026-04-18T08:35:00Z",
+					PreviousStatus: applyrequest.StatusQueued,
+					Status:         applyrequest.StatusRunning,
+					Step:           1,
+					Actor:          requestactor.Actor{Available: true, ID: "operator-123", Name: "Release Operator", Email: "release@example.com"},
+					Details:        []string{"executor picked up queued apply request"},
+					Lifecycle: applyrequest.Lifecycle{
+						UpdatedAt:      "2026-04-18T08:35:00Z",
+						StartedAt:      "2026-04-18T08:35:00Z",
+						CurrentStep:    1,
+						CompletedSteps: 0,
+						TotalSteps:     2,
+					},
+				}},
+			}}, nil
+		},
+		ListDeployments: func(context.Context) ([]catalog.DeploymentView, error) {
+			return []catalog.DeploymentView{{Name: "api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"}}, nil
+		},
+	}
+
+	result, err := service.List(context.Background(), Query{Action: ActionApplyTransitioned})
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	if len(result.Entries) != 1 {
+		t.Fatalf("expected one transition audit entry, got %+v", result.Entries)
+	}
+	entry := result.Entries[0]
+	if entry.Action != string(ActionApplyTransitioned) || entry.Timestamp != "2026-04-18T08:35:00Z" || entry.ApplyID != "apply_running" || entry.PlanID != "plan_ready" {
+		t.Fatalf("unexpected transition audit entry identity: %+v", entry)
+	}
+	if entry.Actor.ID != "operator-123" || entry.Metadata.PreviousStatus != "queued" || entry.Metadata.NewStatus != "running" || entry.Metadata.Step != 1 || entry.Metadata.TotalSteps != 2 {
+		t.Fatalf("expected transition actor and lifecycle metadata, got %+v", entry)
+	}
+	if entry.Source.Kind != "applyTransition" || entry.Source.RecordRoute != "/v1/applies/apply_running" || entry.Source.SourceRoute != "/v1/plans/plan_ready" {
+		t.Fatalf("expected transition source handoff to the immutable apply and plan records, got %+v", entry.Source)
+	}
+	if result.ResultScope.Action != string(ActionApplyTransitioned) || result.ResultScope.TotalEntryCount != 1 {
+		t.Fatalf("expected filtered result scope for transition action, got %+v", result.ResultScope)
+	}
+}
