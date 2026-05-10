@@ -4799,6 +4799,11 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const summaryText = collectText(document.getElementById('summary')).join(' | ');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   if (!accountsText.includes('Tenet request ID | req-logs-871-success')) throw new Error('expected recent-log unavailable card to render Tenet request ID metadata: ' + accountsText);
+  if (!accountsText.includes('Selected resource context')) throw new Error('expected resource page selected-resource context callout: ' + accountsText);
+  if (!accountsText.includes('payments-api-staging Deployment Group · deployment payments-api-staging')) throw new Error('expected selected-resource callout to summarize resource and deployment: ' + accountsText);
+  if (!accountsText.includes('Use the Live inspection and Recent logs sections below to refresh focused evidence for this exact resource selection.')) throw new Error('expected selected-resource callout to explain evidence refresh surfaces: ' + accountsText);
+  if (!accountsText.includes('GET /v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging+Deployment+Group')) throw new Error('expected selected-resource callout to expose live-inspection route intent: ' + accountsText);
+  if (!accountsText.includes('GET /v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging+Deployment+Group')) throw new Error('expected selected-resource callout to expose recent-log route intent: ' + accountsText);
   if (accountsText.includes('Last refreshed |')) throw new Error('expected recent-log unavailable card not to claim fresh evidence: ' + accountsText);
   if (!toolbarText.includes('Back to application')) throw new Error('expected resource page back link');
   const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');

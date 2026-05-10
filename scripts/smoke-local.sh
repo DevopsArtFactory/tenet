@@ -1905,6 +1905,10 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "const renderResourceDetailPage = (detail, resourceState = null) => {" in body, body
     assert "const resourceDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;" in body, body
     assert "const createResourceDetailActions = (resourceState = null, detail = null, resource = null) => [" in body, body
+    assert "const createSelectedResourceContextCallout = (detail, resource) => {" in body, body
+    assert 'Selected resource context' in body, body
+    assert 'Use the Live inspection and Recent logs sections below to refresh focused evidence for this exact resource selection.' in body, body
+    assert 'createSelectedResourceContextCallout(detail, resource)' in body, body
     assert 'Refresh resource detail' in body, body
     assert 'Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…' in body, body
     assert 'Current resource detail remains visible below.' in body, body
