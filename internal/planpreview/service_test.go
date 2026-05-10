@@ -2,6 +2,7 @@ package planpreview
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -274,5 +275,66 @@ func TestServiceCreatePersistsAvailableActorFromRequestContext(t *testing.T) {
 	}
 	if result.Record.Actor.Reason != "" {
 		t.Fatalf("expected no unavailable reason for available actor, got %+v", result.Record.Actor)
+	}
+}
+
+func TestNormalizeOperationIDsBackfillsLegacyDuplicateRows(t *testing.T) {
+	record := Record{
+		ID:             "plan_legacy",
+		DeploymentName: "api-prod",
+		Status:         StatusReady,
+		Operations: []Operation{
+			{Kind: "ShiftTrafficLinear", Status: "current", Phase: "Promoting", Target: "listener (productionListener)", Summary: "Shift traffic."},
+			{Kind: "ShiftTrafficLinear", Status: "current", Phase: "Promoting", Target: "listener (productionListener)", Summary: "Shift traffic."},
+		},
+	}
+
+	normalized := NormalizeOperationIDs(record)
+	if normalized.Operations[0].ID == "" || normalized.Operations[1].ID == "" {
+		t.Fatalf("expected operation IDs to be backfilled: %+v", normalized.Operations)
+	}
+	if normalized.Operations[0].ID == normalized.Operations[1].ID {
+		t.Fatalf("expected duplicate operation rows to be disambiguated: %+v", normalized.Operations)
+	}
+	if !strings.HasSuffix(normalized.Operations[0].ID, "-1") || !strings.HasSuffix(normalized.Operations[1].ID, "-2") {
+		t.Fatalf("expected ordinal ID suffixes for duplicate rows: %+v", normalized.Operations)
+	}
+	record.Operations[0].ID = normalized.Operations[0].ID
+	record.Operations[1].ID = ""
+	mixed := NormalizeOperationIDs(record)
+	if mixed.Operations[0].ID != normalized.Operations[0].ID || mixed.Operations[1].ID == normalized.Operations[0].ID {
+		t.Fatalf("expected existing generated IDs to be preserved without collision: %+v", mixed.Operations)
+	}
+	encoded, err := json.Marshal(normalized)
+	if err != nil {
+		t.Fatalf("Marshal returned error: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"id":"op_`) {
+		t.Fatalf("expected raw JSON operation id field, got %s", string(encoded))
+	}
+}
+
+func TestStableRecordIDIgnoresAdditiveOperationIDs(t *testing.T) {
+	record := Record{
+		DeploymentName: "api-prod",
+		Status:         StatusReady,
+		Operations: []Operation{
+			{Kind: "VerifyServiceStability", Status: "current", Phase: "Verification", Target: "api-prod-service (ecsService)", Summary: "Wait for service stability."},
+		},
+		Risk:     Risk{Level: "low", Label: "Low", Guidance: "ok"},
+		Approval: Approval{Summary: "ok"},
+		Source:   SourceContext{DeploymentName: "api-prod", Route: "/v1/overview/deployments/api-prod", Fingerprint: "fp"},
+	}
+	withoutID, err := stableRecordID(record)
+	if err != nil {
+		t.Fatalf("stableRecordID without operation IDs returned error: %v", err)
+	}
+	record.Operations[0].ID = "op_custom-1"
+	withID, err := stableRecordID(record)
+	if err != nil {
+		t.Fatalf("stableRecordID with operation IDs returned error: %v", err)
+	}
+	if withID != withoutID {
+		t.Fatalf("expected additive operation IDs not to churn plan ID, got %q and %q", withoutID, withID)
 	}
 }

@@ -8992,6 +8992,7 @@ func TestRouterCreateDeploymentPlanPreview(t *testing.T) {
 					Status:         planpreview.StatusReady,
 					CreatedAt:      "2026-04-17T08:00:00Z",
 					Operations: []planpreview.Operation{{
+						ID:      "op_plan_create-1",
 						Kind:    "CreateCodeDeployDeployment",
 						Status:  "completed",
 						Phase:   "Provisioning",
@@ -9023,6 +9024,9 @@ func TestRouterCreateDeploymentPlanPreview(t *testing.T) {
 	}
 	if record.ID != "plan_1234abcd" || record.Status != planpreview.StatusReady || len(record.Operations) != 1 {
 		t.Fatalf("unexpected plan preview payload: %+v", record)
+	}
+	if record.Operations[0].ID != "op_plan_create-1" || !strings.Contains(resp.Body.String(), `"id":"op_plan_create-1"`) {
+		t.Fatalf("expected raw JSON operation id field in plan preview payload, got %+v body=%s", record.Operations, resp.Body.String())
 	}
 }
 
@@ -9634,7 +9638,7 @@ func TestRouterCreateApplyRequest(t *testing.T) {
 					Details:        []string{"Tenet persisted this immutable apply request in read-only mode and did not contact AWS."},
 					Lifecycle:      applyrequest.Lifecycle{UpdatedAt: "2026-04-18T08:00:00Z", FinishedAt: "2026-04-18T08:00:00Z", TotalSteps: 1},
 					Operations: []applyrequest.Operation{
-						{Status: applyrequest.OperationStatusPending, Phase: "Provisioning", Target: "api-prod-codedeploy-group (codeDeployDeploymentGroup)", Summary: "Create the CodeDeploy deployment for api-prod."},
+						{ID: "op_plan_create-1", Status: applyrequest.OperationStatusPending, Phase: "Provisioning", Target: "api-prod-codedeploy-group (codeDeployDeploymentGroup)", Summary: "Create the CodeDeploy deployment for api-prod."},
 					},
 					Source: applyrequest.SourceContext{PlanID: planID, Route: "/v1/plans/plan_1234abcd", PlanStatus: "ready", Fingerprint: "plan_input"},
 				},
@@ -9665,6 +9669,9 @@ func TestRouterCreateApplyRequest(t *testing.T) {
 	}
 	if len(record.Operations) != 1 || record.Operations[0].Status != applyrequest.OperationStatusPending {
 		t.Fatalf("expected additive operations in apply request payload, got %+v", record)
+	}
+	if record.Operations[0].ID != "op_plan_create-1" || !strings.Contains(resp.Body.String(), `"id":"op_plan_create-1"`) {
+		t.Fatalf("expected raw JSON operation id field in apply request payload, got %+v body=%s", record.Operations, resp.Body.String())
 	}
 }
 

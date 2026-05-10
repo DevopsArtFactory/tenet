@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
@@ -90,7 +91,7 @@ func (s Service) Create(ctx context.Context, deploymentName string, req CreateRe
 
 	existing, err := s.Store.Get(ctx, record.ID)
 	if err == nil {
-		return CreateResult{Record: existing, Created: false}, nil
+		return CreateResult{Record: NormalizeOperationIDs(existing), Created: false}, nil
 	}
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return CreateResult{}, err
@@ -102,7 +103,7 @@ func (s Service) Create(ctx context.Context, deploymentName string, req CreateRe
 	if err != nil {
 		return CreateResult{}, err
 	}
-	return CreateResult{Record: stored, Created: true}, nil
+	return CreateResult{Record: NormalizeOperationIDs(stored), Created: true}, nil
 }
 
 // Get returns one persisted immutable plan preview by ID.
@@ -110,7 +111,19 @@ func (s Service) Get(ctx context.Context, id string) (Record, error) {
 	if s.Store == nil {
 		return Record{}, fmt.Errorf("plan preview store is required")
 	}
-	return s.Store.Get(ctx, id)
+	record, err := s.Store.Get(ctx, id)
+	if err != nil {
+		return Record{}, err
+	}
+	return NormalizeOperationIDs(record), nil
+}
+
+// NormalizeOperationIDs returns a copy of record with backend-authored operation IDs filled in.
+// It preserves existing non-empty IDs so legacy records can be projected with additive IDs
+// without rewriting the immutable stored payload.
+func NormalizeOperationIDs(record Record) Record {
+	record.Operations = normalizeOperationIDs(record.Operations)
+	return record
 }
 
 func (s Service) now() time.Time {
@@ -143,18 +156,35 @@ func deriveSourceContext(detail catalog.DeploymentOverviewDetail) (SourceContext
 }
 
 func stableRecordID(record Record) (string, error) {
+	type operationPayload struct {
+		Kind    string `json:"kind"`
+		Status  string `json:"status"`
+		Phase   string `json:"phase"`
+		Target  string `json:"target"`
+		Summary string `json:"summary"`
+	}
+	operations := make([]operationPayload, 0, len(record.Operations))
+	for _, operation := range record.Operations {
+		operations = append(operations, operationPayload{
+			Kind:    operation.Kind,
+			Status:  operation.Status,
+			Phase:   operation.Phase,
+			Target:  operation.Target,
+			Summary: operation.Summary,
+		})
+	}
 	payload := struct {
-		DeploymentName string        `json:"deploymentName"`
-		Status         Status        `json:"status"`
-		Operations     []Operation   `json:"operations,omitempty"`
-		Risk           Risk          `json:"risk"`
-		Approval       Approval      `json:"approval"`
-		Source         SourceContext `json:"source"`
-		Errors         []string      `json:"errors,omitempty"`
+		DeploymentName string             `json:"deploymentName"`
+		Status         Status             `json:"status"`
+		Operations     []operationPayload `json:"operations,omitempty"`
+		Risk           Risk               `json:"risk"`
+		Approval       Approval           `json:"approval"`
+		Source         SourceContext      `json:"source"`
+		Errors         []string           `json:"errors,omitempty"`
 	}{
 		DeploymentName: record.DeploymentName,
 		Status:         record.Status,
-		Operations:     record.Operations,
+		Operations:     operations,
 		Risk:           record.Risk,
 		Approval:       record.Approval,
 		Source:         record.Source,
@@ -181,7 +211,55 @@ func derivePlanOperations(detail catalog.DeploymentOverviewDetail) []Operation {
 			Summary: derivePlanOperationSummary(detail, step),
 		})
 	}
-	return operations
+	return normalizeOperationIDs(operations)
+}
+
+func normalizeOperationIDs(operations []Operation) []Operation {
+	if len(operations) == 0 {
+		return nil
+	}
+	normalized := append([]Operation(nil), operations...)
+	used := make(map[string]struct{}, len(normalized))
+	for _, operation := range normalized {
+		if operation.ID != "" {
+			used[operation.ID] = struct{}{}
+		}
+	}
+	counts := make(map[string]int, len(normalized))
+	for index := range normalized {
+		if normalized[index].ID != "" {
+			continue
+		}
+		base := planOperationIDBase(normalized[index])
+		for {
+			counts[base]++
+			candidate := base + "-" + strconv.Itoa(counts[base])
+			if _, exists := used[candidate]; exists {
+				continue
+			}
+			normalized[index].ID = candidate
+			used[candidate] = struct{}{}
+			break
+		}
+	}
+	return normalized
+}
+
+func planOperationIDBase(operation Operation) string {
+	payload := struct {
+		Kind    string `json:"kind"`
+		Phase   string `json:"phase"`
+		Target  string `json:"target"`
+		Summary string `json:"summary"`
+	}{
+		Kind:    operation.Kind,
+		Phase:   operation.Phase,
+		Target:  operation.Target,
+		Summary: operation.Summary,
+	}
+	content, _ := json.Marshal(payload)
+	sum := sha256.Sum256(content)
+	return "op_" + hex.EncodeToString(sum[:6])
 }
 
 func derivePlanRisk(detail catalog.DeploymentOverviewDetail) Risk {

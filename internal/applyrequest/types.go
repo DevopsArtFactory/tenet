@@ -88,6 +88,7 @@ type SourceContext struct {
 
 // Operation is one additive operator-facing execution row projected from a ready plan preview.
 type Operation struct {
+	ID      string          `json:"id,omitempty"`
 	Status  OperationStatus `json:"status"`
 	Phase   string          `json:"phase"`
 	Target  string          `json:"target"`
