@@ -8461,6 +8461,8 @@ async function render(detail) {
   const workspaceAuditLink = workspaceLinks.find((node) => node.href === '/?page=audit&deployment=api-prod' && node.textContent === 'Audit log' && node.target === '_self');
   const workspaceResourceLink = workspaceLinks.find((node) => node.href === '/?page=resource&deployment=api-prod&resourceType=aws_lb_listener_rule.payments_prod&resourceId=aws_lb_listener_rule.payments_prod%3A%3Aprod-router%3A%3ARoutes+production+traffic+to+the+stable+target+group' && node.textContent === 'prod-router' && node.target === '_self');
   if (!text.includes('Drift viewer')) throw new Error('expected drift workspace title');
+  if (!text.includes('Drift viewer read refreshed ·')) throw new Error('expected drift workspace deployment-detail freshness cue');
+  if (text.includes('Drift viewer read not refreshed yet')) throw new Error('expected drift workspace freshness cue to use fetched timestamp');
   if (!toolbarText.includes('Back to application')) throw new Error('expected workspace back link');
   if (!toolbarText.includes('api-prod')) throw new Error('expected workspace active deployment title');
   if (!text.includes('Breadcrumbs')) throw new Error('expected drift workspace breadcrumb chrome');
@@ -9332,6 +9334,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const workspacePlanLink = linksBeforeCreate.find((node) => node.href === '/?page=plan&deployment=api-prod' && node.textContent === 'Plan/apply' && node.target === '_self');
   const workspaceAuditLink = linksBeforeCreate.find((node) => node.href === '/?page=audit&deployment=api-prod' && node.textContent === 'Audit log' && node.target === '_self');
   if (!text.includes('Plan and apply')) throw new Error('expected plan workspace title');
+  if (!text.includes('Plan and apply read refreshed ·')) throw new Error('expected plan workspace deployment-detail freshness cue');
+  if (text.includes('Plan and apply read not refreshed yet')) throw new Error('expected plan workspace freshness cue to use fetched timestamp');
   if (!text.includes('Breadcrumbs')) throw new Error('expected plan workspace breadcrumb chrome');
   if (!applicationsBreadcrumb || applicationsBreadcrumb.rel) throw new Error('expected plan workspace applications breadcrumb link');
   if (accountBreadcrumb) throw new Error('expected plan workspace to omit account breadcrumb when awsAccountId is unavailable');
