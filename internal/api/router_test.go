@@ -7448,6 +7448,13 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 							Summary:               "Returned 2 Auto Scaling instance(s) within the effective limit 4.",
 						},
 					},
+					ResultScope: &resourceinspection.ResultScope{
+						SampleType:        "autoScalingInstances",
+						RequestedLimit:    &requestedLimit,
+						EffectiveLimit:    4,
+						ReturnedItemCount: 2,
+						TruncationStatus:  "not_truncated",
+					},
 				}, nil
 			},
 		})
@@ -7482,6 +7489,21 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		} {
 			if !reflect.DeepEqual(instancesScope[key], want) {
 				t.Fatalf("expected instancesScope[%q]=%#v, got %#v in %#v", key, want, instancesScope[key], instancesScope)
+			}
+		}
+		resultScope, ok := raw["resultScope"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected top-level resultScope object in raw payload, got %#v", raw["resultScope"])
+		}
+		for key, want := range map[string]any{
+			"sampleType":        "autoScalingInstances",
+			"effectiveLimit":    float64(4),
+			"requestedLimit":    float64(4),
+			"returnedItemCount": float64(2),
+			"truncationStatus":  "not_truncated",
+		} {
+			if !reflect.DeepEqual(resultScope[key], want) {
+				t.Fatalf("expected resultScope[%q]=%#v, got %#v in %#v", key, want, resultScope[key], resultScope)
 			}
 		}
 	})

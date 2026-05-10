@@ -1296,6 +1296,13 @@ assert isinstance(selected_worker_resource_inspection.get('lookupContext'), dict
 if selected_worker_resource_inspection['available']:
     assert selected_worker_resource_inspection.get('source') == 'ecs_service', selected_worker_resource_inspection
     assert isinstance(selected_worker_resource_inspection.get('ecsService'), dict), selected_worker_resource_inspection
+    worker_inspection_scope = selected_worker_resource_inspection.get('resultScope')
+    assert isinstance(worker_inspection_scope, dict), selected_worker_resource_inspection
+    assert worker_inspection_scope.get('sampleType') == 'ecsTasks', selected_worker_resource_inspection
+    assert worker_inspection_scope.get('requestedLimit') == 1, selected_worker_resource_inspection
+    assert worker_inspection_scope.get('effectiveLimit') == 1, selected_worker_resource_inspection
+    assert isinstance(worker_inspection_scope.get('returnedItemCount'), int), selected_worker_resource_inspection
+    assert worker_inspection_scope.get('truncationStatus') in {'truncated', 'not_truncated', 'not_applicable'}, selected_worker_resource_inspection
 else:
     assert isinstance(selected_worker_resource_inspection.get('unavailableReason'), str) and selected_worker_resource_inspection['unavailableReason'], selected_worker_resource_inspection
 assert candidate_resource_inspection['deploymentName'] == 'payments-api-prod', candidate_resource_inspection
@@ -1341,10 +1348,17 @@ def assert_asg_resource_inspection(payload, *, expect_limit=None, expect_instanc
             assert isinstance(scope.get('requestedLimit'), int), payload
             assert isinstance(scope.get('effectiveLimit'), int), payload
             assert isinstance(scope.get('returnedInstanceCount'), int), payload
-            assert scope.get('truncationStatus') in {'complete', 'truncated', 'unknown'}, payload
+            assert scope.get('truncationStatus') in {'complete', 'truncated', 'unknown', 'not_truncated'}, payload
             assert scope.get('requestedLimit') == expect_limit, payload
             assert scope.get('effectiveLimit') <= expect_limit, payload
             assert scope.get('returnedInstanceCount') <= expect_limit, payload
+            result_scope = payload.get('resultScope')
+            assert isinstance(result_scope, dict), payload
+            assert result_scope.get('sampleType') == 'autoScalingInstances', payload
+            assert result_scope.get('requestedLimit') == expect_limit, payload
+            assert result_scope.get('effectiveLimit') == scope.get('effectiveLimit'), payload
+            assert result_scope.get('returnedItemCount') == scope.get('returnedInstanceCount'), payload
+            assert result_scope.get('truncationStatus') == scope.get('truncationStatus'), payload
         else:
             assert scope is None or isinstance(scope, dict), payload
     else:

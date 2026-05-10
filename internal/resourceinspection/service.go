@@ -108,7 +108,20 @@ type Result struct {
 	AutoScalingGroup        *AutoScalingInspection             `json:"autoScalingGroup,omitempty"`
 	UserDataBootstrapSource *UserDataBootstrapSourceInspection `json:"userDataBootstrapSource,omitempty"`
 	TrafficRoutingResource  *TrafficRoutingInspection          `json:"trafficRoutingResource,omitempty"`
+	ResultScope             *ResultScope                       `json:"resultScope,omitempty"`
 	UnavailableReason       string                             `json:"unavailableReason"`
+}
+
+// ResultScope is additive operator-facing metadata for bounded live-inspection
+// reads. It mirrors the nested ECS tasksScope / ASG instancesScope window in a
+// stable top-level place so scripts and UI consumers do not need to understand
+// each resource-specific body before explaining the applied sample cap.
+type ResultScope struct {
+	SampleType        string `json:"sampleType"`
+	RequestedLimit    *int   `json:"requestedLimit,omitempty"`
+	EffectiveLimit    int    `json:"effectiveLimit"`
+	ReturnedItemCount int    `json:"returnedItemCount"`
+	TruncationStatus  string `json:"truncationStatus"`
 }
 
 type UserDataBootstrapSourceInspection struct {
@@ -842,6 +855,7 @@ func availableECSResult(req Request, detail ECSServiceInspection) Result {
 		Available:           true,
 		Source:              SourceECSService,
 		ECSService:          &detail,
+		ResultScope:         resultScopeFromECSTasks(detail.TasksScope),
 		UnavailableReason:   "",
 	}
 }
@@ -884,8 +898,43 @@ func availableAutoScalingResult(req Request, detail AutoScalingInspection) Resul
 		Available:           true,
 		Source:              SourceAutoScalingGroup,
 		AutoScalingGroup:    &detail,
+		ResultScope:         resultScopeFromAutoScalingInstances(detail.InstancesScope),
 		UnavailableReason:   "",
 	}
+}
+
+func resultScopeFromECSTasks(scope *ECSTaskSummaryScope) *ResultScope {
+	if scope == nil {
+		return nil
+	}
+	return &ResultScope{
+		SampleType:        "ecsTasks",
+		RequestedLimit:    cloneIntPtr(scope.RequestedLimit),
+		EffectiveLimit:    scope.EffectiveLimit,
+		ReturnedItemCount: scope.ReturnedTaskCount,
+		TruncationStatus:  scope.TruncationStatus,
+	}
+}
+
+func resultScopeFromAutoScalingInstances(scope *AutoScalingInstanceScope) *ResultScope {
+	if scope == nil {
+		return nil
+	}
+	return &ResultScope{
+		SampleType:        "autoScalingInstances",
+		RequestedLimit:    cloneIntPtr(scope.RequestedLimit),
+		EffectiveLimit:    scope.EffectiveLimit,
+		ReturnedItemCount: scope.ReturnedInstanceCount,
+		TruncationStatus:  scope.TruncationStatus,
+	}
+}
+
+func cloneIntPtr(value *int) *int {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
 }
 
 func selectedAutoScalingInstance(detail AutoScalingInspection, instanceID string) (AutoScalingGroupInstanceSummary, bool) {
