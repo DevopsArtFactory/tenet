@@ -4437,6 +4437,10 @@
         return `/v1/overview/deployments/${encodeURIComponent(deploymentName)}/resource-logs?${params.toString()}`;
       };
       const resourceLogsReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceLogsRoute(deploymentName, resource, limit)}`;
+      const resourceLogsRequestRouteFields = (deploymentName, resource, limit = 0) => {
+        if (!deploymentName || !resource?.type || !resource?.name) return [];
+        return [['Recent logs request', resourceLogsReadRoute(deploymentName, resource, limit)]];
+      };
       const lookupContextFields = (lookupContext) => resourceLogsLookupContextFields(lookupContext);
       const createLookupContextGrid = (lookupContext, extraFields = []) => {
         const metadata = createElement('div', 'detail-grid');
@@ -4482,8 +4486,9 @@
         const handoffSection = createResourceLogsBackingResourceHandoffSection(detail, result);
         const beforeNodes = (metadata) => handoffSection ? [capNote, lookupPathSummary, metadata, handoffSection] : [capNote, lookupPathSummary, metadata];
         const scopeFields = resourceLogsResultScopeFields(result?.resultScope);
+        const requestRouteFields = resourceLogsRequestRouteFields(deploymentName, resource, selectedLimit);
         if (!result?.available) {
-          const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, [...resourceLogsRequestIDFields(result), ...backingResourceFields, ...scopeFields]);
+          const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, [...resourceLogsRequestIDFields(result), ...requestRouteFields, ...backingResourceFields, ...scopeFields]);
           const unavailableReason = resourceLogsUnavailableReasonText(result?.unavailableReason);
           const details = unavailableReason
             ? [createElement('div', 'detail-condition-meta', unavailableReason)]
@@ -4494,7 +4499,7 @@
 
         const entries = result.entries || [];
         if (!entries.length) {
-          const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, [...resourceLogsRequestIDFields(result), ...backingResourceFields, ...scopeFields]);
+          const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, [...resourceLogsRequestIDFields(result), ...requestRouteFields, ...backingResourceFields, ...scopeFields]);
           const emptyReason = resourceLogsEmptyReasonText(result?.emptyReason);
           const details = emptyReason
             ? [createElement('div', 'detail-condition-meta', emptyReason)]
@@ -4506,6 +4511,7 @@
         const fragment = [];
         const metadata = createResourceLogsLookupContextGrid(result?.lookupContext, [
           ...resourceLogsRequestIDFields(result),
+          ...requestRouteFields,
           ['Logs source', metricValue(result.source)],
           ...scopeFields,
           ...backingResourceFields,

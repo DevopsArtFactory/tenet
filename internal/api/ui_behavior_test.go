@@ -5442,7 +5442,7 @@ async function renderScenario(hash, fetchImpl) {
   if (!recentLogsRun.document.lastScrolledTarget || recentLogsRun.document.lastScrolledTarget.id !== 'resource-recent-logs') throw new Error('expected recent logs hash to remain the active scroll target after lazy panel load');
   const recentLogsText = collectText(recentLogsRoot).join(' | ');
   if (!recentLogsText.includes('Log entry cap · All available entries')) throw new Error('expected recent logs panel to render the default active cap copy');
-  ['Requested cap | All available entries', 'Effective cap | 100 entries', 'Returned entries | 0 entries', 'Scope status | Below cap; no router truncation', 'Resource description | Primary ECS service log stream', 'Selected cluster | ' + clusterArn, 'Selected container | worker'].forEach((fragment) => {
+  ['Recent logs request | GET ' + logsURL, 'Requested cap | All available entries', 'Effective cap | 100 entries', 'Returned entries | 0 entries', 'Scope status | Below cap; no router truncation', 'Resource description | Primary ECS service log stream', 'Selected cluster | ' + clusterArn, 'Selected container | worker'].forEach((fragment) => {
     if (!recentLogsText.includes(fragment)) throw new Error('expected recent logs result-scope evidence ' + fragment + ', got ' + recentLogsText);
   });
   const limitSelect = collectNodes(recentLogsRoot, (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'Log limit')[0];
@@ -5464,7 +5464,7 @@ async function renderScenario(hash, fetchImpl) {
   if (recentLogsFetchCalls.filter((url) => url === inspectionURL).length !== inspectionsBeforeLimit) throw new Error('expected log limit select not to refetch live inspection panel');
   const limitedLogsText = collectText(recentLogsRoot).join(' | ');
   if (!limitedLogsText.includes('Log entry cap · 10 entries')) throw new Error('expected recent logs panel to render selected cap copy');
-  ['Requested cap | 10 entries', 'Effective cap | 10 entries', 'Returned entries | 1 entry', 'Scope status | Below cap; no router truncation'].forEach((fragment) => {
+  ['Recent logs request | GET ' + logsURL + '&limit=10', 'Requested cap | 10 entries', 'Effective cap | 10 entries', 'Returned entries | 1 entry', 'Scope status | Below cap; no router truncation'].forEach((fragment) => {
     if (!limitedLogsText.includes(fragment)) throw new Error('expected limited recent logs result-scope evidence ' + fragment + ', got ' + limitedLogsText);
   });
   if (!limitedLogsText.includes('limited log row')) throw new Error('expected limited recent logs payload to render');
@@ -5563,6 +5563,8 @@ async function renderScenario(hash, fetchImpl) {
   resolvePendingContainerLogs({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'aws_unavailable', entries: [] }) });
   resolvePendingContainerInspection({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'aws_unavailable' }) });
   await settle();
+  const pendingContainerResolvedText = collectText(pendingContainerRun.document.getElementById('accounts')).join(' | ');
+  if (!pendingContainerResolvedText.includes('Recent logs request | GET ' + containerLogsURL)) throw new Error('expected unavailable container recent-log state to show the exact request route, got ' + pendingContainerResolvedText);
 
   const containerRun = await (async () => {
     const document = createDocument();
@@ -5590,6 +5592,7 @@ async function renderScenario(hash, fetchImpl) {
   if (!containerFetches.includes(containerLogsURL)) throw new Error('expected bookmarked container route to fetch container-scoped recent logs, got ' + JSON.stringify(containerFetches));
   const containerText = collectText(containerRun.document.getElementById('accounts')).join(' | ');
   if (!containerText.includes('Selected container | worker') || !containerText.includes('bookmarked worker log')) throw new Error('expected bookmarked container route to render container-scoped logs, got ' + containerText);
+  if (!containerText.includes('Recent logs request | GET ' + containerLogsURL)) throw new Error('expected successful container recent-log state to show the exact request route, got ' + containerText);
   ['Container instance | arn:aws:ecs:ap-northeast-2:210987654321:container-instance/payments-staging/ci-abc123', 'Capacity provider | FARGATE_SPOT', 'Availability Zone | ap-northeast-2a'].forEach((fragment) => {
     if (!containerText.includes(fragment)) throw new Error('expected direct ECS task placement evidence ' + fragment + ', got ' + containerText);
   });
