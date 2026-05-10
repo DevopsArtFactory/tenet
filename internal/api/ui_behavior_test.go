@@ -10947,6 +10947,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const quickNavAuditLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2' && node.textContent === 'Audit log');
   const quickNavDeploymentContextLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-deployment-context' && node.textContent === 'Deployment context');
   const quickNavTimelineLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-timeline' && node.textContent === 'Audit timeline');
+  const quickNavApplyEntryLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-entry-apply-apply-failed-123' && node.textContent === 'Apply requested (apply.requested) · apply apply_failed_123 · 2026-04-18T08:00:00Z');
+  const quickNavPlanEntryLink = links.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-entry-plan-plan-ready-123' && node.textContent === 'Plan preview created (plan.created) · plan plan_ready_123 · 2026-04-17T09:00:00Z');
   const quickNavChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
   const quickNavChip = quickNavChips.find((node) => node.textContent === 'Audit log');
   const applicationLink = links.find((node) => node.href === '/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod' && node.textContent === 'Open application drill-down');
@@ -10989,6 +10991,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!quickNavPlanLink || quickNavPlanLink.target !== '_self' || quickNavPlanLink.rel) throw new Error('expected audit quick navigation plan link');
   if (!quickNavDeploymentContextLink || quickNavDeploymentContextLink.target !== '_self' || quickNavDeploymentContextLink.rel) throw new Error('expected audit quick navigation deployment-context section link');
   if (!quickNavTimelineLink || quickNavTimelineLink.target !== '_self' || quickNavTimelineLink.rel) throw new Error('expected audit quick navigation timeline section link');
+  if (!quickNavApplyEntryLink || quickNavApplyEntryLink.target !== '_self' || quickNavApplyEntryLink.rel) throw new Error('expected audit quick navigation apply row anchor link');
+  if (!quickNavPlanEntryLink || quickNavPlanEntryLink.target !== '_self' || quickNavPlanEntryLink.rel) throw new Error('expected audit quick navigation plan row anchor link');
   if (quickNavAuditLink) throw new Error('expected audit quick navigation to render active workspace as a chip');
   if (!quickNavChip) throw new Error('expected audit quick navigation chip');
   if (quickNavChips.find((node) => String(node.getAttribute('aria-label') || '').startsWith('Current section: '))) throw new Error('expected audit route without hash not to render a current-section chip');
@@ -11098,6 +11102,23 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const updatedSectionLinks = collectNodes(updatedAccounts, (node) => node.tagName === 'A' && ['Deployment context', 'Audit timeline'].includes(node.textContent));
   if (updatedSectionLinks.find((node) => node.textContent === 'Deployment context')) throw new Error('expected updated audit current section to be removed from On this page links');
   if (!updatedSectionLinks.find((node) => node.textContent === 'Audit timeline')) throw new Error('expected previous audit current section to return to On this page links after hashchange');
+  window.location.hash = '#audit-entry-apply-apply-failed-123';
+  window.dispatchHashChange();
+  await settle();
+  const rowAnchorChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
+  const applyRowChip = rowAnchorChips.find((node) => node.getAttribute('aria-label') === 'Current section: Apply requested (apply.requested) · apply apply_failed_123 · 2026-04-18T08:00:00Z');
+  if (!applyRowChip) throw new Error('expected audit row hash to update the current-section chip');
+  const isOnThisPageLink = (node) => {
+    let parent = node.parentNode;
+    while (parent) {
+      if (parent.className === 'quick-nav-group') return collectText(parent).join(' | ').includes('On this page');
+      parent = parent.parentNode;
+    }
+    return false;
+  };
+  const rowAnchorLinks = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.href.includes('#audit-entry-') && isOnThisPageLink(node));
+  if (rowAnchorLinks.find((node) => node.href.endsWith('#audit-entry-apply-apply-failed-123'))) throw new Error('expected active audit row anchor to be removed from On this page links');
+  if (!rowAnchorLinks.find((node) => node.href.endsWith('#audit-entry-plan-plan-ready-123'))) throw new Error('expected sibling audit row anchor to remain in On this page links');
 })();
 `
 

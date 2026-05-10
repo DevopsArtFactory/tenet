@@ -1795,11 +1795,27 @@
         if (entry?.action) return `audit-entry-action-${auditAnchorSlug(entry.action)}`;
         return 'audit-entry-unknown';
       };
-      const auditEntryAnchorURL = (entry) => buildPageSectionURL('audit', auditEntryAnchorID(entry), {
+      const uniqueAuditEntryAnchorID = (entry, seenAnchors) => {
+        const base = auditEntryAnchorID(entry);
+        const seen = seenAnchors.get(base) || 0;
+        seenAnchors.set(base, seen + 1);
+        return seen ? `${base}-${seen + 1}` : base;
+      };
+      const auditEntryAnchorURL = (entry, anchorID = auditEntryAnchorID(entry)) => buildPageSectionURL('audit', anchorID, {
         deployment: currentPageState.deployment,
         action: currentPageState.auditAction,
         limit: currentPageState.auditLimit,
       });
+      const auditEntryQuickNavLabel = (entry) => {
+        const action = auditActionLabel(entry?.action);
+        const subject = entry?.applyId
+          ? `apply ${entry.applyId}`
+          : entry?.planId
+            ? `plan ${entry.planId}`
+            : (entry?.deploymentName || 'audit entry');
+        const timestamp = entry?.timestamp ? ` · ${entry.timestamp}` : '';
+        return `${action} · ${subject}${timestamp}`;
+      };
       const runtimeEventAnchorBase = (event) => {
         const backendID = auditAnchorSlug(event?.eventId);
         if (backendID && backendID !== 'unknown') return `runtime-event-${backendID}`;
@@ -6142,6 +6158,12 @@
         const root = document.getElementById('accounts');
         const page = createElement('article', 'account');
         const entries = sortAuditEntries(result?.entries || []);
+        const seenAuditEntryAnchors = new Map();
+        const auditEntryAnchors = entries.map((entry) => ({
+          entry,
+          anchorID: uniqueAuditEntryAnchorID(entry, seenAuditEntryAnchors),
+          label: auditEntryQuickNavLabel(entry),
+        }));
         const refreshStateText = auditLogsRefreshStateText(auditState);
         const auditSectionLinks = [];
         const pushAuditSectionLink = (sectionID, label) => {
@@ -6177,6 +6199,9 @@
         const timelineSectionID = 'audit-timeline';
         timelineSection.setAttribute('id', timelineSectionID);
         pushAuditSectionLink(timelineSectionID, 'Audit timeline');
+        auditEntryAnchors.forEach((anchor) => {
+          pushAuditSectionLink(anchor.anchorID, anchor.label);
+        });
         const quickNav = createAuditQuickNav(auditSectionLinks);
         if (quickNav) {
           page.append(quickNav);
@@ -6217,9 +6242,10 @@
           timelineSection.append(createElement('div', 'detail-condition-meta audit-limit-cap-hint', limitCapHint));
         }
         const rows = createElement('div', 'rows');
-        entries.forEach((entry) => {
+        entries.forEach((entry, index) => {
           const row = createElement('div', 'row');
-          row.setAttribute('id', auditEntryAnchorID(entry));
+          const rowAnchorID = auditEntryAnchors[index]?.anchorID || auditEntryAnchorID(entry);
+          row.setAttribute('id', rowAnchorID);
           const top = createElement('div', 'row-top');
           const titleWrap = createElement('div');
           const deploymentContext = [
@@ -6287,7 +6313,7 @@
           }
 
           const links = createElement('div', 'row-links row-links-shell');
-          links.append(createNavLink(auditEntryAnchorURL(entry), 'Open audit entry', '_self'));
+          links.append(createNavLink(auditEntryAnchorURL(entry, rowAnchorID), 'Open audit entry', '_self'));
           if (entry.deploymentName) {
             links.append(createNavLink(buildPageURL('application', { deployment: entry.deploymentName }), 'Open application drill-down', '_self'));
             links.append(createNavLink(buildPageURL('drift', { deployment: entry.deploymentName }), 'Open drift view', '_self'));
