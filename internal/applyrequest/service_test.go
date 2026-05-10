@@ -2,6 +2,7 @@ package applyrequest
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -202,32 +203,6 @@ func TestServiceCreateCarriesPlanOperationIDsIntoApplyRows(t *testing.T) {
 	}
 	if len(result.Record.Operations) != 1 || result.Record.Operations[0].ID != "operation-shift-traffic" {
 		t.Fatalf("expected apply operation to preserve plan operation id, got %+v", result.Record.Operations)
-	}
-}
-
-func TestNormalizeRecordBackfillsStableApplyOperationIDs(t *testing.T) {
-	record := Record{Operations: []Operation{
-		{Status: OperationStatusPending, Phase: "Promoting", Target: "listener", Summary: "shift traffic"},
-		{Status: OperationStatusRunning, Phase: "Promoting", Target: "listener", Summary: "shift traffic"},
-		{ID: "operation-existing", Status: OperationStatusPending, Phase: "Verifying", Target: "service", Summary: "verify service"},
-	}}
-
-	normalized := NormalizeRecord(record)
-	if len(normalized.Operations) != 3 {
-		t.Fatalf("expected normalized operations, got %+v", normalized.Operations)
-	}
-	firstID := normalized.Operations[0].ID
-	if firstID == "" || !strings.HasPrefix(firstID, "operation-") {
-		t.Fatalf("expected deterministic generated operation id, got %+v", normalized.Operations)
-	}
-	if normalized.Operations[1].ID != firstID+"-2" {
-		t.Fatalf("expected duplicate operation id suffix, got %+v", normalized.Operations)
-	}
-	if normalized.Operations[2].ID != "operation-existing" {
-		t.Fatalf("expected existing operation id to be preserved, got %+v", normalized.Operations)
-	}
-	if record.Operations[0].ID != "" {
-		t.Fatalf("NormalizeRecord should not mutate caller-owned operation slices, got %+v", record.Operations)
 	}
 }
 
@@ -650,5 +625,57 @@ func TestApplyLifecycleStatusHelpers(t *testing.T) {
 	}
 	if OperationStatus("mystery").Valid() {
 		t.Fatalf("unexpected unknown apply operation status to validate")
+	}
+}
+
+func TestNormalizeOperationIDsBackfillsLegacyApplyDuplicateRows(t *testing.T) {
+	record := Record{
+		ID:             "apply_legacy",
+		PlanID:         "plan_legacy",
+		DeploymentName: "api-prod",
+		Status:         StatusRunning,
+		Operations: []Operation{
+			{Status: OperationStatusRunning, Phase: "Promoting", Target: "listener (productionListener)", Summary: "Shift traffic."},
+			{Status: OperationStatusPending, Phase: "Promoting", Target: "listener (productionListener)", Summary: "Shift traffic."},
+		},
+	}
+
+	normalized := NormalizeOperationIDs(record)
+	if normalized.Operations[0].ID == "" || normalized.Operations[1].ID == "" {
+		t.Fatalf("expected legacy apply operation IDs to be backfilled: %+v", normalized.Operations)
+	}
+	if normalized.Operations[0].ID == normalized.Operations[1].ID {
+		t.Fatalf("expected duplicate apply rows to be disambiguated: %+v", normalized.Operations)
+	}
+	if !strings.HasSuffix(normalized.Operations[0].ID, "-1") || !strings.HasSuffix(normalized.Operations[1].ID, "-2") {
+		t.Fatalf("expected ordinal ID suffixes for duplicate apply rows: %+v", normalized.Operations)
+	}
+	record.Operations[0].ID = normalized.Operations[0].ID
+	record.Operations[1].ID = ""
+	mixed := NormalizeOperationIDs(record)
+	if mixed.Operations[0].ID != normalized.Operations[0].ID || mixed.Operations[1].ID == normalized.Operations[0].ID {
+		t.Fatalf("expected existing generated apply IDs to be preserved without collision: %+v", mixed.Operations)
+	}
+	encoded, err := json.Marshal(normalized)
+	if err != nil {
+		t.Fatalf("Marshal returned error: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"id":"op_`) {
+		t.Fatalf("expected raw JSON operation id field, got %s", string(encoded))
+	}
+}
+
+func TestDeriveOperationsPreservesPlanOperationIDs(t *testing.T) {
+	plan := planpreview.Record{
+		ID:             "plan_ready",
+		DeploymentName: "api-prod",
+		Status:         planpreview.StatusReady,
+		Operations: []planpreview.Operation{
+			{ID: "op_planrow-1", Status: "current", Phase: "Promoting", Target: "listener (productionListener)", Summary: "Shift traffic."},
+		},
+	}
+	operations := deriveOperations(plan, OperationStatusQueued)
+	if len(operations) != 1 || operations[0].ID != "op_planrow-1" {
+		t.Fatalf("expected apply projection to preserve plan operation ID, got %+v", operations)
 	}
 }

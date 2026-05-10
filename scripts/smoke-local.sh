@@ -809,10 +809,14 @@ assert plan_preview['deploymentName'] == 'payments-api-prod', plan_preview
 assert plan_preview['status'] == 'ready', plan_preview
 assert plan_preview['source']['route'] == '/v1/overview/deployments/payments-api-prod', plan_preview
 assert plan_preview['source']['fingerprint'] == deployment_detail['sourceFingerprint'], (plan_preview, deployment_detail)
-assert isinstance(plan_preview.get('operations', []), list), plan_preview
+assert isinstance(plan_preview.get('operations', []), list) and plan_preview['operations'], plan_preview
+plan_operation_ids = [operation.get('id') for operation in plan_preview['operations']]
+assert all(isinstance(operation_id, str) and operation_id.startswith('op_') for operation_id in plan_operation_ids), plan_preview
+assert len(plan_operation_ids) == len(set(plan_operation_ids)), plan_preview
 assert isinstance((plan_preview.get('risk') or {}).get('reasons', []), list), plan_preview
 assert isinstance((plan_preview.get('approval') or {}).get('required'), bool), plan_preview
 assert plan_preview_get == plan_preview, (plan_preview_get, plan_preview)
+assert [operation.get('id') for operation in plan_preview_get['operations']] == plan_operation_ids, (plan_preview_get, plan_preview)
 assert apply_record['planId'] == plan_preview['id'], (apply_record, plan_preview)
 assert apply_record['deploymentName'] == 'payments-api-prod', apply_record
 assert apply_record['status'] == ('queued' if apply_enabled else 'failed'), apply_record
@@ -834,6 +838,7 @@ else:
     assert apply_record['lifecycle']['finishedAt'] == apply_record['createdAt'], apply_record
 assert isinstance(apply_record.get('operations', []), list) and apply_record['operations'], apply_record
 assert len(apply_record['operations']) == len(plan_preview['operations']), (apply_record, plan_preview)
+assert [operation.get('id') for operation in apply_record['operations']] == plan_operation_ids, (apply_record, plan_preview)
 assert [operation['status'] for operation in apply_record['operations']] == [('queued' if apply_enabled else 'pending')] * len(apply_record['operations']), apply_record
 assert [operation['phase'] for operation in apply_record['operations']] == [operation['phase'] for operation in plan_preview['operations']], (apply_record, plan_preview)
 assert [operation['target'] for operation in apply_record['operations']] == [operation['target'] for operation in plan_preview['operations']], (apply_record, plan_preview)
@@ -871,12 +876,16 @@ assert actor_plan_preview['actor']['id'] == 'explicit-456', actor_plan_preview
 assert actor_plan_preview['actor']['name'] == 'Alex Explicit', actor_plan_preview
 assert actor_plan_preview['actor']['email'] == 'alex.explicit@example.com', actor_plan_preview
 assert actor_plan_preview_get == actor_plan_preview, (actor_plan_preview_get, actor_plan_preview)
+actor_plan_operation_ids = [operation.get('id') for operation in actor_plan_preview['operations']]
+assert all(isinstance(operation_id, str) and operation_id.startswith('op_') for operation_id in actor_plan_operation_ids), actor_plan_preview
+assert [operation.get('id') for operation in actor_plan_preview_get['operations']] == actor_plan_operation_ids, (actor_plan_preview_get, actor_plan_preview)
 assert actor_apply_record['deploymentName'] == 'payments-api-staging', actor_apply_record
 assert actor_apply_record['actor']['available'] is True, actor_apply_record
 assert actor_apply_record['actor']['id'] == 'explicit-456', actor_apply_record
 assert actor_apply_record['actor']['name'] == 'Alex Explicit', actor_apply_record
 assert actor_apply_record['actor']['email'] == 'alex.explicit@example.com', actor_apply_record
 assert isinstance(actor_apply_record.get('operations', []), list) and actor_apply_record['operations'], actor_apply_record
+assert [operation.get('id') for operation in actor_apply_record['operations']] == actor_plan_operation_ids, (actor_apply_record, actor_plan_preview)
 assert all(operation['status'] == ('queued' if apply_enabled else 'pending') for operation in actor_apply_record['operations']), actor_apply_record
 if apply_enabled:
     assert actor_apply_record_get['id'] == actor_apply_record['id'], (actor_apply_record_get, actor_apply_record)
@@ -887,6 +896,7 @@ if apply_enabled:
     assert actor_apply_record_get['actor']['email'] == 'alex.explicit@example.com', actor_apply_record_get
 else:
     assert actor_apply_record_get == actor_apply_record, (actor_apply_record_get, actor_apply_record)
+assert [operation.get('id') for operation in actor_apply_record_get['operations']] == [operation.get('id') for operation in actor_apply_record['operations']], (actor_apply_record_get, actor_apply_record)
 assert stale_plan_preview['status'] == 'failed', stale_plan_preview
 assert stale_plan_preview['source']['fingerprint'] == deployment_detail['sourceFingerprint'], (stale_plan_preview, deployment_detail)
 assert isinstance(stale_plan_preview.get('errors', []), list) and stale_plan_preview['errors'], stale_plan_preview

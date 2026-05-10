@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
@@ -53,6 +54,7 @@ func (s Service) Create(ctx context.Context, planID string) (CreateResult, error
 	if err != nil {
 		return CreateResult{}, err
 	}
+	plan = planpreview.NormalizeOperationIDs(plan)
 	if plan.Status != planpreview.StatusReady {
 		return CreateResult{}, fmt.Errorf("%w: %s is %s", ErrPlanNotReady, plan.ID, plan.Status)
 	}
@@ -85,7 +87,7 @@ func (s Service) Create(ctx context.Context, planID string) (CreateResult, error
 
 	existing, err := s.Store.Get(ctx, record.ID)
 	if err == nil {
-		return CreateResult{Record: NormalizeRecord(existing), Created: false}, nil
+		return CreateResult{Record: NormalizeOperationIDs(existing), Created: false}, nil
 	}
 	if err != nil && !errors.Is(err, ErrNotFound) {
 		return CreateResult{}, err
@@ -97,7 +99,7 @@ func (s Service) Create(ctx context.Context, planID string) (CreateResult, error
 	if err != nil {
 		return CreateResult{}, err
 	}
-	return CreateResult{Record: NormalizeRecord(stored), Created: true}, nil
+	return CreateResult{Record: NormalizeOperationIDs(stored), Created: true}, nil
 }
 
 func (s Service) validateCurrentFingerprint(ctx context.Context, plan planpreview.Record) error {
@@ -132,7 +134,14 @@ func (s Service) Get(ctx context.Context, id string) (Record, error) {
 	if err != nil {
 		return Record{}, err
 	}
-	return NormalizeRecord(record), nil
+	return NormalizeOperationIDs(record), nil
+}
+
+// NormalizeOperationIDs returns a copy of record with additive backend-authored operation IDs.
+// Existing non-empty IDs are preserved so immutable stored records do not need to be rewritten.
+func NormalizeOperationIDs(record Record) Record {
+	record.Operations = normalizeOperationIDs(record.Operations)
+	return record
 }
 
 // Transition advances one persisted apply request to a validated lifecycle state without changing
@@ -149,6 +158,7 @@ func (s Service) Transition(ctx context.Context, id string, request TransitionRe
 	if err != nil {
 		return Record{}, err
 	}
+	record = NormalizeOperationIDs(record)
 	if err := validateTransition(record, request); err != nil {
 		return Record{}, err
 	}
@@ -166,11 +176,11 @@ func (s Service) Transition(ctx context.Context, id string, request TransitionRe
 	if err := s.Store.Update(ctx, record); err != nil {
 		return Record{}, err
 	}
-	updated, err := s.Store.Get(ctx, id)
+	stored, err := s.Store.Get(ctx, id)
 	if err != nil {
 		return Record{}, err
 	}
-	return NormalizeRecord(updated), nil
+	return NormalizeOperationIDs(stored), nil
 }
 
 func (s Service) now() time.Time {
@@ -252,54 +262,53 @@ func deriveOperations(plan planpreview.Record, status OperationStatus) []Operati
 			Summary: operation.Summary,
 		})
 	}
-	return assignOperationIDs(operations)
+	return normalizeOperationIDs(operations)
 }
 
-// NormalizeRecord backfills additive read-model fields for legacy immutable apply records.
-func NormalizeRecord(record Record) Record {
-	record.Operations = assignOperationIDs(record.Operations)
-	return record
-}
-
-func assignOperationIDs(operations []Operation) []Operation {
+func normalizeOperationIDs(operations []Operation) []Operation {
 	if len(operations) == 0 {
 		return nil
 	}
-	normalized := make([]Operation, len(operations))
-	copy(normalized, operations)
-	seen := map[string]int{}
+	normalized := append([]Operation(nil), operations...)
+	used := make(map[string]struct{}, len(normalized))
+	for _, operation := range normalized {
+		if operation.ID != "" {
+			used[operation.ID] = struct{}{}
+		}
+	}
+	counts := make(map[string]int, len(normalized))
 	for index := range normalized {
 		if normalized[index].ID != "" {
-			seen[normalized[index].ID]++
 			continue
 		}
-		base := operationIDBase(normalized[index])
-		seen[base]++
-		if seen[base] == 1 {
-			normalized[index].ID = base
-		} else {
-			normalized[index].ID = fmt.Sprintf("%s-%d", base, seen[base])
+		base := applyOperationIDBase(normalized[index])
+		for {
+			counts[base]++
+			candidate := base + "-" + strconv.Itoa(counts[base])
+			if _, exists := used[candidate]; exists {
+				continue
+			}
+			normalized[index].ID = candidate
+			used[candidate] = struct{}{}
+			break
 		}
 	}
 	return normalized
 }
 
-func operationIDBase(operation Operation) string {
+func applyOperationIDBase(operation Operation) string {
 	payload := struct {
-		Phase   string `json:"phase,omitempty"`
-		Target  string `json:"target,omitempty"`
-		Summary string `json:"summary,omitempty"`
+		Phase   string `json:"phase"`
+		Target  string `json:"target"`
+		Summary string `json:"summary"`
 	}{
 		Phase:   operation.Phase,
 		Target:  operation.Target,
 		Summary: operation.Summary,
 	}
-	content, err := json.Marshal(payload)
-	if err != nil {
-		return "operation-unknown"
-	}
+	content, _ := json.Marshal(payload)
 	sum := sha256.Sum256(content)
-	return "operation-" + hex.EncodeToString(sum[:6])
+	return "op_" + hex.EncodeToString(sum[:6])
 }
 
 func initialLifecycle(record Record) Lifecycle {
