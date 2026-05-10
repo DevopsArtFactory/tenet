@@ -817,7 +817,7 @@ func newOverviewDeploymentResourceInspectionProvider(
 		if err != nil {
 			return resourceinspection.Result{}, err
 		}
-		return provider.Inspect(ctx, resourceinspection.Request{
+		result, err := provider.Inspect(ctx, resourceinspection.Request{
 			DeploymentName:           request.DeploymentName,
 			ResourceType:             request.ResourceType,
 			ResourceName:             request.ResourceName,
@@ -833,6 +833,13 @@ func newOverviewDeploymentResourceInspectionProvider(
 			Region:                   request.Region,
 			ObserverRoleARN:          request.ObserverRoleARN,
 		})
+		if err != nil {
+			return resourceinspection.Result{}, err
+		}
+		if result.ResourceDescription == "" {
+			result.ResourceDescription = strings.TrimSpace(request.ResourceDescription)
+		}
+		return result, nil
 	}
 }
 

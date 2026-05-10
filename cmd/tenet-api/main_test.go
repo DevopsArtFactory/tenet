@@ -1861,6 +1861,9 @@ func TestAPIOptionsOverviewDeploymentResourceInspectionWiresObserverRoleAndPlace
 	if !result.Available {
 		t.Fatalf("expected wired provider result, got %+v", result)
 	}
+	if result.ResourceDescription != "live ECS service" {
+		t.Fatalf("expected selected resource description to be echoed in inspection result, got %+v", result)
+	}
 	want := resourceinspection.Request{
 		DeploymentName:           "api-prod",
 		ResourceType:             "ecsService",
