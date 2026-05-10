@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"regexp"
 	"sort"
 	"strings"
@@ -323,10 +324,12 @@ type AutoScalingInspection struct {
 }
 
 type AutoScalingInstanceScope struct {
+	Available             bool   `json:"available"`
 	RequestedLimit        *int   `json:"requestedLimit,omitempty"`
 	EffectiveLimit        int    `json:"effectiveLimit"`
 	ReturnedInstanceCount int    `json:"returnedInstanceCount"`
 	TruncationStatus      string `json:"truncationStatus"`
+	Summary               string `json:"summary,omitempty"`
 }
 
 type AutoScalingLaunchTemplateSummary struct {
@@ -983,12 +986,21 @@ func applyAutoScalingInstanceScope(detail AutoScalingInspection, limit int) Auto
 	}
 	detail.Instances = instances
 	detail.InstancesScope = &AutoScalingInstanceScope{
+		Available:             true,
 		RequestedLimit:        requestedLimit,
 		EffectiveLimit:        effectiveLimit,
 		ReturnedInstanceCount: len(instances),
 		TruncationStatus:      truncationStatus,
+		Summary:               autoScalingInstanceScopeSummary(len(instances), effectiveLimit, truncationStatus),
 	}
 	return detail
+}
+
+func autoScalingInstanceScopeSummary(returnedCount, effectiveLimit int, truncationStatus string) string {
+	if truncationStatus == "truncated" {
+		return fmt.Sprintf("Showing %d Auto Scaling instance(s); additional instances were omitted by the effective limit %d.", returnedCount, effectiveLimit)
+	}
+	return fmt.Sprintf("Returned %d Auto Scaling instance(s) within the effective limit %d.", returnedCount, effectiveLimit)
 }
 
 func availableUserDataBootstrapSourceResult(req Request, detail AutoScalingInspection) Result {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -295,7 +296,7 @@ func TestServiceInspect(t *testing.T) {
 			t.Fatalf("expected ASG instancesScope, got %+v", result.AutoScalingGroup)
 		}
 		scope := result.AutoScalingGroup.InstancesScope
-		if scope.RequestedLimit != nil || scope.EffectiveLimit != 10 || scope.ReturnedInstanceCount != 10 || scope.TruncationStatus != "truncated" {
+		if scope.RequestedLimit != nil || !scope.Available || scope.EffectiveLimit != 10 || scope.ReturnedInstanceCount != 10 || scope.TruncationStatus != "truncated" || !strings.Contains(scope.Summary, "additional instances were omitted") {
 			t.Fatalf("unexpected default ASG instancesScope: %+v", scope)
 		}
 		if got := result.AutoScalingGroup.Instances; len(got) != 10 || got[0].InstanceID != "i-001" || got[9].InstanceID != "i-010" {
@@ -326,7 +327,7 @@ func TestServiceInspect(t *testing.T) {
 			t.Fatalf("expected ASG instancesScope, got %+v", result.AutoScalingGroup)
 		}
 		scope := result.AutoScalingGroup.InstancesScope
-		if scope.RequestedLimit == nil || *scope.RequestedLimit != 5 || scope.EffectiveLimit != 5 || scope.ReturnedInstanceCount != 3 || scope.TruncationStatus != "not_truncated" {
+		if scope.RequestedLimit == nil || *scope.RequestedLimit != 5 || !scope.Available || scope.EffectiveLimit != 5 || scope.ReturnedInstanceCount != 3 || scope.TruncationStatus != "not_truncated" || !strings.Contains(scope.Summary, "within the effective limit 5") {
 			t.Fatalf("unexpected explicit ASG instancesScope: %+v", scope)
 		}
 		if got := result.AutoScalingGroup.Instances; len(got) != 3 || got[0].InstanceID != "i-001" || got[2].InstanceID != "i-003" {
@@ -369,7 +370,7 @@ func TestServiceInspect(t *testing.T) {
 		if got := result.AutoScalingGroup.Instances; len(got) != 1 || got[0].InstanceID != "i-0abc123def4567890" {
 			t.Fatalf("expected only selected ASG instance, got %+v", got)
 		}
-		if scope := result.AutoScalingGroup.InstancesScope; scope == nil || scope.RequestedLimit == nil || *scope.RequestedLimit != 1 || scope.EffectiveLimit != 1 || scope.ReturnedInstanceCount != 1 || scope.TruncationStatus != "not_truncated" {
+		if scope := result.AutoScalingGroup.InstancesScope; scope == nil || scope.RequestedLimit == nil || *scope.RequestedLimit != 1 || !scope.Available || scope.EffectiveLimit != 1 || scope.ReturnedInstanceCount != 1 || scope.TruncationStatus != "not_truncated" || scope.Summary == "" {
 			t.Fatalf("unexpected selected ASG instancesScope: %+v", scope)
 		}
 	})
