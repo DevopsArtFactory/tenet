@@ -3001,6 +3001,29 @@
         createClearSelectedClusterButton(detail, resource, resourceState),
         createClearSelectedInstanceButton(detail, resource, resourceState),
       ];
+      const createSelectedResourceContextCallout = (detail, resource) => {
+        const deploymentName = detail.name || currentPageState.deployment || '';
+        const scopeText = selectedResourceScopeText(resource);
+        const routeBits = [
+          resourceInspectionReadRoute(deploymentName, resource),
+          resourceLogsReadRoute(deploymentName, resource),
+        ].filter(Boolean);
+        const callout = createElement('div', 'workspace-callout selected-resource-context');
+        const head = createElement('div', 'workspace-callout-head');
+        head.append(
+          createElement('span', 'workspace-callout-label', 'Selected resource context'),
+          createElement('span', 'pill target', resource.type || 'resource'),
+        );
+        const summaryParts = [resource.name, deploymentName ? `deployment ${deploymentName}` : '', scopeText].filter(Boolean);
+        callout.append(
+          head,
+          createElement('div', 'workspace-callout-copy', summaryParts.length ? summaryParts.join(' · ') : 'Resource selection is derived from the current bookmarkable route.'),
+          createElement('div', 'workspace-callout-factors', routeBits.length
+            ? `Use the Live inspection and Recent logs sections below to refresh focused evidence for this exact resource selection. Backing reads: ${routeBits.join(' and ')}.`
+            : 'Use the Live inspection and Recent logs sections below to refresh focused evidence for this exact resource selection.'),
+        );
+        return callout;
+      };
       const resourceDetailRefreshState = (resourceState = null) => {
         if (resourceState?.status === 'loading') {
           return {
@@ -3757,6 +3780,7 @@
         page.append(
           createElement('h2', 'account-name', 'Resource detail'),
           createElement('div', 'account-meta', `Focused rollout/runtime context for ${resource.name}.`),
+          createSelectedResourceContextCallout(detail, resource),
         );
         if (resourceRouteState.openedViaAlias) {
           page.append(createElement('div', 'detail-state', `Opened via bookmarked resource alias. Requested resource id ${resourceRouteState.routeResourceId}; resolved canonical resource id ${resource.id}.`));
