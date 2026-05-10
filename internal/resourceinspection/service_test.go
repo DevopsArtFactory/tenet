@@ -135,6 +135,45 @@ func TestServiceInspect(t *testing.T) {
 		}
 	})
 
+	t.Run("ecs service mirrors task scope at response level", func(t *testing.T) {
+		requestedLimit := 5
+		service := NewService(Options{
+			InspectECSService: func(ctx context.Context, req ECSRequest) (ECSServiceInspection, error) {
+				if req.TaskSummaryLimit != requestedLimit {
+					t.Fatalf("expected ECS task summary limit %d, got %d", requestedLimit, req.TaskSummaryLimit)
+				}
+				return ECSServiceInspection{
+					ClusterARN:     "arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker",
+					ServiceARN:     "arn:aws:ecs:ap-northeast-2:123456789012:service/worker/worker-prod-service",
+					ServiceName:    "worker-prod-service",
+					Status:         "ACTIVE",
+					DesiredCount:   4,
+					RunningCount:   4,
+					TaskDefinition: "worker:42",
+					Tasks:          []ECSTaskSummary{{TaskARN: "arn:aws:ecs:ap-northeast-2:123456789012:task/worker/one", TaskID: "one"}},
+					TasksScope: &ECSTaskSummaryScope{
+						Available:         true,
+						RequestedLimit:    &requestedLimit,
+						EffectiveLimit:    requestedLimit,
+						ReturnedTaskCount: 1,
+						TruncationStatus:  "not_truncated",
+					},
+				}, nil
+			},
+		})
+
+		result, err := service.Inspect(context.Background(), Request{ResourceType: "ecsService", ResourceName: "worker-prod-service", TaskSummaryLimit: requestedLimit})
+		if err != nil {
+			t.Fatalf("Inspect returned error: %v", err)
+		}
+		if result.ResultScope == nil || result.ResultScope.SampleType != "ecsTasks" || result.ResultScope.RequestedLimit == nil || *result.ResultScope.RequestedLimit != requestedLimit || result.ResultScope.EffectiveLimit != requestedLimit || result.ResultScope.ReturnedItemCount != 1 || result.ResultScope.TruncationStatus != "not_truncated" {
+			t.Fatalf("unexpected top-level ECS resultScope: %+v", result.ResultScope)
+		}
+		if result.ECSService == nil || result.ECSService.TasksScope == nil || result.ECSService.TasksScope.ReturnedTaskCount != 1 {
+			t.Fatalf("expected nested tasksScope to remain present, got %+v", result.ECSService)
+		}
+	})
+
 	t.Run("ecs task returns explicit task inspection payload", func(t *testing.T) {
 		var gotLookup ECSTaskRequest
 		service := NewService(Options{
@@ -329,6 +368,9 @@ func TestServiceInspect(t *testing.T) {
 		scope := result.AutoScalingGroup.InstancesScope
 		if scope.RequestedLimit == nil || *scope.RequestedLimit != 5 || !scope.Available || scope.EffectiveLimit != 5 || scope.ReturnedInstanceCount != 3 || scope.TruncationStatus != "not_truncated" || !strings.Contains(scope.Summary, "within the effective limit 5") {
 			t.Fatalf("unexpected explicit ASG instancesScope: %+v", scope)
+		}
+		if result.ResultScope == nil || result.ResultScope.SampleType != "autoScalingInstances" || result.ResultScope.RequestedLimit == nil || *result.ResultScope.RequestedLimit != 5 || result.ResultScope.EffectiveLimit != 5 || result.ResultScope.ReturnedItemCount != 3 || result.ResultScope.TruncationStatus != "not_truncated" {
+			t.Fatalf("unexpected top-level ASG resultScope: %+v", result.ResultScope)
 		}
 		if got := result.AutoScalingGroup.Instances; len(got) != 3 || got[0].InstanceID != "i-001" || got[2].InstanceID != "i-003" {
 			t.Fatalf("expected deterministic ASG instances, got %+v", got)
