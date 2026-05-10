@@ -3230,7 +3230,7 @@ func TestDeploymentOverviewEventsRouteIncludesManagedDriftSummary(t *testing.T) 
 		t.Fatalf("expected managedDriftSummary counts in events payload, got %#v", payload["managedDriftSummary"])
 	}
 	scope, ok := payload["resultScope"].(map[string]any)
-	if !ok || scope["effectiveLimit"] != float64(0) || scope["returnedEventCount"] != float64(1) || scope["totalEventCount"] != float64(1) || scope["limited"] != false || scope["truncationStatus"] != "not_truncated" {
+	if !ok || scope["effectiveLimit"] != float64(0) || scope["returnedEventCount"] != float64(1) || scope["totalEventCount"] != float64(1) || scope["limited"] != false || scope["newestEventTimestamp"] != "2026-04-16T06:15:00Z" || scope["oldestEventTimestamp"] != "2026-04-16T06:15:00Z" || scope["truncationStatus"] != "not_truncated" {
 		t.Fatalf("expected default events resultScope to describe the full returned window, got %#v", payload["resultScope"])
 	}
 	if _, exists := scope["requestedLimit"]; exists {
@@ -3294,8 +3294,40 @@ func TestDeploymentOverviewEventsRouteAppliesLimitToEventsAndSummary(t *testing.
 		t.Fatalf("expected managedDriftSummary counts for returned events only, got %#v", payload["managedDriftSummary"])
 	}
 	scope, ok := payload["resultScope"].(map[string]any)
-	if !ok || scope["requestedLimit"] != float64(1) || scope["effectiveLimit"] != float64(1) || scope["returnedEventCount"] != float64(1) || scope["totalEventCount"] != float64(2) || scope["limited"] != true || scope["truncationStatus"] != "truncated" {
+	if !ok || scope["requestedLimit"] != float64(1) || scope["effectiveLimit"] != float64(1) || scope["returnedEventCount"] != float64(1) || scope["totalEventCount"] != float64(2) || scope["limited"] != true || scope["newestEventTimestamp"] != "2026-05-06T03:00:00Z" || scope["oldestEventTimestamp"] != "2026-05-06T03:00:00Z" || scope["truncationStatus"] != "truncated" {
 		t.Fatalf("expected bounded resultScope for returned events only, got %#v", payload["resultScope"])
+	}
+}
+
+func TestDeploymentOverviewEventsRouteReportsTimestampEnvelopeForReturnedWindow(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeploymentEvents: func(_ context.Context, name string) (catalog.DeploymentOverviewEvents, error) {
+			return catalog.DeploymentOverviewEvents{
+				DeploymentName: name,
+				Events: []domain.StatusHistoryEntry{
+					{Timestamp: "2026-05-06T01:00:00Z", Summary: "older returned event"},
+					{Timestamp: "2026-05-06T03:00:00Z", Summary: "newest returned event"},
+					{Timestamp: "2026-05-06T02:00:00Z", Summary: "middle returned event"},
+				},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/events", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode deployment events payload: %v", err)
+	}
+	scope, ok := payload["resultScope"].(map[string]any)
+	if !ok || scope["newestEventTimestamp"] != "2026-05-06T03:00:00Z" || scope["oldestEventTimestamp"] != "2026-05-06T01:00:00Z" {
+		t.Fatalf("expected resultScope timestamp envelope for returned events, got %#v", payload["resultScope"])
 	}
 }
 
@@ -3332,8 +3364,39 @@ func TestDeploymentOverviewEventsRouteReportsExactLimitAsNotTruncated(t *testing
 		t.Fatalf("expected exact-limit events array in payload, got %#v", payload["events"])
 	}
 	scope, ok := payload["resultScope"].(map[string]any)
-	if !ok || scope["requestedLimit"] != float64(1) || scope["effectiveLimit"] != float64(1) || scope["returnedEventCount"] != float64(1) || scope["totalEventCount"] != float64(1) || scope["limited"] != false || scope["truncationStatus"] != "not_truncated" {
+	if !ok || scope["requestedLimit"] != float64(1) || scope["effectiveLimit"] != float64(1) || scope["returnedEventCount"] != float64(1) || scope["totalEventCount"] != float64(1) || scope["limited"] != false || scope["newestEventTimestamp"] != "2026-05-06T03:00:00Z" || scope["oldestEventTimestamp"] != "2026-05-06T03:00:00Z" || scope["truncationStatus"] != "not_truncated" {
 		t.Fatalf("expected exact-limit resultScope to be deterministic and not truncated, got %#v", payload["resultScope"])
+	}
+}
+
+func TestDeploymentOverviewEventsRouteOmitsWindowTimestampsForEmptyEvents(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeploymentEvents: func(_ context.Context, name string) (catalog.DeploymentOverviewEvents, error) {
+			return catalog.DeploymentOverviewEvents{DeploymentName: name, Events: []domain.StatusHistoryEntry{}}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/events", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode deployment events payload: %v", err)
+	}
+	scope, ok := payload["resultScope"].(map[string]any)
+	if !ok || scope["returnedEventCount"] != float64(0) || scope["totalEventCount"] != float64(0) || scope["truncationStatus"] != "not_truncated" {
+		t.Fatalf("expected empty resultScope counts, got %#v", payload["resultScope"])
+	}
+	if _, exists := scope["newestEventTimestamp"]; exists {
+		t.Fatalf("expected empty event resultScope to omit newestEventTimestamp, got %#v", scope)
+	}
+	if _, exists := scope["oldestEventTimestamp"]; exists {
+		t.Fatalf("expected empty event resultScope to omit oldestEventTimestamp, got %#v", scope)
 	}
 }
 

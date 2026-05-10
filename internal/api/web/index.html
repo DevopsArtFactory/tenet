@@ -5738,12 +5738,15 @@
       };
       const deploymentEventsResultScopeFields = (scope) => {
         if (!scope) return [];
-        return [
+        const fields = [
           ['Requested window', scope.requestedLimit == null ? 'All available events' : deploymentEventsScopeLimitText(scope.requestedLimit)],
           ['Effective window', deploymentEventsScopeLimitText(scope.effectiveLimit)],
           ['Returned events', deploymentEventsCountText(scope.returnedEventCount)],
-          ['Window status', deploymentEventsTruncationStatusText(scope.truncationStatus)],
         ];
+        if (scope.newestEventTimestamp) fields.push(['Newest event', scope.newestEventTimestamp]);
+        if (scope.oldestEventTimestamp) fields.push(['Oldest event', scope.oldestEventTimestamp]);
+        fields.push(['Window status', deploymentEventsTruncationStatusText(scope.truncationStatus)]);
+        return fields;
       };
       const createDeploymentEventsResultScopeSummary = (scope) => {
         const fields = deploymentEventsResultScopeFields(scope);

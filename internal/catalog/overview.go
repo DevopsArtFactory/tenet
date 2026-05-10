@@ -157,12 +157,14 @@ type DeploymentOverviewEvents struct {
 // by GET /v1/overview/deployments/{deploymentName}/events without promising an
 // expensive provider-wide total count.
 type DeploymentEventsResultScope struct {
-	RequestedLimit     *int   `json:"requestedLimit,omitempty"`
-	EffectiveLimit     int    `json:"effectiveLimit"`
-	ReturnedEventCount int    `json:"returnedEventCount"`
-	TotalEventCount    int    `json:"totalEventCount"`
-	Limited            bool   `json:"limited"`
-	TruncationStatus   string `json:"truncationStatus"`
+	RequestedLimit       *int   `json:"requestedLimit,omitempty"`
+	EffectiveLimit       int    `json:"effectiveLimit"`
+	ReturnedEventCount   int    `json:"returnedEventCount"`
+	TotalEventCount      int    `json:"totalEventCount"`
+	Limited              bool   `json:"limited"`
+	NewestEventTimestamp string `json:"newestEventTimestamp,omitempty"`
+	OldestEventTimestamp string `json:"oldestEventTimestamp,omitempty"`
+	TruncationStatus     string `json:"truncationStatus"`
 }
 
 // ApplicationOverviewDetail makes the application page contract explicit while preserving deployment detail semantics.
