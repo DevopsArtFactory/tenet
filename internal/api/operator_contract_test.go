@@ -1551,6 +1551,7 @@ func TestResourceDrillDownFrontDoorAuthOperatorContract(t *testing.T) {
 		"`403 Forbidden` authenticated-but-unauthorized reads",
 		"`200 OK` authorized reads",
 		"`available=false` plus explicit `unavailableReason` payload contract",
+		"unknown live-inspection codes out of operator copy",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README resource drill-down auth contract to include %q", fragment)
@@ -1575,6 +1576,7 @@ func TestResourceDrillDownFrontDoorAuthOperatorContract(t *testing.T) {
 		"`401`",
 		"`403`",
 		"`available=false` plus `unavailableReason`",
+		"unknown reason codes use a generic operator-facing fallback instead of raw machine codes",
 	} {
 		if !strings.Contains(overviewUIDoc, fragment) {
 			t.Fatalf("expected overview UI doc resource drill-down auth contract to include %q", fragment)
