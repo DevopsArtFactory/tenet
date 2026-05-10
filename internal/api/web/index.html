@@ -2542,6 +2542,17 @@
           () => overviewState?.onRefresh?.().catch(() => {}),
         ),
       ];
+      const applicationsOverviewFetchedAtText = (overviewState = null) => {
+        const fetchedAt = overviewState?.lastFetchedAt;
+        if (!fetchedAt) return '';
+        const timestamp = fetchedAt instanceof Date ? fetchedAt : new Date(fetchedAt);
+        if (Number.isNaN(timestamp.getTime())) return '';
+        return timestamp.toLocaleString();
+      };
+      const applicationsOverviewFreshnessLabel = (overviewState = null) => {
+        const fetchedAt = applicationsOverviewFetchedAtText(overviewState);
+        return fetchedAt ? `Applications read refreshed · ${fetchedAt}` : 'Applications read not refreshed yet';
+      };
       const applicationsOverviewRefreshState = (overviewState = null) => {
         if (overviewState?.status === 'loading') {
           return {
@@ -2661,6 +2672,7 @@
           createElement('div', 'label', 'Sync and health summary'),
           createElement('div', 'account-meta', `${synced} synced · ${progressing} progressing · ${paused} paused · ${errored} error`),
           createElement('div', 'account-meta', `${lastUpdateLabel} · ${latestUpdate}`),
+          createElement('div', 'account-meta', applicationsOverviewFreshnessLabel(applicationsOverviewState)),
         );
         const refreshState = applicationsOverviewRefreshState(applicationsOverviewState);
         const refreshNodes = [];
@@ -8202,6 +8214,7 @@
             applicationsOverviewState = {
               status: 'idle',
               error: null,
+              lastFetchedAt: new Date(),
               onRefresh: null,
             };
             applicationsOverviewState.onRefresh = () => {
@@ -8216,6 +8229,7 @@
                   syncViewState(currentViewState);
                   applicationsOverviewState.status = 'idle';
                   applicationsOverviewState.error = null;
+                  applicationsOverviewState.lastFetchedAt = new Date();
                   renderApplicationsOverview(nextApplications);
                   return nextApplications;
                 })

@@ -1205,6 +1205,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!summaryText.includes('Visible applications after filters: 1 of 2. Active filters: search “payments” · sync OutOfSync · health Progressing · account staging-core.')) throw new Error('expected filtered applications summary to explain active filters, got ' + summaryText);
   if (!summaryText.includes('Visible subset last update')) throw new Error('expected filtered applications summary to scope last update to visible subset');
   if (!summaryText.includes('2026-04-16T07:10:00Z')) throw new Error('expected applications page last update value');
+  if (!summaryText.includes('Applications read refreshed ·')) throw new Error('expected applications overview to show read freshness, got ' + summaryText);
+  if (summaryText.includes('Applications read not refreshed yet')) throw new Error('expected successful applications read to replace the not-refreshed placeholder');
   if (!accountsText.includes('payments-api-staging')) throw new Error('expected applications page row text');
   if (!accountsText.includes('More actions')) throw new Error('expected applications page secondary actions disclosure');
   if (!accountsText.includes('Latest runtime signal')) throw new Error('expected applications page latest runtime signal label');
@@ -1520,6 +1522,7 @@ async function render(fetchImpl) {
   let summaryText = collectText(loadingView.document.getElementById('summary')).join(' | ');
   if (!accountsText.includes('payments-api-staging')) throw new Error('expected initial applications overview content before refresh');
   if (!summaryText.includes('Application status overview')) throw new Error('expected applications overview summary before refresh');
+  if (!summaryText.includes('Applications read refreshed ·')) throw new Error('expected initial applications overview read freshness before refresh');
   refreshButton.dispatch('click');
   await settle();
   toolbarButtons = collectNodes(loadingView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
@@ -1528,6 +1531,7 @@ async function render(fetchImpl) {
   accountsText = collectText(loadingView.document.getElementById('accounts')).join(' | ');
   summaryText = collectText(loadingView.document.getElementById('summary')).join(' | ');
   if (!summaryText.includes('Refreshing applications overview from GET /v1/overview/applications…')) throw new Error('expected applications overview refresh loading copy');
+  if (!summaryText.includes('Applications read refreshed ·')) throw new Error('expected refresh loading state to preserve previous read freshness');
   if (!accountsText.includes('payments-api-staging')) throw new Error('expected current applications overview content to stay visible during refresh');
   if (loadingView.fetchCalls.length !== 2 || loadingView.fetchCalls[0] !== overviewURL || loadingView.fetchCalls[1] !== overviewURL) throw new Error('expected applications overview refresh to re-fetch only the overview route');
   if (loadingView.window.location.search !== initialSearch) throw new Error('expected applications overview refresh to preserve bookmarkable query state');
@@ -1535,9 +1539,12 @@ async function render(fetchImpl) {
   await settle();
   await settle();
   accountsText = collectText(loadingView.document.getElementById('accounts')).join(' | ');
+  summaryText = collectText(loadingView.document.getElementById('summary')).join(' | ');
   toolbarButtons = collectNodes(loadingView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
   refreshButton = toolbarButtons.find((node) => node.textContent === 'Refresh applications overview');
   if (!accountsText.includes('payments-api-canary')) throw new Error('expected refreshed applications overview to render in place');
+  if (!summaryText.includes('Applications read refreshed ·')) throw new Error('expected refreshed applications overview to keep read freshness label');
+  if (summaryText.includes('Applications read not refreshed yet')) throw new Error('expected refreshed applications overview to avoid not-refreshed placeholder');
   if (accountsText.includes('payments-api-staging')) throw new Error('expected refreshed applications overview to replace stale row content');
   if (accountsText.includes('Latest runtime signal')) throw new Error('expected refreshed overview to omit latest runtime signal when only a timestamp is present');
   if (!refreshButton || refreshButton.disabled) throw new Error('expected applications overview refresh button re-enabled after refresh completes');

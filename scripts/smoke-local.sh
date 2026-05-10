@@ -1387,6 +1387,7 @@ assert isinstance(traffic_resource_inspection['trafficRoutingResource'].get('sum
 assert 'Application status overview' in ui, ui
 assert 'Visible applications after filters:' in ui, ui
 assert 'Visible subset last update' in ui, ui
+assert 'Applications read refreshed ·' in ui, ui
 assert 'Latest runtime signal' in ui, ui
 assert 'Applications JSON' in ui, ui
 assert "createNavLink('/v1/overview/applications', 'Applications JSON')" in ui, ui
@@ -1544,6 +1545,8 @@ assert "buildPageURL('drift', { deployment: deployment.name })" in ui, ui
 assert "buildPageURL('plan', { deployment: deployment.name })" in ui, ui
 assert "buildPageURL('audit', { deployment: deployment.name })" in ui, ui
 assert 'Refresh applications overview' in ui, ui
+assert 'Applications read not refreshed yet' in ui, ui
+assert 'applicationsOverviewFreshnessLabel(applicationsOverviewState)' in ui, ui
 assert 'Health' in ui, ui
 assert 'All health states' in ui, ui
 assert "params.set('health', currentViewState.healthState)" in ui, ui
