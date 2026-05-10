@@ -27,10 +27,10 @@ Enterprise SSO should extend the second family as provider-neutral managed-login
 
 ## Provider-neutral configuration shape
 
-Provider work is disabled by default. GitHub OAuth, Google Workspace OIDC, and Okta OIDC become active Tenet-managed login providers only when their configured provider mode and required non-secret state, identity, and session settings are complete. Google Workspace OIDC uses `TENET_AUTH_PROVIDER=google_oidc` (canonical diagnostic provider `google`; the legacy `google` alias is accepted), and Okta OIDC uses `TENET_AUTH_PROVIDER=okta_oidc`; Okta SAML remains diagnostic-only and inactive. Configure the diagnostic/runtime with settings such as:
+Provider work is disabled by default. GitHub OAuth, Google Workspace OIDC, and Okta OIDC become active Tenet-managed login providers only when their configured provider mode and required non-secret state, identity, and session settings are complete. GitHub OAuth uses `TENET_AUTH_PROVIDER=github`, Google Workspace OIDC uses `TENET_AUTH_PROVIDER=google_oidc` (the legacy `google` alias is accepted), Okta OIDC uses `TENET_AUTH_PROVIDER=okta_oidc`, and Okta SAML uses `TENET_AUTH_PROVIDER=okta_saml` for diagnostic-only preflight. Configure the diagnostic/runtime with settings such as:
 
 ```text
-TENET_AUTH_PROVIDER=google_oidc        # set okta_oidc for Okta OIDC; okta_saml remains diagnostic-only
+TENET_AUTH_PROVIDER=google_oidc # use okta_oidc for Okta OIDC, okta_saml for Okta SAML diagnostics, or github for GitHub OAuth
 TENET_GOOGLE_OIDC_CLIENT_ID=google-client-id
 TENET_GOOGLE_OIDC_CLIENT_SECRET=<secret from Google Workspace>
 TENET_GOOGLE_OIDC_ISSUER_URL=https://accounts.google.com
@@ -90,7 +90,7 @@ Recommended mapping:
 
 | Tenet field | Google OIDC source | Okta SAML/OIDC source |
 | --- | --- | --- |
-| `provider` | canonical runtime provider `google` (`TENET_AUTH_PROVIDER=google_oidc` is accepted) | `okta_saml` or `okta_oidc` |
+| `provider` | canonical runtime provider `google_oidc` (`TENET_AUTH_PROVIDER=google` remains a legacy alias) | `okta_saml` or `okta_oidc` |
 | `subject` / stable provider ID | OIDC `sub` | SAML `NameID` or OIDC `sub` |
 | `email` | verified email claim when available | email attribute/claim |
 | `name` | profile/display-name claim | display-name attribute/claim |

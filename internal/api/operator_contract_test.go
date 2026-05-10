@@ -129,9 +129,11 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 		"Google Workspace/Gmail means identity login only",
 		"It does not grant Tenet Gmail mailbox, Drive, Calendar, or other Google API access.",
 		"Google Workspace identity through Google OIDC profile claims",
+		"GitHub OAuth uses `TENET_AUTH_PROVIDER=github`",
 		"Google Workspace OIDC uses `TENET_AUTH_PROVIDER=google_oidc`",
 		"Okta OIDC uses `TENET_AUTH_PROVIDER=okta_oidc`",
-		"TENET_AUTH_PROVIDER=google_oidc        # set okta_oidc for Okta OIDC; okta_saml remains diagnostic-only",
+		"Okta SAML uses `TENET_AUTH_PROVIDER=okta_saml` for diagnostic-only preflight",
+		"TENET_AUTH_PROVIDER=google_oidc # use okta_oidc for Okta OIDC, okta_saml for Okta SAML diagnostics, or github for GitHub OAuth",
 		"human-readable provider labels in operator-facing UI (`Google Workspace OIDC`, `Okta SAML`, `Okta OIDC`)",
 		"provider-boundary copy in the embedded Operator context details",
 		"Okta identity through SAML assertions or OIDC profile claims",
@@ -165,11 +167,15 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 			t.Fatalf("expected enterprise SSO docs to include %q", fragment)
 		}
 	}
-	for _, forbidden := range []string{
-		"TENET_AUTH_PROVIDER=***",
+	for _, source := range []struct {
+		name string
+		body string
+	}{
+		{name: "README.md", body: readme},
+		{name: "docs/architecture/tenet-v1-enterprise-sso.md", body: doc},
 	} {
-		if strings.Contains(doc, forbidden) {
-			t.Fatalf("expected enterprise SSO docs to avoid placeholder provider examples %q", forbidden)
+		if strings.Contains(source.body, "TENET_AUTH_PROVIDER=***") {
+			t.Fatalf("expected %s to use concrete non-secret auth provider examples", source.name)
 		}
 	}
 }
@@ -178,7 +184,8 @@ func TestEnterpriseSSOSmokeContracts(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
 	for _, fragment := range []string{
 		"`GET /v1/operator/context.authRuntime.enterpriseSso` is the provider-neutral diagnostic surface",
-		"For `TENET_AUTH_PROVIDER=google_oidc` (or the `google` alias), the managed-login runtime is active",
+		"For `TENET_AUTH_PROVIDER=google_oidc` (or the legacy `google` alias), the managed-login runtime is active",
+		"For `TENET_AUTH_PROVIDER=okta_oidc`, the same managed-login runtime is active",
 		"`make smoke-local` and `make smoke-docker` restart the API with fake local Google OIDC, Okta OIDC, and Okta SAML settings",
 		"Google and Okta OIDC report active managed-login/enterprise-SSO runtimes while Okta SAML remains configured-but-inactive, non-secret, credential-free",
 		"required/missing/invalid settings",
