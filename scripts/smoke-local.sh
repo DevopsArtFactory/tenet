@@ -1679,6 +1679,10 @@ assert "pushPlanSection(executionSection, 'plan-rollout-execution', 'Rollout exe
 assert "pushPlanSection(actionsSection, 'plan-preview-actions', 'Plan preview actions');" in ui, ui
 assert "pushPlanSection(applySection, 'plan-apply-actions', 'Apply request actions');" in ui, ui
 assert "pushPlanSection(planOperationsSection, 'plan-operations', 'Plan operations');" in ui, ui
+assert "const operationAnchorID = (prefix, operation) => {" in ui, ui
+assert "const previewOperations = (record) => mapRecordOperations(record?.operations || [], 'Plan step', 'operation-plan');" in ui, ui
+assert "anchorID: operationAnchorID('operation-apply', operation)," in ui, ui
+assert "createNavLink(shareURLForOperation(operation), 'Share operation', '_self')" in ui, ui
 assert "const quickNav = createWorkspaceQuickNav(detail, mode, planSectionLinks);" in ui, ui
 assert "activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;" in ui, ui
 assert "header.append(head, quickNav, ...sections);" in ui, ui

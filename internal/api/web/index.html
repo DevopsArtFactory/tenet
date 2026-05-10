@@ -89,6 +89,7 @@
       .account-links { margin-top: 0; align-self: center; }
       .row-links-shell { padding: 0 16px 16px; }
       .row-primary-action { align-self: flex-start; margin-top: 0; }
+      .operation-anchor-row:target { outline: 2px solid rgba(103,183,255,.62); outline-offset: -2px; background: rgba(103,183,255,.10); }
       .row-primary-action .row-link { display:inline-flex; align-items:center; border: 1px solid rgba(103,183,255,.36); background: rgba(103,183,255,.14); border-radius: 999px; padding: 8px 12px; color: var(--text); }
       .row-secondary-actions { margin: 0 16px 16px; color: var(--muted); }
       .row-secondary-actions summary { width: fit-content; cursor:pointer; color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
@@ -6746,7 +6747,13 @@
         const kind = typeof operation?.kind === 'string' ? operation.kind.trim() : '';
         return kind || `${fallbackPrefix} ${index + 1}`;
       };
-      const mapRecordOperations = (operations, fallbackPrefix) => (operations || []).map((operation, index) => ({
+      const operationAnchorID = (prefix, operation) => {
+        const id = typeof operation?.id === 'string' ? operation.id.trim() : '';
+        return id ? `${prefix}-${sectionIDSegment(id, 'unknown')}` : '';
+      };
+      const mapRecordOperations = (operations, fallbackPrefix, anchorPrefix = '') => (operations || []).map((operation, index) => ({
+        id: typeof operation?.id === 'string' ? operation.id.trim() : '',
+        anchorID: anchorPrefix ? operationAnchorID(anchorPrefix, operation) : '',
         kind: recordOperationKind(operation, index, fallbackPrefix),
         status: normalizePlanOperationStatus(operation.status),
         statusLabel: planOperationStatusLabel(operation.status),
@@ -6754,10 +6761,12 @@
         target: textOrDash(operation.target),
         summary: textOrDash(operation.summary),
       }));
-      const previewOperations = (record) => mapRecordOperations(record?.operations || [], 'Plan step');
+      const previewOperations = (record) => mapRecordOperations(record?.operations || [], 'Plan step', 'operation-plan');
       const applyOperations = (record) => (record?.operations || []).map((operation, index) => {
         const normalizedStatus = normalizeApplyOperationStatus(operation?.status);
         return {
+          id: typeof operation?.id === 'string' ? operation.id.trim() : '',
+          anchorID: operationAnchorID('operation-apply', operation),
           kind: recordOperationKind(operation, index, 'Apply step'),
           status: applyOperationStatusClassName(operation?.status),
           statusLabel: applyOperationStatusLabel(operation?.status),
@@ -6768,7 +6777,7 @@
           lifecycleLabel: applyRecordStatusLabel(normalizedStatus),
         };
       });
-      const createOperationsSection = ({ title, intro, operations, emptyMessage }) => {
+      const createOperationsSection = ({ title, intro, operations, emptyMessage, shareURLForOperation = null }) => {
         const section = createDetailSection(title);
         if (!operations.length) {
           section.append(createElement('div', 'detail-state', emptyMessage));
@@ -6787,11 +6796,22 @@
         const tbody = createElement('tbody');
         operations.forEach((operation) => {
           const row = createElement('tr');
+          if (operation.anchorID) {
+            row.id = operation.anchorID;
+            row.classList.add('operation-anchor-row');
+          }
           const operationCell = createElement('td', 'drift-field');
-          operationCell.append(
+          const operationHead = createElement('div', 'row-title-line');
+          operationHead.append(
             createElement('strong', '', operation.kind),
             createElement('span', `detail-step-meta detail-step-meta-${operation.status}`, operation.statusLabel),
           );
+          operationCell.append(operationHead);
+          if (operation.anchorID && typeof shareURLForOperation === 'function') {
+            const operationLinks = createElement('div', 'row-links');
+            operationLinks.append(createNavLink(shareURLForOperation(operation), 'Share operation', '_self'));
+            operationCell.append(operationLinks);
+          }
           row.append(
             operationCell,
             createElement('td', '', operation.phase),
@@ -7805,6 +7825,11 @@
               intro: `Immutable apply request loaded from GET /v1/applies/${activeApplyRecord.id}. The ordered execution sequence below comes from the persisted apply record, so operators can review intended execution order without depending on mutable plan-preview or deployment-derived context.`,
               operations: applyOperations(activeApplyRecord),
               emptyMessage: 'No additive apply operations are stored for this request.',
+              shareURLForOperation: (operation) => buildPageSectionURL('plan', operation.anchorID, {
+                deployment: detail.name || currentPageState.deployment || '',
+                planId: activePlanRecord?.id || currentPageState.planId || activeApplyRecord.planId || '',
+                applyId: activeApplyRecord.id || currentPageState.applyId || '',
+              }),
             });
             pushPlanSection(applyOperationsSection, 'plan-apply-operations', 'Apply operations');
           }
@@ -7818,6 +7843,11 @@
             emptyMessage: activePlanRecord
               ? 'No server-authored plan operations are stored for this preview.'
               : 'No derived plan operations are currently available.',
+            shareURLForOperation: activePlanRecord ? ((operation) => buildPageSectionURL('plan', operation.anchorID, {
+              deployment: detail.name || currentPageState.deployment || '',
+              planId: activePlanRecord.id || currentPageState.planId || '',
+              applyId: activeApplyRecord?.id || currentPageState.applyId || '',
+            })) : null,
           });
           pushPlanSection(planOperationsSection, 'plan-operations', 'Plan operations');
         }

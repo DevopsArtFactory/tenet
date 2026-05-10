@@ -179,6 +179,33 @@ func TestServiceCreatePersistsImmutableQueuedApplyRequestWhenExecutionIsEnabled(
 	}
 }
 
+func TestServiceCreateCarriesPlanOperationIDsIntoApplyRows(t *testing.T) {
+	store := &memoryStore{}
+	plan := planpreview.Record{
+		ID:             "plan_ready_with_operation_ids",
+		DeploymentName: "api-prod",
+		Status:         planpreview.StatusReady,
+		CreatedAt:      "2026-04-17T08:00:00Z",
+		Operations: []planpreview.Operation{
+			{ID: "operation-shift-traffic", Status: "current", Phase: "Promoting", Target: "listener", Summary: "shift traffic"},
+		},
+		Source: planpreview.SourceContext{DeploymentName: "api-prod", Route: "/v1/overview/deployments/api-prod", Fingerprint: "plan_input"},
+	}
+	service := Service{
+		LoadPlan: func(context.Context, string) (planpreview.Record, error) { return plan, nil },
+		Store:    store,
+		Now:      func() time.Time { return time.Date(2026, 4, 18, 8, 6, 0, 0, time.UTC) },
+	}
+
+	result, err := service.Create(context.Background(), plan.ID)
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	if len(result.Record.Operations) != 1 || result.Record.Operations[0].ID != "operation-shift-traffic" {
+		t.Fatalf("expected apply operation to preserve plan operation id, got %+v", result.Record.Operations)
+	}
+}
+
 func TestServiceCreateReturnsNotFoundWhenPlanIsMissing(t *testing.T) {
 	service := Service{
 		LoadPlan: func(context.Context, string) (planpreview.Record, error) {
