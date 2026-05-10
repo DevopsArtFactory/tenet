@@ -5933,6 +5933,9 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   const loadingText = collectText(loadingRun.document.getElementById('accounts')).join(' | ');
   if (!loadingText.includes('Recent logs')) throw new Error('expected resource page to render recent logs section heading while loading');
   if (!loadingText.includes('Loading recent logs…')) throw new Error('expected resource page to render loading state for recent logs');
+  ['Selected deployment | payments-api-staging', 'Selected resource type | codeDeployDeploymentGroup', 'Selected resource name | payments-api-staging Deployment Group', 'Recent logs request | GET ' + logsURL].forEach((fragment) => {
+    if (!loadingText.includes(fragment)) throw new Error('expected recent-log loading context ' + fragment + ', got ' + loadingText);
+  });
   if (loadingText.includes('Share log entry')) throw new Error('expected loading recent logs state not to render share links');
   const loadingLimitSelect = collectNodes(loadingRun.document.getElementById('accounts'), (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'Log limit')[0];
   if (!loadingLimitSelect) throw new Error('expected recent logs panel to expose the log limit select while loading');
@@ -6012,6 +6015,7 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   await settle();
   const failedStatusText = collectText(failedStatusRun.document.getElementById('accounts')).join(' | ');
   if (!failedStatusText.includes('Failed to load recent logs: resource logs request failed (503)')) throw new Error('expected resource page failed recent logs state for non-2xx responses');
+  if (!failedStatusText.includes('Recent logs request | GET ' + logsURL)) throw new Error('expected failed recent logs state to retain request context, got ' + failedStatusText);
 
   const rejectedRun = await renderWithFetch((url) => {
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
@@ -6021,6 +6025,7 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   await settle();
   const rejectedText = collectText(rejectedRun.document.getElementById('accounts')).join(' | ');
   if (!rejectedText.includes('Failed to load recent logs: <img src=x onerror=1> upstream timeout')) throw new Error('expected resource page failed recent logs state for rejected fetches');
+  if (!rejectedText.includes('Selected resource name | payments-api-staging Deployment Group')) throw new Error('expected rejected recent logs state to retain selected resource context, got ' + rejectedText);
   const rejectedImages = collectNodes(rejectedRun.document.getElementById('accounts'), (node) => node.tagName === 'IMG');
   if (rejectedImages.length !== 0) throw new Error('expected rejected recent-log fetch errors to remain text content rather than parsed html');
 
@@ -6242,6 +6247,9 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   const loadingText = collectText(loadingRun.document.getElementById('accounts')).join(' | ');
   if (!loadingText.includes('Live inspection')) throw new Error('expected resource page to render live inspection section heading while loading');
   if (!loadingText.includes('Loading live inspection…')) throw new Error('expected resource page to render loading state for live inspection');
+  ['Selected deployment | payments-api-staging', 'Selected resource type | ecsService', 'Selected resource name | payments-api-staging-service', 'Live inspection request | GET ' + ecsInspectionURL].forEach((fragment) => {
+    if (!loadingText.includes(fragment)) throw new Error('expected live-inspection loading context ' + fragment + ', got ' + loadingText);
+  });
   if (!loadingFetchCalls.includes(ecsInspectionURL)) throw new Error('expected resource page to lazy-load live inspection for the selected resource');
   resolveInspection({ ok: true, json: () => Promise.resolve({ available: true, source: 'ecs_service', lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true }, ecsService: { clusterArn: 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-staging', serviceArn: 'arn:aws:ecs:ap-northeast-2:210987654321:service/payments-staging/payments-api-staging-service', serviceName: 'payments-api-staging-service', status: 'ACTIVE', launchType: 'FARGATE', desiredCount: 2, runningCount: 2, pendingCount: 0, minimumHealthyPercent: 100, maximumPercent: 200, healthCheckGracePeriodSeconds: 45, taskDefinition: 'payments-api:42', deployments: [], events: [] } }) });
   await settle();
