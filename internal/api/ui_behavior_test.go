@@ -9359,9 +9359,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   refreshWorkspace = toolbarButtons.find((node) => node.textContent === 'Refresh plan workspace');
   if (!refreshWorkspace || refreshWorkspace.disabled) throw new Error('expected plan workspace refresh re-enabled after deployment detail reload');
   createPlan.dispatch('click');
-  await settle();
-  await settle();
-  await settle();
+  await waitForFetchCount(fetchCalls, 3);
   if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/overview/deployments/api-prod, /v1/plans/deployments/api-prod') throw new Error('unexpected fetch sequence after create: ' + fetchCalls.join(', '));
   if (!createRequestOptions || createRequestOptions.method !== 'POST') throw new Error('expected Create Plan to POST');
   if (!createRequestOptions.headers || createRequestOptions.headers['Content-Type'] !== 'application/json') throw new Error('expected Create Plan content type header');
