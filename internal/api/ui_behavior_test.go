@@ -2602,8 +2602,10 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (currentSectionChip) throw new Error('expected application route without hash not to render a current-section chip');
   if (!accountsText.includes('Drift view')) throw new Error('expected application route drift workspace entry');
   if (!accountsText.includes('Plan/apply')) throw new Error('expected application route plan workspace entry');
-  if (!accountsText.includes('Workloads')) throw new Error('expected application route workloads group');
-  if (!accountsText.includes('Traffic routing')) throw new Error('expected application route traffic routing group');
+  const resourceHeadings = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'H3' && node.className === 'deployment-group-title').map((node) => node.textContent);
+  if (!resourceHeadings.includes('Workloads')) throw new Error('expected application route plain workloads heading');
+  if (!resourceHeadings.includes('Traffic routing')) throw new Error('expected application route plain traffic-routing heading');
+  if (resourceHeadings.find((heading) => /\(\d+\)/.test(heading))) throw new Error('expected application route resource headings to stay count-free');
   if (!accountLinks.find((node) => node.textContent === 'Workloads (3)')) throw new Error('expected application route workloads quick-nav count');
   if (!accountLinks.find((node) => node.textContent === 'Traffic routing (4)')) throw new Error('expected application route traffic-routing quick-nav count');
   if (!accountsText.includes('Controller runtime events')) throw new Error('expected application route runtime-events section');
@@ -3542,9 +3544,11 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('3 total · 1 high · 1 medium · 1 low')) throw new Error('expected application status summary to use server-authored managed drift totals');
   if (!accountsText.includes('2 runtime events')) throw new Error('expected application status summary runtime event count');
   if (!accountsText.includes('2026-04-16T07:15:00Z')) throw new Error('expected application status summary last update');
-  if (!accountsText.includes('Workloads')) throw new Error('expected workloads group');
-  if (!accountsText.includes('Traffic routing')) throw new Error('expected traffic routing group');
-  if (!accountsText.includes('Config and access')) throw new Error('expected config and access group');
+  const resourceHeadings = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'H3' && node.className === 'deployment-group-title').map((node) => node.textContent);
+  if (!resourceHeadings.includes('Workloads')) throw new Error('expected plain workloads heading');
+  if (!resourceHeadings.includes('Traffic routing')) throw new Error('expected plain traffic-routing heading');
+  if (!resourceHeadings.includes('Config and access')) throw new Error('expected plain config/access heading');
+  if (resourceHeadings.find((heading) => /\(\d+\)/.test(heading))) throw new Error('expected application page resource headings to stay count-free');
   if (!links.find((node) => node.textContent === 'Workloads (3)')) throw new Error('expected workloads quick-nav count');
   if (!links.find((node) => node.textContent === 'Traffic routing (2)')) throw new Error('expected traffic-routing quick-nav count');
   if (!links.find((node) => node.textContent === 'Config and access (1)')) throw new Error('expected config/access quick-nav count');
