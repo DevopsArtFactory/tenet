@@ -5868,38 +5868,90 @@
         switch (status) {
           case 'truncated':
           case 'capped':
-            return 'Capped response; more controller history may exist';
+            return 'Query-limited response; increase Event window to inspect older returned history';
           case 'not_truncated':
-            return 'Below cap; no router truncation';
+            return 'Query window did not truncate the retained history';
           case 'unknown':
           case 'at_cap_unknown_total':
-            return 'At cap; older history may exist';
+            return 'Query limit reached; older retained history may exist';
           case 'not_applicable':
             return 'Not applicable for this response';
           default:
             return status ? String(status) : '—';
         }
       };
-      const deploymentEventsResultScopeFields = (scope) => {
-        if (!scope) return [];
+      const deploymentEventsRetentionStatusText = (status) => {
+        switch (status) {
+          case 'at_retention_limit':
+            return 'Controller retention cap reached; older runtime history may have been dropped';
+          case 'within_retention_limit':
+            return 'Within controller retention limit';
+          default:
+            return status ? String(status) : '—';
+        }
+      };
+      const deploymentEventsRetainedCountText = (value) => {
+        const count = Number(value);
+        return Number.isFinite(count) && count >= 0 ? `${count} retained ${count === 1 ? 'event' : 'events'}` : '—';
+      };
+      const deploymentEventsRetentionScope = (result) => {
+        const scope = result?.resultScope || {};
+        const retention = result?.retention || {};
+        return {
+          limit: scope.retentionLimit ?? retention.limit,
+          retainedEventCount: scope.retainedEventCount ?? retention.retainedEventCount,
+          status: scope.retentionStatus ?? retention.status,
+        };
+      };
+      const deploymentEventsResultScopeFields = (scope, retention = null) => {
+        if (!scope && !retention) return [];
         const fields = [
-          ['Requested window', scope.requestedLimit == null ? 'All available events' : deploymentEventsScopeLimitText(scope.requestedLimit)],
-          ['Effective window', deploymentEventsScopeLimitText(scope.effectiveLimit)],
-          ['Returned events', deploymentEventsCountText(scope.returnedEventCount)],
         ];
-        if (scope.newestEventTimestamp) fields.push(['Newest event', scope.newestEventTimestamp]);
-        if (scope.oldestEventTimestamp) fields.push(['Oldest event', scope.oldestEventTimestamp]);
-        fields.push(['Window status', deploymentEventsTruncationStatusText(scope.truncationStatus)]);
+        if (scope) {
+          fields.push(
+            ['Requested window', scope.requestedLimit == null ? 'All available events' : deploymentEventsScopeLimitText(scope.requestedLimit)],
+            ['Effective window', deploymentEventsScopeLimitText(scope.effectiveLimit)],
+            ['Returned events', deploymentEventsCountText(scope.returnedEventCount)],
+            ['Total retained events', deploymentEventsCountText(scope.totalEventCount ?? retention?.retainedEventCount)],
+          );
+        }
+        if (retention?.limit != null) fields.push(['Retention limit', deploymentEventsScopeLimitText(retention.limit)]);
+        if (retention?.retainedEventCount != null) fields.push(['Retention retained', deploymentEventsRetainedCountText(retention.retainedEventCount)]);
+        if (retention?.status) fields.push(['Retention status', deploymentEventsRetentionStatusText(retention.status)]);
+        if (scope?.newestEventTimestamp) fields.push(['Newest event', scope.newestEventTimestamp]);
+        if (scope?.oldestEventTimestamp) fields.push(['Oldest event', scope.oldestEventTimestamp]);
+        if (scope) fields.push(['Window status', deploymentEventsTruncationStatusText(scope.truncationStatus)]);
         return fields;
       };
-      const createDeploymentEventsResultScopeSummary = (scope) => {
-        const fields = deploymentEventsResultScopeFields(scope);
+      const createDeploymentEventsResultScopeSummary = (result) => {
+        const fields = deploymentEventsResultScopeFields(result?.resultScope, deploymentEventsRetentionScope(result));
         if (!fields.length) return null;
         const summary = createElement('div', 'detail-history-meta');
         fields.forEach(([label, value]) => {
           summary.append(createElement('span', 'detail-condition-meta', `${label} · ${value}`));
         });
         return summary;
+      };
+      const deploymentEventsEmptyStateText = (result, selectedLimit) => {
+        const scope = result?.resultScope || {};
+        const retention = deploymentEventsRetentionScope(result);
+        const returnedCount = Number(scope.returnedEventCount);
+        const totalCount = Number(scope.totalEventCount);
+        const retainedCount = Number(retention.retainedEventCount);
+        const hasNoRetainedEvents = (Number.isFinite(totalCount) && totalCount === 0) || (Number.isFinite(retainedCount) && retainedCount === 0);
+        if (hasNoRetainedEvents) {
+          return 'No controller runtime events are retained for this application yet. Refresh runtime events after the controller reconciles before treating runtime history as absent.';
+        }
+        if (scope.truncationStatus === 'truncated' || scope.truncationStatus === 'capped' || scope.truncationStatus === 'unknown' || scope.truncationStatus === 'at_cap_unknown_total') {
+          return `No controller runtime events were returned in the latest ${selectedLimit}-event query window, but backend metadata indicates retained history may still exist. Increase Event window or refresh before treating controller history as absent.`;
+        }
+        if (retention.status === 'at_retention_limit') {
+          return 'No controller runtime events were returned, and the controller retention cap is full. Older runtime history may already have been dropped from the retained window.';
+        }
+        if (Number.isFinite(returnedCount) && returnedCount === 0) {
+          return `No controller runtime events were returned in the latest ${selectedLimit}-event window. The backend reported retained history metadata above; refresh before treating controller history as absent.`;
+        }
+        return `No controller runtime events were returned in the latest ${selectedLimit}-event window. Increase Event window or use Refresh runtime events before treating controller history as absent.`;
       };
       const withDeploymentEventsFetchedAt = (result) => {
         if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
@@ -5987,12 +6039,12 @@
       const renderDeploymentEventsPayload = (section, deploymentName, result, limit = currentPageState.eventLimit) => {
         const selectedLimit = normalizeDeploymentEventsLimit(limit);
         const events = sortTimelineEvents(result?.events || []);
-        const scopeSummary = createDeploymentEventsResultScopeSummary(result?.resultScope);
+        const scopeSummary = createDeploymentEventsResultScopeSummary(result);
         const freshnessMeta = createDeploymentEventsFreshnessMeta(result);
         if (!events.length) {
           const heading = createDetailSectionHeader('Controller runtime events', createDeploymentEventsActions(section, deploymentName, false, result));
           const intro = createDeploymentEventsIntro(selectedLimit);
-          const stateNode = createElement('div', 'detail-state', `No controller runtime events were returned in the latest ${selectedLimit}-event window. Increase Event window or use Refresh runtime events before treating controller history as absent.`);
+          const stateNode = createElement('div', 'detail-state', deploymentEventsEmptyStateText(result, selectedLimit));
           section.replaceChildren(heading, intro, ...(scopeSummary ? [scopeSummary] : []), ...(freshnessMeta ? [freshnessMeta] : []), stateNode);
           return;
         }
