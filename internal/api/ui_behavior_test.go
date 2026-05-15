@@ -2602,8 +2602,12 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (currentSectionChip) throw new Error('expected application route without hash not to render a current-section chip');
   if (!accountsText.includes('Drift view')) throw new Error('expected application route drift workspace entry');
   if (!accountsText.includes('Plan/apply')) throw new Error('expected application route plan workspace entry');
-  if (!accountsText.includes('Workloads')) throw new Error('expected application route workloads group');
-  if (!accountsText.includes('Traffic routing')) throw new Error('expected application route traffic routing group');
+  const resourceHeadings = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'H3' && node.className === 'deployment-group-title').map((node) => node.textContent);
+  if (!resourceHeadings.includes('Workloads')) throw new Error('expected application route plain workloads heading');
+  if (!resourceHeadings.includes('Traffic routing')) throw new Error('expected application route plain traffic-routing heading');
+  if (resourceHeadings.find((heading) => /\(\d+\)/.test(heading))) throw new Error('expected application route resource headings to stay count-free');
+  if (!accountLinks.find((node) => node.textContent === 'Workloads (3)')) throw new Error('expected application route workloads quick-nav count');
+  if (!accountLinks.find((node) => node.textContent === 'Traffic routing (4)')) throw new Error('expected application route traffic-routing quick-nav count');
   if (!accountsText.includes('Controller runtime events')) throw new Error('expected application route runtime-events section');
   if (!accountsText.includes('GitHub refresh evidence · repo acme/platform-config · ref refs/heads/main · revision abcdef123456 · delivery delivery-744 · request req-744')) throw new Error('expected application route GitHub refresh evidence cue');
   const backendEventShare = accountLinks.find((node) => node.href.includes('page=application') && node.href.includes('deployment=payments-api-staging') && node.href.endsWith('#runtime-event-evt-backend-744') && node.textContent === 'Share event' && node.target === '_self');
@@ -2616,8 +2620,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const sectionLinks = accountLinks.filter((node) => typeof node.href === 'string' && node.href.includes('#application-'));
   const expectedSectionLinks = [
     ['/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-current-status', 'Current application status'],
-    ['/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-workloads', 'Workloads'],
-    ['/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-traffic-routing', 'Traffic routing'],
+    ['/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-workloads', 'Workloads (3)'],
+    ['/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-traffic-routing', 'Traffic routing (4)'],
     ['/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-runtime-events', 'Controller runtime events'],
   ];
   if (sectionLinks.length !== expectedSectionLinks.length) throw new Error('expected four application section links, got ' + sectionLinks.length);
@@ -2789,8 +2793,8 @@ const fetch = (url) => {
   const sectionLinks = collectNodes(accounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#application-'));
   const expectedLinks = [
     ['/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-current-status', 'Current application status'],
-    ['/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-workloads', 'Workloads'],
-    ['/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-traffic-routing', 'Traffic routing'],
+    ['/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-workloads', 'Workloads (3)'],
+    ['/console?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-traffic-routing', 'Traffic routing (4)'],
   ];
   if (sectionLinks.length !== expectedLinks.length) throw new Error('expected three remaining application section links, got ' + sectionLinks.length);
   expectedLinks.forEach(([href, text]) => {
@@ -2804,10 +2808,10 @@ const fetch = (url) => {
   await settle();
   const updatedAccounts = document.getElementById('accounts');
   const updatedChips = collectNodes(updatedAccounts, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
-  const trafficChip = updatedChips.find((node) => node.getAttribute('aria-label') === 'Current section: Traffic routing');
+  const trafficChip = updatedChips.find((node) => node.getAttribute('aria-label') === 'Current section: Traffic routing (4)');
   if (!trafficChip) throw new Error('expected application hashchange to update the current-section chip');
   const updatedSectionLinks = collectNodes(updatedAccounts, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#application-'));
-  if (updatedSectionLinks.find((node) => node.textContent === 'Traffic routing')) throw new Error('expected updated application current section to be removed from On this page links');
+  if (updatedSectionLinks.find((node) => node.textContent === 'Traffic routing (4)')) throw new Error('expected updated application current section to be removed from On this page links');
   if (!updatedSectionLinks.find((node) => node.textContent === 'Controller runtime events')) throw new Error('expected previous application current section to return to On this page links after hashchange');
   if (!document.lastScrolledTarget || document.lastScrolledTarget.id !== 'application-traffic-routing') throw new Error('expected application hashchange to scroll the new current section into view');
 })();
@@ -3528,6 +3532,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const summaryText = collectText(document.getElementById('summary')).join(' | ');
   const accountsText = collectText(document.getElementById('accounts')).join(' | ');
   const toolbarText = collectText(document.getElementById('toolbar')).join(' | ');
+  const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
   if (fetchCalls.length !== 2 || fetchCalls[0] !== '/v1/overview/applications/payments-api-staging' || fetchCalls[1] !== '/v1/overview/deployments/payments-api-staging/events?limit=10') throw new Error('expected application page to load application detail plus deployment events');
   if (!toolbarText.includes('Back to applications')) throw new Error('expected application page back link');
   if (!summaryText.includes('payments-api-staging')) throw new Error('expected application summary title');
@@ -3539,16 +3544,20 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!accountsText.includes('3 total · 1 high · 1 medium · 1 low')) throw new Error('expected application status summary to use server-authored managed drift totals');
   if (!accountsText.includes('2 runtime events')) throw new Error('expected application status summary runtime event count');
   if (!accountsText.includes('2026-04-16T07:15:00Z')) throw new Error('expected application status summary last update');
-  if (!accountsText.includes('Workloads')) throw new Error('expected workloads group');
-  if (!accountsText.includes('Traffic routing')) throw new Error('expected traffic routing group');
-  if (!accountsText.includes('Config and access')) throw new Error('expected config and access group');
+  const resourceHeadings = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'H3' && node.className === 'deployment-group-title').map((node) => node.textContent);
+  if (!resourceHeadings.includes('Workloads')) throw new Error('expected plain workloads heading');
+  if (!resourceHeadings.includes('Traffic routing')) throw new Error('expected plain traffic-routing heading');
+  if (!resourceHeadings.includes('Config and access')) throw new Error('expected plain config/access heading');
+  if (resourceHeadings.find((heading) => /\(\d+\)/.test(heading))) throw new Error('expected application page resource headings to stay count-free');
+  if (!links.find((node) => node.textContent === 'Workloads (3)')) throw new Error('expected workloads quick-nav count');
+  if (!links.find((node) => node.textContent === 'Traffic routing (2)')) throw new Error('expected traffic-routing quick-nav count');
+  if (!links.find((node) => node.textContent === 'Config and access (1)')) throw new Error('expected config/access quick-nav count');
   if (!accountsText.includes('payments-api-staging ECS Service')) throw new Error('expected workload resource');
   if (!accountsText.includes('prod listener')) throw new Error('expected traffic routing resource');
   if (!accountsText.includes('bootstrap source')) throw new Error('expected config/access resource');
   if (!accountsText.includes('Drift view')) throw new Error('expected application page drift workspace link');
   if (!accountsText.includes('Plan/apply')) throw new Error('expected application page plan workspace link');
   if (accountsText.includes('Runtime history')) throw new Error('application page should not expose deep runtime history yet');
-  const links = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A');
   const resourceLink = links.find((node) => node.textContent === 'Open resource');
   const liveInspectionLink = links.find((node) => node.textContent === 'Open live inspection');
   const recentLogsLink = links.find((node) => node.textContent === 'Open recent logs');

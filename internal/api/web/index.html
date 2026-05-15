@@ -3389,7 +3389,7 @@
           });
           groupSection.append(groupHead, groupRows);
           rows.append(groupSection);
-          pushApplicationSectionLink(groupSection.id, group.title);
+          pushApplicationSectionLink(groupSection.id, `${group.title} (${group.resources.length})`);
         });
         if (!resourceGroups.length) {
           const emptyState = createElement('div', 'detail-state', 'No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.');
