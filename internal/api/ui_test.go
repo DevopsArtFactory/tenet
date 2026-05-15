@@ -758,7 +758,7 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"planId: params.get('planId') || '',",
 		"applyId: params.get('applyId') || '',",
 		"resourceType: params.get('resourceType') || '',",
-		"resourceId: params.get('resourceId') || '',",
+		"resourceId: params.get('resourceId') ?? legacyResourceIdentityParam(params),",
 		"auditLimit: normalizeAuditLimit(params.get('limit') || ''),",
 		"const buildPageURL = (page, extras = {}) => {",
 		"if (currentViewState.query) params.set('q', currentViewState.query);",
@@ -1368,6 +1368,11 @@ func TestIndexHTMLIncludesTolerantResourceBookmarkResolutionContract(t *testing.
 	body := string(indexHTML)
 
 	for _, fragment := range []string{
+		"const legacyResourceIdentityParam = (params) => {",
+		"const type = (params.get('resourceType') || '').trim();",
+		"const legacyName = (params.get('resourceName') || '').trim();",
+		"if (!legacyName) return '';",
+		"return type ? [type, legacyName].join('::') : legacyName;",
 		"const parseResourceIdentity = (resourceId) => {",
 		"const [type = '', name = '', ...descriptionParts] = String(resourceId || '').split('::');",
 		"description: descriptionParts.join('::'),",
