@@ -85,7 +85,7 @@ Each row surfaces:
 - health
 - last update
 - one primary `_self` `Open application` link to `/?page=application&deployment={deploymentName}`
-- a `More actions` disclosure containing `_self` `Open account`, deployment-scoped `_self` `Drift view`, `_self` `Plan/apply`, `_self` `Audit log`, and runtime-events handoffs when runtime evidence exists, without making those secondary paths dominate the landing row
+- a self-describing `More actions for {deploymentName}` disclosure with an accessible secondary-action group label, containing `_self` `Open account`, deployment-scoped `_self` `Drift view`, `_self` `Plan/apply`, `_self` `Audit log`, and runtime-events handoffs when runtime evidence exists, without making those secondary paths dominate the landing row
 
 The account drill-down page consumes `GET /v1/overview/accounts/{awsAccountId}` and keeps the denser account-oriented view available without making it the first page again. Current account-page behavior:
 - back-link to the applications overview while preserving current filters

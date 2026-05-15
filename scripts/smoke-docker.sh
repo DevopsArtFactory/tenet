@@ -1704,6 +1704,8 @@ assert_fragments("audit_ui", audit_ui, operator_read_auth_fragments + (
 for fragment in (
     "Open account",
     "Open application",
+    "More actions for ${deployment.name || 'deployment'}",
+    "secondaryActions.setAttribute('aria-label', `Secondary actions for ${deployment.name || 'deployment'}`);",
     "Drift view",
     "Plan/apply",
     "On this page",

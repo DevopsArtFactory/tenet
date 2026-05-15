@@ -1214,7 +1214,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (summaryText.includes('Applications read not refreshed yet')) throw new Error('expected successful applications read to replace the not-refreshed placeholder');
   if (!accountsText.includes('payments-api-staging')) throw new Error('expected applications page row text');
   if (!accountsText.includes('Last update') || !accountsText.includes('2026-04-16T07:10:00Z')) throw new Error('expected applications row to show row-local last update timestamp');
-  if (!accountsText.includes('More actions')) throw new Error('expected applications page secondary actions disclosure');
+  if (!accountsText.includes('More actions for payments-api-staging')) throw new Error('expected applications page secondary actions disclosure to name the deployment');
+  if (accountsText.includes('More actions |')) throw new Error('applications page secondary actions disclosure must not use a generic summary');
   if (!accountsText.includes('Runtime') || !accountsText.includes('waiting for CodeDeploy bake window')) throw new Error('expected applications page compact runtime signal detail');
   if (accountsText.includes('Latest runtime signal')) throw new Error('applications page should use a compact Runtime label instead of the longer latest-runtime label');
   if (accountsText.includes('Runtime · —')) throw new Error('applications page must not render placeholder-only runtime signals');
@@ -1249,6 +1250,10 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
     parent = parent.parentNode;
   }
   if (!runtimeEventsSecondaryWrapperFound) throw new Error('expected runtime events handoff to stay inside the secondary actions disclosure');
+  const secondaryActionsGroup = collectNodes(document.getElementById('accounts'), (node) => String(node.className || '').includes('row-secondary-actions'))[0];
+  if (!secondaryActionsGroup) throw new Error('expected applications page secondary action group');
+  if (secondaryActionsGroup.getAttribute('role') !== 'group') throw new Error('expected applications page secondary action group to expose role=group');
+  if (secondaryActionsGroup.getAttribute('aria-label') !== 'Secondary actions for payments-api-staging') throw new Error('expected applications page secondary action group accessible label, got ' + secondaryActionsGroup.getAttribute('aria-label'));
   const driftLink = links.find((node) => node.href === '/?page=drift&q=payments&sync=OutOfSync&health=Progressing&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Drift view');
   if (!driftLink) throw new Error('expected applications page link to deployment-scoped drift view');
   if (driftLink.target !== '_self') throw new Error('expected applications page drift link to stay in embedded UI flow');
