@@ -6580,6 +6580,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 			ResultScope: &resourcelogs.ResultScope{
 				EffectiveLimit:       resourcelogs.DefaultMaxEntries,
 				ReturnedEntryCount:   2,
+				ReturnedCount:        2,
 				NewestEntryTimestamp: "2026-04-16T07:10:00Z",
 				OldestEntryTimestamp: "2026-04-16T07:09:00Z",
 				TruncationStatus:     resourcelogs.ScopeTruncationStatusNotTruncated,
@@ -6727,9 +6728,11 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		for key, want := range map[string]any{
 			"effectiveLimit":       float64(resourcelogs.DefaultMaxEntries),
 			"returnedEntryCount":   float64(2),
+			"returnedCount":        float64(2),
 			"newestEntryTimestamp": "2026-04-16T07:10:00Z",
 			"oldestEntryTimestamp": "2026-04-16T07:09:00Z",
 			"truncationStatus":     resourcelogs.ScopeTruncationStatusNotTruncated,
+			"truncated":            false,
 		} {
 			if got := rawScope[key]; !reflect.DeepEqual(got, want) {
 				t.Fatalf("expected resultScope[%q]=%#v, got %#v in %#v", key, want, got, rawScope)
@@ -6963,6 +6966,9 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		if got.ResultScope.EffectiveLimit != 2 || got.ResultScope.ReturnedEntryCount != 2 || got.ResultScope.NewestEntryTimestamp != "2026-04-16T07:10:00Z" || got.ResultScope.OldestEntryTimestamp != "2026-04-16T07:09:00Z" || got.ResultScope.TruncationStatus != resourcelogs.ScopeTruncationStatusTruncated {
 			t.Fatalf("unexpected limited resultScope: %+v", got.ResultScope)
 		}
+		if got.ResultScope.ReturnedCount != 2 || !got.ResultScope.Truncated {
+			t.Fatalf("expected additive resultScope returnedCount/truncated fields, got %+v", got.ResultScope)
+		}
 		if got.Entries[0].Message != "newest" || got.Entries[1].Message != "middle" {
 			t.Fatalf("expected limit to preserve provider entry order, got %+v", got.Entries)
 		}
@@ -7180,6 +7186,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 			ResultScope: &resourcelogs.ResultScope{
 				EffectiveLimit:       resourcelogs.DefaultMaxEntries,
 				ReturnedEntryCount:   2,
+				ReturnedCount:        2,
 				NewestEntryTimestamp: "2026-04-16T07:11:45Z",
 				OldestEntryTimestamp: "2026-04-16T07:11:30Z",
 				TruncationStatus:     resourcelogs.ScopeTruncationStatusNotTruncated,

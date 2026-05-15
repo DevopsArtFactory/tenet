@@ -1101,7 +1101,9 @@ assert isinstance(worker_scope, dict), worker_resource_logs
 assert "requestedLimit" not in worker_scope, worker_resource_logs
 assert worker_scope.get("effectiveLimit") == 50, worker_resource_logs
 assert worker_scope.get("returnedEntryCount") == len(worker_resource_logs.get("entries") or []), worker_resource_logs
+assert worker_scope.get("returnedCount") == len(worker_resource_logs.get("entries") or []), worker_resource_logs
 assert worker_scope.get("truncationStatus") in ("not_truncated", "unknown", "not_applicable"), worker_resource_logs
+assert worker_scope.get("truncated") is False, worker_resource_logs
 if worker_resource_logs["available"]:
     assert isinstance(worker_resource_logs.get("source"), str) and worker_resource_logs["source"], worker_resource_logs
     for entry in worker_resource_logs.get("entries") or []:
@@ -1124,7 +1126,9 @@ assert isinstance(limited_scope, dict), limited_worker_resource_logs
 assert limited_scope.get("requestedLimit") == 1, limited_worker_resource_logs
 assert limited_scope.get("effectiveLimit") == 1, limited_worker_resource_logs
 assert limited_scope.get("returnedEntryCount") == len(limited_worker_resource_logs.get("entries") or []), limited_worker_resource_logs
+assert limited_scope.get("returnedCount") == len(limited_worker_resource_logs.get("entries") or []), limited_worker_resource_logs
 assert limited_scope.get("truncationStatus") in ("truncated", "not_truncated", "unknown", "not_applicable"), limited_worker_resource_logs
+assert limited_scope.get("truncated") == (limited_scope.get("truncationStatus") == "truncated"), limited_worker_resource_logs
 if limited_worker_resource_logs["available"]:
     assert isinstance(limited_worker_resource_logs.get("source"), str) and limited_worker_resource_logs["source"], limited_worker_resource_logs
 else:
@@ -1140,6 +1144,8 @@ selected_worker_scope = selected_worker_resource_logs.get("resultScope")
 assert isinstance(selected_worker_scope, dict), selected_worker_resource_logs
 assert selected_worker_scope.get("requestedLimit") == 1, selected_worker_resource_logs
 assert selected_worker_scope.get("effectiveLimit") == 1, selected_worker_resource_logs
+assert selected_worker_scope.get("returnedCount") == len(selected_worker_resource_logs.get("entries") or []), selected_worker_resource_logs
+assert selected_worker_scope.get("truncated") == (selected_worker_scope.get("truncationStatus") == "truncated"), selected_worker_resource_logs
 if selected_worker_resource_logs["available"]:
     assert isinstance(selected_worker_resource_logs.get("source"), str), selected_worker_resource_logs
 else:
@@ -1164,7 +1170,9 @@ assert isinstance(ecs_task_scope, dict), ecs_task_resource_logs
 assert ecs_task_scope.get("requestedLimit") == 1, ecs_task_resource_logs
 assert ecs_task_scope.get("effectiveLimit") == 1, ecs_task_resource_logs
 assert ecs_task_scope.get("returnedEntryCount") == len(ecs_task_resource_logs.get("entries") or []), ecs_task_resource_logs
+assert ecs_task_scope.get("returnedCount") == len(ecs_task_resource_logs.get("entries") or []), ecs_task_resource_logs
 assert ecs_task_scope.get("truncationStatus") in ("truncated", "not_truncated", "unknown", "not_applicable"), ecs_task_resource_logs
+assert ecs_task_scope.get("truncated") == (ecs_task_scope.get("truncationStatus") == "truncated"), ecs_task_resource_logs
 if ecs_task_resource_logs["available"]:
     assert ecs_task_resource_logs.get("source") == "cloudwatch", ecs_task_resource_logs
 else:
@@ -1340,7 +1348,9 @@ for payload, resource_type, resource_name in (
     no_log_source = payload.get("resultScope")
     assert isinstance(no_log_source, dict), payload
     assert no_log_source.get("returnedEntryCount") == 0, payload
+    assert no_log_source.get("returnedCount") == 0, payload
     assert no_log_source.get("truncationStatus") == "not_applicable", payload
+    assert no_log_source.get("truncated") is False, payload
     assert isinstance(payload.get("lookupContext"), dict), payload
     assert isinstance(payload["lookupContext"].get("region"), str) and payload["lookupContext"]["region"], payload
     assert isinstance(payload["lookupContext"].get("controlAccountId"), str) and payload["lookupContext"]["controlAccountId"], payload

@@ -3622,7 +3622,7 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 
 func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 	statusVocabulary := []string{"truncated", "not_truncated", "unknown", "not_applicable"}
-	fieldFragments := []string{"requestedLimit", "effectiveLimit", "returnedEntryCount", "newestEntryTimestamp", "oldestEntryTimestamp", "truncationStatus"}
+	fieldFragments := []string{"requestedLimit", "effectiveLimit", "returnedEntryCount", "returnedCount", "newestEntryTimestamp", "oldestEntryTimestamp", "truncationStatus", "truncated"}
 
 	docs := map[string][]string{
 		"../../docs/architecture/tenet-v1-operator-contracts.md": {
@@ -3673,7 +3673,7 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"that pair gives reviewers the exact Tenet request log correlation key plus the attempted region/account/observer-role path",
 			"maps known reasons to friendly next-step copy for missing cross-account observer-role wiring, missing ECS tasks, missing ASG instances, stale resource selections, and temporary AWS/provider access failures",
 			"Route-stable resource with no independent stream: `available=false`, `unavailableReason=no_log_source`",
-			"unavailable/no-log-source responses use `returnedEntryCount=0` and `truncationStatus=not_applicable`",
+			"unavailable/no-log-source responses use `returnedCount=0`, compatibility `returnedEntryCount=0`, `truncated=false`, and `truncationStatus=not_applicable`",
 			"the UI also recognizes the compatibility aliases `capped` and `at_cap_unknown_total`",
 		},
 		"../../docs/architecture/tenet-v1-local-runtime.md": {
@@ -3729,7 +3729,9 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"assert limited_scope.get('requestedLimit') == 1",
 			"assert limited_scope.get('effectiveLimit') == 1",
 			"assert limited_scope.get('returnedEntryCount') == len(limited_worker_resource_logs.get('entries') or [])",
+			"assert limited_scope.get('returnedCount') == len(limited_worker_resource_logs.get('entries') or [])",
 			"assert limited_scope.get('truncationStatus') in ('truncated', 'not_truncated', 'unknown', 'not_applicable')",
+			"assert limited_scope.get('truncated') == (limited_scope.get('truncationStatus') == 'truncated')",
 			"assert ecs_task_resource_logs.get('resourceDescription') == 'ECS task selected from live service inspection'",
 			"assert ecs_task_resource_inspection.get('resourceDescription') == 'ECS task selected from live service inspection'",
 			"assert ecs_task_resource_logs.get('containerName') == 'worker'",
@@ -3746,7 +3748,9 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"assert limited_scope.get(\"requestedLimit\") == 1",
 			"assert limited_scope.get(\"effectiveLimit\") == 1",
 			"assert limited_scope.get(\"returnedEntryCount\") == len(limited_worker_resource_logs.get(\"entries\") or [])",
+			"assert limited_scope.get(\"returnedCount\") == len(limited_worker_resource_logs.get(\"entries\") or [])",
 			"assert limited_scope.get(\"truncationStatus\") in (\"truncated\", \"not_truncated\", \"unknown\", \"not_applicable\")",
+			"assert limited_scope.get(\"truncated\") == (limited_scope.get(\"truncationStatus\") == \"truncated\")",
 			"assert ecs_task_resource_logs.get(\"resourceDescription\") == \"ECS task selected from live service inspection\"",
 			"assert ecs_task_resource_inspection.get(\"resourceDescription\") == \"ECS task selected from live service inspection\"",
 			"assert ecs_task_resource_logs.get(\"containerName\") == \"worker\"",

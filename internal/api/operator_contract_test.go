@@ -2023,6 +2023,8 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		"the request ID anchors Tenet's structured API logs while the lookup context explains which region, control account, target account, and observer-role path the provider attempted",
 		"resource-logs?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod",
 		"resource-logs?resourceType=ecsTask&resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Atask%2Fworker%2Fabc123&containerName=api&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5",
+		"`returnedCount` plus compatibility `returnedEntryCount`",
+		"boolean `truncated`",
 	} {
 		if !strings.Contains(operatorContractsDoc, fragment) {
 			t.Fatalf("expected operator contracts doc resource log contract to include %q", fragment)
@@ -2053,6 +2055,9 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		"Operators should capture the HTTP `Request-Id` response header together with the `lookupContext` object before escalating",
 		"that pair gives reviewers the exact Tenet request log correlation key plus the attempted region/account/observer-role path",
 		"Example selected-cluster service request",
+		"- `returnedCount`",
+		"- `truncated`",
+		"compatibility `returnedEntryCount={len(entries)}`",
 		"resource-logs?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5",
 		"The embedded resource page also preserves bookmarkable `clusterArn` URL state for ECS service and ECS task resources",
 		"local/compose smoke now lock the response-level `clusterArn` echo",
