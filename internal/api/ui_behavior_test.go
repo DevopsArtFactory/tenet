@@ -6014,7 +6014,7 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   const unavailableText = collectText(unavailableRun.document.getElementById('accounts')).join(' | ');
   if (!unavailableText.includes('Recent logs are unavailable for this resource.')) throw new Error('expected resource page unavailable recent logs state');
   if (unavailableText.includes('Share log entry')) throw new Error('expected unavailable recent logs state not to render share links');
-  if (!unavailableText.includes('Cross-account access is not configured for this deployment.')) throw new Error('expected unavailable recent logs state to surface friendly provider reason');
+  if (!unavailableText.includes('Ask the platform owner to configure the observer role for this target account, then retry Recent logs after the account wiring is updated.')) throw new Error('expected unavailable recent logs state to surface friendly provider guidance');
   if (!unavailableText.includes('Lookup path · ap-northeast-2 · control 123456789012 → target 210987654321 · cross-account lookup · observer role not configured')) throw new Error('expected unavailable recent logs state to summarize the lookup path, got ' + unavailableText);
   if (!unavailableText.includes('Lookup region')) throw new Error('expected unavailable recent logs state to label lookup region');
   if (!unavailableText.includes('ap-northeast-2')) throw new Error('expected unavailable recent logs state to show lookup region value');
