@@ -2229,7 +2229,7 @@
           planId: params.get('planId') || '',
           applyId: params.get('applyId') || '',
           resourceType: params.get('resourceType') || '',
-          resourceId: params.get('resourceId') || legacyResourceIdentityParam(params),
+          resourceId: params.get('resourceId') ?? legacyResourceIdentityParam(params),
           containerName: params.get('containerName') || '',
           instanceId: params.get('instanceId') || '',
           clusterArn: params.get('clusterArn') || '',
