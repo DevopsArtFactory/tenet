@@ -3595,7 +3595,7 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 	fieldFragments := []string{"requestedLimit", "effectiveLimit", "returnedEntryCount", "newestEntryTimestamp", "oldestEntryTimestamp", "truncationStatus"}
 
 	docs := map[string][]string{
-		"../../README.md": {
+		"../../docs/architecture/tenet-v1-operator-contracts.md": {
 			"bounded `resource-logs?limit=1` provider cap plus router fallback truncation/resultScope metadata",
 			"Operators can add an optional positive `limit` query parameter",
 			"Successful responses include additive `resultScope` metadata",
@@ -3741,7 +3741,7 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 
 func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 	files := map[string][]string{
-		"../../README.md": {
+		"../../docs/architecture/tenet-v1-operator-contracts.md": {
 			"### Trusted front-door auth",
 			"Front-door auth remains additive and opt-in.",
 			"The API can now also run explicitly configured Tenet-managed GitHub OAuth, Google Workspace OIDC, or Okta OIDC browser login",
@@ -4136,7 +4136,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 
 func TestDocsDescribeCISmokeRunnerStartRunbook(t *testing.T) {
 	files := map[string][]string{
-		"../../README.md": {
+		"../../docs/architecture/tenet-v1-operator-contracts.md": {
 			"docs/runbooks/ci-smoke-runner-start.md",
 			"scripts/ci-smoke-runner-evidence.sh <run-id>",
 			"exact `gh run view` plus Actions jobs API evidence checklist, rerun-target selection, post-recovery release-health checklist, recovery steps, and closeout comment template for issue #850",
@@ -4233,7 +4233,7 @@ func TestDocsDescribeCISmokeRunnerStartRunbook(t *testing.T) {
 
 func TestOverviewDocsDescribeECSTaskScopeReleaseGuard(t *testing.T) {
 	files := map[string][]string{
-		"../../README.md": {
+		"../../docs/architecture/tenet-v1-operator-contracts.md": {
 			"operators can request a positive bounded sample with `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType=ecsService&resourceName={serviceName}&limit={n}`",
 			"optional nested `ec2Instance` host detail (`instanceState`, `instanceType`, `imageId`, `privateIpAddress`, `publicIpAddress`, `subnetId`, `vpcId`, `launchTime`) when the resolved EC2 instance identity and best-effort `DescribeInstances` lookup succeed",
 			"sibling `tasksScope` reports `available`, optional `requestedLimit`, `effectiveLimit`, `returnedTaskCount`, `truncationStatus`",
@@ -4279,7 +4279,7 @@ func TestOverviewDocsDescribeECSTaskScopeReleaseGuard(t *testing.T) {
 
 func TestOverviewDocsDescribeAccountSectionNavigation(t *testing.T) {
 	files := map[string][]string{
-		"../../README.md": {
+		"../../docs/architecture/tenet-v1-operator-contracts.md": {
 			"`Current section`",
 			"`On this page`",
 			"`No section is currently targeted.`",
@@ -4309,7 +4309,7 @@ func TestOverviewDocsDescribeAccountSectionNavigation(t *testing.T) {
 
 func TestOverviewDocsDescribeAccountDetailRefresh(t *testing.T) {
 	files := map[string][]string{
-		"../../README.md": {
+		"../../docs/architecture/tenet-v1-operator-contracts.md": {
 			"`Refresh account detail`",
 			"re-runs only `GET /v1/overview/accounts/{awsAccountId}`",
 			"leaves the stale account content visible with explicit loading/error copy",
@@ -4337,7 +4337,7 @@ func TestOverviewDocsDescribeAccountDetailRefresh(t *testing.T) {
 
 func TestOverviewDocsDescribeAuditFilterReset(t *testing.T) {
 	files := map[string][]string{
-		"../../README.md": {
+		"../../docs/architecture/tenet-v1-operator-contracts.md": {
 			"`Clear action/limit`",
 			"`View global audit log`",
 			"removing stale `#audit-*` section anchors",
@@ -4370,7 +4370,7 @@ func TestOverviewDocsDescribeAuditFilterReset(t *testing.T) {
 
 func TestOverviewDocsDescribeResourceLazyPanelRefreshAndAuthGuidance(t *testing.T) {
 	files := map[string][]string{
-		"../../README.md": {
+		"../../docs/architecture/tenet-v1-operator-contracts.md": {
 			"`Refresh live inspection` control",
 			"`Refresh recent logs` control",
 			"re-run only that panel-local backend route in place",
@@ -4409,7 +4409,7 @@ func TestOverviewDocsDescribeResourceLazyPanelRefreshAndAuthGuidance(t *testing.
 
 func TestDockerSmokeDocsDescribeResourceRefreshCoverage(t *testing.T) {
 	files := map[string][]string{
-		"../../README.md": {
+		"../../docs/architecture/tenet-v1-operator-contracts.md": {
 			"compose-backed shell coverage now also locks the bookmarkable resource page's top-level `Refresh resource detail` shell (`GET /v1/overview/deployments/{deploymentName}` route-builder text plus the preserved-detail loading/error copy) alongside the existing `Refresh recent logs` and `Refresh live inspection` lazy-panel route-builder/loading/error/auth-guidance hooks",
 		},
 		"../../docs/features/overview-dashboard.md": {
@@ -4436,7 +4436,7 @@ func TestDockerSmokeDocsDescribeResourceRefreshCoverage(t *testing.T) {
 
 func TestDockerSmokeDocsDescribeEmbeddedReadAuthGuidanceCoverage(t *testing.T) {
 	files := map[string][]string{
-		"../../README.md": {
+		"../../docs/architecture/tenet-v1-operator-contracts.md": {
 			"The same bookmarkable application, account, traffic-shift resource, ECS resource, drift, audit, and plan routes locked by direct-process smoke",
 			"the bookmarkable application shell still exposes the `_self` `Applications overview` return path, the non-click `Application detail` destination chip, and the bookmarkable application-detail status summary shell",
 			"raw embedded application/account/resource/drift/audit/plan shell HTML/script fragments instead of runtime DOM text",

@@ -31,6 +31,31 @@ func readRepoFile(t *testing.T, relativePath string) string {
 	return string(body)
 }
 
+func TestReadmeStaysProductOverview(t *testing.T) {
+	readme := readRepoFile(t, "README.md")
+	lineCount := strings.Count(readme, "\n")
+	if !strings.HasSuffix(readme, "\n") {
+		lineCount++
+	}
+	if lineCount > 350 {
+		t.Fatalf("expected README to remain a product overview under 350 lines; got %d", lineCount)
+	}
+
+	for _, fragment := range []string{
+		"Tenet is a repository-driven deployment control plane",
+		"## Product Overview",
+		"## Run Locally",
+		"## Operator UI Entry Points",
+		"## Documentation Map",
+		"docs/architecture/tenet-v1-operator-contracts.md",
+		"endpoint, read-model, auth, resource, and smoke-verification contracts formerly\n  kept in this README",
+	} {
+		if !strings.Contains(readme, fragment) {
+			t.Fatalf("expected README product overview to include %q", fragment)
+		}
+	}
+}
+
 func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 	docPaths := []string{
 		"README.md",
@@ -83,12 +108,12 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 		}
 	}
 
-	readme := readRepoFile(t, "README.md")
-	if !strings.Contains(readme, "`GET /auth/login/github`, `GET /auth/login/google`, or `GET /auth/login/okta` creates one-time callback state") {
-		t.Fatal("expected README auth runtime boundary to state public GitHub login route is shipped")
+	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
+	if !strings.Contains(operatorContractsDoc, "`GET /auth/login/github`, `GET /auth/login/google`, or `GET /auth/login/okta` creates one-time callback state") {
+		t.Fatal("expected operator contracts doc auth runtime boundary to state public GitHub login route is shipped")
 	}
-	if !strings.Contains(readme, "reports `authRuntime.tenetManagedLogin.active=true` from `GET /v1/operator/context`") {
-		t.Fatal("expected README auth runtime boundary to state auth-provider runtime settings activate the diagnostic")
+	if !strings.Contains(operatorContractsDoc, "reports `authRuntime.tenetManagedLogin.active=true` from `GET /v1/operator/context`") {
+		t.Fatal("expected operator contracts doc auth runtime boundary to state auth-provider runtime settings activate the diagnostic")
 	}
 	for _, fragment := range []string{
 		"`GET /auth/login/github`, `GET /auth/login/google`, or `GET /auth/login/okta` creates one-time callback state",
@@ -111,14 +136,14 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 }
 
 func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
-	readme := readRepoFile(t, "README.md")
+	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	for _, placeholder := range []string{
 		"TENET_AUTH_PROVIDER=***",
 		"TENET_AUTH_PROVIDER=<",
 		"TENET_AUTH_PROVIDER=REDACTED",
 	} {
-		if strings.Contains(readme, placeholder) {
-			t.Fatalf("expected README to use concrete non-secret provider modes instead of placeholder %q", placeholder)
+		if strings.Contains(operatorContractsDoc, placeholder) {
+			t.Fatalf("expected operator contracts doc to use concrete non-secret provider modes instead of placeholder %q", placeholder)
 		}
 	}
 	for _, fragment := range []string{
@@ -133,8 +158,8 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 		"`TENET_AUTH_PROVIDER=okta_oidc`",
 		"`TENET_AUTH_PROVIDER=okta_saml`",
 	} {
-		if !strings.Contains(readme, fragment) {
-			t.Fatalf("expected README enterprise SSO boundary to include %q", fragment)
+		if !strings.Contains(operatorContractsDoc, fragment) {
+			t.Fatalf("expected operator contracts doc enterprise SSO boundary to include %q", fragment)
 		}
 	}
 
@@ -186,7 +211,7 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 		name string
 		body string
 	}{
-		{name: "README.md", body: readme},
+		{name: "docs/architecture/tenet-v1-operator-contracts.md", body: operatorContractsDoc},
 		{name: "docs/architecture/tenet-v1-enterprise-sso.md", body: doc},
 		{name: "scripts/smoke-local.sh", body: readRepoFile(t, "scripts/smoke-local.sh")},
 		{name: "scripts/smoke-docker.sh", body: readRepoFile(t, "scripts/smoke-docker.sh")},
@@ -198,7 +223,7 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 }
 
 func TestEnterpriseSSOSmokeContracts(t *testing.T) {
-	readme := readRepoFile(t, "README.md")
+	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
 		"`GET /v1/operator/context.authRuntime.enterpriseSso` is the provider-neutral diagnostic surface",
 		"For `TENET_AUTH_PROVIDER=google_oidc` (or the legacy `google` alias), the managed-login runtime is active",
@@ -215,8 +240,8 @@ func TestEnterpriseSSOSmokeContracts(t *testing.T) {
 		"the embedded recovery copy deliberately prefers the enterprise SSO label",
 		"reserved Okta SAML/enterprise runtime paths `internal/authsaml/**` and `internal/authsso/**`",
 	} {
-		if !strings.Contains(readme, fragment) {
-			t.Fatalf("expected README enterprise SSO smoke scope to include %q", fragment)
+		if !strings.Contains(operatorContractsDoc, fragment) {
+			t.Fatalf("expected operator contracts doc enterprise SSO smoke scope to include %q", fragment)
 		}
 	}
 
@@ -359,7 +384,7 @@ func TestDockerUpOperatorContract(t *testing.T) {
 		}
 	}
 
-	readme := readRepoFile(t, "README.md")
+	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
 		"If `make docker-up` exits before starting the stack, `localhost:8080` is already owned by something outside this Compose project.",
 		"`lsof -nP -iTCP:8080 -sTCP:LISTEN`",
@@ -367,8 +392,8 @@ func TestDockerUpOperatorContract(t *testing.T) {
 		"`docker compose up --build -d`",
 		"`TENET_AWS_ENABLE_APPLY=true make docker-up`",
 	} {
-		if !strings.Contains(readme, fragment) {
-			t.Fatalf("expected README docker troubleshooting to include %q", fragment)
+		if !strings.Contains(operatorContractsDoc, fragment) {
+			t.Fatalf("expected operator contracts doc docker troubleshooting to include %q", fragment)
 		}
 	}
 
@@ -534,7 +559,7 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		}
 	}
 
-	readme := readRepoFile(t, "README.md")
+	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
 		"`POST /v1/applies/plans/{planId}`",
 		"`GET /v1/applies/{applyId}`",
@@ -571,8 +596,8 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 		"environment variables",
 		"Linux CI runners",
 	} {
-		if !strings.Contains(readme, fragment) {
-			t.Fatalf("expected README apply contract to include %q", fragment)
+		if !strings.Contains(operatorContractsDoc, fragment) {
+			t.Fatalf("expected operator contracts doc apply contract to include %q", fragment)
 		}
 	}
 
@@ -627,7 +652,7 @@ func TestReadOnlyApplyOperatorContract(t *testing.T) {
 }
 
 func TestManagedLiveDriftDocsPreferFocusedContractCoverageOverLocalSmoke(t *testing.T) {
-	readme := readRepoFile(t, "README.md")
+	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
 		"`runtimeContext.capacity.desired`, `runtimeContext.capacity.min`, and `runtimeContext.capacity.max`",
 		"`runtimeContext.launchTemplate.bootstrapSource`",
@@ -639,8 +664,8 @@ func TestManagedLiveDriftDocsPreferFocusedContractCoverageOverLocalSmoke(t *test
 		"`runtimeContext.taskDefinition.image`",
 		"Focused `go test ./internal/api` coverage locks the live-backed EC2 launch-template drift rows for `runtimeContext.launchTemplate.imageId` and `runtimeContext.launchTemplate.instanceType` because local smoke may legitimately lack AWS access and therefore does not claim to prove those rows.",
 	} {
-		if !strings.Contains(readme, fragment) {
-			t.Fatalf("expected README managed live drift docs to include %q", fragment)
+		if !strings.Contains(operatorContractsDoc, fragment) {
+			t.Fatalf("expected operator contracts doc managed live drift docs to include %q", fragment)
 		}
 	}
 
@@ -684,7 +709,7 @@ func TestManagedLiveDriftDocsPreferFocusedContractCoverageOverLocalSmoke(t *test
 
 func TestDriftRowShareLinkDocsContract(t *testing.T) {
 	documents := map[string][]string{
-		"README.md": {
+		"docs/architecture/tenet-v1-operator-contracts.md": {
 			"`Share drift row` link to a stable `#drift-row-...` anchor",
 			"prefers backend `driftId` and falls back to a deterministic legacy row identity",
 		},
@@ -712,15 +737,15 @@ func TestDriftRowShareLinkDocsContract(t *testing.T) {
 }
 
 func TestDesiredStateSourceOperatorDocsContract(t *testing.T) {
-	readme := readRepoFile(t, "README.md")
+	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
 		"Both `tenet-api` and `tenet-controller` can read that desired state from either:",
 		"`TENET_REPO_ROOT` remains the filesystem-mode input when you want a local checkout; it is not a universal runtime requirement.",
 		"The AWS central-control-plane docs and Terraform bootstrap README now explicitly call out that the shipped repo-sync bootstrap path works out of the box only with an anonymously readable `repo_url` (for example a public HTTPS clone URL).",
 		"If you plan to use the AWS central-control-plane Terraform bootstrap, do the preflight before `terraform apply`: it builds and pushes the current local Tenet checkout from the machine running apply, requires Terraform 1.5+, Docker Buildx, and AWS CLI v2 with working credentials, and expects you to verify that `repo_url` and `repo_branch` are reachable from that machine first, for example with `git ls-remote --heads <repo_url> <repo_branch>`.",
 	} {
-		if !strings.Contains(readme, fragment) {
-			t.Fatalf("expected README desired-state source contract to include %q", fragment)
+		if !strings.Contains(operatorContractsDoc, fragment) {
+			t.Fatalf("expected operator contracts doc desired-state source contract to include %q", fragment)
 		}
 	}
 
@@ -834,7 +859,7 @@ func TestAuditLogOperatorContract(t *testing.T) {
 		}
 	}
 
-	readme := readRepoFile(t, "README.md")
+	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
 		"`GET /v1/audit-logs?action=apply.requested`",
 		"`GET /v1/audit-logs?action=plan.created`",
@@ -858,8 +883,8 @@ func TestAuditLogOperatorContract(t *testing.T) {
 		"full `GET /v1/audit-logs` collection with expected `plan.created`, `apply.requested`, and lifecycle `apply.transitioned` action support present",
 		"fetches the full `GET /v1/audit-logs` collection and asserts the expected `plan.created`, `apply.requested`, and lifecycle `apply.transitioned` action support is present without depending on `limit=2`",
 	} {
-		if !strings.Contains(readme, fragment) {
-			t.Fatalf("expected README audit contract to include %q", fragment)
+		if !strings.Contains(operatorContractsDoc, fragment) {
+			t.Fatalf("expected operator contracts doc audit contract to include %q", fragment)
 		}
 	}
 
@@ -1200,7 +1225,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		}
 	}
 
-	readme := readRepoFile(t, "README.md")
+	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
 		"TENET_API_TRUST_AUTHENTICATED_HEADERS",
 		"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY",
@@ -1271,8 +1296,8 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		"deployment-scoped plan/apply writes require both `X-Tenet-Authorized-Projects` and `X-Tenet-Authorized-Environments` to match catalog placement",
 		"curl -fsS http://localhost:8080/v1/operator/context",
 	} {
-		if !strings.Contains(readme, fragment) {
-			t.Fatalf("expected README front-door auth contract to include %q", fragment)
+		if !strings.Contains(operatorContractsDoc, fragment) {
+			t.Fatalf("expected operator contracts doc front-door auth contract to include %q", fragment)
 		}
 	}
 
@@ -1575,7 +1600,7 @@ func TestResourceDrillDownFrontDoorAuthOperatorContract(t *testing.T) {
 		}
 	}
 
-	readme := readRepoFile(t, "README.md")
+	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
 		"`GET /v1/overview/deployments/{deploymentName}/resource-logs`",
 		"`GET /v1/overview/deployments/{deploymentName}/resource-inspection`",
@@ -1585,8 +1610,8 @@ func TestResourceDrillDownFrontDoorAuthOperatorContract(t *testing.T) {
 		"`available=false` plus explicit `unavailableReason` payload contract",
 		"unknown live-inspection codes out of operator copy",
 	} {
-		if !strings.Contains(readme, fragment) {
-			t.Fatalf("expected README resource drill-down auth contract to include %q", fragment)
+		if !strings.Contains(operatorContractsDoc, fragment) {
+			t.Fatalf("expected operator contracts doc resource drill-down auth contract to include %q", fragment)
 		}
 	}
 
@@ -1618,7 +1643,7 @@ func TestResourceDrillDownFrontDoorAuthOperatorContract(t *testing.T) {
 
 func TestECSTaskSampleUnavailableReleaseGuardOperatorContract(t *testing.T) {
 	documents := map[string][]string{
-		"README.md": {
+		"docs/architecture/tenet-v1-operator-contracts.md": {
 			"ECS service resource pages also expose a compact `Task sample limit` control",
 			"sibling `tasksScope` reports `available`, optional `requestedLimit`, `effectiveLimit`, `returnedTaskCount`, `truncationStatus`",
 			"the embedded UI renders those optional placement facts with the operator-facing labels `Container instance`, `EC2 instance`, `Capacity provider`, and `Availability Zone`, and local/no-AWS payloads that omit them do not show empty placeholders",
@@ -1772,7 +1797,7 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		}
 	}
 
-	readme := readRepoFile(t, "README.md")
+	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
 		"`GET /v1/overview/deployments/{deploymentName}/events`",
 		"`401 Unauthorized` unauthenticated reads",
@@ -1783,8 +1808,8 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		"router-authored `resultScope` metadata (`requestedLimit`, `effectiveLimit`, `returnedEventCount`, `totalEventCount`, `limited`, optional `newestEventTimestamp` / `oldestEventTimestamp` from the returned window, and `truncationStatus`)",
 		"ticker/default controller events do not include `controllerRefresh`",
 	} {
-		if !strings.Contains(readme, fragment) {
-			t.Fatalf("expected README deployment events auth contract to include %q", fragment)
+		if !strings.Contains(operatorContractsDoc, fragment) {
+			t.Fatalf("expected operator contracts doc deployment events auth contract to include %q", fragment)
 		}
 	}
 
@@ -1813,7 +1838,7 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 		}
 	}
 
-	readme := readRepoFile(t, "README.md")
+	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
 		"`POST /api/v1/github/webhook`",
 		"`TENET_GITHUB_WEBHOOK_SECRET`",
@@ -1834,8 +1859,8 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 		"`controllerRefresh`",
 		"`TENET_STATUS_BACKEND=redis`",
 	} {
-		if !strings.Contains(readme, fragment) {
-			t.Fatalf("expected README github webhook contract to include %q", fragment)
+		if !strings.Contains(operatorContractsDoc, fragment) {
+			t.Fatalf("expected operator contracts doc github webhook contract to include %q", fragment)
 		}
 	}
 
@@ -1981,7 +2006,7 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		}
 	}
 
-	readme := readRepoFile(t, "README.md")
+	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
 		"`lookupContext` object",
 		"`lookupContext.region`",
@@ -1997,8 +2022,8 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		"resource-logs?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod",
 		"resource-logs?resourceType=ecsTask&resourceName=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Atask%2Fworker%2Fabc123&containerName=api&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=5",
 	} {
-		if !strings.Contains(readme, fragment) {
-			t.Fatalf("expected README resource log contract to include %q", fragment)
+		if !strings.Contains(operatorContractsDoc, fragment) {
+			t.Fatalf("expected operator contracts doc resource log contract to include %q", fragment)
 		}
 	}
 
@@ -2095,7 +2120,7 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		}
 	}
 
-	readme := readRepoFile(t, "README.md")
+	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
 		"Auto Scaling payloads add `autoScalingGroup`, including optional `launchTemplate` and `mixedInstancesPolicy` metadata",
 		"`productionListenerRule`",
@@ -2120,8 +2145,8 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"`autoScalingGroup.instances[].ec2Instance`",
 		"`EC2 state`, `EC2 instance type`, `AMI image ID`, `Private IP`, `Public IP`, `Subnet`, `VPC`, and `Launch time`",
 	} {
-		if !strings.Contains(readme, fragment) {
-			t.Fatalf("expected README resource inspection contract to include %q", fragment)
+		if !strings.Contains(operatorContractsDoc, fragment) {
+			t.Fatalf("expected operator contracts doc resource inspection contract to include %q", fragment)
 		}
 	}
 
