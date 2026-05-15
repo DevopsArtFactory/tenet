@@ -152,7 +152,7 @@ Common bookmarkable routes:
 
 - `/?page=application&deployment={deploymentName}`
 - `/?page=account&accountId={awsAccountId}`
-- `/?page=resource&deployment={deploymentName}&resourceType={type}&resourceName={name}`
+- `/?page=resource&deployment={deploymentName}&resourceType={type}&resourceId={stableResourceId}` (canonical); older `resourceName={name}` bookmarks are still accepted as a compatibility fallback
 - `/?page=drift&deployment={deploymentName}`
 - `/?page=plan&deployment={deploymentName}`
 - `/?page=audit`

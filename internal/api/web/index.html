@@ -2212,6 +2212,12 @@
           account: params.get('account') || 'all',
         };
       };
+      const legacyResourceIdentityParam = (params) => {
+        const type = (params.get('resourceType') || '').trim();
+        const legacyName = (params.get('resourceName') || '').trim();
+        if (!legacyName) return '';
+        return type ? [type, legacyName].join('::') : legacyName;
+      };
       const parsePageState = () => {
         const params = new URLSearchParams(window.location.search);
         const page = params.get('page') || params.get('view') || 'applications';
@@ -2223,7 +2229,7 @@
           planId: params.get('planId') || '',
           applyId: params.get('applyId') || '',
           resourceType: params.get('resourceType') || '',
-          resourceId: params.get('resourceId') || '',
+          resourceId: params.get('resourceId') || legacyResourceIdentityParam(params),
           containerName: params.get('containerName') || '',
           instanceId: params.get('instanceId') || '',
           clusterArn: params.get('clusterArn') || '',

@@ -1955,6 +1955,8 @@ assert "createQuickNavChip(currentSectionLink.label, `Current section: ${current
 assert "createElement('div', 'quick-nav-empty', 'No additional section links are available for this application.')" in application_ui, application_ui
 assert "eventsSection.id = 'application-runtime-events';" in application_ui, application_ui
 for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_application_resource_ui, blue_task_set_target_group_resource_ui, production_listener_rule_resource_ui):
+    assert "const legacyResourceIdentityParam = (params) => {" in body, body
+    assert "resourceId: params.get('resourceId') || legacyResourceIdentityParam(params)," in body, body
     assert "const bookmarkedResource = parseResourceIdentity(currentPageState.resourceId);" in body, body
     assert 'Opened via bookmarked resource alias.' in body, body
     assert "const renderResourceDetailPage = (detail, resourceState = null) => {" in body, body

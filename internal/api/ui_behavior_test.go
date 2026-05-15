@@ -7725,21 +7725,28 @@ async function render(search, detailBody) {
   if (!bookmarkedLink) throw new Error('expected application page to generate bookmarkable stable resource link before reorder');
   if (bookmarkedLink.target !== '_self') throw new Error('expected bookmarked resource link to stay in embedded UI flow');
 
+  async function assertResolvedTestListener(label) {
+    const summaryText = collectText(document.getElementById('summary')).join(' | ');
+    const accountsText = collectText(document.getElementById('accounts')).join(' | ');
+    const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
+    const expectedBackHref = '/?' + new URLSearchParams({
+      page: 'application',
+      deployment: 'payments-api-staging',
+    }).toString();
+    const backLink = toolbarLinks.find((node) => node.href === expectedBackHref);
+    if (!backLink || backLink.target !== '_self' || backLink.rel) throw new Error('expected ' + label + ' resource page to preserve self-navigation back link');
+    if (!summaryText.includes('test listener')) throw new Error('expected ' + label + ' resource detail to resolve the intended resource after reorder');
+    if (summaryText.includes('prod listener')) throw new Error('expected ' + label + ' resource detail not to drift to a different resource after reorder');
+    if (!accountsText.includes(resourceID)) throw new Error('expected ' + label + ' resource page to preserve stable resource identity');
+    if (!accountsText.includes('Routes verification traffic')) throw new Error('expected ' + label + ' resource page to render the intended execution description');
+    if (accountsText.includes('Routes production traffic')) throw new Error('expected ' + label + ' resource page not to render the wrong execution description');
+  }
+
   await render('?page=resource&deployment=payments-api-staging&resourceType=productionListener&resourceId=' + encodeURIComponent(resourceID), reorderedDetail);
-  const summaryText = collectText(document.getElementById('summary')).join(' | ');
-  const accountsText = collectText(document.getElementById('accounts')).join(' | ');
-  const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
-  const expectedBackHref = '/?' + new URLSearchParams({
-    page: 'application',
-    deployment: 'payments-api-staging',
-  }).toString();
-  const backLink = toolbarLinks.find((node) => node.href === expectedBackHref);
-  if (!backLink || backLink.target !== '_self' || backLink.rel) throw new Error('expected reordered resource page to preserve self-navigation back link');
-  if (!summaryText.includes('test listener')) throw new Error('expected bookmarked resource detail to resolve the intended resource after reorder');
-  if (summaryText.includes('prod listener')) throw new Error('expected bookmarked resource detail not to drift to a different resource after reorder');
-  if (!accountsText.includes(resourceID)) throw new Error('expected reordered resource page to preserve stable resource identity');
-  if (!accountsText.includes('Routes verification traffic')) throw new Error('expected reordered resource page to render the intended execution description');
-  if (accountsText.includes('Routes production traffic')) throw new Error('expected reordered resource page not to render the wrong execution description');
+  await assertResolvedTestListener('bookmarked resourceId');
+
+  await render('?page=resource&deployment=payments-api-staging&resourceType=productionListener&resourceName=' + encodeURIComponent('test listener'), reorderedDetail);
+  await assertResolvedTestListener('legacy resourceName');
 })();
 `
 
