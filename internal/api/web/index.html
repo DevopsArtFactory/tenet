@@ -2732,11 +2732,18 @@
           );
         } else {
           const diagnosticsLink = createElement('div', 'row-links');
-          diagnosticsLink.append(createNavLink(currentBookmarkableURL(operatorContextAccessDetailsPanelID), 'Open Operator context details', '_self'));
+          diagnosticsLink.append(
+            createRefreshButton(
+              'Refresh applications overview',
+              applicationsOverviewState?.status === 'loading',
+              () => applicationsOverviewState?.onRefresh?.().catch(() => {}),
+            ),
+            createNavLink(currentBookmarkableURL(operatorContextAccessDetailsPanelID), 'Open Operator context details', '_self'),
+          );
           empty.append(
             createElement('h2', 'account-name', 'No visible applications'),
             createElement('div', 'account-meta', 'GET /v1/overview/applications returned no applications for this operator view.'),
-            createElement('div', 'account-meta', 'Check catalog loading, runtime status snapshots, or trusted front-door authorization grants if deployments were expected.'),
+            createElement('div', 'account-meta', 'Check catalog loading, runtime status snapshots, or trusted front-door authorization grants if deployments were expected. Refresh here after fixing inputs, or open operator context details for trusted-front-door diagnostics.'),
             diagnosticsLink,
           );
         }
