@@ -1637,17 +1637,20 @@ assert 'Controller runtime events' in ui, ui
 assert 'Refresh runtime events' in ui, ui
 assert 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events?limit=${normalizeDeploymentEventsLimit(limit)}. Tenet shows the selected bounded window, newest first; use Event window to change how much controller history this panel reads without leaving the application drill-down. This is not audit/auth history.' in ui, ui
 assert 'Loading controller runtime events…' in ui, ui
-assert 'No controller runtime events were returned in the latest ${selectedLimit}-event window. Increase Event window or use Refresh runtime events before treating controller history as absent.' in ui, ui
+assert 'No controller runtime events are retained for this application yet.' in ui, ui
 assert "const createDeploymentEventsFreshnessMeta = (result) => {" in ui, ui
 assert "deployment-events-freshness" in ui, ui
 assert 'Last refreshed · ${fetchedAt}' in ui, ui
 assert 'Controller runtime events are currently unavailable.' in ui, ui
 assert 'Managed drift summary · ${counts.total} total · ${counts.high} high · ${counts.medium} medium · ${counts.low} low' in ui, ui
-assert "const deploymentEventsResultScopeFields = (scope) => {" in ui, ui
+assert "const deploymentEventsRetentionScope = (result) => {" in ui, ui
+assert "const deploymentEventsResultScopeFields = (scope, retention = null) => {" in ui, ui
 assert "Requested window" in ui, ui
+assert "Total retained events" in ui, ui
+assert "Retention status" in ui, ui
 assert "Window status" in ui, ui
-assert "Capped response; more controller history may exist" in ui, ui
-assert "At cap; older history may exist" in ui, ui
+assert "Query-limited response; increase Event window to inspect older returned history" in ui, ui
+assert "Controller retention cap reached; older runtime history may have been dropped" in ui, ui
 assert "const createControllerRefreshCue = (event) => {" in ui, ui
 assert 'GitHub refresh evidence · ${fields.join(\' · \')}' in ui, ui
 assert "const runtimeEventAnchorBase = (event) => {" in ui, ui
