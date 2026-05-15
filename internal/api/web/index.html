@@ -6199,6 +6199,35 @@
         }
         return `No audit entries match the current filters (${filters.join(' · ')}${hasLimit ? `; ${auditLimitLabel()}` : ''}). ${currentPageState.deployment && (currentPageState.auditAction || hasLimit) ? 'Clear action/limit to stay scoped to this deployment, or view the global audit log to remove the deployment scope.' : 'Clear audit controls to return to the full audit timeline.'}`;
       };
+      const createAuditEmptyStateActions = () => {
+        const deploymentName = auditDeploymentName();
+        const hasActionOrLimit = Boolean(currentPageState.auditAction || currentPageState.auditLimit > 0);
+        const actions = createElement('div', 'row-links row-links-shell');
+        if (deploymentName) {
+          actions.append(createNavLink(buildPageURL('plan', { deployment: deploymentName }), 'Open plan/apply workspace', '_self'));
+          if (hasActionOrLimit) {
+            const clearScopedControlsButton = createElement('button', 'toolbar-button', 'Clear action/limit');
+            clearScopedControlsButton.type = 'button';
+            clearScopedControlsButton.addEventListener('click', () => {
+              clearAuditPageFilters({ preserveDeployment: true });
+            });
+            const globalAuditButton = createElement('button', 'toolbar-button', 'View global audit log');
+            globalAuditButton.type = 'button';
+            globalAuditButton.addEventListener('click', () => {
+              clearAuditPageFilters();
+            });
+            actions.append(clearScopedControlsButton, globalAuditButton);
+          }
+        } else if (hasActionOrLimit) {
+          const clearControlsButton = createElement('button', 'toolbar-button', 'Clear audit controls');
+          clearControlsButton.type = 'button';
+          clearControlsButton.addEventListener('click', () => {
+            clearAuditPageFilters();
+          });
+          actions.append(clearControlsButton);
+        }
+        return actions.children.length ? actions : null;
+      };
       const createAuditDeploymentContextCallout = () => {
         const deploymentName = auditDeploymentName();
         if (!deploymentName) return null;
@@ -6481,7 +6510,11 @@
           timelineSection.append(freshnessMeta);
         }
         if (!entries.length) {
-          timelineSection.append(createElement('div', 'detail-state', auditEmptyStateText()));
+          const emptyStateActions = createAuditEmptyStateActions();
+          timelineSection.append(
+            createElement('div', 'detail-state', auditEmptyStateText()),
+            ...(emptyStateActions ? [emptyStateActions] : []),
+          );
           page.append(timelineSection);
           root.replaceChildren(page);
           activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;

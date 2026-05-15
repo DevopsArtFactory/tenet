@@ -11528,6 +11528,16 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   await settle();
   if (fetchCalls.length !== 3 || fetchCalls[2] !== '/v1/audit-logs?deployment=payments-api-prod&action=plan.created&limit=5') throw new Error('expected updated action-filtered audit fetch');
   if (window.location.search !== '?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&action=plan.created&limit=5') throw new Error('expected updated bookmarkable audit URL, got ' + window.location.search);
+  const emptyScopedTimeline = collectNodes(document.getElementById('accounts'), (node) => node.getAttribute?.('id') === 'audit-timeline')[0];
+  if (!emptyScopedTimeline) throw new Error('expected filtered deployment empty timeline section');
+  const emptyScopedLinks = collectNodes(emptyScopedTimeline, (node) => node.tagName === 'A');
+  const inlinePlanLink = emptyScopedLinks.find((node) => node.textContent === 'Open plan/apply workspace' && node.href === '/console?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod');
+  if (!inlinePlanLink) throw new Error('expected filtered deployment empty timeline to include a bookmarkable plan/apply workspace link');
+  const emptyScopedButtons = collectNodes(emptyScopedTimeline, (node) => node.tagName === 'BUTTON');
+  const inlineClearScopedButton = emptyScopedButtons.find((node) => node.textContent === 'Clear action/limit');
+  const inlineGlobalButton = emptyScopedButtons.find((node) => node.textContent === 'View global audit log');
+  if (!inlineClearScopedButton || inlineClearScopedButton.disabled) throw new Error('expected filtered deployment empty timeline to include an enabled inline clear action/limit control');
+  if (!inlineGlobalButton || inlineGlobalButton.disabled) throw new Error('expected filtered deployment empty timeline to include an enabled inline global audit log control');
   clearScopedButton = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear action/limit');
   if (!clearScopedButton || clearScopedButton.disabled) throw new Error('expected clear action/limit recovery action to stay available while action or limit is active');
   clearScopedButton.dispatch('click');
@@ -11615,9 +11625,16 @@ async function renderWithFetch(fetchImpl, search = '?page=audit') {
   const deploymentOnlyText = collectText(deploymentOnlyRun.document.getElementById('accounts')).join(' | ');
   if (!deploymentOnlyText.includes('No audit activity has been persisted yet for deployment payments-api-prod. Create a plan preview or apply request from the plan/apply workspace to add immutable audit rows for this deployment.')) throw new Error('expected deployment-only audit empty-state guidance, got ' + deploymentOnlyText);
   if (deploymentOnlyText.includes('No audit entries match the current filters')) throw new Error('expected deployment-only audit empty state to avoid generic filtered copy');
+  const deploymentOnlyTimeline = collectNodes(deploymentOnlyRun.document.getElementById('accounts'), (node) => node.getAttribute?.('id') === 'audit-timeline')[0];
+  if (!deploymentOnlyTimeline) throw new Error('expected deployment-only empty timeline section');
+  const deploymentOnlyPlanLink = collectNodes(deploymentOnlyTimeline, (node) => node.tagName === 'A').find((node) => node.textContent === 'Open plan/apply workspace');
+  if (!deploymentOnlyPlanLink || deploymentOnlyPlanLink.href !== '/?page=plan&deployment=payments-api-prod') throw new Error('expected deployment-only audit empty state to include a self link to the plan/apply workspace, got ' + (deploymentOnlyPlanLink && deploymentOnlyPlanLink.href));
 
+  let limitOnlyFetchCount = 0;
   const limitOnlyRun = await renderWithFetch((url) => {
-    if (url !== '/v1/audit-logs?limit=2') throw new Error('unexpected limit-only audit fetch: ' + url);
+    limitOnlyFetchCount += 1;
+    if (limitOnlyFetchCount === 1 && url !== '/v1/audit-logs?limit=2') throw new Error('unexpected initial limit-only audit fetch: ' + url);
+    if (limitOnlyFetchCount === 2 && url !== '/v1/audit-logs') throw new Error('unexpected cleared limit-only audit fetch: ' + url);
     return Promise.resolve({ ok: true, json: () => Promise.resolve({ entries: [] }) });
   }, '?page=audit&limit=2');
   await settle();
@@ -11628,6 +11645,15 @@ async function renderWithFetch(fetchImpl, search = '?page=audit') {
   if (!limitOnlyText.includes('No audit entries are visible with the current limit cap (Limit cap: latest 2). Increase the limit or clear audit controls to return to the full audit timeline.')) throw new Error('expected limit-only audit empty-state guidance, got ' + limitOnlyText);
   const clearControlsButton = collectNodes(limitOnlyRun.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear audit controls');
   if (!clearControlsButton) throw new Error('expected limit-only audit page to offer clear audit controls');
+  const limitOnlyTimeline = collectNodes(limitOnlyRun.document.getElementById('accounts'), (node) => node.getAttribute?.('id') === 'audit-timeline')[0];
+  if (!limitOnlyTimeline) throw new Error('expected limit-only empty timeline section');
+  const inlineClearControlsButton = collectNodes(limitOnlyTimeline, (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear audit controls');
+  if (!inlineClearControlsButton || inlineClearControlsButton.disabled) throw new Error('expected limit-only audit empty timeline to offer inline clear audit controls');
+  inlineClearControlsButton.dispatch('click');
+  await settle();
+  await settle();
+  if (limitOnlyFetchCount !== 2) throw new Error('expected inline clear audit controls to reload the global audit route once');
+  if (limitOnlyRun.window.location.search !== '?page=audit') throw new Error('expected inline clear audit controls to preserve the audit page and reset controls, got ' + limitOnlyRun.window.location.search);
 
   const unavailableRun = await renderWithFetch(() => Promise.resolve({
     ok: false,
