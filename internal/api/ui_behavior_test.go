@@ -11540,7 +11540,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!inlineGlobalButton || inlineGlobalButton.disabled) throw new Error('expected filtered deployment empty timeline to include an enabled inline global audit log control');
   clearScopedButton = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Clear action/limit');
   if (!clearScopedButton || clearScopedButton.disabled) throw new Error('expected clear action/limit recovery action to stay available while action or limit is active');
-  clearScopedButton.dispatch('click');
+  inlineClearScopedButton.dispatch('click');
   await settle();
   await settle();
   if (fetchCalls.length !== 4 || fetchCalls[3] !== '/v1/audit-logs?deployment=payments-api-prod') throw new Error('expected clear action/limit to reload the deployment-scoped audit route');
@@ -11616,8 +11616,11 @@ async function renderWithFetch(fetchImpl, search = '?page=audit') {
   if (!emptyText.includes('No audit activity has been persisted yet.')) throw new Error('expected audit empty state after resolve');
   if (emptyText.includes('Quick navigation')) throw new Error('did not expect audit quick navigation without a deployment filter');
 
+  let deploymentOnlyFetchCount = 0;
   const deploymentOnlyRun = await renderWithFetch((url) => {
-    if (url !== '/v1/audit-logs?deployment=payments-api-prod') throw new Error('unexpected deployment-only audit fetch: ' + url);
+    deploymentOnlyFetchCount += 1;
+    if (deploymentOnlyFetchCount === 1 && url !== '/v1/audit-logs?deployment=payments-api-prod') throw new Error('unexpected deployment-only audit fetch: ' + url);
+    if (deploymentOnlyFetchCount === 2 && url !== '/v1/audit-logs') throw new Error('unexpected deployment-only global audit fetch: ' + url);
     return Promise.resolve({ ok: true, json: () => Promise.resolve({ entries: [] }) });
   }, '?page=audit&deployment=payments-api-prod');
   await settle();
@@ -11629,6 +11632,15 @@ async function renderWithFetch(fetchImpl, search = '?page=audit') {
   if (!deploymentOnlyTimeline) throw new Error('expected deployment-only empty timeline section');
   const deploymentOnlyPlanLink = collectNodes(deploymentOnlyTimeline, (node) => node.tagName === 'A').find((node) => node.textContent === 'Open plan/apply workspace');
   if (!deploymentOnlyPlanLink || deploymentOnlyPlanLink.href !== '/?page=plan&deployment=payments-api-prod') throw new Error('expected deployment-only audit empty state to include a self link to the plan/apply workspace, got ' + (deploymentOnlyPlanLink && deploymentOnlyPlanLink.href));
+  const deploymentOnlyButtons = collectNodes(deploymentOnlyTimeline, (node) => node.tagName === 'BUTTON');
+  if (deploymentOnlyButtons.find((node) => node.textContent === 'Clear action/limit')) throw new Error('did not expect deployment-only audit empty state to include clear action/limit without action or limit controls');
+  const deploymentOnlyGlobalButton = deploymentOnlyButtons.find((node) => node.textContent === 'View global audit log');
+  if (!deploymentOnlyGlobalButton || deploymentOnlyGlobalButton.disabled) throw new Error('expected deployment-only audit empty state to include enabled inline global audit control');
+  deploymentOnlyGlobalButton.dispatch('click');
+  await settle();
+  await settle();
+  if (deploymentOnlyFetchCount !== 2) throw new Error('expected inline global audit control to reload the global audit route once');
+  if (deploymentOnlyRun.window.location.search !== '?page=audit') throw new Error('expected inline global audit control to clear deployment scope, got ' + deploymentOnlyRun.window.location.search);
 
   let limitOnlyFetchCount = 0;
   const limitOnlyRun = await renderWithFetch((url) => {

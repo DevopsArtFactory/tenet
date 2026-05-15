@@ -6211,13 +6211,14 @@
             clearScopedControlsButton.addEventListener('click', () => {
               clearAuditPageFilters({ preserveDeployment: true });
             });
-            const globalAuditButton = createElement('button', 'toolbar-button', 'View global audit log');
-            globalAuditButton.type = 'button';
-            globalAuditButton.addEventListener('click', () => {
-              clearAuditPageFilters();
-            });
-            actions.append(clearScopedControlsButton, globalAuditButton);
+            actions.append(clearScopedControlsButton);
           }
+          const globalAuditButton = createElement('button', 'toolbar-button', 'View global audit log');
+          globalAuditButton.type = 'button';
+          globalAuditButton.addEventListener('click', () => {
+            clearAuditPageFilters();
+          });
+          actions.append(globalAuditButton);
         } else if (hasActionOrLimit) {
           const clearControlsButton = createElement('button', 'toolbar-button', 'Clear audit controls');
           clearControlsButton.type = 'button';
