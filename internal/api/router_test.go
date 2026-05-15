@@ -8833,6 +8833,14 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 					WeightedCapacity:     "1",
 				}},
 			},
+			ResultScope: &resourceinspection.ResultScope{
+				SampleType:        "autoScalingInstances",
+				EffectiveLimit:    2,
+				ReturnedItemCount: 1,
+				ReturnedCount:     1,
+				TruncationStatus:  "truncated",
+				Truncated:         true,
+			},
 		}
 
 		router := NewRouter(Options{
@@ -8885,6 +8893,22 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 		if got := launchTemplate["instanceType"]; got != "m6i.large" {
 			t.Fatalf("expected launchTemplate instanceType, got %#v", got)
+		}
+		resultScope, ok := raw["resultScope"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected resultScope object in payload, got %#v", raw["resultScope"])
+		}
+		if got := resultScope["returnedItemCount"]; got != float64(1) {
+			t.Fatalf("expected returnedItemCount to remain present, got %#v", got)
+		}
+		if got := resultScope["returnedCount"]; got != float64(1) {
+			t.Fatalf("expected returnedCount alias, got %#v", got)
+		}
+		if got := resultScope["truncationStatus"]; got != "truncated" {
+			t.Fatalf("expected truncationStatus to remain present, got %#v", got)
+		}
+		if got := resultScope["truncated"]; got != true {
+			t.Fatalf("expected truncated alias to mirror truncationStatus, got %#v", got)
 		}
 		mixedInstancesPolicy, ok := autoScalingGroup["mixedInstancesPolicy"].(map[string]any)
 		if !ok {

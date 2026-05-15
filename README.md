@@ -174,6 +174,9 @@ Primary operator APIs:
 - `GET /v1/overview/deployments/{deploymentName}/events`
 - `GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}[&limit={positiveInteger}]`
 - `GET /v1/overview/deployments/{deploymentName}/resource-inspection`
+  (bounded ECS task / ASG instance samples expose `resultScope.returnedItemCount`
+  and compact alias `resultScope.returnedCount`, plus `truncationStatus` and
+  compact boolean alias `truncated`)
 - `POST /v1/plans/deployments/{deploymentName}`
 - `POST /v1/applies/plans/{planId}` (`409 Conflict` means the reviewed plan
   preview is stale and must be recreated before applying)
