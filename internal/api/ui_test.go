@@ -1437,7 +1437,7 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = [], currentSectionEmptyLabel = '') => {",
 		"const createWorkspaceQuickNav = (detail, mode, sectionLinks = null) => {",
 		"const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';",
-		"const linkedResources = mode === 'drift' ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;",
+		"const linkedResources = (mode === 'drift' || mode === 'plan') ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;",
 		"const resolvedSectionLinks = mode === 'drift'",
 		"buildPageSectionURL('drift', 'drift-runtime-signals', { deployment: deploymentName })",
 		"buildPageSectionURL('drift', 'drift-rollout-execution', { deployment: deploymentName })",
@@ -1468,7 +1468,7 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"resourceType: resource.type,",
 		"resourceId: resource.id,",
 		"}), resource.name, '_self'));",
-		"'No linked resources are available in this drift workspace yet.'",
+		"'No linked resources are available in this workspace yet.'",
 		"const quickNav = createWorkspaceQuickNav(detail, mode, planSectionLinks);",
 		"activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;",
 		"header.append(head, quickNav, ...sections);",
@@ -3008,8 +3008,8 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Linked resources' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains drift linked-resources copy")
 	}
-	if !strings.Contains(text, "assert 'No linked resources are available in this drift workspace yet.' in ui, ui") {
-		t.Fatalf("expected smoke-local.sh to assert embedded html contains drift linked-resources empty-state copy")
+	if !strings.Contains(text, "assert 'No linked resources are available in this workspace yet.' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains workspace linked-resources empty-state copy")
 	}
 	if !strings.Contains(text, "assert \"const workspaceLabel = mode === 'plan' ? 'plan workspace' : 'drift workspace';\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains shared workspace refresh label logic")
@@ -3501,7 +3501,7 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Current source: controller-authored managedDrift rows.' in ui, ui") || !strings.Contains(text, "assert 'Current source: derived fallback read-model heuristics.' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains drift-source callout copy")
 	}
-	if !strings.Contains(text, "assert \"const linkedResources = mode === 'drift' ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;\" in ui, ui") {
+	if !strings.Contains(text, "assert \"const linkedResources = (mode === 'drift' || mode === 'plan') ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert drift workspace resource-link contract")
 	}
 	for _, fragment := range []string{

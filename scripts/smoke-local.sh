@@ -1595,7 +1595,7 @@ assert 'Plan/apply' in ui, ui
 assert 'Linked resources' in ui, ui
 assert 'On this page' in ui, ui
 assert 'Breadcrumbs' in ui, ui
-assert 'No linked resources are available in this drift workspace yet.' in ui, ui
+assert 'No linked resources are available in this workspace yet.' in ui, ui
 assert 'Current source: controller-authored managedDrift rows.' in ui, ui
 assert 'Current source: derived fallback read-model heuristics.' in ui, ui
 assert 'Severity' in ui, ui
@@ -1698,7 +1698,7 @@ assert "createQuickNavChip(currentWorkspace, `Current destination: ${currentWork
 assert "createNavLink(buildPageURL('audit', { deployment: detail.name || currentPageState.deployment || '' }), 'Audit log', '_self')" in ui, ui
 assert "const createWorkspaceQuickNav = (detail, mode, sectionLinks = null) => {" in ui, ui
 assert "const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';" in ui, ui
-assert "const linkedResources = mode === 'drift' ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;" in ui, ui
+assert "const linkedResources = (mode === 'drift' || mode === 'plan') ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;" in ui, ui
 assert "const resolvedSectionLinks = mode === 'drift'" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Current section')" in ui, ui
 assert "(mode === 'drift' || mode === 'plan') ? 'No section is currently targeted.' : ''" in ui, ui
@@ -2032,7 +2032,7 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert 'Current section' in body, body
     assert 'On this page' in body, body
 assert 'Linked resources' in ui, ui
-assert 'No linked resources are available in this drift workspace yet.' in ui, ui
+assert 'No linked resources are available in this workspace yet.' in ui, ui
 assert 'Audit timeline' in audit_ui, audit_ui
 assert 'Deployment audit timeline' in audit_ui, audit_ui
 assert 'Visible audit entries' in audit_ui, audit_ui

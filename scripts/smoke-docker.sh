@@ -1805,7 +1805,7 @@ for fragment in (
     "(mode === 'drift' || mode === 'plan') ? 'No section is currently targeted.' : '',",
     "createQuickNavChip(currentSectionLink.label, `Current section: ${currentSectionLink.label}`)",
     "No section is currently targeted.",
-    "No linked resources are available in this drift workspace yet.",
+    "No linked resources are available in this workspace yet.",
     "Current source: controller-authored managedDrift rows.",
     "managedDrift is present in the deployment detail payload, so fallback read-model heuristics stay suppressed for this deployment.",
     "Drift summary",

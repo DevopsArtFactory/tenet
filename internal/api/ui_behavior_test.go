@@ -8654,7 +8654,7 @@ async function render(detail) {
   const noLinksText = collectText(noLinksRun.document.getElementById('accounts')).join(' | ');
   const noLinksResourceLinks = collectNodes(noLinksRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.href.includes('?page=resource&deployment=api-no-links'));
   if (!noLinksText.includes('Linked resources')) throw new Error('expected no-links drift workspace quick navigation group label');
-  if (!noLinksText.includes('No linked resources are available in this drift workspace yet.')) throw new Error('expected explicit no-links drift workspace copy');
+  if (!noLinksText.includes('No linked resources are available in this workspace yet.')) throw new Error('expected explicit no-links workspace copy');
   if (noLinksResourceLinks.length !== 0) throw new Error('expected drift workspace with no linked resources to suppress broken resource links');
 })();
 `
@@ -9401,6 +9401,11 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (chipsBeforeCreate.find((node) => node.getAttribute('aria-label') === 'Current workspace: Plan/apply')) throw new Error('expected plan workspace to stop using current-workspace chip copy');
   if (chipsBeforeCreate.find((node) => String(node.getAttribute('aria-label') || '').startsWith('Current section: '))) throw new Error('expected plan workspace without hash not to render a current-section chip');
   if (!workspaceAuditLink || workspaceAuditLink.rel) throw new Error('expected plan workspace quick navigation audit link');
+  if (!text.includes('Linked resources')) throw new Error('expected plan workspace linked-resource quick navigation group');
+  const planResourceIDFragment = new URLSearchParams({ resourceId: 'ecsService::api-prod-service::ECS service Tenet updates during CodeDeploy traffic shifting' }).toString();
+  const planResourceLink = linksBeforeCreate.find((node) => node.href.includes('/?page=resource&deployment=api-prod') && node.href.includes('resourceType=ecsService') && node.href.includes(planResourceIDFragment) && node.textContent === 'api-prod-service');
+  if (!planResourceLink) throw new Error('expected plan workspace linked resource handoff to ECS service');
+  if (planResourceLink.target !== '_self' || planResourceLink.rel) throw new Error('expected plan workspace linked resource to stay in embedded UI flow');
   const sectionLinksBeforeCreate = collectNodes(root, (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#plan-'));
   const expectedSectionLinksBeforeCreate = [
     ['/?page=plan&deployment=api-prod#plan-runtime-signals', 'Runtime signals'],
