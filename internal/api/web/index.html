@@ -30,17 +30,18 @@
       .hero { display: flex; justify-content: space-between; gap: 16px; align-items: end; margin-bottom: 24px; }
       .title { font-size: 36px; font-weight: 800; letter-spacing: -0.04em; margin: 0 0 8px; }
       .subtitle { margin: 0; color: var(--muted); max-width: 720px; line-height: 1.5; }
-      .operator-context { display:grid; gap: 10px; margin: -8px 0 24px; padding: 14px 16px; background: rgba(11, 24, 43, 0.72); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 14px 34px rgba(0,0,0,0.18); }
-      .operator-context-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap: 10px; }
-      .operator-context-title-row { display:flex; flex-wrap:wrap; align-items:center; gap: 10px; }
-      .operator-context-title { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
-      .operator-context-summary { color: var(--text); font-size: 14px; font-weight: 700; }
-      .operator-context-meta { display:flex; flex-wrap:wrap; gap: 8px; color: var(--muted); font-size: 13px; line-height: 1.45; }
-      .operator-context-meta span { padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); }
+      .operator-context { display:grid; gap: 6px; margin: -10px 0 16px; padding: 10px 12px; background: rgba(11, 24, 43, 0.62); border: 1px solid rgba(255,255,255,.07); border-radius: 14px; box-shadow: 0 10px 24px rgba(0,0,0,0.14); }
+      .operator-context-head { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap: 8px; }
+      .operator-context-title-row { display:flex; flex-wrap:wrap; align-items:center; gap: 8px; }
+      .operator-context-title { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+      .operator-context-summary { color: var(--text); font-size: 13px; font-weight: 700; }
+      .operator-context-meta { display:flex; flex-wrap:wrap; gap: 6px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+      .operator-context > .operator-context-meta span { padding: 0; border: 0; background: transparent; }
+      .operator-context-details .operator-context-meta span { padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); }
       .operator-context-meta span.operator-context-warning { color: #fde68a; background: rgba(244,201,93,.12); border-color: rgba(244,201,93,.35); }
       .operator-context-meta span.operator-context-denied { color: #ffd0d0; background: rgba(255,123,123,.12); border-color: rgba(255,123,123,.32); }
       .operator-context-details { display:grid; gap: 8px; }
-      .operator-context-details summary { width: fit-content; color: var(--muted); font-size: 12px; font-weight: 800; cursor: pointer; text-transform: uppercase; letter-spacing: .08em; }
+      .operator-context-details summary { width: fit-content; color: var(--muted); font-size: 11px; font-weight: 800; cursor: pointer; text-transform: uppercase; letter-spacing: .08em; }
       .operator-context-details summary:hover, .operator-context-details summary:focus-visible { color: var(--text); }
       .operator-context-details .operator-context-meta { padding-top: 2px; }
       .operator-context-action { appearance:none; border: 1px solid rgba(134,239,172,.24); background: rgba(34,197,94,.10); color: var(--text); border-radius: 999px; padding: 6px 11px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
@@ -77,27 +78,27 @@
       .deployment-group-meta, .account-topology { color: var(--muted); font-size: 13px; margin-top: 6px; }
       .group-pill { padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; border: 1px solid rgba(103,183,255,.24); color: var(--blue); background: rgba(103,183,255,.08); }
       .group-rows { display:grid; gap: 12px; }
-      .row { background: var(--panel-2); border: 1px solid rgba(255,255,255,.06); border-radius: 16px; display:grid; gap: 14px; overflow: clip; }
+      .row { background: var(--panel-2); border: 1px solid rgba(255,255,255,.06); border-radius: 14px; display:grid; gap: 10px; overflow: clip; }
       .row.expanded { border-color: rgba(103,183,255,.28); box-shadow: inset 0 0 0 1px rgba(103,183,255,.12); }
-      .row-toggle { width: 100%; border: 0; background: transparent; color: inherit; padding: 16px; display:grid; gap: 14px; text-align: left; cursor: pointer; }
+      .row-toggle { width: 100%; border: 0; background: transparent; color: inherit; padding: 14px; display:grid; gap: 10px; text-align: left; cursor: pointer; }
       .row-toggle:hover, .row-toggle:focus-visible { background: rgba(255,255,255,.03); }
       .row-toggle:focus-visible { outline: 2px solid rgba(103,183,255,.45); outline-offset: -2px; }
-      .row-top { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
-      .row-title { margin:0; font-size: 18px; }
-      .row-subtitle { margin-top:6px; color: var(--muted); font-size: 14px; }
+      .row-top { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+      .row-title { margin:0; font-size: 17px; }
+      .row-subtitle { margin-top:4px; color: var(--muted); font-size: 13px; }
       .row-links { display:flex; flex-wrap:wrap; gap: 10px; margin-top: 10px; }
       .account-links { margin-top: 0; align-self: center; }
       .row-links-shell { padding: 0 16px 16px; }
       .row-primary-action { align-self: flex-start; margin-top: 0; }
       .operation-anchor-row:target { outline: 2px solid rgba(103,183,255,.62); outline-offset: -2px; background: rgba(103,183,255,.10); }
-      .row-primary-action .row-link { display:inline-flex; align-items:center; border: 1px solid rgba(103,183,255,.36); background: rgba(103,183,255,.14); border-radius: 999px; padding: 8px 12px; color: var(--text); }
-      .row-secondary-actions { margin: 0 16px 16px; color: var(--muted); }
-      .row-secondary-actions summary { width: fit-content; cursor:pointer; color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+      .row-primary-action .row-link { display:inline-flex; align-items:center; border: 1px solid rgba(103,183,255,.32); background: rgba(103,183,255,.12); border-radius: 999px; padding: 7px 11px; color: var(--text); }
+      .row-secondary-actions { margin: 0 14px 14px; color: var(--muted); }
+      .row-secondary-actions summary { width: fit-content; cursor:pointer; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
       .row-secondary-actions summary:hover, .row-secondary-actions summary:focus-visible { color: var(--text); }
       .row-secondary-actions .row-links { margin-top: 8px; }
-      .application-row-core { padding: 0 16px; display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
-      .application-core-item { color: var(--muted); font-size: 13px; line-height: 1.35; }
-      .application-core-item strong { display:block; margin-bottom: 3px; color: var(--text); font-size: 14px; }
+      .application-row-core { padding: 0 14px; display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+      .application-core-item { color: var(--muted); font-size: 12px; line-height: 1.35; }
+      .application-core-item strong { display:block; margin-bottom: 2px; color: var(--text); font-size: 13px; }
       .row-link { color: var(--blue); font-size: 13px; font-weight: 600; text-decoration: none; }
       .row-link:hover, .row-link:focus-visible { text-decoration: underline; }
       .row-hint { margin-top: 10px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
@@ -115,10 +116,9 @@
       .metric .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
       .metric .v { margin-top: 8px; font-size: 14px; font-weight: 650; word-break: break-word; }
       .metric.summary { grid-column: 1 / -1; }
-      .row-match-context, .row-runtime-signal { margin: 0 16px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(103,183,255,.18); background: rgba(103,183,255,.08); color: var(--muted); font-size: 13px; line-height: 1.45; }
+      .row-match-context, .row-runtime-signal { margin: 0 14px; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(103,183,255,.14); background: rgba(103,183,255,.06); color: var(--muted); font-size: 12px; line-height: 1.4; }
       .row-match-context strong, .row-runtime-signal strong { color: var(--blue); }
-      .row-runtime-signal .row-link { margin-left: 8px; }
-      .row-runtime-signal { background: rgba(255,255,255,.035); border-color: rgba(255,255,255,.06); }
+      .row-runtime-signal { background: transparent; border-color: rgba(255,255,255,.045); }
       .detail-panel { padding: 0 16px 16px; display:grid; gap: 12px; }
       .detail-state { padding: 14px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.03); color: var(--muted); }
       .detail-state.error { border-color: rgba(255,123,123,.28); color: #ffd0d0; }
@@ -346,11 +346,8 @@
         const signal = latestRuntimeSignalText(deployment);
         if (!signal) return null;
         const container = createElement('div', 'row-runtime-signal');
-        container.append(createElement('strong', '', 'Latest runtime signal'));
+        container.append(createElement('strong', '', 'Runtime'));
         container.append(` · ${signal}`);
-        if (deployment?.name) {
-          container.append(createNavLink(buildPageSectionURL('application', 'application-runtime-events', { deployment: deployment.name }), 'Open runtime events', '_self'));
-        }
         return container;
       };
       const plannedSteps = (rollout) => {
@@ -1528,9 +1525,6 @@
           statusAnnouncement = `Operator context ready: ${summary.textContent}`;
           meta.append(createElement('span', '', `${context?.trustedHeaders?.enabled ? 'Trusted headers enabled' : 'Trusted headers disabled'} · ${operatorContextRoleLabel(context)} · ${operatorContextDeploymentAccessLabel(context)}`));
           const lastCheckedLabel = operatorContextLastCheckedLabel(operatorContextState.lastCheckedAt);
-          if (lastCheckedLabel) {
-            meta.append(createElement('span', '', lastCheckedLabel));
-          }
           const deploymentAccessSummary = operatorContextDeploymentAccessSummaryLabel(context);
           if (operatorContextState.refreshing) {
             statusAnnouncement = 'Refreshing trusted front-door context…';
@@ -1542,6 +1536,9 @@
             meta.append(createElement('span', '', `Last refresh failed: ${failureMessage}`));
           }
           const detailsMeta = createElement('div', 'operator-context-meta');
+          if (lastCheckedLabel) {
+            detailsMeta.append(createElement('span', '', lastCheckedLabel));
+          }
           detailsMeta.append(
             createElement('span', '', operatorContextRoleLabel(context)),
             createElement('span', '', operatorContextDeploymentAccessLabel(context)),
@@ -2782,9 +2779,7 @@
           const core = createElement('div', 'application-row-core');
           [
             ['Account / environment', [textOrDash(deployment.accountName), textOrDash(deployment.environmentRef)].filter((part) => part !== '—').join(' · ') || '—'],
-            ['Project', textOrDash(deployment.appRef)],
             ['Health', `${healthLabel(deployment.health)}${deployment.health?.summary ? ` · ${deployment.health.summary}` : ''}`],
-            ['Last update', runtimeSummaryTimestamp(deployment.runtimeSummary)],
           ].forEach(([label, value]) => {
             const item = createElement('div', 'application-core-item');
             item.append(createElement('strong', '', label), createElement('span', '', value));
@@ -2800,6 +2795,9 @@
               createNavLink(buildPageURL('plan', { deployment: deployment.name }), 'Plan/apply', '_self'),
               createNavLink(buildPageURL('audit', { deployment: deployment.name }), 'Audit log', '_self'),
             );
+            if (latestRuntimeSignalText(deployment)) {
+              secondaryLinks.append(createNavLink(buildPageSectionURL('application', 'application-runtime-events', { deployment: deployment.name }), 'Open runtime events', '_self'));
+            }
           }
           const secondaryActions = createElement('details', 'row-secondary-actions');
           secondaryActions.append(createElement('summary', '', 'More actions'), secondaryLinks);

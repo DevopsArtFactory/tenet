@@ -601,7 +601,8 @@ async function render(operatorResponses, initialHash = '') {
   if (!ready.liveStatusText().includes('Operator context ready: Front Door Operator')) throw new Error('expected compact live region to announce ready identity status');
   if (ready.liveStatusText().includes('Supported identity headers:') || ready.liveStatusText().includes('Supported Tenet roles:') || ready.liveStatusText().includes('Supported role headers:') || ready.liveStatusText().includes('Required trusted headers:') || ready.liveStatusText().includes('Operator reads allowed:')) throw new Error('verbose diagnostics should not be announced by compact live region');
   if (!ready.text().includes('Refresh context')) throw new Error('expected refresh action in operator context banner');
-  if (!ready.compactText().includes('Last checked ')) throw new Error('expected initial successful operator context load to show freshness timestamp');
+  if (ready.compactText().includes('Last checked ')) throw new Error('expected initial successful operator context load to keep freshness timestamp behind details');
+  if (!ready.detailsText().includes('Last checked ')) throw new Error('expected initial successful operator context load to show freshness timestamp in details');
   if (ready.liveStatusText().includes('Last checked ')) throw new Error('freshness timestamp should not be announced by compact live region');
   if (ready.refresh().disabled) throw new Error('refresh action should be enabled after first context load');
   if (!ready.text().includes('Front Door Operator')) throw new Error('expected trusted identity in operator context banner');
@@ -869,13 +870,15 @@ async function render(operatorResponses, initialHash = '') {
   refreshed.details().dispatch('toggle');
   if (!refreshed.detailsText().includes('Hide access details')) throw new Error('expected access details to be expanded before refresh');
   refreshed.refresh().dispatch('click');
-  if (!refreshed.compactText().includes('Last checked ')) throw new Error('refresh-in-flight should preserve the previous freshness timestamp');
+  if (refreshed.compactText().includes('Last checked ')) throw new Error('refresh-in-flight should keep freshness timestamp behind access details');
+  if (!refreshed.detailsText().includes('Last checked ')) throw new Error('refresh-in-flight should preserve the previous freshness timestamp in details');
   if (!refreshed.compactText().includes('Refreshing trusted front-door context…')) throw new Error('refresh-in-flight should show refresh status beside preserved context');
   await settle();
   if (refreshed.fetchCalls.filter((url) => url === '/v1/operator/context').length !== 2) throw new Error('expected refresh to re-fetch operator context');
   if (refreshed.window.location.search !== '') throw new Error('refresh should not change bookmarkable URL state');
   if (!refreshed.text().includes('Refreshed Operator')) throw new Error('expected refreshed operator identity');
-  if (!refreshed.compactText().includes('Last checked ')) throw new Error('successful refresh should keep a visible freshness timestamp');
+  if (refreshed.compactText().includes('Last checked ')) throw new Error('successful refresh should keep freshness timestamp behind access details');
+  if (!refreshed.detailsText().includes('Last checked ')) throw new Error('successful refresh should keep a freshness timestamp in details');
   if (!refreshed.liveStatusText().includes('Operator context ready: Refreshed Operator')) throw new Error('expected compact live region to announce refreshed identity only');
   if (refreshed.liveStatusText().includes('Supported Tenet roles:') || refreshed.liveStatusText().includes('Required trusted headers:')) throw new Error('refreshed live region should not include verbose diagnostics');
   if (!refreshed.text().includes('Read-capable roles: viewer')) throw new Error('expected refreshed role capability');
@@ -891,7 +894,8 @@ async function render(operatorResponses, initialHash = '') {
   failedRefresh.refresh().dispatch('click');
   await settle();
   if (!failedRefresh.text().includes('Front Door Operator')) throw new Error('failed refresh should keep last successful operator context visible');
-  if (!failedRefresh.compactText().includes('Last checked ')) throw new Error('failed refresh should keep the last successful freshness timestamp visible');
+  if (failedRefresh.compactText().includes('Last checked ')) throw new Error('failed refresh should keep freshness timestamp behind access details');
+  if (!failedRefresh.detailsText().includes('Last checked ')) throw new Error('failed refresh should keep the last successful freshness timestamp in details');
   if (!failedRefresh.text().includes('Last refresh failed:')) throw new Error('expected failed refresh diagnostic');
   if (!failedRefresh.text().includes('operator context provider unavailable')) throw new Error('expected failed refresh backend detail');
   if (!failedRefresh.liveStatusText().includes('Operator context refresh failed:') || !failedRefresh.liveStatusText().includes('operator context provider unavailable')) throw new Error('expected compact live region to announce refresh failure without verbose diagnostics: ' + failedRefresh.liveStatusText());
@@ -905,7 +909,8 @@ async function render(operatorResponses, initialHash = '') {
   await settle();
   if (failedAuthRefresh.window.location.search !== '') throw new Error('auth failed refresh should not change bookmarkable URL state');
   if (!failedAuthRefresh.text().includes('Front Door Operator')) throw new Error('auth failed refresh should keep last successful operator context visible');
-  if (!failedAuthRefresh.compactText().includes('Last checked ')) throw new Error('auth failed refresh should keep the last successful freshness timestamp visible');
+  if (failedAuthRefresh.compactText().includes('Last checked ')) throw new Error('auth failed refresh should keep freshness timestamp behind access details');
+  if (!failedAuthRefresh.detailsText().includes('Last checked ')) throw new Error('auth failed refresh should keep the last successful freshness timestamp in details');
   if (!failedAuthRefresh.text().includes('Last refresh failed: Tenet rejected GET /v1/operator/context because authenticated identity is required on this operator read route. Tenet does not start a built-in GitHub OAuth login, enterprise SSO login, or Tenet-managed browser session from this page; reopen this same bookmarkable URL through the trusted front door so it can authenticate you and forward X-Tenet-Authenticated-* identity headers before Tenet loads the view.')) throw new Error('expected auth guidance on failed operator context refresh');
 
   const authRequired = await render({ ok: false, status: 401, text: () => Promise.resolve('authenticated identity is required on this operator read route') });
@@ -1209,9 +1214,9 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (summaryText.includes('Applications read not refreshed yet')) throw new Error('expected successful applications read to replace the not-refreshed placeholder');
   if (!accountsText.includes('payments-api-staging')) throw new Error('expected applications page row text');
   if (!accountsText.includes('More actions')) throw new Error('expected applications page secondary actions disclosure');
-  if (!accountsText.includes('Latest runtime signal')) throw new Error('expected applications page latest runtime signal label');
-  if (!accountsText.includes('waiting for CodeDeploy bake window')) throw new Error('expected applications page latest runtime signal detail');
-  if (accountsText.includes('Latest runtime signal · —')) throw new Error('applications page must not render placeholder-only runtime signals');
+  if (!accountsText.includes('Runtime') || !accountsText.includes('waiting for CodeDeploy bake window')) throw new Error('expected applications page compact runtime signal detail');
+  if (accountsText.includes('Latest runtime signal')) throw new Error('applications page should use a compact Runtime label instead of the longer latest-runtime label');
+  if (accountsText.includes('Runtime · —')) throw new Error('applications page must not render placeholder-only runtime signals');
   if (accountsText.includes('payments-api-prod')) throw new Error('expected health/sync/account filters to hide the prod row');
   if (accountsText.includes('Overview JSON')) throw new Error('applications page should not expose deployment read-model quick links');
   if (accountsText.includes('Status JSON')) throw new Error('applications page should not expose status quick links');
@@ -1233,9 +1238,16 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   }
   if (!primaryWrapperFound) throw new Error('expected Open application to be the primary visible row action');
   const runtimeEventsLink = links.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&health=Progressing&account=210987654321&deployment=payments-api-staging#application-runtime-events' && node.textContent === 'Open runtime events');
-  if (!runtimeEventsLink) throw new Error('expected applications page latest runtime signal link to application runtime events');
+  if (!runtimeEventsLink) throw new Error('expected applications page compact More actions handoff to application runtime events');
   if (runtimeEventsLink.target !== '_self') throw new Error('expected runtime events link to stay in embedded UI flow');
   if (runtimeEventsLink.rel) throw new Error('expected runtime events link to avoid new-tab rel attributes');
+  parent = runtimeEventsLink.parentNode;
+  let runtimeEventsSecondaryWrapperFound = false;
+  while (parent) {
+    if (String(parent.className || '').includes('row-secondary-actions')) runtimeEventsSecondaryWrapperFound = true;
+    parent = parent.parentNode;
+  }
+  if (!runtimeEventsSecondaryWrapperFound) throw new Error('expected runtime events handoff to stay inside the secondary actions disclosure');
   const driftLink = links.find((node) => node.href === '/?page=drift&q=payments&sync=OutOfSync&health=Progressing&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Drift view');
   if (!driftLink) throw new Error('expected applications page link to deployment-scoped drift view');
   if (driftLink.target !== '_self') throw new Error('expected applications page drift link to stay in embedded UI flow');

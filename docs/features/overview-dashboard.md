@@ -75,17 +75,15 @@ Current applications-overview behavior:
 - keeps the current applications summary plus visible rows rendered with explicit loading/error copy while that in-place refresh is running or fails
 - refresh-time `401` / `403` responses reuse the same trusted-front-door / access-denied guidance as the other embedded read paths instead of generic refresh-error copy
 - when a `q` search matches hidden runtime-only evidence such as `runtimeSummary.changeDetails`, runtime conditions, rollout step/summary text, or artifact values, the matching row shows a concise `Search match` context line (for example `Matched runtime: managed drift added 2 rows`) so operators can understand why the row matched without expanding the landing page into a dense runtime dashboard
-- when an already-loaded row has meaningful runtime evidence, it shows a compact optional `Latest runtime signal` line that prefers controller-authored change details, then runtime summary text, then concise condition or rollout-step cues; rows without a real signal omit the line instead of showing placeholder dashes, and the `_self` `Open runtime events` handoff jumps to `/?page=application&deployment={deploymentName}#application-runtime-events`
+- when an already-loaded row has meaningful runtime evidence, it shows a compact optional `Runtime` line that prefers controller-authored change details, then runtime summary text, then concise condition or rollout-step cues; rows without a real signal omit the line instead of showing placeholder dashes, and the `_self` `Open runtime events` handoff stays inside `More actions` so runtime evidence does not compete with the primary `Open application` action
 
 Each row surfaces:
 - application name
-- account
-- project/app
+- account/environment
 - sync
 - health
-- last update
 - one primary `_self` `Open application` link to `/?page=application&deployment={deploymentName}`
-- a `More actions` disclosure containing `_self` `Open account`, deployment-scoped `_self` `Drift view`, `_self` `Plan/apply`, and `_self` `Audit log` links without making those secondary paths dominate the landing row
+- a `More actions` disclosure containing `_self` `Open account`, deployment-scoped `_self` `Drift view`, `_self` `Plan/apply`, `_self` `Audit log`, and runtime-events handoffs when runtime evidence exists, without making those secondary paths dominate the landing row
 
 The account drill-down page consumes `GET /v1/overview/accounts/{awsAccountId}` and keeps the denser account-oriented view available without making it the first page again. Current account-page behavior:
 - back-link to the applications overview while preserving current filters
