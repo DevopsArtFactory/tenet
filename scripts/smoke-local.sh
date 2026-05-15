@@ -2184,6 +2184,7 @@ assert "if (operatorReadStateForbidden(state) || operatorWriteForbiddenState(sta
 assert 'Refresh plan preview' in ui, ui
 assert 'Refresh apply request' in ui, ui
 assert 'Refresh plan workspace' in ui, ui
+assert 'Create Plan reviews the current deployment detail immediately; Apply Plan and record refresh controls activate only after a persisted ready preview or apply request is loaded.' in ui, ui
 assert "const workspaceLabel = mode === 'plan' ? 'plan workspace' : 'drift workspace';" in ui, ui
 assert 'Refreshing ${workspaceLabel} from GET /v1/overview/deployments/{deploymentName}…' in ui, ui
 assert 'Failed to refresh ${workspaceLabel}:' in ui, ui

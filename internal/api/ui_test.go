@@ -1615,6 +1615,8 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"const applyRecordStateMessage = (applyState, detail, planState) => {",
 		"Live execution is intentionally disabled by default, so failed immutable apply records are expected and useful for operator review.",
 		"Future immutable lifecycle states render here as queued, running, succeeded, cancelled, or failed.",
+		"const planActionHint = createElement(",
+		"Create Plan reviews the current deployment detail immediately; Apply Plan and record refresh controls activate only after a persisted ready preview or apply request is loaded.",
 		"Apply Plan activates only when a loaded persisted ready plan preview with a valid planId is present.",
 		"Loading immutable apply request ${activeApplyID} from GET /v1/applies/${activeApplyID}.",
 		"operatorWriteAuthRequiredMessage(route, 'Apply Plan')",

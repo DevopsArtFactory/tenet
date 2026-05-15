@@ -7995,6 +7995,11 @@
             });
           }
           actionBar.append(createPlanButton, applyPlanButton, refreshPlanButton, refreshApplyButton);
+          const planActionHint = createElement(
+            'div',
+            'detail-condition-meta',
+            'Create Plan reviews the current deployment detail immediately; Apply Plan and record refresh controls activate only after a persisted ready preview or apply request is loaded.',
+          );
           const planStateCallout = createElement('div', 'detail-state', planPreviewStateMessage(planState, detail));
           const planStateClassName = planPreviewStateClassName(planState);
           if (planStateClassName) {
@@ -8002,6 +8007,7 @@
           }
           actionsSection.append(
             actionBar,
+            planActionHint,
             createElement('div', 'workspace-callout-label', planPreviewStatusHeading(planState)),
             planStateCallout,
             createOperatorWriteAuthRequiredActions(planState),

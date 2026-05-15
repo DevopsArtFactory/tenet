@@ -9419,6 +9419,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (sectionLinksBeforeCreate.find((node) => node.href.includes('#plan-stored-preview') || node.href.includes('#plan-stored-apply') || node.href.includes('#plan-apply-operations'))) {
     throw new Error('did not expect plan quick navigation links for unrendered stored preview/apply sections before create');
   }
+  if (!text.includes('Create Plan reviews the current deployment detail immediately; Apply Plan and record refresh controls activate only after a persisted ready preview or apply request is loaded.')) throw new Error('expected plan action hint to explain disabled apply/refresh controls');
   if (!text.includes('No stored plan preview yet')) throw new Error('expected idle plan-preview heading');
   if (!text.includes('Create Plan will POST /v1/plans/deployments/api-prod')) throw new Error('expected idle create-plan guidance');
   if (!text.includes('Apply Plan activates only when a loaded persisted ready plan preview with a valid planId is present.')) throw new Error('expected idle apply gating guidance');

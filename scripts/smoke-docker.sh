@@ -2063,6 +2063,7 @@ for fragment in (
     "Plan JSON",
     "Open bookmarked apply",
     "Apply JSON",
+    "Create Plan reviews the current deployment detail immediately; Apply Plan and record refresh controls activate only after a persisted ready preview or apply request is loaded.",
     "Apply Plan activates only when a loaded persisted ready plan preview with a valid planId is present.",
     "Live execution is intentionally disabled by default, so failed immutable apply records are expected and useful for operator review.",
     "createNavLink(buildPageURL('plan', { deployment: detail.name || currentPageState.deployment, planId: activePlanRecord.id, applyId: activeApplyRecord?.id || applyState?.applyId || '' }), 'Open bookmarked workspace', '_self')",
