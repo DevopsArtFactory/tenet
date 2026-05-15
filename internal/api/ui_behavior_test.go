@@ -6700,7 +6700,9 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
     throw new Error('unexpected clear selected asg fetch url: ' + url);
   }, 3, '#resource-recent-logs');
   const scopedLimitConsoleLogLink = collectNodes(clearSelectedASGRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open EC2 console logs')[0];
-  const scopedLimitConsoleLogHref = scopedLimitConsoleLogLink?.href || '';
+  if (!scopedLimitConsoleLogLink) throw new Error('expected clear selected ASG view to keep the console-log handoff');
+  if (scopedLimitConsoleLogLink.target !== '_self') throw new Error('expected clear selected ASG console-log handoff to stay inside embedded UI');
+  const scopedLimitConsoleLogHref = scopedLimitConsoleLogLink.href;
   ['instanceId=i-abc123', 'resourceLogLimit=5', '#resource-recent-logs'].forEach((fragment) => {
     if (!scopedLimitConsoleLogHref.includes(fragment)) throw new Error('expected selected ASG console-log handoff to preserve ' + fragment + ', got ' + scopedLimitConsoleLogHref);
   });
