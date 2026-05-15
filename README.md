@@ -177,6 +177,10 @@ Primary operator APIs:
   (bounded ECS task / ASG instance samples expose `resultScope.returnedItemCount`
   and compact alias `resultScope.returnedCount`, plus `truncationStatus` and
   compact boolean alias `truncated`)
+
+Resource drill-down Recent logs and Live inspection panels label returned
+`lookupContext` as `Provider lookup context` so operators can confirm the
+region/account/observer-role path before troubleshooting unavailable AWS reads.
 - `POST /v1/plans/deployments/{deploymentName}`
 - `POST /v1/applies/plans/{planId}` (`409 Conflict` means the reviewed plan
   preview is stale and must be recreated before applying)
