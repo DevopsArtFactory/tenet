@@ -4384,17 +4384,17 @@
           case 'unsupported_resource_type':
             return 'Recent logs are not supported for this resource type.';
           case 'cross_account_not_configured':
-            return 'Cross-account access is not configured for this deployment.';
+            return 'Cross-account access is not configured for this deployment. Ask the platform owner to configure the observer role for this target account, then retry Recent logs after the account wiring is updated.';
           case 'no_log_source':
             return 'This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet.';
           case 'no_running_tasks':
-            return 'No running tasks were found for this resource.';
+            return 'No running tasks were found for this resource. Check whether the service is scaled down or still deploying, then retry Recent logs after a task is running.';
           case 'no_instances':
-            return 'No instances were found for this resource.';
+            return 'No instances were found for this resource. Check ASG desired capacity and instance health, then retry Recent logs after a current instance exists.';
           case 'resource_not_found':
-            return 'This resource could not be found in the provider.';
+            return 'The selected resource could not be found in the provider. Refresh resource detail to confirm the deployment still points at this resource, then retry Recent logs.';
           case 'aws_unavailable':
-            return 'AWS access is currently unavailable for recent logs.';
+            return 'AWS access is currently unavailable for recent logs. Capture the Tenet request ID and lookup path, then verify credentials, region/account placement, observer-role reachability, and log-source permissions.';
           default:
             return reason ? 'Tenet returned an unavailable recent-log state. Use the lookup context above to continue provider troubleshooting.' : '';
         }
@@ -4826,17 +4826,17 @@
           case 'unsupported_resource_type':
             return 'Live inspection is not supported for this resource type.';
           case 'cross_account_not_configured':
-            return 'Cross-account access is not configured for live inspection for this deployment.';
+            return 'Cross-account access is not configured for live inspection for this deployment. Ask the platform owner to configure the observer role for this target account, then retry Live inspection after the account wiring is updated.';
           case 'no_log_source':
             return 'No live inspection source is configured for this resource yet.';
           case 'no_running_tasks':
-            return 'No running tasks were found for this ECS service.';
+            return 'No running tasks were found for this ECS service. Check desired count, deployment progress, and stopped-task events, then retry Live inspection after a task is running.';
           case 'no_instances':
-            return 'No instances were found in this Auto Scaling Group.';
+            return 'No instances were found in this Auto Scaling Group. Check ASG desired capacity and instance health, then retry Live inspection after a current instance exists.';
           case 'resource_not_found':
-            return 'This resource could not be found in the provider.';
+            return 'The selected resource could not be found in the provider. Refresh resource detail to confirm the deployment still points at this resource, then retry Live inspection.';
           case 'aws_unavailable':
-            return 'AWS access is currently unavailable for live inspection.';
+            return 'AWS access is currently unavailable for live inspection. Capture the Tenet request ID and inspection path, then verify credentials, region/account placement, observer-role reachability, and describe permissions.';
           default:
             return reason ? 'Tenet returned an unavailable live-inspection state. Use the lookup context above to continue provider troubleshooting.' : '';
         }
