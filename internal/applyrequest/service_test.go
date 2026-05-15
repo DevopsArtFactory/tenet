@@ -437,6 +437,58 @@ func TestServiceTransitionAdvancesQueuedApplyRequestToRunningAndSucceeded(t *tes
 	if statuses := []OperationStatus{succeeded.Operations[0].Status, succeeded.Operations[1].Status}; !reflect.DeepEqual(statuses, []OperationStatus{OperationStatusSucceeded, OperationStatusSucceeded}) {
 		t.Fatalf("unexpected succeeded operations: %+v", succeeded.Operations)
 	}
+	if len(succeeded.Transitions) != 2 {
+		t.Fatalf("expected each successful transition to append audit history, got %+v", succeeded.Transitions)
+	}
+	if first := succeeded.Transitions[0]; first.TransitionedAt != "2026-04-18T08:06:00Z" || first.PreviousStatus != StatusQueued || first.Status != StatusRunning || first.Step != 1 {
+		t.Fatalf("unexpected running transition history: %+v", first)
+	}
+	if second := succeeded.Transitions[1]; second.TransitionedAt != "2026-04-18T08:07:00Z" || second.PreviousStatus != StatusRunning || second.Status != StatusSucceeded || second.Step != 0 {
+		t.Fatalf("unexpected succeeded transition history: %+v", second)
+	}
+}
+
+func TestServiceTransitionPersistsRequestActorInTransitionHistory(t *testing.T) {
+	store := &memoryStore{
+		records: map[string]Record{
+			"apply_actor": {
+				ID:             "apply_actor",
+				PlanID:         "plan_actor",
+				DeploymentName: "api-prod",
+				Status:         StatusQueued,
+				CreatedAt:      "2026-04-18T08:05:00Z",
+				Lifecycle:      Lifecycle{UpdatedAt: "2026-04-18T08:05:00Z", TotalSteps: 1},
+				Operations: []Operation{
+					{Status: OperationStatusQueued, Phase: "Promoting", Target: "api-prod listener", Summary: "Shift production traffic."},
+				},
+			},
+		},
+	}
+	service := Service{
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, 4, 18, 8, 9, 0, 0, time.UTC) },
+	}
+	ctx := requestactor.WithContext(context.Background(), requestactor.Actor{
+		Available: true,
+		ID:        "operator-123",
+		Name:      "Release Operator",
+		Email:     "release@example.com",
+	})
+
+	result, err := service.Transition(ctx, "apply_actor", TransitionRequest{Status: StatusRunning, Step: 1, Details: []string{"picked up by executor"}})
+	if err != nil {
+		t.Fatalf("Transition returned error: %v", err)
+	}
+	if len(result.Transitions) != 1 {
+		t.Fatalf("expected one persisted transition event, got %+v", result.Transitions)
+	}
+	transition := result.Transitions[0]
+	if transition.Actor.ID != "operator-123" || transition.Actor.Name != "Release Operator" || transition.Actor.Email != "release@example.com" {
+		t.Fatalf("expected transition actor from request context, got %+v", transition.Actor)
+	}
+	if !reflect.DeepEqual(transition.Details, []string{"picked up by executor"}) {
+		t.Fatalf("expected transition details snapshot, got %+v", transition.Details)
+	}
 }
 
 func TestServiceTransitionMarksRunningStepAsFailed(t *testing.T) {

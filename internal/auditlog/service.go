@@ -17,8 +17,9 @@ import (
 type Action string
 
 const (
-	ActionPlanCreated    Action = "plan.created"
-	ActionApplyRequested Action = "apply.requested"
+	ActionPlanCreated       Action = "plan.created"
+	ActionApplyRequested    Action = "apply.requested"
+	ActionApplyTransitioned Action = "apply.transitioned"
 )
 
 // Query captures optional audit timeline filters.
@@ -34,6 +35,12 @@ type Actor = requestactor.Actor
 // Metadata captures action-specific audit details from immutable source records.
 type Metadata struct {
 	Status            string   `json:"status,omitempty"`
+	PreviousStatus    string   `json:"previousStatus,omitempty"`
+	NewStatus         string   `json:"newStatus,omitempty"`
+	Step              int      `json:"step,omitempty"`
+	CurrentStep       int      `json:"currentStep,omitempty"`
+	CompletedSteps    int      `json:"completedSteps,omitempty"`
+	TotalSteps        int      `json:"totalSteps,omitempty"`
 	PlanStatus        string   `json:"planStatus,omitempty"`
 	SourceFingerprint string   `json:"sourceFingerprint,omitempty"`
 	RiskLevel         string   `json:"riskLevel,omitempty"`
@@ -131,10 +138,12 @@ func (s Service) List(ctx context.Context, query Query) (Result, error) {
 		if query.DeploymentName != "" && record.DeploymentName != query.DeploymentName {
 			continue
 		}
-		if query.Action != "" && query.Action != ActionApplyRequested {
-			continue
+		if query.Action == "" || query.Action == ActionApplyRequested {
+			entries = append(entries, projectApply(record, deployments[record.DeploymentName]))
 		}
-		entries = append(entries, projectApply(record, deployments[record.DeploymentName]))
+		if query.Action == "" || query.Action == ActionApplyTransitioned {
+			entries = append(entries, projectApplyTransitions(record, deployments[record.DeploymentName])...)
+		}
 	}
 
 	sort.Slice(entries, func(i, j int) bool {
@@ -247,6 +256,50 @@ func projectApply(record applyrequest.Record, deployment catalog.DeploymentView)
 	}
 }
 
+func projectApplyTransitions(record applyrequest.Record, deployment catalog.DeploymentView) []Entry {
+	if len(record.Transitions) == 0 {
+		return nil
+	}
+	entries := make([]Entry, 0, len(record.Transitions))
+	for _, transition := range record.Transitions {
+		entries = append(entries, projectApplyTransition(record, transition, deployment))
+	}
+	return entries
+}
+
+func projectApplyTransition(record applyrequest.Record, transition applyrequest.Transition, deployment catalog.DeploymentView) Entry {
+	return Entry{
+		EntryID:        stableAuditEntryID("apply_transition", record.ID+"\x00"+transition.TransitionedAt+"\x00"+string(transition.PreviousStatus)+"\x00"+string(transition.Status)),
+		Timestamp:      transition.TransitionedAt,
+		Action:         string(ActionApplyTransitioned),
+		DeploymentName: record.DeploymentName,
+		AppRef:         deployment.AppRef,
+		EnvironmentRef: deployment.EnvironmentRef,
+		PlanID:         record.PlanID,
+		ApplyID:        record.ID,
+		Actor:          requestactor.Normalize(transition.Actor),
+		Metadata: Metadata{
+			Status:            string(transition.Status),
+			PreviousStatus:    string(transition.PreviousStatus),
+			NewStatus:         string(transition.Status),
+			Step:              transition.Step,
+			CurrentStep:       transition.Lifecycle.CurrentStep,
+			CompletedSteps:    transition.Lifecycle.CompletedSteps,
+			TotalSteps:        transition.Lifecycle.TotalSteps,
+			PlanStatus:        record.Source.PlanStatus,
+			SourceFingerprint: record.Source.Fingerprint,
+			Error:             transition.Error,
+			Details:           append([]string(nil), transition.Details...),
+		},
+		Source: Source{
+			Kind:        "applyTransition",
+			Store:       "applyRequestStore",
+			RecordRoute: "/v1/applies/" + record.ID,
+			SourceRoute: record.Source.Route,
+		},
+	}
+}
+
 func (e Entry) stableID() string {
 	if e.EntryID != "" {
 		return e.EntryID
@@ -265,7 +318,7 @@ func stableAuditEntryID(kind, id string) string {
 // ValidAction reports whether the provided query value is one of the supported audit actions.
 func ValidAction(value string) bool {
 	switch Action(value) {
-	case ActionPlanCreated, ActionApplyRequested:
+	case ActionPlanCreated, ActionApplyRequested, ActionApplyTransitioned:
 		return true
 	default:
 		return false

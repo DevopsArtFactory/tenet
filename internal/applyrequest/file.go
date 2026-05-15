@@ -40,6 +40,9 @@ func Load(path string) ([]Record, error) {
 	}
 	for i := range records {
 		records[i].Actor = requestactor.Normalize(records[i].Actor)
+		for j := range records[i].Transitions {
+			records[i].Transitions[j].Actor = requestactor.Normalize(records[i].Transitions[j].Actor)
+		}
 	}
 	sort.Slice(records, func(i, j int) bool {
 		return records[i].ID < records[j].ID

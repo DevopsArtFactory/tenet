@@ -105,6 +105,18 @@ type Lifecycle struct {
 	TotalSteps     int    `json:"totalSteps,omitempty"`
 }
 
+// Transition captures one successful lifecycle advance for immutable audit projection.
+type Transition struct {
+	TransitionedAt string             `json:"transitionedAt"`
+	PreviousStatus Status             `json:"previousStatus"`
+	Status         Status             `json:"status"`
+	Step           int                `json:"step,omitempty"`
+	Actor          requestactor.Actor `json:"actor"`
+	Error          string             `json:"error,omitempty"`
+	Details        []string           `json:"details,omitempty"`
+	Lifecycle      Lifecycle          `json:"lifecycle,omitempty"`
+}
+
 // Record is one immutable apply request derived from a persisted ready plan preview.
 type Record struct {
 	ID             string             `json:"id"`
@@ -116,6 +128,7 @@ type Record struct {
 	Error          string             `json:"error,omitempty"`
 	Details        []string           `json:"details,omitempty"`
 	Lifecycle      Lifecycle          `json:"lifecycle,omitempty"`
+	Transitions    []Transition       `json:"transitions,omitempty"`
 	Operations     []Operation        `json:"operations,omitempty"`
 	Source         SourceContext      `json:"source"`
 }

@@ -214,13 +214,13 @@ Current behavior:
 The embedded UI now exposes a dedicated bookmarkable audit route:
 - `/?page=audit`
 - `/?page=audit&deployment={deploymentName}` to keep one deployment's audit context visible in the page chrome/body
-- `/?page=audit&action={action}` to narrow the page to exactly `plan.created` or `apply.requested`
+- `/?page=audit&action={action}` to narrow the page to exactly `plan.created`, `apply.requested`, or `apply.transitioned`
 - `/?page=audit&limit={n}` to request a smaller newest-first window from `GET /v1/audit-logs`; the audit toolbar exposes the same bookmarkable limit through an explicit safe selector
 
 Current behavior:
 - fetches `GET /v1/audit-logs` directly and renders the exact current audit read route (including `deployment`, `action`, and `limit` query params when present) near the timeline intro so operators can confirm what backend collection request is driving a bookmarked view
 - preserves optional `deployment`, `action`, and `limit` URL state when present
-- renders a safe action filter control for exactly `plan.created` and `apply.requested`
+- renders a safe action filter control for exactly `plan.created`, `apply.requested`, and `apply.transitioned`
 - renders a safe limit selector in the audit toolbar with preset newest-first windows while still honoring bookmarked positive integers such as `limit=2`; when deployment-read authorization is enforced, the backend applies that limit after filtering to the operator's visible deployments so hidden newer records do not mask authorized rows; when the API returns `resultScope`, the timeline renders a compact scope strip with returned/matching entry counts, router limit, deployment/action scope, and an explicit capped/below-cap/uncapped window status so operators know whether older matching rows may be hidden without opening raw JSON
 - renders an in-place `Refresh audit log` control that re-runs only `GET /v1/audit-logs` for the current bookmarkable audit route, disables only while that audit fetch is active, preserves the same deployment/action/limit query state, and adds a visible `Last refreshed` timestamp to the timeline summary after successful reads
 - renders an `Audit JSON` link beside the refresh control that opens the exact current `GET /v1/audit-logs` route with deployment/action/limit query parameters intact, making raw `resultScope` troubleshooting available without copying query state by hand

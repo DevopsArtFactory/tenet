@@ -229,6 +229,7 @@
         { value: '', label: 'All actions' },
         { value: 'plan.created', label: 'Plan preview created (plan.created)' },
         { value: 'apply.requested', label: 'Apply requested (apply.requested)' },
+        { value: 'apply.transitioned', label: 'Apply lifecycle transitioned (apply.transitioned)' },
       ];
       const validAuditActions = new Set(auditActionOptions.map((option) => option.value).filter(Boolean));
       const auditActionLabel = (value) => {
@@ -6266,6 +6267,7 @@
         const visibleEntries = Array.isArray(entries) ? entries : [];
         const planCount = visibleEntries.filter((entry) => entry?.action === 'plan.created').length;
         const applyCount = visibleEntries.filter((entry) => entry?.action === 'apply.requested').length;
+        const transitionCount = visibleEntries.filter((entry) => entry?.action === 'apply.transitioned').length;
         const actorRecordedCount = visibleEntries.filter((entry) => entry?.actor?.available === true).length;
         const actorUnavailableCount = visibleEntries.length - actorRecordedCount;
         const summary = createElement('div', 'metrics audit-summary-strip');
@@ -6273,6 +6275,7 @@
           ['Visible audit entries', auditEntryCountLabel(visibleEntries.length)],
           ['Plan previews', String(planCount)],
           ['Apply requests', String(applyCount)],
+          ['Apply transitions', String(transitionCount)],
           ['Actor recorded', String(actorRecordedCount)],
           ['Actor unavailable/unknown', String(actorUnavailableCount)],
         ].forEach(([label, value]) => {
@@ -6544,6 +6547,10 @@
           row.append(createElement('div', 'detail-condition-meta', `Actor detail · ${auditActorReasonText(entry.actor)}`));
 
           const metadataLabels = [];
+          if (entry.metadata?.previousStatus || entry.metadata?.newStatus) metadataLabels.push(`Transition · ${textOrDash(entry.metadata.previousStatus)} → ${textOrDash(entry.metadata.newStatus)}`);
+          if (Number.isFinite(entry.metadata?.step) && entry.metadata.step > 0) metadataLabels.push(`Transition step · ${entry.metadata.step}`);
+          if (Number.isFinite(entry.metadata?.currentStep) && entry.metadata.currentStep > 0) metadataLabels.push(`Current step · ${entry.metadata.currentStep}`);
+          if (Number.isFinite(entry.metadata?.completedSteps) || Number.isFinite(entry.metadata?.totalSteps)) metadataLabels.push(`Completed steps · ${Number.isFinite(entry.metadata?.completedSteps) ? entry.metadata.completedSteps : '—'} of ${Number.isFinite(entry.metadata?.totalSteps) ? entry.metadata.totalSteps : '—'}`);
           if (entry.metadata?.planStatus) metadataLabels.push(`Plan status · ${entry.metadata.planStatus}`);
           if (entry.metadata?.sourceFingerprint) metadataLabels.push(`Source fingerprint · ${entry.metadata.sourceFingerprint}`);
           if (entry.metadata?.error) metadataLabels.push(`Error · ${entry.metadata.error}`);
