@@ -33,7 +33,11 @@ func readRepoFile(t *testing.T, relativePath string) string {
 
 func TestReadmeStaysProductOverview(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
-	if lineCount := strings.Count(readme, "\n") + 1; lineCount > 350 {
+	lineCount := strings.Count(readme, "\n")
+	if !strings.HasSuffix(readme, "\n") {
+		lineCount++
+	}
+	if lineCount > 350 {
 		t.Fatalf("expected README to remain a product overview under 350 lines; got %d", lineCount)
 	}
 
