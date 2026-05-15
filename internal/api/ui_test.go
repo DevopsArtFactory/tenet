@@ -4153,6 +4153,8 @@ func TestDocsDescribeCISmokeRunnerStartRunbook(t *testing.T) {
 			"# CI Smoke runner-start failures",
 			"scripts/ci-smoke-runner-evidence.sh <run-id>",
 			"The helper below prints the same evidence bundle",
+			"prints a compact `Runner-start verdict` section before the raw evidence",
+			"likely pre-runner blocker when `Fast smoke` or `Docker smoke scope` has `runner_id=0` or an empty `runner_name`, and `steps=[]`",
 			"treats missing downloadable failed logs as a runner-start signal to record rather than as a script failure",
 			"If you need to collect each piece manually or paste individual commands into a PR comment",
 			"`runner_id=0`",
@@ -4197,6 +4199,9 @@ func TestDocsDescribeCISmokeRunnerStartRunbook(t *testing.T) {
 		"../../scripts/ci-smoke-runner-evidence.sh": {
 			"Usage: scripts/ci-smoke-runner-evidence.sh <run-id>",
 			"set -euo pipefail",
+			"section \"Runner-start verdict\"",
+			"Likely pre-runner blocker",
+			"billing/spending-limit annotation",
 			"gh run view \"$RUN_ID\" --json databaseId,name,status,conclusion,headSha,url",
 			"gh api \"repos/:owner/:repo/actions/runs/${RUN_ID}/jobs\"",
 			"runner_id,runner_name,steps",
