@@ -792,6 +792,7 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"row-primary-action",
 		"row-secondary-actions",
 		"application-row-core",
+		"['Last update', runtimeSummaryTimestamp(deployment.runtimeSummary)]",
 		"row-match-context",
 		"row-runtime-signal",
 		"const latestRuntimeSignalParts = (deployment) => {",
@@ -1908,6 +1909,7 @@ func TestEmbeddedUIProvidesFilterControlsAndURLSyncedViewState(t *testing.T) {
 		"...changeDetailLabels(runtimeSummary.changeDetails).map((detail) => ['runtime', detail]),",
 		"const applicationVisibleSearchText = (deployment) => [",
 		"const createApplicationMatchContext = (deployment, query) => {",
+		"['Last update', runtimeSummaryTimestamp(deployment.runtimeSummary)]",
 		"const applyViewState = (applications, state) => {",
 		"const searchNeedle = state.query.trim().toLowerCase();",
 		"deployment.accountName,",
@@ -2978,6 +2980,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert \"container.append(createElement('strong', '', 'Runtime'));\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains compact Runtime label")
+	}
+	if !strings.Contains(text, "assert \"['Last update', runtimeSummaryTimestamp(deployment.runtimeSummary)]\" in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains row-local Last update field")
 	}
 	if !strings.Contains(text, "application-runtime-events") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains runtime-events handoff anchor")

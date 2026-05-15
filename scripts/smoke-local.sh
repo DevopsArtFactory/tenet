@@ -1431,6 +1431,7 @@ assert 'Application status overview' in ui, ui
 assert 'Visible applications after filters:' in ui, ui
 assert 'Visible subset last update' in ui, ui
 assert 'Applications read refreshed ·' in ui, ui
+assert "['Last update', runtimeSummaryTimestamp(deployment.runtimeSummary)]" in ui, ui
 assert "container.append(createElement('strong', '', 'Runtime'));" in ui, ui
 assert 'Applications JSON' in ui, ui
 assert "createNavLink('/v1/overview/applications', 'Applications JSON')" in ui, ui

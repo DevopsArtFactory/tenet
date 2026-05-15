@@ -2793,6 +2793,7 @@
           [
             ['Account / environment', [textOrDash(deployment.accountName), textOrDash(deployment.environmentRef)].filter((part) => part !== '—').join(' · ') || '—'],
             ['Health', `${healthLabel(deployment.health)}${deployment.health?.summary ? ` · ${deployment.health.summary}` : ''}`],
+            ['Last update', runtimeSummaryTimestamp(deployment.runtimeSummary)],
           ].forEach(([label, value]) => {
             const item = createElement('div', 'application-core-item');
             item.append(createElement('strong', '', label), createElement('span', '', value));
