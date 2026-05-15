@@ -795,8 +795,8 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"row-match-context",
 		"row-runtime-signal",
 		"const latestRuntimeSignalParts = (deployment) => {",
-		"Latest runtime signal",
-		"createNavLink(buildPageSectionURL('application', 'application-runtime-events', { deployment: deployment.name }), 'Open runtime events', '_self')",
+		"Runtime",
+		"secondaryLinks.append(createNavLink(buildPageSectionURL('application', 'application-runtime-events', { deployment: deployment.name }), 'Open runtime events', '_self'));",
 		"const createApplicationMatchContext = (deployment, query) => {",
 		"Matched ${label}: ${value}",
 		"createNavLink(buildPageURL('account', { accountId: deployment.awsAccountId }), 'Open account', '_self')",
@@ -2960,8 +2960,8 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"createNavLink('/v1/overview/applications', 'Applications JSON')\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert applications overview JSON route contract")
 	}
-	if !strings.Contains(text, "assert 'Latest runtime signal' in ui, ui") {
-		t.Fatalf("expected smoke-local.sh to assert embedded html contains Latest runtime signal")
+	if !strings.Contains(text, "assert \"container.append(createElement('strong', '', 'Runtime'));\" in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains compact Runtime label")
 	}
 	if !strings.Contains(text, "application-runtime-events") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains runtime-events handoff anchor")

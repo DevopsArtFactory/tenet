@@ -1419,7 +1419,7 @@ assert 'Application status overview' in ui, ui
 assert 'Visible applications after filters:' in ui, ui
 assert 'Visible subset last update' in ui, ui
 assert 'Applications read refreshed ·' in ui, ui
-assert 'Latest runtime signal' in ui, ui
+assert "container.append(createElement('strong', '', 'Runtime'));" in ui, ui
 assert 'Applications JSON' in ui, ui
 assert "createNavLink('/v1/overview/applications', 'Applications JSON')" in ui, ui
 assert "const latestRuntimeSignalParts = (deployment) => {" in ui, ui
