@@ -1348,10 +1348,13 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const refreshButton = collectNodes(accounts, (node) => node.tagName === 'BUTTON' && node.textContent === 'Refresh applications overview')[0];
   if (!refreshButton) throw new Error('expected no-applications empty state to expose inline refresh action');
   if (refreshButton.disabled) throw new Error('expected inline no-applications refresh action to start enabled');
+  const applicationsFetchCount = fetchCalls.filter((url) => url === '/v1/overview/applications').length;
+  const priorSearch = window.location.search;
+  const priorHash = window.location.hash;
   refreshButton.dispatch('click');
   await settle();
-  if (fetchCalls.filter((url) => url === '/v1/overview/applications').length !== 2) throw new Error('expected inline no-applications refresh to re-fetch applications overview');
-  if (window.location.search || window.location.hash) throw new Error('expected inline no-applications refresh to preserve bookmarkable URL state');
+  if (fetchCalls.filter((url) => url === '/v1/overview/applications').length !== applicationsFetchCount + 1) throw new Error('expected inline no-applications refresh to re-fetch applications overview exactly once');
+  if (window.location.search !== priorSearch || window.location.hash !== priorHash) throw new Error('expected inline no-applications refresh to preserve bookmarkable URL state');
   const refreshedText = collectText(document.getElementById('accounts')).join(' | ');
   if (!refreshedText.includes('No visible applications')) throw new Error('expected no-applications refresh to keep empty-state body visible when response is still empty');
   const diagnosticsLink = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open Operator context details')[0];
