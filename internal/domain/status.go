@@ -20,6 +20,14 @@ const (
 	SyncStatePaused      SyncState = "Paused"
 )
 
+const (
+	// RuntimeHistoryMaxEntries is the controller-retained runtime history cap per deployment.
+	RuntimeHistoryMaxEntries = 10
+
+	RuntimeHistoryRetentionStatusWithinLimit = "within_retention_limit"
+	RuntimeHistoryRetentionStatusAtLimit     = "at_retention_limit"
+)
+
 // Valid reports whether the sync state is one of the supported values.
 func (s SyncState) Valid() bool {
 	switch s {

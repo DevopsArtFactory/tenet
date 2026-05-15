@@ -19,7 +19,7 @@ import (
 
 const (
 	runtimeHistorySourceController = "controller"
-	runtimeHistoryMaxEntries       = 10
+	runtimeHistoryMaxEntries       = domain.RuntimeHistoryMaxEntries
 	controllerMarkedSyncedReason   = "Controller marked deployment synced"
 	controllerDriftedSyncReason    = "Controller detected managed drift in completed deployment"
 	controllerHealthySyncedSummary = "Deployment is healthy and synced"
