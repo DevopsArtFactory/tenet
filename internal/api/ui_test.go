@@ -606,7 +606,7 @@ func TestEmbeddedUIIncludesApplicationSectionNavigation(t *testing.T) {
 		"'Traffic routing': 'application-traffic-routing',",
 		"'Config and access': 'application-config-access',",
 		"sectionID,",
-		"pushApplicationSectionLink(groupSection.id, group.title);",
+		"pushApplicationSectionLink(groupSection.id, `${group.title} (${group.resources.length})`);",
 		"applicationStatusSection.id = applicationStatusSectionID;",
 		"pushApplicationSectionLink(applicationStatusSectionID, 'Current application status');",
 		"eventsSection.id = 'application-runtime-events';",
