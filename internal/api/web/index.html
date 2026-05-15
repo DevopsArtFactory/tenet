@@ -3641,7 +3641,7 @@
             });
             resourceGroup.append(resourceLinks);
           } else {
-            resourceGroup.append(createElement('div', 'quick-nav-empty', 'No linked resources are available in this drift workspace yet.'));
+            resourceGroup.append(createElement('div', 'quick-nav-empty', 'No linked resources are available in this workspace yet.'));
           }
           groups.append(resourceGroup);
         }
@@ -3657,7 +3657,7 @@
       const createWorkspaceQuickNav = (detail, mode, sectionLinks = null) => {
         const deploymentName = detail.name || currentPageState.deployment || '';
         const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';
-        const linkedResources = mode === 'drift' ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;
+        const linkedResources = (mode === 'drift' || mode === 'plan') ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;
         const resolvedSectionLinks = mode === 'drift'
           ? [
             { sectionID: 'drift-runtime-signals', label: 'Runtime signals', href: buildPageSectionURL('drift', 'drift-runtime-signals', { deployment: deploymentName }) },
