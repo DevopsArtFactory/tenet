@@ -169,6 +169,12 @@ func TestServiceInspect(t *testing.T) {
 		if result.ResultScope == nil || result.ResultScope.SampleType != "ecsTasks" || result.ResultScope.RequestedLimit == nil || *result.ResultScope.RequestedLimit != requestedLimit || result.ResultScope.EffectiveLimit != requestedLimit || result.ResultScope.ReturnedItemCount != 1 || result.ResultScope.TruncationStatus != "not_truncated" {
 			t.Fatalf("unexpected top-level ECS resultScope: %+v", result.ResultScope)
 		}
+		if got, want := result.ResultScope.ReturnedCount, result.ResultScope.ReturnedItemCount; got != want {
+			t.Fatalf("expected returnedCount alias to mirror returnedItemCount, got %d want %d", got, want)
+		}
+		if result.ResultScope.Truncated {
+			t.Fatalf("expected truncated alias to mirror not_truncated status, got %+v", result.ResultScope)
+		}
 		if result.ECSService == nil || result.ECSService.TasksScope == nil || result.ECSService.TasksScope.ReturnedTaskCount != 1 {
 			t.Fatalf("expected nested tasksScope to remain present, got %+v", result.ECSService)
 		}
@@ -338,6 +344,9 @@ func TestServiceInspect(t *testing.T) {
 		if scope.RequestedLimit != nil || !scope.Available || scope.EffectiveLimit != 10 || scope.ReturnedInstanceCount != 10 || scope.TruncationStatus != "truncated" || !strings.Contains(scope.Summary, "additional instances were omitted") {
 			t.Fatalf("unexpected default ASG instancesScope: %+v", scope)
 		}
+		if result.ResultScope == nil || result.ResultScope.ReturnedCount != result.ResultScope.ReturnedItemCount || !result.ResultScope.Truncated {
+			t.Fatalf("expected compact resultScope aliases to describe truncated ASG sample, got %+v", result.ResultScope)
+		}
 		if got := result.AutoScalingGroup.Instances; len(got) != 10 || got[0].InstanceID != "i-001" || got[9].InstanceID != "i-010" {
 			t.Fatalf("expected deterministic capped ASG instances, got %+v", got)
 		}
@@ -371,6 +380,12 @@ func TestServiceInspect(t *testing.T) {
 		}
 		if result.ResultScope == nil || result.ResultScope.SampleType != "autoScalingInstances" || result.ResultScope.RequestedLimit == nil || *result.ResultScope.RequestedLimit != 5 || result.ResultScope.EffectiveLimit != 5 || result.ResultScope.ReturnedItemCount != 3 || result.ResultScope.TruncationStatus != "not_truncated" {
 			t.Fatalf("unexpected top-level ASG resultScope: %+v", result.ResultScope)
+		}
+		if got, want := result.ResultScope.ReturnedCount, result.ResultScope.ReturnedItemCount; got != want {
+			t.Fatalf("expected returnedCount alias to mirror returnedItemCount, got %d want %d", got, want)
+		}
+		if result.ResultScope.Truncated {
+			t.Fatalf("expected truncated alias to mirror not_truncated status, got %+v", result.ResultScope)
 		}
 		if got := result.AutoScalingGroup.Instances; len(got) != 3 || got[0].InstanceID != "i-001" || got[2].InstanceID != "i-003" {
 			t.Fatalf("expected deterministic ASG instances, got %+v", got)

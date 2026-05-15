@@ -121,7 +121,9 @@ type ResultScope struct {
 	RequestedLimit    *int   `json:"requestedLimit,omitempty"`
 	EffectiveLimit    int    `json:"effectiveLimit"`
 	ReturnedItemCount int    `json:"returnedItemCount"`
+	ReturnedCount     int    `json:"returnedCount"`
 	TruncationStatus  string `json:"truncationStatus"`
+	Truncated         bool   `json:"truncated"`
 }
 
 type UserDataBootstrapSourceInspection struct {
@@ -912,7 +914,9 @@ func resultScopeFromECSTasks(scope *ECSTaskSummaryScope) *ResultScope {
 		RequestedLimit:    cloneIntPtr(scope.RequestedLimit),
 		EffectiveLimit:    scope.EffectiveLimit,
 		ReturnedItemCount: scope.ReturnedTaskCount,
+		ReturnedCount:     scope.ReturnedTaskCount,
 		TruncationStatus:  scope.TruncationStatus,
+		Truncated:         scope.TruncationStatus == "truncated",
 	}
 }
 
@@ -925,7 +929,9 @@ func resultScopeFromAutoScalingInstances(scope *AutoScalingInstanceScope) *Resul
 		RequestedLimit:    cloneIntPtr(scope.RequestedLimit),
 		EffectiveLimit:    scope.EffectiveLimit,
 		ReturnedItemCount: scope.ReturnedInstanceCount,
+		ReturnedCount:     scope.ReturnedInstanceCount,
 		TruncationStatus:  scope.TruncationStatus,
+		Truncated:         scope.TruncationStatus == "truncated",
 	}
 }
 

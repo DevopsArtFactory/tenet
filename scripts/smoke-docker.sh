@@ -1288,7 +1288,9 @@ if selected_worker_resource_inspection["available"]:
     assert worker_inspection_scope.get("requestedLimit") == 1, selected_worker_resource_inspection
     assert worker_inspection_scope.get("effectiveLimit") == 1, selected_worker_resource_inspection
     assert isinstance(worker_inspection_scope.get("returnedItemCount"), int), selected_worker_resource_inspection
+    assert worker_inspection_scope.get("returnedCount") == worker_inspection_scope.get("returnedItemCount"), selected_worker_resource_inspection
     assert worker_inspection_scope.get("truncationStatus") in {"truncated", "not_truncated", "not_applicable"}, selected_worker_resource_inspection
+    assert worker_inspection_scope.get("truncated") == (worker_inspection_scope.get("truncationStatus") == "truncated"), selected_worker_resource_inspection
 else:
     assert isinstance(selected_worker_resource_inspection.get("unavailableReason"), str) and selected_worker_resource_inspection["unavailableReason"], selected_worker_resource_inspection
 
@@ -1423,7 +1425,9 @@ def assert_asg_resource_inspection(payload, *, expect_limit=None, expect_instanc
             assert result_scope.get("requestedLimit") == expect_limit, payload
             assert result_scope.get("effectiveLimit") == scope.get("effectiveLimit"), payload
             assert result_scope.get("returnedItemCount") == scope.get("returnedInstanceCount"), payload
+            assert result_scope.get("returnedCount") == result_scope.get("returnedItemCount"), payload
             assert result_scope.get("truncationStatus") == scope.get("truncationStatus"), payload
+            assert result_scope.get("truncated") == (result_scope.get("truncationStatus") == "truncated"), payload
         else:
             assert scope is None or isinstance(scope, dict), payload
     else:
