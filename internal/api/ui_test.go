@@ -906,6 +906,8 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"Applications read refreshed ·",
 		"lastFetchedAt: new Date()",
 		"'Refresh applications overview'",
+		"Refresh here after fixing inputs",
+		"Open Operator context details",
 		"const applicationsOverviewRefreshState = (overviewState = null) => {",
 		"'Refreshing applications overview from GET /v1/overview/applications…'",
 		"Current applications overview remains visible below.",

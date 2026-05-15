@@ -58,7 +58,7 @@ Current behavior:
 - unrelated query params/hash fragments are preserved when updating managed filters
 - browser tab titles are derived from the active route and loaded resource/account/deployment identity as safe text, while the static `<title>Tenet Control Plane</title>` remains the non-JS fallback
 - search input focus and caret position survive rerenders
-- when filters remove all results, the UI renders `Filters hid every application`, summarizes the active filters, and offers a local `Clear filters` action; if `/v1/overview/applications` itself returns no rows, the UI instead renders `No visible applications`, directs operators toward catalog loading, runtime status snapshots, or trusted front-door authorization grants, and offers `_self` `Open Operator context details` to jump to `#operator-context-access-details-panel`
+- when filters remove all results, the UI renders `Filters hid every application`, summarizes the active filters, and offers a local `Clear filters` action; if `/v1/overview/applications` itself returns no rows, the UI instead renders `No visible applications`, directs operators toward catalog loading, runtime status snapshots, or trusted front-door authorization grants, offers an inline `Refresh applications overview` retry after those inputs are fixed, and offers `_self` `Open Operator context details` to jump to `#operator-context-access-details-panel`
 
 ## Current pages
 
