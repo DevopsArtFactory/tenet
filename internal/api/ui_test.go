@@ -795,7 +795,7 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"row-match-context",
 		"row-runtime-signal",
 		"const latestRuntimeSignalParts = (deployment) => {",
-		"Runtime",
+		"container.append(createElement('strong', '', 'Runtime'));",
 		"secondaryLinks.append(createNavLink(buildPageSectionURL('application', 'application-runtime-events', { deployment: deployment.name }), 'Open runtime events', '_self'));",
 		"const createApplicationMatchContext = (deployment, query) => {",
 		"Matched ${label}: ${value}",
