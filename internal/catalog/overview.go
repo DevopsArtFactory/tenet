@@ -150,7 +150,16 @@ type DeploymentOverviewEvents struct {
 	DeploymentName      string                       `json:"deploymentName"`
 	Events              []domain.StatusHistoryEntry  `json:"events"`
 	ManagedDriftSummary ManagedDriftSummary          `json:"managedDriftSummary"`
+	Retention           RuntimeEventRetention        `json:"retention"`
 	ResultScope         *DeploymentEventsResultScope `json:"resultScope,omitempty"`
+}
+
+// RuntimeEventRetention describes the bounded controller-history slice used to
+// build deployment runtime events.
+type RuntimeEventRetention struct {
+	Limit              int    `json:"limit"`
+	RetainedEventCount int    `json:"retainedEventCount"`
+	Status             string `json:"status"`
 }
 
 // DeploymentEventsResultScope describes the bounded runtime-event window returned
@@ -161,6 +170,9 @@ type DeploymentEventsResultScope struct {
 	EffectiveLimit       int    `json:"effectiveLimit"`
 	ReturnedEventCount   int    `json:"returnedEventCount"`
 	TotalEventCount      int    `json:"totalEventCount"`
+	RetentionLimit       int    `json:"retentionLimit"`
+	RetainedEventCount   int    `json:"retainedEventCount"`
+	RetentionStatus      string `json:"retentionStatus"`
 	Limited              bool   `json:"limited"`
 	NewestEventTimestamp string `json:"newestEventTimestamp,omitempty"`
 	OldestEventTimestamp string `json:"oldestEventTimestamp,omitempty"`
@@ -535,7 +547,20 @@ func BuildDeploymentOverviewEvents(c manifest.Catalog, snapshots []statusstore.S
 		DeploymentName:      detail.Name,
 		Events:              events,
 		ManagedDriftSummary: summarizeManagedDriftEvents(events),
+		Retention:           BuildRuntimeEventRetention(len(events)),
 	}, nil
+}
+
+func BuildRuntimeEventRetention(retainedEventCount int) RuntimeEventRetention {
+	status := domain.RuntimeHistoryRetentionStatusWithinLimit
+	if retainedEventCount >= domain.RuntimeHistoryMaxEntries {
+		status = domain.RuntimeHistoryRetentionStatusAtLimit
+	}
+	return RuntimeEventRetention{
+		Limit:              domain.RuntimeHistoryMaxEntries,
+		RetainedEventCount: retainedEventCount,
+		Status:             status,
+	}
 }
 
 func withRuntimeEventIDs(deploymentName string, history []domain.StatusHistoryEntry) []domain.StatusHistoryEntry {

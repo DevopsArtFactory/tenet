@@ -25,7 +25,7 @@ The deployment overview read models now intentionally copy the latest artifact/c
 
 That additive copy keeps overview/detail consumers from having to diff the full `status` object or scrape the newest history entry just to show the latest runtime artifact/condition context in a compact UI row.
 
-These payloads are still deterministic persisted read models, but they now document the richer runtime shape Tenet serves today. The bounded runtime-history retention cap remains 10 entries per deployment.
+These payloads are still deterministic persisted read models, but they now document the richer runtime shape Tenet serves today. The bounded runtime-history retention cap remains 10 entries per deployment; `GET /v1/overview/deployments/{deploymentName}/events` exposes that retained-history cap separately from `?limit=` result-scope truncation metadata.
 
 ## Front-door auth
 

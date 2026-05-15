@@ -179,6 +179,11 @@ func applyAuditLogLimit(result auditlog.Result, query auditlog.Query) auditlog.R
 
 func applyDeploymentEventsLimit(result catalog.DeploymentOverviewEvents, limit int) catalog.DeploymentOverviewEvents {
 	totalEventCount := len(result.Events)
+	retention := result.Retention
+	if retention.Limit == 0 {
+		retention = catalog.BuildRuntimeEventRetention(totalEventCount)
+		result.Retention = retention
+	}
 	effectiveLimit := 0
 	var requestedLimit *int
 	limited := false
@@ -202,6 +207,9 @@ func applyDeploymentEventsLimit(result catalog.DeploymentOverviewEvents, limit i
 		EffectiveLimit:       effectiveLimit,
 		ReturnedEventCount:   len(result.Events),
 		TotalEventCount:      totalEventCount,
+		RetentionLimit:       retention.Limit,
+		RetainedEventCount:   retention.RetainedEventCount,
+		RetentionStatus:      retention.Status,
 		Limited:              limited,
 		NewestEventTimestamp: newestEventTimestamp,
 		OldestEventTimestamp: oldestEventTimestamp,

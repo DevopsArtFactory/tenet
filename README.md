@@ -172,6 +172,8 @@ Primary operator APIs:
 - `GET /v1/audit-logs`
 - `GET /v1/operator/context`
 
+Deployment runtime events are read from the controller-retained history window, currently 10 events per deployment. Successful `GET /v1/overview/deployments/{deploymentName}/events` responses keep `events: []` and zero-count `managedDriftSummary`, `retention`, and `resultScope` metadata for repo-known deployments before history exists. The `resultScope` fields distinguish `?limit=` query truncation (`limited`, `truncationStatus`) from the retained controller-history cap (`retentionLimit`, `retainedEventCount`, `retentionStatus`).
+
 Trusted front-door auth is additive and opt-in. Only enable the auth/RBAC
 environment toggles when every request reaches Tenet through a front door that
 authenticates the caller and strips spoofable trusted headers before forwarding

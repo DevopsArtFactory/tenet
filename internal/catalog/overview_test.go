@@ -1163,6 +1163,10 @@ func TestBuildDeploymentOverviewEventsReturnsEmptyListWhenHistoryMissing(t *test
 	if !ok || summary["total"] != float64(0) || summary["high"] != float64(0) || summary["medium"] != float64(0) || summary["low"] != float64(0) {
 		t.Fatalf("expected managedDriftSummary zero counts in JSON payload, got %#v", decoded["managedDriftSummary"])
 	}
+	retention, ok := decoded["retention"].(map[string]any)
+	if !ok || retention["limit"] != float64(domain.RuntimeHistoryMaxEntries) || retention["retainedEventCount"] != float64(0) || retention["status"] != "within_retention_limit" {
+		t.Fatalf("expected retention zero-count metadata in JSON payload, got %#v", decoded["retention"])
+	}
 	if _, exists := decoded["resultScope"]; exists {
 		t.Fatalf("expected catalog-built events payload to omit router-authored resultScope, got %#v", decoded["resultScope"])
 	}

@@ -799,22 +799,34 @@ assert isinstance(deployment_events_fixture['events'], list), deployment_events_
 assert len(deployment_events_fixture['events']) == 0, deployment_events_fixture
 assert all('controllerRefresh' not in event for event in deployment_events_fixture['events']), deployment_events_fixture
 assert deployment_events_fixture.get('managedDriftSummary') == {'total': 0, 'high': 0, 'medium': 0, 'low': 0}, deployment_events_fixture
+fixture_events_retention = deployment_events_fixture.get('retention') or {}
+assert fixture_events_retention.get('limit') == 10, deployment_events_fixture
+assert fixture_events_retention.get('retainedEventCount') == 0, deployment_events_fixture
+assert fixture_events_retention.get('status') == 'within_retention_limit', deployment_events_fixture
 fixture_events_default_scope = deployment_events_fixture.get('resultScope') or {}
 assert 'requestedLimit' not in fixture_events_default_scope, deployment_events_fixture
 assert fixture_events_default_scope.get('effectiveLimit') == 0, deployment_events_fixture
 assert fixture_events_default_scope.get('returnedEventCount') == len(deployment_events_fixture['events']), deployment_events_fixture
 assert fixture_events_default_scope.get('totalEventCount') == len(deployment_events_fixture['events']), deployment_events_fixture
+assert fixture_events_default_scope.get('retentionLimit') == fixture_events_retention.get('limit'), deployment_events_fixture
+assert fixture_events_default_scope.get('retainedEventCount') == fixture_events_retention.get('retainedEventCount'), deployment_events_fixture
+assert fixture_events_default_scope.get('retentionStatus') == fixture_events_retention.get('status'), deployment_events_fixture
 assert fixture_events_default_scope.get('limited') is False, deployment_events_fixture
 assert fixture_events_default_scope.get('truncationStatus') == 'not_truncated', deployment_events_fixture
 assert 'newestEventTimestamp' not in fixture_events_default_scope, deployment_events_fixture
 assert 'oldestEventTimestamp' not in fixture_events_default_scope, deployment_events_fixture
 assert deployment_events_fixture_limited['deploymentName'] == 'payments-api-prod', deployment_events_fixture_limited
 assert deployment_events_fixture_limited['events'] == [], deployment_events_fixture_limited
+fixture_events_limited_retention = deployment_events_fixture_limited.get('retention') or {}
+assert fixture_events_limited_retention == fixture_events_retention, deployment_events_fixture_limited
 fixture_events_scope = deployment_events_fixture_limited.get('resultScope') or {}
 assert fixture_events_scope.get('requestedLimit') == 1, deployment_events_fixture_limited
 assert fixture_events_scope.get('effectiveLimit') == 1, deployment_events_fixture_limited
 assert fixture_events_scope.get('returnedEventCount') == 0, deployment_events_fixture_limited
 assert fixture_events_scope.get('totalEventCount') == 0, deployment_events_fixture_limited
+assert fixture_events_scope.get('retentionLimit') == fixture_events_limited_retention.get('limit'), deployment_events_fixture_limited
+assert fixture_events_scope.get('retainedEventCount') == fixture_events_limited_retention.get('retainedEventCount'), deployment_events_fixture_limited
+assert fixture_events_scope.get('retentionStatus') == fixture_events_limited_retention.get('status'), deployment_events_fixture_limited
 assert fixture_events_scope.get('limited') is False, deployment_events_fixture_limited
 assert fixture_events_scope.get('truncationStatus') == 'not_truncated', deployment_events_fixture_limited
 assert 'newestEventTimestamp' not in fixture_events_scope, deployment_events_fixture_limited
