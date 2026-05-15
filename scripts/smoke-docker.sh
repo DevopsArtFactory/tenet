@@ -1641,6 +1641,7 @@ assert_fragments("ui", ui, (
     "Failed to refresh applications overview:",
     "Visible applications after filters:",
     "Visible subset last update",
+    "['Last update', runtimeSummaryTimestamp(deployment.runtimeSummary)]",
     "No visible applications",
     "Open Operator context details",
     "currentBookmarkableURL(operatorContextAccessDetailsPanelID)",

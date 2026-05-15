@@ -959,7 +959,7 @@ func TestApplicationsOverviewPageWithNodeHarness(t *testing.T) {
 			"executionMode":  "asgWeightedTargetGroups",
 			"sync":           map[string]any{"state": "Synced", "reason": "latest desired generation applied"},
 			"health":         map[string]any{"overall": "Healthy", "summary": "3/3 targets healthy"},
-			"runtimeSummary": map[string]any{"timestamp": "2026-04-16T06:40:00Z"},
+			"runtimeSummary": map[string]any{},
 		},
 		{
 			"name":           "payments-api-staging",
@@ -1213,6 +1213,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!summaryText.includes('Applications read refreshed ·')) throw new Error('expected applications overview to show read freshness, got ' + summaryText);
   if (summaryText.includes('Applications read not refreshed yet')) throw new Error('expected successful applications read to replace the not-refreshed placeholder');
   if (!accountsText.includes('payments-api-staging')) throw new Error('expected applications page row text');
+  if (!accountsText.includes('Last update') || !accountsText.includes('2026-04-16T07:10:00Z')) throw new Error('expected applications row to show row-local last update timestamp');
   if (!accountsText.includes('More actions')) throw new Error('expected applications page secondary actions disclosure');
   if (!accountsText.includes('Runtime') || !accountsText.includes('waiting for CodeDeploy bake window')) throw new Error('expected applications page compact runtime signal detail');
   if (accountsText.includes('Latest runtime signal')) throw new Error('applications page should use a compact Runtime label instead of the longer latest-runtime label');
@@ -1276,6 +1277,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   clearEmptyButton.dispatch('click');
   const resetText = collectText(document.getElementById('accounts')).join(' | ');
   if (!resetText.includes('payments-api-staging') || !resetText.includes('payments-api-prod')) throw new Error('expected empty-state Clear filters action to restore all application rows');
+  if (!resetText.includes('Latest runtime status')) throw new Error('expected applications row without timestamp to use latest-runtime-status fallback');
   if (window.location.search) throw new Error('expected empty-state Clear filters action to clear bookmarkable filter params');
 })();
 `

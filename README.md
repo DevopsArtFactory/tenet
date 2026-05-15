@@ -149,7 +149,9 @@ not implemented for this backend slice.
 
 Start at `/` for the applications overview. The overview keeps the first page
 compact with application rows, status chips, filters, `Open application`, and an
-`Applications JSON` handoff to `GET /v1/overview/applications`.
+`Applications JSON` handoff to `GET /v1/overview/applications`. Each row keeps a
+compact `Last update` field from the joined runtime summary, falling back to
+`Latest runtime status` when no timestamp is present.
 
 Common bookmarkable routes:
 
