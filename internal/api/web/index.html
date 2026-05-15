@@ -2814,7 +2814,9 @@
             }
           }
           const secondaryActions = createElement('details', 'row-secondary-actions');
-          secondaryActions.append(createElement('summary', '', 'More actions'), secondaryLinks);
+          secondaryActions.setAttribute('role', 'group');
+          secondaryActions.setAttribute('aria-label', `Secondary actions for ${deployment.name || 'deployment'}`);
+          secondaryActions.append(createElement('summary', '', `More actions for ${deployment.name || 'deployment'}`), secondaryLinks);
           const matchContext = createApplicationMatchContext(deployment, currentViewState.query);
           const latestSignal = createLatestRuntimeSignal(deployment);
           row.append(top, core);
