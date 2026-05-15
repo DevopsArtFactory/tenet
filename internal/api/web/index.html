@@ -4411,13 +4411,14 @@
       };
       const lookupContextText = (value) => value == null || value === '' ? '—' : String(value);
       const lookupContextBoolText = (value) => typeof value === 'boolean' ? boolLabel(value) : '—';
-      const resourceLogsLookupContextFields = (lookupContext) => [
-        ['Lookup region', lookupContextText(lookupContext?.region)],
-        ['Control account ID', lookupContextText(lookupContext?.controlAccountId)],
-        ['Target account ID', lookupContextText(lookupContext?.targetAccountId)],
-        ['Cross-account lookup', lookupContextBoolText(lookupContext?.crossAccount)],
-        ['Observer role configured', lookupContextBoolText(lookupContext?.observerRoleConfigured)],
-      ];
+      const lookupContextReturned = (lookupContext) => lookupContext && typeof lookupContext === 'object' && !Array.isArray(lookupContext);
+      const resourceLogsLookupContextFields = (lookupContext) => lookupContextReturned(lookupContext) ? [
+        ['Lookup region', lookupContextText(lookupContext.region)],
+        ['Control account ID', lookupContextText(lookupContext.controlAccountId)],
+        ['Target account ID', lookupContextText(lookupContext.targetAccountId)],
+        ['Cross-account lookup', lookupContextBoolText(lookupContext.crossAccount)],
+        ['Observer role configured', lookupContextBoolText(lookupContext.observerRoleConfigured)],
+      ] : [];
       const lookupContextPathText = (lookupContext, prefix = 'Lookup path ·') => {
         const parts = [];
         const region = lookupContextText(lookupContext?.region);
@@ -4447,6 +4448,13 @@
       const resourceInspectionLookupPathText = (lookupContext) => lookupContextPathText(lookupContext, 'Inspection path ·');
       const createResourceLogsLookupPathSummary = (lookupContext) => createElement('p', 'detail-section-copy', resourceLogsLookupPathText(lookupContext));
       const createResourceInspectionLookupPathSummary = (lookupContext) => createElement('p', 'detail-section-copy', resourceInspectionLookupPathText(lookupContext));
+      const createProviderLookupContextLabel = () => createElement('div', 'detail-condition-meta', 'Provider lookup context');
+      const createResourceLogsLookupContextNodes = (lookupContext) => lookupContextReturned(lookupContext)
+        ? [createResourceLogsLookupPathSummary(lookupContext), createProviderLookupContextLabel()]
+        : [];
+      const createResourceInspectionLookupContextNodes = (lookupContext) => lookupContextReturned(lookupContext)
+        ? [createResourceInspectionLookupPathSummary(lookupContext), createProviderLookupContextLabel()]
+        : [];
 
       const resourcePanelFetchedAtText = (result) => {
         const fetchedAt = result?.tenetFetchedAt;
@@ -4619,9 +4627,9 @@
         const actions = createResourceLogsActions(section, deploymentName, resource, false, detail);
         const capNote = createResourceLogsLimitNote(selectedLimit);
         const backingResourceFields = resourceLogsBackingResourceFields(result);
-        const lookupPathSummary = createResourceLogsLookupPathSummary(result?.lookupContext);
+        const lookupContextNodes = createResourceLogsLookupContextNodes(result?.lookupContext);
         const handoffSection = createResourceLogsBackingResourceHandoffSection(detail, result);
-        const beforeNodes = (metadata) => handoffSection ? [capNote, lookupPathSummary, metadata, handoffSection] : [capNote, lookupPathSummary, metadata];
+        const beforeNodes = (metadata) => handoffSection ? [capNote, ...lookupContextNodes, metadata, handoffSection] : [capNote, ...lookupContextNodes, metadata];
         const scopeFields = resourceLogsResultScopeFields(result?.resultScope);
         const requestRouteFields = resourceLogsRequestRouteFields(deploymentName, resource, selectedLimit);
         if (!result?.available) {
@@ -5061,7 +5069,7 @@
         section.replaceChildren(
           createDetailSectionHeader('Live inspection', actions),
           createElement('p', 'detail-section-copy', 'Live ECS service inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
-          createResourceInspectionLookupPathSummary(result?.lookupContext),
+          ...createResourceInspectionLookupContextNodes(result?.lookupContext),
           metadata,
           deploymentsSection,
           tasksSection,
@@ -5262,7 +5270,7 @@
         section.replaceChildren(
           createDetailSectionHeader('Live inspection', actions),
           createElement('p', 'detail-section-copy', 'Live Auto Scaling Group inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
-          createResourceInspectionLookupPathSummary(result?.lookupContext),
+          ...createResourceInspectionLookupContextNodes(result?.lookupContext),
           metadata,
           targetGroupsSection,
           mixedInstancesOverridesSection,
@@ -5338,7 +5346,7 @@
         section.replaceChildren(
           createDetailSectionHeader('Live inspection', actions),
           createElement('p', 'detail-section-copy', 'Live bootstrap-source inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
-          createResourceInspectionLookupPathSummary(result?.lookupContext),
+          ...createResourceInspectionLookupContextNodes(result?.lookupContext),
           metadata,
           ...(handoffSection ? [handoffSection] : []),
           summarySection,
@@ -5565,7 +5573,7 @@
         section.replaceChildren(
           createDetailSectionHeader('Live inspection', actions),
           createElement('p', 'detail-section-copy', 'Live ECS task inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
-          createResourceInspectionLookupPathSummary(result?.lookupContext),
+          ...createResourceInspectionLookupContextNodes(result?.lookupContext),
           metadata,
           ...(ec2HostSection?.children?.length ? [ec2HostSection] : []),
           containersSection,
@@ -5592,7 +5600,7 @@
         section.replaceChildren(
           createDetailSectionHeader('Live inspection', actions),
           createElement('p', 'detail-section-copy', 'Read-only traffic-routing inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
-          createResourceInspectionLookupPathSummary(result?.lookupContext),
+          ...createResourceInspectionLookupContextNodes(result?.lookupContext),
           metadata,
           ...(listenerRuleSection ? [listenerRuleSection] : []),
           ...(targetGroupSection ? [targetGroupSection] : []),
@@ -5616,7 +5624,7 @@
           const details = unavailableReason
             ? [createElement('div', 'detail-condition-meta', unavailableReason)]
             : [];
-          renderResourceInspectionState(section, 'Live inspection is unavailable for this resource.', '', [createResourceInspectionLookupPathSummary(result?.lookupContext), metadata], details, actions);
+          renderResourceInspectionState(section, 'Live inspection is unavailable for this resource.', '', [...createResourceInspectionLookupContextNodes(result?.lookupContext), metadata], details, actions);
           return;
         }
         if (result?.ecsService) {
@@ -5639,7 +5647,7 @@
           renderTrafficRoutingInspection(section, deploymentName, resource, result);
           return;
         }
-        renderResourceInspectionState(section, 'No live inspection details are available for this resource yet.', '', [createResourceInspectionLookupPathSummary(result?.lookupContext), metadata], [], actions);
+        renderResourceInspectionState(section, 'No live inspection details are available for this resource yet.', '', [...createResourceInspectionLookupContextNodes(result?.lookupContext), metadata], [], actions);
       };
       const renderResourceInspectionSection = (section, detail, resource, options = {}) => {
         const deploymentName = detail?.name || currentPageState.deployment || '';

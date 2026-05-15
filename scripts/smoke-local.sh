@@ -1684,7 +1684,8 @@ assert 'Loading live inspection…' in ui, ui
 assert 'Live inspection is unavailable for this resource.' in ui, ui
 assert 'Refresh live inspection' in ui, ui
 assert 'Inspection path ·' in ui, ui
-assert 'createResourceInspectionLookupPathSummary(result?.lookupContext)' in ui, ui
+assert 'Provider lookup context' in ui, ui
+assert 'createResourceInspectionLookupContextNodes(result?.lookupContext)' in ui, ui
 assert 'No live inspection details are available for this resource yet.' in ui, ui
 assert 'Service deployments' in ui, ui
 assert 'Container instance' in ui, ui

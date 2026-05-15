@@ -7414,6 +7414,10 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!refreshLogs || !refreshInspection) throw new Error('expected resource refresh buttons after initial responses');
   if (refreshLogs.disabled || refreshInspection.disabled) throw new Error('expected resource refresh buttons enabled after initial terminal states');
   if (!text.includes('Initial recent log line')) throw new Error('expected initial recent log payload before refresh');
+  if (!text.includes('Provider lookup context')) throw new Error('expected recent logs to label returned provider lookup context');
+  if (!text.includes('Lookup region') || !text.includes('ap-northeast-2')) throw new Error('expected recent logs provider lookup context to include region');
+  if (!text.includes('Target account ID') || !text.includes('210987654321')) throw new Error('expected recent logs provider lookup context to include target account');
+  if (!text.includes('Observer role configured') || !text.includes('True')) throw new Error('expected recent logs provider lookup context to include observer role status');
   if (!text.includes('Failed to load live inspection: resource inspection request failed (503)')) throw new Error('expected initial live inspection error state before refresh');
 
   refreshLogs.dispatch('click');
@@ -7478,6 +7482,8 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Service name')) throw new Error('expected refreshed live inspection payload to render supported fields');
   if (!text.includes('payments-api-staging-service')) throw new Error('expected refreshed live inspection payload to render service name');
   if (!text.includes('Service reached steady state again')) throw new Error('expected refreshed live inspection payload to render fresh event text');
+  if (collectText(root).filter((value) => value === 'Provider lookup context').length !== 2) throw new Error('expected recent logs and live inspection to label returned provider lookup context');
+  if (!text.includes('Inspection path · ap-northeast-2 · account 210987654321 · same-account lookup · observer role configured')) throw new Error('expected live inspection provider lookup context summary');
   if (text.includes('Failed to load live inspection: resource inspection request failed (503)')) throw new Error('expected refreshed live inspection payload to replace stale error state');
   if (fetchCalls.filter((url) => url === deploymentURL).length !== 1) throw new Error('expected in-place refresh controls not to reload deployment detail');
   if (fetchCalls.filter((url) => url === logsURL).length !== 2) throw new Error('expected exactly two recent-logs fetches');

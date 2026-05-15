@@ -1763,6 +1763,7 @@ for fragment in (
     "Open container recent logs",
     "params.set('containerName', containerName);",
     "Lookup path ·",
+    "Provider lookup context",
     "Lookup region",
     "Observer role configured",
     "This resource is a valid drill-down target, but Tenet has no independent recent-log stream for it yet.",
