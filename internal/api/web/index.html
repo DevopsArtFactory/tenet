@@ -5131,10 +5131,18 @@
       const autoScalingGroupRecentLogsHandoff = (deploymentName, resource) => {
         if (!deploymentName || !resource?.id) return null;
         if (!autoScalingGroupSupportsInstanceHandoff(resource)) return null;
+        const routeState = createCurrentResourceRouteState(resource);
+        const scopedResource = {
+          ...resource,
+          instanceId: routeState.routeInstanceId || resource.instanceId || '',
+        };
+        const logsLimit = selectedResourceLogsLimit(deploymentName, scopedResource);
         return createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', {
           deployment: deploymentName,
-          resourceType: resource.type,
-          resourceId: resource.id,
+          resourceType: routeState.routeResourceType || resource.type,
+          resourceId: routeState.routeResourceId || resource.id,
+          instanceId: routeState.routeInstanceId,
+          resourceLogLimit: logsLimit,
         }), 'Open EC2 console logs', '_self');
       };
       const createAutoScalingInstanceHandoffLinks = (deploymentName, resource, instance) => {
