@@ -6669,6 +6669,11 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!selectedASGText.includes('Public IP · 198.51.100.24')) throw new Error('expected selected ASG live inspection to render EC2 public IP: ' + selectedASGText);
   if (!selectedASGText.includes('Launch time · 2026-05-05T08:15:00Z')) throw new Error('expected selected ASG live inspection to render EC2 launch time: ' + selectedASGText);
   if (!selectedASGText.includes('Log instance · i-abc123')) throw new Error('expected selected ASG recent logs to render entry instance metadata: ' + selectedASGText);
+  const selectedASGConsoleLogLink = collectNodes(selectedASGRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open EC2 console logs')[0];
+  if (!selectedASGConsoleLogLink) throw new Error('expected selected ASG live inspection to keep the console-log handoff');
+  const selectedASGExpectedParams = new URLSearchParams({ page: 'resource', deployment: 'payments-api-prod', resourceType: 'candidateAutoScalingGroup', resourceId: asgResourceID, instanceId: 'i-abc123' });
+  if (selectedASGConsoleLogLink.href !== '/?' + selectedASGExpectedParams.toString() + '#resource-recent-logs') throw new Error('expected selected ASG console-log handoff to preserve instanceId, got ' + selectedASGConsoleLogLink.href);
+  if (selectedASGConsoleLogLink.target !== '_self') throw new Error('expected selected ASG console-log handoff to stay inside embedded UI');
   const selectedASGRefreshButtons = collectNodes(selectedASGRun.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
   const selectedLogsRefresh = selectedASGRefreshButtons.find((node) => node.textContent === 'Refresh recent logs');
   const selectedInspectionRefresh = selectedASGRefreshButtons.find((node) => node.textContent === 'Refresh live inspection');
@@ -6694,6 +6699,11 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
     if (url === clearUnscopedASGInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'auto_scaling_group', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, autoScalingGroup: { autoScalingGroupName: 'payments-api-prod-candidate', instancesScope: { requestedLimit: 25, effectiveLimit: 25, returnedInstanceCount: 1, truncationStatus: 'not_truncated' }, instances: [{ instanceId: 'i-def456', availabilityZone: 'ap-northeast-2b', lifecycleState: 'InService', healthStatus: 'Healthy' }] } }) });
     throw new Error('unexpected clear selected asg fetch url: ' + url);
   }, 3, '#resource-recent-logs');
+  const scopedLimitConsoleLogLink = collectNodes(clearSelectedASGRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open EC2 console logs')[0];
+  const scopedLimitConsoleLogHref = scopedLimitConsoleLogLink?.href || '';
+  ['instanceId=i-abc123', 'resourceLogLimit=5', '#resource-recent-logs'].forEach((fragment) => {
+    if (!scopedLimitConsoleLogHref.includes(fragment)) throw new Error('expected selected ASG console-log handoff to preserve ' + fragment + ', got ' + scopedLimitConsoleLogHref);
+  });
   const clearSelectedASGToolbarButtons = collectNodes(clearSelectedASGRun.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
   const clearSelectedInstanceButton = clearSelectedASGToolbarButtons.find((node) => node.textContent === 'Clear selected instance');
   if (!clearSelectedInstanceButton || clearSelectedInstanceButton.disabled) throw new Error('expected selected ASG clear selected instance action to be enabled');
