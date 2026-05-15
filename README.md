@@ -35,7 +35,10 @@ Additional operator workspaces are linked from that flow: account detail, drift,
 plan/apply, audit timeline, deployment events, recent logs, and live inspection.
 The plan/apply workspace keeps disabled mutation controls explanatory: `Create Plan`
 is available for the currently reviewed deployment, while `Apply Plan` and
-record refreshes activate after persisted plan/apply records are loaded.
+record refreshes activate after persisted plan/apply records are loaded. If
+`POST /v1/applies/plans/{planId}` returns `409 Conflict` because the reviewed
+plan is stale, the workspace keeps the bookmarkable deployment/plan context
+visible and tells the operator to create a fresh plan preview before retrying.
 
 ## Architecture
 
@@ -172,7 +175,8 @@ Primary operator APIs:
 - `GET /v1/overview/deployments/{deploymentName}/resource-logs`
 - `GET /v1/overview/deployments/{deploymentName}/resource-inspection`
 - `POST /v1/plans/deployments/{deploymentName}`
-- `POST /v1/applies/plans/{planId}`
+- `POST /v1/applies/plans/{planId}` (`409 Conflict` means the reviewed plan
+  preview is stale and must be recreated before applying)
 - `GET /v1/audit-logs`
 - `GET /v1/operator/context`
 

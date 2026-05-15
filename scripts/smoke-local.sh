@@ -2193,6 +2193,11 @@ assert 'Trusted front-door X-Tenet-Authenticated-* identity headers still take p
 assert 'Tenet does not start a built-in GitHub OAuth login, enterprise SSO login, or Tenet-managed browser session from this page; retry ${action} for this same bookmarkable workspace through the trusted front door' in ui, ui
 assert 'const operatorWriteForbiddenMessage = (route, action) => `Tenet rejected ${route} after recognizing the caller\x27s identity, but this operator is not authorized to ${action.toLowerCase()} for that deployment through this route. Ask a front-door/RBAC admin to authorize this deployment through either X-Tenet-Authorized-Deployments or matching X-Tenet-Authorized-Projects plus X-Tenet-Authorized-Environments catalog placement, then retry ${action}. Partial, stale, or unavailable project/environment placement still fails closed, so use the Operator context banner to confirm the forwarded scopes match this deployment.`;' in ui, ui
 assert 'Operator access denied' in ui, ui
+assert 'reviewed plan is stale (${response.status})' in ui, ui
+assert "throw requestError(response.status === 409 ? 'stale-plan' : response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);" in ui, ui
+assert 'Reviewed plan is stale' in ui, ui
+assert 'The reviewed plan preview ${activePlanID || \'planId\'} is stale. Create a fresh plan preview before retrying Apply Plan. Deployment and plan-derived context are still shown below.' in ui, ui
+assert "applyState?.status === 'stale-plan' ? 'Stale plan'" in ui, ui
 assert "const operatorPlanPreviewReadRoute = (planId) => `GET /v1/plans/${planId || 'planId'}`;" in ui, ui
 assert "const operatorApplyRequestReadRoute = (applyId) => `GET /v1/applies/${applyId || 'applyId'}`;" in ui, ui
 assert "return `${operatorReadFailureMessage(operatorPlanPreviewReadRoute(activePlanId), planState.error)} Deployment-derived context is still shown below and Apply Plan stays disabled until a persisted ready preview is available.`;" in ui, ui

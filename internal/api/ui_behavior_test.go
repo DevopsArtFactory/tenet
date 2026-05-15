@@ -10211,6 +10211,60 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
 		runNodeHarness(t, nodeProgram)
 	})
 
+	t.Run("apply create 409 renders stale plan guidance without hiding context", func(t *testing.T) {
+		nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+const planPreview = ` + string(planPreviewReadyJSON) + `;
+` + domHarness + `
+const document = new Document();
+document.byID.set('toolbar', document.createElement('section'));
+document.byID.set('summary', document.createElement('section'));
+document.byID.set('accounts', document.createElement('section'));
+const fetchCalls = [];
+const initialSearch = '?page=plan&deployment=api-prod&planId=plan_ready_123';
+const window = { location: { pathname: '/console', search: initialSearch, hash: '' } };
+const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/console'; window.location.search = query ? '?' + query : ''; } };
+const fetch = (url, options = {}) => {
+  fetchCalls.push(String(url));
+  if (url === '/v1/overview/deployments/api-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+  if (url === '/v1/plans/plan_ready_123') return Promise.resolve({ ok: true, json: () => Promise.resolve(planPreview) });
+  if (url === '/v1/applies/plans/plan_ready_123' && options.method === 'POST') {
+    return Promise.resolve({ ok: false, status: 409, text: () => Promise.resolve('conflict: reviewed plan is stale; create a new plan preview before applying') });
+  }
+  throw new Error('unexpected fetch url: ' + url);
+};
+new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+(async () => {
+  await settle();
+  await settle();
+  await settle();
+  const root = document.getElementById('accounts');
+  const buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
+  const applyPlan = buttons.find((node) => node.textContent === 'Apply Plan');
+  if (!applyPlan || applyPlan.disabled) throw new Error('expected Apply Plan enabled for ready preview');
+  applyPlan.dispatch('click');
+  await settle();
+  await settle();
+  await settle();
+  if (fetchCalls.join(', ') !== '/v1/overview/deployments/api-prod, /v1/plans/plan_ready_123, /v1/applies/plans/plan_ready_123') throw new Error('unexpected fetch sequence after stale apply conflict: ' + fetchCalls.join(', '));
+  if (window.location.pathname !== '/console') throw new Error('expected pathname to stay stable after stale apply conflict, got ' + window.location.pathname);
+  if (window.location.search !== initialSearch) throw new Error('expected plan/apply URL to preserve deployment and planId after stale apply conflict, got ' + window.location.search);
+  const text = collectText(root).join(' | ');
+  if (!text.includes('Reviewed plan is stale')) throw new Error('expected stale reviewed plan heading, got ' + text);
+  if (!text.includes('The reviewed plan preview plan_ready_123 is stale. Create a fresh plan preview before retrying Apply Plan.')) throw new Error('expected stale reviewed plan guidance, got ' + text);
+  if (!text.includes('Deployment and plan-derived context are still shown below.')) throw new Error('expected context-preservation copy for stale apply conflict, got ' + text);
+  if (text.includes('Failed to create an apply request')) throw new Error('expected stale conflict not to render generic create failure copy: ' + text);
+  if (text.includes('Apply request fetch error')) throw new Error('expected stale conflict not to render generic fetch-error heading: ' + text);
+  if (text.includes(' | null | ') || text.endsWith(' | null') || text.startsWith('null | ')) throw new Error('expected stale conflict not to render null placeholder text: ' + text);
+  if (!text.includes('acct-a · 111111111111 · us-west-2') || !text.includes('Latest runtime signals')) throw new Error('expected deployment context to remain visible after stale apply conflict, got ' + text);
+  if (!text.includes('Stale plan')) throw new Error('expected stale-plan status pill after stale apply conflict, got ' + text);
+  if (!text.includes('Stored plan preview') || !text.includes('Server-authored approval summary') || !text.includes('server-preview-target')) throw new Error('expected plan-derived context to remain visible after stale apply conflict, got ' + text);
+})();
+`
+		runNodeHarness(t, nodeProgram)
+	})
+
 	t.Run("bookmarked plan hash deep links re-scroll after async plan and apply sections render", func(t *testing.T) {
 		nodeProgram := `
 const scriptContent = ` + string(scriptJSON) + `;

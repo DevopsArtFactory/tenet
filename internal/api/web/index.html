@@ -6946,11 +6946,13 @@
         method: 'POST',
       }).then((response) => {
         if (response.ok) return response.json();
-        const fallback = response.status === 503
+        const fallback = response.status === 409
+          ? `reviewed plan is stale (${response.status})`
+          : response.status === 503
           ? `apply request API unavailable (${response.status})`
           : `apply request create failed (${response.status})`;
         return responseErrorMessage(response, fallback).then((message) => {
-          throw requestError(response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);
+          throw requestError(response.status === 409 ? 'stale-plan' : response.status === 503 ? 'unavailable' : 'fetch-error', message, response.status);
         });
       });
       const normalizePlanOperationStatus = (status) => {
@@ -7006,6 +7008,7 @@
             return 'pill paused';
           case 'failed':
           case 'unavailable':
+          case 'stale-plan':
           case 'fetch-error':
             return 'pill error';
           case 'queued':
@@ -7395,6 +7398,8 @@
               return `GET /v1/applies/${activeApplyID} is currently unavailable. Deployment and plan-derived context are still shown below.`;
             }
             return `POST /v1/applies/plans/${activePlanID || 'planId'} is currently unavailable. Deployment and plan-derived context are still shown below.`;
+          case 'stale-plan':
+            return `The reviewed plan preview ${activePlanID || 'planId'} is stale. Create a fresh plan preview before retrying Apply Plan. Deployment and plan-derived context are still shown below.`;
           case 'fetch-error':
             if (operatorReadStateHeading(applyState)) {
               return `${operatorReadFailureMessage(operatorApplyRequestReadRoute(activeApplyID), applyState.error)} Deployment and plan-derived context are still shown below.`;
@@ -7420,6 +7425,7 @@
         switch (applyState?.status) {
           case 'failed':
           case 'unavailable':
+          case 'stale-plan':
           case 'fetch-error':
             return 'error';
           default:
@@ -7442,6 +7448,8 @@
             return 'Apply request failed';
           case 'unavailable':
             return 'Apply request unavailable';
+          case 'stale-plan':
+            return 'Reviewed plan is stale';
           case 'fetch-error':
             if (operatorReadStateHeading(applyState)) {
               return operatorReadStateHeading(applyState);
@@ -8073,8 +8081,11 @@
             planActionHint,
             createElement('div', 'workspace-callout-label', planPreviewStatusHeading(planState)),
             planStateCallout,
-            createOperatorWriteAuthRequiredActions(planState),
           );
+          const planWriteActions = createOperatorWriteAuthRequiredActions(planState);
+          if (planWriteActions) {
+            actionsSection.append(planWriteActions);
+          }
           pushPlanSection(actionsSection, 'plan-preview-actions', 'Plan preview actions');
 
           if (activePlanRecord) {
@@ -8119,7 +8130,7 @@
           const applyStateHead = createElement('div', 'workspace-callout-head');
           applyStateHead.append(
             createElement('div', 'workspace-callout-label', applyRecordStatusHeading(applyState)),
-            createElement('span', applyStatusPillClassName(applyState?.status), applyState?.status === 'idle' ? 'Awaiting apply request' : applyState?.status === 'loading' ? 'Loading' : applyState?.status === 'unavailable' ? 'Unavailable' : applyState?.status === 'fetch-error' ? operatorFetchErrorPillLabel(applyState) : applyRecordStatusLabel(applyState?.status)),
+            createElement('span', applyStatusPillClassName(applyState?.status), applyState?.status === 'idle' ? 'Awaiting apply request' : applyState?.status === 'loading' ? 'Loading' : applyState?.status === 'unavailable' ? 'Unavailable' : applyState?.status === 'stale-plan' ? 'Stale plan' : applyState?.status === 'fetch-error' ? operatorFetchErrorPillLabel(applyState) : applyRecordStatusLabel(applyState?.status)),
           );
           if (applyStateClassName) {
             applyStateCallout.classList.add(applyStateClassName);
@@ -8127,8 +8138,11 @@
           applySection.append(
             applyStateHead,
             applyStateCallout,
-            createOperatorWriteAuthRequiredActions(applyState),
           );
+          const applyWriteActions = createOperatorWriteAuthRequiredActions(applyState);
+          if (applyWriteActions) {
+            applySection.append(applyWriteActions);
+          }
           pushPlanSection(applySection, 'plan-apply-actions', 'Apply request actions');
 
           if (activeApplyRecord) {
@@ -8931,7 +8945,7 @@
                         .catch((error) => {
                           applyState = {
                             ...applyState,
-                            status: error.kind === 'unavailable' ? 'unavailable' : 'fetch-error',
+                            status: error.kind === 'unavailable' ? 'unavailable' : error.kind === 'stale-plan' ? 'stale-plan' : 'fetch-error',
                             request: 'create',
                             error,
                           };
