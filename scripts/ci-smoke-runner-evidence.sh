@@ -61,7 +61,7 @@ print_runner_start_verdict() {
     printf '%s\n' "$blocker_lines"
   fi
 
-  check_runs=$(gh api "repos/:owner/:repo/commits/${sha}/check-runs" \
+  check_runs=$(gh api --paginate "repos/:owner/:repo/commits/${sha}/check-runs" \
     --jq '.check_runs[] | select(.name == "Fast smoke" or .name == "Docker smoke scope" or .name == "Docker smoke") | [.id, .name] | @tsv')
   local billing_lines=()
   local id
@@ -70,7 +70,7 @@ print_runner_start_verdict() {
   local message
   while IFS=$'\t' read -r id name; do
     [[ -n "$id" ]] || continue
-    annotations=$(gh api "repos/:owner/:repo/check-runs/${id}/annotations" \
+    annotations=$(gh api --paginate "repos/:owner/:repo/check-runs/${id}/annotations" \
       --jq '.[] | select((.message // "") | test("billing|spending limit|payments have failed|Billing & plans"; "i")) | .message')
     while IFS= read -r message; do
       [[ -n "$message" ]] || continue
@@ -104,14 +104,14 @@ if ! gh run view "$RUN_ID" --log-failed; then
 fi
 
 section "CI Smoke check-runs"
-gh api "repos/:owner/:repo/commits/${SHA}/check-runs" \
+gh api --paginate "repos/:owner/:repo/commits/${SHA}/check-runs" \
   --jq '.check_runs[] | select(.name == "Fast smoke" or .name == "Docker smoke scope" or .name == "Docker smoke") | {id,name,status,conclusion,details_url}'
 
 section "CI Smoke check-run annotations"
 CHECK_RUN_IDS=()
 while IFS= read -r id; do
   [[ -n "$id" ]] && CHECK_RUN_IDS+=("$id")
-done < <(gh api "repos/:owner/:repo/commits/${SHA}/check-runs" \
+done < <(gh api --paginate "repos/:owner/:repo/commits/${SHA}/check-runs" \
   --jq '.check_runs[] | select(.name == "Fast smoke" or .name == "Docker smoke scope" or .name == "Docker smoke") | .id')
 
 if [[ ${#CHECK_RUN_IDS[@]} -eq 0 ]]; then
@@ -119,7 +119,7 @@ if [[ ${#CHECK_RUN_IDS[@]} -eq 0 ]]; then
 else
   for id in "${CHECK_RUN_IDS[@]}"; do
     echo "-- check-run ${id} --"
-    annotations=$(gh api "repos/:owner/:repo/check-runs/${id}/annotations" \
+    annotations=$(gh api --paginate "repos/:owner/:repo/check-runs/${id}/annotations" \
       --jq '.[] | {path,start_line,annotation_level,message}')
     if [[ -z "$annotations" ]]; then
       echo "No annotations returned."

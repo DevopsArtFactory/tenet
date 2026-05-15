@@ -41,12 +41,12 @@ Capture the check-run annotations too, because GitHub often puts the account-lev
 
 ```bash
 SHA=$(gh run view <run-id> --json headSha --jq .headSha)
-gh api "repos/:owner/:repo/commits/${SHA}/check-runs" \
+gh api --paginate "repos/:owner/:repo/commits/${SHA}/check-runs" \
   --jq '.check_runs[] | select(.name == "Fast smoke" or .name == "Docker smoke scope" or .name == "Docker smoke") | {id,name,status,conclusion,details_url}'
 
-for id in $(gh api "repos/:owner/:repo/commits/${SHA}/check-runs" \
+for id in $(gh api --paginate "repos/:owner/:repo/commits/${SHA}/check-runs" \
   --jq '.check_runs[] | select(.name == "Fast smoke" or .name == "Docker smoke scope" or .name == "Docker smoke") | .id'); do
-  gh api "repos/:owner/:repo/check-runs/${id}/annotations" \
+  gh api --paginate "repos/:owner/:repo/check-runs/${id}/annotations" \
     --jq '.[] | {path,start_line,annotation_level,message}'
 done
 ```
