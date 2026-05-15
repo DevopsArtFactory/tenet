@@ -33,6 +33,9 @@ The primary UI flow is intentionally simple:
 
 Additional operator workspaces are linked from that flow: account detail, drift,
 plan/apply, audit timeline, deployment events, recent logs, and live inspection.
+The plan/apply workspace keeps disabled mutation controls explanatory: `Create Plan`
+is available for the currently reviewed deployment, while `Apply Plan` and
+record refreshes activate after persisted plan/apply records are loaded.
 
 ## Architecture
 
