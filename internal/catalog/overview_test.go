@@ -1164,7 +1164,7 @@ func TestBuildDeploymentOverviewEventsReturnsEmptyListWhenHistoryMissing(t *test
 		t.Fatalf("expected managedDriftSummary zero counts in JSON payload, got %#v", decoded["managedDriftSummary"])
 	}
 	retention, ok := decoded["retention"].(map[string]any)
-	if !ok || retention["limit"] != float64(domain.RuntimeHistoryMaxEntries) || retention["retainedEventCount"] != float64(0) || retention["status"] != "within_retention_limit" {
+	if !ok || retention["limit"] != float64(domain.RuntimeHistoryMaxEntries) || retention["retainedEventCount"] != float64(0) || retention["status"] != domain.RuntimeHistoryRetentionStatusWithinLimit {
 		t.Fatalf("expected retention zero-count metadata in JSON payload, got %#v", decoded["retention"])
 	}
 	if _, exists := decoded["resultScope"]; exists {
