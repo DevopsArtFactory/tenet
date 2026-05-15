@@ -303,9 +303,11 @@ func applyResourceLogLimit(result resourcelogs.Result, limit int) resourcelogs.R
 		RequestedLimit:       requestedLimit,
 		EffectiveLimit:       effectiveLimit,
 		ReturnedEntryCount:   len(result.Entries),
+		ReturnedCount:        len(result.Entries),
 		NewestEntryTimestamp: newestEntryTimestamp,
 		OldestEntryTimestamp: oldestEntryTimestamp,
 		TruncationStatus:     truncationStatus,
+		Truncated:            truncationStatus == resourcelogs.ScopeTruncationStatusTruncated,
 	}
 	return result
 }

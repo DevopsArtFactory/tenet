@@ -142,9 +142,11 @@ type ResultScope struct {
 	RequestedLimit       *int   `json:"requestedLimit,omitempty"`
 	EffectiveLimit       int    `json:"effectiveLimit"`
 	ReturnedEntryCount   int    `json:"returnedEntryCount"`
+	ReturnedCount        int    `json:"returnedCount"`
 	NewestEntryTimestamp string `json:"newestEntryTimestamp,omitempty"`
 	OldestEntryTimestamp string `json:"oldestEntryTimestamp,omitempty"`
 	TruncationStatus     string `json:"truncationStatus"`
+	Truncated            bool   `json:"truncated"`
 }
 
 type LookupContext = resourceaws.LookupContext

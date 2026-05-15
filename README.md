@@ -172,7 +172,7 @@ Primary operator APIs:
 - `GET /v1/overview/applications`
 - `GET /v1/overview/deployments/{deploymentName}`
 - `GET /v1/overview/deployments/{deploymentName}/events`
-- `GET /v1/overview/deployments/{deploymentName}/resource-logs`
+- `GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}[&limit={positiveInteger}]`
 - `GET /v1/overview/deployments/{deploymentName}/resource-inspection`
 - `POST /v1/plans/deployments/{deploymentName}`
 - `POST /v1/applies/plans/{planId}` (`409 Conflict` means the reviewed plan
