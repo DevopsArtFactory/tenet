@@ -52,7 +52,7 @@ func TestReadmeStaysProductOverview(t *testing.T) {
 		"`codeDeployDeploymentGroup`,\n`productionListener`, and `testListener` can return",
 		"`available=true`, `source=rollout_execution_summary`, and a summary-only",
 		"`source=live` / `inspectionMode=live`",
-		"traffic-routing fallback routes do not regress to `aws_unavailable`",
+		"Local no-AWS summary fallback stays\nexplicitly summary-only",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README product overview to include %q", fragment)
@@ -2211,7 +2211,7 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"`available=true`, `source=rollout_execution_summary`, `trafficRoutingResource.inspectionMode=summary_only`",
 		"`available=false` / `unavailableReason=aws_unavailable`",
 		"`source=live`",
-		"when live health counts are present — a target-health pill/cue and raw `Target group health` counts",
+		"only when the live payload includes health counts — a target-health pill/cue and raw `Target group health` counts",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
 			t.Fatalf("expected overview dashboard doc to include %q", fragment)

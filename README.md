@@ -193,9 +193,9 @@ live AWS access to keep the drill-down usable: `codeDeployDeploymentGroup`,
 inspection is configured and succeeds, the same identifiers may instead return
 `source=live` / `inspectionMode=live`; the resource-detail Live inspection
 panel renders a compact `Traffic-routing status` block with operator-facing
-`Resource`, `Inspection mode`, `Source`, `Summary`, and — when live target-group
-health counts are present — a target-health status pill, next-action cue, and
-raw `Target group health` rows before the detailed
+`Resource`, `Inspection mode`, `Source`, `Summary`, and — only when the live AWS
+payload includes target-group health counts — a target-health status pill,
+next-action cue, and raw `Target group health` rows before the detailed
 deployment-group status cues such as CodeDeploy application, deployment group,
 deployment config, deployment style, ECS service bindings, and the latest
 CodeDeploy deployment summary and target groups. When the live payload
@@ -203,8 +203,10 @@ includes `trafficRoutingResource.codeDeployDeploymentGroup.latestDeployment` or
 `latestCodeDeployDeployment`, that same resource-detail panel also shows a
 scannable latest-deployment status pill, an operator next-action cue, and the
 deployment id/status/create time/complete time/status message without moving
-that noise onto the applications overview. Local smoke guards ensure these
-traffic-routing fallback routes do not regress to `aws_unavailable`.
+that noise onto the applications overview. Local no-AWS summary fallback stays
+explicitly summary-only and does not invent latest CodeDeploy deployment status
+or target-group health counts. Local smoke guards ensure these traffic-routing
+fallback routes do not regress to `aws_unavailable`.
 
 - `POST /v1/plans/deployments/{deploymentName}`
 - `POST /v1/applies/plans/{planId}` (`409 Conflict` means the reviewed plan
