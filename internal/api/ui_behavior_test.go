@@ -7375,6 +7375,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const root = document.getElementById('accounts');
   let text = collectText(root).join(' | ');
   if (!text.includes('Original deployment group description')) throw new Error('expected initial resource detail to render original bookmarked resource');
+  if (!text.includes('Current resource read: GET /v1/overview/deployments/payments-api-staging')) throw new Error('expected resource detail page to show the top-level read route');
   let buttons = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
   let refresh = buttons.find((node) => node.textContent === 'Refresh resource detail');
   if (!refresh) throw new Error('expected resource detail refresh button in toolbar');

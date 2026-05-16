@@ -1987,6 +1987,7 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
         "const renderResourceDetailPage = (detail, resourceState = null) => {",
         "const resourceDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;",
         "const createResourceDetailActions = (resourceState = null, detail = null, resource = null) => [",
+        "Current resource read: ${resourceDetailReadRoute(deploymentName)}.",
         "Refresh resource detail",
         "Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…",
         "Current resource detail remains visible below.",
