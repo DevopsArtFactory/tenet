@@ -166,7 +166,7 @@ Common bookmarkable routes:
 - `/?page=application&deployment={deploymentName}`
 - `/?page=account&accountId={awsAccountId}`
 - `/?page=resource&deployment={deploymentName}&resourceType={type}&resourceId={stableResourceId}` (canonical); older `resourceName={name}` bookmarks are still accepted as a compatibility fallback
-- `/?page=drift&deployment={deploymentName}`
+- `/?page=drift&deployment={deploymentName}`; optional `driftQuery`, `driftSeverity=high|medium|low`, and `driftSort=severity` preserve field-level drift filters in shareable URLs
 - `/?page=plan&deployment={deploymentName}`
 - `/?page=audit`
 

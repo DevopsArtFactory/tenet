@@ -211,6 +211,16 @@
       let allApplications = [];
       let applicationsOverviewState = null;
       let currentViewState = { query: '', syncState: 'all', healthState: 'all', account: 'all' };
+      const defaultDriftFilters = { query: '', severity: 'all', sort: 'field' };
+      const normalizeDriftFilters = (filters = {}) => {
+        const severity = String(filters.severity || defaultDriftFilters.severity);
+        const sort = String(filters.sort || defaultDriftFilters.sort);
+        return {
+          query: String(filters.query || '').trim(),
+          severity: ['all', 'high', 'medium', 'low'].includes(severity) ? severity : defaultDriftFilters.severity,
+          sort: ['field', 'severity'].includes(sort) ? sort : defaultDriftFilters.sort,
+        };
+      };
       let currentPageState = {
         page: 'applications',
         accountId: '',
@@ -224,6 +234,9 @@
         eventLimit: 10,
         resourceLogLimit: 0,
         resourceInspectionLimit: 10,
+        driftQuery: defaultDriftFilters.query,
+        driftSeverity: defaultDriftFilters.severity,
+        driftSort: defaultDriftFilters.sort,
       };
       const auditActionOptions = [
         { value: '', label: 'All actions' },
@@ -2222,6 +2235,11 @@
         const params = new URLSearchParams(window.location.search);
         const page = params.get('page') || params.get('view') || 'applications';
         const validPages = new Set(['applications', 'application', 'account', 'resource', 'drift', 'plan', 'audit']);
+        const driftFilters = normalizeDriftFilters({
+          query: params.get('driftQuery') || '',
+          severity: params.get('driftSeverity') || '',
+          sort: params.get('driftSort') || '',
+        });
         return {
           page: validPages.has(page) ? page : 'applications',
           accountId: params.get('accountId') || '',
@@ -2238,7 +2256,40 @@
           resourceInspectionLimit: normalizeResourceInspectionTaskLimit(params.get('resourceInspectionLimit') || ''),
           auditAction: normalizeAuditAction(params.get('action') || ''),
           auditLimit: normalizeAuditLimit(params.get('limit') || ''),
+          driftQuery: driftFilters.query,
+          driftSeverity: driftFilters.severity,
+          driftSort: driftFilters.sort,
         };
+      };
+      const syncDriftPageState = (filters = {}) => {
+        const normalized = normalizeDriftFilters(filters);
+        const params = new URLSearchParams(window.location.search);
+        params.set('page', 'drift');
+        if (currentPageState.deployment) {
+          params.set('deployment', currentPageState.deployment);
+        }
+        params.delete('driftQuery');
+        params.delete('driftSeverity');
+        params.delete('driftSort');
+        if (normalized.query) {
+          params.set('driftQuery', normalized.query);
+        } else {
+          params.delete('driftQuery');
+        }
+        if (normalized.severity !== defaultDriftFilters.severity) {
+          params.set('driftSeverity', normalized.severity);
+        } else {
+          params.delete('driftSeverity');
+        }
+        if (normalized.sort !== defaultDriftFilters.sort) {
+          params.set('driftSort', normalized.sort);
+        } else {
+          params.delete('driftSort');
+        }
+        const query = params.toString();
+        const hash = window.location.hash || '';
+        const nextURL = query ? `${window.location.pathname}?${query}${hash}` : `${window.location.pathname}${hash}`;
+        history.replaceState({}, '', nextURL);
       };
       const syncAuditQueryParams = (params, pageState) => {
         if (pageState.deployment) {
@@ -7799,22 +7850,36 @@
           }
           const driftRows = deploymentDriftRows(detail);
           const driftSource = deploymentDriftSource(detail);
-          const defaultDriftFilters = { query: '', severity: 'all', sort: 'field' };
-          let driftQuery = workspaceState?.filters?.query || defaultDriftFilters.query;
-          let driftSeverity = workspaceState?.filters?.severity || defaultDriftFilters.severity;
-          let driftSort = workspaceState?.filters?.sort || defaultDriftFilters.sort;
+          const initialDriftFilters = normalizeDriftFilters(workspaceState?.filters || {});
+          let driftQuery = initialDriftFilters.query;
+          let driftSeverity = initialDriftFilters.severity;
+          let driftSort = initialDriftFilters.sort;
           const hasActiveDriftFilters = () => (
             driftQuery !== defaultDriftFilters.query
             || driftSeverity !== defaultDriftFilters.severity
             || driftSort !== defaultDriftFilters.sort
           );
           const syncDriftFilters = () => {
-            if (!workspaceState) return;
-            workspaceState.filters = {
+            const normalized = normalizeDriftFilters({
               query: driftQuery,
               severity: driftSeverity,
               sort: driftSort,
-            };
+            });
+            driftQuery = normalized.query;
+            driftSeverity = normalized.severity;
+            driftSort = normalized.sort;
+            if (workspaceState) {
+              workspaceState.filters = normalized;
+            }
+            if (currentPageState.page === 'drift') {
+              currentPageState = {
+                ...currentPageState,
+                driftQuery: normalized.query,
+                driftSeverity: normalized.severity,
+                driftSort: normalized.sort,
+              };
+              syncDriftPageState(normalized);
+            }
           };
           const driftControls = createElement('div', 'toolbar-grid');
           const driftToolbarActions = createElement('div', 'toolbar-actions');
@@ -8731,9 +8796,9 @@
                   detail: withResourceDetailFetchedAt(detail),
                   error: null,
                   filters: {
-                    query: '',
-                    severity: 'all',
-                    sort: 'field',
+                    query: currentPageState.driftQuery,
+                    severity: currentPageState.driftSeverity,
+                    sort: currentPageState.driftSort,
                   },
                   onRefresh: null,
                 };

@@ -8455,11 +8455,18 @@ const createDocument = () => {
 async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
 const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
 const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
-async function render(detail) {
+async function render(detail, search, hash = '') {
   const document = createDocument();
   const fetchCalls = [];
-  const window = { location: { pathname: '/', search: '?page=drift&deployment=' + encodeURIComponent(detail.name), hash: '' } };
-  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  const initialSearch = search || '?page=drift&deployment=' + encodeURIComponent(detail.name);
+  const window = { location: { pathname: '/', search: initialSearch, hash } };
+  const history = { replaceState(_state, _title, url) {
+    const [pathAndQuery, nextHash = ''] = String(url).split('#');
+    const [pathname, query = ''] = pathAndQuery.split('?');
+    window.location.pathname = pathname || '/';
+    window.location.search = query ? '?' + query : '';
+    window.location.hash = nextHash ? '#' + nextHash : '';
+  } };
   const fetch = (url) => {
     fetchCalls.push(String(url));
     if (url === '/v1/overview/deployments/' + encodeURIComponent(detail.name)) return Promise.resolve({ ok: true, json: () => Promise.resolve(detail) });
@@ -8519,6 +8526,27 @@ async function render(detail) {
   const managedHighShareLinks = collectNodes(managedRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Share drift row');
   if (!managedHighShareLinks.find((node) => node.href === '/?page=drift&deployment=api-managed#drift-row-md-row-listener-weight')) throw new Error('expected filtered drift rows to keep backend share anchor stable');
   if (!managedHighShareLinks.find((node) => node.href.includes('#drift-row-runtimecontext-launchtemplate-imageid-ami-1234567890abcdef0-script-alert-ami-script-ami-fffffffffffffffff-high'))) throw new Error('expected filtered drift rows to keep legacy fallback share anchor stable');
+
+  const bookmarkedRun = await render(
+    managedDetail,
+    '?page=drift&q=managed&sync=OutOfSync&health=Unhealthy&account=123456789012&deployment=api-managed&driftQuery=imageId&driftSeverity=high&driftSort=severity',
+    '#drift-field-level',
+  );
+  const bookmarkedText = collectText(bookmarkedRun.document.getElementById('accounts')).join(' | ');
+  const bookmarkedRows = collectNodes(bookmarkedRun.document.getElementById('accounts'), (node) => node.tagName === 'TR').slice(1).map((node) => collectText(node).join(' | '));
+  const bookmarkedQueryField = bookmarkedRun.document.querySelector('[data-toolbar-field="Filter drift rows"]');
+  const bookmarkedSeverityField = bookmarkedRun.document.querySelector('[data-toolbar-field="Severity"]');
+  const bookmarkedSortField = bookmarkedRun.document.querySelector('[data-toolbar-field="Sort by"]');
+  if (!bookmarkedQueryField || bookmarkedQueryField.value !== 'imageId') throw new Error('expected bookmarked drift query filter to initialize from URL');
+  if (!bookmarkedSeverityField || bookmarkedSeverityField.value !== 'high') throw new Error('expected bookmarked drift severity filter to initialize from URL');
+  if (!bookmarkedSortField || bookmarkedSortField.value !== 'severity') throw new Error('expected bookmarked drift sort filter to initialize from URL');
+  if (bookmarkedRows.length !== 1 || !bookmarkedRows[0].includes('runtimeContext.launchTemplate.imageId')) throw new Error('expected bookmarked drift filters to narrow rendered rows, got ' + bookmarkedRows.join(' || '));
+  if (!bookmarkedText.includes('Drift filters: search “imageId” · severity high · sort severity')) throw new Error('expected bookmarked drift filter summary to reflect URL params');
+  if (bookmarkedRun.window.location.search !== '?page=drift&q=managed&sync=OutOfSync&health=Unhealthy&account=123456789012&deployment=api-managed&driftQuery=imageId&driftSeverity=high&driftSort=severity') throw new Error('expected initial bookmarked drift filters to preserve URL, got ' + bookmarkedRun.window.location.search);
+  if (bookmarkedRun.window.location.hash !== '#drift-field-level') throw new Error('expected bookmarked drift filters to preserve hash, got ' + bookmarkedRun.window.location.hash);
+  const invalidBookmarkRun = await render(managedDetail, '?page=drift&deployment=api-managed&driftSeverity=critical&driftSort=created&driftQuery=imageId');
+  if (invalidBookmarkRun.document.querySelector('[data-toolbar-field="Severity"]').value !== 'all') throw new Error('expected invalid drift severity URL param to fall back to all');
+  if (invalidBookmarkRun.document.querySelector('[data-toolbar-field="Sort by"]').value !== 'field') throw new Error('expected invalid drift sort URL param to fall back to field');
 
   const managedEmptyRun = await render(managedEmptyDetail);
   const managedEmptyText = collectText(managedEmptyRun.document.getElementById('accounts')).join(' | ');
@@ -8626,7 +8654,7 @@ async function render(detail) {
   if (highOnlyText.includes('condition.Healthy')) throw new Error('expected high severity filter to remove low-severity condition row');
   if (!highOnlyText.includes('Showing 2 drift rows out of 7 drift rows after filters.')) throw new Error('expected high severity summary to reflect visible fallback rows');
   if (clearDriftFiltersButton.disabled) throw new Error('expected drift clear-filters control enabled after severity change');
-  if (run.window.location.search !== '?page=drift&deployment=api-prod') throw new Error('expected severity change not to mutate drift route');
+  if (run.window.location.search !== '?page=drift&deployment=api-prod&driftSeverity=high') throw new Error('expected severity change to update bookmarkable drift URL, got ' + run.window.location.search);
 
   const queryField = run.document.querySelector('[data-toolbar-field="Filter drift rows"]');
   if (!queryField) throw new Error('expected drift query filter control');
@@ -8641,6 +8669,7 @@ async function render(detail) {
   if (queryRows[0].includes('artifact')) throw new Error('expected drift query filter not to include artifact row content');
   const queryText = collectText(run.document.getElementById('accounts')).join(' | ');
   if (!queryText.includes('Showing 1 drift row out of 7 drift rows after filters.')) throw new Error('expected query summary to reflect visible fallback rows');
+  if (run.window.location.search !== '?page=drift&deployment=api-prod&driftQuery=targetderegistrationlag') throw new Error('expected query change to update bookmarkable drift URL, got ' + run.window.location.search);
 
   queryField.value = '';
   queryField.dispatch('input', { target: queryField });
@@ -8651,6 +8680,7 @@ async function render(detail) {
   sortField.value = 'severity';
   sortField.dispatch('change', { target: sortField });
   await settle();
+  if (run.window.location.search !== '?page=drift&deployment=api-prod&driftSort=severity') throw new Error('expected sort change to update bookmarkable drift URL, got ' + run.window.location.search);
   const rowItems = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'TR').slice(1);
   const rowTexts = rowItems.map((node) => collectText(node).join(' | '));
   if (!rowTexts.length) throw new Error('expected rendered drift table rows');
@@ -8663,6 +8693,7 @@ async function render(detail) {
   await settle();
   let controlsText = collectText(run.document.getElementById('accounts')).join(' | ');
   if (!controlsText.includes('Drift filters: search “targetderegistrationlag” · severity high · sort severity')) throw new Error('expected drift filter summary to reflect all active controls');
+  if (run.window.location.search !== '?page=drift&deployment=api-prod&driftQuery=targetderegistrationlag&driftSeverity=high&driftSort=severity') throw new Error('expected all active drift controls to update bookmarkable URL, got ' + run.window.location.search);
   clearDriftFiltersButton.dispatch('click');
   await settle();
   if (queryField.value !== '') throw new Error('expected clear drift filters to reset query control');
@@ -8675,7 +8706,7 @@ async function render(detail) {
   const clearedRows = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'TR').slice(1).map((node) => collectText(node).join(' | '));
   if (!clearedRows.length) throw new Error('expected cleared drift filters to restore table rows');
   if (!clearedRows[clearedRows.length - 1].includes('runtimeContext.targetType')) throw new Error('expected clear drift filters to restore default field sort');
-  if (run.window.location.search !== '?page=drift&deployment=api-prod') throw new Error('expected clear drift filters to preserve bookmarkable drift route');
+  if (run.window.location.search !== '?page=drift&deployment=api-prod') throw new Error('expected clear drift filters to remove drift params and preserve bookmarkable drift route');
   queryField.value = 'missing-signal';
   queryField.dispatch('input', { target: queryField });
   await settle();
