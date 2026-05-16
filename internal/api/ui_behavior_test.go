@@ -6224,7 +6224,10 @@ func TestResourceDetailPageLiveInspectionWithNodeHarness(t *testing.T) {
 		"rollout": map[string]any{
 			"execution": []map[string]any{
 				{"name": "payments-api-staging Deployment Group", "resource": "codeDeployDeploymentGroup", "description": "Linear traffic shifting deployment group"},
+				{"name": "arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:listener/app/payments/prod", "resource": "productionListener", "description": "Production listener exact ARN"},
 				{"name": "payments-api-staging-blue", "resource": "blueTaskSetTargetGroup", "description": "Blue task-set target group"},
+				{"name": "payments-api-staging-green", "resource": "greenTaskSetTargetGroup", "description": "Green task-set target group"},
+				{"name": "payments-active", "resource": "activeTargetGroup", "description": "Active target group exact ARN name"},
 			},
 		},
 	})
@@ -6499,6 +6502,14 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!liveDeploymentGroupText.includes('Service · payments-api-staging-service<script>safe</script>')) throw new Error('expected ECS service binding to render as safe text');
   if (!liveDeploymentGroupText.includes('CodeDeploy target groups')) throw new Error('expected target groups section');
   if (!liveDeploymentGroupText.includes('payments-api-staging-green')) throw new Error('expected target group value');
+  const liveDeploymentGroupLinks = collectNodes(liveDeploymentGroupRun.document.getElementById('accounts'), (node) => node.tagName === 'A');
+  const linkedGreenTargetGroupID = 'greenTaskSetTargetGroup::payments-api-staging-green::Green task-set target group';
+  const linkedGreenTargetGroupURL = '/?' + new URLSearchParams({ page: 'resource', deployment: 'payments-api-staging', resourceType: 'greenTaskSetTargetGroup', resourceId: linkedGreenTargetGroupID }).toString();
+  const linkedProductionListenerID = 'productionListener::arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:listener/app/payments/prod::Production listener exact ARN';
+  const linkedProductionListenerURL = '/?' + new URLSearchParams({ page: 'resource', deployment: 'payments-api-staging', resourceType: 'productionListener', resourceId: linkedProductionListenerID }).toString();
+  if (!liveDeploymentGroupLinks.find((node) => node.href === linkedGreenTargetGroupURL && node.textContent === 'Open resource detail' && node.target === '_self' && !node.rel)) throw new Error('expected CodeDeploy target-group row to link to matching normalized resource detail');
+  if (!liveDeploymentGroupLinks.find((node) => node.href === linkedProductionListenerURL && node.textContent === 'Open resource detail' && node.target === '_self' && !node.rel)) throw new Error('expected CodeDeploy listener row to link to matching normalized resource detail');
+  if (liveDeploymentGroupLinks.find((node) => String(node.href || '').includes('test-listener') && node.textContent === 'Open resource detail')) throw new Error('expected unmatched test listener ARN not to render a resource-detail link');
   const liveDeploymentGroupScripts = collectNodes(liveDeploymentGroupRun.document.getElementById('accounts'), (node) => node.tagName === 'SCRIPT');
   if (liveDeploymentGroupScripts.length !== 0) throw new Error('expected deployment-group live details to use safe text rendering');
   const refreshButton = collectNodes(liveDeploymentGroupRun.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && node.textContent === 'Refresh live inspection')[0];
@@ -6684,6 +6695,11 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!liveWeightedListenerRuleText.includes('Order · 1')) throw new Error('expected live listener-rule action order');
   if (!liveWeightedListenerRuleText.includes('targetgroup/payments-active/abc123 · weight 80')) throw new Error('expected live listener-rule active target weight');
   if (!liveWeightedListenerRuleText.includes('targetgroup/payments-candidate/def456 · weight 20')) throw new Error('expected live listener-rule candidate target weight');
+  const liveWeightedListenerRuleLinks = collectNodes(liveWeightedListenerRuleRun.document.getElementById('accounts'), (node) => node.tagName === 'A');
+  const linkedActiveTargetGroupID = 'activeTargetGroup::payments-active::Active target group exact ARN name';
+  const linkedActiveTargetGroupURL = '/?' + new URLSearchParams({ page: 'resource', deployment: 'payments-api-staging', resourceType: 'activeTargetGroup', resourceId: linkedActiveTargetGroupID }).toString();
+  if (!liveWeightedListenerRuleLinks.find((node) => node.href === linkedActiveTargetGroupURL && node.textContent === 'Open resource detail' && node.target === '_self' && !node.rel)) throw new Error('expected weighted listener target-group row to link by ARN targetgroup name');
+  if (liveWeightedListenerRuleLinks.find((node) => String(node.href || '').includes('payments-candidate') && node.textContent === 'Open resource detail')) throw new Error('expected unmatched listener target-group ARN not to render a resource-detail link');
   const liveWeightedListenerRuleScripts = collectNodes(liveWeightedListenerRuleRun.document.getElementById('accounts'), (node) => node.tagName === 'SCRIPT');
   if (liveWeightedListenerRuleScripts.length !== 0) throw new Error('expected listener-rule live details to use safe text rendering');
 

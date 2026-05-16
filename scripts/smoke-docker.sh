@@ -1977,6 +1977,10 @@ for fragment in (
     "const resourceSupportsRecentLogs = (resource) => {",
     "createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open live inspection', '_self')",
     "createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open recent logs', '_self')",
+    "const trafficRoutingIdentifierTokens = (value) => {",
+    "const rolloutResourceDetailURL = (detail, resourceTypes, identifiers) => {",
+    "const createRolloutResourceDetailLink = (detail, resourceTypes, identifiers) => {",
+    "return href ? createNavLink(href, 'Open resource detail', '_self') : null;",
     "Application resources",
 ):
     assert fragment in application_ui, fragment

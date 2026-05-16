@@ -2144,6 +2144,36 @@
         return execution.length ? execution : canonicalRolloutExecutionFallback(detail);
       };
       const normalizedRolloutResources = (detail) => rolloutExecutionResources(detail).map((resource) => normalizeResource(resource));
+      const trafficRoutingIdentifierTokens = (value) => {
+        const raw = String(value || '').trim();
+        if (!raw) return [];
+        const tokens = new Set([raw]);
+        const arnParts = raw.split(':');
+        const resourcePart = arnParts.length >= 6 ? arnParts.slice(5).join(':') : '';
+        if (resourcePart.startsWith('targetgroup/')) {
+          const [, targetGroupName] = resourcePart.split('/');
+          if (targetGroupName) tokens.add(targetGroupName);
+        }
+        return Array.from(tokens).filter(Boolean);
+      };
+      const rolloutResourceDetailURL = (detail, resourceTypes, identifiers) => {
+        const allowedTypes = new Set((Array.isArray(resourceTypes) ? resourceTypes : [resourceTypes]).filter(Boolean));
+        const tokens = new Set((Array.isArray(identifiers) ? identifiers : [identifiers]).flatMap((value) => trafficRoutingIdentifierTokens(value)));
+        if (!allowedTypes.size || !tokens.size) return '';
+        const matches = normalizedRolloutResources(detail).filter((resource) => (
+          allowedTypes.has(resource.type) && (tokens.has(resource.name) || tokens.has(resource.id))
+        ));
+        if (matches.length !== 1) return '';
+        return buildPageURL('resource', {
+          deployment: detail?.name || currentPageState.deployment || '',
+          resourceType: matches[0].type,
+          resourceId: matches[0].id,
+        });
+      };
+      const createRolloutResourceDetailLink = (detail, resourceTypes, identifiers) => {
+        const href = rolloutResourceDetailURL(detail, resourceTypes, identifiers);
+        return href ? createNavLink(href, 'Open resource detail', '_self') : null;
+      };
       const resolveManagedDriftResourceRef = (detail, resourceRef) => {
         if (!resourceRef?.resourceType || !resourceRef?.resourceName) return null;
         return normalizedRolloutResources(detail).find((resource) => (
@@ -5536,7 +5566,7 @@
         );
         return wrapper;
       };
-      const createTrafficRoutingTargetGroupSection = (trafficRouting) => {
+      const createTrafficRoutingTargetGroupSection = (detail, trafficRouting) => {
         const targetGroup = trafficRoutingTargetGroupDetail(trafficRouting);
         if (!targetGroup) return null;
         const section = createElement('section', 'detail-section');
@@ -5556,6 +5586,16 @@
           ['Target health counts', targetHealthCountsText(targetGroup.targetHealthCounts || targetGroup.healthCounts)],
         ].forEach(([label, value]) => metadata.append(createMetric(label, value)));
         section.append(metadata);
+        const targetGroupResourceLink = createRolloutResourceDetailLink(
+          detail,
+          trafficRouting?.kind || ['activeTargetGroup', 'candidateTargetGroup', 'blueTaskSetTargetGroup', 'greenTaskSetTargetGroup'],
+          [targetGroup.targetGroupName, targetGroup.name, targetGroup.targetGroupArn, targetGroup.arn],
+        );
+        if (targetGroupResourceLink) {
+          const handoff = createElement('div', 'detail-history-meta');
+          handoff.append(targetGroupResourceLink);
+          section.append(handoff);
+        }
         const loadBalancerArns = Array.isArray(targetGroup.loadBalancerArns) ? targetGroup.loadBalancerArns : [];
         const loadBalancersSection = createInspectionListSection(
           'Load balancer ARNs',
@@ -5615,7 +5655,7 @@
         section.append(...(targetGroupHealthCueNode ? [targetGroupHealthCueNode] : []), rows);
         return section;
       };
-      const createCodeDeployDeploymentGroupSection = (trafficRouting) => {
+      const createCodeDeployDeploymentGroupSection = (detail, trafficRouting) => {
         const deploymentGroup = trafficRouting?.codeDeployDeploymentGroup || trafficRouting?.deploymentGroup;
         if (!deploymentGroup || typeof deploymentGroup !== 'object') return null;
         const section = createElement('section', 'detail-section');
@@ -5632,6 +5672,15 @@
           ['Test listener ARN', textOrDash(deploymentGroup.testListenerArn)],
         ].forEach(([label, value]) => metadata.append(createMetric(label, value)));
         section.append(metadata);
+        const listenerLinks = [
+          createRolloutResourceDetailLink(detail, 'productionListener', deploymentGroup.productionListenerArn),
+          createRolloutResourceDetailLink(detail, 'testListener', deploymentGroup.testListenerArn),
+        ].filter(Boolean);
+        if (listenerLinks.length) {
+          const listenerHandoffs = createElement('div', 'detail-history-meta');
+          listenerLinks.forEach((link) => listenerHandoffs.append(link));
+          section.append(listenerHandoffs);
+        }
         const ecsServicesSection = createInspectionListSection(
           'CodeDeploy ECS service bindings',
           Array.isArray(deploymentGroup.ecsServices) ? deploymentGroup.ecsServices : [],
@@ -5681,6 +5730,12 @@
           (targetGroupName) => {
             const item = createElement('li');
             item.append(createElement('strong', '', textOrDash(targetGroupName)));
+            const link = createRolloutResourceDetailLink(detail, ['blueTaskSetTargetGroup', 'greenTaskSetTargetGroup', 'activeTargetGroup', 'candidateTargetGroup'], targetGroupName);
+            if (link) {
+              const meta = createElement('div', 'detail-history-meta');
+              meta.append(link);
+              item.append(meta);
+            }
             return item;
           },
           'No target groups are currently reported for this CodeDeploy deployment group.',
@@ -5688,7 +5743,7 @@
         section.append(ecsServicesSection, ...(latestDeploymentSection ? [latestDeploymentSection] : []), targetGroupsSection);
         return section;
       };
-      const createTrafficRoutingListenerRuleSection = (trafficRouting) => {
+      const createTrafficRoutingListenerRuleSection = (detail, trafficRouting) => {
         const listenerRule = trafficRouting?.listenerRule;
         if (!listenerRule || typeof listenerRule !== 'object') return null;
         const section = createElement('section', 'detail-section');
@@ -5731,6 +5786,8 @@
               const label = targetGroup?.targetGroupArn || `Target group ${index + 1}`;
               const weight = Number.isFinite(targetGroup?.weight) ? targetGroup.weight : targetGroup?.weight;
               meta.append(createElement('span', 'detail-condition-meta', `${label} · weight ${textOrDash(weight)}`));
+              const link = createRolloutResourceDetailLink(detail, ['activeTargetGroup', 'candidateTargetGroup', 'blueTaskSetTargetGroup', 'greenTaskSetTargetGroup'], targetGroup?.targetGroupArn || targetGroup?.targetGroupName || targetGroup?.name);
+              if (link) meta.append(link);
             });
             item.append(meta);
             return item;
@@ -5830,7 +5887,8 @@
           containersSection,
         );
       };
-      const renderTrafficRoutingInspection = (section, deploymentName, resource, result) => {
+      const renderTrafficRoutingInspection = (section, detail, resource, result) => {
+        const deploymentName = detail?.name || currentPageState.deployment || '';
         const trafficRouting = result?.trafficRoutingResource;
         const actions = createResourceInspectionActions(section, deploymentName, resource);
         const metadata = createLookupContextGrid(result?.lookupContext, [
@@ -5847,9 +5905,9 @@
           createElement('p', 'detail-section-copy', textOrDash(trafficRouting?.summary)),
         );
         const statusSection = createTrafficRoutingStatusSection(trafficRouting, result);
-        const codeDeployDeploymentGroupSection = createCodeDeployDeploymentGroupSection(trafficRouting);
-        const listenerRuleSection = createTrafficRoutingListenerRuleSection(trafficRouting);
-        const targetGroupSection = createTrafficRoutingTargetGroupSection(trafficRouting);
+        const codeDeployDeploymentGroupSection = createCodeDeployDeploymentGroupSection(detail, trafficRouting);
+        const listenerRuleSection = createTrafficRoutingListenerRuleSection(detail, trafficRouting);
+        const targetGroupSection = createTrafficRoutingTargetGroupSection(detail, trafficRouting);
         section.replaceChildren(
           createDetailSectionHeader('Live inspection', actions),
           createElement('p', 'detail-section-copy', 'Read-only traffic-routing inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
@@ -5899,7 +5957,7 @@
           return;
         }
         if (result?.trafficRoutingResource) {
-          renderTrafficRoutingInspection(section, deploymentName, resource, result);
+          renderTrafficRoutingInspection(section, detail, resource, result);
           return;
         }
         renderResourceInspectionState(section, 'No live inspection details are available for this resource yet.', '', [...createResourceInspectionLookupContextNodes(result?.lookupContext), metadata], [], actions);
