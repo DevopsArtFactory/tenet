@@ -6352,6 +6352,61 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!summaryText.includes('Observer role configured')) throw new Error('expected traffic-routing inspection to label observer role configuration');
   if (!summaryText.includes('False')) throw new Error('expected traffic-routing inspection to show missing observer role configuration');
 
+  let liveDeploymentGroupFetchCount = 0;
+  const liveDeploymentGroupSearch = '?page=resource&deployment=payments-api-staging&resourceType=codeDeployDeploymentGroup&resourceId=' + encodeURIComponent(summaryResourceID);
+  const liveDeploymentGroupRun = await renderWithFetch(liveDeploymentGroupSearch, (url) => {
+    if (url === ecsDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(unsupportedDetailBody) });
+    if (url === summaryLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === summaryInspectionURL) {
+      liveDeploymentGroupFetchCount += 1;
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({
+        available: true,
+        source: 'traffic_routing_aws',
+        lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true },
+        trafficRoutingResource: {
+          kind: 'codeDeployDeploymentGroup',
+          displayName: 'CodeDeploy deployment group',
+          inspectionMode: 'live',
+          summary: 'Linear traffic shifting deployment group',
+          codeDeployDeploymentGroup: {
+            applicationName: 'payments-api-staging-codedeploy-app',
+            deploymentGroupName: 'payments-api-staging Deployment Group',
+            deploymentConfigName: 'CodeDeployDefault.ECSLinear10PercentEvery1Minutes',
+            serviceRoleArn: 'arn:aws:iam::210987654321:role/codedeploy-service-role',
+            deploymentType: 'BLUE_GREEN',
+            deploymentOption: 'WITH_TRAFFIC_CONTROL',
+            productionListenerArn: 'arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:listener/app/payments/prod',
+            testListenerArn: 'arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:listener/app/payments/test',
+            ecsServices: [{ clusterName: 'payments-staging', serviceName: 'payments-api-staging-service<script>safe</script>' }],
+            targetGroups: ['payments-api-staging-blue', 'payments-api-staging-green'],
+          },
+        },
+      }) });
+    }
+    throw new Error('unexpected live deployment-group fetch url: ' + url);
+  });
+  const liveDeploymentGroupText = collectText(liveDeploymentGroupRun.document.getElementById('accounts')).join(' | ');
+  if (!liveDeploymentGroupText.includes('Live AWS inspection')) throw new Error('expected live deployment-group inspection mode');
+  if (!liveDeploymentGroupText.includes('CodeDeploy deployment group status')) throw new Error('expected live deployment-group status section');
+  if (!liveDeploymentGroupText.includes('Application name')) throw new Error('expected application name label');
+  if (!liveDeploymentGroupText.includes('payments-api-staging-codedeploy-app')) throw new Error('expected application name value');
+  if (!liveDeploymentGroupText.includes('Deployment config')) throw new Error('expected deployment config label');
+  if (!liveDeploymentGroupText.includes('CodeDeployDefault.ECSLinear10PercentEvery1Minutes')) throw new Error('expected deployment config value');
+  if (!liveDeploymentGroupText.includes('Deployment style')) throw new Error('expected deployment style label');
+  if (!liveDeploymentGroupText.includes('BLUE_GREEN / WITH_TRAFFIC_CONTROL')) throw new Error('expected deployment style value');
+  if (!liveDeploymentGroupText.includes('CodeDeploy ECS service bindings')) throw new Error('expected ECS bindings section');
+  if (!liveDeploymentGroupText.includes('Service · payments-api-staging-service<script>safe</script>')) throw new Error('expected ECS service binding to render as safe text');
+  if (!liveDeploymentGroupText.includes('CodeDeploy target groups')) throw new Error('expected target groups section');
+  if (!liveDeploymentGroupText.includes('payments-api-staging-green')) throw new Error('expected target group value');
+  const liveDeploymentGroupScripts = collectNodes(liveDeploymentGroupRun.document.getElementById('accounts'), (node) => node.tagName === 'SCRIPT');
+  if (liveDeploymentGroupScripts.length !== 0) throw new Error('expected deployment-group live details to use safe text rendering');
+  const refreshButton = collectNodes(liveDeploymentGroupRun.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && node.textContent === 'Refresh live inspection')[0];
+  if (!refreshButton) throw new Error('expected live deployment-group refresh control');
+  refreshButton.dispatch('click');
+  await settle();
+  if (liveDeploymentGroupRun.window.location.search !== liveDeploymentGroupSearch) throw new Error('expected live deployment-group refresh to preserve bookmarkable URL, got ' + liveDeploymentGroupRun.window.location.search);
+  if (liveDeploymentGroupFetchCount !== 2) throw new Error('expected live deployment-group refresh to re-fetch inspection once, got ' + liveDeploymentGroupFetchCount);
+
   const blueTargetGroupLogsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=blueTaskSetTargetGroup&resourceName=payments-api-staging-blue';
   const blueTargetGroupInspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=blueTaskSetTargetGroup&resourceName=payments-api-staging-blue';
   const blueTargetGroupRun = await renderWithFetch('?page=resource&deployment=payments-api-staging&resourceType=blueTaskSetTargetGroup&resourceId=' + encodeURIComponent(blueTaskSetTargetGroupResourceID), (url) => {

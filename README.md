@@ -191,7 +191,10 @@ live AWS access to keep the drill-down usable: `codeDeployDeploymentGroup`,
 `available=true`, `source=rollout_execution_summary`, and a summary-only
 `trafficRoutingResource` body derived from rollout execution metadata. When AWS
 inspection is configured and succeeds, the same identifiers may instead return
-`source=live` / `inspectionMode=live`; local smoke guards ensure these
+`source=live` / `inspectionMode=live`; the resource-detail Live inspection
+panel renders deployment-group status cues such as CodeDeploy application,
+deployment group, deployment config, deployment style, ECS service bindings, and
+target groups without moving that noise onto the applications overview. Local smoke guards ensure these
 traffic-routing fallback routes do not regress to `aws_unavailable`.
 
 - `POST /v1/plans/deployments/{deploymentName}`
