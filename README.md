@@ -151,9 +151,10 @@ not implemented for this backend slice.
 ## Operator UI Entry Points
 
 Start at `/` for the applications overview. The overview keeps the first page
-compact with application rows, status chips, filters, `Open application`, a
-self-describing `More actions for {deploymentName}` disclosure with an accessible
-secondary-action group label, and an `Applications JSON` handoff to
+compact with application rows, status chips, filters, a count-aware `Clear N filters`
+reset action when filter state is active, `Open application`, a self-describing
+`More actions for {deploymentName}` disclosure with an accessible secondary-action
+group label, and an `Applications JSON` handoff to
 `GET /v1/overview/applications`. Each row keeps a
 compact `Last update` field from the joined runtime summary, falling back to
 `Latest runtime status` when no timestamp is present. The secondary account

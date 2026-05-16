@@ -1208,6 +1208,11 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!summaryText.includes('Application status overview')) throw new Error('expected applications page overview title');
   if (!summaryText.includes('1 of 2')) throw new Error('expected filtered applications summary to show visible and total counts, got ' + summaryText);
   if (!summaryText.includes('Visible applications after filters: 1 of 2. Active filters: search “payments” · sync OutOfSync · health Progressing · account staging-core.')) throw new Error('expected filtered applications summary to explain active filters, got ' + summaryText);
+  const toolbarButtons = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+  const activeClearButton = toolbarButtons.find((node) => node.textContent === 'Clear 4 filters');
+  if (!activeClearButton) throw new Error('expected count-aware applications toolbar clear label, got ' + toolbarText);
+  if (activeClearButton.disabled) throw new Error('expected active applications clear button to stay enabled');
+  if (activeClearButton.getAttribute('aria-label') !== 'Clear active application filters: search “payments”, sync OutOfSync, health Progressing, account staging-core') throw new Error('expected applications clear button aria-label to list active filters, got ' + activeClearButton.getAttribute('aria-label'));
   if (!summaryText.includes('Visible subset last update')) throw new Error('expected filtered applications summary to scope last update to visible subset');
   if (!summaryText.includes('2026-04-16T07:10:00Z')) throw new Error('expected applications page last update value');
   if (!summaryText.includes('Applications read refreshed ·')) throw new Error('expected applications overview to show read freshness, got ' + summaryText);
@@ -1282,6 +1287,11 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   clearEmptyButton.dispatch('click');
   const resetText = collectText(document.getElementById('accounts')).join(' | ');
   if (!resetText.includes('payments-api-staging') || !resetText.includes('payments-api-prod')) throw new Error('expected empty-state Clear filters action to restore all application rows');
+  const resetToolbarButtons = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+  const resetClearButton = resetToolbarButtons.find((node) => node.textContent === 'Clear filters');
+  if (!resetClearButton) throw new Error('expected no-filter applications toolbar clear label after reset');
+  if (!resetClearButton.disabled) throw new Error('expected no-filter applications clear button to be disabled after reset');
+  if (resetClearButton.getAttribute('aria-label') !== 'No active application filters to clear') throw new Error('expected no-filter applications clear button aria-label, got ' + resetClearButton.getAttribute('aria-label'));
   if (!resetText.includes('Latest runtime status')) throw new Error('expected applications row without timestamp to use latest-runtime-status fallback');
   if (window.location.search) throw new Error('expected empty-state Clear filters action to clear bookmarkable filter params');
 })();
