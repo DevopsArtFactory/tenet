@@ -832,6 +832,10 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"const resourceSupportsLiveInspection = (resource) => {",
 		"'codeDeployApplication',\n          'codeDeployDeploymentGroup'",
 		"'trafficShiftPlan',\n          'productionListenerRule',\n          'activeTargetGroup',\n          'candidateTargetGroup'",
+		"const trafficRoutingIdentifierTokens = (value) => {",
+		"const rolloutResourceDetailURL = (detail, resourceTypes, identifiers) => {",
+		"const createRolloutResourceDetailLink = (detail, resourceTypes, identifiers) => {",
+		"return href ? createNavLink(href, 'Open resource detail', '_self') : null;",
 		"const resourceSupportsRecentLogs = (resource) => {",
 		"createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open live inspection', '_self')",
 		"createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open recent logs', '_self')",
@@ -2428,13 +2432,13 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"const trafficRoutingTargetGroupDetail = (trafficRouting) => {",
 		"trafficRouting.targetGroup || trafficRouting.targetGroupInspection || trafficRouting.loadBalancerTargetGroup",
 		"const targetHealthCountsText = (counts) => {",
-		"const createTrafficRoutingTargetGroupSection = (trafficRouting) => {",
+		"const createTrafficRoutingTargetGroupSection = (detail, trafficRouting) => {",
 		"Target group live details",
 		"Target group name",
 		"Target health counts",
 		"Registered target health",
 		"const listenerRuleArrayText = (values) =>",
-		"const createCodeDeployDeploymentGroupSection = (trafficRouting) => {",
+		"const createCodeDeployDeploymentGroupSection = (detail, trafficRouting) => {",
 		"CodeDeploy deployment group status",
 		"Bounded live deployment-group evidence for the CodeDeploy traffic-routing resource selected in this drill-down.",
 		"deploymentGroup.latestDeployment || deploymentGroup.latestCodeDeployDeployment",
@@ -2452,7 +2456,7 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"CodeDeploy ECS service bindings",
 		"Latest CodeDeploy deployment",
 		"CodeDeploy target groups",
-		"const createTrafficRoutingListenerRuleSection = (trafficRouting) => {",
+		"const createTrafficRoutingListenerRuleSection = (detail, trafficRouting) => {",
 		"Listener rule live details",
 		"Rule ARN",
 		"Default rule",
@@ -2460,7 +2464,7 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"Listener rule actions",
 		"weight ${textOrDash(weight)}",
 		"const renderECSTaskInspection = (section, deploymentName, resource, result) => {",
-		"const renderTrafficRoutingInspection = (section, deploymentName, resource, result) => {",
+		"const renderTrafficRoutingInspection = (section, detail, resource, result) => {",
 		"Read-only traffic-routing inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.",
 		"Traffic-routing status",
 		"['Resource', trafficRoutingDisplayName(trafficRouting)]",
@@ -3251,6 +3255,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open recent logs', '_self')\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page recent logs handoff contract")
 	}
+	if !strings.Contains(text, "assert \"const rolloutResourceDetailURL = (detail, resourceTypes, identifiers) => {\" in application_ui, application_ui") || !strings.Contains(text, "assert \"return href ? createNavLink(href, 'Open resource detail', '_self') : null;\" in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert traffic-routing resource-detail handoff contract")
+	}
 	if !strings.Contains(text, "assert 'Open live inspection' in application_ui, application_ui") || !strings.Contains(text, "assert 'Open recent logs' in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page evidence handoff copy")
 	}
@@ -4038,6 +4045,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"bookmarkable CodeDeploy application, `blueTaskSetTargetGroup`, and `productionListenerRule` resource pages and the local-friendly traffic-routing inspection fallback",
 			"CodeDeploy deployment-group status cues such as CodeDeploy application",
 			"without moving that noise onto the applications overview",
+			"When live target-group/listener rows match exactly one normalized rollout resource, they add `_self` `Open resource detail` handoffs back into the bookmarkable resource drill-down",
 			"`aws_unavailable` / `no_log_source` unavailable payloads as expected local-runtime outcomes, including route-stable weighted target-group resources that have no independent recent-log stream",
 			"The same raw-shell checks separately lock the ECS service `tasksScope` renderer and `Task sample scope` copy",
 			"without requiring live AWS task inventory in local or compose runs",
@@ -4082,6 +4090,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"bookmarkable `/?page=resource&deployment=payments-api-staging&resourceType=blueTaskSetTargetGroup&resourceId=blueTaskSetTargetGroup::payments-api-staging-blue::Blue task set target group CodeDeploy treats as the live ECS traffic destination` page",
 			"bookmarkable `/?page=resource&deployment=payments-api-prod&resourceType=productionListenerRule&resourceId=productionListenerRule::payments-api-prod-prod-listener::Production listener rule operators inspect while Tenet updates weighted forwarding during rollout` page",
 			"summary-only traffic-routing fallbacks and explicit unavailable reasons",
+			"live target-group and listener rows add `_self` `Open resource detail` handoffs only when their identifiers resolve to exactly one normalized `rolloutExecutionResources()` resource",
 		},
 		"../../docs/features/overview-dashboard.md": {
 			"diagnostic identity header provenance (`identityProvenance.idSource` / `nameSource` / `emailSource`)",

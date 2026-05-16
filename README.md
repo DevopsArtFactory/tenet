@@ -203,10 +203,14 @@ includes `trafficRoutingResource.codeDeployDeploymentGroup.latestDeployment` or
 `latestCodeDeployDeployment`, that same resource-detail panel also shows a
 scannable latest-deployment status pill, an operator next-action cue, and the
 deployment id/status/create time/complete time/status message without moving
-that noise onto the applications overview. Local no-AWS summary fallback stays
+that noise onto the applications overview. When live target-group/listener rows
+match exactly one normalized rollout resource, they add `_self` `Open resource
+detail` handoffs back into the bookmarkable resource drill-down; unmatched or
+incomplete identifiers remain plain text so operators never get broken self-
+links. Local no-AWS summary fallback stays
 explicitly summary-only and does not invent latest CodeDeploy deployment status
-or target-group health counts. Local smoke guards ensure these traffic-routing
-fallback routes do not regress to `aws_unavailable`.
+or target-group health counts. Local smoke guards ensure traffic-routing fallback
+routes do not regress to `aws_unavailable`.
 
 - `POST /v1/plans/deployments/{deploymentName}`
 - `POST /v1/applies/plans/{planId}` (`409 Conflict` means the reviewed plan

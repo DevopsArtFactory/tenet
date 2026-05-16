@@ -2020,6 +2020,10 @@ assert "'codeDeployApplication',\n          'codeDeployDeploymentGroup'" in appl
 assert "'trafficShiftPlan',\n          'productionListenerRule',\n          'activeTargetGroup',\n          'candidateTargetGroup'" in application_ui, application_ui
 assert "createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open live inspection', '_self')" in application_ui, application_ui
 assert "createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open recent logs', '_self')" in application_ui, application_ui
+assert "const trafficRoutingIdentifierTokens = (value) => {" in application_ui, application_ui
+assert "const rolloutResourceDetailURL = (detail, resourceTypes, identifiers) => {" in application_ui, application_ui
+assert "const createRolloutResourceDetailLink = (detail, resourceTypes, identifiers) => {" in application_ui, application_ui
+assert "return href ? createNavLink(href, 'Open resource detail', '_self') : null;" in application_ui, application_ui
 assert 'Open live inspection' in application_ui, application_ui
 assert 'Open recent logs' in application_ui, application_ui
 assert 'Application resources' in application_ui, application_ui
