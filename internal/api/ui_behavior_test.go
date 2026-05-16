@@ -6377,6 +6377,13 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
             deploymentOption: 'WITH_TRAFFIC_CONTROL',
             productionListenerArn: 'arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:listener/app/payments/prod',
             testListenerArn: 'arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:listener/app/payments/test',
+            latestDeployment: {
+              deploymentId: 'd-LATEST<script>safe</script>',
+              status: 'Succeeded',
+              createTime: '2026-04-18T09:15:00Z',
+              endTime: '2026-04-18T09:18:00Z',
+              source: 'last_attempted',
+            },
             ecsServices: [{ clusterName: 'payments-staging', serviceName: 'payments-api-staging-service<script>safe</script>' }],
             targetGroups: ['payments-api-staging-blue', 'payments-api-staging-green'],
           },
@@ -6394,6 +6401,11 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!liveDeploymentGroupText.includes('CodeDeployDefault.ECSLinear10PercentEvery1Minutes')) throw new Error('expected deployment config value');
   if (!liveDeploymentGroupText.includes('Deployment style')) throw new Error('expected deployment style label');
   if (!liveDeploymentGroupText.includes('BLUE_GREEN / WITH_TRAFFIC_CONTROL')) throw new Error('expected deployment style value');
+  if (!liveDeploymentGroupText.includes('Latest CodeDeploy deployment')) throw new Error('expected latest CodeDeploy deployment section');
+  if (!liveDeploymentGroupText.includes('Deployment ID')) throw new Error('expected latest deployment id label');
+  if (!liveDeploymentGroupText.includes('d-LATEST<script>safe</script>')) throw new Error('expected latest deployment id to render as safe text');
+  if (!liveDeploymentGroupText.includes('Succeeded')) throw new Error('expected latest deployment status');
+  if (!liveDeploymentGroupText.includes('2026-04-18T09:18:00Z')) throw new Error('expected latest deployment end time');
   if (!liveDeploymentGroupText.includes('CodeDeploy ECS service bindings')) throw new Error('expected ECS bindings section');
   if (!liveDeploymentGroupText.includes('Service · payments-api-staging-service<script>safe</script>')) throw new Error('expected ECS service binding to render as safe text');
   if (!liveDeploymentGroupText.includes('CodeDeploy target groups')) throw new Error('expected target groups section');

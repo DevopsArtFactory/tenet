@@ -3,6 +3,7 @@ package resourceinspection
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"strconv"
@@ -708,12 +709,19 @@ func TestServiceInspect(t *testing.T) {
 						InspectionMode: "live",
 						Summary:        req.ResourceDescription,
 						CodeDeployDeploymentGroup: &CodeDeployDeploymentGroupInspection{
-							ApplicationName:       "payments-api-prod-codedeploy-app",
-							DeploymentGroupName:   "payments-api-prod-codedeploy-group",
-							DeploymentConfigName:  "CodeDeployDefault.ECSLinear10PercentEvery1Minutes",
-							ServiceRoleARN:        "arn:aws:iam::123456789012:role/TenetCodeDeployRole",
-							DeploymentType:        "BLUE_GREEN",
-							DeploymentOption:      "WITH_TRAFFIC_CONTROL",
+							ApplicationName:      "payments-api-prod-codedeploy-app",
+							DeploymentGroupName:  "payments-api-prod-codedeploy-group",
+							DeploymentConfigName: "CodeDeployDefault.ECSLinear10PercentEvery1Minutes",
+							ServiceRoleARN:       "arn:aws:iam::123456789012:role/TenetCodeDeployRole",
+							DeploymentType:       "BLUE_GREEN",
+							DeploymentOption:     "WITH_TRAFFIC_CONTROL",
+							LatestDeployment: &CodeDeployDeploymentSummary{
+								DeploymentID: "d-NEWEST",
+								Status:       "Succeeded",
+								CreateTime:   "2026-04-18T09:15:00Z",
+								EndTime:      "2026-04-18T09:18:00Z",
+								Source:       "last_attempted",
+							},
 							ECSServices:           []CodeDeployECSServiceBinding{{ClusterName: "payments-prod", ServiceName: "payments-api-prod-service"}},
 							TargetGroups:          []string{"payments-api-prod-blue", "payments-api-prod-green"},
 							ProductionListenerARN: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:listener/app/payments/abc123/prod456",
@@ -1175,6 +1183,78 @@ func TestServiceInspect(t *testing.T) {
 		}
 		if result.UnavailableReason != "cross_account_not_configured" || result.Available {
 			t.Fatalf("unexpected cross-account unavailable payload: %+v", result)
+		}
+	})
+
+	t.Run("traffic routing deployment group maps latest CodeDeploy deployment from live AWS payload", func(t *testing.T) {
+		var group codeDeployDeploymentGroupInfoPayload
+		raw := []byte(`{
+			"applicationName": "payments-api-prod-codedeploy-app",
+			"deploymentGroupName": "payments-api-prod-codedeploy-group",
+			"deploymentConfigName": "CodeDeployDefault.ECSLinear10PercentEvery1Minutes",
+			"serviceRoleArn": "arn:aws:iam::123456789012:role/TenetCodeDeployRole",
+			"deploymentStyle": {"deploymentType": "BLUE_GREEN", "deploymentOption": "WITH_TRAFFIC_CONTROL"},
+			"ecsServices": [{"clusterName": "payments-prod", "serviceName": "payments-api-prod-service"}],
+			"loadBalancerInfo": {"targetGroupPairInfoList": [{"targetGroups": [{"name": "payments-api-prod-green"}, {"name": "payments-api-prod-blue"}]}]},
+			"lastSuccessfulDeployment": {
+				"deploymentId": "d-SUCCESS",
+				"status": "Succeeded",
+				"createTime": 1776502800,
+				"endTime": 1776502920
+			},
+			"lastAttemptedDeployment": {
+				"deploymentId": "d-LATEST",
+				"status": "Failed",
+				"createTime": "2026-04-18T09:15:00Z",
+				"endTime": "2026-04-18T09:18:00Z"
+			}
+		}`)
+		if err := json.Unmarshal(raw, &group); err != nil {
+			t.Fatalf("failed to decode deployment group fixture: %v", err)
+		}
+
+		inspection := trafficRoutingInspectionFromDeploymentGroup(TrafficRoutingRequest{
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "codeDeployDeploymentGroup",
+			ResourceDescription: "CodeDeploy deployment group Tenet targets for ECS rollout",
+		}, group)
+		deploymentGroup := inspection.CodeDeployDeploymentGroup
+		if deploymentGroup == nil {
+			t.Fatalf("expected deployment-group inspection body, got %+v", inspection)
+		}
+		if deploymentGroup.LatestDeployment == nil {
+			t.Fatalf("expected latest deployment summary, got %+v", deploymentGroup)
+		}
+		want := CodeDeployDeploymentSummary{
+			DeploymentID: "d-LATEST",
+			Status:       "Failed",
+			CreateTime:   "2026-04-18T09:15:00Z",
+			EndTime:      "2026-04-18T09:18:00Z",
+			Source:       "last_attempted",
+		}
+		if got := *deploymentGroup.LatestDeployment; got != want {
+			t.Fatalf("unexpected latest deployment summary: got %+v want %+v", got, want)
+		}
+		if got := deploymentGroup.TargetGroups; !reflect.DeepEqual(got, []string{"payments-api-prod-blue", "payments-api-prod-green"}) {
+			t.Fatalf("expected sorted target groups to remain stable, got %+v", got)
+		}
+	})
+
+	t.Run("traffic routing deployment group omits latest deployment when CodeDeploy history is empty", func(t *testing.T) {
+		inspection := trafficRoutingInspectionFromDeploymentGroup(TrafficRoutingRequest{
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "codeDeployDeploymentGroup",
+			ResourceDescription: "CodeDeploy deployment group Tenet targets for ECS rollout",
+		}, codeDeployDeploymentGroupInfoPayload{
+			ApplicationName:     "payments-api-prod-codedeploy-app",
+			DeploymentGroupName: "payments-api-prod-codedeploy-group",
+		})
+		deploymentGroup := inspection.CodeDeployDeploymentGroup
+		if deploymentGroup == nil {
+			t.Fatalf("expected deployment-group inspection body, got %+v", inspection)
+		}
+		if deploymentGroup.LatestDeployment != nil {
+			t.Fatalf("expected empty CodeDeploy history to omit latest deployment, got %+v", deploymentGroup.LatestDeployment)
 		}
 	})
 
