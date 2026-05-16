@@ -185,6 +185,15 @@ Primary operator APIs:
 Resource drill-down Recent logs and Live inspection panels label returned
 `lookupContext` as `Provider lookup context` so operators can confirm the
 region/account/observer-role path before troubleshooting unavailable AWS reads.
+For CodeDeploy ECS traffic-routing resources, local and Compose runs do not need
+live AWS access to keep the drill-down usable: `codeDeployDeploymentGroup`,
+`productionListener`, and `testListener` can return
+`available=true`, `source=rollout_execution_summary`, and a summary-only
+`trafficRoutingResource` body derived from rollout execution metadata. When AWS
+inspection is configured and succeeds, the same identifiers may instead return
+`source=live` / `inspectionMode=live`; local smoke guards ensure these
+traffic-routing fallback routes do not regress to `aws_unavailable`.
+
 - `POST /v1/plans/deployments/{deploymentName}`
 - `POST /v1/applies/plans/{planId}` (`409 Conflict` means the reviewed plan
   preview is stale and must be recreated before applying)
