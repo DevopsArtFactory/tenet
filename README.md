@@ -194,7 +194,8 @@ inspection is configured and succeeds, the same identifiers may instead return
 `source=live` / `inspectionMode=live`; the resource-detail Live inspection
 panel renders a compact `Traffic-routing status` block with operator-facing
 `Resource`, `Inspection mode`, `Source`, `Summary`, and — when live target-group
-health counts are present — `Target group health` rows before the detailed
+health counts are present — a target-health status pill, next-action cue, and
+raw `Target group health` rows before the detailed
 deployment-group status cues such as CodeDeploy application, deployment group,
 deployment config, deployment style, ECS service bindings, and the latest
 CodeDeploy deployment summary and target groups. When the live payload

@@ -30,6 +30,27 @@ func TestNodeHarnessFailureMessageIncludesRuntimeAndScriptPath(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUITrafficRoutingTargetHealthCueCopy(t *testing.T) {
+	script := embeddedUIScriptForTest(t)
+	for _, want := range []string{
+		"const targetGroupHealthCue = (counts) => {",
+		"if (unhealthy > 0) {",
+		"label: 'Unhealthy targets'",
+		"At least one target is unhealthy. Inspect registered target health, deployment events, and service logs before shifting more traffic.",
+		"if (initial > 0 || draining > 0) {",
+		"label: 'Targets transitioning'",
+		"if (healthy > 0) {",
+		"label: 'Healthy targets'",
+		"All reported targets are healthy. Continue rollout checks with deployment status and recent logs.",
+		"createElement('span', `pill ${cue.className}`, `Target health · ${cue.label}`)",
+		"statusRows.push(['Target group health', targetGroupHealth]);",
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("expected embedded UI target-health cue contract %q", want)
+		}
+	}
+}
+
 func nodeHarnessFailureMessage(nodeVersion, scriptPath, errText, output string) string {
 	parts := []string{
 		"node harness failed: " + strings.TrimSpace(errText),
@@ -6294,6 +6315,7 @@ async function settle() { await Promise.resolve(); await new Promise((resolve) =
 const ecsResourceID = 'ecsService::payments-api-staging-service::Primary ECS service';
 const summaryResourceID = 'codeDeployDeploymentGroup::payments-api-staging Deployment Group::Linear traffic shifting deployment group';
 const blueTaskSetTargetGroupResourceID = 'blueTaskSetTargetGroup::payments-api-staging-blue::Blue task-set target group';
+const greenTaskSetTargetGroupResourceID = 'greenTaskSetTargetGroup::payments-api-staging-green::Green task-set target group';
 const weightedListenerRuleResourceID = 'productionListenerRule::payments-api-staging-prod-listener::Weighted listener rule';
 const asgResourceID = 'candidateAutoScalingGroup::payments-api-prod-candidate::Candidate capacity';
 const genericASGResourceID = 'autoScalingGroup::payments-api-prod-generic::Generic ASG resource should not expose recent-log handoffs';
@@ -6555,6 +6577,8 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   });
   const blueTargetGroupText = collectText(blueTargetGroupRun.document.getElementById('accounts')).join(' | ');
   if (!blueTargetGroupText.includes('Live AWS inspection')) throw new Error('expected live target-group inspection mode to render live copy');
+  if (!blueTargetGroupText.includes('Target health · Unhealthy targets')) throw new Error('expected unhealthy target-group status pill');
+  if (!blueTargetGroupText.includes('At least one target is unhealthy. Inspect registered target health, deployment events, and service logs before shifting more traffic.')) throw new Error('expected unhealthy target-group operator cue');
   if (!blueTargetGroupText.includes('Target group health · healthy 2 · unhealthy 1 · initial 1')) throw new Error('expected compact traffic-routing status to summarize target-group health counts');
   if (!blueTargetGroupText.includes('Target group live details')) throw new Error('expected live target-group details section');
   if (!blueTargetGroupText.includes('Target group name')) throw new Error('expected live target-group name label');
@@ -6570,6 +6594,33 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!blueTargetGroupText.includes('<script>not html</script> remains text')) throw new Error('expected target description to remain literal text');
   const blueTargetGroupScripts = collectNodes(blueTargetGroupRun.document.getElementById('accounts'), (node) => node.tagName === 'SCRIPT');
   if (blueTargetGroupScripts.length !== 0) throw new Error('expected target-group live details to use safe text rendering');
+
+  const greenTargetGroupLogsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=greenTaskSetTargetGroup&resourceName=payments-api-staging-green';
+  const greenTargetGroupInspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=greenTaskSetTargetGroup&resourceName=payments-api-staging-green';
+  const greenTargetGroupRun = await renderWithFetch('?page=resource&deployment=payments-api-staging&resourceType=greenTaskSetTargetGroup&resourceId=' + encodeURIComponent(greenTaskSetTargetGroupResourceID), (url) => {
+    if (url === ecsDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(unsupportedDetailBody) });
+    if (url === greenTargetGroupLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === greenTargetGroupInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({
+      available: true,
+      source: 'traffic_routing_aws',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true },
+      trafficRoutingResource: {
+        kind: 'greenTaskSetTargetGroup',
+        displayName: 'Green task-set target group',
+        inspectionMode: 'live',
+        summary: 'Green task-set target group is ready for promotion.',
+        targetGroup: {
+          targetGroupName: 'payments-api-staging-green',
+          targetHealthCounts: { healthy: 3, unhealthy: 0, initial: 0, draining: 0, unused: 0, unavailable: 0 },
+        },
+      },
+    }) });
+    throw new Error('unexpected green target-group fetch url: ' + url);
+  });
+  const greenTargetGroupText = collectText(greenTargetGroupRun.document.getElementById('accounts')).join(' | ');
+  if (!greenTargetGroupText.includes('Target health · Healthy targets')) throw new Error('expected healthy target-group status pill');
+  if (!greenTargetGroupText.includes('All reported targets are healthy. Continue rollout checks with deployment status and recent logs.')) throw new Error('expected healthy target-group operator cue');
+  if (!greenTargetGroupText.includes('Target group health · healthy 3 · unhealthy 0 · initial 0 · draining 0 · unused 0 · unavailable 0')) throw new Error('expected healthy target-group raw counts to stay visible');
 
   const weightedListenerRuleLogsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=productionListenerRule&resourceName=payments-api-staging-prod-listener';
   const weightedListenerRuleInspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=productionListenerRule&resourceName=payments-api-staging-prod-listener';

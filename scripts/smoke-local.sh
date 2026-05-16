@@ -1720,6 +1720,9 @@ assert "['Resource', trafficRoutingDisplayName(trafficRouting)]" in ui, ui
 assert "['Inspection mode', trafficRoutingInspectionModeText(trafficRouting?.inspectionMode)]" in ui, ui
 assert "['Source', metricValue(result?.source)]" in ui, ui
 assert "['Summary', textOrDash(trafficRouting?.summary)]" in ui, ui
+assert 'Target health · ${cue.label}' in ui, ui
+assert 'At least one target is unhealthy. Inspect registered target health, deployment events, and service logs before shifting more traffic.' in ui, ui
+assert 'All reported targets are healthy. Continue rollout checks with deployment status and recent logs.' in ui, ui
 assert "statusRows.push(['Target group health', targetGroupHealth]);" in ui, ui
 assert 'Latest CodeDeploy deployment' in ui, ui
 assert 'Latest deployment · ${textOrDash(latestStatus)}' in ui, ui
