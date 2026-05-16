@@ -149,6 +149,8 @@
       .detail-step-meta-cancelled { color: var(--muted); }
       .detail-execution-meta, .detail-history-meta { display:grid; gap: 4px; margin-top: 6px; }
       .detail-section-copy { margin: 0 0 12px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+      .detail-callout { display:grid; gap: 8px; margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.035); }
+      .detail-callout .detail-section-copy { margin: 0; }
       .drift-table-wrap { overflow-x: auto; }
       .drift-table { width: 100%; border-collapse: collapse; }
       .drift-table th, .drift-table td { text-align: left; padding: 12px 10px; border-top: 1px solid rgba(255,255,255,.06); vertical-align: top; font-size: 14px; }
@@ -5481,6 +5483,59 @@
           .map(([key, label]) => `${label} ${counts[key]}`);
         return parts.length ? parts.join(' · ') : '—';
       };
+      const targetHealthCountValue = (counts, key) => Number.isFinite(counts?.[key]) ? counts[key] : 0;
+      const targetGroupHealthCue = (counts) => {
+        if (!counts || typeof counts !== 'object' || targetHealthCountsText(counts) === '—') return null;
+        const unhealthy = targetHealthCountValue(counts, 'unhealthy');
+        const initial = targetHealthCountValue(counts, 'initial');
+        const draining = targetHealthCountValue(counts, 'draining');
+        const unused = targetHealthCountValue(counts, 'unused');
+        const unavailable = targetHealthCountValue(counts, 'unavailable');
+        const healthy = targetHealthCountValue(counts, 'healthy');
+        if (unhealthy > 0) {
+          return {
+            className: 'error',
+            label: 'Unhealthy targets',
+            cue: 'At least one target is unhealthy. Inspect registered target health, deployment events, and service logs before shifting more traffic.',
+          };
+        }
+        if (initial > 0 || draining > 0) {
+          return {
+            className: 'progress',
+            label: 'Targets transitioning',
+            cue: 'Targets are still registering or draining. Wait for target health to settle before treating traffic routing as stable.',
+          };
+        }
+        if (unused > 0 || unavailable > 0) {
+          return {
+            className: 'paused',
+            label: 'Targets unavailable',
+            cue: 'Some targets are unused or unavailable. Confirm listener routing and target registration before relying on this group.',
+          };
+        }
+        if (healthy > 0) {
+          return {
+            className: 'synced',
+            label: 'Healthy targets',
+            cue: 'All reported targets are healthy. Continue rollout checks with deployment status and recent logs.',
+          };
+        }
+        return {
+          className: 'mode',
+          label: 'No reported targets',
+          cue: 'No target health counts are currently reported. Confirm registration before shifting traffic.',
+        };
+      };
+      const createTargetGroupHealthCue = (counts) => {
+        const cue = targetGroupHealthCue(counts);
+        if (!cue) return null;
+        const wrapper = createElement('div', 'detail-callout');
+        wrapper.append(
+          createElement('span', `pill ${cue.className}`, `Target health · ${cue.label}`),
+          createElement('p', 'detail-section-copy', cue.cue),
+        );
+        return wrapper;
+      };
       const createTrafficRoutingTargetGroupSection = (trafficRouting) => {
         const targetGroup = trafficRoutingTargetGroupDetail(trafficRouting);
         if (!targetGroup) return null;
@@ -5548,14 +5603,16 @@
           ['Summary', textOrDash(trafficRouting?.summary)],
         ];
         const targetGroup = trafficRoutingTargetGroupDetail(trafficRouting);
-        const targetGroupHealth = targetHealthCountsText(targetGroup?.targetHealthCounts || targetGroup?.healthCounts);
+        const targetGroupHealthCounts = targetGroup?.targetHealthCounts || targetGroup?.healthCounts;
+        const targetGroupHealthCueNode = createTargetGroupHealthCue(targetGroupHealthCounts);
+        const targetGroupHealth = targetHealthCountsText(targetGroupHealthCounts);
         if (targetGroupHealth && targetGroupHealth !== '—') {
           statusRows.push(['Target group health', targetGroupHealth]);
         }
         statusRows.forEach(([label, value]) => {
           rows.append(createElement('span', 'detail-condition-meta', `${label} · ${value}`));
         });
-        section.append(rows);
+        section.append(...(targetGroupHealthCueNode ? [targetGroupHealthCueNode] : []), rows);
         return section;
       };
       const createCodeDeployDeploymentGroupSection = (trafficRouting) => {
