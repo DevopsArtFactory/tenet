@@ -7832,6 +7832,75 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 	})
 
+	t.Run("encodes ASG scaling activities in raw JSON payload", func(t *testing.T) {
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(context.Context, string) (catalog.DeploymentOverviewDetail, error) {
+				return catalog.DeploymentOverviewDetail{Name: "api-prod"}, nil
+			},
+			OverviewDeploymentResourceInspection: func(_ context.Context, name, resourceType, resourceName string, _ int) (resourceinspection.Result, error) {
+				progress := int32(60)
+				scalingActivities := []resourceinspection.AutoScalingActivitySummary{{
+					ActivityID:    "activity-123",
+					StatusCode:    "InProgress",
+					Progress:      &progress,
+					StartTime:     "2026-05-16T06:20:00Z",
+					Cause:         "desired capacity changed",
+					Description:   "Launching EC2 instance: i-0abc123def4567890.",
+					StatusMessage: "Waiting for instance warmup.",
+				}}
+				return resourceinspection.Result{
+					DeploymentName: name,
+					ResourceType:   resourceType,
+					ResourceName:   resourceName,
+					Available:      true,
+					Source:         resourceinspection.SourceAutoScalingGroup,
+					AutoScalingGroup: &resourceinspection.AutoScalingInspection{
+						AutoScalingGroupName: resourceName,
+						Instances:            []resourceinspection.AutoScalingGroupInstanceSummary{},
+						ScalingActivities:    &scalingActivities,
+					},
+				}, nil
+			},
+		})
+
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=api-prod-candidate", nil))
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected ASG resource inspection to return 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+
+		var raw map[string]any
+		if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+			t.Fatalf("decode ASG resource inspection payload: %v", err)
+		}
+		autoScalingGroup, ok := raw["autoScalingGroup"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected autoScalingGroup object in raw payload, got %#v", raw["autoScalingGroup"])
+		}
+		activities, ok := autoScalingGroup["scalingActivities"].([]any)
+		if !ok || len(activities) != 1 {
+			t.Fatalf("expected one scaling activity in raw payload, got %#v", autoScalingGroup["scalingActivities"])
+		}
+		activity, ok := activities[0].(map[string]any)
+		if !ok {
+			t.Fatalf("expected scaling activity object, got %#v", activities[0])
+		}
+		for key, want := range map[string]any{
+			"activityId":    "activity-123",
+			"statusCode":    "InProgress",
+			"progress":      float64(60),
+			"startTime":     "2026-05-16T06:20:00Z",
+			"cause":         "desired capacity changed",
+			"description":   "Launching EC2 instance: i-0abc123def4567890.",
+			"statusMessage": "Waiting for instance warmup.",
+		} {
+			if !reflect.DeepEqual(activity[key], want) {
+				t.Fatalf("expected scaling activity %q=%#v, got %#v in %#v", key, want, activity[key], activity)
+			}
+		}
+	})
+
 	t.Run("passes selected ASG inspection instanceId to provider context", func(t *testing.T) {
 		var gotInstanceID string
 		router := NewRouter(Options{
