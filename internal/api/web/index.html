@@ -5536,6 +5536,22 @@
         return section;
       };
       const listenerRuleArrayText = (values) => Array.isArray(values) && values.length ? values.map((value) => textOrDash(value)).join(', ') : '—';
+      const trafficRoutingDisplayName = (trafficRouting) => textOrDash(trafficRouting?.displayName || trafficRouting?.kind);
+      const createTrafficRoutingStatusSection = (trafficRouting, result) => {
+        const section = createElement('section', 'detail-section');
+        section.append(createElement('h4', '', 'Traffic-routing status'));
+        const rows = createElement('div', 'detail-history-meta');
+        [
+          ['Resource', trafficRoutingDisplayName(trafficRouting)],
+          ['Inspection mode', trafficRoutingInspectionModeText(trafficRouting?.inspectionMode)],
+          ['Source', metricValue(result?.source)],
+          ['Summary', textOrDash(trafficRouting?.summary)],
+        ].forEach(([label, value]) => {
+          rows.append(createElement('span', 'detail-condition-meta', `${label} · ${value}`));
+        });
+        section.append(rows);
+        return section;
+      };
       const createCodeDeployDeploymentGroupSection = (trafficRouting) => {
         const deploymentGroup = trafficRouting?.codeDeployDeploymentGroup || trafficRouting?.deploymentGroup;
         if (!deploymentGroup || typeof deploymentGroup !== 'object') return null;
@@ -5767,6 +5783,7 @@
           createElement('h4', '', 'Rollout summary'),
           createElement('p', 'detail-section-copy', textOrDash(trafficRouting?.summary)),
         );
+        const statusSection = createTrafficRoutingStatusSection(trafficRouting, result);
         const codeDeployDeploymentGroupSection = createCodeDeployDeploymentGroupSection(trafficRouting);
         const listenerRuleSection = createTrafficRoutingListenerRuleSection(trafficRouting);
         const targetGroupSection = createTrafficRoutingTargetGroupSection(trafficRouting);
@@ -5775,6 +5792,7 @@
           createElement('p', 'detail-section-copy', 'Read-only traffic-routing inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
           ...createResourceInspectionLookupContextNodes(result?.lookupContext),
           metadata,
+          statusSection,
           ...(codeDeployDeploymentGroupSection ? [codeDeployDeploymentGroupSection] : []),
           ...(listenerRuleSection ? [listenerRuleSection] : []),
           ...(targetGroupSection ? [targetGroupSection] : []),

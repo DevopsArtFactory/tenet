@@ -1715,6 +1715,11 @@ assert 'createResourceInspectionLookupContextNodes(result?.lookupContext)' in ui
 assert 'No live inspection details are available for this resource yet.' in ui, ui
 assert 'CodeDeploy deployment group status' in ui, ui
 assert 'Bounded live deployment-group evidence for the CodeDeploy traffic-routing resource selected in this drill-down.' in ui, ui
+assert 'Traffic-routing status' in ui, ui
+assert "['Resource', trafficRoutingDisplayName(trafficRouting)]" in ui, ui
+assert "['Inspection mode', trafficRoutingInspectionModeText(trafficRouting?.inspectionMode)]" in ui, ui
+assert "['Source', metricValue(result?.source)]" in ui, ui
+assert "['Summary', textOrDash(trafficRouting?.summary)]" in ui, ui
 assert 'Latest CodeDeploy deployment' in ui, ui
 assert 'Latest deployment · ${textOrDash(latestStatus)}' in ui, ui
 assert 'Traffic shift completed. Confirm service health and close out the rollout handoff.' in ui, ui

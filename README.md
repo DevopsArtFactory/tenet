@@ -192,9 +192,11 @@ live AWS access to keep the drill-down usable: `codeDeployDeploymentGroup`,
 `trafficRoutingResource` body derived from rollout execution metadata. When AWS
 inspection is configured and succeeds, the same identifiers may instead return
 `source=live` / `inspectionMode=live`; the resource-detail Live inspection
-panel renders deployment-group status cues such as CodeDeploy application,
-deployment group, deployment config, deployment style, ECS service bindings, and
-the latest CodeDeploy deployment summary and target groups. When the live payload
+panel renders a compact `Traffic-routing status` block with operator-facing
+`Resource`, `Inspection mode`, `Source`, and `Summary` rows before the detailed
+deployment-group status cues such as CodeDeploy application, deployment group,
+deployment config, deployment style, ECS service bindings, and the latest
+CodeDeploy deployment summary and target groups. When the live payload
 includes `trafficRoutingResource.codeDeployDeploymentGroup.latestDeployment` or
 `latestCodeDeployDeployment`, that same resource-detail panel also shows a
 scannable latest-deployment status pill, an operator next-action cue, and the
