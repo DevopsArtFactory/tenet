@@ -6351,6 +6351,7 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!summaryText.includes('Lookup region')) throw new Error('expected traffic-routing inspection to label lookup context');
   if (!summaryText.includes('Observer role configured')) throw new Error('expected traffic-routing inspection to label observer role configuration');
   if (!summaryText.includes('False')) throw new Error('expected traffic-routing inspection to show missing observer role configuration');
+  if (summaryText.includes('Latest CodeDeploy deployment')) throw new Error('expected summary-only deployment-group inspection to hide latest deployment section');
 
   let liveDeploymentGroupFetchCount = 0;
   const liveDeploymentGroupSearch = '?page=resource&deployment=payments-api-staging&resourceType=codeDeployDeploymentGroup&resourceId=' + encodeURIComponent(summaryResourceID);
@@ -6377,6 +6378,13 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
             deploymentOption: 'WITH_TRAFFIC_CONTROL',
             productionListenerArn: 'arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:listener/app/payments/prod',
             testListenerArn: 'arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:listener/app/payments/test',
+            latestDeployment: {
+              deploymentId: 'd-ABCDEFGHI',
+              status: 'Succeeded',
+              createTime: '2026-05-16T04:10:00Z',
+              completeTime: '2026-05-16T04:17:30Z',
+              statusMessage: '<script>latest deployment text only</script>',
+            },
             ecsServices: [{ clusterName: 'payments-staging', serviceName: 'payments-api-staging-service<script>safe</script>' }],
             targetGroups: ['payments-api-staging-blue', 'payments-api-staging-green'],
           },
@@ -6394,6 +6402,17 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!liveDeploymentGroupText.includes('CodeDeployDefault.ECSLinear10PercentEvery1Minutes')) throw new Error('expected deployment config value');
   if (!liveDeploymentGroupText.includes('Deployment style')) throw new Error('expected deployment style label');
   if (!liveDeploymentGroupText.includes('BLUE_GREEN / WITH_TRAFFIC_CONTROL')) throw new Error('expected deployment style value');
+  if (!liveDeploymentGroupText.includes('Latest CodeDeploy deployment')) throw new Error('expected latest CodeDeploy deployment section');
+  if (!liveDeploymentGroupText.includes('Deployment ID')) throw new Error('expected latest deployment id label');
+  if (!liveDeploymentGroupText.includes('d-ABCDEFGHI')) throw new Error('expected latest deployment id value');
+  if (!liveDeploymentGroupText.includes('Deployment status')) throw new Error('expected latest deployment status label');
+  if (!liveDeploymentGroupText.includes('Succeeded')) throw new Error('expected latest deployment status value');
+  if (!liveDeploymentGroupText.includes('Create time')) throw new Error('expected latest deployment create time label');
+  if (!liveDeploymentGroupText.includes('2026-05-16T04:10:00Z')) throw new Error('expected latest deployment create time value');
+  if (!liveDeploymentGroupText.includes('Complete time')) throw new Error('expected latest deployment complete time label');
+  if (!liveDeploymentGroupText.includes('2026-05-16T04:17:30Z')) throw new Error('expected latest deployment complete time value');
+  if (!liveDeploymentGroupText.includes('Status message')) throw new Error('expected latest deployment status-message label');
+  if (!liveDeploymentGroupText.includes('<script>latest deployment text only</script>')) throw new Error('expected latest deployment status message to render as text');
   if (!liveDeploymentGroupText.includes('CodeDeploy ECS service bindings')) throw new Error('expected ECS bindings section');
   if (!liveDeploymentGroupText.includes('Service · payments-api-staging-service<script>safe</script>')) throw new Error('expected ECS service binding to render as safe text');
   if (!liveDeploymentGroupText.includes('CodeDeploy target groups')) throw new Error('expected target groups section');
@@ -6406,6 +6425,39 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   await settle();
   if (liveDeploymentGroupRun.window.location.search !== liveDeploymentGroupSearch) throw new Error('expected live deployment-group refresh to preserve bookmarkable URL, got ' + liveDeploymentGroupRun.window.location.search);
   if (liveDeploymentGroupFetchCount !== 2) throw new Error('expected live deployment-group refresh to re-fetch inspection once, got ' + liveDeploymentGroupFetchCount);
+
+  const liveDeploymentGroupAliasRun = await renderWithFetch(liveDeploymentGroupSearch, (url) => {
+    if (url === ecsDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(unsupportedDetailBody) });
+    if (url === summaryLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === summaryInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({
+      available: true,
+      source: 'traffic_routing_aws',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true },
+      trafficRoutingResource: {
+        kind: 'codeDeployDeploymentGroup',
+        displayName: 'CodeDeploy deployment group',
+        inspectionMode: 'live',
+        summary: 'Linear traffic shifting deployment group',
+        codeDeployDeploymentGroup: {
+          applicationName: 'payments-api-staging-codedeploy-app',
+          deploymentGroupName: 'payments-api-staging Deployment Group',
+          latestCodeDeployDeployment: {
+            deploymentId: 'd-JKLMNOPQR',
+            status: 'InProgress',
+            createTime: '2026-05-16T05:00:00Z',
+            completeTime: '',
+            statusMessage: 'Deployment is still shifting traffic.',
+          },
+        },
+      },
+    }) });
+    throw new Error('unexpected latest deployment alias fetch url: ' + url);
+  });
+  const liveDeploymentGroupAliasText = collectText(liveDeploymentGroupAliasRun.document.getElementById('accounts')).join(' | ');
+  if (!liveDeploymentGroupAliasText.includes('Latest CodeDeploy deployment')) throw new Error('expected latestCodeDeployDeployment alias section');
+  if (!liveDeploymentGroupAliasText.includes('d-JKLMNOPQR')) throw new Error('expected latestCodeDeployDeployment alias id value');
+  if (!liveDeploymentGroupAliasText.includes('InProgress')) throw new Error('expected latestCodeDeployDeployment alias status value');
+  if (!liveDeploymentGroupAliasText.includes('Deployment is still shifting traffic.')) throw new Error('expected latestCodeDeployDeployment alias status message');
 
   const blueTargetGroupLogsURL = '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=blueTaskSetTargetGroup&resourceName=payments-api-staging-blue';
   const blueTargetGroupInspectionURL = '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=blueTaskSetTargetGroup&resourceName=payments-api-staging-blue';

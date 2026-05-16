@@ -5538,6 +5538,23 @@
           ['Test listener ARN', textOrDash(deploymentGroup.testListenerArn)],
         ].forEach(([label, value]) => metadata.append(createMetric(label, value)));
         section.append(metadata);
+        const latestDeployment = deploymentGroup.latestDeployment || deploymentGroup.latestCodeDeployDeployment;
+        if (latestDeployment && typeof latestDeployment === 'object') {
+          const latestDeploymentSection = createElement('section', 'detail-section');
+          const latestDeploymentMetadata = createElement('div', 'detail-grid');
+          [
+            ['Deployment ID', textOrDash(latestDeployment.deploymentId || latestDeployment.deploymentID || latestDeployment.id)],
+            ['Deployment status', textOrDash(latestDeployment.status)],
+            ['Create time', textOrDash(latestDeployment.createTime || latestDeployment.createdAt)],
+            ['Complete time', textOrDash(latestDeployment.completeTime || latestDeployment.completedAt)],
+            ['Status message', textOrDash(latestDeployment.statusMessage || latestDeployment.message)],
+          ].forEach(([label, value]) => latestDeploymentMetadata.append(createMetric(label, value)));
+          latestDeploymentSection.append(
+            createElement('h4', '', 'Latest CodeDeploy deployment'),
+            latestDeploymentMetadata,
+          );
+          section.append(latestDeploymentSection);
+        }
         const ecsServicesSection = createInspectionListSection(
           'CodeDeploy ECS service bindings',
           Array.isArray(deploymentGroup.ecsServices) ? deploymentGroup.ecsServices : [],
