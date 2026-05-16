@@ -6888,6 +6888,7 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!asgSupportedText.includes('Instance type · c7g.large')) throw new Error('expected ASG inspection to render mixed instances override instance type');
   if (!asgSupportedText.includes('Recent scaling activities')) throw new Error('expected ASG inspection to render scaling activities section');
   if (!asgSupportedText.includes('act-123')) throw new Error('expected ASG inspection to render scaling activity id');
+  if (!asgSupportedText.includes('Activity ID · act-123')) throw new Error('expected ASG inspection to render scaling activity id label');
   if (!asgSupportedText.includes('Status code · Successful')) throw new Error('expected ASG inspection to render scaling activity status');
   if (!asgSupportedText.includes('Progress · 100')) throw new Error('expected ASG inspection to render scaling activity progress');
   if (!asgSupportedText.includes('Start time · 2026-05-05T07:20:00Z')) throw new Error('expected ASG inspection to render scaling activity start time');
@@ -6958,7 +6959,7 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   });
   const asgEmptyActivitiesText = collectText(asgEmptyActivitiesRun.document.getElementById('accounts')).join(' | ');
   if (!asgEmptyActivitiesText.includes('Recent scaling activities')) throw new Error('expected empty ASG scaling activities payload to render section heading');
-  if (!asgEmptyActivitiesText.includes('No scaling activities are currently reported for this Auto Scaling Group.')) throw new Error('expected empty ASG scaling activities payload to render empty state');
+  if (!asgEmptyActivitiesText.includes('No scaling activities are reported in the bounded recent activity window for this Auto Scaling Group.')) throw new Error('expected empty ASG scaling activities payload to render bounded-window empty state');
 
   const selectedInstanceLogsURL = asgLogsURL + '&instanceId=i-abc123';
   const selectedInstanceInspectionURL = asgInspectionURL.replace('&limit=10', '&instanceId=i-abc123&limit=10');

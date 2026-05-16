@@ -5355,6 +5355,7 @@
         item.append(createElement('strong', '', textOrDash(activity?.activityId || activity?.activityID || activity?.id || activity?.statusCode || 'Scaling activity')));
         const meta = createElement('div', 'detail-history-meta');
         [
+          ['Activity ID', activity?.activityId || activity?.activityID || activity?.id],
           ['Status code', activity?.statusCode],
           ['Progress', activity?.progress],
           ['Start time', activity?.startTime || activity?.startedAt],
@@ -5452,7 +5453,7 @@
               'Recent scaling activities',
               group.scalingActivities,
               createAutoScalingActivityListItem,
-              'No scaling activities are currently reported for this Auto Scaling Group.',
+              'No scaling activities are reported in the bounded recent activity window for this Auto Scaling Group.',
             )
           : null;
         section.replaceChildren(
