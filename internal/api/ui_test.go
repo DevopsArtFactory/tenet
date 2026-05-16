@@ -2819,6 +2819,38 @@ func TestSmokeScriptsLockDeploymentEventsInvalidLimitReleaseGuard(t *testing.T) 
 	}
 }
 
+func TestSmokeScriptsPairCodeDeployDiagnosticEmbeddedShellLabels(t *testing.T) {
+	labels := []string{
+		"Rollback diagnostics",
+		"Rollback deployment ID",
+		"Rollback trigger deployment ID",
+		"Rollback message",
+		"Error diagnostics",
+		"Error code",
+		"Error message",
+		"Alarm diagnostics",
+		"Alarm status",
+		"Alarm polling enabled",
+		"Ignore alarm polling failures",
+		"Alarms",
+		"Deployment overview",
+		"CodeDeploy instance or target lifecycle counts for the latest deployment.",
+	}
+
+	for _, script := range []string{"smoke-local.sh", "smoke-docker.sh"} {
+		body, err := os.ReadFile("../../scripts/" + script)
+		if err != nil {
+			t.Fatalf("read %s: %v", script, err)
+		}
+		text := string(body)
+		for _, label := range labels {
+			if !strings.Contains(text, label) {
+				t.Fatalf("expected %s to lock CodeDeploy diagnostic embedded-shell label %q", script, label)
+			}
+		}
+	}
+}
+
 func TestSmokeScriptsAssertGuardedResourceEvidenceRequestIDHeaders(t *testing.T) {
 	for _, script := range []string{"smoke-local.sh", "smoke-docker.sh"} {
 		body, err := os.ReadFile("../../scripts/" + script)
