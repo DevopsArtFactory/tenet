@@ -1188,6 +1188,7 @@ func TestServiceInspect(t *testing.T) {
 
 	t.Run("traffic routing deployment group maps latest CodeDeploy deployment from live AWS payload", func(t *testing.T) {
 		var group codeDeployDeploymentGroupInfoPayload
+		var deployment codeDeployDeploymentInfoPayload
 		raw := []byte(`{
 			"applicationName": "payments-api-prod-codedeploy-app",
 			"deploymentGroupName": "payments-api-prod-codedeploy-group",
@@ -1209,15 +1210,47 @@ func TestServiceInspect(t *testing.T) {
 				"endTime": "2026-04-18T09:18:00Z"
 			}
 		}`)
+		deploymentRaw := []byte(`{
+			"deploymentId": "d-LATEST",
+			"status": "Failed",
+			"createTime": "2026-04-18T09:15:00Z",
+			"completeTime": "2026-04-18T09:18:00Z",
+			"deploymentStatusMessages": ["Deployment failed because target health never stabilized."],
+			"rollbackInfo": {
+				"rollbackDeploymentId": "d-ROLLBACK",
+				"rollbackTriggeringDeploymentId": "d-LATEST",
+				"rollbackMessage": "Rolled back after alarm threshold breach."
+			},
+			"errorInformation": {
+				"code": "HEALTH_CONSTRAINTS",
+				"message": "The replacement task set did not pass target health checks."
+			},
+			"overrideAlarmConfiguration": {
+				"enabled": true,
+				"ignorePollAlarmFailure": false,
+				"alarms": [{"name": "payments-api-5xx"}, {"name": "payments-api-latency"}]
+			},
+			"deploymentOverview": {
+				"Pending": 0,
+				"InProgress": 1,
+				"Succeeded": 4,
+				"Failed": 0,
+				"Skipped": 0,
+				"Ready": 2
+			}
+		}`)
 		if err := json.Unmarshal(raw, &group); err != nil {
 			t.Fatalf("failed to decode deployment group fixture: %v", err)
+		}
+		if err := json.Unmarshal(deploymentRaw, &deployment); err != nil {
+			t.Fatalf("failed to decode deployment fixture: %v", err)
 		}
 
 		inspection := trafficRoutingInspectionFromDeploymentGroup(TrafficRoutingRequest{
 			DeploymentName:      "payments-api-prod",
 			ResourceType:        "codeDeployDeploymentGroup",
 			ResourceDescription: "CodeDeploy deployment group Tenet targets for ECS rollout",
-		}, group)
+		}, group, &deployment)
 		deploymentGroup := inspection.CodeDeployDeploymentGroup
 		if deploymentGroup == nil {
 			t.Fatalf("expected deployment-group inspection body, got %+v", inspection)
@@ -1232,11 +1265,68 @@ func TestServiceInspect(t *testing.T) {
 			EndTime:      "2026-04-18T09:18:00Z",
 			Source:       "last_attempted",
 		}
-		if got := *deploymentGroup.LatestDeployment; got != want {
+		got := *deploymentGroup.LatestDeployment
+		if got.DeploymentID != want.DeploymentID || got.Status != want.Status || got.CreateTime != want.CreateTime || got.EndTime != want.EndTime || got.Source != want.Source {
 			t.Fatalf("unexpected latest deployment summary: got %+v want %+v", got, want)
+		}
+		if got.StatusMessage != "Deployment failed because target health never stabilized." {
+			t.Fatalf("expected status message from GetDeployment, got %+v", got)
+		}
+		if got.RollbackInfo == nil || got.RollbackInfo.RollbackDeploymentID != "d-ROLLBACK" || got.RollbackInfo.RollbackTriggeringDeploymentID != "d-LATEST" || got.RollbackInfo.RollbackMessage != "Rolled back after alarm threshold breach." {
+			t.Fatalf("expected rollback diagnostics from GetDeployment, got %+v", got.RollbackInfo)
+		}
+		if got.ErrorInformation == nil || got.ErrorInformation.Code != "HEALTH_CONSTRAINTS" || got.ErrorInformation.Message != "The replacement task set did not pass target health checks." {
+			t.Fatalf("expected error diagnostics from GetDeployment, got %+v", got.ErrorInformation)
+		}
+		if got.AlarmConfiguration == nil || got.AlarmConfiguration.Enabled == nil || *got.AlarmConfiguration.Enabled != true || got.AlarmConfiguration.IgnorePollAlarmFailure == nil || *got.AlarmConfiguration.IgnorePollAlarmFailure != false || !reflect.DeepEqual(got.AlarmConfiguration.Alarms, []CodeDeployAlarm{{Name: "payments-api-5xx"}, {Name: "payments-api-latency"}}) {
+			t.Fatalf("expected alarm diagnostics from GetDeployment, got %+v", got.AlarmConfiguration)
+		}
+		if got.DeploymentOverview == nil || got.DeploymentOverview.Pending != 0 || got.DeploymentOverview.InProgress != 1 || got.DeploymentOverview.Succeeded != 4 || got.DeploymentOverview.Failed != 0 || got.DeploymentOverview.Skipped != 0 || got.DeploymentOverview.Ready != 2 {
+			t.Fatalf("expected deployment overview diagnostics from GetDeployment, got %+v", got.DeploymentOverview)
 		}
 		if got := deploymentGroup.TargetGroups; !reflect.DeepEqual(got, []string{"payments-api-prod-blue", "payments-api-prod-green"}) {
 			t.Fatalf("expected sorted target groups to remain stable, got %+v", got)
+		}
+	})
+
+	t.Run("traffic routing deployment group keeps missing CodeDeploy diagnostics omitted", func(t *testing.T) {
+		var group codeDeployDeploymentGroupInfoPayload
+		var deployment codeDeployDeploymentInfoPayload
+		raw := []byte(`{
+			"applicationName": "payments-api-prod-codedeploy-app",
+			"deploymentGroupName": "payments-api-prod-codedeploy-group",
+			"lastAttemptedDeployment": {
+				"deploymentId": "d-LATEST",
+				"status": "Succeeded",
+				"createTime": "2026-04-18T09:15:00Z",
+				"endTime": "2026-04-18T09:18:00Z"
+			}
+		}`)
+		deploymentRaw := []byte(`{
+			"deploymentId": "d-LATEST",
+			"status": "Succeeded",
+			"createTime": "2026-04-18T09:15:00Z",
+			"completeTime": "2026-04-18T09:18:00Z",
+			"deploymentStatusMessages": ["", "   "]
+		}`)
+		if err := json.Unmarshal(raw, &group); err != nil {
+			t.Fatalf("failed to decode deployment group fixture: %v", err)
+		}
+		if err := json.Unmarshal(deploymentRaw, &deployment); err != nil {
+			t.Fatalf("failed to decode deployment fixture: %v", err)
+		}
+
+		inspection := trafficRoutingInspectionFromDeploymentGroup(TrafficRoutingRequest{
+			DeploymentName:      "payments-api-prod",
+			ResourceType:        "codeDeployDeploymentGroup",
+			ResourceDescription: "CodeDeploy deployment group Tenet targets for ECS rollout",
+		}, group, &deployment)
+		latest := inspection.CodeDeployDeploymentGroup.LatestDeployment
+		if latest == nil {
+			t.Fatalf("expected latest deployment summary")
+		}
+		if latest.StatusMessage != "" || latest.RollbackInfo != nil || latest.ErrorInformation != nil || latest.AlarmConfiguration != nil || latest.DeploymentOverview != nil {
+			t.Fatalf("expected missing diagnostics to stay omitted, got %+v", latest)
 		}
 	})
 
@@ -1248,7 +1338,7 @@ func TestServiceInspect(t *testing.T) {
 		}, codeDeployDeploymentGroupInfoPayload{
 			ApplicationName:     "payments-api-prod-codedeploy-app",
 			DeploymentGroupName: "payments-api-prod-codedeploy-group",
-		})
+		}, nil)
 		deploymentGroup := inspection.CodeDeployDeploymentGroup
 		if deploymentGroup == nil {
 			t.Fatalf("expected deployment-group inspection body, got %+v", inspection)
