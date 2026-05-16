@@ -49,6 +49,10 @@ func TestReadmeStaysProductOverview(t *testing.T) {
 		"## Documentation Map",
 		"docs/architecture/tenet-v1-operator-contracts.md",
 		"endpoint, read-model, auth, resource, and smoke-verification contracts formerly\n  kept in this README",
+		"`codeDeployDeploymentGroup`,\n`productionListener`, and `testListener` can return",
+		"`available=true`, `source=rollout_execution_summary`, and a summary-only",
+		"`source=live` / `inspectionMode=live`",
+		"traffic-routing fallback routes do not regress to `aws_unavailable`",
 	} {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README product overview to include %q", fragment)
@@ -2083,10 +2087,17 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 	localSmoke := readRepoFile(t, "scripts/smoke-local.sh")
 	for _, fragment := range []string{
 		`candidate_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate")`,
+		`codedeploy_group_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging-codedeploy-group")`,
+		`production_listener_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=productionListener&resourceName=payments-api-staging-prod-listener")`,
+		`test_listener_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=testListener&resourceName=payments-api-staging-test-listener")`,
 		`production_listener_rule_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=productionListenerRule&resourceName=payments-api-prod-prod-listener")`,
 		`active_target_group_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=activeTargetGroup&resourceName=payments-api-prod-active")`,
 		`candidate_target_group_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateTargetGroup&resourceName=payments-api-prod-candidate")`,
 		`blue_task_set_target_group_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=blueTaskSetTargetGroup&resourceName=payments-api-staging-blue")`,
+		`assert payload.get('source') in {'rollout_execution_summary', 'live'}, payload`,
+		`assert payload.get('unavailableReason') != 'aws_unavailable', payload`,
+		`assert isinstance(payload['trafficRoutingResource'].get('displayName'), str) and payload['trafficRoutingResource']['displayName'], payload`,
+		`assert payload['trafficRoutingResource'].get('inspectionMode') in {'summary_only', 'live'}, payload`,
 		`selected_worker_resource_inspection=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=1")`,
 		`assert selected_worker_resource_inspection.get('clusterArn') == worker_cluster_arn, selected_worker_resource_inspection`,
 		`assert ecs_task_resource_inspection.get('resourceDescription') == 'ECS task selected from live service inspection', ecs_task_resource_inspection`,
@@ -2111,10 +2122,17 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 	dockerSmoke := readRepoFile(t, "scripts/smoke-docker.sh")
 	for _, fragment := range []string{
 		`candidate_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate")`,
+		`codedeploy_group_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging-codedeploy-group")`,
+		`production_listener_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=productionListener&resourceName=payments-api-staging-prod-listener")`,
+		`test_listener_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=testListener&resourceName=payments-api-staging-test-listener")`,
 		`production_listener_rule_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=productionListenerRule&resourceName=payments-api-prod-prod-listener")`,
 		`active_target_group_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=activeTargetGroup&resourceName=payments-api-prod-active")`,
 		`candidate_target_group_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/resource-inspection?resourceType=candidateTargetGroup&resourceName=payments-api-prod-candidate")`,
 		`blue_task_set_target_group_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=blueTaskSetTargetGroup&resourceName=payments-api-staging-blue")`,
+		`assert payload.get("unavailableReason") != "aws_unavailable", payload`,
+		`assert payload.get("source") in {"rollout_execution_summary", "live"}, payload`,
+		`assert isinstance(payload["trafficRoutingResource"].get("displayName"), str) and payload["trafficRoutingResource"]["displayName"], payload`,
+		`assert payload["trafficRoutingResource"].get("inspectionMode") in {"summary_only", "live"}, payload`,
 		`selected_worker_resource_inspection=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A123456789012%3Acluster%2Fworker-prod&limit=1")`,
 		`assert selected_worker_resource_inspection.get("clusterArn") == worker_cluster_arn, selected_worker_resource_inspection`,
 		`assert ecs_task_resource_inspection.get("resourceDescription") == "ECS task selected from live service inspection", ecs_task_resource_inspection`,
@@ -2187,6 +2205,10 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"selected ASG EC2 host-detail evidence is optional live AWS evidence",
 		"local and compose runs may omit `autoScalingGroup.instances[].ec2Instance`",
 		"the exact operator labels `EC2 state`, `EC2 instance type`, `AMI image ID`, `Private IP`, `Public IP`, `Subnet`, `VPC`, and `Launch time`",
+		"the exact local fallback identifiers `codeDeployDeploymentGroup`, `productionListener`, and `testListener`",
+		"`available=true`, `source=rollout_execution_summary`, `trafficRoutingResource.inspectionMode=summary_only`",
+		"`available=false` / `unavailableReason=aws_unavailable`",
+		"`source=live`",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
 			t.Fatalf("expected overview dashboard doc to include %q", fragment)

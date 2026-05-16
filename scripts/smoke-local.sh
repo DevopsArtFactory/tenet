@@ -1429,11 +1429,13 @@ def assert_summary_traffic_routing(payload, deployment_name, resource_type, reso
     assert payload['resourceType'] == resource_type, payload
     assert payload['resourceName'] == resource_name, payload
     assert payload['available'] is True, payload
-    assert payload.get('source') == 'rollout_execution_summary', payload
+    assert payload.get('source') in {'rollout_execution_summary', 'live'}, payload
+    assert payload.get('unavailableReason') != 'aws_unavailable', payload
     assert isinstance(payload.get('lookupContext'), dict), payload
     assert isinstance(payload.get('trafficRoutingResource'), dict), payload
     assert payload['trafficRoutingResource'].get('kind') == resource_type, payload
-    assert payload['trafficRoutingResource'].get('inspectionMode') == 'summary_only', payload
+    assert isinstance(payload['trafficRoutingResource'].get('displayName'), str) and payload['trafficRoutingResource']['displayName'], payload
+    assert payload['trafficRoutingResource'].get('inspectionMode') in {'summary_only', 'live'}, payload
     assert isinstance(payload['trafficRoutingResource'].get('summary'), str) and payload['trafficRoutingResource']['summary'], payload
 
 assert_summary_traffic_routing(codedeploy_application_resource_inspection, 'payments-api-staging', 'codeDeployApplication', 'payments-api-staging-codedeploy-app')
