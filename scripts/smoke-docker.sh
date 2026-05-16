@@ -2084,6 +2084,7 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
         "CodeDeploy deployment group status",
         "Bounded live deployment-group evidence for the CodeDeploy traffic-routing resource selected in this drill-down.",
         "CodeDeploy ECS service bindings",
+        "Latest CodeDeploy deployment",
         "CodeDeploy target groups",
         "resourceInspectionReadRoute(deploymentName, resource, targetLimit)",
         "const autoScalingGroupSupportsInstanceHandoff = (resource) => ['candidateAutoScalingGroup', 'serviceAutoScalingGroup'].includes(String(resource?.type || '').trim());",

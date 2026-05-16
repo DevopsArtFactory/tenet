@@ -9129,12 +9129,19 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				InspectionMode: "live",
 				Summary:        "CodeDeploy deployment group Tenet targets for ECS rollout (style: linear)",
 				CodeDeployDeploymentGroup: &resourceinspection.CodeDeployDeploymentGroupInspection{
-					ApplicationName:       "api-prod-codedeploy-app",
-					DeploymentGroupName:   "api-prod-codedeploy-group",
-					DeploymentConfigName:  "CodeDeployDefault.ECSLinear10PercentEvery1Minutes",
-					ServiceRoleARN:        "arn:aws:iam::123456789012:role/TenetCodeDeployRole",
-					DeploymentType:        "BLUE_GREEN",
-					DeploymentOption:      "WITH_TRAFFIC_CONTROL",
+					ApplicationName:      "api-prod-codedeploy-app",
+					DeploymentGroupName:  "api-prod-codedeploy-group",
+					DeploymentConfigName: "CodeDeployDefault.ECSLinear10PercentEvery1Minutes",
+					ServiceRoleARN:       "arn:aws:iam::123456789012:role/TenetCodeDeployRole",
+					DeploymentType:       "BLUE_GREEN",
+					DeploymentOption:     "WITH_TRAFFIC_CONTROL",
+					LatestDeployment: &resourceinspection.CodeDeployDeploymentSummary{
+						DeploymentID: "d-NEWEST",
+						Status:       "Succeeded",
+						CreateTime:   "2026-04-18T09:15:00Z",
+						EndTime:      "2026-04-18T09:18:00Z",
+						Source:       "last_attempted",
+					},
 					ECSServices:           []resourceinspection.CodeDeployECSServiceBinding{{ClusterName: "payments-prod", ServiceName: "api-prod-service"}},
 					TargetGroups:          []string{"api-prod-blue", "api-prod-green"},
 					ProductionListenerARN: "arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:listener/app/payments/abc123/prod456",
@@ -9186,6 +9193,26 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 		if _, ok := trafficRoutingResource["codeDeployDeploymentGroup"].(map[string]any); !ok {
 			t.Fatalf("expected codeDeployDeploymentGroup object in payload, got %#v", trafficRoutingResource["codeDeployDeploymentGroup"])
+		}
+		deploymentGroup := trafficRoutingResource["codeDeployDeploymentGroup"].(map[string]any)
+		latestDeployment, ok := deploymentGroup["latestDeployment"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected latestDeployment object in payload, got %#v", deploymentGroup["latestDeployment"])
+		}
+		if got := latestDeployment["deploymentId"]; got != "d-NEWEST" {
+			t.Fatalf("expected latest deployment id, got %#v", got)
+		}
+		if got := latestDeployment["status"]; got != "Succeeded" {
+			t.Fatalf("expected latest deployment status, got %#v", got)
+		}
+		if got := latestDeployment["createTime"]; got != "2026-04-18T09:15:00Z" {
+			t.Fatalf("expected latest deployment createTime, got %#v", got)
+		}
+		if got := latestDeployment["endTime"]; got != "2026-04-18T09:18:00Z" {
+			t.Fatalf("expected latest deployment endTime, got %#v", got)
+		}
+		if got := latestDeployment["source"]; got != "last_attempted" {
+			t.Fatalf("expected latest deployment source, got %#v", got)
 		}
 	})
 

@@ -5554,6 +5554,23 @@
           },
           'No ECS service bindings are currently reported for this CodeDeploy deployment group.',
         );
+        const latestDeployment = deploymentGroup.latestDeployment;
+        const latestDeploymentSection = latestDeployment && typeof latestDeployment === 'object'
+          ? (() => {
+              const latestSection = createElement('section', 'detail-section');
+              latestSection.append(createElement('h4', '', 'Latest CodeDeploy deployment'));
+              const latestGrid = createElement('div', 'detail-grid');
+              [
+                ['Deployment ID', textOrDash(latestDeployment.deploymentId)],
+                ['Status', textOrDash(latestDeployment.status)],
+                ['Created', textOrDash(latestDeployment.createTime)],
+                ['Ended', textOrDash(latestDeployment.endTime)],
+                ['Summary source', textOrDash(latestDeployment.source)],
+              ].forEach(([label, value]) => latestGrid.append(createMetric(label, value)));
+              latestSection.append(latestGrid);
+              return latestSection;
+            })()
+          : null;
         const targetGroupsSection = createInspectionListSection(
           'CodeDeploy target groups',
           Array.isArray(deploymentGroup.targetGroups) ? deploymentGroup.targetGroups : [],
@@ -5564,7 +5581,7 @@
           },
           'No target groups are currently reported for this CodeDeploy deployment group.',
         );
-        section.append(ecsServicesSection, targetGroupsSection);
+        section.append(ecsServicesSection, ...(latestDeploymentSection ? [latestDeploymentSection] : []), targetGroupsSection);
         return section;
       };
       const createTrafficRoutingListenerRuleSection = (trafficRouting) => {

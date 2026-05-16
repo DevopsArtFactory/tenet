@@ -188,10 +188,19 @@ type CodeDeployDeploymentGroupInspection struct {
 	ServiceRoleARN        string                        `json:"serviceRoleArn,omitempty"`
 	DeploymentType        string                        `json:"deploymentType,omitempty"`
 	DeploymentOption      string                        `json:"deploymentOption,omitempty"`
+	LatestDeployment      *CodeDeployDeploymentSummary  `json:"latestDeployment,omitempty"`
 	ECSServices           []CodeDeployECSServiceBinding `json:"ecsServices,omitempty"`
 	TargetGroups          []string                      `json:"targetGroups,omitempty"`
 	ProductionListenerARN string                        `json:"productionListenerArn,omitempty"`
 	TestListenerARN       string                        `json:"testListenerArn,omitempty"`
+}
+
+type CodeDeployDeploymentSummary struct {
+	DeploymentID string `json:"deploymentId"`
+	Status       string `json:"status,omitempty"`
+	CreateTime   string `json:"createTime,omitempty"`
+	EndTime      string `json:"endTime,omitempty"`
+	Source       string `json:"source,omitempty"`
 }
 
 type CodeDeployECSServiceBinding struct {
