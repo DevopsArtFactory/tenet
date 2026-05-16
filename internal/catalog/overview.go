@@ -169,6 +169,7 @@ type DeploymentEventsResultScope struct {
 	RequestedLimit       *int   `json:"requestedLimit,omitempty"`
 	EffectiveLimit       int    `json:"effectiveLimit"`
 	ReturnedEventCount   int    `json:"returnedEventCount"`
+	ReturnedCount        int    `json:"returnedCount"`
 	TotalEventCount      int    `json:"totalEventCount"`
 	RetentionLimit       int    `json:"retentionLimit"`
 	RetainedEventCount   int    `json:"retainedEventCount"`
@@ -177,6 +178,7 @@ type DeploymentEventsResultScope struct {
 	NewestEventTimestamp string `json:"newestEventTimestamp,omitempty"`
 	OldestEventTimestamp string `json:"oldestEventTimestamp,omitempty"`
 	TruncationStatus     string `json:"truncationStatus"`
+	Truncated            bool   `json:"truncated"`
 }
 
 // ApplicationOverviewDetail makes the application page contract explicit while preserving deployment detail semantics.

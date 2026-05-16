@@ -1730,7 +1730,9 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		`deployment_events_fixture_limited=$(curl -fsS "http://$HOST:$PORT/v1/overview/deployments/payments-api-prod/events?limit=1")`,
 		`DEPLOYMENT_EVENTS_FIXTURE_LIMITED_PATH="$deployment_events_fixture_limited_path"`,
 		`assert fixture_events_scope.get('returnedEventCount') == 0, deployment_events_fixture_limited`,
+		`assert fixture_events_scope.get('returnedCount') == fixture_events_scope.get('returnedEventCount'), deployment_events_fixture_limited`,
 		`assert fixture_events_scope.get('truncationStatus') == 'not_truncated', deployment_events_fixture_limited`,
+		`assert fixture_events_scope.get('truncated') is False, deployment_events_fixture_limited`,
 		`auth_forbidden_events_status=$(curl -sS -o "$AUTH_FORBIDDEN_EVENTS_BODY" -w "%{http_code}" \`,
 		`allowed_events_read=$(curl -fsS \`,
 		`allowed_events_read_path=$(write_payload allowed-events-read.json "$allowed_events_read")`,
@@ -1747,11 +1749,13 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		`assert allowed_events_scope.get('requestedLimit') == 1, allowed_events_read`,
 		`assert allowed_events_scope.get('effectiveLimit') == 1, allowed_events_read`,
 		`assert allowed_events_scope.get('returnedEventCount') == len(allowed_events_read['events']), allowed_events_read`,
+		`assert allowed_events_scope.get('returnedCount') == allowed_events_scope.get('returnedEventCount'), allowed_events_read`,
 		`assert isinstance(allowed_events_scope.get('totalEventCount'), int), allowed_events_read`,
 		`assert allowed_events_scope.get('totalEventCount') >= allowed_events_scope.get('returnedEventCount'), allowed_events_read`,
 		`assert isinstance(allowed_events_scope.get('limited'), bool), allowed_events_read`,
 		`assert allowed_events_scope.get('limited') == (allowed_events_scope.get('totalEventCount') > allowed_events_scope.get('returnedEventCount')), allowed_events_read`,
 		`assert allowed_events_scope.get('truncationStatus') in {'truncated', 'not_truncated'}, allowed_events_read`,
+		`assert allowed_events_scope.get('truncated') == (allowed_events_scope.get('truncationStatus') == 'truncated'), allowed_events_read`,
 		`assert all('controllerRefresh' not in event for event in deployment_events_fixture['events']), deployment_events_fixture`,
 		`assert 'controllerRefresh' not in event, events_payload`,
 	} {
@@ -1769,7 +1773,9 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		`deployment_events=$(curl -fsS "$API_BASE_URL/v1/overview/deployments/payments-api-prod/events?limit=1")`,
 		`events_scope = deployment_events.get("resultScope") or {}`,
 		`assert events_scope.get("returnedEventCount") == len(deployment_events["events"]), deployment_events`,
+		`assert events_scope.get("returnedCount") == events_scope.get("returnedEventCount"), deployment_events`,
 		`assert events_scope.get("limited") == (events_scope.get("totalEventCount") > events_scope.get("returnedEventCount")), deployment_events`,
+		`assert events_scope.get("truncated") == (events_scope.get("truncationStatus") == "truncated"), deployment_events`,
 		`auth_forbidden_events_status=$(curl -sS -o "$AUTH_FORBIDDEN_EVENTS_BODY" -w "%{http_code}" \`,
 		`allowed_events_read=$(curl -fsS \`,
 		`allowed_events_read_path=$(write_payload allowed-events-read.json "$allowed_events_read")`,
@@ -1786,11 +1792,13 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		`assert allowed_events_scope.get("requestedLimit") == 1, allowed_events_read`,
 		`assert allowed_events_scope.get("effectiveLimit") == 1, allowed_events_read`,
 		`assert allowed_events_scope.get("returnedEventCount") == len(allowed_events_read["events"]), allowed_events_read`,
+		`assert allowed_events_scope.get("returnedCount") == allowed_events_scope.get("returnedEventCount"), allowed_events_read`,
 		`assert isinstance(allowed_events_scope.get("totalEventCount"), int), allowed_events_read`,
 		`assert allowed_events_scope.get("totalEventCount") >= allowed_events_scope.get("returnedEventCount"), allowed_events_read`,
 		`assert isinstance(allowed_events_scope.get("limited"), bool), allowed_events_read`,
 		`assert allowed_events_scope.get("limited") == (allowed_events_scope.get("totalEventCount") > allowed_events_scope.get("returnedEventCount")), allowed_events_read`,
 		`assert allowed_events_scope.get("truncationStatus") in {"truncated", "not_truncated"}, allowed_events_read`,
+		`assert allowed_events_scope.get("truncated") == (allowed_events_scope.get("truncationStatus") == "truncated"), allowed_events_read`,
 	} {
 		if !strings.Contains(dockerSmoke, fragment) {
 			t.Fatalf("expected smoke-docker deployment events auth contract to include %q", fragment)
@@ -1807,6 +1815,7 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		"additive `managedDriftSummary` severity counts",
 		"top-level `retention` metadata (`limit`, `retainedEventCount`, `status`)",
 		"router-authored `resultScope` metadata (`requestedLimit`, `effectiveLimit`, `returnedEventCount`, `totalEventCount`, `retentionLimit`, `retainedEventCount`, `retentionStatus`, `limited`, optional `newestEventTimestamp` / `oldestEventTimestamp` from the returned window, and `truncationStatus`)",
+		"`returnedCount` mirrors `returnedEventCount`, and `truncated` mirrors `truncationStatus == \"truncated\"`",
 		"ticker/default controller events do not include `controllerRefresh`",
 	} {
 		if !strings.Contains(operatorContractsDoc, fragment) {
@@ -1821,7 +1830,7 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		"`deploymentName` plus `events` list shape",
 		"additive `managedDriftSummary` object carrying explicit zero/non-zero severity counts",
 		"top-level `retention` metadata (`limit`, `retainedEventCount`, `status`)",
-		"router-authored `resultScope` object (`requestedLimit`, `effectiveLimit`, optional `newestEventTimestamp` / `oldestEventTimestamp` from the returned window, `returnedEventCount`, `totalEventCount`, `retentionLimit`, `retainedEventCount`, `retentionStatus`, `limited`, `truncationStatus`) for both default and bounded `?limit=` reads",
+		"router-authored `resultScope` object (`requestedLimit`, `effectiveLimit`, optional `newestEventTimestamp` / `oldestEventTimestamp` from the returned window, `returnedEventCount`, compact alias `returnedCount`, `totalEventCount`, `retentionLimit`, `retainedEventCount`, `retentionStatus`, `limited`, `truncationStatus`, compact alias `truncated`) for both default and bounded `?limit=` reads",
 		"ticker/default controller-event path omit `controllerRefresh`",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
