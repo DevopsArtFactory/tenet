@@ -2211,6 +2211,7 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		"`available=true`, `source=rollout_execution_summary`, `trafficRoutingResource.inspectionMode=summary_only`",
 		"`available=false` / `unavailableReason=aws_unavailable`",
 		"`source=live`",
+		"`Target group health` when live health counts are present",
 	} {
 		if !strings.Contains(featureDoc, fragment) {
 			t.Fatalf("expected overview dashboard doc to include %q", fragment)

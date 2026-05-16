@@ -6555,6 +6555,7 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   });
   const blueTargetGroupText = collectText(blueTargetGroupRun.document.getElementById('accounts')).join(' | ');
   if (!blueTargetGroupText.includes('Live AWS inspection')) throw new Error('expected live target-group inspection mode to render live copy');
+  if (!blueTargetGroupText.includes('Target group health · healthy 2 · unhealthy 1 · initial 1')) throw new Error('expected compact traffic-routing status to summarize target-group health counts');
   if (!blueTargetGroupText.includes('Target group live details')) throw new Error('expected live target-group details section');
   if (!blueTargetGroupText.includes('Target group name')) throw new Error('expected live target-group name label');
   if (!blueTargetGroupText.includes('payments-api-staging-blue')) throw new Error('expected live target-group name value');

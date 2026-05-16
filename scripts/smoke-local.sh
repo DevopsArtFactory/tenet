@@ -1720,6 +1720,7 @@ assert "['Resource', trafficRoutingDisplayName(trafficRouting)]" in ui, ui
 assert "['Inspection mode', trafficRoutingInspectionModeText(trafficRouting?.inspectionMode)]" in ui, ui
 assert "['Source', metricValue(result?.source)]" in ui, ui
 assert "['Summary', textOrDash(trafficRouting?.summary)]" in ui, ui
+assert "statusRows.push(['Target group health', targetGroupHealth]);" in ui, ui
 assert 'Latest CodeDeploy deployment' in ui, ui
 assert 'Latest deployment · ${textOrDash(latestStatus)}' in ui, ui
 assert 'Traffic shift completed. Confirm service health and close out the rollout handoff.' in ui, ui
