@@ -1642,6 +1642,9 @@ assert 'workspace-detail-freshness' in ui, ui
 assert '${workspaceLabel} read refreshed · ${fetchedAt}' in ui, ui
 assert '${workspaceLabel} read not refreshed yet' in ui, ui
 assert 'Clear drift filters' in ui, ui
+assert "params.set('driftQuery', normalized.query);" in ui, ui
+assert "params.set('driftSeverity', normalized.severity);" in ui, ui
+assert "params.set('driftSort', normalized.sort);" in ui, ui
 assert "const workspaceLabel = mode === 'plan' ? 'plan workspace' : 'drift workspace';" in ui, ui
 assert 'Refreshing ${workspaceLabel} from GET /v1/overview/deployments/{deploymentName}…' in ui, ui
 assert 'Failed to refresh ${workspaceLabel}:' in ui, ui

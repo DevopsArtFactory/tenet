@@ -1527,12 +1527,18 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"const driftRefreshState = deploymentWorkspaceRefreshStateText(mode, workspaceState);",
 		"workspaceState?.status === 'error' ? 'detail-state error' : 'detail-state'",
 		"const defaultDriftFilters = { query: '', severity: 'all', sort: 'field' };",
+		"const normalizeDriftFilters = (filters = {}) => {",
+		"const syncDriftPageState = (filters = {}) => {",
+		"params.set('driftQuery', normalized.query);",
+		"params.set('driftSeverity', normalized.severity);",
+		"params.set('driftSort', normalized.sort);",
 		"const hasActiveDriftFilters = () => (",
-		"let driftQuery = workspaceState?.filters?.query || defaultDriftFilters.query;",
-		"let driftSeverity = workspaceState?.filters?.severity || defaultDriftFilters.severity;",
-		"let driftSort = workspaceState?.filters?.sort || defaultDriftFilters.sort;",
+		"const initialDriftFilters = normalizeDriftFilters(workspaceState?.filters || {});",
+		"let driftQuery = initialDriftFilters.query;",
+		"let driftSeverity = initialDriftFilters.severity;",
+		"let driftSort = initialDriftFilters.sort;",
 		"const syncDriftFilters = () => {",
-		"workspaceState.filters = {",
+		"workspaceState.filters = normalized;",
 		"'Clear drift filters',",
 		"'Drift filters: defaults'",
 		"createInput('Filter drift rows', driftQuery, 'Filter by field, value, or condition context', (event) => {",
@@ -3037,6 +3043,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert 'Clear drift filters' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Clear drift filters")
+	}
+	if !strings.Contains(text, "assert \"params.set('driftQuery', normalized.query);\" in ui, ui") || !strings.Contains(text, "assert \"params.set('driftSeverity', normalized.severity);\" in ui, ui") || !strings.Contains(text, "assert \"params.set('driftSort', normalized.sort);\" in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html documents shareable drift filter URL params")
 	}
 	if !strings.Contains(text, "assert 'Linked resources' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains drift linked-resources copy")
