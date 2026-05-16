@@ -9261,7 +9261,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 			t.Fatalf("expected alarmConfiguration alarms, got %#v", alarmConfiguration["alarms"])
 		}
 		deploymentOverview, ok := latestDeployment["deploymentOverview"].(map[string]any)
-		if !ok || deploymentOverview["pending"] != float64(0) || deploymentOverview["inProgress"] != float64(1) || deploymentOverview["succeeded"] != float64(4) || deploymentOverview["ready"] != float64(2) {
+		if !ok || deploymentOverview["pending"] != float64(0) || deploymentOverview["inProgress"] != float64(1) || deploymentOverview["succeeded"] != float64(4) || deploymentOverview["failed"] != float64(0) || deploymentOverview["skipped"] != float64(0) || deploymentOverview["ready"] != float64(2) {
 			t.Fatalf("expected deploymentOverview diagnostics, got %#v", latestDeployment["deploymentOverview"])
 		}
 	})
