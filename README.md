@@ -193,9 +193,9 @@ live AWS access to keep the drill-down usable: `codeDeployDeploymentGroup`,
 inspection is configured and succeeds, the same identifiers may instead return
 `source=live` / `inspectionMode=live`; the resource-detail Live inspection
 panel renders a compact `Traffic-routing status` block with operator-facing
-`Resource`, `Inspection mode`, `Source`, `Summary`, and — when live target-group
-health counts are present — a target-health status pill, next-action cue, and
-raw `Target group health` rows before the detailed
+`Resource`, `Inspection mode`, `Source`, `Summary`, and — only when the live AWS
+payload includes target-group health counts — a target-health status pill,
+next-action cue, and raw `Target group health` rows before the detailed
 deployment-group status cues such as CodeDeploy application, deployment group,
 deployment config, deployment style, ECS service bindings, and the latest
 CodeDeploy deployment summary and target groups. When the live payload
@@ -207,7 +207,10 @@ that noise onto the applications overview. When live target-group/listener rows
 match exactly one normalized rollout resource, they add `_self` `Open resource
 detail` handoffs back into the bookmarkable resource drill-down; unmatched or
 incomplete identifiers remain plain text so operators never get broken self-
-links. Local smoke guards ensure traffic-routing fallback routes do not regress to `aws_unavailable`.
+links. Local no-AWS summary fallback stays
+explicitly summary-only and does not invent latest CodeDeploy deployment status
+or target-group health counts. Local smoke guards ensure traffic-routing fallback
+routes do not regress to `aws_unavailable`.
 
 - `POST /v1/plans/deployments/{deploymentName}`
 - `POST /v1/applies/plans/{planId}` (`409 Conflict` means the reviewed plan

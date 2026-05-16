@@ -5890,7 +5890,7 @@
       const renderTrafficRoutingInspection = (section, detail, resource, result) => {
         const deploymentName = detail?.name || currentPageState.deployment || '';
         const trafficRouting = result?.trafficRoutingResource;
-        const actions = createResourceInspectionActions(section, deploymentName, resource);
+        const actions = createResourceInspectionActions(section, detail, resource);
         const metadata = createLookupContextGrid(result?.lookupContext, [
           ...resourceInspectionRequestIDFields(result),
           ['Inspection source', metricValue(result?.source)],

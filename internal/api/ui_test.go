@@ -2430,6 +2430,7 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"return 'Rollout summary only';",
 		"return 'Live AWS inspection';",
 		"const trafficRoutingTargetGroupDetail = (trafficRouting) => {",
+		"trafficRouting.targetGroup || trafficRouting.targetGroupInspection || trafficRouting.loadBalancerTargetGroup",
 		"const targetHealthCountsText = (counts) => {",
 		"const createTrafficRoutingTargetGroupSection = (detail, trafficRouting) => {",
 		"Target group live details",

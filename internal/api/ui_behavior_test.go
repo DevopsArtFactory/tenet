@@ -6316,6 +6316,13 @@ const createDocument = () => {
 };
 const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
 const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+const expectLabelValue = (text, label, value, context) => {
+  const labelIndex = text.indexOf(label);
+  const valueIndex = text.indexOf(value, labelIndex + label.length);
+  if (labelIndex < 0 || valueIndex < 0) {
+    throw new Error('expected ' + context + ' label/value ' + label + ' -> ' + value + ': ' + text);
+  }
+};
 async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
 
 const ecsResourceID = 'ecsService::payments-api-staging-service::Primary ECS service';
@@ -6469,44 +6476,43 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
             ecsServices: [{ clusterName: 'payments-staging', serviceName: 'payments-api-staging-service<script>safe</script>' }],
             targetGroups: ['payments-api-staging-blue', 'payments-api-staging-green'],
           },
+          targetGroup: {
+            targetGroupName: 'payments-api-staging-green',
+            targetHealthCounts: { healthy: 4, unhealthy: 0, initial: 1, draining: 0 },
+          },
         },
       }) });
     }
     throw new Error('unexpected live deployment-group fetch url: ' + url);
   });
   const liveDeploymentGroupText = collectText(liveDeploymentGroupRun.document.getElementById('accounts')).join(' | ');
-  if (!liveDeploymentGroupText.includes('Live AWS inspection')) throw new Error('expected live deployment-group inspection mode');
+  expectLabelValue(liveDeploymentGroupText, 'Inspection mode', 'Live AWS inspection', 'live deployment-group status');
   if (!liveDeploymentGroupText.includes('CodeDeploy deployment group status')) throw new Error('expected live deployment-group status section');
-  if (!liveDeploymentGroupText.includes('Application name')) throw new Error('expected application name label');
-  if (!liveDeploymentGroupText.includes('payments-api-staging-codedeploy-app')) throw new Error('expected application name value');
-  if (!liveDeploymentGroupText.includes('Deployment config')) throw new Error('expected deployment config label');
-  if (!liveDeploymentGroupText.includes('CodeDeployDefault.ECSLinear10PercentEvery1Minutes')) throw new Error('expected deployment config value');
-  if (!liveDeploymentGroupText.includes('Deployment style')) throw new Error('expected deployment style label');
-  if (!liveDeploymentGroupText.includes('BLUE_GREEN / WITH_TRAFFIC_CONTROL')) throw new Error('expected deployment style value');
+  expectLabelValue(liveDeploymentGroupText, 'Target health', 'Targets transitioning', 'live deployment-group target-health cue');
+  if (!liveDeploymentGroupText.includes('Targets are still registering or draining. Wait for target health to settle before treating traffic routing as stable.')) throw new Error('expected transitioning target-health operator cue');
+  expectLabelValue(liveDeploymentGroupText, 'Target group health', 'healthy 4 · unhealthy 0 · initial 1 · draining 0', 'live deployment-group target-health counts');
+  expectLabelValue(liveDeploymentGroupText, 'Application name', 'payments-api-staging-codedeploy-app', 'live deployment-group metadata');
+  expectLabelValue(liveDeploymentGroupText, 'Deployment config', 'CodeDeployDefault.ECSLinear10PercentEvery1Minutes', 'live deployment-group metadata');
+  expectLabelValue(liveDeploymentGroupText, 'Deployment style', 'BLUE_GREEN / WITH_TRAFFIC_CONTROL', 'live deployment-group metadata');
   if (!liveDeploymentGroupText.includes('Latest CodeDeploy deployment')) throw new Error('expected latest CodeDeploy deployment section');
-  if (!liveDeploymentGroupText.includes('Latest deployment · Succeeded')) throw new Error('expected scannable latest deployment status pill');
+  expectLabelValue(liveDeploymentGroupText, 'Latest deployment', 'Succeeded', 'live deployment-group latest deployment pill');
   if (!liveDeploymentGroupText.includes('Traffic shift completed. Confirm service health and close out the rollout handoff.')) throw new Error('expected succeeded deployment operator cue');
-  if (!liveDeploymentGroupText.includes('Deployment ID')) throw new Error('expected latest deployment id label');
-  if (!liveDeploymentGroupText.includes('d-LATEST<script>safe</script>')) throw new Error('expected latest deployment id to render as safe text');
-  if (!liveDeploymentGroupText.includes('Deployment status')) throw new Error('expected latest deployment status label');
-  if (!liveDeploymentGroupText.includes('Succeeded')) throw new Error('expected latest deployment status value');
-  if (!liveDeploymentGroupText.includes('Create time')) throw new Error('expected latest deployment create time label');
-  if (!liveDeploymentGroupText.includes('2026-05-16T04:10:00Z')) throw new Error('expected latest deployment create time value');
-  if (!liveDeploymentGroupText.includes('Complete time')) throw new Error('expected latest deployment complete time label');
-  if (!liveDeploymentGroupText.includes('2026-05-16T04:17:30Z')) throw new Error('expected latest deployment complete time value');
-  if (!liveDeploymentGroupText.includes('Status message')) throw new Error('expected latest deployment status-message label');
+  expectLabelValue(liveDeploymentGroupText, 'Deployment ID', 'd-LATEST<script>safe</script>', 'live deployment-group latest deployment');
+  expectLabelValue(liveDeploymentGroupText, 'Deployment status', 'Succeeded', 'live deployment-group latest deployment');
+  expectLabelValue(liveDeploymentGroupText, 'Create time', '2026-05-16T04:10:00Z', 'live deployment-group latest deployment');
+  expectLabelValue(liveDeploymentGroupText, 'Complete time', '2026-05-16T04:17:30Z', 'live deployment-group latest deployment');
   if (!liveDeploymentGroupText.includes('<script>latest deployment text only</script>')) throw new Error('expected latest deployment status message to render as text');
-  if (!liveDeploymentGroupText.includes('Summary source')) throw new Error('expected latest deployment source label');
-  if (!liveDeploymentGroupText.includes('last_attempted')) throw new Error('expected latest deployment source value');
+  expectLabelValue(liveDeploymentGroupText, 'Summary source', 'last_attempted', 'live deployment-group latest deployment');
   if (!liveDeploymentGroupText.includes('CodeDeploy ECS service bindings')) throw new Error('expected ECS bindings section');
-  if (!liveDeploymentGroupText.includes('Service · payments-api-staging-service<script>safe</script>')) throw new Error('expected ECS service binding to render as safe text');
+  expectLabelValue(liveDeploymentGroupText, 'Service', 'payments-api-staging-service<script>safe</script>', 'live deployment-group ECS service binding');
   if (!liveDeploymentGroupText.includes('CodeDeploy target groups')) throw new Error('expected target groups section');
   if (!liveDeploymentGroupText.includes('payments-api-staging-green')) throw new Error('expected target group value');
   const liveDeploymentGroupLinks = collectNodes(liveDeploymentGroupRun.document.getElementById('accounts'), (node) => node.tagName === 'A');
+  const trafficRoutingDeploymentName = 'payments-api-staging';
   const linkedGreenTargetGroupID = 'greenTaskSetTargetGroup::payments-api-staging-green::Green task-set target group';
-  const linkedGreenTargetGroupURL = '/?' + new URLSearchParams({ page: 'resource', deployment: 'payments-api-staging', resourceType: 'greenTaskSetTargetGroup', resourceId: linkedGreenTargetGroupID }).toString();
+  const linkedGreenTargetGroupURL = '/?' + new URLSearchParams({ page: 'resource', deployment: trafficRoutingDeploymentName, resourceType: 'greenTaskSetTargetGroup', resourceId: linkedGreenTargetGroupID }).toString();
   const linkedProductionListenerID = 'productionListener::arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:listener/app/payments/prod::Production listener exact ARN';
-  const linkedProductionListenerURL = '/?' + new URLSearchParams({ page: 'resource', deployment: 'payments-api-staging', resourceType: 'productionListener', resourceId: linkedProductionListenerID }).toString();
+  const linkedProductionListenerURL = '/?' + new URLSearchParams({ page: 'resource', deployment: trafficRoutingDeploymentName, resourceType: 'productionListener', resourceId: linkedProductionListenerID }).toString();
   if (!liveDeploymentGroupLinks.find((node) => node.href === linkedGreenTargetGroupURL && node.textContent === 'Open resource detail' && node.target === '_self' && !node.rel)) throw new Error('expected CodeDeploy target-group row to link to matching normalized resource detail');
   if (!liveDeploymentGroupLinks.find((node) => node.href === linkedProductionListenerURL && node.textContent === 'Open resource detail' && node.target === '_self' && !node.rel)) throw new Error('expected CodeDeploy listener row to link to matching normalized resource detail');
   if (liveDeploymentGroupLinks.find((node) => String(node.href || '').includes('test-listener') && node.textContent === 'Open resource detail')) throw new Error('expected unmatched test listener ARN not to render a resource-detail link');
@@ -6697,7 +6703,7 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!liveWeightedListenerRuleText.includes('targetgroup/payments-candidate/def456 · weight 20')) throw new Error('expected live listener-rule candidate target weight');
   const liveWeightedListenerRuleLinks = collectNodes(liveWeightedListenerRuleRun.document.getElementById('accounts'), (node) => node.tagName === 'A');
   const linkedActiveTargetGroupID = 'activeTargetGroup::payments-active::Active target group exact ARN name';
-  const linkedActiveTargetGroupURL = '/?' + new URLSearchParams({ page: 'resource', deployment: 'payments-api-staging', resourceType: 'activeTargetGroup', resourceId: linkedActiveTargetGroupID }).toString();
+  const linkedActiveTargetGroupURL = '/?' + new URLSearchParams({ page: 'resource', deployment: trafficRoutingDeploymentName, resourceType: 'activeTargetGroup', resourceId: linkedActiveTargetGroupID }).toString();
   if (!liveWeightedListenerRuleLinks.find((node) => node.href === linkedActiveTargetGroupURL && node.textContent === 'Open resource detail' && node.target === '_self' && !node.rel)) throw new Error('expected weighted listener target-group row to link by ARN targetgroup name');
   if (liveWeightedListenerRuleLinks.find((node) => String(node.href || '').includes('payments-candidate') && node.textContent === 'Open resource detail')) throw new Error('expected unmatched listener target-group ARN not to render a resource-detail link');
   const liveWeightedListenerRuleScripts = collectNodes(liveWeightedListenerRuleRun.document.getElementById('accounts'), (node) => node.tagName === 'SCRIPT');
