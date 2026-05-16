@@ -2468,6 +2468,7 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"['Summary', textOrDash(trafficRouting?.summary)]",
 		"const targetGroup = trafficRoutingTargetGroupDetail(trafficRouting);",
 		"const targetGroupHealth = targetHealthCountsText(targetGroup?.targetHealthCounts || targetGroup?.healthCounts);",
+		"if (targetGroupHealth && targetGroupHealth !== '—') {",
 		"statusRows.push(['Target group health', targetGroupHealth]);",
 		"`${label} · ${value}`",
 		"Resource kind",

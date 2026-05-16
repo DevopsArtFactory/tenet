@@ -5549,7 +5549,7 @@
         ];
         const targetGroup = trafficRoutingTargetGroupDetail(trafficRouting);
         const targetGroupHealth = targetHealthCountsText(targetGroup?.targetHealthCounts || targetGroup?.healthCounts);
-        if (targetGroupHealth !== '—') {
+        if (targetGroupHealth && targetGroupHealth !== '—') {
           statusRows.push(['Target group health', targetGroupHealth]);
         }
         statusRows.forEach(([label, value]) => {
