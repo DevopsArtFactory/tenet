@@ -3799,6 +3799,11 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"assert ecs_task_scope.get(\"requestedLimit\") == 1",
 			"assert ecs_task_resource_inspection[\"resourceType\"] == \"ecsTask\"",
 			"assert no_log_source.get(\"truncationStatus\") == \"not_applicable\"",
+			"\"audit-freshness\"",
+			"\"Last refreshed · ${fetchedAt}\"",
+			"\"meta.setAttribute('role', 'status');\"",
+			"\"meta.setAttribute('aria-live', 'polite');\"",
+			"\"meta.setAttribute('aria-atomic', 'true');\"",
 		},
 	}
 	for path, fragments := range smokeScripts {
