@@ -6853,6 +6853,16 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
           }],
         },
         targetGroupArns: ['arn:aws:elasticloadbalancing:ap-northeast-2:123456789012:targetgroup/payments-api-prod-candidate/abc123'],
+        scalingActivities: [{
+          activityId: 'act-123',
+          statusCode: 'Successful',
+          progress: 100,
+          startTime: '2026-05-05T07:20:00Z',
+          endTime: '2026-05-05T07:25:00Z',
+          cause: '<script>alert("scale")</script> user requested capacity change',
+          description: 'Launching a new EC2 instance: i-abc123',
+          statusMessage: 'Instance launched successfully',
+        }],
         instancesScope: { requestedLimit: limit, effectiveLimit: limit, returnedInstanceCount: limit === 25 ? 1 : 10, truncationStatus: limit === 25 ? 'not_truncated' : 'truncated' },
         instances: [{ instanceId: 'i-abc123', availabilityZone: 'ap-northeast-2a', lifecycleState: 'InService', healthStatus: 'Healthy', protectedFromScaleIn: true, weightedCapacity: '1', ec2Instance: { instanceState: 'running', instanceType: 'm6i.large', imageId: 'ami-host123', privateIpAddress: '10.0.1.24', publicIpAddress: '<img src=x onerror=1>', subnetId: 'subnet-abc123', vpcId: 'vpc-abc123', launchTime: '2026-05-05T07:30:00Z' } }],
       },
@@ -6876,6 +6886,16 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!asgSupportedText.includes('Mixed instances overrides')) throw new Error('expected ASG inspection to render mixed instances overrides section');
   if (!asgSupportedText.includes('payments-api-prod-candidate-arm · version 3 · id lt-arm123')) throw new Error('expected ASG inspection to render mixed instances override launch template');
   if (!asgSupportedText.includes('Instance type · c7g.large')) throw new Error('expected ASG inspection to render mixed instances override instance type');
+  if (!asgSupportedText.includes('Recent scaling activities')) throw new Error('expected ASG inspection to render scaling activities section');
+  if (!asgSupportedText.includes('act-123')) throw new Error('expected ASG inspection to render scaling activity id');
+  if (!asgSupportedText.includes('Activity ID · act-123')) throw new Error('expected ASG inspection to render scaling activity id label');
+  if (!asgSupportedText.includes('Status code · Successful')) throw new Error('expected ASG inspection to render scaling activity status');
+  if (!asgSupportedText.includes('Progress · 100')) throw new Error('expected ASG inspection to render scaling activity progress');
+  if (!asgSupportedText.includes('Start time · 2026-05-05T07:20:00Z')) throw new Error('expected ASG inspection to render scaling activity start time');
+  if (!asgSupportedText.includes('End time · 2026-05-05T07:25:00Z')) throw new Error('expected ASG inspection to render scaling activity end time');
+  if (!asgSupportedText.includes('Cause · <script>alert("scale")</script> user requested capacity change')) throw new Error('expected ASG inspection to render scaling activity cause safely');
+  if (!asgSupportedText.includes('Description · Launching a new EC2 instance: i-abc123')) throw new Error('expected ASG inspection to render scaling activity description');
+  if (!asgSupportedText.includes('Status message · Instance launched successfully')) throw new Error('expected ASG inspection to render scaling activity status message');
   if (!asgSupportedText.includes('Instances')) throw new Error('expected ASG inspection to render instances section');
   if (!asgSupportedText.includes('Lifecycle state · InService')) throw new Error('expected ASG inspection to render lifecycle state');
   if (!asgSupportedText.includes('Protected from scale-in · True')) throw new Error('expected ASG inspection to render protected-from-scale-in');
@@ -6890,6 +6910,8 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!asgSupportedText.includes('Launch time · 2026-05-05T07:30:00Z')) throw new Error('expected ASG inspection to render selected EC2 launch time: ' + asgSupportedText);
   const asgImages = collectNodes(asgSupportedRun.document.getElementById('accounts'), (node) => node.tagName === 'IMG');
   if (asgImages.length !== 0) throw new Error('expected selected EC2 host fields to remain text content rather than parsed html');
+  const asgScripts = collectNodes(asgSupportedRun.document.getElementById('accounts'), (node) => node.tagName === 'SCRIPT');
+  if (asgScripts.length !== 0) throw new Error('expected scaling activity text to remain text content rather than parsed html');
   if (!asgSupportedText.includes('Open EC2 console logs')) throw new Error('expected ASG inspection to render console-log handoff');
   const asgConsoleLogLinks = collectNodes(asgSupportedRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Open EC2 console logs');
   if (asgConsoleLogLinks.length !== 1) throw new Error('expected exactly one ASG console-log handoff, got ' + asgConsoleLogLinks.length);
@@ -6918,6 +6940,26 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (asgSupportedRun.window.location.search !== expectedASGInspectionLimitSearch) throw new Error('expected ASG instance sample limit select to update bookmarkable resource query, got ' + asgSupportedRun.window.location.search);
   const limitedASGInspectionText = collectText(asgSupportedRun.document.getElementById('accounts')).join(' | ');
   if (!limitedASGInspectionText.includes('ASG instance sample scope · requested 25 · effective 25 · returned 1 instance(s) · not truncated')) throw new Error('expected selected ASG scope evidence to stay backend-sourced, got ' + limitedASGInspectionText);
+
+  const asgEmptyActivitiesRun = await renderWithFetch('?page=resource&deployment=payments-api-prod&resourceType=candidateAutoScalingGroup&resourceId=' + encodeURIComponent(asgResourceID), (url) => {
+    if (url === asgDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(asgDetailBody) });
+    if (url === asgLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === asgInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({
+      available: true,
+      source: 'auto_scaling_group',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true },
+      autoScalingGroup: {
+        autoScalingGroupName: 'payments-api-prod-candidate',
+        scalingActivities: [],
+        instancesScope: { requestedLimit: 10, effectiveLimit: 10, returnedInstanceCount: 0, truncationStatus: 'not_truncated' },
+        instances: [],
+      },
+    }) });
+    throw new Error('unexpected empty-activities asg fetch url: ' + url);
+  });
+  const asgEmptyActivitiesText = collectText(asgEmptyActivitiesRun.document.getElementById('accounts')).join(' | ');
+  if (!asgEmptyActivitiesText.includes('Recent scaling activities')) throw new Error('expected empty ASG scaling activities payload to render section heading');
+  if (!asgEmptyActivitiesText.includes('No scaling activities are reported in the bounded recent activity window for this Auto Scaling Group.')) throw new Error('expected empty ASG scaling activities payload to render bounded-window empty state');
 
   const selectedInstanceLogsURL = asgLogsURL + '&instanceId=i-abc123';
   const selectedInstanceInspectionURL = asgInspectionURL.replace('&limit=10', '&instanceId=i-abc123&limit=10');
@@ -7794,6 +7836,60 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (fetchCalls.filter((url) => url === logsURL).length !== 2) throw new Error('expected exactly two recent-logs fetches');
   if (fetchCalls.filter((url) => url === inspectionURL).length !== 2) throw new Error('expected exactly two live-inspection fetches');
   if (window.location.search !== initialSearch) throw new Error('expected bookmarkable URL to remain unchanged after both refreshes');
+
+  const unavailableDocument = new Document();
+  unavailableDocument.byID.set('toolbar', unavailableDocument.createElement('section'));
+  unavailableDocument.byID.set('summary', unavailableDocument.createElement('section'));
+  unavailableDocument.byID.set('accounts', unavailableDocument.createElement('section'));
+  const unavailableWindow = { location: { pathname: '/', search: initialSearch, hash: '' } };
+  const unavailableHistory = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); unavailableWindow.location.pathname = pathname || '/'; unavailableWindow.location.search = query ? '?' + query : ''; } };
+  const unavailableFetchCalls = [];
+  let unavailableLogsFetchCount = 0;
+  let unavailableInspectionFetchCount = 0;
+  const unavailableFetch = (url) => {
+    unavailableFetchCalls.push(String(url));
+    if (url === deploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === logsURL) {
+      unavailableLogsFetchCount += 1;
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({
+        available: true,
+        source: 'cloudwatch',
+        lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true },
+        entries: [{ timestamp: '2026-04-18T00:18:00Z', stream: 'ecs/payments-api-staging/3', message: 'Unavailable payload sibling log line' }],
+      }) });
+    }
+    if (url === inspectionURL) {
+      unavailableInspectionFetchCount += 1;
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({
+        available: false,
+        source: '',
+        unavailableReason: unavailableInspectionFetchCount === 1 ? 'aws_unavailable' : 'no_running_tasks',
+        lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true },
+      }) });
+    }
+    throw new Error('unexpected unavailable-payload fetch url: ' + url);
+  };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(unavailableWindow, unavailableDocument, unavailableFetch, unavailableHistory, Element, InputElement);
+  await settle(3);
+  const unavailableRoot = unavailableDocument.getElementById('accounts');
+  let unavailableText = collectText(unavailableRoot).join(' | ');
+  if (!unavailableText.includes('Live inspection is unavailable for this resource.')) throw new Error('expected explicit unavailable payload mapping for live inspection');
+  if (!unavailableText.includes('AWS access is currently unavailable for live inspection.')) throw new Error('expected unavailable payload to use friendly reason mapping');
+  let unavailableButtons = collectNodes(unavailableRoot, (node) => node.tagName === 'BUTTON');
+  const unavailableRefreshInspection = unavailableButtons.find((node) => node.textContent === 'Refresh live inspection');
+  const unavailableRefreshLogs = unavailableButtons.find((node) => node.textContent === 'Refresh recent logs');
+  if (!unavailableRefreshInspection || unavailableRefreshInspection.disabled) throw new Error('expected unavailable live-inspection payload to leave refresh enabled');
+  if (!unavailableRefreshLogs || unavailableRefreshLogs.disabled) throw new Error('expected sibling recent-logs refresh to remain enabled after unavailable inspection payload');
+  unavailableRefreshInspection.dispatch('click');
+  await settle(3);
+  unavailableText = collectText(unavailableRoot).join(' | ');
+  if (!unavailableText.includes('No running tasks were found for this ECS service.')) throw new Error('expected unavailable refresh to render refreshed friendly reason mapping');
+  if (unavailableLogsFetchCount !== 1) throw new Error('expected unavailable live-inspection refresh not to refetch sibling recent logs, got ' + unavailableLogsFetchCount);
+  if (unavailableInspectionFetchCount !== 2) throw new Error('expected unavailable live-inspection refresh to refetch inspection exactly once, got ' + unavailableInspectionFetchCount);
+  if (unavailableFetchCalls.filter((url) => url === deploymentURL).length !== 1) throw new Error('expected unavailable live-inspection refresh not to reload deployment detail');
+  unavailableButtons = collectNodes(unavailableRoot, (node) => node.tagName === 'BUTTON');
+  if (unavailableButtons.find((node) => node.textContent === 'Refresh live inspection')?.disabled) throw new Error('expected unavailable live-inspection refresh button to re-enable after refresh');
+  if (unavailableWindow.location.search !== initialSearch) throw new Error('expected unavailable live-inspection refresh to preserve bookmarkable URL');
 })();
 `
 
