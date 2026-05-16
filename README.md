@@ -194,8 +194,11 @@ inspection is configured and succeeds, the same identifiers may instead return
 `source=live` / `inspectionMode=live`; the resource-detail Live inspection
 panel renders deployment-group status cues such as CodeDeploy application,
 deployment group, deployment config, deployment style, ECS service bindings, and
-the latest CodeDeploy deployment summary and target groups without moving that
-noise onto the applications overview. Local smoke guards ensure these
+the latest CodeDeploy deployment summary and target groups. When the live payload
+includes `trafficRoutingResource.codeDeployDeploymentGroup.latestDeployment` or
+`latestCodeDeployDeployment`, that same resource-detail panel also shows the
+deployment id/status/create time/complete time/status message without moving
+that noise onto the applications overview. Local smoke guards ensure these
 traffic-routing fallback routes do not regress to `aws_unavailable`.
 
 - `POST /v1/plans/deployments/{deploymentName}`

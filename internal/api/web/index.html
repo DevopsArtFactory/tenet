@@ -5554,17 +5554,18 @@
           },
           'No ECS service bindings are currently reported for this CodeDeploy deployment group.',
         );
-        const latestDeployment = deploymentGroup.latestDeployment;
+        const latestDeployment = deploymentGroup.latestDeployment || deploymentGroup.latestCodeDeployDeployment;
         const latestDeploymentSection = latestDeployment && typeof latestDeployment === 'object'
           ? (() => {
               const latestSection = createElement('section', 'detail-section');
               latestSection.append(createElement('h4', '', 'Latest CodeDeploy deployment'));
               const latestGrid = createElement('div', 'detail-grid');
               [
-                ['Deployment ID', textOrDash(latestDeployment.deploymentId)],
-                ['Status', textOrDash(latestDeployment.status)],
-                ['Created', textOrDash(latestDeployment.createTime)],
-                ['Ended', textOrDash(latestDeployment.endTime)],
+                ['Deployment ID', textOrDash(latestDeployment.deploymentId || latestDeployment.deploymentID || latestDeployment.id)],
+                ['Deployment status', textOrDash(latestDeployment.status)],
+                ['Create time', textOrDash(latestDeployment.createTime || latestDeployment.createdAt)],
+                ['Complete time', textOrDash(latestDeployment.completeTime || latestDeployment.endTime || latestDeployment.completedAt)],
+                ['Status message', textOrDash(latestDeployment.statusMessage || latestDeployment.message)],
                 ['Summary source', textOrDash(latestDeployment.source)],
               ].forEach(([label, value]) => latestGrid.append(createMetric(label, value)));
               latestSection.append(latestGrid);
