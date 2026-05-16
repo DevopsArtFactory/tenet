@@ -6404,6 +6404,8 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!liveDeploymentGroupText.includes('Deployment style')) throw new Error('expected deployment style label');
   if (!liveDeploymentGroupText.includes('BLUE_GREEN / WITH_TRAFFIC_CONTROL')) throw new Error('expected deployment style value');
   if (!liveDeploymentGroupText.includes('Latest CodeDeploy deployment')) throw new Error('expected latest CodeDeploy deployment section');
+  if (!liveDeploymentGroupText.includes('Latest deployment · Succeeded')) throw new Error('expected scannable latest deployment status pill');
+  if (!liveDeploymentGroupText.includes('Traffic shift completed. Confirm service health and close out the rollout handoff.')) throw new Error('expected succeeded deployment operator cue');
   if (!liveDeploymentGroupText.includes('Deployment ID')) throw new Error('expected latest deployment id label');
   if (!liveDeploymentGroupText.includes('d-LATEST<script>safe</script>')) throw new Error('expected latest deployment id to render as safe text');
   if (!liveDeploymentGroupText.includes('Deployment status')) throw new Error('expected latest deployment status label');
@@ -6458,6 +6460,8 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   });
   const liveDeploymentGroupAliasText = collectText(liveDeploymentGroupAliasRun.document.getElementById('accounts')).join(' | ');
   if (!liveDeploymentGroupAliasText.includes('Latest CodeDeploy deployment')) throw new Error('expected latestCodeDeployDeployment alias section');
+  if (!liveDeploymentGroupAliasText.includes('Latest deployment · InProgress')) throw new Error('expected latestCodeDeployDeployment alias status pill');
+  if (!liveDeploymentGroupAliasText.includes('Rollout is still active. Watch the CodeDeploy deployment before promoting or troubleshooting traffic.')) throw new Error('expected in-progress deployment operator cue');
   if (!liveDeploymentGroupAliasText.includes('d-JKLMNOPQR')) throw new Error('expected latestCodeDeployDeployment alias id value');
   if (!liveDeploymentGroupAliasText.includes('InProgress')) throw new Error('expected latestCodeDeployDeployment alias status value');
   if (!liveDeploymentGroupAliasText.includes('Deployment is still shifting traffic.')) throw new Error('expected latestCodeDeployDeployment alias status message');

@@ -1716,6 +1716,9 @@ assert 'No live inspection details are available for this resource yet.' in ui, 
 assert 'CodeDeploy deployment group status' in ui, ui
 assert 'Bounded live deployment-group evidence for the CodeDeploy traffic-routing resource selected in this drill-down.' in ui, ui
 assert 'Latest CodeDeploy deployment' in ui, ui
+assert 'Latest deployment · ${textOrDash(latestStatus)}' in ui, ui
+assert 'Traffic shift completed. Confirm service health and close out the rollout handoff.' in ui, ui
+assert 'Rollout is still active. Watch the CodeDeploy deployment before promoting or troubleshooting traffic.' in ui, ui
 assert 'Deployment ID' in ui, ui
 assert 'Deployment status' in ui, ui
 assert 'Create time' in ui, ui

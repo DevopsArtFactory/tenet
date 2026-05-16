@@ -280,6 +280,20 @@
             return '';
         }
       };
+      const codeDeployDeploymentStatusClass = (status) => {
+        const normalized = String(status || '').toLowerCase();
+        if (['succeeded', 'ready'].includes(normalized)) return 'synced';
+        if (['created', 'queued', 'inprogress', 'in_progress', 'baking'].includes(normalized)) return 'progress';
+        if (['stopped', 'failed'].includes(normalized)) return 'error';
+        return '';
+      };
+      const codeDeployDeploymentOperatorCue = (status) => {
+        const normalized = String(status || '').toLowerCase();
+        if (normalized === 'succeeded') return 'Traffic shift completed. Confirm service health and close out the rollout handoff.';
+        if (['created', 'queued', 'inprogress', 'in_progress', 'baking'].includes(normalized)) return 'Rollout is still active. Watch the CodeDeploy deployment before promoting or troubleshooting traffic.';
+        if (['stopped', 'failed'].includes(normalized)) return 'Rollout needs attention. Inspect the CodeDeploy deployment message and target-group health before retrying.';
+        return 'Use the deployment status, message, and target-group evidence below to decide the next operator action.';
+      };
 
       const healthLabel = (health) => health?.overall || 'Unknown';
       const artifact = (obj) => obj?.binary || obj?.image || '—';
@@ -5559,10 +5573,19 @@
           ? (() => {
               const latestSection = createElement('section', 'detail-section');
               latestSection.append(createElement('h4', '', 'Latest CodeDeploy deployment'));
+              const latestStatus = latestDeployment.status || latestDeployment.deploymentStatus;
+              const latestSummary = createElement('div', 'pills');
+              latestSummary.append(
+                createElement('span', `pill ${codeDeployDeploymentStatusClass(latestStatus)}`, `Latest deployment · ${textOrDash(latestStatus)}`),
+              );
+              latestSection.append(
+                latestSummary,
+                createElement('p', 'detail-section-copy', codeDeployDeploymentOperatorCue(latestStatus)),
+              );
               const latestGrid = createElement('div', 'detail-grid');
               [
                 ['Deployment ID', textOrDash(latestDeployment.deploymentId || latestDeployment.deploymentID || latestDeployment.id)],
-                ['Deployment status', textOrDash(latestDeployment.status)],
+                ['Deployment status', textOrDash(latestStatus)],
                 ['Create time', textOrDash(latestDeployment.createTime || latestDeployment.createdAt)],
                 ['Complete time', textOrDash(latestDeployment.completeTime || latestDeployment.endTime || latestDeployment.completedAt)],
                 ['Status message', textOrDash(latestDeployment.statusMessage || latestDeployment.message)],
