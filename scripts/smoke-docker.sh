@@ -1883,7 +1883,7 @@ for fragment in (
     "const auditEntryAnchors = entries.map((entry) => ({",
     "pushAuditSectionLink(anchor.anchorID, anchor.label);",
     "row.setAttribute('id', rowAnchorID);",
-    "createNavLink(auditEntryAnchorURL(entry, rowAnchorID), 'Open audit entry', '_self')",
+    "createNavLink(auditEntryAnchorURL(entry, rowAnchorID), 'Share audit entry', '_self')",
     "Share or continue in app",
     "No audit activity has been persisted yet.",
     "No audit activity has been persisted yet for deployment ${currentPageState.deployment}. Create a plan preview or apply request from the plan/apply workspace to add immutable audit rows for this deployment.",

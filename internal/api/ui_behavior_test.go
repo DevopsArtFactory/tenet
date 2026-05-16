@@ -11293,7 +11293,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!driftLink || driftLink.target !== '_self' || driftLink.rel) throw new Error('expected audit drift self link');
   const workspaceLink = links.find((node) => node.href === '/console?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&planId=plan_ready_123&applyId=apply_failed_123' && node.textContent === 'Open plan/apply workspace');
   if (!workspaceLink || workspaceLink.target !== '_self' || workspaceLink.rel) throw new Error('expected audit plan/apply self link');
-  const auditEntryLinks = links.filter((node) => node.textContent === 'Open audit entry');
+  const auditEntryLinks = links.filter((node) => node.textContent === 'Share audit entry');
   if (auditEntryLinks.length !== 2) throw new Error('expected one shareable self link per audit row, got ' + auditEntryLinks.length);
   const applyEntryLink = auditEntryLinks.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2#audit-entry-apply-apply-failed-123');
   if (!applyEntryLink || applyEntryLink.target !== '_self' || applyEntryLink.rel) throw new Error('expected apply audit row anchor link to preserve filters');

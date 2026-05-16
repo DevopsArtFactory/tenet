@@ -2117,7 +2117,7 @@ assert "const auditEntryQuickNavLabel = (entry) => {" in audit_ui, audit_ui
 assert "const auditEntryAnchors = entries.map((entry) => ({" in audit_ui, audit_ui
 assert "pushAuditSectionLink(anchor.anchorID, anchor.label);" in audit_ui, audit_ui
 assert "row.setAttribute('id', rowAnchorID);" in audit_ui, audit_ui
-assert "createNavLink(auditEntryAnchorURL(entry, rowAnchorID), 'Open audit entry', '_self')" in audit_ui, audit_ui
+assert "createNavLink(auditEntryAnchorURL(entry, rowAnchorID), 'Share audit entry', '_self')" in audit_ui, audit_ui
 assert 'Share or continue in app' in audit_ui, audit_ui
 assert 'No audit activity has been persisted yet.' in audit_ui, audit_ui
 assert 'No audit activity has been persisted yet for deployment ${currentPageState.deployment}. Create a plan preview or apply request from the plan/apply workspace to add immutable audit rows for this deployment.' in audit_ui, audit_ui
