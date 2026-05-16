@@ -2639,6 +2639,13 @@
         const fetchedAt = applicationsOverviewFetchedAtText(overviewState);
         return fetchedAt ? `Applications read refreshed · ${fetchedAt}` : 'Applications read not refreshed yet';
       };
+      const createApplicationsOverviewFreshnessMeta = (overviewState = null) => {
+        const meta = createElement('div', 'account-meta applications-overview-freshness', applicationsOverviewFreshnessLabel(overviewState));
+        meta.setAttribute('role', 'status');
+        meta.setAttribute('aria-live', 'polite');
+        meta.setAttribute('aria-atomic', 'true');
+        return meta;
+      };
       const applicationsOverviewRefreshState = (overviewState = null) => {
         if (overviewState?.status === 'loading') {
           return {
@@ -2769,7 +2776,7 @@
           createElement('div', 'label', 'Sync and health summary'),
           createElement('div', 'account-meta', `${synced} synced · ${progressing} progressing · ${paused} paused · ${errored} error`),
           createElement('div', 'account-meta', `${lastUpdateLabel} · ${latestUpdate}`),
-          createElement('div', 'account-meta', applicationsOverviewFreshnessLabel(applicationsOverviewState)),
+          createApplicationsOverviewFreshnessMeta(applicationsOverviewState),
         );
         const refreshState = applicationsOverviewRefreshState(applicationsOverviewState);
         const refreshNodes = [];

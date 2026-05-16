@@ -1458,6 +1458,11 @@ assert 'Application status overview' in ui, ui
 assert 'Visible applications after filters:' in ui, ui
 assert 'Visible subset last update' in ui, ui
 assert 'Applications read refreshed ·' in ui, ui
+assert 'createApplicationsOverviewFreshnessMeta(applicationsOverviewState)' in ui, ui
+assert 'applications-overview-freshness' in ui, ui
+assert "meta.setAttribute('role', 'status');" in ui, ui
+assert "meta.setAttribute('aria-live', 'polite');" in ui, ui
+assert "meta.setAttribute('aria-atomic', 'true');" in ui, ui
 assert "['Last update', runtimeSummaryTimestamp(deployment.runtimeSummary)]" in ui, ui
 assert "container.append(createElement('strong', '', 'Runtime'));" in ui, ui
 assert 'Applications JSON' in ui, ui
@@ -1621,7 +1626,7 @@ assert "buildPageURL('plan', { deployment: deployment.name })" in ui, ui
 assert "buildPageURL('audit', { deployment: deployment.name })" in ui, ui
 assert 'Refresh applications overview' in ui, ui
 assert 'Applications read not refreshed yet' in ui, ui
-assert 'applicationsOverviewFreshnessLabel(applicationsOverviewState)' in ui, ui
+assert 'createApplicationsOverviewFreshnessMeta(applicationsOverviewState)' in ui, ui
 assert 'Health' in ui, ui
 assert 'All health states' in ui, ui
 assert "params.set('health', currentViewState.healthState)" in ui, ui

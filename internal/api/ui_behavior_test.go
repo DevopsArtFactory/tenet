@@ -1217,6 +1217,11 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!summaryText.includes('2026-04-16T07:10:00Z')) throw new Error('expected applications page last update value');
   if (!summaryText.includes('Applications read refreshed ·')) throw new Error('expected applications overview to show read freshness, got ' + summaryText);
   if (summaryText.includes('Applications read not refreshed yet')) throw new Error('expected successful applications read to replace the not-refreshed placeholder');
+  const freshnessMeta = collectNodes(document.getElementById('summary'), (node) => node.className === 'account-meta applications-overview-freshness')[0];
+  if (!freshnessMeta) throw new Error('expected applications overview freshness meta element');
+  if (freshnessMeta.getAttribute('role') !== 'status') throw new Error('expected applications overview freshness meta to be a status region');
+  if (freshnessMeta.getAttribute('aria-live') !== 'polite') throw new Error('expected applications overview freshness meta to announce politely');
+  if (freshnessMeta.getAttribute('aria-atomic') !== 'true') throw new Error('expected applications overview freshness meta to announce atomically');
   if (!accountsText.includes('payments-api-staging')) throw new Error('expected applications page row text');
   if (!accountsText.includes('Last update') || !accountsText.includes('2026-04-16T07:10:00Z')) throw new Error('expected applications row to show row-local last update timestamp');
   if (!accountsText.includes('More actions for payments-api-staging')) throw new Error('expected applications page secondary actions disclosure to name the deployment');
