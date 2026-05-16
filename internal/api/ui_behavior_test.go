@@ -2098,6 +2098,10 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/accounts/210987654321') throw new Error('expected only account overview detail fetch on account page');
   if (document.title !== '210987654321 · Account detail · Tenet') throw new Error('expected account page browser title, got ' + document.title);
   if (!toolbarText.includes('Back to applications')) throw new Error('expected account page back link');
+  if (!toolbarText.includes('Refresh account detail')) throw new Error('expected account page toolbar refresh control');
+  const toolbarButtons = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
+  const toolbarRefreshButton = toolbarButtons.find((node) => node.textContent === 'Refresh account detail');
+  if (!toolbarRefreshButton || toolbarRefreshButton.disabled) throw new Error('expected enabled account toolbar refresh button after initial render');
   const toolbarLinks = collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'A');
   const backLink = toolbarLinks.find((node) => node.href === '/?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.target === '_self');
   if (!backLink) throw new Error('expected account page back link to preserve filters');
@@ -2249,7 +2253,7 @@ async function render(fetchImpl) {
     if (refreshFetchCount === 2) return new Promise((resolve) => { resolveRefresh = resolve; });
     throw new Error('unexpected account fetch count: ' + refreshFetchCount);
   });
-  let buttons = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  let buttons = collectNodes(loadingView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
   let refreshButton = buttons.find((node) => node.textContent === 'Refresh account detail');
   if (!refreshButton || refreshButton.disabled) throw new Error('expected account refresh button enabled after initial render');
   let text = collectText(loadingView.document.getElementById('accounts')).join(' | ');
@@ -2258,7 +2262,7 @@ async function render(fetchImpl) {
   if (!summaryText.includes('Account detail read refreshed ·')) throw new Error('expected initial account detail freshness cue');
   refreshButton.dispatch('click');
   await settle();
-  buttons = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  buttons = collectNodes(loadingView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
   refreshButton = buttons.find((node) => node.textContent === 'Refresh account detail');
   if (!refreshButton || !refreshButton.disabled) throw new Error('expected account refresh button disabled only while refresh is in flight');
   text = collectText(loadingView.document.getElementById('accounts')).join(' | ');
@@ -2275,9 +2279,9 @@ async function render(fetchImpl) {
   if (text.includes('payments-api-staging')) throw new Error('expected refreshed account detail to replace stale deployment content');
   if (!summaryText.includes('Account detail read refreshed ·')) throw new Error('expected refreshed account detail to keep freshness cue');
   if (summaryText.includes('Account detail read not refreshed yet')) throw new Error('expected refreshed account detail not to show missing freshness fallback');
-  buttons = collectNodes(loadingView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  buttons = collectNodes(loadingView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
   refreshButton = buttons.find((node) => node.textContent === 'Refresh account detail');
-  if (!refreshButton || refreshButton.disabled) throw new Error('expected account refresh button re-enabled after refresh completes');
+  if (!refreshButton || refreshButton.disabled) throw new Error('expected account toolbar refresh button re-enabled after refresh completes');
 
   let authFetchCount = 0;
   const authView = await render((url) => {
@@ -2287,9 +2291,9 @@ async function render(fetchImpl) {
     if (authFetchCount === 2) return Promise.resolve({ ok: false, status: 401, text: () => Promise.resolve('unauthenticated: authenticated identity is required for this operator read route') });
     throw new Error('unexpected auth-view account fetch count: ' + authFetchCount);
   });
-  buttons = collectNodes(authView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  buttons = collectNodes(authView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
   refreshButton = buttons.find((node) => node.textContent === 'Refresh account detail');
-  if (!refreshButton) throw new Error('expected account refresh button in auth error scenario');
+  if (!refreshButton) throw new Error('expected account toolbar refresh button in auth error scenario');
   refreshButton.dispatch('click');
   await settle();
   await settle();
@@ -2299,9 +2303,9 @@ async function render(fetchImpl) {
   if (!text.includes('Current account detail remains visible below.')) throw new Error('expected account refresh auth guidance to keep stale-content copy');
   if (!text.includes('payments-api-staging')) throw new Error('expected account content to remain visible after auth failure');
   if (text.includes('Failed to refresh account detail:')) throw new Error('expected account auth refresh to avoid generic refresh failure copy');
-  buttons = collectNodes(authView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  buttons = collectNodes(authView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
   refreshButton = buttons.find((node) => node.textContent === 'Refresh account detail');
-  if (!refreshButton || refreshButton.disabled) throw new Error('expected account refresh button re-enabled after auth failure');
+  if (!refreshButton || refreshButton.disabled) throw new Error('expected account toolbar refresh button re-enabled after auth failure');
   if (authFetchCount !== 2) throw new Error('expected account auth refresh to retry exactly once');
   if (authView.window.location.search !== initialSearch) throw new Error('expected account auth refresh to preserve bookmarkable route');
 
@@ -2313,18 +2317,18 @@ async function render(fetchImpl) {
     if (errorFetchCount === 2) return Promise.resolve({ ok: false, status: 500, text: () => Promise.resolve('boom') });
     throw new Error('unexpected error-view account fetch count: ' + errorFetchCount);
   });
-  buttons = collectNodes(errorView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  buttons = collectNodes(errorView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
   refreshButton = buttons.find((node) => node.textContent === 'Refresh account detail');
-  if (!refreshButton) throw new Error('expected account refresh button in generic error scenario');
+  if (!refreshButton) throw new Error('expected account toolbar refresh button in generic error scenario');
   refreshButton.dispatch('click');
   await settle();
   await settle();
   text = collectText(errorView.document.getElementById('accounts')).join(' | ');
   if (!text.includes('Failed to refresh account detail: account detail request failed (500): boom')) throw new Error('expected account refresh error copy');
   if (!text.includes('payments-api-staging')) throw new Error('expected current account content to remain visible after refresh error');
-  buttons = collectNodes(errorView.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  buttons = collectNodes(errorView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON');
   refreshButton = buttons.find((node) => node.textContent === 'Refresh account detail');
-  if (!refreshButton || refreshButton.disabled) throw new Error('expected account refresh button re-enabled after refresh error');
+  if (!refreshButton || refreshButton.disabled) throw new Error('expected account toolbar refresh button re-enabled after refresh error');
   if (errorFetchCount !== 2) throw new Error('expected account refresh error to retry exactly once');
   if (errorView.window.location.search !== initialSearch) throw new Error('expected account refresh error state to preserve bookmarkable route');
 })();

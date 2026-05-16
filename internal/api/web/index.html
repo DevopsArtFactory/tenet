@@ -8477,7 +8477,12 @@
         const backLink = createNavLink(buildPageURL('applications'), 'Back to applications');
         backLink.target = '_self';
         backLink.rel = '';
-        toolbar.replaceChildren(backLink);
+        const toolbarActions = createElement('div', 'toolbar-actions');
+        toolbarActions.append(backLink);
+        createAccountDetailActions(accountState).forEach((action) => {
+          if (action) toolbarActions.append(action);
+        });
+        toolbar.replaceChildren(toolbarActions);
 
         const detailSummary = createElement('article', 'account');
         detailSummary.id = 'account-summary';

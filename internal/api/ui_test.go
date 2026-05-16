@@ -808,6 +808,8 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"Drift view",
 		"createNavLink(buildPageURL('drift', { deployment: deployment.name }), 'Drift view', '_self')",
 		"const renderAccountDetailPage = (account, accountState = null) => {",
+		"createAccountDetailActions(accountState).forEach((action) => {",
+		"toolbar.replaceChildren(toolbarActions);",
 		"Account deployment overview",
 		"Account JSON",
 		"Group JSON",
@@ -3009,6 +3011,12 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Refresh account detail' in account_ui, account_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh account detail")
 	}
+	if !strings.Contains(text, "assert \"createAccountDetailActions(accountState).forEach((action) => {\" in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert account refresh toolbar action wiring")
+	}
+	if !strings.Contains(text, "assert \"toolbar.replaceChildren(toolbarActions);\" in account_ui, account_ui") {
+		t.Fatalf("expected smoke-local.sh to assert account toolbar action container")
+	}
 	if !strings.Contains(text, "assert 'Refresh application detail' in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh application detail")
 	}
@@ -4351,12 +4359,12 @@ func TestOverviewDocsDescribeAccountSectionNavigation(t *testing.T) {
 func TestOverviewDocsDescribeAccountDetailRefresh(t *testing.T) {
 	files := map[string][]string{
 		"../../docs/architecture/tenet-v1-operator-contracts.md": {
-			"`Refresh account detail`",
+			"toolbar-level `Refresh account detail`",
 			"re-runs only `GET /v1/overview/accounts/{awsAccountId}`",
 			"leaves the stale account content visible with explicit loading/error copy",
 		},
 		"../../docs/features/overview-dashboard.md": {
-			"`Refresh account detail`",
+			"toolbar-level `Refresh account detail`",
 			"re-runs only `GET /v1/overview/accounts/{awsAccountId}`",
 			"refresh-time `401` / `403` responses reuse that same trusted-front-door / access-denied guidance instead of generic fetch-error copy",
 		},
