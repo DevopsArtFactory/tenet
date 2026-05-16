@@ -2497,7 +2497,7 @@ func TestEmbeddedUIIncludesRuntimeAndHistoryChangeDetailsRendering(t *testing.T)
 	}
 }
 
-func TestCISmokeWorkflowSyntaxChecksBothSmokeScriptsInFastLane(t *testing.T) {
+func TestCISmokeWorkflowSyntaxChecksFastLaneScripts(t *testing.T) {
 	body, err := os.ReadFile("../../.github/workflows/ci-smoke.yml")
 	if err != nil {
 		t.Fatalf("read ci-smoke workflow: %v", err)
@@ -2513,6 +2513,7 @@ func TestCISmokeWorkflowSyntaxChecksBothSmokeScriptsInFastLane(t *testing.T) {
 	for _, fragment := range []string{
 		"run: bash -n scripts/smoke-local.sh",
 		"run: bash -n scripts/smoke-docker.sh",
+		"run: bash -n scripts/ci-smoke-runner-evidence.sh",
 		"run: make smoke-local",
 	} {
 		if !strings.Contains(fastJob, fragment) {
@@ -3898,7 +3899,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"`aws_unavailable` and `no_log_source` as part of the expected local no-AWS contract",
 			"valid drill-down target but has no independent recent-log stream yet",
 			"Linux CI runners",
-			"syntax-checks both `scripts/smoke-local.sh` and `scripts/smoke-docker.sh` with `bash -n`, then runs `make smoke-local`",
+			"syntax-checks `scripts/smoke-local.sh`, `scripts/smoke-docker.sh`, and the runner-start evidence helper `scripts/ci-smoke-runner-evidence.sh` with `bash -n`, then runs `make smoke-local`",
 			"on pull requests, a cheap `docker-smoke-scope` job first checks changed paths",
 			"runs the full `make smoke-docker` container stack only when the PR touches Compose/front-door/auth/API/controller, local desired-state/status fixtures, catalog/domain/placement status read-model contracts, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surfaces",
 			"fixture inputs (`examples/local-repo/**`, `examples/local-status/**`)",
@@ -4003,7 +4004,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"For the first recovered `main` run, require non-empty `steps[]`, real runner assignment, fast-lane evidence that `go test ./...`, smoke-script syntax checks, and `make smoke-local` were reached",
 			"remaining red checks are normal actionable CI failures: inspect logs, reproduce locally, and link the repo-side follow-up",
 			"rely on local `go test ./...`, `make smoke-local`, and `make smoke-docker` output for code-level reproduction",
-			"syntax-checks both `scripts/smoke-local.sh` and `scripts/smoke-docker.sh` with `bash -n`, then runs `make smoke-local`",
+			"syntax-checks `scripts/smoke-local.sh`, `scripts/smoke-docker.sh`, and the runner-start evidence helper `scripts/ci-smoke-runner-evidence.sh` with `bash -n`, then runs `make smoke-local`",
 			"Pull requests first pass through a cheap `docker-smoke-scope` path filter",
 			"only PRs that touch Compose/front-door/auth/API/controller, local desired-state/status fixtures, catalog/domain/placement status read-model contracts, GitHub webhook, resource evidence/logs/inspection, or plan/apply/audit persistence smoke surfaces",
 			"fixture inputs (`examples/local-repo/**`, `examples/local-status/**`)",

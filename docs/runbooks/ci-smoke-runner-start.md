@@ -23,6 +23,8 @@ scripts/ci-smoke-runner-evidence.sh <run-id>
 
 The helper also prints a compact `Runner-start verdict` section before the raw evidence. Treat a line as a likely pre-runner blocker when `Fast smoke` or `Docker smoke scope` has `runner_id=0` or an empty `runner_name`, and `steps=[]`; that means the lane did not reach repository commands. The same verdict section calls out any billing/spending-limit annotation found on the CI Smoke check-runs so reviewers do not have to infer the account-level blocker from raw JSON alone.
 
+The CI Smoke fast lane syntax-checks this helper with `bash -n` alongside the local and Docker smoke scripts. If an edit breaks the evidence collector itself, expect the hosted fast lane to fail before operators need it during a runner-start incident.
+
 If you need to collect each piece manually or paste individual commands into a PR comment, use the same sequence:
 
 ```bash
@@ -122,7 +124,7 @@ Use this checklist for the first `main` run that starts after the account-level 
 
 - Rerun the newest failed `main` `CI Smoke` run, or dispatch a fresh `CI Smoke` run on `main` if GitHub no longer allows rerunning the old run.
 - Confirm `Fast smoke` and `Docker smoke scope` have non-empty `steps[]` plus a real runner assignment. A recovered run must show repository steps such as checkout/setup instead of the pre-runner `runner_id=0` / `steps=[]` pattern.
-- Confirm the fast lane reaches the repository commands documented in `.github/workflows/ci-smoke.yml`: `go test ./...`, `bash -n scripts/smoke-local.sh`, `bash -n scripts/smoke-docker.sh`, and `make smoke-local`.
+- Confirm the fast lane reaches the repository commands documented in `.github/workflows/ci-smoke.yml`: `go test ./...`, `bash -n scripts/smoke-local.sh`, `bash -n scripts/smoke-docker.sh`, `bash -n scripts/ci-smoke-runner-evidence.sh`, and `make smoke-local`.
 - For `main`, confirm the Docker lane either reaches `make smoke-docker` or fails with normal downloadable logs from repository commands. Do not require the Docker lane on unrelated PRs just to prove runner recovery; keep the existing CI cost profile intact.
 - If any command fails after steps are non-empty, classify it as a normal actionable CI failure: read the logs, reproduce locally, and open or link the repo-side follow-up. Do not keep labeling post-recovery command failures as the billing/spending-limit blocker.
 - Leave one concrete #850 comment with the run URL, the non-empty `steps[]` evidence, the first repository command reached in each lane, and the follow-up issue/PR for any remaining product failure. Close #850 only after this evidence is recorded.
