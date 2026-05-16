@@ -5521,6 +5521,52 @@
         return section;
       };
       const listenerRuleArrayText = (values) => Array.isArray(values) && values.length ? values.map((value) => textOrDash(value)).join(', ') : '—';
+      const createCodeDeployDeploymentGroupSection = (trafficRouting) => {
+        const deploymentGroup = trafficRouting?.codeDeployDeploymentGroup || trafficRouting?.deploymentGroup;
+        if (!deploymentGroup || typeof deploymentGroup !== 'object') return null;
+        const section = createElement('section', 'detail-section');
+        section.append(createElement('h4', '', 'CodeDeploy deployment group status'));
+        section.append(createElement('p', 'detail-section-copy', 'Bounded live deployment-group evidence for the CodeDeploy traffic-routing resource selected in this drill-down.'));
+        const metadata = createElement('div', 'detail-grid');
+        [
+          ['Application name', textOrDash(deploymentGroup.applicationName)],
+          ['Deployment group name', textOrDash(deploymentGroup.deploymentGroupName)],
+          ['Deployment config', textOrDash(deploymentGroup.deploymentConfigName)],
+          ['Deployment style', deploymentGroup.deploymentType || deploymentGroup.deploymentOption ? `${textOrDash(deploymentGroup.deploymentType)} / ${textOrDash(deploymentGroup.deploymentOption)}` : '—'],
+          ['Service role ARN', textOrDash(deploymentGroup.serviceRoleArn)],
+          ['Production listener ARN', textOrDash(deploymentGroup.productionListenerArn)],
+          ['Test listener ARN', textOrDash(deploymentGroup.testListenerArn)],
+        ].forEach(([label, value]) => metadata.append(createMetric(label, value)));
+        section.append(metadata);
+        const ecsServicesSection = createInspectionListSection(
+          'CodeDeploy ECS service bindings',
+          Array.isArray(deploymentGroup.ecsServices) ? deploymentGroup.ecsServices : [],
+          (service) => {
+            const item = createElement('li');
+            item.append(createElement('strong', '', textOrDash(service?.serviceName || service?.clusterName || 'ECS service')));
+            const meta = createElement('div', 'detail-history-meta');
+            meta.append(
+              createElement('span', 'detail-condition-meta', `Cluster · ${textOrDash(service?.clusterName)}`),
+              createElement('span', 'detail-condition-meta', `Service · ${textOrDash(service?.serviceName)}`),
+            );
+            item.append(meta);
+            return item;
+          },
+          'No ECS service bindings are currently reported for this CodeDeploy deployment group.',
+        );
+        const targetGroupsSection = createInspectionListSection(
+          'CodeDeploy target groups',
+          Array.isArray(deploymentGroup.targetGroups) ? deploymentGroup.targetGroups : [],
+          (targetGroupName) => {
+            const item = createElement('li');
+            item.append(createElement('strong', '', textOrDash(targetGroupName)));
+            return item;
+          },
+          'No target groups are currently reported for this CodeDeploy deployment group.',
+        );
+        section.append(ecsServicesSection, targetGroupsSection);
+        return section;
+      };
       const createTrafficRoutingListenerRuleSection = (trafficRouting) => {
         const listenerRule = trafficRouting?.listenerRule;
         if (!listenerRule || typeof listenerRule !== 'object') return null;
@@ -5679,6 +5725,7 @@
           createElement('h4', '', 'Rollout summary'),
           createElement('p', 'detail-section-copy', textOrDash(trafficRouting?.summary)),
         );
+        const codeDeployDeploymentGroupSection = createCodeDeployDeploymentGroupSection(trafficRouting);
         const listenerRuleSection = createTrafficRoutingListenerRuleSection(trafficRouting);
         const targetGroupSection = createTrafficRoutingTargetGroupSection(trafficRouting);
         section.replaceChildren(
@@ -5686,6 +5733,7 @@
           createElement('p', 'detail-section-copy', 'Read-only traffic-routing inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
           ...createResourceInspectionLookupContextNodes(result?.lookupContext),
           metadata,
+          ...(codeDeployDeploymentGroupSection ? [codeDeployDeploymentGroupSection] : []),
           ...(listenerRuleSection ? [listenerRuleSection] : []),
           ...(targetGroupSection ? [targetGroupSection] : []),
           summarySection,

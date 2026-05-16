@@ -1713,6 +1713,10 @@ assert 'Inspection path ·' in ui, ui
 assert 'Provider lookup context' in ui, ui
 assert 'createResourceInspectionLookupContextNodes(result?.lookupContext)' in ui, ui
 assert 'No live inspection details are available for this resource yet.' in ui, ui
+assert 'CodeDeploy deployment group status' in ui, ui
+assert 'Bounded live deployment-group evidence for the CodeDeploy traffic-routing resource selected in this drill-down.' in ui, ui
+assert 'CodeDeploy ECS service bindings' in ui, ui
+assert 'CodeDeploy target groups' in ui, ui
 assert 'Service deployments' in ui, ui
 assert 'Container instance' in ui, ui
 assert 'EC2 instance' in ui, ui
