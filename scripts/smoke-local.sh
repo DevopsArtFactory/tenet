@@ -1722,6 +1722,8 @@ assert "['Source', metricValue(result?.source)]" in ui, ui
 assert "['Summary', textOrDash(trafficRouting?.summary)]" in ui, ui
 assert 'Target health · ${cue.label}' in ui, ui
 assert 'At least one target is unhealthy. Inspect registered target health, deployment events, and service logs before shifting more traffic.' in ui, ui
+assert 'Targets are still registering or draining. Wait for target health to settle before treating traffic routing as stable.' in ui, ui
+assert 'Some targets are unused or unavailable. Confirm listener routing and target registration before relying on this group.' in ui, ui
 assert 'All reported targets are healthy. Continue rollout checks with deployment status and recent logs.' in ui, ui
 assert "statusRows.push(['Target group health', targetGroupHealth]);" in ui, ui
 assert 'Latest CodeDeploy deployment' in ui, ui

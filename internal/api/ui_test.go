@@ -2470,6 +2470,8 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"const targetGroupHealthCueNode = createTargetGroupHealthCue(targetGroupHealthCounts);",
 		"Target health · ${cue.label}",
 		"At least one target is unhealthy. Inspect registered target health, deployment events, and service logs before shifting more traffic.",
+		"Targets are still registering or draining. Wait for target health to settle before treating traffic routing as stable.",
+		"Some targets are unused or unavailable. Confirm listener routing and target registration before relying on this group.",
 		"All reported targets are healthy. Continue rollout checks with deployment status and recent logs.",
 		"const targetGroupHealthCounts = targetGroup?.targetHealthCounts || targetGroup?.healthCounts;",
 		"const targetGroupHealth = targetHealthCountsText(targetGroupHealthCounts);",
