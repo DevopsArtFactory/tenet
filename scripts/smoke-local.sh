@@ -2103,6 +2103,9 @@ assert 'audit-freshness' in audit_ui, audit_ui
 assert 'const auditLogsFetchedAtText = (result) => {' in audit_ui, audit_ui
 assert 'const withAuditLogsFetchedAt = (result) => {' in audit_ui, audit_ui
 assert 'Last refreshed · ${fetchedAt}' in audit_ui, audit_ui
+assert "meta.setAttribute('role', 'status');" in audit_ui, audit_ui
+assert "meta.setAttribute('aria-live', 'polite');" in audit_ui, audit_ui
+assert "meta.setAttribute('aria-atomic', 'true');" in audit_ui, audit_ui
 assert "['Returned entries', auditEntryCountLabel(returnedCount)]" in audit_ui, audit_ui
 assert "['Matching entries', auditEntryCountLabel(totalCount)]" in audit_ui, audit_ui
 assert "['Router limit', limit > 0 ? auditEntryCountLabel(limit) : 'No cap']" in audit_ui, audit_ui

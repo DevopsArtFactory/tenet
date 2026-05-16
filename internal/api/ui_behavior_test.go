@@ -11299,6 +11299,12 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!accountsText.includes('Showing the latest 2-entry capped audit window. Older matching audit entries may be hidden; increase Limit or clear audit controls before concluding no earlier activity exists.')) throw new Error('expected capped audit-window hint when visible entries reach the selected limit');
   const limitCapHints = collectNodes(document.getElementById('accounts'), (node) => node.className === 'detail-condition-meta audit-limit-cap-hint');
   if (limitCapHints.length !== 1) throw new Error('expected one safe DOM audit limit-cap hint, got ' + limitCapHints.length);
+  const freshnessMeta = collectNodes(document.getElementById('accounts'), (node) => node.className === 'detail-condition-meta audit-freshness')[0];
+  if (!freshnessMeta) throw new Error('expected audit freshness meta element');
+  if (!freshnessMeta.textContent.includes('Last refreshed ·')) throw new Error('expected audit freshness meta to keep visible Last refreshed text');
+  if (freshnessMeta.getAttribute('role') !== 'status') throw new Error('expected audit freshness meta to be a status region');
+  if (freshnessMeta.getAttribute('aria-live') !== 'polite') throw new Error('expected audit freshness meta to announce politely');
+  if (freshnessMeta.getAttribute('aria-atomic') !== 'true') throw new Error('expected audit freshness meta to announce atomically');
   if (!accountsText.includes('Actor detail')) throw new Error('expected explicit actor label');
   if (!accountsText.includes('Recorded')) throw new Error('expected recorded actor state');
   if (!accountsText.includes('Jane Operator')) throw new Error('expected recorded actor details');

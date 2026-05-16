@@ -6323,7 +6323,12 @@
       };
       const createAuditLogsFreshnessMeta = (result) => {
         const fetchedAt = auditLogsFetchedAtText(result);
-        return fetchedAt ? createElement('div', 'detail-condition-meta audit-freshness', `Last refreshed · ${fetchedAt}`) : null;
+        if (!fetchedAt) return null;
+        const meta = createElement('div', 'detail-condition-meta audit-freshness', `Last refreshed · ${fetchedAt}`);
+        meta.setAttribute('role', 'status');
+        meta.setAttribute('aria-live', 'polite');
+        meta.setAttribute('aria-atomic', 'true');
+        return meta;
       };
       const auditFilterLabels = () => {
         const labels = [];
