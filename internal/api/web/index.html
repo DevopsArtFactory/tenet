@@ -3304,6 +3304,7 @@
         callout.append(
           head,
           createElement('div', 'workspace-callout-copy', summaryParts.length ? summaryParts.join(' · ') : 'Resource selection is derived from the current bookmarkable route.'),
+          createElement('div', 'workspace-callout-factors', `Current resource read: ${resourceDetailReadRoute(deploymentName)}.`),
           createElement('div', 'workspace-callout-factors', routeBits.length
             ? `Use the Live inspection and Recent logs handoffs below to refresh focused evidence for this exact resource selection. Backing reads: ${routeBits.join(' and ')}.`
             : 'Use the Live inspection and Recent logs handoffs below to refresh focused evidence for this exact resource selection.'),

@@ -2038,6 +2038,7 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "const createResourceDetailActions = (resourceState = null, detail = null, resource = null) => [" in body, body
     assert "const createSelectedResourceContextCallout = (detail, resource) => {" in body, body
     assert 'Selected resource context' in body, body
+    assert "Current resource read: ${resourceDetailReadRoute(deploymentName)}." in body, body
     assert 'Use the Live inspection and Recent logs handoffs below to refresh focused evidence for this exact resource selection.' in body, body
     assert "createNavLink(buildPageSectionURL('resource', 'resource-live-inspection', routeParams), 'Jump to live inspection', '_self')" in body, body
     assert "createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', routeParams), 'Jump to recent logs', '_self')" in body, body
