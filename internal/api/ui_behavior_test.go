@@ -6344,6 +6344,10 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
     throw new Error('unexpected summary fetch url: ' + url);
   });
   const summaryText = collectText(summaryRun.document.getElementById('accounts')).join(' | ');
+  if (!summaryText.includes('Traffic-routing status')) throw new Error('expected traffic-routing inspection to render compact status heading');
+  if (!summaryText.includes('Resource · CodeDeploy deployment group')) throw new Error('expected traffic-routing status row to render resource display name');
+  if (!summaryText.includes('Inspection mode · Rollout summary only')) throw new Error('expected traffic-routing status row to render readable inspection mode');
+  if (!summaryText.includes('Source · rollout_execution_summary')) throw new Error('expected traffic-routing status row to render inspection source');
   if (!summaryText.includes('Rollout summary')) throw new Error('expected traffic-routing inspection to render rollout summary heading');
   if (!summaryText.includes('CodeDeploy deployment group')) throw new Error('expected traffic-routing inspection to render display name');
   if (!summaryText.includes('Rollout summary only')) throw new Error('expected traffic-routing inspection to render summary inspection mode');
@@ -6352,6 +6356,54 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!summaryText.includes('Observer role configured')) throw new Error('expected traffic-routing inspection to label observer role configuration');
   if (!summaryText.includes('False')) throw new Error('expected traffic-routing inspection to show missing observer role configuration');
   if (summaryText.includes('Latest CodeDeploy deployment')) throw new Error('expected summary-only deployment-group inspection to hide latest deployment section');
+
+  let resolveTrafficSummaryInspection;
+  const trafficSummarySearch = '?page=resource&deployment=payments-api-staging&resourceType=codeDeployDeploymentGroup&resourceId=' + encodeURIComponent(summaryResourceID);
+  const trafficSummaryRun = await renderWithFetch(trafficSummarySearch, (url) => {
+    if (url === ecsDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(unsupportedDetailBody) });
+    if (url === summaryLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === summaryInspectionURL) return new Promise((resolve) => { resolveTrafficSummaryInspection = resolve; });
+    throw new Error('unexpected traffic summary loading fetch url: ' + url);
+  }, 1);
+  let trafficSummaryText = collectText(trafficSummaryRun.document.getElementById('accounts')).join(' | ');
+  if (!trafficSummaryText.includes('Loading live inspection…')) throw new Error('expected traffic-routing inspection loading state before summary render');
+  resolveTrafficSummaryInspection({ ok: true, json: () => Promise.resolve({ available: true, source: 'rollout_execution_summary', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: false }, trafficRoutingResource: { kind: 'codeDeployDeploymentGroup', displayName: 'CodeDeploy deployment group', inspectionMode: 'summary_only', summary: 'Linear traffic shifting deployment group' } }) });
+  await settle();
+  trafficSummaryText = collectText(trafficSummaryRun.document.getElementById('accounts')).join(' | ');
+  if (!trafficSummaryText.includes('Traffic-routing status')) throw new Error('expected traffic-routing loading flow to render compact status rows after summary payload');
+  if (!trafficSummaryText.includes('Summary · Linear traffic shifting deployment group')) throw new Error('expected traffic-routing status rows to include summary after loading');
+
+  let trafficRefreshInspectionCount = 0;
+  const trafficRefreshRun = await renderWithFetch(trafficSummarySearch, (url) => {
+    if (url === ecsDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(unsupportedDetailBody) });
+    if (url === summaryLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === summaryInspectionURL) {
+      trafficRefreshInspectionCount += 1;
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: trafficRefreshInspectionCount === 1 ? 'rollout_execution_summary' : 'live', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true }, trafficRoutingResource: { kind: 'codeDeployDeploymentGroup', displayName: 'CodeDeploy deployment group', inspectionMode: trafficRefreshInspectionCount === 1 ? 'summary_only' : 'live', summary: trafficRefreshInspectionCount === 1 ? 'Linear traffic shifting deployment group' : 'Live deployment group inspection refreshed' } }) });
+    }
+    throw new Error('unexpected traffic refresh fetch url: ' + url);
+  });
+  const trafficRefreshButtons = collectNodes(trafficRefreshRun.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON');
+  const trafficRefreshButton = trafficRefreshButtons.find((node) => node.textContent === 'Refresh live inspection');
+  if (!trafficRefreshButton) throw new Error('expected traffic-routing inspection refresh button');
+  trafficRefreshButton.dispatch('click');
+  await settle();
+  if (trafficRefreshInspectionCount !== 2) throw new Error('expected traffic-routing refresh to re-fetch live inspection, got ' + trafficRefreshInspectionCount);
+  if (trafficRefreshRun.window.location.search !== trafficSummarySearch) throw new Error('expected traffic-routing refresh to preserve bookmarkable URL search');
+  const trafficRefreshText = collectText(trafficRefreshRun.document.getElementById('accounts')).join(' | ');
+  if (!trafficRefreshText.includes('Inspection mode · Live AWS inspection')) throw new Error('expected traffic-routing refresh to render fresh inspection mode');
+  if (!trafficRefreshText.includes('Summary · Live deployment group inspection refreshed')) throw new Error('expected traffic-routing refresh to replace summary row');
+
+  const absentTrafficRun = await renderWithFetch(trafficSummarySearch, (url) => {
+    if (url === ecsDeploymentURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(unsupportedDetailBody) });
+    if (url === summaryLogsURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, source: '', unavailableReason: 'unsupported_resource_type', entries: [] }) });
+    if (url === summaryInspectionURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'rollout_execution_summary', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: false }, trafficRoutingResource: { kind: 'codeDeployDeploymentGroup', inspectionMode: 'summary_only' } }) });
+    throw new Error('unexpected absent traffic fetch url: ' + url);
+  });
+  const absentTrafficText = collectText(absentTrafficRun.document.getElementById('accounts')).join(' | ');
+  if (!absentTrafficText.includes('Traffic-routing status')) throw new Error('expected absent traffic-routing optional fields to keep compact status section');
+  if (!absentTrafficText.includes('Resource · codeDeployDeploymentGroup')) throw new Error('expected absent displayName to fall back to resource kind');
+  if (!absentTrafficText.includes('Summary · —')) throw new Error('expected absent summary to render dash instead of throwing or showing raw JSON');
 
   let liveDeploymentGroupFetchCount = 0;
   const liveDeploymentGroupSearch = '?page=resource&deployment=payments-api-staging&resourceType=codeDeployDeploymentGroup&resourceId=' + encodeURIComponent(summaryResourceID);
