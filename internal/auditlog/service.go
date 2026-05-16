@@ -76,12 +76,14 @@ type Entry struct {
 // ResultScope describes the bounded audit timeline window returned by the API.
 type ResultScope struct {
 	ReturnedEntryCount int    `json:"returnedEntryCount"`
+	ReturnedCount      int    `json:"returnedCount"`
 	TotalEntryCount    int    `json:"totalEntryCount"`
 	Limited            bool   `json:"limited"`
 	Limit              *int   `json:"limit,omitempty"`
 	RequestedLimit     *int   `json:"requestedLimit,omitempty"`
 	EffectiveLimit     int    `json:"effectiveLimit"`
 	TruncationStatus   string `json:"truncationStatus"`
+	Truncated          bool   `json:"truncated"`
 	DeploymentName     string `json:"deploymentName,omitempty"`
 	Action             string `json:"action,omitempty"`
 }
@@ -168,10 +170,12 @@ func BuildResultScope(query Query, totalEntryCount, returnedEntryCount int) Resu
 	limited := query.Limit > 0 && returnedEntryCount < totalEntryCount
 	scope := ResultScope{
 		ReturnedEntryCount: returnedEntryCount,
+		ReturnedCount:      returnedEntryCount,
 		TotalEntryCount:    totalEntryCount,
 		Limited:            limited,
 		EffectiveLimit:     0,
 		TruncationStatus:   "not_truncated",
+		Truncated:          limited,
 		DeploymentName:     query.DeploymentName,
 		Action:             string(query.Action),
 	}

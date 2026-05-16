@@ -189,6 +189,9 @@ region/account/observer-role path before troubleshooting unavailable AWS reads.
 - `POST /v1/applies/plans/{planId}` (`409 Conflict` means the reviewed plan
   preview is stale and must be recreated before applying)
 - `GET /v1/audit-logs`
+  (bounded audit reads expose `resultScope.returnedEntryCount` and compact alias
+  `resultScope.returnedCount`, plus `truncationStatus` and compact boolean alias
+  `truncated`)
 - `GET /v1/operator/context`
 
 Deployment runtime events are read from the controller-retained history window, currently 10 events per deployment. Successful `GET /v1/overview/deployments/{deploymentName}/events` responses keep `events: []` for repo-known deployments before history exists, with zero-count `managedDriftSummary` plus zero retained-event counts in `retention` / `resultScope` (`retention.limit` may still be non-zero, e.g. `10`). The application detail Controller runtime events panel renders the same backend metadata, including total returned/retained counts, retention limit/status, and query-window status, so operators can distinguish an empty retained history from a query-limited response or a controller-retention cap. The `resultScope` fields distinguish `?limit=` query truncation (`limited`, `truncationStatus`, compact alias `truncated`) from the retained controller-history cap (`retentionLimit`, `retainedEventCount`, `retentionStatus`), and expose `returnedCount` as a compact alias for `returnedEventCount`.
