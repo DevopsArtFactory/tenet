@@ -32,6 +32,7 @@ const (
 	trafficRoutingCacheCap               = 128
 	maxECSServiceTaskSummaries           = 10
 	maxAutoScalingGroupInstanceSummaries = maxECSServiceTaskSummaries
+	maxAutoScalingGroupScalingActivities = 10
 	ecsServiceTaskListPageLimit          = 10
 )
 
@@ -380,6 +381,7 @@ type AutoScalingInspection struct {
 	TargetGroupARNs               []string                          `json:"targetGroupArns,omitempty"`
 	Instances                     []AutoScalingGroupInstanceSummary `json:"instances"`
 	InstancesScope                *AutoScalingInstanceScope         `json:"instancesScope,omitempty"`
+	ScalingActivities             *[]AutoScalingActivitySummary     `json:"scalingActivities,omitempty"`
 }
 
 type AutoScalingInstanceScope struct {
@@ -389,6 +391,17 @@ type AutoScalingInstanceScope struct {
 	ReturnedInstanceCount int    `json:"returnedInstanceCount"`
 	TruncationStatus      string `json:"truncationStatus"`
 	Summary               string `json:"summary,omitempty"`
+}
+
+type AutoScalingActivitySummary struct {
+	ActivityID    string `json:"activityId"`
+	StatusCode    string `json:"statusCode,omitempty"`
+	Progress      *int32 `json:"progress,omitempty"`
+	StartTime     string `json:"startTime,omitempty"`
+	EndTime       string `json:"endTime,omitempty"`
+	Cause         string `json:"cause,omitempty"`
+	Description   string `json:"description,omitempty"`
+	StatusMessage string `json:"statusMessage,omitempty"`
 }
 
 type AutoScalingLaunchTemplateSummary struct {
@@ -1737,6 +1750,13 @@ func (s Service) inspectAutoScalingGroupFromAWS(ctx context.Context, req AutoSca
 		return AutoScalingInspection{}, resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
 	}
 	inspection := autoScalingInspectionFromGroup(out.AutoScalingGroups[0])
+	if activitiesOut, err := clients.ASG.DescribeScalingActivities(ctx, &autoscaling.DescribeScalingActivitiesInput{
+		AutoScalingGroupName: aws.String(req.ResourceName),
+		MaxRecords:           aws.Int32(maxAutoScalingGroupScalingActivities),
+	}); err == nil {
+		activities := autoScalingActivitySummaries(activitiesOut.Activities, maxAutoScalingGroupScalingActivities)
+		inspection.ScalingActivities = &activities
+	}
 	if observedLaunchTemplate, bootstrapSource, err := autoScalingObservedLaunchTemplateFromGroup(ctx, clients.EC2, out.AutoScalingGroups[0]); err == nil {
 		if observedLaunchTemplate != nil {
 			if inspection.LaunchTemplate != nil {
@@ -1751,6 +1771,42 @@ func (s Service) inspectAutoScalingGroupFromAWS(ctx context.Context, req AutoSca
 		inspection = enrichSelectedAutoScalingInstanceFromEC2(ctx, clients.EC2, inspection, instanceID)
 	}
 	return inspection, nil
+}
+
+func autoScalingActivitySummaries(activities []asgtypes.Activity, limit int) []AutoScalingActivitySummary {
+	if limit <= 0 {
+		limit = maxAutoScalingGroupScalingActivities
+	}
+	activities = append([]asgtypes.Activity(nil), activities...)
+	sort.SliceStable(activities, func(i, j int) bool {
+		left := aws.ToTime(activities[i].StartTime)
+		right := aws.ToTime(activities[j].StartTime)
+		if left.Equal(right) {
+			return aws.ToString(activities[i].ActivityId) < aws.ToString(activities[j].ActivityId)
+		}
+		return left.After(right)
+	})
+	if len(activities) > limit {
+		activities = activities[:limit]
+	}
+	summaries := make([]AutoScalingActivitySummary, 0, len(activities))
+	for _, activity := range activities {
+		summary := AutoScalingActivitySummary{
+			ActivityID:    strings.TrimSpace(aws.ToString(activity.ActivityId)),
+			StatusCode:    strings.TrimSpace(string(activity.StatusCode)),
+			StartTime:     formatTime(aws.ToTime(activity.StartTime)),
+			EndTime:       formatTime(aws.ToTime(activity.EndTime)),
+			Cause:         strings.TrimSpace(aws.ToString(activity.Cause)),
+			Description:   strings.TrimSpace(aws.ToString(activity.Description)),
+			StatusMessage: strings.TrimSpace(aws.ToString(activity.StatusMessage)),
+		}
+		if activity.Progress != nil {
+			progress := aws.ToInt32(activity.Progress)
+			summary.Progress = &progress
+		}
+		summaries = append(summaries, summary)
+	}
+	return summaries
 }
 
 func ecsInspectionFromService(service ecstypes.Service, clusterARN string, taskDefinitionImage string, tasks []ECSTaskSummary, tasksScope *ECSTaskSummaryScope) ECSServiceInspection {

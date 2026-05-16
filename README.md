@@ -190,6 +190,9 @@ Auto Scaling Group Live inspection can also render optional
 with `Activity ID`, `Status code`, `Progress`, `Start time`, `End time`,
 `Cause`, `Description`, and `Status message` labels; an explicit empty array
 renders `No scaling activities are reported in the bounded recent activity window for this Auto Scaling Group.`
+Those rows come from a bounded read-only `DescribeScalingActivities` lookup
+after the ASG itself is resolved, and local/no-AWS runtimes keep the existing
+unavailable or summary-only behavior instead of requiring AWS access.
 For CodeDeploy ECS traffic-routing resources, local and Compose runs do not need
 live AWS access to keep the drill-down usable: `codeDeployDeploymentGroup`,
 `productionListener`, and `testListener` can return

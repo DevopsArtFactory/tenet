@@ -2200,6 +2200,56 @@ func TestAutoScalingInspectionFromGroupSortsFieldsAndMapsLaunchTemplates(t *test
 	}
 }
 
+func TestAutoScalingInspectionFromActivitiesSortsAndBoundsOperatorFields(t *testing.T) {
+	startOld := time.Date(2026, 5, 16, 6, 10, 0, 0, time.UTC)
+	endOld := time.Date(2026, 5, 16, 6, 12, 0, 0, time.UTC)
+	startNew := time.Date(2026, 5, 16, 6, 20, 0, 0, time.UTC)
+
+	got := autoScalingActivitySummaries([]asgtypes.Activity{
+		{
+			ActivityId:    stringPtr("activity-old"),
+			StatusCode:    asgtypes.ScalingActivityStatusCodeSuccessful,
+			Progress:      int32Ptr(100),
+			StartTime:     &startOld,
+			EndTime:       &endOld,
+			Cause:         stringPtr("At 2026-05-16T06:10:00Z an instance was taken out of service."),
+			Description:   stringPtr("Terminating EC2 instance: i-0old."),
+			StatusMessage: stringPtr("Instance terminated."),
+			Details:       stringPtr("internal AWS details that should not be exposed"),
+		},
+		{
+			ActivityId:    stringPtr("activity-new"),
+			StatusCode:    asgtypes.ScalingActivityStatusCodeInProgress,
+			Progress:      int32Ptr(45),
+			StartTime:     &startNew,
+			Cause:         stringPtr("At 2026-05-16T06:20:00Z a user request updated desired capacity."),
+			Description:   stringPtr("Launching EC2 instance: i-0new."),
+			StatusMessage: stringPtr("Waiting for instance warmup."),
+			Details:       stringPtr("included activity details should still stay out of the API summary"),
+		},
+	}, 1)
+
+	if !reflect.DeepEqual(got, []AutoScalingActivitySummary{{
+		ActivityID:    "activity-new",
+		StatusCode:    "InProgress",
+		Progress:      int32Ptr(45),
+		StartTime:     "2026-05-16T06:20:00Z",
+		Cause:         "At 2026-05-16T06:20:00Z a user request updated desired capacity.",
+		Description:   "Launching EC2 instance: i-0new.",
+		StatusMessage: "Waiting for instance warmup.",
+	}}) {
+		t.Fatalf("expected newest bounded operator-facing scaling activity summary, got %+v", got)
+	}
+
+	raw, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal scaling activity summaries: %v", err)
+	}
+	if strings.Contains(string(raw), "Details") || strings.Contains(string(raw), "internal AWS details") || strings.Contains(string(raw), "included activity details") || strings.Contains(string(raw), "autoScalingGroupArn") {
+		t.Fatalf("expected scaling activity summaries to omit noisy provider details, got %s", raw)
+	}
+}
+
 func TestAutoScalingObservedLaunchTemplateFromGroupUsesPrimaryLaunchTemplate(t *testing.T) {
 	client := &fakeEC2LaunchTemplateAPI{
 		output: &ec2.DescribeLaunchTemplateVersionsOutput{
