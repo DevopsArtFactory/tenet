@@ -3288,7 +3288,7 @@ func TestDeploymentOverviewEventsRouteIncludesManagedDriftSummary(t *testing.T) 
 		t.Fatalf("expected managedDriftSummary counts in events payload, got %#v", payload["managedDriftSummary"])
 	}
 	scope, ok := payload["resultScope"].(map[string]any)
-	if !ok || scope["effectiveLimit"] != float64(0) || scope["returnedEventCount"] != float64(1) || scope["totalEventCount"] != float64(1) || scope["limited"] != false || scope["newestEventTimestamp"] != "2026-04-16T06:15:00Z" || scope["oldestEventTimestamp"] != "2026-04-16T06:15:00Z" || scope["truncationStatus"] != "not_truncated" {
+	if !ok || scope["effectiveLimit"] != float64(0) || scope["returnedEventCount"] != float64(1) || scope["returnedCount"] != float64(1) || scope["totalEventCount"] != float64(1) || scope["limited"] != false || scope["newestEventTimestamp"] != "2026-04-16T06:15:00Z" || scope["oldestEventTimestamp"] != "2026-04-16T06:15:00Z" || scope["truncationStatus"] != "not_truncated" || scope["truncated"] != false {
 		t.Fatalf("expected default events resultScope to describe the full returned window, got %#v", payload["resultScope"])
 	}
 	if _, exists := scope["requestedLimit"]; exists {
@@ -3352,7 +3352,7 @@ func TestDeploymentOverviewEventsRouteAppliesLimitToEventsAndSummary(t *testing.
 		t.Fatalf("expected managedDriftSummary counts for returned events only, got %#v", payload["managedDriftSummary"])
 	}
 	scope, ok := payload["resultScope"].(map[string]any)
-	if !ok || scope["requestedLimit"] != float64(1) || scope["effectiveLimit"] != float64(1) || scope["returnedEventCount"] != float64(1) || scope["totalEventCount"] != float64(2) || scope["retentionLimit"] != float64(domain.RuntimeHistoryMaxEntries) || scope["retainedEventCount"] != float64(2) || scope["retentionStatus"] != "within_retention_limit" || scope["limited"] != true || scope["newestEventTimestamp"] != "2026-05-06T03:00:00Z" || scope["oldestEventTimestamp"] != "2026-05-06T03:00:00Z" || scope["truncationStatus"] != "truncated" {
+	if !ok || scope["requestedLimit"] != float64(1) || scope["effectiveLimit"] != float64(1) || scope["returnedEventCount"] != float64(1) || scope["returnedCount"] != float64(1) || scope["totalEventCount"] != float64(2) || scope["retentionLimit"] != float64(domain.RuntimeHistoryMaxEntries) || scope["retainedEventCount"] != float64(2) || scope["retentionStatus"] != "within_retention_limit" || scope["limited"] != true || scope["newestEventTimestamp"] != "2026-05-06T03:00:00Z" || scope["oldestEventTimestamp"] != "2026-05-06T03:00:00Z" || scope["truncationStatus"] != "truncated" || scope["truncated"] != true {
 		t.Fatalf("expected bounded resultScope for returned events only, got %#v", payload["resultScope"])
 	}
 }
@@ -3384,7 +3384,7 @@ func TestDeploymentOverviewEventsRouteReportsRetainedHistoryCapSeparatelyFromQue
 		t.Fatalf("failed to decode deployment events payload: %v", err)
 	}
 	scope, ok := payload["resultScope"].(map[string]any)
-	if !ok || scope["limited"] != false || scope["truncationStatus"] != "not_truncated" || scope["retentionLimit"] != float64(domain.RuntimeHistoryMaxEntries) || scope["retainedEventCount"] != float64(domain.RuntimeHistoryMaxEntries) || scope["retentionStatus"] != "at_retention_limit" {
+	if !ok || scope["limited"] != false || scope["truncationStatus"] != "not_truncated" || scope["truncated"] != false || scope["retentionLimit"] != float64(domain.RuntimeHistoryMaxEntries) || scope["retainedEventCount"] != float64(domain.RuntimeHistoryMaxEntries) || scope["retentionStatus"] != "at_retention_limit" {
 		t.Fatalf("expected retained-history cap metadata separate from query-limit truncation, got %#v", payload["resultScope"])
 	}
 }
@@ -3454,7 +3454,7 @@ func TestDeploymentOverviewEventsRouteReportsExactLimitAsNotTruncated(t *testing
 		t.Fatalf("expected exact-limit events array in payload, got %#v", payload["events"])
 	}
 	scope, ok := payload["resultScope"].(map[string]any)
-	if !ok || scope["requestedLimit"] != float64(1) || scope["effectiveLimit"] != float64(1) || scope["returnedEventCount"] != float64(1) || scope["totalEventCount"] != float64(1) || scope["limited"] != false || scope["newestEventTimestamp"] != "2026-05-06T03:00:00Z" || scope["oldestEventTimestamp"] != "2026-05-06T03:00:00Z" || scope["truncationStatus"] != "not_truncated" {
+	if !ok || scope["requestedLimit"] != float64(1) || scope["effectiveLimit"] != float64(1) || scope["returnedEventCount"] != float64(1) || scope["returnedCount"] != float64(1) || scope["totalEventCount"] != float64(1) || scope["limited"] != false || scope["newestEventTimestamp"] != "2026-05-06T03:00:00Z" || scope["oldestEventTimestamp"] != "2026-05-06T03:00:00Z" || scope["truncationStatus"] != "not_truncated" || scope["truncated"] != false {
 		t.Fatalf("expected exact-limit resultScope to be deterministic and not truncated, got %#v", payload["resultScope"])
 	}
 }
@@ -3479,7 +3479,7 @@ func TestDeploymentOverviewEventsRouteOmitsWindowTimestampsForEmptyEvents(t *tes
 		t.Fatalf("failed to decode deployment events payload: %v", err)
 	}
 	scope, ok := payload["resultScope"].(map[string]any)
-	if !ok || scope["returnedEventCount"] != float64(0) || scope["totalEventCount"] != float64(0) || scope["retentionLimit"] != float64(domain.RuntimeHistoryMaxEntries) || scope["retainedEventCount"] != float64(0) || scope["retentionStatus"] != "within_retention_limit" || scope["truncationStatus"] != "not_truncated" {
+	if !ok || scope["returnedEventCount"] != float64(0) || scope["returnedCount"] != float64(0) || scope["totalEventCount"] != float64(0) || scope["retentionLimit"] != float64(domain.RuntimeHistoryMaxEntries) || scope["retainedEventCount"] != float64(0) || scope["retentionStatus"] != "within_retention_limit" || scope["truncationStatus"] != "not_truncated" || scope["truncated"] != false {
 		t.Fatalf("expected empty resultScope counts, got %#v", payload["resultScope"])
 	}
 	if _, exists := scope["newestEventTimestamp"]; exists {

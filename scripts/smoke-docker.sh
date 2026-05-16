@@ -1062,11 +1062,13 @@ events_scope = deployment_events.get("resultScope") or {}
 assert events_scope.get("requestedLimit") == 1, deployment_events
 assert events_scope.get("effectiveLimit") == 1, deployment_events
 assert events_scope.get("returnedEventCount") == len(deployment_events["events"]), deployment_events
+assert events_scope.get("returnedCount") == events_scope.get("returnedEventCount"), deployment_events
 assert isinstance(events_scope.get("totalEventCount"), int), deployment_events
 assert events_scope.get("totalEventCount") >= events_scope.get("returnedEventCount"), deployment_events
 assert isinstance(events_scope.get("limited"), bool), deployment_events
 assert events_scope.get("limited") == (events_scope.get("totalEventCount") > events_scope.get("returnedEventCount")), deployment_events
 assert events_scope.get("truncationStatus") in {"truncated", "not_truncated"}, deployment_events
+assert events_scope.get("truncated") == (events_scope.get("truncationStatus") == "truncated"), deployment_events
 event_timestamps = [event.get("timestamp") for event in deployment_events["events"] if event.get("timestamp")]
 if event_timestamps:
     assert events_scope.get("newestEventTimestamp") == max(event_timestamps), deployment_events
@@ -2951,11 +2953,13 @@ allowed_events_scope = allowed_events_read.get("resultScope") or {}
 assert allowed_events_scope.get("requestedLimit") == 1, allowed_events_read
 assert allowed_events_scope.get("effectiveLimit") == 1, allowed_events_read
 assert allowed_events_scope.get("returnedEventCount") == len(allowed_events_read["events"]), allowed_events_read
+assert allowed_events_scope.get("returnedCount") == allowed_events_scope.get("returnedEventCount"), allowed_events_read
 assert isinstance(allowed_events_scope.get("totalEventCount"), int), allowed_events_read
 assert allowed_events_scope.get("totalEventCount") >= allowed_events_scope.get("returnedEventCount"), allowed_events_read
 assert isinstance(allowed_events_scope.get("limited"), bool), allowed_events_read
 assert allowed_events_scope.get("limited") == (allowed_events_scope.get("totalEventCount") > allowed_events_scope.get("returnedEventCount")), allowed_events_read
 assert allowed_events_scope.get("truncationStatus") in {"truncated", "not_truncated"}, allowed_events_read
+assert allowed_events_scope.get("truncated") == (allowed_events_scope.get("truncationStatus") == "truncated"), allowed_events_read
 event_timestamps = [event.get("timestamp") for event in allowed_events_read["events"] if event.get("timestamp")]
 if event_timestamps:
     assert allowed_events_scope.get("newestEventTimestamp") == max(event_timestamps), allowed_events_read

@@ -807,12 +807,14 @@ fixture_events_default_scope = deployment_events_fixture.get('resultScope') or {
 assert 'requestedLimit' not in fixture_events_default_scope, deployment_events_fixture
 assert fixture_events_default_scope.get('effectiveLimit') == 0, deployment_events_fixture
 assert fixture_events_default_scope.get('returnedEventCount') == len(deployment_events_fixture['events']), deployment_events_fixture
+assert fixture_events_default_scope.get('returnedCount') == fixture_events_default_scope.get('returnedEventCount'), deployment_events_fixture
 assert fixture_events_default_scope.get('totalEventCount') == len(deployment_events_fixture['events']), deployment_events_fixture
 assert fixture_events_default_scope.get('retentionLimit') == fixture_events_retention.get('limit'), deployment_events_fixture
 assert fixture_events_default_scope.get('retainedEventCount') == fixture_events_retention.get('retainedEventCount'), deployment_events_fixture
 assert fixture_events_default_scope.get('retentionStatus') == fixture_events_retention.get('status'), deployment_events_fixture
 assert fixture_events_default_scope.get('limited') is False, deployment_events_fixture
 assert fixture_events_default_scope.get('truncationStatus') == 'not_truncated', deployment_events_fixture
+assert fixture_events_default_scope.get('truncated') is False, deployment_events_fixture
 assert 'newestEventTimestamp' not in fixture_events_default_scope, deployment_events_fixture
 assert 'oldestEventTimestamp' not in fixture_events_default_scope, deployment_events_fixture
 assert deployment_events_fixture_limited['deploymentName'] == 'payments-api-prod', deployment_events_fixture_limited
@@ -823,12 +825,14 @@ fixture_events_scope = deployment_events_fixture_limited.get('resultScope') or {
 assert fixture_events_scope.get('requestedLimit') == 1, deployment_events_fixture_limited
 assert fixture_events_scope.get('effectiveLimit') == 1, deployment_events_fixture_limited
 assert fixture_events_scope.get('returnedEventCount') == 0, deployment_events_fixture_limited
+assert fixture_events_scope.get('returnedCount') == fixture_events_scope.get('returnedEventCount'), deployment_events_fixture_limited
 assert fixture_events_scope.get('totalEventCount') == 0, deployment_events_fixture_limited
 assert fixture_events_scope.get('retentionLimit') == fixture_events_limited_retention.get('limit'), deployment_events_fixture_limited
 assert fixture_events_scope.get('retainedEventCount') == fixture_events_limited_retention.get('retainedEventCount'), deployment_events_fixture_limited
 assert fixture_events_scope.get('retentionStatus') == fixture_events_limited_retention.get('status'), deployment_events_fixture_limited
 assert fixture_events_scope.get('limited') is False, deployment_events_fixture_limited
 assert fixture_events_scope.get('truncationStatus') == 'not_truncated', deployment_events_fixture_limited
+assert fixture_events_scope.get('truncated') is False, deployment_events_fixture_limited
 assert 'newestEventTimestamp' not in fixture_events_scope, deployment_events_fixture_limited
 assert 'oldestEventTimestamp' not in fixture_events_scope, deployment_events_fixture_limited
 assert os.environ['INVALID_DEPLOYMENT_EVENTS_LIMIT_STATUS'] == '400', os.environ['INVALID_DEPLOYMENT_EVENTS_LIMIT_STATUS']
@@ -3449,11 +3453,13 @@ allowed_events_scope = allowed_events_read.get('resultScope') or {}
 assert allowed_events_scope.get('requestedLimit') == 1, allowed_events_read
 assert allowed_events_scope.get('effectiveLimit') == 1, allowed_events_read
 assert allowed_events_scope.get('returnedEventCount') == len(allowed_events_read['events']), allowed_events_read
+assert allowed_events_scope.get('returnedCount') == allowed_events_scope.get('returnedEventCount'), allowed_events_read
 assert isinstance(allowed_events_scope.get('totalEventCount'), int), allowed_events_read
 assert allowed_events_scope.get('totalEventCount') >= allowed_events_scope.get('returnedEventCount'), allowed_events_read
 assert isinstance(allowed_events_scope.get('limited'), bool), allowed_events_read
 assert allowed_events_scope.get('limited') == (allowed_events_scope.get('totalEventCount') > allowed_events_scope.get('returnedEventCount')), allowed_events_read
 assert allowed_events_scope.get('truncationStatus') in {'truncated', 'not_truncated'}, allowed_events_read
+assert allowed_events_scope.get('truncated') == (allowed_events_scope.get('truncationStatus') == 'truncated'), allowed_events_read
 event_timestamps = [event.get('timestamp') for event in allowed_events_read['events'] if event.get('timestamp')]
 if event_timestamps:
     assert allowed_events_scope.get('newestEventTimestamp') == max(event_timestamps), allowed_events_read

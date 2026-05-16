@@ -206,6 +206,7 @@ func applyDeploymentEventsLimit(result catalog.DeploymentOverviewEvents, limit i
 		RequestedLimit:       requestedLimit,
 		EffectiveLimit:       effectiveLimit,
 		ReturnedEventCount:   len(result.Events),
+		ReturnedCount:        len(result.Events),
 		TotalEventCount:      totalEventCount,
 		RetentionLimit:       retention.Limit,
 		RetainedEventCount:   retention.RetainedEventCount,
@@ -214,6 +215,7 @@ func applyDeploymentEventsLimit(result catalog.DeploymentOverviewEvents, limit i
 		NewestEventTimestamp: newestEventTimestamp,
 		OldestEventTimestamp: oldestEventTimestamp,
 		TruncationStatus:     truncationStatus,
+		Truncated:            truncationStatus == resourcelogs.ScopeTruncationStatusTruncated,
 	}
 	return result
 }
