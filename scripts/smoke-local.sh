@@ -3475,7 +3475,7 @@ assert isinstance(allowed_events_scope.get('totalEventCount'), int), allowed_eve
 assert allowed_events_scope.get('totalEventCount') >= allowed_events_scope.get('returnedEventCount'), allowed_events_read
 assert isinstance(allowed_events_scope.get('limited'), bool), allowed_events_read
 assert allowed_events_scope.get('limited') == (allowed_events_scope.get('totalEventCount') > allowed_events_scope.get('returnedEventCount')), allowed_events_read
-assert allowed_events_scope.get('truncationStatus') in {'truncated', 'not_truncated'}, allowed_events_read
+assert allowed_events_scope.get('truncationStatus') in {'truncated', 'not_truncated', 'unknown'}, allowed_events_read
 assert allowed_events_scope.get('truncated') == (allowed_events_scope.get('truncationStatus') == 'truncated'), allowed_events_read
 event_timestamps = [event.get('timestamp') for event in allowed_events_read['events'] if event.get('timestamp')]
 if event_timestamps:
