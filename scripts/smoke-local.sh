@@ -1735,6 +1735,20 @@ assert 'Deployment status' in ui, ui
 assert 'Create time' in ui, ui
 assert 'Complete time' in ui, ui
 assert 'Status message' in ui, ui
+assert 'Rollback diagnostics' in ui, ui
+assert 'Rollback deployment ID' in ui, ui
+assert 'Rollback trigger deployment ID' in ui, ui
+assert 'Rollback message' in ui, ui
+assert 'Error diagnostics' in ui, ui
+assert 'Error code' in ui, ui
+assert 'Error message' in ui, ui
+assert 'Alarm diagnostics' in ui, ui
+assert 'Alarm status' in ui, ui
+assert 'Alarm polling enabled' in ui, ui
+assert 'Ignore alarm polling failures' in ui, ui
+assert 'Alarms' in ui, ui
+assert 'Deployment overview' in ui, ui
+assert 'CodeDeploy instance or target lifecycle counts for the latest deployment.' in ui, ui
 assert 'CodeDeploy ECS service bindings' in ui, ui
 assert 'Latest CodeDeploy deployment' in ui, ui
 assert 'CodeDeploy target groups' in ui, ui

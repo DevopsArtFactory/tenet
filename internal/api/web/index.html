@@ -296,6 +296,34 @@
         if (['stopped', 'failed'].includes(normalized)) return 'Rollout needs attention. Inspect the CodeDeploy deployment message and target-group health before retrying.';
         return 'Use the deployment status, message, and target-group evidence below to decide the next operator action.';
       };
+      const diagnosticValue = (value) => value === undefined || value === null || value === '' ? '—' : String(value);
+      const compactDiagnosticEntries = (rows) => rows.filter(([, value]) => value !== undefined && value !== null && value !== '');
+      const alarmNamesText = (alarms) => {
+        if (!Array.isArray(alarms)) return '';
+        const names = alarms
+          .map((alarm) => typeof alarm === 'string' ? alarm : alarm?.name || alarm?.alarmName)
+          .map((name) => String(name || '').trim())
+          .filter(Boolean);
+        return names.join(', ');
+      };
+      const deploymentOverviewCount = (overview, ...keys) => {
+        if (!overview || typeof overview !== 'object') return undefined;
+        for (const key of keys) {
+          if (overview[key] !== undefined && overview[key] !== null && overview[key] !== '') return overview[key];
+        }
+        return undefined;
+      };
+      const appendDiagnosticMetricSection = (container, title, copy, rows) => {
+        const visibleRows = compactDiagnosticEntries(rows);
+        if (!visibleRows.length) return;
+        const section = createElement('section', 'detail-section');
+        section.append(createElement('h4', '', title));
+        if (copy) section.append(createElement('p', 'detail-section-copy', copy));
+        const grid = createElement('div', 'detail-grid');
+        visibleRows.forEach(([label, value]) => grid.append(createMetric(label, diagnosticValue(value))));
+        section.append(grid);
+        container.append(section);
+      };
 
       const healthLabel = (health) => health?.overall || 'Unknown';
       const artifact = (obj) => obj?.binary || obj?.image || '—';
@@ -5721,6 +5749,53 @@
                 ['Summary source', textOrDash(latestDeployment.source)],
               ].forEach(([label, value]) => latestGrid.append(createMetric(label, value)));
               latestSection.append(latestGrid);
+              const rollbackInfo = latestDeployment.rollbackInfo || latestDeployment.rollback;
+              appendDiagnosticMetricSection(
+                latestSection,
+                'Rollback diagnostics',
+                'CodeDeploy rollback details reported for the latest deployment.',
+                [
+                  ['Rollback deployment ID', rollbackInfo?.rollbackDeploymentId || rollbackInfo?.rollbackDeploymentID || latestDeployment.rollbackDeploymentId],
+                  ['Rollback trigger deployment ID', rollbackInfo?.rollbackTriggeringDeploymentId || rollbackInfo?.rollbackTriggeringDeploymentID || latestDeployment.rollbackTriggeringDeploymentId],
+                  ['Rollback message', rollbackInfo?.rollbackMessage || rollbackInfo?.message || latestDeployment.rollbackMessage],
+                ],
+              );
+              const errorInfo = latestDeployment.errorInformation || latestDeployment.errorInfo || latestDeployment.error;
+              appendDiagnosticMetricSection(
+                latestSection,
+                'Error diagnostics',
+                'CodeDeploy error details reported for the latest deployment.',
+                [
+                  ['Error code', errorInfo?.code || errorInfo?.errorCode || latestDeployment.errorCode],
+                  ['Error message', errorInfo?.message || errorInfo?.errorMessage || latestDeployment.errorMessage],
+                ],
+              );
+              const alarmConfiguration = latestDeployment.alarmConfiguration || latestDeployment.alarmConfig || latestDeployment.alarms;
+              appendDiagnosticMetricSection(
+                latestSection,
+                'Alarm diagnostics',
+                'CodeDeploy alarm state and alarm configuration reported for the latest deployment.',
+                [
+                  ['Alarm status', latestDeployment.alarmStatus || alarmConfiguration?.status],
+                  ['Alarm polling enabled', typeof alarmConfiguration?.enabled === 'boolean' ? boolLabel(alarmConfiguration.enabled) : alarmConfiguration?.enabled],
+                  ['Ignore alarm polling failures', typeof alarmConfiguration?.ignorePollAlarmFailure === 'boolean' ? boolLabel(alarmConfiguration.ignorePollAlarmFailure) : alarmConfiguration?.ignorePollAlarmFailure],
+                  ['Alarms', alarmNamesText(Array.isArray(alarmConfiguration) ? alarmConfiguration : alarmConfiguration?.alarms)],
+                ],
+              );
+              const deploymentOverview = latestDeployment.deploymentOverview || latestDeployment.overview;
+              appendDiagnosticMetricSection(
+                latestSection,
+                'Deployment overview',
+                'CodeDeploy instance or target lifecycle counts for the latest deployment.',
+                [
+                  ['Pending', deploymentOverviewCount(deploymentOverview, 'pending', 'Pending')],
+                  ['In progress', deploymentOverviewCount(deploymentOverview, 'inProgress', 'InProgress', 'in_progress')],
+                  ['Succeeded', deploymentOverviewCount(deploymentOverview, 'succeeded', 'Succeeded')],
+                  ['Failed', deploymentOverviewCount(deploymentOverview, 'failed', 'Failed')],
+                  ['Skipped', deploymentOverviewCount(deploymentOverview, 'skipped', 'Skipped')],
+                  ['Ready', deploymentOverviewCount(deploymentOverview, 'ready', 'Ready')],
+                ],
+              );
               return latestSection;
             })()
           : null;
