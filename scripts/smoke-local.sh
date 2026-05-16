@@ -1722,6 +1722,7 @@ assert 'Create time' in ui, ui
 assert 'Complete time' in ui, ui
 assert 'Status message' in ui, ui
 assert 'CodeDeploy ECS service bindings' in ui, ui
+assert 'Latest CodeDeploy deployment' in ui, ui
 assert 'CodeDeploy target groups' in ui, ui
 assert 'Service deployments' in ui, ui
 assert 'Container instance' in ui, ui

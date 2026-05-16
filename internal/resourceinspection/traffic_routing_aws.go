@@ -7,10 +7,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
+	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -143,6 +146,7 @@ func trafficRoutingInspectionFromDeploymentGroup(req TrafficRoutingRequest, grou
 			ServiceRoleARN:        group.ServiceRoleARN,
 			DeploymentType:        group.DeploymentStyle.DeploymentType,
 			DeploymentOption:      group.DeploymentStyle.DeploymentOption,
+			LatestDeployment:      codeDeployLatestDeployment(group),
 			ECSServices:           ecsServices,
 			TargetGroups:          targetGroups,
 			ProductionListenerARN: codeDeployProductionListenerARN(group),
@@ -287,6 +291,48 @@ func codeDeployDeploymentGroups(application codeDeployApplicationInfoPayload) []
 		deploymentGroups = append(deploymentGroups, group)
 	}
 	return deploymentGroups
+}
+
+func codeDeployLatestDeployment(group codeDeployDeploymentGroupInfoPayload) *CodeDeployDeploymentSummary {
+	attempted := codeDeployDeploymentSummary(group.LastAttemptedDeployment, "last_attempted")
+	successful := codeDeployDeploymentSummary(group.LastSuccessfulDeployment, "last_successful")
+	switch {
+	case attempted == nil:
+		return successful
+	case successful == nil:
+		return attempted
+	case codeDeployDeploymentSummaryTime(successful).After(codeDeployDeploymentSummaryTime(attempted)):
+		return successful
+	default:
+		return attempted
+	}
+}
+
+func codeDeployDeploymentSummary(deployment codeDeployLastDeploymentInfoPayload, source string) *CodeDeployDeploymentSummary {
+	deploymentID := strings.TrimSpace(deployment.DeploymentID)
+	if deploymentID == "" {
+		return nil
+	}
+	return &CodeDeployDeploymentSummary{
+		DeploymentID: deploymentID,
+		Status:       strings.TrimSpace(deployment.Status),
+		CreateTime:   deployment.CreateTime.String(),
+		EndTime:      deployment.EndTime.String(),
+		Source:       source,
+	}
+}
+
+func codeDeployDeploymentSummaryTime(summary *CodeDeployDeploymentSummary) time.Time {
+	if summary == nil {
+		return time.Time{}
+	}
+	if parsed, err := time.Parse(time.RFC3339, summary.EndTime); err == nil {
+		return parsed
+	}
+	if parsed, err := time.Parse(time.RFC3339, summary.CreateTime); err == nil {
+		return parsed
+	}
+	return time.Time{}
 }
 
 func codeDeployTaskSetTargetGroupName(group codeDeployDeploymentGroupInfoPayload, resourceType, resourceName string) string {
@@ -795,13 +841,71 @@ type codeDeployGetDeploymentGroupOutput struct {
 }
 
 type codeDeployDeploymentGroupInfoPayload struct {
-	ApplicationName      string                            `json:"applicationName"`
-	DeploymentGroupName  string                            `json:"deploymentGroupName"`
-	DeploymentConfigName string                            `json:"deploymentConfigName"`
-	ServiceRoleARN       string                            `json:"serviceRoleArn"`
-	DeploymentStyle      codeDeployDeploymentStylePayload  `json:"deploymentStyle"`
-	ECSServices          []codeDeployECSServicePayload     `json:"ecsServices"`
-	LoadBalancerInfo     codeDeployLoadBalancerInfoPayload `json:"loadBalancerInfo"`
+	ApplicationName          string                              `json:"applicationName"`
+	DeploymentGroupName      string                              `json:"deploymentGroupName"`
+	DeploymentConfigName     string                              `json:"deploymentConfigName"`
+	ServiceRoleARN           string                              `json:"serviceRoleArn"`
+	DeploymentStyle          codeDeployDeploymentStylePayload    `json:"deploymentStyle"`
+	ECSServices              []codeDeployECSServicePayload       `json:"ecsServices"`
+	LoadBalancerInfo         codeDeployLoadBalancerInfoPayload   `json:"loadBalancerInfo"`
+	LastAttemptedDeployment  codeDeployLastDeploymentInfoPayload `json:"lastAttemptedDeployment"`
+	LastSuccessfulDeployment codeDeployLastDeploymentInfoPayload `json:"lastSuccessfulDeployment"`
+}
+
+type codeDeployLastDeploymentInfoPayload struct {
+	DeploymentID string                  `json:"deploymentId"`
+	Status       string                  `json:"status"`
+	CreateTime   codeDeployJSONTimestamp `json:"createTime"`
+	EndTime      codeDeployJSONTimestamp `json:"endTime"`
+}
+
+type codeDeployJSONTimestamp struct {
+	time time.Time
+}
+
+func (t *codeDeployJSONTimestamp) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+		return nil
+	}
+	var text string
+	if err := json.Unmarshal(data, &text); err == nil {
+		parsed, parseErr := parseCodeDeployTimestamp(text)
+		if parseErr != nil {
+			return parseErr
+		}
+		t.time = parsed
+		return nil
+	}
+	var seconds float64
+	if err := json.Unmarshal(data, &seconds); err != nil {
+		return err
+	}
+	whole, fraction := math.Modf(seconds)
+	t.time = time.Unix(int64(whole), int64(fraction*1e9)).UTC()
+	return nil
+}
+
+func (t codeDeployJSONTimestamp) String() string {
+	if t.time.IsZero() {
+		return ""
+	}
+	return t.time.UTC().Format(time.RFC3339)
+}
+
+func parseCodeDeployTimestamp(value string) (time.Time, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Time{}, nil
+	}
+	if parsed, err := time.Parse(time.RFC3339, value); err == nil {
+		return parsed.UTC(), nil
+	}
+	if seconds, err := strconv.ParseFloat(value, 64); err == nil {
+		whole, fraction := math.Modf(seconds)
+		return time.Unix(int64(whole), int64(fraction*1e9)).UTC(), nil
+	}
+	return time.Time{}, fmt.Errorf("parse CodeDeploy timestamp %q", value)
 }
 
 type codeDeployDeploymentStylePayload struct {

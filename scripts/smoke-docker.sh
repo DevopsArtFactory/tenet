@@ -2090,6 +2090,7 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
         "Complete time",
         "Status message",
         "CodeDeploy ECS service bindings",
+        "Latest CodeDeploy deployment",
         "CodeDeploy target groups",
         "resourceInspectionReadRoute(deploymentName, resource, targetLimit)",
         "const autoScalingGroupSupportsInstanceHandoff = (resource) => ['candidateAutoScalingGroup', 'serviceAutoScalingGroup'].includes(String(resource?.type || '').trim());",

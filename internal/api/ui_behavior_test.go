@@ -6379,11 +6379,12 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
             productionListenerArn: 'arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:listener/app/payments/prod',
             testListenerArn: 'arn:aws:elasticloadbalancing:ap-northeast-2:210987654321:listener/app/payments/test',
             latestDeployment: {
-              deploymentId: 'd-ABCDEFGHI',
+              deploymentId: 'd-LATEST<script>safe</script>',
               status: 'Succeeded',
               createTime: '2026-05-16T04:10:00Z',
               completeTime: '2026-05-16T04:17:30Z',
               statusMessage: '<script>latest deployment text only</script>',
+              source: 'last_attempted',
             },
             ecsServices: [{ clusterName: 'payments-staging', serviceName: 'payments-api-staging-service<script>safe</script>' }],
             targetGroups: ['payments-api-staging-blue', 'payments-api-staging-green'],
@@ -6404,7 +6405,7 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!liveDeploymentGroupText.includes('BLUE_GREEN / WITH_TRAFFIC_CONTROL')) throw new Error('expected deployment style value');
   if (!liveDeploymentGroupText.includes('Latest CodeDeploy deployment')) throw new Error('expected latest CodeDeploy deployment section');
   if (!liveDeploymentGroupText.includes('Deployment ID')) throw new Error('expected latest deployment id label');
-  if (!liveDeploymentGroupText.includes('d-ABCDEFGHI')) throw new Error('expected latest deployment id value');
+  if (!liveDeploymentGroupText.includes('d-LATEST<script>safe</script>')) throw new Error('expected latest deployment id to render as safe text');
   if (!liveDeploymentGroupText.includes('Deployment status')) throw new Error('expected latest deployment status label');
   if (!liveDeploymentGroupText.includes('Succeeded')) throw new Error('expected latest deployment status value');
   if (!liveDeploymentGroupText.includes('Create time')) throw new Error('expected latest deployment create time label');
@@ -6413,6 +6414,8 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!liveDeploymentGroupText.includes('2026-05-16T04:17:30Z')) throw new Error('expected latest deployment complete time value');
   if (!liveDeploymentGroupText.includes('Status message')) throw new Error('expected latest deployment status-message label');
   if (!liveDeploymentGroupText.includes('<script>latest deployment text only</script>')) throw new Error('expected latest deployment status message to render as text');
+  if (!liveDeploymentGroupText.includes('Summary source')) throw new Error('expected latest deployment source label');
+  if (!liveDeploymentGroupText.includes('last_attempted')) throw new Error('expected latest deployment source value');
   if (!liveDeploymentGroupText.includes('CodeDeploy ECS service bindings')) throw new Error('expected ECS bindings section');
   if (!liveDeploymentGroupText.includes('Service · payments-api-staging-service<script>safe</script>')) throw new Error('expected ECS service binding to render as safe text');
   if (!liveDeploymentGroupText.includes('CodeDeploy target groups')) throw new Error('expected target groups section');

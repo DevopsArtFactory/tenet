@@ -5538,23 +5538,6 @@
           ['Test listener ARN', textOrDash(deploymentGroup.testListenerArn)],
         ].forEach(([label, value]) => metadata.append(createMetric(label, value)));
         section.append(metadata);
-        const latestDeployment = deploymentGroup.latestDeployment || deploymentGroup.latestCodeDeployDeployment;
-        if (latestDeployment && typeof latestDeployment === 'object') {
-          const latestDeploymentSection = createElement('section', 'detail-section');
-          const latestDeploymentMetadata = createElement('div', 'detail-grid');
-          [
-            ['Deployment ID', textOrDash(latestDeployment.deploymentId || latestDeployment.deploymentID || latestDeployment.id)],
-            ['Deployment status', textOrDash(latestDeployment.status)],
-            ['Create time', textOrDash(latestDeployment.createTime || latestDeployment.createdAt)],
-            ['Complete time', textOrDash(latestDeployment.completeTime || latestDeployment.completedAt)],
-            ['Status message', textOrDash(latestDeployment.statusMessage || latestDeployment.message)],
-          ].forEach(([label, value]) => latestDeploymentMetadata.append(createMetric(label, value)));
-          latestDeploymentSection.append(
-            createElement('h4', '', 'Latest CodeDeploy deployment'),
-            latestDeploymentMetadata,
-          );
-          section.append(latestDeploymentSection);
-        }
         const ecsServicesSection = createInspectionListSection(
           'CodeDeploy ECS service bindings',
           Array.isArray(deploymentGroup.ecsServices) ? deploymentGroup.ecsServices : [],
@@ -5571,6 +5554,24 @@
           },
           'No ECS service bindings are currently reported for this CodeDeploy deployment group.',
         );
+        const latestDeployment = deploymentGroup.latestDeployment || deploymentGroup.latestCodeDeployDeployment;
+        const latestDeploymentSection = latestDeployment && typeof latestDeployment === 'object'
+          ? (() => {
+              const latestSection = createElement('section', 'detail-section');
+              latestSection.append(createElement('h4', '', 'Latest CodeDeploy deployment'));
+              const latestGrid = createElement('div', 'detail-grid');
+              [
+                ['Deployment ID', textOrDash(latestDeployment.deploymentId || latestDeployment.deploymentID || latestDeployment.id)],
+                ['Deployment status', textOrDash(latestDeployment.status)],
+                ['Create time', textOrDash(latestDeployment.createTime || latestDeployment.createdAt)],
+                ['Complete time', textOrDash(latestDeployment.completeTime || latestDeployment.endTime || latestDeployment.completedAt)],
+                ['Status message', textOrDash(latestDeployment.statusMessage || latestDeployment.message)],
+                ['Summary source', textOrDash(latestDeployment.source)],
+              ].forEach(([label, value]) => latestGrid.append(createMetric(label, value)));
+              latestSection.append(latestGrid);
+              return latestSection;
+            })()
+          : null;
         const targetGroupsSection = createInspectionListSection(
           'CodeDeploy target groups',
           Array.isArray(deploymentGroup.targetGroups) ? deploymentGroup.targetGroups : [],
@@ -5581,7 +5582,7 @@
           },
           'No target groups are currently reported for this CodeDeploy deployment group.',
         );
-        section.append(ecsServicesSection, targetGroupsSection);
+        section.append(ecsServicesSection, ...(latestDeploymentSection ? [latestDeploymentSection] : []), targetGroupsSection);
         return section;
       };
       const createTrafficRoutingListenerRuleSection = (trafficRouting) => {
