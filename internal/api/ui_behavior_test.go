@@ -6472,6 +6472,29 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
               completeTime: '2026-05-16T04:17:30Z',
               statusMessage: '<script>latest deployment text only</script>',
               source: 'last_attempted',
+              rollbackInfo: {
+                rollbackDeploymentId: 'd-ROLLBACK<script>safe</script>',
+                rollbackTriggeringDeploymentId: 'd-TRIGGER',
+                rollbackMessage: '<script>rollback text only</script>',
+              },
+              errorInformation: {
+                code: 'HEALTH_CONSTRAINTS',
+                message: '<script>error text only</script>',
+              },
+              alarmStatus: 'Triggered',
+              alarmConfiguration: {
+                enabled: true,
+                ignorePollAlarmFailure: false,
+                alarms: [{ name: 'payments-api-5xx<script>safe</script>' }, { name: 'payments-api-latency' }],
+              },
+              deploymentOverview: {
+                pending: 0,
+                inProgress: 1,
+                succeeded: 4,
+                failed: 0,
+                skipped: 0,
+                ready: 2,
+              },
             },
             ecsServices: [{ clusterName: 'payments-staging', serviceName: 'payments-api-staging-service<script>safe</script>' }],
             targetGroups: ['payments-api-staging-blue', 'payments-api-staging-green'],
@@ -6503,6 +6526,25 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   expectLabelValue(liveDeploymentGroupText, 'Complete time', '2026-05-16T04:17:30Z', 'live deployment-group latest deployment');
   if (!liveDeploymentGroupText.includes('<script>latest deployment text only</script>')) throw new Error('expected latest deployment status message to render as text');
   expectLabelValue(liveDeploymentGroupText, 'Summary source', 'last_attempted', 'live deployment-group latest deployment');
+  if (!liveDeploymentGroupText.includes('Rollback diagnostics')) throw new Error('expected rollback diagnostics section');
+  expectLabelValue(liveDeploymentGroupText, 'Rollback deployment ID', 'd-ROLLBACK<script>safe</script>', 'live deployment-group rollback diagnostics');
+  expectLabelValue(liveDeploymentGroupText, 'Rollback trigger deployment ID', 'd-TRIGGER', 'live deployment-group rollback diagnostics');
+  if (!liveDeploymentGroupText.includes('<script>rollback text only</script>')) throw new Error('expected rollback message to render as text');
+  if (!liveDeploymentGroupText.includes('Error diagnostics')) throw new Error('expected error diagnostics section');
+  expectLabelValue(liveDeploymentGroupText, 'Error code', 'HEALTH_CONSTRAINTS', 'live deployment-group error diagnostics');
+  if (!liveDeploymentGroupText.includes('<script>error text only</script>')) throw new Error('expected error message to render as text');
+  if (!liveDeploymentGroupText.includes('Alarm diagnostics')) throw new Error('expected alarm diagnostics section');
+  expectLabelValue(liveDeploymentGroupText, 'Alarm status', 'Triggered', 'live deployment-group alarm diagnostics');
+  expectLabelValue(liveDeploymentGroupText, 'Alarm polling enabled', 'True', 'live deployment-group alarm diagnostics');
+  expectLabelValue(liveDeploymentGroupText, 'Ignore alarm polling failures', 'False', 'live deployment-group alarm diagnostics');
+  expectLabelValue(liveDeploymentGroupText, 'Alarms', 'payments-api-5xx<script>safe</script>, payments-api-latency', 'live deployment-group alarm diagnostics');
+  if (!liveDeploymentGroupText.includes('Deployment overview')) throw new Error('expected deployment overview diagnostics section');
+  expectLabelValue(liveDeploymentGroupText, 'Pending', '0', 'live deployment-group deployment overview');
+  expectLabelValue(liveDeploymentGroupText, 'In progress', '1', 'live deployment-group deployment overview');
+  expectLabelValue(liveDeploymentGroupText, 'Succeeded', '4', 'live deployment-group deployment overview');
+  expectLabelValue(liveDeploymentGroupText, 'Failed', '0', 'live deployment-group deployment overview');
+  expectLabelValue(liveDeploymentGroupText, 'Skipped', '0', 'live deployment-group deployment overview');
+  expectLabelValue(liveDeploymentGroupText, 'Ready', '2', 'live deployment-group deployment overview');
   if (!liveDeploymentGroupText.includes('CodeDeploy ECS service bindings')) throw new Error('expected ECS bindings section');
   expectLabelValue(liveDeploymentGroupText, 'Service', 'payments-api-staging-service<script>safe</script>', 'live deployment-group ECS service binding');
   if (!liveDeploymentGroupText.includes('CodeDeploy target groups')) throw new Error('expected target groups section');
