@@ -973,10 +973,12 @@ assert 1 <= len(audit_logs_action_filtered["entries"]) <= 2, audit_logs_action_f
 assert all(entry["action"] == "apply.requested" for entry in audit_logs_action_filtered["entries"]), audit_logs_action_filtered
 assert isinstance(audit_logs.get("resultScope"), dict), audit_logs
 assert audit_logs["resultScope"]["returnedEntryCount"] == len(audit_logs["entries"]), audit_logs
+assert audit_logs["resultScope"]["returnedCount"] == audit_logs["resultScope"]["returnedEntryCount"], audit_logs
 assert audit_logs["resultScope"]["totalEntryCount"] >= audit_logs["resultScope"]["returnedEntryCount"], audit_logs
 assert audit_logs["resultScope"]["limited"] is False, audit_logs
 assert audit_logs["resultScope"]["effectiveLimit"] == 0, audit_logs
 assert audit_logs["resultScope"]["truncationStatus"] == "not_truncated", audit_logs
+assert audit_logs["resultScope"]["truncated"] is False, audit_logs
 assert "requestedLimit" not in audit_logs["resultScope"], audit_logs
 assert isinstance(audit_logs_action_filtered.get("resultScope"), dict), audit_logs_action_filtered
 assert audit_logs_action_filtered["resultScope"]["action"] == "apply.requested", audit_logs_action_filtered
@@ -984,7 +986,9 @@ assert audit_logs_action_filtered["resultScope"]["limit"] == 2, audit_logs_actio
 assert audit_logs_action_filtered["resultScope"]["requestedLimit"] == 2, audit_logs_action_filtered
 assert audit_logs_action_filtered["resultScope"]["effectiveLimit"] == 2, audit_logs_action_filtered
 assert audit_logs_action_filtered["resultScope"].get("truncationStatus") in {"truncated", "not_truncated"}, audit_logs_action_filtered
+assert audit_logs_action_filtered["resultScope"]["truncated"] == (audit_logs_action_filtered["resultScope"]["truncationStatus"] == "truncated"), audit_logs_action_filtered
 assert audit_logs_action_filtered["resultScope"]["returnedEntryCount"] == len(audit_logs_action_filtered["entries"]), audit_logs_action_filtered
+assert audit_logs_action_filtered["resultScope"]["returnedCount"] == audit_logs_action_filtered["resultScope"]["returnedEntryCount"], audit_logs_action_filtered
 assert os.environ["INVALID_AUDIT_ACTION_STATUS"] == "400", os.environ["INVALID_AUDIT_ACTION_STATUS"]
 assert "invalid action query" in invalid_audit_action_body, invalid_audit_action_body
 assert os.environ["WEBHOOK_PUSH_STATUS"] == "202", os.environ["WEBHOOK_PUSH_STATUS"]
@@ -1049,7 +1053,9 @@ assert actor_audit_logs["resultScope"]["limit"] == 1, actor_audit_logs
 assert actor_audit_logs["resultScope"]["requestedLimit"] == 1, actor_audit_logs
 assert actor_audit_logs["resultScope"]["effectiveLimit"] == 1, actor_audit_logs
 assert actor_audit_logs["resultScope"]["truncationStatus"] == "not_truncated", actor_audit_logs
+assert actor_audit_logs["resultScope"]["truncated"] is False, actor_audit_logs
 assert actor_audit_logs["resultScope"]["returnedEntryCount"] == 1, actor_audit_logs
+assert actor_audit_logs["resultScope"]["returnedCount"] == 1, actor_audit_logs
 assert actor_audit_logs["entries"][0]["deploymentName"] == "payments-api-staging", actor_audit_logs
 assert actor_audit_logs["entries"][0]["actor"]["available"] is True, actor_audit_logs
 assert actor_audit_logs["entries"][0]["actor"]["id"] == "explicit-456", actor_audit_logs

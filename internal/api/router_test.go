@@ -2996,10 +2996,10 @@ func TestRouterAuditLogs(t *testing.T) {
 	if len(result.Entries) != 1 || result.Entries[0].ApplyID != "apply_5678" {
 		t.Fatalf("unexpected audit logs payload: %+v", result)
 	}
-	if result.ResultScope.ReturnedEntryCount != 1 || result.ResultScope.TotalEntryCount != 1 || result.ResultScope.Limited || result.ResultScope.DeploymentName != "api-prod" || result.ResultScope.Action != string(auditlog.ActionApplyRequested) {
+	if result.ResultScope.ReturnedEntryCount != 1 || result.ResultScope.ReturnedCount != 1 || result.ResultScope.TotalEntryCount != 1 || result.ResultScope.Limited || result.ResultScope.DeploymentName != "api-prod" || result.ResultScope.Action != string(auditlog.ActionApplyRequested) {
 		t.Fatalf("unexpected audit result scope: %+v", result.ResultScope)
 	}
-	if result.ResultScope.Limit == nil || *result.ResultScope.Limit != 2 || result.ResultScope.RequestedLimit == nil || *result.ResultScope.RequestedLimit != 2 || result.ResultScope.EffectiveLimit != 2 || result.ResultScope.TruncationStatus != "not_truncated" {
+	if result.ResultScope.Limit == nil || *result.ResultScope.Limit != 2 || result.ResultScope.RequestedLimit == nil || *result.ResultScope.RequestedLimit != 2 || result.ResultScope.EffectiveLimit != 2 || result.ResultScope.TruncationStatus != "not_truncated" || result.ResultScope.Truncated {
 		t.Fatalf("expected audit result scope to echo applied limit, got %+v", result.ResultScope)
 	}
 	var raw map[string]any
@@ -3015,7 +3015,7 @@ func TestRouterAuditLogs(t *testing.T) {
 		t.Fatalf("expected raw audit entryId field, got %#v", rawEntries[0])
 	}
 	rawScope, ok := raw["resultScope"].(map[string]any)
-	if !ok || rawScope["returnedEntryCount"] != float64(1) || rawScope["totalEntryCount"] != float64(1) || rawScope["limited"] != false || rawScope["limit"] != float64(2) || rawScope["requestedLimit"] != float64(2) || rawScope["effectiveLimit"] != float64(2) || rawScope["truncationStatus"] != "not_truncated" || rawScope["deploymentName"] != "api-prod" || rawScope["action"] != "apply.requested" {
+	if !ok || rawScope["returnedEntryCount"] != float64(1) || rawScope["returnedCount"] != float64(1) || rawScope["totalEntryCount"] != float64(1) || rawScope["limited"] != false || rawScope["limit"] != float64(2) || rawScope["requestedLimit"] != float64(2) || rawScope["effectiveLimit"] != float64(2) || rawScope["truncationStatus"] != "not_truncated" || rawScope["truncated"] != false || rawScope["deploymentName"] != "api-prod" || rawScope["action"] != "apply.requested" {
 		t.Fatalf("expected raw audit resultScope contract, got %#v", raw["resultScope"])
 	}
 }
@@ -3053,10 +3053,10 @@ func TestRouterAuditLogsFiltersAuthorizationBeforeApplyingCollectionLimit(t *tes
 	if len(result.Entries) != 1 || result.Entries[0].ApplyID != "apply_visible_newer" {
 		t.Fatalf("expected limit to apply after authorization filtering, got %+v", result.Entries)
 	}
-	if result.ResultScope.ReturnedEntryCount != 1 || result.ResultScope.TotalEntryCount != 2 || !result.ResultScope.Limited || result.ResultScope.Action != string(auditlog.ActionApplyRequested) {
+	if result.ResultScope.ReturnedEntryCount != 1 || result.ResultScope.ReturnedCount != 1 || result.ResultScope.TotalEntryCount != 2 || !result.ResultScope.Limited || result.ResultScope.Action != string(auditlog.ActionApplyRequested) {
 		t.Fatalf("expected authorized collection result scope after filtering and limit, got %+v", result.ResultScope)
 	}
-	if result.ResultScope.Limit == nil || *result.ResultScope.Limit != 1 || result.ResultScope.RequestedLimit == nil || *result.ResultScope.RequestedLimit != 1 || result.ResultScope.EffectiveLimit != 1 || result.ResultScope.TruncationStatus != "truncated" {
+	if result.ResultScope.Limit == nil || *result.ResultScope.Limit != 1 || result.ResultScope.RequestedLimit == nil || *result.ResultScope.RequestedLimit != 1 || result.ResultScope.EffectiveLimit != 1 || result.ResultScope.TruncationStatus != "truncated" || !result.ResultScope.Truncated {
 		t.Fatalf("expected authorized collection result scope limit echo, got %+v", result.ResultScope)
 	}
 }
@@ -3114,7 +3114,7 @@ func TestRouterAuditLogsAcceptsApplyTransitionAction(t *testing.T) {
 		t.Fatalf("expected raw transition metadata, got %#v", rawEntry["metadata"])
 	}
 	rawScope, ok := raw["resultScope"].(map[string]any)
-	if !ok || rawScope["action"] != "apply.transitioned" || rawScope["deploymentName"] != "api-prod" || rawScope["returnedEntryCount"] != float64(1) {
+	if !ok || rawScope["action"] != "apply.transitioned" || rawScope["deploymentName"] != "api-prod" || rawScope["returnedEntryCount"] != float64(1) || rawScope["returnedCount"] != float64(1) || rawScope["truncated"] != false {
 		t.Fatalf("expected raw transition result scope, got %#v", raw["resultScope"])
 	}
 }

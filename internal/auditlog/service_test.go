@@ -75,10 +75,10 @@ func TestServiceListProjectsImmutableRecordsIntoNewestFirstTimeline(t *testing.T
 	if len(result.Entries) != 2 {
 		t.Fatalf("expected two limited entries, got %+v", result.Entries)
 	}
-	if result.ResultScope.ReturnedEntryCount != 2 || result.ResultScope.TotalEntryCount != 3 || !result.ResultScope.Limited {
+	if result.ResultScope.ReturnedEntryCount != 2 || result.ResultScope.ReturnedCount != 2 || result.ResultScope.TotalEntryCount != 3 || !result.ResultScope.Limited {
 		t.Fatalf("expected capped result scope for limited audit window, got %+v", result.ResultScope)
 	}
-	if result.ResultScope.Limit == nil || *result.ResultScope.Limit != 2 || result.ResultScope.RequestedLimit == nil || *result.ResultScope.RequestedLimit != 2 || result.ResultScope.EffectiveLimit != 2 || result.ResultScope.TruncationStatus != "truncated" {
+	if result.ResultScope.Limit == nil || *result.ResultScope.Limit != 2 || result.ResultScope.RequestedLimit == nil || *result.ResultScope.RequestedLimit != 2 || result.ResultScope.EffectiveLimit != 2 || result.ResultScope.TruncationStatus != "truncated" || !result.ResultScope.Truncated {
 		t.Fatalf("expected applied audit limit in result scope, got %+v", result.ResultScope)
 	}
 
@@ -159,10 +159,10 @@ func TestServiceListAssignsStableEntryIDsAcrossFiltersAndLimits(t *testing.T) {
 	if len(all.Entries) != 2 || len(filtered.Entries) != 1 {
 		t.Fatalf("expected two full entries and one filtered entry, all=%+v filtered=%+v", all.Entries, filtered.Entries)
 	}
-	if all.ResultScope.ReturnedEntryCount != 2 || all.ResultScope.TotalEntryCount != 2 || all.ResultScope.Limited || all.ResultScope.EffectiveLimit != 0 || all.ResultScope.RequestedLimit != nil || all.ResultScope.TruncationStatus != "not_truncated" {
+	if all.ResultScope.ReturnedEntryCount != 2 || all.ResultScope.ReturnedCount != 2 || all.ResultScope.TotalEntryCount != 2 || all.ResultScope.Limited || all.ResultScope.EffectiveLimit != 0 || all.ResultScope.RequestedLimit != nil || all.ResultScope.TruncationStatus != "not_truncated" || all.ResultScope.Truncated {
 		t.Fatalf("expected uncapped all-entry result scope, got %+v", all.ResultScope)
 	}
-	if filtered.ResultScope.ReturnedEntryCount != 1 || filtered.ResultScope.TotalEntryCount != 1 || filtered.ResultScope.Limited || filtered.ResultScope.EffectiveLimit != 1 || filtered.ResultScope.RequestedLimit == nil || *filtered.ResultScope.RequestedLimit != 1 || filtered.ResultScope.TruncationStatus != "not_truncated" {
+	if filtered.ResultScope.ReturnedEntryCount != 1 || filtered.ResultScope.ReturnedCount != 1 || filtered.ResultScope.TotalEntryCount != 1 || filtered.ResultScope.Limited || filtered.ResultScope.EffectiveLimit != 1 || filtered.ResultScope.RequestedLimit == nil || *filtered.ResultScope.RequestedLimit != 1 || filtered.ResultScope.TruncationStatus != "not_truncated" || filtered.ResultScope.Truncated {
 		t.Fatalf("expected filtered result scope to describe matched rows before cap, got %+v", filtered.ResultScope)
 	}
 	if filtered.ResultScope.DeploymentName != "api-prod" || filtered.ResultScope.Action != string(ActionApplyRequested) || filtered.ResultScope.Limit == nil || *filtered.ResultScope.Limit != 1 {
@@ -311,7 +311,7 @@ func TestServiceListReturnsExplicitEmptyEntriesForDeploymentWithoutAuditRecords(
 	if len(result.Entries) != 0 {
 		t.Fatalf("expected explicit empty audit result, got %+v", result.Entries)
 	}
-	if result.ResultScope.ReturnedEntryCount != 0 || result.ResultScope.TotalEntryCount != 0 || result.ResultScope.DeploymentName != "worker-prod" || result.ResultScope.Limited || result.ResultScope.EffectiveLimit != 0 || result.ResultScope.TruncationStatus != "not_truncated" {
+	if result.ResultScope.ReturnedEntryCount != 0 || result.ResultScope.ReturnedCount != 0 || result.ResultScope.TotalEntryCount != 0 || result.ResultScope.DeploymentName != "worker-prod" || result.ResultScope.Limited || result.ResultScope.EffectiveLimit != 0 || result.ResultScope.TruncationStatus != "not_truncated" || result.ResultScope.Truncated {
 		t.Fatalf("expected empty scoped result metadata, got %+v", result.ResultScope)
 	}
 }
