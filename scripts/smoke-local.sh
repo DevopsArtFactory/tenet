@@ -1915,6 +1915,8 @@ assert "const createAccountQuickNav = (account, sectionLinks = []) => {" in acco
 assert "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')" in account_ui, account_ui
 assert "createQuickNavChip('Account detail', 'Current destination: Account detail')" in account_ui, account_ui
 assert 'Refresh account detail' in account_ui, account_ui
+assert "createAccountDetailActions(accountState).forEach((action) => {" in account_ui, account_ui
+assert "toolbar.replaceChildren(toolbarActions);" in account_ui, account_ui
 assert 'Account detail read refreshed ·' in account_ui, account_ui
 assert 'Account detail read not refreshed yet' in account_ui, account_ui
 assert 'account-detail-freshness' in account_ui, account_ui

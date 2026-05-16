@@ -156,7 +156,10 @@ self-describing `More actions for {deploymentName}` disclosure with an accessibl
 secondary-action group label, and an `Applications JSON` handoff to
 `GET /v1/overview/applications`. Each row keeps a
 compact `Last update` field from the joined runtime summary, falling back to
-`Latest runtime status` when no timestamp is present.
+`Latest runtime status` when no timestamp is present. The secondary account
+drill-down keeps its `Refresh account detail` action in the page toolbar so
+operators can refresh account-scoped rows from the same place they refresh
+application detail pages.
 
 Common bookmarkable routes:
 
