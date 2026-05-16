@@ -230,6 +230,16 @@ General repository checks:
 go test ./...
 ```
 
+For hosted CI Smoke failures that never start a runner, collect pasteable issue
+evidence with:
+
+```bash
+scripts/ci-smoke-runner-evidence.sh --summary <run-id>
+```
+
+The detailed runner-start evidence bundle remains available by omitting
+`--summary`; see `docs/runbooks/ci-smoke-runner-start.md`.
+
 ## Documentation Map
 
 - `docs/architecture/tenet-v1-operator-contracts.md` preserves the detailed

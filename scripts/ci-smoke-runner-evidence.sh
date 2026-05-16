@@ -3,9 +3,10 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/ci-smoke-runner-evidence.sh <run-id>
+Usage: scripts/ci-smoke-runner-evidence.sh [--summary|--markdown] <run-id>
 
 Collect GitHub Actions CI Smoke runner-start evidence for a workflow run.
+Use --summary or --markdown to print a concise Markdown block for PR/issue comments.
 
 The report includes:
   - run summary with head SHA and URL
@@ -19,9 +20,16 @@ Run from a gh-authenticated checkout of DevopsArtFactory/tenet.
 USAGE
 }
 
+SUMMARY_MODE=false
+
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage
   exit 0
+fi
+
+if [[ "${1:-}" == "--summary" || "${1:-}" == "--markdown" ]]; then
+  SUMMARY_MODE=true
+  shift
 fi
 
 if [[ $# -ne 1 ]]; then
@@ -45,6 +53,40 @@ section() {
   printf '\n== %s ==\n' "$1"
 }
 
+ci_smoke_check_runs_tsv() {
+  local sha="$1"
+  gh api --paginate "repos/:owner/:repo/commits/${sha}/check-runs" \
+    --jq '.check_runs[] | select(.name == "Fast smoke" or .name == "Docker smoke scope" or .name == "Docker smoke") | [.id, .name, (.status // ""), (.conclusion // ""), (.details_url // "")] | @tsv'
+}
+
+print_billing_annotations() {
+  local check_runs="$1"
+  local prefix="$2"
+  local id
+  local name
+  local status
+  local conclusion
+  local details_url
+  local annotations
+  local message
+  local found=false
+
+  while IFS=$'\t' read -r id name status conclusion details_url; do
+    [[ -n "$id" ]] || continue
+    annotations=$(gh api --paginate "repos/:owner/:repo/check-runs/${id}/annotations" \
+      --jq '.[] | select((.message // "") | test("billing|spending limit|payments have failed|Billing & plans"; "i")) | .message')
+    while IFS= read -r message; do
+      [[ -n "$message" ]] || continue
+      found=true
+      printf '%s Billing/spending-limit annotation on %s: %s\n' "$prefix" "$name" "$message"
+    done <<< "$annotations"
+  done <<< "$check_runs"
+
+  if [[ "$found" != true ]]; then
+    printf '%s No billing/spending-limit annotation found on CI Smoke check-runs.\n' "$prefix"
+  fi
+}
+
 print_runner_start_verdict() {
   local run_id="$1"
   local sha="$2"
@@ -61,29 +103,67 @@ print_runner_start_verdict() {
     printf '%s\n' "$blocker_lines"
   fi
 
-  check_runs=$(gh api --paginate "repos/:owner/:repo/commits/${sha}/check-runs" \
-    --jq '.check_runs[] | select(.name == "Fast smoke" or .name == "Docker smoke scope" or .name == "Docker smoke") | [.id, .name] | @tsv')
-  local billing_lines=()
-  local id
-  local name
-  local annotations
-  local message
-  while IFS=$'\t' read -r id name; do
-    [[ -n "$id" ]] || continue
-    annotations=$(gh api --paginate "repos/:owner/:repo/check-runs/${id}/annotations" \
-      --jq '.[] | select((.message // "") | test("billing|spending limit|payments have failed|Billing & plans"; "i")) | .message')
-    while IFS= read -r message; do
-      [[ -n "$message" ]] || continue
-      billing_lines+=("- Billing/spending-limit annotation on ${name}: ${message}")
-    done <<< "$annotations"
-  done <<< "$check_runs"
-
-  if [[ ${#billing_lines[@]} -eq 0 ]]; then
-    echo "No billing/spending-limit annotation found on CI Smoke check-runs."
-  else
-    printf '%s\n' "${billing_lines[@]}"
-  fi
+  check_runs=$(ci_smoke_check_runs_tsv "$sha")
+  print_billing_annotations "$check_runs" "-"
 }
+
+print_markdown_summary() {
+  local run_id="$1"
+  local run_json
+  local sha
+  local url
+  local check_runs
+  local jobs
+  local docker_smoke
+  local log_output
+
+  run_json=$(gh run view "$run_id" --json databaseId,name,status,conclusion,headSha,url \
+    --jq '{id:.databaseId,name,status,conclusion,headSha,url}')
+  sha=$(gh run view "$run_id" --json headSha --jq .headSha)
+  url=$(gh run view "$run_id" --json url --jq .url)
+  check_runs=$(ci_smoke_check_runs_tsv "$sha")
+
+  printf '### CI Smoke runner-start evidence\n\n'
+  printf -- '- Run: %s\n' "$url"
+  printf -- '- Head SHA: `%s`\n' "$sha"
+  printf '\n'
+
+  printf 'Run summary:\n\n'
+  printf '```json\n%s\n```\n\n' "$run_json"
+
+  printf 'Runner assignment evidence:\n\n'
+  printf '| Scope | Status | Conclusion | runner_id | runner_name | steps |\n'
+  printf '| --- | --- | --- | --- | --- | --- |\n'
+  jobs=$(gh api "repos/:owner/:repo/actions/runs/${run_id}/jobs" \
+    --jq '.jobs[] | select(.name == "Fast smoke" or .name == "Docker smoke scope") | "| \(.name) | \(.status // "") | \(.conclusion // "") | \(.runner_id // 0) | \((.runner_name // "") | if . == "" then "<empty>" else . end) | \((.steps // []) | length) |"')
+  if [[ -z "$jobs" ]]; then
+    echo '| Fast smoke / Docker smoke scope | unavailable | unavailable | unavailable | unavailable | unavailable |'
+  else
+    printf '%s\n' "$jobs"
+  fi
+  printf '\n'
+
+  docker_smoke=$(printf '%s\n' "$check_runs" | awk -F '\t' '$2 == "Docker smoke" && $4 == "skipped" {print "- Docker smoke: skipped (" $3 "/" $4 ") " $5}')
+  if [[ -n "$docker_smoke" ]]; then
+    printf '%s\n\n' "$docker_smoke"
+  fi
+
+  if ! log_output=$(gh run view "$run_id" --log-failed 2>&1); then
+    printf -- '- Missing failed logs: `gh run view %s --log-failed` did not return downloadable failed logs' "$run_id"
+    if [[ -n "$log_output" ]]; then
+      printf ' (`%s`)' "$(printf '%s' "$log_output" | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
+    fi
+    printf '.\n\n'
+  fi
+
+  printf 'Billing/spending-limit annotations:\n\n'
+  print_billing_annotations "$check_runs" "-"
+}
+
+if [[ "$SUMMARY_MODE" == true ]]; then
+  print_markdown_summary "$RUN_ID"
+  exit 0
+fi
 
 section "Run summary"
 gh run view "$RUN_ID" --json databaseId,name,status,conclusion,headSha,url \

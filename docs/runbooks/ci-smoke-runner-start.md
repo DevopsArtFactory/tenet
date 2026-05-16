@@ -23,6 +23,14 @@ scripts/ci-smoke-runner-evidence.sh <run-id>
 
 The helper also prints a compact `Runner-start verdict` section before the raw evidence. Treat a line as a likely pre-runner blocker when `Fast smoke` or `Docker smoke scope` has `runner_id=0` or an empty `runner_name`, and `steps=[]`; that means the lane did not reach repository commands. The same verdict section calls out any billing/spending-limit annotation found on the CI Smoke check-runs so reviewers do not have to infer the account-level blocker from raw JSON alone.
 
+For a pasteable PR or issue comment, use the concise Markdown mode:
+
+```bash
+scripts/ci-smoke-runner-evidence.sh --summary <run-id>
+```
+
+`--summary` and `--markdown` are aliases. The Markdown summary keeps the run URL and head SHA, `Fast smoke` and `Docker smoke scope` runner assignment evidence (`runner_id`, `runner_name`, and `steps` count), a Docker smoke skipped note when that check-run is skipped, a missing failed-log note when `gh run view --log-failed` cannot download logs, and any billing/spending-limit annotations found on the CI Smoke check-runs.
+
 The CI Smoke fast lane syntax-checks this helper with `bash -n` alongside the local and Docker smoke scripts. If an edit breaks the evidence collector itself, expect the hosted fast lane to fail before operators need it during a runner-start incident.
 
 If you need to collect each piece manually or paste individual commands into a PR comment, use the same sequence:
