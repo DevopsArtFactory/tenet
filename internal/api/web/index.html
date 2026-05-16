@@ -5541,12 +5541,18 @@
         const section = createElement('section', 'detail-section');
         section.append(createElement('h4', '', 'Traffic-routing status'));
         const rows = createElement('div', 'detail-history-meta');
-        [
+        const statusRows = [
           ['Resource', trafficRoutingDisplayName(trafficRouting)],
           ['Inspection mode', trafficRoutingInspectionModeText(trafficRouting?.inspectionMode)],
           ['Source', metricValue(result?.source)],
           ['Summary', textOrDash(trafficRouting?.summary)],
-        ].forEach(([label, value]) => {
+        ];
+        const targetGroup = trafficRoutingTargetGroupDetail(trafficRouting);
+        const targetGroupHealth = targetHealthCountsText(targetGroup?.targetHealthCounts || targetGroup?.healthCounts);
+        if (targetGroupHealth && targetGroupHealth !== '—') {
+          statusRows.push(['Target group health', targetGroupHealth]);
+        }
+        statusRows.forEach(([label, value]) => {
           rows.append(createElement('span', 'detail-condition-meta', `${label} · ${value}`));
         });
         section.append(rows);

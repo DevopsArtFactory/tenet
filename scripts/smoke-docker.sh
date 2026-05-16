@@ -1768,6 +1768,7 @@ for fragment in (
     "['Inspection mode', trafficRoutingInspectionModeText(trafficRouting?.inspectionMode)]",
     "['Source', metricValue(result?.source)]",
     "['Summary', textOrDash(trafficRouting?.summary)]",
+    "statusRows.push(['Target group health', targetGroupHealth]);",
     "Requested cap",
     "Effective cap",
     "Returned entries",
