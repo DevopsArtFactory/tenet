@@ -66,7 +66,7 @@ func (s Service) inspectTrafficRoutingResourceFromAWS(ctx context.Context, req T
 	}
 	switch req.ResourceType {
 	case "codeDeployDeploymentGroup":
-		return trafficRoutingInspectionFromDeploymentGroup(req, group), nil
+		return trafficRoutingInspectionFromDeploymentGroup(req, group, codeDeployDeploymentDetails(ctx, clients.Config, req.Region, group)), nil
 	case "productionListener":
 		listenerARN := codeDeployProductionListenerARN(group)
 		if listenerARN == "" {
@@ -124,7 +124,7 @@ func trafficRoutingInspectionFromApplication(req TrafficRoutingRequest, applicat
 	}
 }
 
-func trafficRoutingInspectionFromDeploymentGroup(req TrafficRoutingRequest, group codeDeployDeploymentGroupInfoPayload) TrafficRoutingInspection {
+func trafficRoutingInspectionFromDeploymentGroup(req TrafficRoutingRequest, group codeDeployDeploymentGroupInfoPayload, latestDeploymentInfo *codeDeployDeploymentInfoPayload) TrafficRoutingInspection {
 	ecsServices := append([]CodeDeployECSServiceBinding(nil), codeDeployECSServices(group)...)
 	sort.SliceStable(ecsServices, func(i, j int) bool {
 		if ecsServices[i].ClusterName == ecsServices[j].ClusterName {
@@ -146,7 +146,7 @@ func trafficRoutingInspectionFromDeploymentGroup(req TrafficRoutingRequest, grou
 			ServiceRoleARN:        group.ServiceRoleARN,
 			DeploymentType:        group.DeploymentStyle.DeploymentType,
 			DeploymentOption:      group.DeploymentStyle.DeploymentOption,
-			LatestDeployment:      codeDeployLatestDeployment(group),
+			LatestDeployment:      codeDeployLatestDeployment(group, latestDeploymentInfo),
 			ECSServices:           ecsServices,
 			TargetGroups:          targetGroups,
 			ProductionListenerARN: codeDeployProductionListenerARN(group),
@@ -293,9 +293,25 @@ func codeDeployDeploymentGroups(application codeDeployApplicationInfoPayload) []
 	return deploymentGroups
 }
 
-func codeDeployLatestDeployment(group codeDeployDeploymentGroupInfoPayload) *CodeDeployDeploymentSummary {
+func codeDeployDeploymentDetails(ctx context.Context, cfg aws.Config, region string, group codeDeployDeploymentGroupInfoPayload) *codeDeployDeploymentInfoPayload {
+	latest := codeDeployLatestDeployment(group, nil)
+	if latest == nil || latest.DeploymentID == "" {
+		return nil
+	}
+	deployment, err := getCodeDeployDeployment(ctx, cfg, region, latest.DeploymentID)
+	if err != nil {
+		return nil
+	}
+	return &deployment
+}
+
+func codeDeployLatestDeployment(group codeDeployDeploymentGroupInfoPayload, latestDeploymentInfo *codeDeployDeploymentInfoPayload) *CodeDeployDeploymentSummary {
 	attempted := codeDeployDeploymentSummary(group.LastAttemptedDeployment, "last_attempted")
 	successful := codeDeployDeploymentSummary(group.LastSuccessfulDeployment, "last_successful")
+	if latestDeploymentInfo != nil {
+		enrichCodeDeployDeploymentSummary(attempted, *latestDeploymentInfo)
+		enrichCodeDeployDeploymentSummary(successful, *latestDeploymentInfo)
+	}
 	switch {
 	case attempted == nil:
 		return successful
@@ -306,6 +322,27 @@ func codeDeployLatestDeployment(group codeDeployDeploymentGroupInfoPayload) *Cod
 	default:
 		return attempted
 	}
+}
+
+func enrichCodeDeployDeploymentSummary(summary *CodeDeployDeploymentSummary, deployment codeDeployDeploymentInfoPayload) {
+	if summary == nil || strings.TrimSpace(deployment.DeploymentID) != summary.DeploymentID {
+		return
+	}
+	status := strings.TrimSpace(deployment.Status)
+	if status != "" {
+		summary.Status = status
+	}
+	if createTime := deployment.CreateTime.String(); createTime != "" {
+		summary.CreateTime = createTime
+	}
+	if completeTime := deployment.CompleteTime.String(); completeTime != "" {
+		summary.EndTime = completeTime
+	}
+	summary.StatusMessage = codeDeployStatusMessage(deployment.DeploymentStatusMessages)
+	summary.RollbackInfo = codeDeployRollbackInfo(deployment.RollbackInfo)
+	summary.ErrorInformation = codeDeployErrorInformation(deployment.ErrorInformation)
+	summary.AlarmConfiguration = codeDeployAlarmConfiguration(deployment.OverrideAlarmConfiguration)
+	summary.DeploymentOverview = codeDeployDeploymentOverview(deployment.DeploymentOverview)
 }
 
 func codeDeployDeploymentSummary(deployment codeDeployLastDeploymentInfoPayload, source string) *CodeDeployDeploymentSummary {
@@ -333,6 +370,75 @@ func codeDeployDeploymentSummaryTime(summary *CodeDeployDeploymentSummary) time.
 		return parsed
 	}
 	return time.Time{}
+}
+
+func codeDeployStatusMessage(messages []string) string {
+	for _, message := range messages {
+		message = strings.TrimSpace(message)
+		if message != "" {
+			return message
+		}
+	}
+	return ""
+}
+
+func codeDeployRollbackInfo(info codeDeployRollbackInfoPayload) *CodeDeployRollbackInfo {
+	rollbackInfo := CodeDeployRollbackInfo{
+		RollbackDeploymentID:           strings.TrimSpace(info.RollbackDeploymentID),
+		RollbackTriggeringDeploymentID: strings.TrimSpace(info.RollbackTriggeringDeploymentID),
+		RollbackMessage:                strings.TrimSpace(info.RollbackMessage),
+	}
+	if rollbackInfo.RollbackDeploymentID == "" && rollbackInfo.RollbackTriggeringDeploymentID == "" && rollbackInfo.RollbackMessage == "" {
+		return nil
+	}
+	return &rollbackInfo
+}
+
+func codeDeployErrorInformation(info codeDeployErrorInformationPayload) *CodeDeployErrorInformation {
+	errorInformation := CodeDeployErrorInformation{
+		Code:    strings.TrimSpace(info.Code),
+		Message: strings.TrimSpace(info.Message),
+	}
+	if errorInformation.Code == "" && errorInformation.Message == "" {
+		return nil
+	}
+	return &errorInformation
+}
+
+func codeDeployAlarmConfiguration(config codeDeployAlarmConfigurationPayload) *CodeDeployAlarmConfiguration {
+	alarms := make([]CodeDeployAlarm, 0, len(config.Alarms))
+	for _, alarm := range config.Alarms {
+		name := strings.TrimSpace(alarm.Name)
+		if name == "" {
+			continue
+		}
+		alarms = append(alarms, CodeDeployAlarm{Name: name})
+	}
+	sort.SliceStable(alarms, func(i, j int) bool {
+		return alarms[i].Name < alarms[j].Name
+	})
+	if config.Enabled == nil && config.IgnorePollAlarmFailure == nil && len(alarms) == 0 {
+		return nil
+	}
+	return &CodeDeployAlarmConfiguration{
+		Enabled:                config.Enabled,
+		IgnorePollAlarmFailure: config.IgnorePollAlarmFailure,
+		Alarms:                 alarms,
+	}
+}
+
+func codeDeployDeploymentOverview(overview *codeDeployDeploymentOverviewPayload) *CodeDeployDeploymentOverview {
+	if overview == nil {
+		return nil
+	}
+	return &CodeDeployDeploymentOverview{
+		Pending:    overview.Pending,
+		InProgress: overview.InProgress,
+		Succeeded:  overview.Succeeded,
+		Failed:     overview.Failed,
+		Skipped:    overview.Skipped,
+		Ready:      overview.Ready,
+	}
 }
 
 func codeDeployTaskSetTargetGroupName(group codeDeployDeploymentGroupInfoPayload, resourceType, resourceName string) string {
@@ -556,6 +662,37 @@ func getCodeDeployDeploymentGroup(ctx context.Context, cfg aws.Config, region, a
 		return codeDeployDeploymentGroupInfoPayload{}, resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
 	}
 	return response.DeploymentGroupInfo, nil
+}
+
+func getCodeDeployDeployment(ctx context.Context, cfg aws.Config, region, deploymentID string) (codeDeployDeploymentInfoPayload, error) {
+	var response codeDeployGetDeploymentOutput
+	if err := doSignedAWSJSONRequest(
+		ctx,
+		cfg,
+		"codedeploy",
+		region,
+		"https://codedeploy."+strings.TrimSpace(region)+".amazonaws.com/",
+		"CodeDeploy_20141006.GetDeployment",
+		map[string]string{
+			"deploymentId": strings.TrimSpace(deploymentID),
+		},
+		&response,
+		func(headers http.Header, body []byte) error {
+			code, _ := parseAWSJSONError(headers, body)
+			switch code {
+			case "DeploymentDoesNotExistException", "DeploymentIdRequiredException", "InvalidDeploymentIdException":
+				return resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
+			default:
+				return resourceaws.NewUnavailableError(resourceaws.UnavailableReasonAWSUnavailable)
+			}
+		},
+	); err != nil {
+		return codeDeployDeploymentInfoPayload{}, err
+	}
+	if strings.TrimSpace(response.DeploymentInfo.DeploymentID) == "" {
+		return codeDeployDeploymentInfoPayload{}, resourceaws.NewUnavailableError(resourceaws.UnavailableReasonResourceNotFound)
+	}
+	return response.DeploymentInfo, nil
 }
 
 func describeTargetGroup(ctx context.Context, cfg aws.Config, region, targetGroupName string) (elbv2TargetGroupPayload, error) {
@@ -840,6 +977,10 @@ type codeDeployGetDeploymentGroupOutput struct {
 	DeploymentGroupInfo codeDeployDeploymentGroupInfoPayload `json:"deploymentGroupInfo"`
 }
 
+type codeDeployGetDeploymentOutput struct {
+	DeploymentInfo codeDeployDeploymentInfoPayload `json:"deploymentInfo"`
+}
+
 type codeDeployDeploymentGroupInfoPayload struct {
 	ApplicationName          string                              `json:"applicationName"`
 	DeploymentGroupName      string                              `json:"deploymentGroupName"`
@@ -857,6 +998,48 @@ type codeDeployLastDeploymentInfoPayload struct {
 	Status       string                  `json:"status"`
 	CreateTime   codeDeployJSONTimestamp `json:"createTime"`
 	EndTime      codeDeployJSONTimestamp `json:"endTime"`
+}
+
+type codeDeployDeploymentInfoPayload struct {
+	DeploymentID               string                               `json:"deploymentId"`
+	Status                     string                               `json:"status"`
+	CreateTime                 codeDeployJSONTimestamp              `json:"createTime"`
+	CompleteTime               codeDeployJSONTimestamp              `json:"completeTime"`
+	DeploymentStatusMessages   []string                             `json:"deploymentStatusMessages"`
+	RollbackInfo               codeDeployRollbackInfoPayload        `json:"rollbackInfo"`
+	ErrorInformation           codeDeployErrorInformationPayload    `json:"errorInformation"`
+	OverrideAlarmConfiguration codeDeployAlarmConfigurationPayload  `json:"overrideAlarmConfiguration"`
+	DeploymentOverview         *codeDeployDeploymentOverviewPayload `json:"deploymentOverview"`
+}
+
+type codeDeployRollbackInfoPayload struct {
+	RollbackDeploymentID           string `json:"rollbackDeploymentId"`
+	RollbackTriggeringDeploymentID string `json:"rollbackTriggeringDeploymentId"`
+	RollbackMessage                string `json:"rollbackMessage"`
+}
+
+type codeDeployErrorInformationPayload struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+type codeDeployAlarmConfigurationPayload struct {
+	Enabled                *bool                    `json:"enabled"`
+	IgnorePollAlarmFailure *bool                    `json:"ignorePollAlarmFailure"`
+	Alarms                 []codeDeployAlarmPayload `json:"alarms"`
+}
+
+type codeDeployAlarmPayload struct {
+	Name string `json:"name"`
+}
+
+type codeDeployDeploymentOverviewPayload struct {
+	Pending    int64 `json:"Pending"`
+	InProgress int64 `json:"InProgress"`
+	Succeeded  int64 `json:"Succeeded"`
+	Failed     int64 `json:"Failed"`
+	Skipped    int64 `json:"Skipped"`
+	Ready      int64 `json:"Ready"`
 }
 
 type codeDeployJSONTimestamp struct {

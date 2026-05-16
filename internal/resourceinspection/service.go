@@ -196,11 +196,46 @@ type CodeDeployDeploymentGroupInspection struct {
 }
 
 type CodeDeployDeploymentSummary struct {
-	DeploymentID string `json:"deploymentId"`
-	Status       string `json:"status,omitempty"`
-	CreateTime   string `json:"createTime,omitempty"`
-	EndTime      string `json:"endTime,omitempty"`
-	Source       string `json:"source,omitempty"`
+	DeploymentID       string                        `json:"deploymentId"`
+	Status             string                        `json:"status,omitempty"`
+	CreateTime         string                        `json:"createTime,omitempty"`
+	EndTime            string                        `json:"endTime,omitempty"`
+	StatusMessage      string                        `json:"statusMessage,omitempty"`
+	Source             string                        `json:"source,omitempty"`
+	RollbackInfo       *CodeDeployRollbackInfo       `json:"rollbackInfo,omitempty"`
+	ErrorInformation   *CodeDeployErrorInformation   `json:"errorInformation,omitempty"`
+	AlarmConfiguration *CodeDeployAlarmConfiguration `json:"alarmConfiguration,omitempty"`
+	DeploymentOverview *CodeDeployDeploymentOverview `json:"deploymentOverview,omitempty"`
+}
+
+type CodeDeployRollbackInfo struct {
+	RollbackDeploymentID           string `json:"rollbackDeploymentId,omitempty"`
+	RollbackTriggeringDeploymentID string `json:"rollbackTriggeringDeploymentId,omitempty"`
+	RollbackMessage                string `json:"rollbackMessage,omitempty"`
+}
+
+type CodeDeployErrorInformation struct {
+	Code    string `json:"code,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+type CodeDeployAlarmConfiguration struct {
+	Enabled                *bool             `json:"enabled,omitempty"`
+	IgnorePollAlarmFailure *bool             `json:"ignorePollAlarmFailure,omitempty"`
+	Alarms                 []CodeDeployAlarm `json:"alarms,omitempty"`
+}
+
+type CodeDeployAlarm struct {
+	Name string `json:"name,omitempty"`
+}
+
+type CodeDeployDeploymentOverview struct {
+	Pending    int64 `json:"pending"`
+	InProgress int64 `json:"inProgress"`
+	Succeeded  int64 `json:"succeeded"`
+	Failed     int64 `json:"failed"`
+	Skipped    int64 `json:"skipped"`
+	Ready      int64 `json:"ready"`
 }
 
 type CodeDeployECSServiceBinding struct {

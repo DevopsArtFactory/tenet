@@ -203,8 +203,11 @@ includes `trafficRoutingResource.codeDeployDeploymentGroup.latestDeployment` or
 `latestCodeDeployDeployment`, that same resource-detail panel also shows a
 scannable latest-deployment status pill, an operator next-action cue, the
 deployment id/status/create time/complete time/status message, and any additive
-rollback/error/alarm/deployment-overview diagnostics without moving that noise
-onto the applications overview. When live target-group/listener rows
+rollback/error/alarm/deployment-overview diagnostics from CodeDeploy
+`GetDeployment` when the extra deployment lookup succeeds, without moving that
+noise onto the applications overview. If only the deployment-group summary is
+available, Tenet preserves the existing summary-only payload shape. When live
+target-group/listener rows
 match exactly one normalized rollout resource, they add `_self` `Open resource
 detail` handoffs back into the bookmarkable resource drill-down; unmatched or
 incomplete identifiers remain plain text so operators never get broken self-

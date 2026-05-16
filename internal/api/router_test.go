@@ -86,6 +86,10 @@ func requireManagedDriftItemByField(t *testing.T, items []any, field string) map
 	return nil
 }
 
+func boolPtr(value bool) *bool {
+	return &value
+}
+
 func TestRouterHealthz(t *testing.T) {
 	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
@@ -9136,11 +9140,34 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 					DeploymentType:       "BLUE_GREEN",
 					DeploymentOption:     "WITH_TRAFFIC_CONTROL",
 					LatestDeployment: &resourceinspection.CodeDeployDeploymentSummary{
-						DeploymentID: "d-NEWEST",
-						Status:       "Succeeded",
-						CreateTime:   "2026-04-18T09:15:00Z",
-						EndTime:      "2026-04-18T09:18:00Z",
-						Source:       "last_attempted",
+						DeploymentID:  "d-NEWEST",
+						Status:        "Succeeded",
+						CreateTime:    "2026-04-18T09:15:00Z",
+						EndTime:       "2026-04-18T09:18:00Z",
+						Source:        "last_attempted",
+						StatusMessage: "Deployment completed after shifting traffic.",
+						RollbackInfo: &resourceinspection.CodeDeployRollbackInfo{
+							RollbackDeploymentID:           "d-ROLLBACK",
+							RollbackTriggeringDeploymentID: "d-TRIGGER",
+							RollbackMessage:                "Automatic rollback was configured.",
+						},
+						ErrorInformation: &resourceinspection.CodeDeployErrorInformation{
+							Code:    "HEALTH_CONSTRAINTS",
+							Message: "Target health was below the deployment threshold.",
+						},
+						AlarmConfiguration: &resourceinspection.CodeDeployAlarmConfiguration{
+							Enabled:                boolPtr(true),
+							IgnorePollAlarmFailure: boolPtr(false),
+							Alarms:                 []resourceinspection.CodeDeployAlarm{{Name: "payments-api-5xx"}, {Name: "payments-api-latency"}},
+						},
+						DeploymentOverview: &resourceinspection.CodeDeployDeploymentOverview{
+							Pending:    0,
+							InProgress: 1,
+							Succeeded:  4,
+							Failed:     0,
+							Skipped:    0,
+							Ready:      2,
+						},
 					},
 					ECSServices:           []resourceinspection.CodeDeployECSServiceBinding{{ClusterName: "payments-prod", ServiceName: "api-prod-service"}},
 					TargetGroups:          []string{"api-prod-blue", "api-prod-green"},
@@ -9213,6 +9240,29 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		}
 		if got := latestDeployment["source"]; got != "last_attempted" {
 			t.Fatalf("expected latest deployment source, got %#v", got)
+		}
+		if got := latestDeployment["statusMessage"]; got != "Deployment completed after shifting traffic." {
+			t.Fatalf("expected latest deployment statusMessage, got %#v", got)
+		}
+		rollbackInfo, ok := latestDeployment["rollbackInfo"].(map[string]any)
+		if !ok || rollbackInfo["rollbackDeploymentId"] != "d-ROLLBACK" || rollbackInfo["rollbackTriggeringDeploymentId"] != "d-TRIGGER" || rollbackInfo["rollbackMessage"] != "Automatic rollback was configured." {
+			t.Fatalf("expected rollbackInfo diagnostics, got %#v", latestDeployment["rollbackInfo"])
+		}
+		errorInformation, ok := latestDeployment["errorInformation"].(map[string]any)
+		if !ok || errorInformation["code"] != "HEALTH_CONSTRAINTS" || errorInformation["message"] != "Target health was below the deployment threshold." {
+			t.Fatalf("expected errorInformation diagnostics, got %#v", latestDeployment["errorInformation"])
+		}
+		alarmConfiguration, ok := latestDeployment["alarmConfiguration"].(map[string]any)
+		if !ok || alarmConfiguration["enabled"] != true || alarmConfiguration["ignorePollAlarmFailure"] != false {
+			t.Fatalf("expected alarmConfiguration booleans, got %#v", latestDeployment["alarmConfiguration"])
+		}
+		alarms, ok := alarmConfiguration["alarms"].([]any)
+		if !ok || len(alarms) != 2 {
+			t.Fatalf("expected alarmConfiguration alarms, got %#v", alarmConfiguration["alarms"])
+		}
+		deploymentOverview, ok := latestDeployment["deploymentOverview"].(map[string]any)
+		if !ok || deploymentOverview["pending"] != float64(0) || deploymentOverview["inProgress"] != float64(1) || deploymentOverview["succeeded"] != float64(4) || deploymentOverview["ready"] != float64(2) {
+			t.Fatalf("expected deploymentOverview diagnostics, got %#v", latestDeployment["deploymentOverview"])
 		}
 	})
 
