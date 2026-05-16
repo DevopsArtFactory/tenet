@@ -11249,9 +11249,13 @@ document.byID.set('accounts', document.createElement('section'));
 const fetchCalls = [];
 const window = { location: { pathname: '/console', search: '?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=2', hash: '' } };
 const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/console'; window.location.search = query ? '?' + query : ''; } };
+const expandedAuditLogs = Object.assign({}, auditLogs, {
+  resultScope: Object.assign({}, auditLogs.resultScope, { limit: 5, limited: false, returnedEntryCount: 2, totalEntryCount: 2 })
+});
 const fetch = (url) => {
   fetchCalls.push(String(url));
   if (url === '/v1/audit-logs?deployment=payments-api-prod&limit=2') return Promise.resolve({ ok: true, json: () => Promise.resolve(auditLogs) });
+  if (url === '/v1/audit-logs?deployment=payments-api-prod&limit=5') return Promise.resolve({ ok: true, json: () => Promise.resolve(expandedAuditLogs) });
   throw new Error('unexpected fetch url: ' + url);
 };
 new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
@@ -11388,6 +11392,19 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (quickNavAuditLink) throw new Error('expected audit quick navigation to render active workspace as a chip');
   if (!quickNavChip) throw new Error('expected audit quick navigation chip');
   if (quickNavChips.find((node) => String(node.getAttribute('aria-label') || '').startsWith('Current section: '))) throw new Error('expected audit route without hash not to render a current-section chip');
+  const expandWindowButton = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Expand audit window to 5 entries');
+  if (!expandWindowButton || expandWindowButton.disabled) throw new Error('expected capped audit window to expose an enabled inline expand button');
+  expandWindowButton.dispatch('click');
+  await settle();
+  await settle();
+  if (window.location.search !== '?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-prod&limit=5') throw new Error('expected inline audit-window expansion to preserve scope and update limit URL, got ' + window.location.search);
+  if (fetchCalls[fetchCalls.length - 1] !== '/v1/audit-logs?deployment=payments-api-prod&limit=5') throw new Error('expected inline audit-window expansion to refetch expanded scoped audit route, got ' + fetchCalls.join(' | '));
+  const expandedToolbarText = collectText(document.getElementById('toolbar')).join(' | ');
+  if (!expandedToolbarText.includes('Audit filters: deployment payments-api-prod · Limit cap: latest 5')) throw new Error('expected expanded audit window toolbar label, got ' + expandedToolbarText);
+  const expandedLimitSelect = document.querySelector('[data-toolbar-field="Limit"]');
+  if (!expandedLimitSelect || expandedLimitSelect.value !== '5') throw new Error('expected audit limit select to reflect expanded bookmarkable URL state');
+  if (collectNodes(document.getElementById('accounts'), (node) => node.textContent === 'Expand audit window to 5 entries').length) throw new Error('expected expand-window button to disappear once backend reports uncapped results');
+  if (!collectText(document.getElementById('accounts')).join(' | ').includes('Window status | Below cap; all matching audit entries returned')) throw new Error('expected expanded audit result scope to render below-cap status');
 })();
 `
 		runNodeHarness(t, nodeProgram)
