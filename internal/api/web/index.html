@@ -2205,17 +2205,22 @@
         { value: '25', label: '25 events' },
         { value: '50', label: '50 events' },
       ];
+      const auditLimitPresets = [1, 2, 5, 10, 20, 50];
       const auditLimitSelectOptions = (limit) => {
-        const presets = [1, 2, 5, 10, 20, 50];
         const options = [{ value: '', label: 'Default window' }];
         const currentLimit = normalizeAuditLimit(limit);
-        if (currentLimit > 0 && !presets.includes(currentLimit)) {
+        if (currentLimit > 0 && !auditLimitPresets.includes(currentLimit)) {
           options.push({ value: String(currentLimit), label: `${currentLimit} entries` });
         }
-        presets.forEach((preset) => {
+        auditLimitPresets.forEach((preset) => {
           options.push({ value: String(preset), label: `${preset} entr${preset === 1 ? 'y' : 'ies'}` });
         });
         return options;
+      };
+      const nextAuditLimitPreset = (limit) => {
+        const currentLimit = normalizeAuditLimit(limit);
+        const nextPreset = auditLimitPresets.find((preset) => preset > currentLimit);
+        return nextPreset || 0;
       };
       const parseViewState = () => {
         const params = new URLSearchParams(window.location.search);
@@ -2351,6 +2356,15 @@
           deployment: preserveDeployment ? currentPageState.deployment : '',
           auditAction: '',
           auditLimit: 0,
+        };
+        syncAuditPageState({ clearAuditHash: true });
+        loadAuditLogsPage().catch(() => {});
+      };
+      const setAuditLimitFromTimeline = (limit) => {
+        currentPageState = {
+          ...currentPageState,
+          page: 'audit',
+          auditLimit: normalizeAuditLimit(limit),
         };
         syncAuditPageState({ clearAuditHash: true });
         loadAuditLogsPage().catch(() => {});
@@ -6481,6 +6495,24 @@
         if (limit <= 0 || visibleEntries.length < limit) return '';
         return `Showing the latest ${limit}-entry capped audit window. Older matching audit entries may be hidden; increase Limit or clear audit controls before concluding no earlier activity exists.`;
       };
+      const createAuditLimitCapActions = (result = null) => {
+        const scope = result?.resultScope;
+        if (!scope || typeof scope !== 'object' || scope.limited !== true) return null;
+        const currentLimit = auditResultScopeLimit(scope);
+        const nextLimit = nextAuditLimitPreset(currentLimit);
+        const actions = createElement('div', 'row-links row-links-shell audit-limit-cap-actions');
+        if (nextLimit > 0) {
+          const expandButton = createElement('button', 'toolbar-button', `Expand audit window to ${nextLimit} entries`);
+          expandButton.type = 'button';
+          expandButton.addEventListener('click', () => setAuditLimitFromTimeline(nextLimit));
+          actions.append(expandButton);
+        }
+        const clearCapButton = createElement('button', 'toolbar-button', 'Clear audit limit cap');
+        clearCapButton.type = 'button';
+        clearCapButton.addEventListener('click', () => setAuditLimitFromTimeline(0));
+        actions.append(clearCapButton);
+        return actions;
+      };
       const renderAuditPageChrome = () => {
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
@@ -6694,6 +6726,10 @@
         const limitCapHint = auditLimitCapHintText(entries, result);
         if (limitCapHint) {
           timelineSection.append(createElement('div', 'detail-condition-meta audit-limit-cap-hint', limitCapHint));
+          const limitCapActions = createAuditLimitCapActions(result);
+          if (limitCapActions) {
+            timelineSection.append(limitCapActions);
+          }
         }
         const rows = createElement('div', 'rows');
         entries.forEach((entry, index) => {
