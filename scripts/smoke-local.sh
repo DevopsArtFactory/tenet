@@ -1449,6 +1449,9 @@ assert "['Last update', runtimeSummaryTimestamp(deployment.runtimeSummary)]" in 
 assert "container.append(createElement('strong', '', 'Runtime'));" in ui, ui
 assert 'Applications JSON' in ui, ui
 assert "createNavLink('/v1/overview/applications', 'Applications JSON')" in ui, ui
+assert "const applicationsClearFiltersLabel = (activeFilters) => {" in ui, ui
+assert "return `Clear ${count} ${count === 1 ? 'filter' : 'filters'}`;" in ui, ui
+assert "clearButton.setAttribute('aria-label', applicationsClearFiltersAriaLabel(active));" in ui, ui
 assert "const latestRuntimeSignalParts = (deployment) => {" in ui, ui
 assert "buildPageSectionURL('application', 'application-runtime-events', { deployment: deployment.name })" in ui, ui
 assert 'Operator context' in ui, ui

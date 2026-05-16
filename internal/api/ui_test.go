@@ -1947,6 +1947,13 @@ func TestEmbeddedUIProvidesFilterControlsAndURLSyncedViewState(t *testing.T) {
 		"Check catalog loading, runtime status snapshots, or trusted front-door authorization grants if deployments were expected.",
 		"Open Operator context details",
 		"currentBookmarkableURL(operatorContextAccessDetailsPanelID)",
+		"const applicationsClearFiltersLabel = (activeFilters) => {",
+		"return `Clear ${count} ${count === 1 ? 'filter' : 'filters'}`;",
+		"const applicationsClearFiltersAriaLabel = (activeFilters) => {",
+		"return `Clear active application filters: ${filters.join(', ')}`;",
+		"clearButton.setAttribute('aria-label', applicationsClearFiltersAriaLabel(active));",
+		".toolbar-button:hover:not(:disabled)",
+		".toolbar-button:disabled",
 		"Clear filters",
 	} {
 		if !strings.Contains(body, fragment) {

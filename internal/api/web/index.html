@@ -60,7 +60,8 @@
       .toolbar-actions { display:flex; flex-wrap:wrap; gap: 10px; align-items:center; justify-content:space-between; }
       .toolbar-active { color: var(--muted); font-size: 14px; }
       .toolbar-button { border: 1px solid rgba(103,183,255,.24); background: rgba(103,183,255,.12); color: var(--blue); border-radius: 999px; padding: 10px 14px; font: inherit; font-weight: 700; cursor: pointer; }
-      .toolbar-button:hover { background: rgba(103,183,255,.18); }
+      .toolbar-button:hover:not(:disabled) { background: rgba(103,183,255,.18); }
+      .toolbar-button:disabled { cursor: not-allowed; opacity: .58; }
       .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
       .card, .account { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 18px 40px rgba(0,0,0,0.24); }
       .card { padding: 18px; }
@@ -2673,6 +2674,16 @@
         }
         return active;
       };
+      const applicationsClearFiltersLabel = (activeFilters) => {
+        const count = Array.isArray(activeFilters) ? activeFilters.length : 0;
+        if (!count) return 'Clear filters';
+        return `Clear ${count} ${count === 1 ? 'filter' : 'filters'}`;
+      };
+      const applicationsClearFiltersAriaLabel = (activeFilters) => {
+        const filters = Array.isArray(activeFilters) ? activeFilters.filter(Boolean) : [];
+        if (!filters.length) return 'No active application filters to clear';
+        return `Clear active application filters: ${filters.join(', ')}`;
+      };
       const resetApplicationsFilters = (focusState = null) => {
         currentViewState = { query: '', syncState: 'all', healthState: 'all', account: 'all' };
         syncViewState(currentViewState);
@@ -2722,9 +2733,10 @@
         createApplicationsOverviewActions(applicationsOverviewState).forEach((action) => {
           if (action) actions.append(action);
         });
-        const clearButton = createElement('button', 'toolbar-button', 'Clear filters');
+        const clearButton = createElement('button', 'toolbar-button', applicationsClearFiltersLabel(active));
         clearButton.type = 'button';
         clearButton.disabled = !active.length;
+        clearButton.setAttribute('aria-label', applicationsClearFiltersAriaLabel(active));
         clearButton.addEventListener('click', () => {
           resetApplicationsFilters(captureToolbarFocus());
         });
