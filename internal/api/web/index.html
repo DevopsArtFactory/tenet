@@ -5350,6 +5350,27 @@
         });
         item.append(hostMeta);
       };
+      const createAutoScalingActivityListItem = (activity) => {
+        const item = createElement('li');
+        item.append(createElement('strong', '', textOrDash(activity?.activityId || activity?.activityID || activity?.id || activity?.statusCode || 'Scaling activity')));
+        const meta = createElement('div', 'detail-history-meta');
+        [
+          ['Status code', activity?.statusCode],
+          ['Progress', activity?.progress],
+          ['Start time', activity?.startTime || activity?.startedAt],
+          ['End time', activity?.endTime || activity?.endedAt],
+          ['Cause', activity?.cause],
+          ['Description', activity?.description],
+          ['Status message', activity?.statusMessage],
+        ]
+          .map(([label, value]) => [label, String(value ?? '').trim()])
+          .filter(([, value]) => value)
+          .forEach(([label, value]) => {
+            meta.append(createElement('span', 'detail-condition-meta', `${label} · ${value}`));
+          });
+        if (meta.children.length) item.append(meta);
+        return item;
+      };
       const renderAutoScalingGroupInspection = (section, deploymentName, resource, result) => {
         const group = result?.autoScalingGroup;
         const observedLaunchTemplate = autoScalingObservedLaunchTemplate(group);
@@ -5426,6 +5447,14 @@
           },
           'No mixed-instances launch template overrides are configured for this Auto Scaling Group.',
         );
+        const scalingActivitiesSection = Array.isArray(group?.scalingActivities)
+          ? createInspectionListSection(
+              'Recent scaling activities',
+              group.scalingActivities,
+              createAutoScalingActivityListItem,
+              'No scaling activities are currently reported for this Auto Scaling Group.',
+            )
+          : null;
         section.replaceChildren(
           createDetailSectionHeader('Live inspection', actions),
           createElement('p', 'detail-section-copy', 'Live Auto Scaling Group inspection from GET /v1/overview/deployments/{deploymentName}/resource-inspection.'),
@@ -5433,6 +5462,7 @@
           metadata,
           targetGroupsSection,
           mixedInstancesOverridesSection,
+          ...(scalingActivitiesSection ? [scalingActivitiesSection] : []),
           instancesSection,
         );
       };

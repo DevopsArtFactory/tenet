@@ -185,6 +185,11 @@ Primary operator APIs:
 Resource drill-down Recent logs and Live inspection panels label returned
 `lookupContext` as `Provider lookup context` so operators can confirm the
 region/account/observer-role path before troubleshooting unavailable AWS reads.
+Auto Scaling Group Live inspection can also render optional
+`autoScalingGroup.scalingActivities[]` evidence as `Recent scaling activities`
+with `Status code`, `Progress`, `Start time`, `End time`, `Cause`,
+`Description`, and `Status message` labels; an explicit empty array renders
+`No scaling activities are currently reported for this Auto Scaling Group.`
 For CodeDeploy ECS traffic-routing resources, local and Compose runs do not need
 live AWS access to keep the drill-down usable: `codeDeployDeploymentGroup`,
 `productionListener`, and `testListener` can return
