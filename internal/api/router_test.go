@@ -6977,6 +6977,65 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		}
 	})
 
+	t.Run("marks exact-cap resource log windows as unknown total", func(t *testing.T) {
+		provided := resourcelogs.Result{
+			DeploymentName: "api-prod",
+			ResourceType:   "ecsService",
+			ResourceName:   "payments-api-prod-service",
+			Available:      true,
+			Source:         resourcelogs.SourceCloudWatch,
+			Entries: []resourcelogs.Entry{
+				{Timestamp: "2026-04-16T07:10:00Z", Message: "newest", Stream: "ecs/payments-api/service/newest"},
+				{Timestamp: "2026-04-16T07:09:00Z", Message: "middle", Stream: "ecs/payments-api/service/middle"},
+			},
+		}
+
+		var gotLimit int
+		router := NewRouter(Options{
+			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+			OverviewDeployment: func(_ context.Context, name string) (catalog.DeploymentOverviewDetail, error) {
+				if name != "api-prod" {
+					t.Fatalf("unexpected deployment lookup: %s", name)
+				}
+				return catalog.DeploymentOverviewDetail{Name: name}, nil
+			},
+			OverviewDeploymentResourceLogs: func(_ context.Context, deploymentName, resourceType, resourceName string, limit int) (resourcelogs.Result, error) {
+				gotLimit = limit
+				if deploymentName != "api-prod" || resourceType != "ecsService" || resourceName != "payments-api-prod-service" {
+					t.Fatalf("unexpected provider request: deployment=%q type=%q name=%q", deploymentName, resourceType, resourceName)
+				}
+				return provided, nil
+			},
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-logs?resourceType=ecsService&resourceName=payments-api-prod-service&limit=2", nil)
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+		}
+		if gotLimit != 2 {
+			t.Fatalf("expected provider limit 2, got %d", gotLimit)
+		}
+		var got resourcelogs.Result
+		if err := json.Unmarshal(resp.Body.Bytes(), &got); err != nil {
+			t.Fatalf("failed to decode exact-cap resource logs payload: %v", err)
+		}
+		if got.ResultScope == nil {
+			t.Fatalf("expected resultScope in exact-cap resource logs payload")
+		}
+		if got.ResultScope.RequestedLimit == nil || *got.ResultScope.RequestedLimit != 2 {
+			t.Fatalf("expected requestedLimit 2, got %+v", got.ResultScope)
+		}
+		if got.ResultScope.EffectiveLimit != 2 || got.ResultScope.ReturnedEntryCount != 2 || got.ResultScope.ReturnedCount != 2 || got.ResultScope.TruncationStatus != resourcelogs.ScopeTruncationStatusUnknown || got.ResultScope.Truncated {
+			t.Fatalf("expected exact-cap scope to report unknown total without truncation, got %+v", got.ResultScope)
+		}
+		if got.ResultScope.NewestEntryTimestamp != "2026-04-16T07:10:00Z" || got.ResultScope.OldestEntryTimestamp != "2026-04-16T07:09:00Z" {
+			t.Fatalf("expected exact-cap timestamp window from returned entries, got %+v", got.ResultScope)
+		}
+	})
+
 	t.Run("passes optional ECS task cluster selector into resource log provider", func(t *testing.T) {
 		var gotClusterARN string
 		router := NewRouter(Options{
