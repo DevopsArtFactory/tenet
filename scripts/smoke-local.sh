@@ -2107,7 +2107,11 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "history.replaceState({}, '', `${nextURL}${window.location.hash || ''}`);" in body, body
     assert "const resourceInspectionReadRoute = (deploymentName, resource, limit = 0) => `GET ${buildResourceInspectionRoute(deploymentName, resource, limit)}`;" in body, body
     assert "const resourceInspectionTaskDefaultLimit = 10;" in body, body
-    assert "const resourceInspectionLimitOptions = [" in body, body
+    assert "const resourceInspectionTaskLimitOptions = [" in body, body
+    assert "const resourceInspectionInstanceLimitOptions = [" in body, body
+    assert "const resourceInspectionLimitOptions = (resource) => String(resource?.type || '').trim() === 'ecsService' ? resourceInspectionTaskLimitOptions : resourceInspectionInstanceLimitOptions;" in body, body
+    assert "'10 instances (default)'" in body, body
+    assert "'25 instances'" in body, body
     assert "resourceInspectionLimitLabel(resource)" in body, body
     assert "'Task sample limit'" in body, body
     assert "'ASG instance sample limit'" in body, body

@@ -1999,9 +1999,13 @@
         const limit = Number.parseInt(String(value || '').trim(), 10);
         return Number.isInteger(limit) && limit > 0 ? limit : resourceInspectionTaskDefaultLimit;
       };
-      const resourceInspectionLimitOptions = [
+      const resourceInspectionTaskLimitOptions = [
         { value: '10', label: '10 tasks (default)' },
         { value: '25', label: '25 tasks' },
+      ];
+      const resourceInspectionInstanceLimitOptions = [
+        { value: '10', label: '10 instances (default)' },
+        { value: '25', label: '25 instances' },
       ];
       const resourceLogsLimitText = (limit) => {
         const normalized = normalizeResourceLogsLimit(limit);
@@ -4925,6 +4929,7 @@
       const resourceInspectionCacheKey = (deploymentName, resource) => resourceLogCacheKey(deploymentName, resource);
       const selectedResourceInspectionLimit = (deploymentName, resource) => normalizeResourceInspectionTaskLimit(resourceInspectionLimitByResourceKey.get(resourceInspectionCacheKey(deploymentName, resource)) || 0);
       const resourceInspectionLimitLabel = (resource) => String(resource?.type || '').trim() === 'ecsService' ? 'Task sample limit' : 'ASG instance sample limit';
+      const resourceInspectionLimitOptions = (resource) => String(resource?.type || '').trim() === 'ecsService' ? resourceInspectionTaskLimitOptions : resourceInspectionInstanceLimitOptions;
       const buildResourceInspectionRoute = (deploymentName, resource, limit = 0) => {
         const params = new URLSearchParams({
           resourceType: resource?.type || '',
@@ -4964,7 +4969,7 @@
         return createSelect(
           resourceInspectionLimitLabel(resource),
           String(selectedLimit),
-          resourceInspectionLimitOptions,
+          resourceInspectionLimitOptions(resource),
           (event) => {
             const nextLimit = normalizeResourceInspectionTaskLimit(event.target.value);
             resourceInspectionLimitByResourceKey.set(resourceInspectionCacheKey(deploymentName, resource), nextLimit);
