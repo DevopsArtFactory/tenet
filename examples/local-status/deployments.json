@@ -9,7 +9,7 @@
       },
       "health": {
         "overall": "Healthy",
-        "summary": "3/3 tasks healthy in ap-northeast-2"
+        "summary": "3/3 instances healthy in ap-northeast-2"
       },
       "conditions": [
         {

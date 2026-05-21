@@ -6947,6 +6947,11 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!asgSupportedText.includes('ASG instance sample scope · requested 10 · effective 10 · returned 10 instance(s) · truncated')) throw new Error('expected ASG instance sample scope text: ' + asgSupportedText);
   const asgLimitSelect = collectNodes(asgSupportedRun.document.getElementById('accounts'), (node) => node.tagName === 'SELECT' && node.dataset?.toolbarField === 'ASG instance sample limit')[0];
   if (!asgLimitSelect || asgLimitSelect.disabled) throw new Error('expected ASG live inspection to expose usable instance sample limit select');
+  const asgLimitOptionsText = (asgLimitSelect.children || []).map((node) => node.textContent).join(' | ');
+  ['10 instances (default)', '25 instances'].forEach((label) => {
+    if (!asgLimitOptionsText.includes(label)) throw new Error('expected ASG instance limit option ' + label + ', got ' + asgLimitOptionsText);
+  });
+  if (asgLimitOptionsText.includes('tasks')) throw new Error('expected ASG instance limit options not to use ECS task terminology, got ' + asgLimitOptionsText);
   asgLimitSelect.value = '25';
   asgLimitSelect.dispatch('change', { target: { value: '25' } });
   await settle(); await settle(); await settle();
