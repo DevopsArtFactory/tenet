@@ -314,6 +314,7 @@ start_api "$AUTH_TRUSTED_HEADERS" "$AUTH_ENFORCED" "$AUTH_ROLE_ENFORCED" "$AUTH_
 
 curl -fsS "http://$HOST:$PORT/healthz" >/dev/null
 assert_request_id_header "http://$HOST:$PORT/healthz"
+assert_request_id_header "http://$HOST:$PORT/favicon.ico"
 assert_request_id_header "http://$HOST:$PORT/v1/catalog/summary"
 assert_request_id_header "http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging-codedeploy-group"
 assert_request_id_header "http://$HOST:$PORT/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service"

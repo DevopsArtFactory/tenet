@@ -103,6 +103,22 @@ func TestRouterHealthz(t *testing.T) {
 	assertResponseRequestID(t, resp)
 }
 
+func TestRouterFaviconRequestStaysOutOfClientErrorLogs(t *testing.T) {
+	router := NewRouter(Options{BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"}})
+	req := httptest.NewRequest(http.MethodGet, "/favicon.ico", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("expected favicon request to return 204, got %d", resp.Code)
+	}
+	assertResponseRequestID(t, resp)
+	if cacheControl := resp.Header().Get("Cache-Control"); cacheControl != "public, max-age=86400" {
+		t.Fatalf("expected cacheable empty favicon response, got Cache-Control %q", cacheControl)
+	}
+}
+
 type diagnosticRefreshPublisher struct {
 	diagnostic controllerrefresh.Diagnostic
 }
