@@ -6896,6 +6896,14 @@ async function renderWithFetch(search, fetchImpl, settleCount = 2) {
   if (!asgSupportedText.includes('Cause · <script>alert("scale")</script> user requested capacity change')) throw new Error('expected ASG inspection to render scaling activity cause safely');
   if (!asgSupportedText.includes('Description · Launching a new EC2 instance: i-abc123')) throw new Error('expected ASG inspection to render scaling activity description');
   if (!asgSupportedText.includes('Status message · Instance launched successfully')) throw new Error('expected ASG inspection to render scaling activity status message');
+  if (!asgSupportedText.includes('Share scaling activity')) throw new Error('expected ASG inspection to render scaling activity share handoff');
+  const asgScalingActivityRows = collectNodes(asgSupportedRun.document.getElementById('accounts'), (node) => node.tagName === 'LI' && node.id === 'asg-scaling-activity-act-123');
+  if (asgScalingActivityRows.length !== 1) throw new Error('expected ASG scaling activity to expose a stable row anchor, got ' + asgScalingActivityRows.length);
+  const asgScalingActivityShareLinks = collectNodes(asgSupportedRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && node.textContent === 'Share scaling activity');
+  if (asgScalingActivityShareLinks.length !== 1) throw new Error('expected exactly one ASG scaling activity share link, got ' + asgScalingActivityShareLinks.length);
+  if (asgScalingActivityShareLinks[0].target !== '_self') throw new Error('expected ASG scaling activity share link to stay inside embedded UI');
+  if (asgScalingActivityShareLinks[0].rel) throw new Error('expected ASG scaling activity share link to avoid new-tab rel attributes');
+  if (asgScalingActivityShareLinks[0].href !== '/?page=resource&deployment=payments-api-prod&resourceType=candidateAutoScalingGroup&resourceId=candidateAutoScalingGroup%3A%3Apayments-api-prod-candidate%3A%3ACandidate+capacity#asg-scaling-activity-act-123') throw new Error('expected ASG scaling activity share link to preserve resource route and activity anchor, got ' + asgScalingActivityShareLinks[0].href);
   if (!asgSupportedText.includes('Instances')) throw new Error('expected ASG inspection to render instances section');
   if (!asgSupportedText.includes('Lifecycle state · InService')) throw new Error('expected ASG inspection to render lifecycle state');
   if (!asgSupportedText.includes('Protected from scale-in · True')) throw new Error('expected ASG inspection to render protected-from-scale-in');

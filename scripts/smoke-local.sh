@@ -2127,7 +2127,10 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "const createAutoScalingInstanceScopeSummary = (scope) => {" in body, body
     assert "ASG instance sample scope · requested ${countText(scope.requestedLimit)} · effective ${countText(effectiveLimit)} · returned ${countText(returnedInstanceCount)} instance(s) · ${truncationStatus}" in body, body
     assert "ASG instance sampling is unavailable for this group; group inspection remains available." in body, body
-    assert "const createAutoScalingActivityListItem = (activity) => {" in body, body
+    assert "const autoScalingActivityAnchorID = (activity) =>" in body, body
+    assert "const autoScalingActivityShareURL = (deploymentName, resource, activity) =>" in body, body
+    assert "const createAutoScalingActivityListItem = (deploymentName, resource, activity) => {" in body, body
+    assert "Share scaling activity" in body, body
     assert "Recent scaling activities" in body, body
     assert "No scaling activities are reported in the bounded recent activity window for this Auto Scaling Group." in body, body
     assert "Activity ID" in body, body

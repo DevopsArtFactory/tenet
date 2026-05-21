@@ -5350,8 +5350,20 @@
         });
         item.append(hostMeta);
       };
-      const createAutoScalingActivityListItem = (activity) => {
+      const autoScalingActivityAnchorID = (activity) => {
+        const id = activity?.activityId || activity?.activityID || activity?.id || activity?.statusCode;
+        return `asg-scaling-activity-${sectionIDSegment(id, 'unknown')}`;
+      };
+      const autoScalingActivityShareURL = (deploymentName, resource, activity) => buildPageSectionURL('resource', autoScalingActivityAnchorID(activity), {
+        deployment: deploymentName,
+        resourceType: resource?.type,
+        resourceId: resource?.id,
+        ...resourcePanelLimitURLParams(deploymentName, resource),
+      });
+      const createAutoScalingActivityListItem = (deploymentName, resource, activity) => {
         const item = createElement('li');
+        item.id = autoScalingActivityAnchorID(activity);
+        item.classList.add('operation-anchor-row');
         item.append(createElement('strong', '', textOrDash(activity?.activityId || activity?.activityID || activity?.id || activity?.statusCode || 'Scaling activity')));
         const meta = createElement('div', 'detail-history-meta');
         [
@@ -5370,6 +5382,9 @@
             meta.append(createElement('span', 'detail-condition-meta', `${label} · ${value}`));
           });
         if (meta.children.length) item.append(meta);
+        const links = createElement('div', 'row-links');
+        links.append(createNavLink(autoScalingActivityShareURL(deploymentName, resource, activity), 'Share scaling activity', '_self'));
+        item.append(links);
         return item;
       };
       const renderAutoScalingGroupInspection = (section, deploymentName, resource, result) => {
@@ -5452,7 +5467,7 @@
           ? createInspectionListSection(
               'Recent scaling activities',
               group.scalingActivities,
-              createAutoScalingActivityListItem,
+              (activity) => createAutoScalingActivityListItem(deploymentName, resource, activity),
               'No scaling activities are reported in the bounded recent activity window for this Auto Scaling Group.',
             )
           : null;

@@ -188,7 +188,9 @@ region/account/observer-role path before troubleshooting unavailable AWS reads.
 Auto Scaling Group Live inspection can also render optional
 `autoScalingGroup.scalingActivities[]` evidence as `Recent scaling activities`
 with `Activity ID`, `Status code`, `Progress`, `Start time`, `End time`,
-`Cause`, `Description`, and `Status message` labels; an explicit empty array
+`Cause`, `Description`, and `Status message` labels, and each populated row
+includes a same-tab `Share scaling activity` anchor for handing off the exact
+bounded activity evidence; an explicit empty array
 renders `No scaling activities are reported in the bounded recent activity window for this Auto Scaling Group.`
 Those rows come from a bounded read-only `DescribeScalingActivities` lookup
 after the ASG itself is resolved, and local/no-AWS runtimes keep the existing
