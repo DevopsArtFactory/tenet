@@ -5017,7 +5017,7 @@
           return section;
         }
         const list = createElement('ol', 'detail-list');
-        items.forEach((item) => list.append(renderItem(item)));
+        items.forEach((item, index) => list.append(renderItem(item, index)));
         section.append(list);
         return section;
       };
@@ -5350,19 +5350,29 @@
         });
         item.append(hostMeta);
       };
-      const autoScalingActivityAnchorID = (activity) => {
-        const id = activity?.activityId || activity?.activityID || activity?.id || activity?.statusCode;
-        return `asg-scaling-activity-${sectionIDSegment(id, 'unknown')}`;
+      const autoScalingActivityAnchorID = (activity, index = 0) => {
+        const providerID = activity?.activityId || activity?.activityID || activity?.id;
+        if (providerID) return `asg-scaling-activity-${sectionIDSegment(providerID, 'unknown')}`;
+        const fallback = [
+          activity?.startTime || activity?.startedAt,
+          activity?.endTime || activity?.endedAt,
+          activity?.statusCode,
+          activity?.description,
+          activity?.cause,
+          activity?.statusMessage,
+          `row-${index + 1}`,
+        ].filter(Boolean).join('-');
+        return `asg-scaling-activity-${sectionIDSegment(fallback, 'unknown')}`;
       };
-      const autoScalingActivityShareURL = (deploymentName, resource, activity) => buildPageSectionURL('resource', autoScalingActivityAnchorID(activity), {
+      const autoScalingActivityShareURL = (deploymentName, resource, activity, index = 0) => buildPageSectionURL('resource', autoScalingActivityAnchorID(activity, index), {
         deployment: deploymentName,
         resourceType: resource?.type,
         resourceId: resource?.id,
         ...resourcePanelLimitURLParams(deploymentName, resource),
       });
-      const createAutoScalingActivityListItem = (deploymentName, resource, activity) => {
+      const createAutoScalingActivityListItem = (deploymentName, resource, activity, index = 0) => {
         const item = createElement('li');
-        item.id = autoScalingActivityAnchorID(activity);
+        item.id = autoScalingActivityAnchorID(activity, index);
         item.classList.add('operation-anchor-row');
         item.append(createElement('strong', '', textOrDash(activity?.activityId || activity?.activityID || activity?.id || activity?.statusCode || 'Scaling activity')));
         const meta = createElement('div', 'detail-history-meta');
@@ -5383,7 +5393,7 @@
           });
         if (meta.children.length) item.append(meta);
         const links = createElement('div', 'row-links');
-        links.append(createNavLink(autoScalingActivityShareURL(deploymentName, resource, activity), 'Share scaling activity', '_self'));
+        links.append(createNavLink(autoScalingActivityShareURL(deploymentName, resource, activity, index), 'Share scaling activity', '_self'));
         item.append(links);
         return item;
       };
@@ -5467,7 +5477,7 @@
           ? createInspectionListSection(
               'Recent scaling activities',
               group.scalingActivities,
-              (activity) => createAutoScalingActivityListItem(deploymentName, resource, activity),
+              (activity, index) => createAutoScalingActivityListItem(deploymentName, resource, activity, index),
               'No scaling activities are reported in the bounded recent activity window for this Auto Scaling Group.',
             )
           : null;
