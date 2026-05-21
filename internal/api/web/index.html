@@ -5351,8 +5351,15 @@
         item.append(hostMeta);
       };
       const autoScalingActivityAnchorID = (activity) => {
-        const id = activity?.activityId || activity?.activityID || activity?.id || activity?.statusCode;
-        return `asg-scaling-activity-${sectionIDSegment(id, 'unknown')}`;
+        const providerID = activity?.activityId || activity?.activityID || activity?.id;
+        if (providerID) return `asg-scaling-activity-${sectionIDSegment(providerID, 'unknown')}`;
+        const fallback = [
+          activity?.startTime || activity?.startedAt,
+          activity?.endTime || activity?.endedAt,
+          activity?.statusCode,
+          activity?.description,
+        ].filter(Boolean).join('-');
+        return `asg-scaling-activity-${sectionIDSegment(fallback, 'unknown')}`;
       };
       const autoScalingActivityShareURL = (deploymentName, resource, activity) => buildPageSectionURL('resource', autoScalingActivityAnchorID(activity), {
         deployment: deploymentName,
