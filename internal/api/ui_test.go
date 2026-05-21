@@ -3416,6 +3416,7 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 		"assert_request_id_header() {",
 		"assert headers.get(\"request-id\"), headers",
 		"assert_request_id_header \"http://$HOST:$PORT/healthz\"",
+		"assert_request_id_header \"http://$HOST:$PORT/favicon.ico\"",
 		"assert_request_id_header \"http://$HOST:$PORT/v1/catalog/summary\"",
 		"assert_request_id_header \"http://$HOST:$PORT/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployDeploymentGroup&resourceName=payments-api-staging-codedeploy-group\"",
 		"assert_request_id_header \"http://$HOST:$PORT/\"",

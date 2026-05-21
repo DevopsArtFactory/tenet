@@ -465,6 +465,7 @@ done
 wait_for_api_health
 
 healthz_request_id=$(assert_request_id_header "$API_BASE_URL/healthz")
+assert_request_id_header "$API_BASE_URL/favicon.ico" >/dev/null
 summary_request_id=$(assert_request_id_header "$API_BASE_URL/v1/catalog/summary")
 worker_resource_logs_request_id=$(assert_request_id_header "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 codedeploy_application_resource_logs_request_id=$(assert_request_id_header "$API_BASE_URL/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployApplication&resourceName=payments-api-staging-codedeploy-app")
