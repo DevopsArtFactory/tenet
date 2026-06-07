@@ -139,6 +139,25 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 	}
 }
 
+func TestLocalRuntimeDocsDescribeComposeRedisStatusStore(t *testing.T) {
+	localRuntimeDoc := readRepoFile(t, "docs/architecture/tenet-v1-local-runtime.md")
+	for _, fragment := range []string{
+		"`compose.yaml` wires both processes plus Redis together",
+		"`TENET_STATUS_BACKEND=redis`",
+		"`TENET_REDIS_ADDR=redis:6379`",
+		"`TENET_STATUS_SEED_PATH=/workspace/examples/local-status/deployments.json`",
+		"Redis-backed status store can seed from the local deployment snapshot when empty",
+	} {
+		if !strings.Contains(localRuntimeDoc, fragment) {
+			t.Fatalf("expected local runtime Compose status-store docs to include %q", fragment)
+		}
+	}
+
+	if strings.Contains(localRuntimeDoc, "`TENET_STATUS_PATH=/workspace/examples/local-status/deployments.json`") {
+		t.Fatal("expected local runtime Compose contract to document Redis seed inputs instead of TENET_STATUS_PATH")
+	}
+}
+
 func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	for _, placeholder := range []string{
