@@ -7,8 +7,8 @@ The local runtime packages the current read-only control-plane foundation as a D
 - `tenet-api` serves the catalog and deployment-status read APIs.
 - `tenet-controller` validates the repository catalog at startup, then reloads the repo and status snapshots on a timer to log abstract reconcile plans per deployment.
 - a sample repository-shaped desired-state tree lives under `examples/local-repo/`, including YAML deployment manifests that can carry `binary` or `image` artifact intent.
-- a sample filesystem-backed deployment-status file lives under `examples/local-status/deployments.json`, including the currently deployed binary/image metadata.
-- `compose.yaml` wires both processes together so the repo can be explored locally without AWS credentials.
+- a sample deployment-status seed snapshot lives under `examples/local-status/deployments.json`, including the currently deployed binary/image metadata.
+- `compose.yaml` wires both processes plus Redis together so the repo can be explored locally without AWS credentials.
 
 ## Runtime contract
 
@@ -16,13 +16,15 @@ The local stack uses these inputs:
 
 - `TENET_CATALOG_SOURCE=filesystem`
 - `TENET_REPO_ROOT=/workspace/examples/local-repo`
-- `TENET_STATUS_PATH=/workspace/examples/local-status/deployments.json`
+- `TENET_STATUS_BACKEND=redis`
+- `TENET_REDIS_ADDR=redis:6379`
+- `TENET_STATUS_SEED_PATH=/workspace/examples/local-status/deployments.json`
 - `TENET_PLAN_STORE_PATH=/tmp/tenet/plan-previews.json`
 - `TENET_APPLY_STORE_PATH=/tmp/tenet/apply-requests.json`
 - `TENET_CONTROLLER_REQUEUE_SECONDS=5` in the local Compose demo so controller planning logs refresh quickly
 - `TENET_AWS_ENABLE_APPLY=false` by default in the local Compose demo; set it to `true` when you want queued-on-create immutable apply records plus a local-safe executor handoff on the same `applyId` without introducing AWS mutation
 
-Both services mount `./examples` read-only. The `api` service also mounts a named volume on `/tmp`, which keeps `/tmp/tenet/plan-previews.json` and `/tmp/tenet/apply-requests.json` restart-safe so immutable plan/apply records survive the Compose `api` service restart used by `make smoke-docker`. That keeps the runtime deterministic and aligned with the current repo-backed architecture.
+Both services mount `./examples` read-only so the Redis-backed status store can seed from the local deployment snapshot when empty. The `api` service also mounts a named volume on `/tmp`, which keeps `/tmp/tenet/plan-previews.json` and `/tmp/tenet/apply-requests.json` restart-safe so immutable plan/apply records survive the Compose `api` service restart used by `make smoke-docker`. That keeps the runtime deterministic and aligned with the current repo-backed architecture.
 
 For `tenet-api`, the local runtime also enables request-scoped JSON logs for every API/UI request. Operators can rely on the stable fields `request_id`, `method`, `path`, `status`, `duration_ms`, and `result`, plus an `error` field on timeout/panic paths. `TENET_API_REQUEST_TIMEOUT` defaults to `30s`; set it to `0` to disable the timeout wrapper for local debugging.
 
