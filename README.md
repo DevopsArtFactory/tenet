@@ -230,9 +230,9 @@ routes do not regress to `aws_unavailable`.
 - `POST /v1/applies/plans/{planId}` (`409 Conflict` means the reviewed plan
   preview is stale and must be recreated before applying)
 - `GET /v1/audit-logs`
-  (bounded audit reads expose `resultScope.returnedEntryCount` and compact alias
-  `resultScope.returnedCount`, plus `truncationStatus` and compact boolean alias
-  `truncated`)
+  (bounded and empty authorized audit reads expose `resultScope.returnedEntryCount`
+  and compact alias `resultScope.returnedCount`, plus `truncationStatus` and
+  compact boolean alias `truncated`)
 - `GET /v1/operator/context`
 
 The bookmarkable audit timeline (`/?page=audit`) keeps a manual `Refresh audit

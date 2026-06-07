@@ -3060,7 +3060,16 @@ assert filtered_audit_deployment_names <= {"payments-api-prod", "payments-api-st
 assert "payments-api-staging" in filtered_audit_deployment_names, filtered_audit_collection
 assert empty_applications_collection == [], empty_applications_collection
 assert empty_status_collection == [], empty_status_collection
-assert empty_audit_collection == {"entries": []}, empty_audit_collection
+assert empty_audit_collection["entries"] == [], empty_audit_collection
+empty_audit_scope = empty_audit_collection.get("resultScope") or {}
+assert empty_audit_scope.get("action") == "apply.requested", empty_audit_collection
+assert empty_audit_scope.get("returnedEntryCount") == 0, empty_audit_collection
+assert empty_audit_scope.get("returnedCount") == 0, empty_audit_collection
+assert empty_audit_scope.get("totalEntryCount") == 0, empty_audit_collection
+assert empty_audit_scope.get("limited") is False, empty_audit_collection
+assert empty_audit_scope.get("effectiveLimit") == 0, empty_audit_collection
+assert empty_audit_scope.get("truncationStatus") == "not_truncated", empty_audit_collection
+assert empty_audit_scope.get("truncated") is False, empty_audit_collection
 PY
 
 restart_api_with_enterprise_sso google_oidc

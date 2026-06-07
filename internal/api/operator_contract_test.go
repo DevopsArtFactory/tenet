@@ -936,6 +936,31 @@ func TestAuditLogOperatorContract(t *testing.T) {
 	}
 }
 
+func TestDockerSmokeAuthFilteredAuditActionEmptyResultScope(t *testing.T) {
+	dockerSmoke := readRepoFile(t, "scripts/smoke-docker.sh")
+	for _, fragment := range []string{
+		`assert empty_audit_collection["entries"] == [], empty_audit_collection`,
+		`empty_audit_scope = empty_audit_collection.get("resultScope") or {}`,
+		`assert empty_audit_scope.get("action") == "apply.requested", empty_audit_collection`,
+		`assert empty_audit_scope.get("returnedEntryCount") == 0, empty_audit_collection`,
+		`assert empty_audit_scope.get("returnedCount") == 0, empty_audit_collection`,
+		`assert empty_audit_scope.get("totalEntryCount") == 0, empty_audit_collection`,
+		`assert empty_audit_scope.get("effectiveLimit") == 0, empty_audit_collection`,
+		`assert empty_audit_scope.get("truncationStatus") == "not_truncated", empty_audit_collection`,
+	} {
+		if !strings.Contains(dockerSmoke, fragment) {
+			t.Fatalf("expected smoke-docker empty authorized audit action-filter contract to include %q", fragment)
+		}
+	}
+	for _, forbidden := range []string{
+		`assert empty_audit_collection == {"entries": []}, empty_audit_collection`,
+	} {
+		if strings.Contains(dockerSmoke, forbidden) {
+			t.Fatalf("expected smoke-docker to preserve resultScope on empty authorized audit filters instead of %q", forbidden)
+		}
+	}
+}
+
 func TestFrontDoorAuthOperatorContract(t *testing.T) {
 	compose := readRepoFile(t, "compose.yaml")
 	for _, fragment := range []string{
