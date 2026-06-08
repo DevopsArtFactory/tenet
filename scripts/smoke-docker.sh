@@ -1964,6 +1964,7 @@ for fragment in (
     "const createApplicationStatusSummary = (detail, resourceGroups = []) => {",
     "const createApplicationDetailActions = (applicationState = null) => [",
     "'Refresh application detail'",
+    "Current application read: ${applicationDetailReadRoute(deploymentName)}",
     "const applicationDetailRefreshState = (applicationState = null) => {",
     "'Refreshing application detail from GET /v1/overview/applications/{deploymentName}…'",
     "Current application detail remains visible below.",

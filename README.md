@@ -160,7 +160,8 @@ compact `Last update` field from the joined runtime summary, falling back to
 `Latest runtime status` when no timestamp is present. The secondary account
 drill-down keeps its `Refresh account detail` action in the page toolbar so
 operators can refresh account-scoped rows from the same place they refresh
-application detail pages.
+application detail pages. Application detail pages also show the exact backing
+read route, for example `Current application read: GET /v1/overview/applications/{deploymentName}`.
 
 Common bookmarkable routes:
 
