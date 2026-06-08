@@ -161,7 +161,8 @@ compact `Last update` field from the joined runtime summary, falling back to
 drill-down keeps its `Refresh account detail` action in the page toolbar so
 operators can refresh account-scoped rows from the same place they refresh
 application detail pages. Application detail pages also show the exact backing
-read route, for example `Current application read: GET /v1/overview/applications/{deploymentName}`.
+read route, for example `Current application read: GET /v1/overview/applications/{deploymentName}`,
+and expose an `Application JSON` handoff to that same read model.
 
 Common bookmarkable routes:
 
@@ -249,8 +250,10 @@ preserving the current deployment/action and applications-shell query state.
 The bookmarkable resource page (`/?page=resource...`) keeps the top-level
 deployment-detail read visible as `Current resource read:
 GET /v1/overview/deployments/{deploymentName}` in the selected-resource context.
-That gives screenshots the same route-builder breadcrumb used by refresh/error
-guidance before operators open the lazy Recent logs or Live inspection panels.
+It also exposes a `Resource JSON` handoff to that deployment-detail read model.
+That gives screenshots and raw handoffs the same route-builder breadcrumb used
+by refresh/error guidance before operators open the lazy Recent logs or Live
+inspection panels.
 
 Deployment runtime events are read from the controller-retained history window, currently 10 events per deployment. Successful `GET /v1/overview/deployments/{deploymentName}/events` responses keep `events: []` for repo-known deployments before history exists, with zero-count `managedDriftSummary` plus zero retained-event counts in `retention` / `resultScope` (`retention.limit` may still be non-zero, e.g. `10`). The application detail Controller runtime events panel renders the same backend metadata, including total returned/retained counts, retention limit/status, and query-window status, so operators can distinguish an empty retained history from a query-limited response or a controller-retention cap. The `resultScope` fields distinguish `?limit=` query truncation (`limited`, `truncationStatus`, compact alias `truncated`) from the retained controller-history cap (`retentionLimit`, `retainedEventCount`, `retentionStatus`), report exact-cap bounded reads as `truncationStatus: "unknown"` with `truncated: false`, and expose `returnedCount` as a compact alias for `returnedEventCount`.
 
