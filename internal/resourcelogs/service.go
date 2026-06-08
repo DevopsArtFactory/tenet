@@ -141,8 +141,12 @@ type Result struct {
 type ResultScope struct {
 	RequestedLimit       *int   `json:"requestedLimit,omitempty"`
 	EffectiveLimit       int    `json:"effectiveLimit"`
+	Limit                int    `json:"limit"`
 	ReturnedEntryCount   int    `json:"returnedEntryCount"`
 	ReturnedCount        int    `json:"returnedCount"`
+	Returned             int    `json:"returned"`
+	TotalEntryCount      int    `json:"totalEntryCount"`
+	Total                int    `json:"total"`
 	NewestEntryTimestamp string `json:"newestEntryTimestamp,omitempty"`
 	OldestEntryTimestamp string `json:"oldestEntryTimestamp,omitempty"`
 	TruncationStatus     string `json:"truncationStatus"`
@@ -202,7 +206,7 @@ func (s Service) awsClients(ctx context.Context, region, targetAccountID, observ
 
 func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 	if req.ControlAccountID != "" && req.TargetAccountID != "" && req.ControlAccountID != req.TargetAccountID && strings.TrimSpace(req.ObserverRoleARN) == "" {
-		return unavailableResult(req, UnavailableReasonCrossAccountNotConfigured), nil
+		return s.unavailableResult(req, UnavailableReasonCrossAccountNotConfigured), nil
 	}
 
 	switch req.ResourceType {
@@ -225,12 +229,12 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 		})
 		if err != nil {
 			if reason, ok := unavailableReasonForError(err); ok {
-				return unavailableResult(req, reason), nil
+				return s.unavailableResult(req, reason), nil
 			}
 			return Result{}, err
 		}
-		entries := formatCloudWatchEntries(events, s.effectiveLimit(req.Limit))
-		return availableResult(req, SourceCloudWatch, entries, emptyReason(len(events), len(entries))), nil
+		entries, total := formatCloudWatchEntries(events, s.effectiveLimit(req.Limit))
+		return s.availableResult(req, SourceCloudWatch, entries, total, emptyReason(len(events), len(entries))), nil
 	case "ecsTask":
 		list := s.options.ListECSLogEvents
 		if list == nil {
@@ -251,18 +255,18 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 		})
 		if err != nil {
 			if reason, ok := unavailableReasonForError(err); ok {
-				return unavailableResult(req, reason), nil
+				return s.unavailableResult(req, reason), nil
 			}
 			return Result{}, err
 		}
-		entries := formatCloudWatchEntries(events, s.effectiveLimit(req.Limit), req.ContainerName)
-		return availableResult(req, SourceCloudWatch, entries, emptyReason(len(events), len(entries))), nil
+		entries, total := formatCloudWatchEntries(events, s.effectiveLimit(req.Limit), req.ContainerName)
+		return s.availableResult(req, SourceCloudWatch, entries, total, emptyReason(len(events), len(entries))), nil
 	case "candidateAutoScalingGroup", "serviceAutoScalingGroup", "userDataBootstrapSource":
 		resourceName := req.ResourceName
 		if req.ResourceType == "userDataBootstrapSource" {
 			resourceName = strings.TrimSpace(req.BackingResourceName)
 			if resourceName == "" {
-				return unavailableResult(req, UnavailableReasonNoLogSource), nil
+				return s.unavailableResult(req, UnavailableReasonNoLogSource), nil
 			}
 		}
 		list := s.options.ListASGInstanceConsoles
@@ -283,24 +287,24 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 		})
 		if err != nil {
 			if reason, ok := unavailableReasonForError(err); ok {
-				return unavailableResult(req, reason), nil
+				return s.unavailableResult(req, reason), nil
 			}
 			return Result{}, err
 		}
 		consoles = selectInstanceConsoles(consoles, instanceID(req))
 		if instanceID(req) != "" && len(consoles) == 0 {
-			return unavailableResult(req, UnavailableReasonResourceNotFound), nil
+			return s.unavailableResult(req, UnavailableReasonResourceNotFound), nil
 		}
-		entries := formatConsoleEntries(consoles, s.effectiveLimit(req.Limit))
-		return availableResult(req, SourceEC2Console, entries, emptyReason(len(consoles), len(entries))), nil
+		entries, total := formatConsoleEntries(consoles, s.effectiveLimit(req.Limit))
+		return s.availableResult(req, SourceEC2Console, entries, total, emptyReason(len(consoles), len(entries))), nil
 	case "trafficShiftPlan", "productionListenerRule", "activeTargetGroup", "candidateTargetGroup":
-		return unavailableResult(req, UnavailableReasonNoLogSource), nil
+		return s.unavailableResult(req, UnavailableReasonNoLogSource), nil
 	case "codeDeployApplication", "codeDeployDeploymentGroup", "productionListener", "testListener", "blueTaskSetTargetGroup", "greenTaskSetTargetGroup":
 		resourceName := req.ResourceName
 		if req.ResourceType != "codeDeployApplication" && req.ResourceType != "codeDeployDeploymentGroup" {
 			resourceName = strings.TrimSpace(req.BackingResourceName)
 			if resourceName == "" {
-				return unavailableResult(req, UnavailableReasonNoLogSource), nil
+				return s.unavailableResult(req, UnavailableReasonNoLogSource), nil
 			}
 		}
 		list := s.options.ListCodeDeployEvents
@@ -321,14 +325,14 @@ func (s Service) Recent(ctx context.Context, req Request) (Result, error) {
 		})
 		if err != nil {
 			if reason, ok := unavailableReasonForError(err); ok {
-				return unavailableResult(req, reason), nil
+				return s.unavailableResult(req, reason), nil
 			}
 			return Result{}, err
 		}
-		entries := formatCodeDeployEntries(events, s.effectiveLimit(req.Limit))
-		return availableResult(req, SourceCodeDeploy, entries, emptyReason(len(events), len(entries))), nil
+		entries, total := formatCodeDeployEntries(events, s.effectiveLimit(req.Limit))
+		return s.availableResult(req, SourceCodeDeploy, entries, total, emptyReason(len(events), len(entries))), nil
 	default:
-		return unavailableResult(req, UnavailableReasonUnsupportedResourceType), nil
+		return s.unavailableResult(req, UnavailableReasonUnsupportedResourceType), nil
 	}
 }
 
@@ -392,7 +396,7 @@ func unavailableReasonForError(err error) (string, bool) {
 	return resourceaws.UnavailableReasonForError(err)
 }
 
-func unavailableResult(req Request, reason string) Result {
+func (s Service) unavailableResult(req Request, reason string) Result {
 	return Result{
 		DeploymentName:      req.DeploymentName,
 		ResourceType:        req.ResourceType,
@@ -405,11 +409,12 @@ func unavailableResult(req Request, reason string) Result {
 		ClusterARN:          clusterARN(req),
 		LookupContext:       lookupContext(req),
 		Available:           false,
+		ResultScope:         buildResultScope(req.Limit, s.effectiveLimit(req.Limit), 0, 0, nil, ScopeTruncationStatusNotApplicable),
 		UnavailableReason:   reason,
 	}
 }
 
-func availableResult(req Request, source string, entries []Entry, emptyReason string) Result {
+func (s Service) availableResult(req Request, source string, entries []Entry, total int, emptyReason string) Result {
 	return Result{
 		DeploymentName:      req.DeploymentName,
 		ResourceType:        req.ResourceType,
@@ -424,8 +429,87 @@ func availableResult(req Request, source string, entries []Entry, emptyReason st
 		Available:           true,
 		Source:              source,
 		Entries:             entries,
+		ResultScope:         buildResultScope(req.Limit, s.effectiveLimit(req.Limit), len(entries), total, entries, truncationStatus(s.effectiveLimit(req.Limit), len(entries), total)),
 		EmptyReason:         emptyReason,
 	}
+}
+
+func buildResultScope(requestedLimit, effectiveLimit, returned, total int, entries []Entry, status string) *ResultScope {
+	var requested *int
+	if requestedLimit > 0 {
+		value := requestedLimit
+		requested = &value
+	}
+	newest, oldest := entryTimestampWindow(entries)
+	return &ResultScope{
+		RequestedLimit:       requested,
+		EffectiveLimit:       effectiveLimit,
+		Limit:                effectiveLimit,
+		ReturnedEntryCount:   returned,
+		ReturnedCount:        returned,
+		Returned:             returned,
+		TotalEntryCount:      total,
+		Total:                total,
+		NewestEntryTimestamp: newest,
+		OldestEntryTimestamp: oldest,
+		TruncationStatus:     status,
+		Truncated:            status == ScopeTruncationStatusTruncated,
+	}
+}
+
+func truncationStatus(effectiveLimit, returned, total int) string {
+	if effectiveLimit <= 0 {
+		return ScopeTruncationStatusNotTruncated
+	}
+	if total > returned {
+		return ScopeTruncationStatusTruncated
+	}
+	if returned == effectiveLimit {
+		return ScopeTruncationStatusUnknown
+	}
+	return ScopeTruncationStatusNotTruncated
+}
+
+func entryTimestampWindow(entries []Entry) (string, string) {
+	var newest string
+	var newestTime time.Time
+	var oldest string
+	var oldestTime time.Time
+	var sawParsed bool
+	var fallbackTimestamps []string
+
+	for _, entry := range entries {
+		timestamp := strings.TrimSpace(entry.Timestamp)
+		if timestamp == "" {
+			continue
+		}
+		parsed, err := time.Parse(time.RFC3339Nano, timestamp)
+		if err != nil {
+			fallbackTimestamps = append(fallbackTimestamps, timestamp)
+			continue
+		}
+		if !sawParsed || parsed.After(newestTime) {
+			newestTime = parsed
+			newest = timestamp
+		}
+		if !sawParsed || parsed.Before(oldestTime) {
+			oldestTime = parsed
+			oldest = timestamp
+		}
+		sawParsed = true
+	}
+	if sawParsed {
+		return newest, oldest
+	}
+	for _, timestamp := range fallbackTimestamps {
+		if newest == "" || timestamp > newest {
+			newest = timestamp
+		}
+		if oldest == "" || timestamp < oldest {
+			oldest = timestamp
+		}
+	}
+	return newest, oldest
 }
 
 func emptyReason(rawCount, entryCount int) string {
@@ -533,7 +617,7 @@ func (s Service) effectiveLimit(requested int) int {
 	return s.maxEntries()
 }
 
-func formatCloudWatchEntries(events []CloudWatchEvent, max int, fallbackContainerName ...string) []Entry {
+func formatCloudWatchEntries(events []CloudWatchEvent, max int, fallbackContainerName ...string) ([]Entry, int) {
 	sort.SliceStable(events, func(i, j int) bool {
 		return events[i].Timestamp.After(events[j].Timestamp)
 	})
@@ -542,47 +626,46 @@ func formatCloudWatchEntries(events []CloudWatchEvent, max int, fallbackContaine
 		containerFallback = strings.TrimSpace(fallbackContainerName[0])
 	}
 	entries := make([]Entry, 0, min(max, len(events)))
+	total := 0
 	for _, event := range events {
 		message := strings.TrimSpace(event.Message)
 		if message == "" {
 			continue
 		}
+		total++
 		containerName := strings.TrimSpace(event.ContainerName)
 		if containerName == "" {
 			containerName = containerFallback
 		}
-		entries = append(entries, Entry{Timestamp: event.Timestamp.UTC().Format(time.RFC3339), Message: message, Stream: strings.TrimSpace(event.Stream), LogGroup: strings.TrimSpace(event.LogGroup), ContainerName: containerName})
-		if len(entries) == max {
-			break
+		if len(entries) < max {
+			entries = append(entries, Entry{Timestamp: event.Timestamp.UTC().Format(time.RFC3339), Message: message, Stream: strings.TrimSpace(event.Stream), LogGroup: strings.TrimSpace(event.LogGroup), ContainerName: containerName})
 		}
 	}
-	return entries
+	return entries, total
 }
 
-func formatConsoleEntries(consoles []InstanceConsole, max int) []Entry {
+func formatConsoleEntries(consoles []InstanceConsole, max int) ([]Entry, int) {
 	sort.SliceStable(consoles, func(i, j int) bool {
 		return consoles[i].GeneratedAt.After(consoles[j].GeneratedAt)
 	})
 	entries := make([]Entry, 0, min(max, len(consoles)))
+	total := 0
 	for _, console := range consoles {
 		for i := len(console.Lines) - 1; i >= 0; i-- {
 			message := strings.TrimSpace(console.Lines[i].Message)
 			if message == "" {
 				continue
 			}
-			entries = append(entries, Entry{Timestamp: console.Lines[i].Timestamp.UTC().Format(time.RFC3339), Message: message, InstanceID: strings.TrimSpace(console.InstanceID)})
-			if len(entries) == max {
-				break
+			total++
+			if len(entries) < max {
+				entries = append(entries, Entry{Timestamp: console.Lines[i].Timestamp.UTC().Format(time.RFC3339), Message: message, InstanceID: strings.TrimSpace(console.InstanceID)})
 			}
-		}
-		if len(entries) == max {
-			break
 		}
 	}
 	for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
 		entries[i], entries[j] = entries[j], entries[i]
 	}
-	return entries
+	return entries, total
 }
 
 func selectInstanceConsoles(consoles []InstanceConsole, instanceID string) []InstanceConsole {
@@ -599,26 +682,27 @@ func selectInstanceConsoles(consoles []InstanceConsole, instanceID string) []Ins
 	return selected
 }
 
-func formatCodeDeployEntries(events []CodeDeployEvent, max int) []Entry {
+func formatCodeDeployEntries(events []CodeDeployEvent, max int) ([]Entry, int) {
 	sort.SliceStable(events, func(i, j int) bool {
 		return events[i].Timestamp.After(events[j].Timestamp)
 	})
 	entries := make([]Entry, 0, min(max, len(events)))
+	total := 0
 	for _, event := range events {
 		message := strings.TrimSpace(event.Message)
 		if message == "" {
 			continue
 		}
-		entries = append(entries, Entry{
-			Timestamp: event.Timestamp.UTC().Format(time.RFC3339),
-			Message:   message,
-			Stream:    strings.TrimSpace(event.DeploymentID),
-		})
-		if len(entries) == max {
-			break
+		total++
+		if len(entries) < max {
+			entries = append(entries, Entry{
+				Timestamp: event.Timestamp.UTC().Format(time.RFC3339),
+				Message:   message,
+				Stream:    strings.TrimSpace(event.DeploymentID),
+			})
 		}
 	}
-	return entries
+	return entries, total
 }
 
 func (s Service) listECSLogEventsFromAWS(ctx context.Context, req ECSRequest) ([]CloudWatchEvent, error) {

@@ -178,6 +178,9 @@ Primary operator APIs:
 - `GET /v1/overview/deployments/{deploymentName}`
 - `GET /v1/overview/deployments/{deploymentName}/events`
 - `GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}[&limit={positiveInteger}]`
+  (recent-log responses expose `resultScope.limit`, `resultScope.returned`,
+  `resultScope.total`, and `resultScope.truncated` so operators can tell when
+  the returned entries were capped)
 - `GET /v1/overview/deployments/{deploymentName}/resource-inspection`
   (bounded ECS task / ASG instance samples expose `resultScope.returnedItemCount`
   and compact alias `resultScope.returnedCount`, plus `truncationStatus` and
