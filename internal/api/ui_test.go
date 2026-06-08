@@ -4660,11 +4660,11 @@ func TestOverviewDocsDescribeResourceLazyPanelRefreshAndAuthGuidance(t *testing.
 func TestDockerSmokeDocsDescribeResourceRefreshCoverage(t *testing.T) {
 	files := map[string][]string{
 		"../../docs/architecture/tenet-v1-operator-contracts.md": {
-			"compose-backed shell coverage now also locks the bookmarkable resource page's top-level `Refresh resource detail` and `Resource JSON` shell (`GET /v1/overview/deployments/{deploymentName}` route-builder text plus the preserved-detail loading/error copy) alongside the existing `Refresh recent logs` and `Refresh live inspection` lazy-panel route-builder/loading/error/auth-guidance hooks",
+			"compose-backed shell coverage now also locks the bookmarkable resource page's top-level `Refresh resource detail` and `Resource JSON` shell (`Resource JSON` handoff builder, `GET /v1/overview/deployments/{deploymentName}` route-builder text, plus the preserved-detail loading/error copy) alongside the existing `Refresh recent logs` and `Refresh live inspection` lazy-panel route-builder/loading/error/auth-guidance hooks",
 		},
 		"../../docs/features/overview-dashboard.md": {
 			"`make smoke-docker`, including raw shell-contract checks for the root applications overview refresh hooks",
-			"the bookmarkable resource page's top-level refresh shell (`Refresh resource detail`, `Resource JSON`, the `GET /v1/overview/deployments/{deploymentName}` route-builder text, and the preserved-detail loading/error copy)",
+			"the bookmarkable resource page's top-level JSON/refresh shell (`Resource JSON`, its `/v1/overview/deployments/{deploymentName}` handoff builder, `Refresh resource detail`, the `GET /v1/overview/deployments/{deploymentName}` route-builder text, and the preserved-detail loading/error copy)",
 			"the drift workspace `Open resource evidence` handoff shell plus optional `managedDrift[].resourceRef` payload-shape validation when live AWS evidence is present",
 			"the bookmarkable resource page's lazy-panel refresh hooks (`Refresh recent logs`, `Refresh live inspection`, their route-builder helpers, and the loading/error/auth-guidance copy)",
 		},
@@ -4709,6 +4709,22 @@ func TestDockerSmokeDocsDescribeEmbeddedReadAuthGuidanceCoverage(t *testing.T) {
 			if !strings.Contains(text, fragment) {
 				t.Fatalf("expected %s to include %q", path, fragment)
 			}
+		}
+	}
+}
+
+func TestSmokeDockerLocksResourceJSONHandoff(t *testing.T) {
+	body, err := os.ReadFile("../../scripts/smoke-docker.sh")
+	if err != nil {
+		t.Fatalf("read smoke-docker.sh: %v", err)
+	}
+	text := string(body)
+	for _, fragment := range []string{
+		"\"Resource JSON\"",
+		"\"createNavLink(`/v1/overview/deployments/${encodeURIComponent(detail?.name || resourceState?.detail?.name || currentPageState.deployment)}`, 'Resource JSON')\"",
+	} {
+		if !strings.Contains(text, fragment) {
+			t.Fatalf("expected smoke-docker.sh to lock resource detail JSON handoff fragment %q", fragment)
 		}
 	}
 }
