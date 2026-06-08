@@ -1485,6 +1485,9 @@ assert "['Last update', runtimeSummaryTimestamp(deployment.runtimeSummary)]" in 
 assert "container.append(createElement('strong', '', 'Runtime'));" in ui, ui
 assert 'Applications JSON' in ui, ui
 assert "createNavLink('/v1/overview/applications', 'Applications JSON')" in ui, ui
+assert 'Workspace JSON' in ui, ui
+assert "const deploymentDetailJSONRoute = (deploymentName) => `/v1/overview/deployments/${encodeURIComponent(deploymentName || '')}`;" in ui, ui
+assert "createNavLink(deploymentDetailJSONRoute(deploymentName), 'Workspace JSON')" in ui, ui
 assert "const applicationsClearFiltersLabel = (activeFilters) => {" in ui, ui
 assert "return `Clear ${count} ${count === 1 ? 'filter' : 'filters'}`;" in ui, ui
 assert "clearButton.setAttribute('aria-label', applicationsClearFiltersAriaLabel(active));" in ui, ui
@@ -1680,6 +1683,8 @@ assert "const createWorkspaceDetailFreshnessMeta = (detail = null, workspaceLabe
 assert 'workspace-detail-freshness' in ui, ui
 assert '${workspaceLabel} read refreshed · ${fetchedAt}' in ui, ui
 assert '${workspaceLabel} read not refreshed yet' in ui, ui
+assert "const deploymentDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;" in ui, ui
+assert "Current workspace read: ${deploymentDetailReadRoute(deploymentName)}." in ui, ui
 assert 'Clear drift filters' in ui, ui
 assert "params.set('driftQuery', normalized.query);" in ui, ui
 assert "params.set('driftSeverity', normalized.severity);" in ui, ui
@@ -1808,7 +1813,7 @@ assert "createElement('div', 'quick-nav-label', 'Hierarchy')" in ui, ui
 assert "createElement('div', 'quick-nav-label', 'Current destination')" in ui, ui
 assert "createNavLink(buildPageURL('applications'), 'Applications overview', '_self')" in ui, ui
 assert "createQuickNavChip(currentWorkspace, `Current destination: ${currentWorkspace}`)" in ui, ui
-assert "createNavLink(buildPageURL('audit', { deployment: detail.name || currentPageState.deployment || '' }), 'Audit log', '_self')" in ui, ui
+assert "createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self')" in ui, ui
 assert "const createWorkspaceQuickNav = (detail, mode, sectionLinks = null) => {" in ui, ui
 assert "const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';" in ui, ui
 assert "const linkedResources = (mode === 'drift' || mode === 'plan') ? groupResourceSections(detail).flatMap((group) => group.resources || []) : null;" in ui, ui
