@@ -1187,6 +1187,7 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"const createApplicationDetailFreshnessMeta = (applicationState = null, detail = null) => {",
 		"Application detail read refreshed · ${fetchedAt}",
 		"Application detail read not refreshed yet",
+		"Current application read: ${applicationDetailReadRoute(deploymentName)}",
 		"meta.setAttribute('role', 'status');",
 		"meta.setAttribute('aria-live', 'polite');",
 		"meta.setAttribute('aria-atomic', 'true');",

@@ -2010,6 +2010,7 @@ assert "const withApplicationDetailFetchedAt = (detail) => {" in application_ui,
 assert "const createApplicationDetailFreshnessMeta = (applicationState = null, detail = null) => {" in application_ui, application_ui
 assert 'Application detail read refreshed · ${fetchedAt}' in application_ui, application_ui
 assert 'Application detail read not refreshed yet' in application_ui, application_ui
+assert 'Current application read: ${applicationDetailReadRoute(deploymentName)}' in application_ui, application_ui
 assert "meta.setAttribute('role', 'status');" in application_ui, application_ui
 assert "meta.setAttribute('aria-live', 'polite');" in application_ui, application_ui
 assert "meta.setAttribute('aria-atomic', 'true');" in application_ui, application_ui

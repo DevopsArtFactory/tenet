@@ -123,6 +123,7 @@ The application-detail route now loads `GET /v1/overview/applications/{deploymen
 Current behavior:
 - breadcrumb/back-link to the applications overview, with an additive account step when `awsAccountId` is already known from the loaded deployment detail
 - top-level application summary for account/region context
+- visible backing-read copy in that summary, for example `Current application read: GET /v1/overview/applications/{deploymentName}`, so operators can see the exact route behind the embedded detail page
 - compact `Current application status` block near the top of the page so operators can quickly scan sync, health, rollout context, artifact, linked-resource count, managed-drift severity totals, runtime-event availability, and last update before drilling further
 - live-status `Application detail read refreshed` metadata in the page summary for the `GET /v1/overview/applications/{deploymentName}` payload, with a not-yet-refreshed fallback before a successful read, so operators can tell whether the application-detail page chrome is showing freshly fetched data rather than only source-runtime timestamps
 - the compact summary stays read-only and uses the existing application-detail payload, preserving the applications-first drill-down instead of turning the page back into a dense dashboard; its `Managed drift` row prefers the server-authored `managedDriftSummary` totals, falls back to current `managedDrift[]` rows for older payloads, and renders `No managed drift reported` when neither surface reports drift
