@@ -2032,6 +2032,8 @@ assert "meta.setAttribute('aria-atomic', 'true');" in application_ui, applicatio
 assert "createApplicationDetailFreshnessMeta(applicationState, detail)" in application_ui, application_ui
 assert "}).then(withApplicationDetailFetchedAt);" in application_ui, application_ui
 assert 'Refresh application detail' in application_ui, application_ui
+assert 'Application JSON' in application_ui, application_ui
+assert "createNavLink(`/v1/overview/applications/${encodeURIComponent(applicationState?.detail?.name || currentPageState.deployment)}`, 'Application JSON')" in application_ui, application_ui
 assert 'Refreshing application detail from GET /v1/overview/applications/{deploymentName}…' in application_ui, application_ui
 assert 'Failed to refresh application detail:' in application_ui, application_ui
 assert "const renderApplicationDetailPage = (detail, applicationState = null) => {" in application_ui, application_ui
@@ -2090,6 +2092,8 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', routeParams), 'Jump to recent logs', '_self')" in body, body
     assert 'createSelectedResourceContextCallout(detail, resource)' in body, body
     assert 'Refresh resource detail' in body, body
+    assert 'Resource JSON' in body, body
+    assert "createNavLink(`/v1/overview/deployments/${encodeURIComponent(detail?.name || resourceState?.detail?.name || currentPageState.deployment)}`, 'Resource JSON')" in body, body
     assert 'Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…' in body, body
     assert 'Current resource detail remains visible below.' in body, body
     assert 'Failed to refresh resource detail:' in body, body

@@ -3173,6 +3173,9 @@
         return section;
       };
       const createApplicationDetailActions = (applicationState = null) => [
+        (applicationState?.detail?.name || currentPageState.deployment)
+          ? createNavLink(`/v1/overview/applications/${encodeURIComponent(applicationState?.detail?.name || currentPageState.deployment)}`, 'Application JSON')
+          : null,
         createRefreshButton(
           'Refresh application detail',
           applicationState?.status === 'loading' || !(applicationState?.detail?.name || currentPageState.deployment),
@@ -3325,6 +3328,9 @@
         return button;
       };
       const createResourceDetailActions = (resourceState = null, detail = null, resource = null) => [
+        (detail?.name || resourceState?.detail?.name || currentPageState.deployment)
+          ? createNavLink(`/v1/overview/deployments/${encodeURIComponent(detail?.name || resourceState?.detail?.name || currentPageState.deployment)}`, 'Resource JSON')
+          : null,
         createRefreshButton(
           'Refresh resource detail',
           resourceState?.status === 'loading' || !(resourceState?.detail?.name || currentPageState.deployment),

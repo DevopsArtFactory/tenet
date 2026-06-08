@@ -861,6 +861,7 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"const renderResourceDetailPage = (detail, resourceState = null) => {",
 		"const resourceDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;",
 		"const createResourceDetailActions = (resourceState = null, detail = null, resource = null) => [",
+		"createNavLink(`/v1/overview/deployments/${encodeURIComponent(detail?.name || resourceState?.detail?.name || currentPageState.deployment)}`, 'Resource JSON')",
 		"Current resource read: ${resourceDetailReadRoute(deploymentName)}.",
 		"Refresh resource detail",
 		"Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…",
@@ -964,6 +965,7 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"page.append(applicationStatusSection);",
 		"pushApplicationSectionLink(applicationStatusSectionID, 'Current application status');",
 		"const createApplicationDetailActions = (applicationState = null) => [",
+		"createNavLink(`/v1/overview/applications/${encodeURIComponent(applicationState?.detail?.name || currentPageState.deployment)}`, 'Application JSON')",
 		"'Refresh application detail'",
 		"const applicationDetailRefreshState = (applicationState = null) => {",
 		"'Refreshing application detail from GET /v1/overview/applications/{deploymentName}…'",
@@ -971,6 +973,7 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"Failed to refresh application detail:",
 		"const resourceDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;",
 		"const createResourceDetailActions = (resourceState = null, detail = null, resource = null) => [",
+		"createNavLink(`/v1/overview/deployments/${encodeURIComponent(detail?.name || resourceState?.detail?.name || currentPageState.deployment)}`, 'Resource JSON')",
 		"'Refresh resource detail'",
 		"const resourceDetailRefreshState = (resourceState = null) => {",
 		"'Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…'",
@@ -3161,11 +3164,23 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Refresh application detail' in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh application detail")
 	}
+	if !strings.Contains(text, "assert 'Application JSON' in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains application detail JSON handoff")
+	}
+	if !strings.Contains(text, "assert \"createNavLink(`/v1/overview/applications/${encodeURIComponent(applicationState?.detail?.name || currentPageState.deployment)}`, 'Application JSON')\" in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert application detail JSON route contract")
+	}
 	if !strings.Contains(text, "assert 'Grouped linked resources for the selected application. Open drift, plan/apply, or audit log from here before the final resource page.' in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains complete application workspace handoff copy")
 	}
 	if !strings.Contains(text, "assert 'Refresh resource detail' in body, body") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh resource detail")
+	}
+	if !strings.Contains(text, "assert 'Resource JSON' in body, body") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains resource detail JSON handoff")
+	}
+	if !strings.Contains(text, "assert \"createNavLink(`/v1/overview/deployments/${encodeURIComponent(detail?.name || resourceState?.detail?.name || currentPageState.deployment)}`, 'Resource JSON')\" in body, body") {
+		t.Fatalf("expected smoke-local.sh to assert resource detail JSON route contract")
 	}
 	if !strings.Contains(text, "assert 'Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…' in body, body") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains resource detail refresh loading copy")
@@ -4645,11 +4660,11 @@ func TestOverviewDocsDescribeResourceLazyPanelRefreshAndAuthGuidance(t *testing.
 func TestDockerSmokeDocsDescribeResourceRefreshCoverage(t *testing.T) {
 	files := map[string][]string{
 		"../../docs/architecture/tenet-v1-operator-contracts.md": {
-			"compose-backed shell coverage now also locks the bookmarkable resource page's top-level `Refresh resource detail` shell (`GET /v1/overview/deployments/{deploymentName}` route-builder text plus the preserved-detail loading/error copy) alongside the existing `Refresh recent logs` and `Refresh live inspection` lazy-panel route-builder/loading/error/auth-guidance hooks",
+			"compose-backed shell coverage now also locks the bookmarkable resource page's top-level `Refresh resource detail` and `Resource JSON` shell (`GET /v1/overview/deployments/{deploymentName}` route-builder text plus the preserved-detail loading/error copy) alongside the existing `Refresh recent logs` and `Refresh live inspection` lazy-panel route-builder/loading/error/auth-guidance hooks",
 		},
 		"../../docs/features/overview-dashboard.md": {
 			"`make smoke-docker`, including raw shell-contract checks for the root applications overview refresh hooks",
-			"the bookmarkable resource page's top-level refresh shell (`Refresh resource detail`, the `GET /v1/overview/deployments/{deploymentName}` route-builder text, and the preserved-detail loading/error copy)",
+			"the bookmarkable resource page's top-level refresh shell (`Refresh resource detail`, `Resource JSON`, the `GET /v1/overview/deployments/{deploymentName}` route-builder text, and the preserved-detail loading/error copy)",
 			"the drift workspace `Open resource evidence` handoff shell plus optional `managedDrift[].resourceRef` payload-shape validation when live AWS evidence is present",
 			"the bookmarkable resource page's lazy-panel refresh hooks (`Refresh recent logs`, `Refresh live inspection`, their route-builder helpers, and the loading/error/auth-guidance copy)",
 		},

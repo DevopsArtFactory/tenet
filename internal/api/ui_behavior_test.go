@@ -2616,6 +2616,9 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const breadcrumbChips = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className.includes('breadcrumb-current'));
   const backLink = toolbarLinks.find((node) => node.href === '/?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.target === '_self');
   if (!backLink) throw new Error('expected application route self-navigation back link');
+  const applicationJSONLink = toolbarLinks.find((node) => node.href === '/v1/overview/applications/payments-api-staging' && node.textContent === 'Application JSON');
+  if (!applicationJSONLink) throw new Error('expected application route JSON read-model handoff');
+  if (applicationJSONLink.target !== '_blank' || applicationJSONLink.rel !== 'noreferrer noopener') throw new Error('expected application JSON handoff to use external-style link attributes');
   if (!accountsText.includes('Breadcrumbs')) throw new Error('expected application route breadcrumb chrome');
   const applicationsBreadcrumb = accountLinks.find((node) => node.href === '/?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.textContent === 'Applications' && node.target === '_self');
   if (!applicationsBreadcrumb || applicationsBreadcrumb.rel) throw new Error('expected application route applications breadcrumb link');
@@ -2661,6 +2664,8 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (accountsText.includes('repo —') || accountsText.includes('delivery —') || accountsText.includes('GitHub refresh evidence · Source · controller')) throw new Error('expected application route to avoid GitHub placeholders on ordinary runtime events');
   if (!accountsText.includes('payments-api-staging-service')) throw new Error('expected application route synthesized workload resource');
   if (!accountsText.includes('payments-api-staging-codedeploy-group')) throw new Error('expected application route synthesized deployment-group resource');
+  const resourceDrillDownLink = accountLinks.find((node) => node.textContent === 'Open resource' && node.href.includes('/?page=resource&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging') && node.href.includes('resourceType=ecsService') && node.href.includes('resourceId=ecsService%3A%3Apayments-api-staging-service'));
+  if (!resourceDrillDownLink || resourceDrillDownLink.target !== '_self' || resourceDrillDownLink.rel) throw new Error('expected application resource drill-down link to remain in-shell');
   const sectionLinks = accountLinks.filter((node) => typeof node.href === 'string' && node.href.includes('#application-'));
   const expectedSectionLinks = [
     ['/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging#application-current-status', 'Current application status'],
@@ -4923,6 +4928,9 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   const backLink = toolbarLinks.find((node) => node.href === '/?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.target === '_self');
   if (!backLink) throw new Error('expected resource page self-navigation back link');
   if (backLink.rel) throw new Error('expected resource page back link to avoid new-tab rel attributes');
+  const resourceJSONLink = toolbarLinks.find((node) => node.href === '/v1/overview/deployments/payments-api-staging' && node.textContent === 'Resource JSON');
+  if (!resourceJSONLink) throw new Error('expected resource page JSON read-model handoff');
+  if (resourceJSONLink.target !== '_blank' || resourceJSONLink.rel !== 'noreferrer noopener') throw new Error('expected resource JSON handoff to use external-style link attributes');
   if (!accountsText.includes('Breadcrumbs')) throw new Error('expected resource page breadcrumb chrome');
   const applicationsBreadcrumb = pageLinks.find((node) => node.href === '/?page=applications&q=payments&sync=OutOfSync&account=210987654321' && node.textContent === 'Applications' && node.target === '_self');
   if (!applicationsBreadcrumb || applicationsBreadcrumb.rel) throw new Error('expected resource page applications breadcrumb link');
