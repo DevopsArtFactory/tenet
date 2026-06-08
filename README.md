@@ -162,7 +162,10 @@ drill-down keeps its `Refresh account detail` action in the page toolbar so
 operators can refresh account-scoped rows from the same place they refresh
 application detail pages. Application detail pages also show the exact backing
 read route, for example `Current application read: GET /v1/overview/applications/{deploymentName}`,
-and expose an `Application JSON` handoff to that same read model.
+and expose an `Application JSON` handoff to that same read model. The drift and
+plan workspaces show `Current workspace read: GET /v1/overview/deployments/{deploymentName}.`
+in their chrome and include a top-level `Workspace JSON` handoff to that
+deployment-detail read model.
 
 Common bookmarkable routes:
 

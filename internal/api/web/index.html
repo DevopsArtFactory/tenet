@@ -3106,6 +3106,8 @@
         meta.setAttribute('aria-atomic', 'true');
         return meta;
       };
+      const deploymentDetailJSONRoute = (deploymentName) => `/v1/overview/deployments/${encodeURIComponent(deploymentName || '')}`;
+      const deploymentDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;
 
       const applicationManagedDriftCounts = (detail) => {
         const summary = detail?.managedDriftSummary;
@@ -8127,10 +8129,11 @@
         const workspaceTitle = mode === 'drift' ? 'Drift viewer' : 'Plan and apply';
         const workspaceBreadcrumbLabel = mode === 'drift' ? 'Drift view' : 'Plan/apply';
         const emptyTitle = mode === 'drift' ? 'Field-level drift' : 'Plan operations';
-        setEmbeddedBrowserTitle(detail.name || currentPageState.deployment || '', workspaceBreadcrumbLabel);
+        const deploymentName = detail.name || currentPageState.deployment || '';
+        setEmbeddedBrowserTitle(deploymentName, workspaceBreadcrumbLabel);
         const header = createElement('article', 'account');
         const breadcrumb = createDeploymentBreadcrumb({
-          deploymentName: detail.name || currentPageState.deployment || '',
+          deploymentName,
           awsAccountId: detail.awsAccountId || '',
           accountName: detail.accountName || '',
           currentLabel: workspaceBreadcrumbLabel,
@@ -8139,8 +8142,9 @@
         const titleWrap = createElement('div');
         titleWrap.append(
           createElement('h2', 'account-name', workspaceTitle),
-          createElement('div', 'account-meta', detail.name || currentPageState.deployment || 'Unknown deployment'),
+          createElement('div', 'account-meta', deploymentName || 'Unknown deployment'),
           createElement('div', 'account-topology', [detail.accountName, detail.awsAccountId, detail.region].filter(Boolean).join(' · ') || '—'),
+          createElement('div', 'account-topology workspace-read-route', `Current workspace read: ${deploymentDetailReadRoute(deploymentName)}.`),
           createWorkspaceDetailFreshnessMeta(detail, workspaceTitle),
         );
         const pills = createElement('div', 'pills');
@@ -8154,22 +8158,25 @@
         });
         head.append(titleWrap, pills);
 
-        const backLink = createNavLink(buildPageURL('application', { deployment: detail.name || currentPageState.deployment || '' }), 'Back to application');
+        const backLink = createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application');
         backLink.target = '_self';
         backLink.rel = '';
         const toolbarActions = createElement('div', 'toolbar-actions');
         toolbarActions.append(
           backLink,
-          createNavLink(buildPageURL('audit', { deployment: detail.name || currentPageState.deployment || '' }), 'Audit log', '_self'),
+          createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self'),
         );
+        if (deploymentName) {
+          toolbarActions.append(createNavLink(deploymentDetailJSONRoute(deploymentName), 'Workspace JSON'));
+        }
         if (mode === 'plan') {
           toolbarActions.append(createRefreshButton(
             'Refresh plan workspace',
-            workspaceState?.status === 'loading' || !(detail.name || currentPageState.deployment),
+            workspaceState?.status === 'loading' || !deploymentName,
             () => workspaceState?.onRefresh?.().catch(() => {}),
           ));
         }
-        toolbarActions.append(createElement('div', 'toolbar-active', `${workspaceTitle} · ${detail.name || currentPageState.deployment || 'deployment'}`));
+        toolbarActions.append(createElement('div', 'toolbar-active', `${workspaceTitle} · ${deploymentName || 'deployment'}`));
         toolbar.replaceChildren(toolbarActions);
 
         const workspaceSummary = createElement('div', 'detail-grid');

@@ -1457,7 +1457,11 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"const deploymentWorkspaceRefreshStateText = (mode, workspaceState) => {",
 		"return `Refreshing ${workspaceLabel} from GET /v1/overview/deployments/{deploymentName}…`;",
 		"return `Failed to refresh ${workspaceLabel}: ${workspaceState.error?.message || 'unknown error'}`;",
+		"const deploymentDetailJSONRoute = (deploymentName) => `/v1/overview/deployments/${encodeURIComponent(deploymentName || '')}`;",
+		"const deploymentDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;",
 		"const workspaceTitle = mode === 'drift' ? 'Drift viewer' : 'Plan and apply';",
+		"const deploymentName = detail.name || currentPageState.deployment || '';",
+		"createElement('div', 'account-topology workspace-read-route', `Current workspace read: ${deploymentDetailReadRoute(deploymentName)}.`)",
 		"const runtimeSignalsSection = createDetailSection('Latest runtime signals');",
 		"['Runtime source', metricValue(detail.runtimeSummary?.source)]",
 		"['Runtime timestamp', metricValue(detail.runtimeSummary?.timestamp)]",
@@ -1467,9 +1471,10 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"const executionSection = createDetailSection('Rollout execution');",
 		"rolloutExecutionResources(detail).filter((item) => normalizeResource(item).id === resource.id)",
 		"No rollout execution resources are currently reported.",
-		"const backLink = createNavLink(buildPageURL('application', { deployment: detail.name || currentPageState.deployment || '' }), 'Back to application');",
+		"const backLink = createNavLink(buildPageURL('application', { deployment: deploymentName }), 'Back to application');",
 		"backLink.target = '_self';",
 		"backLink.rel = '';",
+		"toolbarActions.append(createNavLink(deploymentDetailJSONRoute(deploymentName), 'Workspace JSON'));",
 		"const createDeploymentQuickNav = (deploymentName, currentWorkspace, linkedResources = null, sectionLinks = [], currentSectionEmptyLabel = '') => {",
 		"const createWorkspaceQuickNav = (detail, mode, sectionLinks = null) => {",
 		"const currentWorkspace = mode === 'drift' ? 'Drift view' : 'Plan/apply';",
@@ -1733,7 +1738,7 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"No server-authored plan operations are stored for this preview.",
 		"const fallbackIfMatch = planState.record?.source?.fingerprint || '';",
 		"const ifMatch = workspaceDetail.sourceFingerprint || await derivePlanSourceFingerprint(workspaceDetail).catch(() => '') || fallbackIfMatch;",
-		"createNavLink(buildPageURL('audit', { deployment: detail.name || currentPageState.deployment || '' }), 'Audit log', '_self')",
+		"createNavLink(buildPageURL('audit', { deployment: deploymentName }), 'Audit log', '_self')",
 		"let applyState = {",
 		"applyId: currentPageState.applyId,",
 		"const syncPlanPageURL = (planId, applyId = '') => {",
@@ -3136,6 +3141,12 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert \"createNavLink('/v1/overview/applications', 'Applications JSON')\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert applications overview JSON route contract")
+	}
+	if !strings.Contains(text, "assert 'Workspace JSON' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains workspace JSON handoff")
+	}
+	if !strings.Contains(text, "assert \"createNavLink(deploymentDetailJSONRoute(deploymentName), 'Workspace JSON')\" in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert workspace JSON route contract")
 	}
 	if !strings.Contains(text, "assert \"container.append(createElement('strong', '', 'Runtime'));\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains compact Runtime label")

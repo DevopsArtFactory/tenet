@@ -8987,9 +8987,11 @@ async function render(detail, search, hash = '') {
   if (run.fetchCalls.length !== 1 || run.fetchCalls[0] !== '/v1/overview/deployments/api-prod') throw new Error('expected drift workspace to load only deployment detail, got ' + run.fetchCalls.join(', '));
   const text = collectText(run.document.getElementById('accounts')).join(' | ');
   const toolbarText = collectText(run.document.getElementById('toolbar')).join(' | ');
+  const toolbarLinks = collectNodes(run.document.getElementById('toolbar'), (node) => node.tagName === 'A');
   const workspaceLinks = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'A');
   const workspaceChips = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
   const breadcrumbChips = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'SPAN' && node.className.includes('breadcrumb-current'));
+  const workspaceJSONLink = toolbarLinks.find((node) => node.href === '/v1/overview/deployments/api-prod' && node.textContent === 'Workspace JSON');
   const applicationsBreadcrumb = workspaceLinks.find((node) => node.href === '/?page=applications' && node.textContent === 'Applications' && node.target === '_self');
   const accountBreadcrumb = workspaceLinks.find((node) => node.href === '/?page=account&accountId=123456789012' && node.textContent.includes('123456789012') && node.target === '_self');
   const applicationBreadcrumb = workspaceLinks.find((node) => node.href === '/?page=application&deployment=api-prod' && node.textContent === 'api-prod' && node.target === '_self');
@@ -9000,9 +9002,11 @@ async function render(detail, search, hash = '') {
   const workspaceAuditLink = workspaceLinks.find((node) => node.href === '/?page=audit&deployment=api-prod' && node.textContent === 'Audit log' && node.target === '_self');
   const workspaceResourceLink = workspaceLinks.find((node) => node.href === '/?page=resource&deployment=api-prod&resourceType=aws_lb_listener_rule.payments_prod&resourceId=aws_lb_listener_rule.payments_prod%3A%3Aprod-router%3A%3ARoutes+production+traffic+to+the+stable+target+group' && node.textContent === 'prod-router' && node.target === '_self');
   if (!text.includes('Drift viewer')) throw new Error('expected drift workspace title');
+  if (!text.includes('Current workspace read: GET /v1/overview/deployments/api-prod.')) throw new Error('expected drift workspace backing read copy');
   if (!text.includes('Drift viewer read refreshed ·')) throw new Error('expected drift workspace deployment-detail freshness cue');
   if (text.includes('Drift viewer read not refreshed yet')) throw new Error('expected drift workspace freshness cue to use fetched timestamp');
   if (!toolbarText.includes('Back to application')) throw new Error('expected workspace back link');
+  if (!workspaceJSONLink || workspaceJSONLink.target !== '_blank' || workspaceJSONLink.rel !== 'noreferrer noopener') throw new Error('expected drift workspace JSON handoff link');
   if (!toolbarText.includes('api-prod')) throw new Error('expected workspace active deployment title');
   if (!text.includes('Breadcrumbs')) throw new Error('expected drift workspace breadcrumb chrome');
   if (!applicationsBreadcrumb || applicationsBreadcrumb.rel) throw new Error('expected drift workspace applications breadcrumb link');
@@ -9864,6 +9868,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const toolbarRoot = document.getElementById('toolbar');
   if (fetchCalls.length !== 1 || fetchCalls[0] !== '/v1/overview/deployments/api-prod') throw new Error('expected only deployment detail before create, got ' + fetchCalls.join(', '));
   let text = collectText(root).join(' | ');
+  const toolbarLinksBeforeCreate = collectNodes(toolbarRoot, (node) => node.tagName === 'A');
   const linksBeforeCreate = collectNodes(root, (node) => node.tagName === 'A');
   const chipsBeforeCreate = collectNodes(root, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip');
   const breadcrumbChipsBeforeCreate = collectNodes(root, (node) => node.tagName === 'SPAN' && node.className.includes('breadcrumb-current'));
@@ -9875,9 +9880,12 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   const workspaceDriftLink = linksBeforeCreate.find((node) => node.href === '/?page=drift&deployment=api-prod' && node.textContent === 'Drift view' && node.target === '_self');
   const workspacePlanLink = linksBeforeCreate.find((node) => node.href === '/?page=plan&deployment=api-prod' && node.textContent === 'Plan/apply' && node.target === '_self');
   const workspaceAuditLink = linksBeforeCreate.find((node) => node.href === '/?page=audit&deployment=api-prod' && node.textContent === 'Audit log' && node.target === '_self');
+  const workspaceJSONLink = toolbarLinksBeforeCreate.find((node) => node.href === '/v1/overview/deployments/api-prod' && node.textContent === 'Workspace JSON');
   if (!text.includes('Plan and apply')) throw new Error('expected plan workspace title');
+  if (!text.includes('Current workspace read: GET /v1/overview/deployments/api-prod.')) throw new Error('expected plan workspace backing read copy');
   if (!text.includes('Plan and apply read refreshed ·')) throw new Error('expected plan workspace deployment-detail freshness cue');
   if (text.includes('Plan and apply read not refreshed yet')) throw new Error('expected plan workspace freshness cue to use fetched timestamp');
+  if (!workspaceJSONLink || workspaceJSONLink.target !== '_blank' || workspaceJSONLink.rel !== 'noreferrer noopener') throw new Error('expected plan workspace JSON handoff link');
   if (!text.includes('Breadcrumbs')) throw new Error('expected plan workspace breadcrumb chrome');
   if (!applicationsBreadcrumb || applicationsBreadcrumb.rel) throw new Error('expected plan workspace applications breadcrumb link');
   if (accountBreadcrumb) throw new Error('expected plan workspace to omit account breadcrumb when awsAccountId is unavailable');
