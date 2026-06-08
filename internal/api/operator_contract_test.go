@@ -49,6 +49,7 @@ func TestReadmeStaysProductOverview(t *testing.T) {
 		"## Documentation Map",
 		"docs/architecture/tenet-v1-operator-contracts.md",
 		"endpoint, read-model, auth, resource, and smoke-verification contracts formerly\n  kept in this README",
+		"`internal/statusstore`, `internal/planpreview`, `internal/applyrequest`, and\n  `internal/auditlog` - runtime status, plan/apply, and audit stores",
 		"`codeDeployDeploymentGroup`,\n`productionListener`, and `testListener` can return",
 		"`available=true`, `source=rollout_execution_summary`, and a summary-only",
 		"`source=live` / `inspectionMode=live`",
@@ -57,6 +58,10 @@ func TestReadmeStaysProductOverview(t *testing.T) {
 		if !strings.Contains(readme, fragment) {
 			t.Fatalf("expected README product overview to include %q", fragment)
 		}
+	}
+
+	if strings.Contains(readme, "`internal/runtime`") {
+		t.Fatal("expected README repository layout to name current runtime-store packages instead of nonexistent internal/runtime")
 	}
 }
 

@@ -319,7 +319,8 @@ The detailed runner-start evidence bundle remains available by omitting
 - `cmd/tenet-controller` - controller/runtime loop entry point
 - `internal/api` - routes, read models, auth enforcement, and UI assets
 - `internal/catalog` - manifest loading and catalog compilation
-- `internal/runtime` - runtime status, plan/apply, and audit stores
+- `internal/statusstore`, `internal/planpreview`, `internal/applyrequest`, and
+  `internal/auditlog` - runtime status, plan/apply, and audit stores
 - `examples/local-repo` - sample desired-state repository
 - `examples/local-status` - sample runtime status fixtures
 - `scripts` - smoke, Compose, and CI helper scripts
