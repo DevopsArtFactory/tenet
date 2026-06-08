@@ -287,6 +287,16 @@ General repository checks:
 go test ./...
 ```
 
+CI Smoke mirrors those checks in the hosted fast lane and also syntax-checks the operator smoke helpers before running local smoke. For smoke-script or runner-start evidence changes, run:
+
+```bash
+bash -n scripts/smoke-local.sh
+bash -n scripts/smoke-docker.sh
+bash -n scripts/ci-smoke-runner-evidence.sh
+```
+
+The Docker smoke lane remains separate; use `make smoke-docker` for Compose, container startup, fixture, or Docker-stack runtime changes.
+
 For hosted CI Smoke failures that never start a runner, collect pasteable issue
 evidence with:
 
