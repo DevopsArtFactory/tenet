@@ -28,6 +28,11 @@ func expectedLookupContext(region, controlAccountID, targetAccountID, observerRo
 	}
 }
 
+func withoutResultScope(result Result) Result {
+	result.ResultScope = nil
+	return result
+}
+
 func TestAssignEntryIDsDerivesStableUniqueRowAnchors(t *testing.T) {
 	entries := []Entry{
 		{Timestamp: "2026-05-09T10:00:00Z", Message: "same message", Stream: "ecs/api/task-a", LogGroup: "/aws/ecs/payments-api-a", ContainerName: "api"},
@@ -70,6 +75,59 @@ func TestAssignEntryIDsDerivesStableUniqueRowAnchors(t *testing.T) {
 }
 
 func TestServiceRecent(t *testing.T) {
+	t.Run("ecs service result scope reports total before max-entry capping", func(t *testing.T) {
+		service := NewService(Options{
+			MaxEntries: 2,
+			ListECSLogEvents: func(ctx context.Context, req ECSRequest) ([]CloudWatchEvent, error) {
+				return []CloudWatchEvent{
+					{Timestamp: time.Date(2026, 4, 16, 7, 11, 0, 0, time.UTC), Message: "newest event"},
+					{Timestamp: time.Date(2026, 4, 16, 7, 10, 0, 0, time.UTC), Message: "middle event"},
+					{Timestamp: time.Date(2026, 4, 16, 7, 9, 0, 0, time.UTC), Message: "oldest event"},
+				}, nil
+			},
+		})
+
+		result, err := service.Recent(context.Background(), Request{
+			DeploymentName: "payments-api-prod",
+			ResourceType:   "ecsService",
+			ResourceName:   "payments-api-prod-service",
+		})
+		if err != nil {
+			t.Fatalf("Recent returned error: %v", err)
+		}
+		if result.ResultScope == nil {
+			t.Fatalf("expected resultScope, got %+v", result)
+		}
+		if result.ResultScope.Limit != 2 || result.ResultScope.Returned != 2 || result.ResultScope.Total != 3 || !result.ResultScope.Truncated {
+			t.Fatalf("expected compact resultScope to expose cap and pre-cap total, got %+v", result.ResultScope)
+		}
+		if result.ResultScope.EffectiveLimit != 2 || result.ResultScope.ReturnedEntryCount != 2 || result.ResultScope.ReturnedCount != 2 || result.ResultScope.TotalEntryCount != 3 || result.ResultScope.TruncationStatus != ScopeTruncationStatusTruncated {
+			t.Fatalf("expected compatibility resultScope fields to match compact aliases, got %+v", result.ResultScope)
+		}
+	})
+
+	t.Run("unsupported resources include not-applicable result scope", func(t *testing.T) {
+		service := NewService(Options{MaxEntries: 7})
+
+		result, err := service.Recent(context.Background(), Request{
+			DeploymentName: "payments-api-prod",
+			ResourceType:   "unsupportedThing",
+			ResourceName:   "unsupported-resource",
+		})
+		if err != nil {
+			t.Fatalf("Recent returned error: %v", err)
+		}
+		if result.ResultScope == nil {
+			t.Fatalf("expected resultScope on unavailable payload, got %+v", result)
+		}
+		if result.ResultScope.Limit != 7 || result.ResultScope.Returned != 0 || result.ResultScope.Total != 0 || result.ResultScope.Truncated {
+			t.Fatalf("expected unavailable resultScope to use effective max and zero counts, got %+v", result.ResultScope)
+		}
+		if result.ResultScope.EffectiveLimit != 7 || result.ResultScope.ReturnedEntryCount != 0 || result.ResultScope.TotalEntryCount != 0 || result.ResultScope.TruncationStatus != ScopeTruncationStatusNotApplicable {
+			t.Fatalf("expected unavailable compatibility resultScope fields, got %+v", result.ResultScope)
+		}
+	})
+
 	t.Run("ecs service returns newest cloudwatch log events", func(t *testing.T) {
 		var gotLookup ECSRequest
 		service := NewService(Options{
@@ -118,7 +176,7 @@ func TestServiceRecent(t *testing.T) {
 			},
 			UnavailableReason: "",
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected resource logs result: %+v", result)
 		}
 	})
@@ -339,7 +397,7 @@ func TestServiceRecent(t *testing.T) {
 			Entries:        []Entry{},
 			EmptyReason:    EmptyReasonNoFormattedEntries,
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected empty ECS resource logs result: %+v", result)
 		}
 	})
@@ -402,7 +460,7 @@ func TestServiceRecent(t *testing.T) {
 			},
 			UnavailableReason: "",
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected resource logs result: %+v", result)
 		}
 	})
@@ -448,7 +506,7 @@ func TestServiceRecent(t *testing.T) {
 				{Timestamp: "2026-04-16T07:11:45Z", Message: "selected complete", InstanceID: "i-selected"},
 			},
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected selected ASG resource logs result: got %+v want %+v", result, want)
 		}
 	})
@@ -481,7 +539,7 @@ func TestServiceRecent(t *testing.T) {
 			Available:         false,
 			UnavailableReason: UnavailableReasonResourceNotFound,
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected missing selected instance result: got %+v want %+v", result, want)
 		}
 	})
@@ -535,7 +593,7 @@ func TestServiceRecent(t *testing.T) {
 				{Timestamp: "2026-04-16T07:11:45Z", Message: "bootstrap complete", InstanceID: "i-newest"},
 			},
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected resource logs result: %+v", result)
 		}
 	})
@@ -573,7 +631,7 @@ func TestServiceRecent(t *testing.T) {
 			Entries:        []Entry{},
 			EmptyReason:    EmptyReasonNoFormattedEntries,
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected empty ASG resource logs result: %+v", result)
 		}
 	})
@@ -626,7 +684,7 @@ func TestServiceRecent(t *testing.T) {
 				{Timestamp: "2026-04-16T07:11:45Z", Message: "refresh complete", InstanceID: "i-refresh"},
 			},
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected service ASG result: %+v", result)
 		}
 	})
@@ -683,7 +741,7 @@ func TestServiceRecent(t *testing.T) {
 				{Timestamp: "2026-04-16T07:11:45Z", Message: "refresh complete", InstanceID: "i-refresh"},
 			},
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected bootstrap-source result: %+v", result)
 		}
 	})
@@ -717,7 +775,7 @@ func TestServiceRecent(t *testing.T) {
 			Available:           false,
 			UnavailableReason:   UnavailableReasonNoLogSource,
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected bootstrap-source unavailable result: %+v", result)
 		}
 	})
@@ -768,7 +826,7 @@ func TestServiceRecent(t *testing.T) {
 				{Timestamp: "2026-04-18T09:16:00Z", Message: "Status: InProgress — shifting 50 percent of traffic", Stream: "d-middle"},
 			},
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected CodeDeploy resource logs result: %+v", result)
 		}
 	})
@@ -819,7 +877,7 @@ func TestServiceRecent(t *testing.T) {
 				Stream:    "d-application",
 			}},
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected CodeDeploy application recent logs result: %+v", result)
 		}
 	})
@@ -873,7 +931,7 @@ func TestServiceRecent(t *testing.T) {
 				Stream:    "d-newest",
 			}},
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected CodeDeploy sibling recent logs result: %+v", result)
 		}
 	})
@@ -900,7 +958,7 @@ func TestServiceRecent(t *testing.T) {
 			Available:         false,
 			UnavailableReason: UnavailableReasonNoLogSource,
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected missing-backing CodeDeploy sibling result: %+v", result)
 		}
 	})
@@ -933,7 +991,7 @@ func TestServiceRecent(t *testing.T) {
 			Entries:        []Entry{},
 			EmptyReason:    EmptyReasonNoRecentEvents,
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected empty CodeDeploy result: %+v", result)
 		}
 	})
@@ -974,7 +1032,7 @@ func TestServiceRecent(t *testing.T) {
 			Available:         false,
 			UnavailableReason: UnavailableReasonAWSUnavailable,
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected CodeDeploy AWS unavailable result: %+v", result)
 		}
 	})
@@ -1046,7 +1104,7 @@ func TestServiceRecent(t *testing.T) {
 			Entries:           nil,
 			UnavailableReason: UnavailableReasonUnsupportedResourceType,
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected unavailable result: %+v", result)
 		}
 	})
@@ -1093,7 +1151,7 @@ func TestServiceRecent(t *testing.T) {
 				Entries:           nil,
 				UnavailableReason: UnavailableReasonNoLogSource,
 			}
-			if !reflect.DeepEqual(result, want) {
+			if !reflect.DeepEqual(withoutResultScope(result), want) {
 				t.Fatalf("unexpected weighted traffic-routing log result for %s: got %+v want %+v", resource.resourceType, result, want)
 			}
 		}
@@ -1131,7 +1189,7 @@ func TestServiceRecent(t *testing.T) {
 			Entries:           nil,
 			UnavailableReason: UnavailableReasonCrossAccountNotConfigured,
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected cross-account unavailable result: %+v", result)
 		}
 	})
@@ -1174,7 +1232,7 @@ func TestServiceRecent(t *testing.T) {
 			Available:         false,
 			UnavailableReason: UnavailableReasonAWSUnavailable,
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected AWS unavailable result: %+v", result)
 		}
 	})
@@ -1215,7 +1273,7 @@ func TestServiceRecent(t *testing.T) {
 			Available:         false,
 			UnavailableReason: UnavailableReasonAWSUnavailable,
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected AWS unavailable result: %+v", result)
 		}
 	})
@@ -1260,7 +1318,7 @@ func TestServiceRecent(t *testing.T) {
 			Available:           false,
 			UnavailableReason:   UnavailableReasonAWSUnavailable,
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected bootstrap-source AWS unavailable result: %+v", result)
 		}
 	})
@@ -1388,7 +1446,7 @@ func TestServiceRecent(t *testing.T) {
 			Available:         false,
 			UnavailableReason: UnavailableReasonUnsupportedResourceType,
 		}
-		if !reflect.DeepEqual(result, want) {
+		if !reflect.DeepEqual(withoutResultScope(result), want) {
 			t.Fatalf("unexpected generic asg unavailable result: %+v", result)
 		}
 	})

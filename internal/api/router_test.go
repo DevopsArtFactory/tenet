@@ -6521,6 +6521,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 			Entries:   []resourcelogs.Entry{},
 			ResultScope: &resourcelogs.ResultScope{
 				EffectiveLimit:     resourcelogs.DefaultMaxEntries,
+				Limit:              resourcelogs.DefaultMaxEntries,
 				ReturnedEntryCount: 0,
 				TruncationStatus:   resourcelogs.ScopeTruncationStatusNotApplicable,
 			},
@@ -6637,8 +6638,12 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 			},
 			ResultScope: &resourcelogs.ResultScope{
 				EffectiveLimit:       resourcelogs.DefaultMaxEntries,
+				Limit:                resourcelogs.DefaultMaxEntries,
 				ReturnedEntryCount:   2,
 				ReturnedCount:        2,
+				Returned:             2,
+				TotalEntryCount:      2,
+				Total:                2,
 				NewestEntryTimestamp: "2026-04-16T07:10:00Z",
 				OldestEntryTimestamp: "2026-04-16T07:09:00Z",
 				TruncationStatus:     resourcelogs.ScopeTruncationStatusNotTruncated,
@@ -6785,8 +6790,12 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		}
 		for key, want := range map[string]any{
 			"effectiveLimit":       float64(resourcelogs.DefaultMaxEntries),
+			"limit":                float64(resourcelogs.DefaultMaxEntries),
 			"returnedEntryCount":   float64(2),
 			"returnedCount":        float64(2),
+			"returned":             float64(2),
+			"totalEntryCount":      float64(2),
+			"total":                float64(2),
 			"newestEntryTimestamp": "2026-04-16T07:10:00Z",
 			"oldestEntryTimestamp": "2026-04-16T07:09:00Z",
 			"truncationStatus":     resourcelogs.ScopeTruncationStatusNotTruncated,
@@ -6808,6 +6817,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 			Entries:        []resourcelogs.Entry{},
 			ResultScope: &resourcelogs.ResultScope{
 				EffectiveLimit:     resourcelogs.DefaultMaxEntries,
+				Limit:              resourcelogs.DefaultMaxEntries,
 				ReturnedEntryCount: 0,
 				TruncationStatus:   resourcelogs.ScopeTruncationStatusNotTruncated,
 			},
@@ -7021,7 +7031,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		if got.ResultScope.RequestedLimit == nil || *got.ResultScope.RequestedLimit != 2 {
 			t.Fatalf("expected requestedLimit 2, got %+v", got.ResultScope)
 		}
-		if got.ResultScope.EffectiveLimit != 2 || got.ResultScope.ReturnedEntryCount != 2 || got.ResultScope.NewestEntryTimestamp != "2026-04-16T07:10:00Z" || got.ResultScope.OldestEntryTimestamp != "2026-04-16T07:09:00Z" || got.ResultScope.TruncationStatus != resourcelogs.ScopeTruncationStatusTruncated {
+		if got.ResultScope.EffectiveLimit != 2 || got.ResultScope.Limit != 2 || got.ResultScope.ReturnedEntryCount != 2 || got.ResultScope.Returned != 2 || got.ResultScope.TotalEntryCount != 3 || got.ResultScope.Total != 3 || got.ResultScope.NewestEntryTimestamp != "2026-04-16T07:10:00Z" || got.ResultScope.OldestEntryTimestamp != "2026-04-16T07:09:00Z" || got.ResultScope.TruncationStatus != resourcelogs.ScopeTruncationStatusTruncated {
 			t.Fatalf("unexpected limited resultScope: %+v", got.ResultScope)
 		}
 		if got.ResultScope.ReturnedCount != 2 || !got.ResultScope.Truncated {
@@ -7086,7 +7096,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		if got.ResultScope.RequestedLimit == nil || *got.ResultScope.RequestedLimit != 2 {
 			t.Fatalf("expected requestedLimit 2, got %+v", got.ResultScope)
 		}
-		if got.ResultScope.EffectiveLimit != 2 || got.ResultScope.ReturnedEntryCount != 2 || got.ResultScope.ReturnedCount != 2 || got.ResultScope.TruncationStatus != resourcelogs.ScopeTruncationStatusUnknown || got.ResultScope.Truncated {
+		if got.ResultScope.EffectiveLimit != 2 || got.ResultScope.Limit != 2 || got.ResultScope.ReturnedEntryCount != 2 || got.ResultScope.ReturnedCount != 2 || got.ResultScope.Returned != 2 || got.ResultScope.TotalEntryCount != 2 || got.ResultScope.Total != 2 || got.ResultScope.TruncationStatus != resourcelogs.ScopeTruncationStatusUnknown || got.ResultScope.Truncated {
 			t.Fatalf("expected exact-cap scope to report unknown total without truncation, got %+v", got.ResultScope)
 		}
 		if got.ResultScope.NewestEntryTimestamp != "2026-04-16T07:10:00Z" || got.ResultScope.OldestEntryTimestamp != "2026-04-16T07:09:00Z" {
@@ -7302,8 +7312,12 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 			}},
 			ResultScope: &resourcelogs.ResultScope{
 				EffectiveLimit:       resourcelogs.DefaultMaxEntries,
+				Limit:                resourcelogs.DefaultMaxEntries,
 				ReturnedEntryCount:   2,
 				ReturnedCount:        2,
+				Returned:             2,
+				TotalEntryCount:      2,
+				Total:                2,
 				NewestEntryTimestamp: "2026-04-16T07:11:45Z",
 				OldestEntryTimestamp: "2026-04-16T07:11:30Z",
 				TruncationStatus:     resourcelogs.ScopeTruncationStatusNotTruncated,

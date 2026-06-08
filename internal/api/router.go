@@ -289,6 +289,18 @@ func applyResourceLogLimit(result resourcelogs.Result, limit int) resourcelogs.R
 		effectiveLimit = limit
 		requested := limit
 		requestedLimit = &requested
+	} else if result.ResultScope != nil && result.ResultScope.EffectiveLimit > 0 {
+		effectiveLimit = result.ResultScope.EffectiveLimit
+		if result.ResultScope.RequestedLimit != nil {
+			requested := *result.ResultScope.RequestedLimit
+			requestedLimit = &requested
+		}
+	}
+
+	totalEntryCount := len(result.Entries)
+	if result.ResultScope != nil {
+		totalEntryCount = max(totalEntryCount, result.ResultScope.Total)
+		totalEntryCount = max(totalEntryCount, result.ResultScope.TotalEntryCount)
 	}
 
 	truncationStatus := resourcelogs.ScopeTruncationStatusNotApplicable
@@ -297,8 +309,17 @@ func applyResourceLogLimit(result resourcelogs.Result, limit int) resourcelogs.R
 		if effectiveLimit > 0 && len(result.Entries) > effectiveLimit {
 			result.Entries = append([]resourcelogs.Entry(nil), result.Entries[:effectiveLimit]...)
 			truncationStatus = resourcelogs.ScopeTruncationStatusTruncated
+			totalEntryCount = max(totalEntryCount, len(result.Entries))
+		} else if totalEntryCount > len(result.Entries) {
+			truncationStatus = resourcelogs.ScopeTruncationStatusTruncated
 		} else if effectiveLimit > 0 && len(result.Entries) == effectiveLimit {
-			truncationStatus = resourcelogs.ScopeTruncationStatusUnknown
+			if result.ResultScope != nil && result.ResultScope.TruncationStatus != "" {
+				truncationStatus = result.ResultScope.TruncationStatus
+			} else {
+				truncationStatus = resourcelogs.ScopeTruncationStatusUnknown
+			}
+		} else if result.ResultScope != nil && result.ResultScope.TruncationStatus != "" {
+			truncationStatus = result.ResultScope.TruncationStatus
 		}
 	}
 
@@ -306,8 +327,12 @@ func applyResourceLogLimit(result resourcelogs.Result, limit int) resourcelogs.R
 	result.ResultScope = &resourcelogs.ResultScope{
 		RequestedLimit:       requestedLimit,
 		EffectiveLimit:       effectiveLimit,
+		Limit:                effectiveLimit,
 		ReturnedEntryCount:   len(result.Entries),
 		ReturnedCount:        len(result.Entries),
+		Returned:             len(result.Entries),
+		TotalEntryCount:      totalEntryCount,
+		Total:                totalEntryCount,
 		NewestEntryTimestamp: newestEntryTimestamp,
 		OldestEntryTimestamp: oldestEntryTimestamp,
 		TruncationStatus:     truncationStatus,

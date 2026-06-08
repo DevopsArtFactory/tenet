@@ -1120,6 +1120,9 @@ no_log_source = production_listener_rule_resource_logs.get('resultScope')
 assert isinstance(no_log_source, dict), production_listener_rule_resource_logs
 assert no_log_source.get('returnedEntryCount') == 0, production_listener_rule_resource_logs
 assert no_log_source.get('returnedCount') == 0, production_listener_rule_resource_logs
+assert no_log_source.get('returned') == 0, production_listener_rule_resource_logs
+assert no_log_source.get('total') == 0, production_listener_rule_resource_logs
+assert no_log_source.get('limit') == no_log_source.get('effectiveLimit'), production_listener_rule_resource_logs
 assert no_log_source.get('truncationStatus') == 'not_applicable', production_listener_rule_resource_logs
 assert no_log_source.get('truncated') is False, production_listener_rule_resource_logs
 assert isinstance(production_listener_rule_resource_logs.get('lookupContext'), dict), production_listener_rule_resource_logs
@@ -1200,8 +1203,11 @@ worker_scope = worker_resource_logs.get('resultScope')
 assert isinstance(worker_scope, dict), worker_resource_logs
 assert 'requestedLimit' not in worker_scope, worker_resource_logs
 assert worker_scope.get('effectiveLimit') == 50, worker_resource_logs
+assert worker_scope.get('limit') == worker_scope.get('effectiveLimit'), worker_resource_logs
 assert worker_scope.get('returnedEntryCount') == len(worker_resource_logs.get('entries') or []), worker_resource_logs
 assert worker_scope.get('returnedCount') == len(worker_resource_logs.get('entries') or []), worker_resource_logs
+assert worker_scope.get('returned') == len(worker_resource_logs.get('entries') or []), worker_resource_logs
+assert isinstance(worker_scope.get('total'), int) and worker_scope.get('total') >= worker_scope.get('returned'), worker_resource_logs
 assert worker_scope.get('truncationStatus') in ('not_truncated', 'unknown', 'not_applicable'), worker_resource_logs
 assert worker_scope.get('truncated') is False, worker_resource_logs
 if worker_resource_logs['available']:
@@ -1220,8 +1226,11 @@ limited_scope = limited_worker_resource_logs.get('resultScope')
 assert isinstance(limited_scope, dict), limited_worker_resource_logs
 assert limited_scope.get('requestedLimit') == 1, limited_worker_resource_logs
 assert limited_scope.get('effectiveLimit') == 1, limited_worker_resource_logs
+assert limited_scope.get('limit') == 1, limited_worker_resource_logs
 assert limited_scope.get('returnedEntryCount') == len(limited_worker_resource_logs.get('entries') or []), limited_worker_resource_logs
 assert limited_scope.get('returnedCount') == len(limited_worker_resource_logs.get('entries') or []), limited_worker_resource_logs
+assert limited_scope.get('returned') == len(limited_worker_resource_logs.get('entries') or []), limited_worker_resource_logs
+assert isinstance(limited_scope.get('total'), int) and limited_scope.get('total') >= limited_scope.get('returned'), limited_worker_resource_logs
 assert limited_scope.get('truncationStatus') in ('truncated', 'not_truncated', 'unknown', 'not_applicable'), limited_worker_resource_logs
 assert limited_scope.get('truncated') == (limited_scope.get('truncationStatus') == 'truncated'), limited_worker_resource_logs
 if limited_worker_resource_logs['available']:
@@ -1239,7 +1248,10 @@ selected_worker_scope = selected_worker_resource_logs.get('resultScope')
 assert isinstance(selected_worker_scope, dict), selected_worker_resource_logs
 assert selected_worker_scope.get('requestedLimit') == 1, selected_worker_resource_logs
 assert selected_worker_scope.get('effectiveLimit') == 1, selected_worker_resource_logs
+assert selected_worker_scope.get('limit') == 1, selected_worker_resource_logs
 assert selected_worker_scope.get('returnedCount') == len(selected_worker_resource_logs.get('entries') or []), selected_worker_resource_logs
+assert selected_worker_scope.get('returned') == len(selected_worker_resource_logs.get('entries') or []), selected_worker_resource_logs
+assert isinstance(selected_worker_scope.get('total'), int) and selected_worker_scope.get('total') >= selected_worker_scope.get('returned'), selected_worker_resource_logs
 assert selected_worker_scope.get('truncated') == (selected_worker_scope.get('truncationStatus') == 'truncated'), selected_worker_resource_logs
 if selected_worker_resource_logs['available']:
     assert isinstance(selected_worker_resource_logs.get('source'), str), selected_worker_resource_logs
@@ -1264,8 +1276,11 @@ ecs_task_scope = ecs_task_resource_logs.get('resultScope')
 assert isinstance(ecs_task_scope, dict), ecs_task_resource_logs
 assert ecs_task_scope.get('requestedLimit') == 1, ecs_task_resource_logs
 assert ecs_task_scope.get('effectiveLimit') == 1, ecs_task_resource_logs
+assert ecs_task_scope.get('limit') == 1, ecs_task_resource_logs
 assert ecs_task_scope.get('returnedEntryCount') == len(ecs_task_resource_logs.get('entries') or []), ecs_task_resource_logs
 assert ecs_task_scope.get('returnedCount') == len(ecs_task_resource_logs.get('entries') or []), ecs_task_resource_logs
+assert ecs_task_scope.get('returned') == len(ecs_task_resource_logs.get('entries') or []), ecs_task_resource_logs
+assert isinstance(ecs_task_scope.get('total'), int) and ecs_task_scope.get('total') >= ecs_task_scope.get('returned'), ecs_task_resource_logs
 assert ecs_task_scope.get('truncationStatus') in ('truncated', 'not_truncated', 'unknown', 'not_applicable'), ecs_task_resource_logs
 assert ecs_task_scope.get('truncated') == (ecs_task_scope.get('truncationStatus') == 'truncated'), ecs_task_resource_logs
 if ecs_task_resource_logs['available']:
