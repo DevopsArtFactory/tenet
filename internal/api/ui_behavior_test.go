@@ -1810,12 +1810,13 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
 
 async function render(search, fetchImpl) {
   const document = createDocument();
-  const window = { location: { pathname: '/console', search, hash: '' } };
+  const clipboardWrites = [];
+  const window = { location: { pathname: '/console', search, hash: '' }, navigator: { clipboard: { writeText: (text) => { clipboardWrites.push(text); return Promise.resolve(); } } } };
   const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
   new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetchImpl, history, Element, InputElement);
   await settle();
   await settle();
-  return { document, window };
+  return { document, window, clipboardWrites };
 }
 
 (async () => {
@@ -1836,6 +1837,16 @@ async function render(search, fetchImpl) {
   if (!overviewLinks.find((node) => node.href === '/console?page=audit&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Audit log' && node.target === '_self')) {
     throw new Error('expected applications overview deployment-scoped audit link to preserve /console pathname');
   }
+  const overviewToolbarLinks = collectNodes(applicationsView.document.getElementById('toolbar'), (node) => node.tagName === 'A');
+  if (!overviewToolbarLinks.find((node) => node.href === '/v1/overview/applications' && node.textContent === 'Applications JSON' && node.target === '_blank' && node.rel === 'noreferrer noopener')) {
+    throw new Error('expected applications overview JSON link to remain available');
+  }
+  const overviewCopyButton = collectNodes(applicationsView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Copy read route');
+  if (!overviewCopyButton || overviewCopyButton.getAttribute('aria-label') !== 'Copy GET /v1/overview/applications') throw new Error('expected applications overview copy button');
+  overviewCopyButton.dispatch('click');
+  await settle();
+  if (applicationsView.clipboardWrites.join(', ') !== 'GET /v1/overview/applications') throw new Error('expected applications overview copy route, got ' + applicationsView.clipboardWrites.join(', '));
+  if (overviewCopyButton.textContent !== 'Copied') throw new Error('expected applications overview copy button success label');
 
   const accountView = await render('?page=account&accountId=210987654321&q=payments&sync=OutOfSync&account=210987654321', (url) => {
     if (url === '/v1/overview/accounts/210987654321') return Promise.resolve({ ok: true, json: () => Promise.resolve(accountDetail) });
@@ -1865,6 +1876,32 @@ async function render(search, fetchImpl) {
   if (!applicationLinks.find((node) => node.href === '/console?page=plan&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging' && node.textContent === 'Plan/apply' && node.target === '_self')) {
     throw new Error('expected application detail plan link to preserve /console pathname');
   }
+  const applicationToolbarLinks = collectNodes(applicationView.document.getElementById('toolbar'), (node) => node.tagName === 'A');
+  if (!applicationToolbarLinks.find((node) => node.href === '/v1/overview/applications/payments-api-staging' && node.textContent === 'Application JSON' && node.target === '_blank' && node.rel === 'noreferrer noopener')) {
+    throw new Error('expected application detail JSON link to remain available');
+  }
+  const applicationCopyButton = collectNodes(applicationView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Copy read route');
+  if (!applicationCopyButton || applicationCopyButton.getAttribute('aria-label') !== 'Copy GET /v1/overview/applications/payments-api-staging') throw new Error('expected application detail copy button');
+  applicationCopyButton.dispatch('click');
+  await settle();
+  if (applicationView.clipboardWrites.join(', ') !== 'GET /v1/overview/applications/payments-api-staging') throw new Error('expected application detail copy route, got ' + applicationView.clipboardWrites.join(', '));
+
+  const resourceID = 'ecsService::payments-api-staging-service::ECS service Tenet updates during CodeDeploy traffic shifting (style: linear)';
+  const resourceView = await render('?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(resourceID), (url) => {
+    if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(applicationDetail) });
+    if (url === '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service') return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, unavailableReason: 'local_no_provider' }) });
+    if (url === '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service') return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: false, unavailableReason: 'no_log_source', entries: [] }) });
+    throw new Error('unexpected resource fetch url: ' + url);
+  });
+  const resourceToolbarLinks = collectNodes(resourceView.document.getElementById('toolbar'), (node) => node.tagName === 'A');
+  if (!resourceToolbarLinks.find((node) => node.href === '/v1/overview/deployments/payments-api-staging' && node.textContent === 'Resource JSON' && node.target === '_blank' && node.rel === 'noreferrer noopener')) {
+    throw new Error('expected resource detail JSON link to remain available');
+  }
+  const resourceCopyButton = collectNodes(resourceView.document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON').find((node) => node.textContent === 'Copy read route');
+  if (!resourceCopyButton || resourceCopyButton.getAttribute('aria-label') !== 'Copy GET /v1/overview/deployments/payments-api-staging') throw new Error('expected resource detail copy button');
+  resourceCopyButton.dispatch('click');
+  await settle();
+  if (resourceView.clipboardWrites.join(', ') !== 'GET /v1/overview/deployments/payments-api-staging') throw new Error('expected resource detail copy route, got ' + resourceView.clipboardWrites.join(', '));
 })();
 `
 

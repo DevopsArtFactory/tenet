@@ -1485,6 +1485,9 @@ assert "['Last update', runtimeSummaryTimestamp(deployment.runtimeSummary)]" in 
 assert "container.append(createElement('strong', '', 'Runtime'));" in ui, ui
 assert 'Applications JSON' in ui, ui
 assert "createNavLink('/v1/overview/applications', 'Applications JSON')" in ui, ui
+assert 'Copy read route' in ui, ui
+assert "createCopyReadRouteButton(applicationsOverviewReadRoute())" in ui, ui
+assert "navigator.clipboard.writeText(routeText)" in ui, ui
 assert 'Workspace JSON' in ui, ui
 assert "const deploymentDetailJSONRoute = (deploymentName) => `/v1/overview/deployments/${encodeURIComponent(deploymentName || '')}`;" in ui, ui
 assert "createNavLink(deploymentDetailJSONRoute(deploymentName), 'Workspace JSON')" in ui, ui
@@ -2039,6 +2042,7 @@ assert "}).then(withApplicationDetailFetchedAt);" in application_ui, application
 assert 'Refresh application detail' in application_ui, application_ui
 assert 'Application JSON' in application_ui, application_ui
 assert "createNavLink(`/v1/overview/applications/${encodeURIComponent(applicationState?.detail?.name || currentPageState.deployment)}`, 'Application JSON')" in application_ui, application_ui
+assert "createCopyReadRouteButton(applicationDetailReadRoute(applicationState?.detail?.name || currentPageState.deployment))" in application_ui, application_ui
 assert 'Refreshing application detail from GET /v1/overview/applications/{deploymentName}…' in application_ui, application_ui
 assert 'Failed to refresh application detail:' in application_ui, application_ui
 assert "const renderApplicationDetailPage = (detail, applicationState = null) => {" in application_ui, application_ui
@@ -2099,6 +2103,7 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert 'Refresh resource detail' in body, body
     assert 'Resource JSON' in body, body
     assert "createNavLink(`/v1/overview/deployments/${encodeURIComponent(detail?.name || resourceState?.detail?.name || currentPageState.deployment)}`, 'Resource JSON')" in body, body
+    assert "createCopyReadRouteButton(resourceDetailReadRoute(detail?.name || resourceState?.detail?.name || currentPageState.deployment))" in body, body
     assert 'Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…' in body, body
     assert 'Current resource detail remains visible below.' in body, body
     assert 'Failed to refresh resource detail:' in body, body
