@@ -62,6 +62,8 @@
       .toolbar-button { border: 1px solid rgba(103,183,255,.24); background: rgba(103,183,255,.12); color: var(--blue); border-radius: 999px; padding: 10px 14px; font: inherit; font-weight: 700; cursor: pointer; }
       .toolbar-button:hover:not(:disabled) { background: rgba(103,183,255,.18); }
       .toolbar-button:disabled { cursor: not-allowed; opacity: .58; }
+      .copy-read-route { color: var(--text); border-color: rgba(255,255,255,.16); background: rgba(255,255,255,.06); }
+      .copy-read-route:hover:not(:disabled) { background: rgba(255,255,255,.1); }
       .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
       .card, .account { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 18px 40px rgba(0,0,0,0.24); }
       .card { padding: 18px; }
@@ -1773,6 +1775,36 @@
         link.rel = target === '_blank' ? 'noreferrer noopener' : '';
         return link;
       };
+      const copyReadRouteToClipboard = (routeText) => {
+        const navigator = window.navigator;
+        if (!navigator?.clipboard?.writeText) {
+          return Promise.reject(new Error('clipboard unavailable'));
+        }
+        return navigator.clipboard.writeText(routeText);
+      };
+      const createCopyReadRouteButton = (routeText) => {
+        if (!routeText) return null;
+        const button = createElement('button', 'toolbar-button copy-read-route', 'Copy read route');
+        button.type = 'button';
+        button.setAttribute('aria-label', `Copy ${routeText}`);
+        button.addEventListener('click', () => {
+          button.disabled = true;
+          copyReadRouteToClipboard(routeText)
+            .then(() => {
+              button.textContent = 'Copied';
+            })
+            .catch(() => {
+              button.textContent = 'Copy failed';
+            })
+            .finally(() => {
+              setTimeout(() => {
+                button.disabled = false;
+                button.textContent = 'Copy read route';
+              }, 1600);
+            });
+        });
+        return button;
+      };
       const createQuickNavChip = (text, ariaLabel) => {
         const chip = createElement('span', 'quick-nav-chip', text);
         if (ariaLabel) chip.setAttribute('aria-label', ariaLabel);
@@ -2714,6 +2746,7 @@
       const applicationsOverviewReadRoute = () => 'GET /v1/overview/applications';
       const createApplicationsOverviewActions = (overviewState = null) => [
         createNavLink('/v1/overview/applications', 'Applications JSON'),
+        createCopyReadRouteButton(applicationsOverviewReadRoute()),
         createRefreshButton(
           'Refresh applications overview',
           overviewState?.status === 'loading',
@@ -3178,6 +3211,7 @@
         (applicationState?.detail?.name || currentPageState.deployment)
           ? createNavLink(`/v1/overview/applications/${encodeURIComponent(applicationState?.detail?.name || currentPageState.deployment)}`, 'Application JSON')
           : null,
+        createCopyReadRouteButton(applicationDetailReadRoute(applicationState?.detail?.name || currentPageState.deployment)),
         createRefreshButton(
           'Refresh application detail',
           applicationState?.status === 'loading' || !(applicationState?.detail?.name || currentPageState.deployment),
@@ -3333,6 +3367,7 @@
         (detail?.name || resourceState?.detail?.name || currentPageState.deployment)
           ? createNavLink(`/v1/overview/deployments/${encodeURIComponent(detail?.name || resourceState?.detail?.name || currentPageState.deployment)}`, 'Resource JSON')
           : null,
+        createCopyReadRouteButton(resourceDetailReadRoute(detail?.name || resourceState?.detail?.name || currentPageState.deployment)),
         createRefreshButton(
           'Refresh resource detail',
           resourceState?.status === 'loading' || !(resourceState?.detail?.name || currentPageState.deployment),

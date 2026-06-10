@@ -3142,6 +3142,15 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"createNavLink('/v1/overview/applications', 'Applications JSON')\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert applications overview JSON route contract")
 	}
+	if !strings.Contains(text, "assert 'Copy read route' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains copy read route controls")
+	}
+	if !strings.Contains(text, "assert \"createCopyReadRouteButton(applicationsOverviewReadRoute())\" in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert applications overview copy route contract")
+	}
+	if !strings.Contains(text, "assert \"navigator.clipboard.writeText(routeText)\" in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert clipboard write contract")
+	}
 	if !strings.Contains(text, "assert 'Workspace JSON' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains workspace JSON handoff")
 	}
@@ -3181,6 +3190,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"createNavLink(`/v1/overview/applications/${encodeURIComponent(applicationState?.detail?.name || currentPageState.deployment)}`, 'Application JSON')\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application detail JSON route contract")
 	}
+	if !strings.Contains(text, "assert \"createCopyReadRouteButton(applicationDetailReadRoute(applicationState?.detail?.name || currentPageState.deployment))\" in application_ui, application_ui") {
+		t.Fatalf("expected smoke-local.sh to assert application detail copy route contract")
+	}
 	if !strings.Contains(text, "assert 'Grouped linked resources for the selected application. Open drift, plan/apply, or audit log from here before the final resource page.' in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains complete application workspace handoff copy")
 	}
@@ -3192,6 +3204,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	}
 	if !strings.Contains(text, "assert \"createNavLink(`/v1/overview/deployments/${encodeURIComponent(detail?.name || resourceState?.detail?.name || currentPageState.deployment)}`, 'Resource JSON')\" in body, body") {
 		t.Fatalf("expected smoke-local.sh to assert resource detail JSON route contract")
+	}
+	if !strings.Contains(text, "assert \"createCopyReadRouteButton(resourceDetailReadRoute(detail?.name || resourceState?.detail?.name || currentPageState.deployment))\" in body, body") {
+		t.Fatalf("expected smoke-local.sh to assert resource detail copy route contract")
 	}
 	if !strings.Contains(text, "assert 'Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…' in body, body") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains resource detail refresh loading copy")
