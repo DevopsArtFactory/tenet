@@ -1,13 +1,39 @@
 #!/bin/sh
 set -eu
 TARGET=/workspace/repo
+REPO_URL=${jsonencode(repo_url)}
+REPO_BRANCH=${jsonencode(repo_branch)}
+SYNC_INTERVAL=${sync_interval}
+
+if [ -n "$${TENET_REPO_SYNC_TOKEN:-}" ]; then
+  case "$REPO_URL" in
+    https://*) ;;
+    *)
+      echo "TENET_REPO_SYNC_TOKEN requires an https:// repo_url" >&2
+      exit 1
+      ;;
+  esac
+
+  GIT_ASKPASS=/tmp/tenet-git-askpass
+  cat >"$GIT_ASKPASS" <<'ASKPASS'
+#!/bin/sh
+case "$1" in
+  *Username*) printf '%s\n' x-access-token ;;
+  *Password*) printf '%s\n' "$TENET_REPO_SYNC_TOKEN" ;;
+  *) printf '\n' ;;
+esac
+ASKPASS
+  chmod 0700 "$GIT_ASKPASS"
+  export GIT_ASKPASS GIT_TERMINAL_PROMPT=0
+fi
+
 if [ ! -d "$TARGET/.git" ]; then
   rm -rf "$TARGET"
   mkdir -p "$(dirname "$TARGET")"
-  git clone --depth 1 --branch ${repo_branch} ${repo_url} "$TARGET"
+  git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$TARGET"
 fi
 while true; do
-  git -C "$TARGET" fetch --depth 1 origin ${repo_branch}
+  git -C "$TARGET" fetch --depth 1 origin "$REPO_BRANCH"
   git -C "$TARGET" reset --hard FETCH_HEAD
-  sleep ${sync_interval}
+  sleep "$SYNC_INTERVAL"
 done

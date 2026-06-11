@@ -17,9 +17,20 @@ variable "operator_cidr_blocks" {
 }
 
 variable "repo_url" {
-  description = "Git clone URL that the repo-sync sidecars keep mounted into both Tenet tasks. The shipped repo-sync path works out of the box only when this URL is anonymously readable, for example a public HTTPS clone URL. Private desired-state repo authentication is not wired into this module yet."
+  description = "Git clone URL that the repo-sync sidecars keep mounted into both Tenet tasks. Public HTTPS clone URLs work anonymously; private HTTPS repos can use repo_sync_token_secret_arn."
   type        = string
   default     = "https://github.com/DevopsArtFactory/tenet.git"
+}
+
+variable "repo_sync_token_secret_arn" {
+  description = "Optional AWS Secrets Manager secret ARN containing an HTTPS token for the repo-sync sidecars. Leave null to keep anonymous public clone behavior."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.repo_sync_token_secret_arn == null ? true : can(regex("^arn:[^:]+:secretsmanager:", var.repo_sync_token_secret_arn))
+    error_message = "repo_sync_token_secret_arn must be null or an AWS Secrets Manager secret ARN."
+  }
 }
 
 variable "repo_branch" {

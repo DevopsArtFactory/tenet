@@ -68,7 +68,7 @@ Tenet selects desired-state reads with `TENET_CATALOG_SOURCE`:
 - `filesystem` uses `TENET_REPO_ROOT` to point `tenet-api` and `tenet-controller` at the same checked-out repo or synced repo tree
 - `github` uses `TENET_CATALOG_GITHUB_*` so both services read the same desired-state manifests directly from GitHub in read-only mode
 
-The shipped Terraform/bootstrap path in this doc still uses repo-sync plus shared filesystem delivery today because that works for both services now. That repo-sync path works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL. Private desired-state repo authentication is not wired into this module yet.
+The shipped Terraform/bootstrap path in this doc still uses repo-sync plus shared filesystem delivery today because that works for both services now. Public HTTPS `repo_url` values work anonymously. Set `repo_sync_token_secret_arn` to an AWS Secrets Manager secret ARN when the filesystem-mode desired-state repo is private.
 
 ### 3. Runtime state store
 
@@ -359,7 +359,7 @@ That GitHub mode is read-only for desired state. Both `tenet-api` and `tenet-con
 
 ### 3. Choose desired-state delivery
 
-`tenet-api` and `tenet-controller` may either share the same checkout via `TENET_REPO_ROOT` or use the same read-only GitHub source envs above for desired-state reads. The shipped Terraform/bootstrap path still uses the shared checkout plus repo-sync pattern today. That repo-sync path works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL. Keep the local checkout when you want filesystem mode or when the API-side local-safe apply executor is enabled.
+`tenet-api` and `tenet-controller` may either share the same checkout via `TENET_REPO_ROOT` or use the same read-only GitHub source envs above for desired-state reads. The shipped Terraform/bootstrap path still uses the shared checkout plus repo-sync pattern today. Leave `repo_sync_token_secret_arn` unset for public repos; the repo-sync sidecars keep using anonymous HTTPS clone/fetch. Set `repo_sync_token_secret_arn` to an AWS Secrets Manager secret ARN when the filesystem-mode desired-state repo is private. Keep the local checkout when you want filesystem mode or when the API-side local-safe apply executor is enabled.
 
 If you use the shipped Terraform bootstrap, run this operator preflight on the same machine before `terraform apply`:
 - `terraform apply` builds and pushes the current local Tenet checkout from that machine, so run it from the repo checkout you intend to ship
@@ -367,8 +367,8 @@ If you use the shipped Terraform bootstrap, run this operator preflight on the s
 - Docker Buildx is installed and working locally
 - AWS CLI v2 is installed and your current shell has working AWS credentials for this deployment
 - verify that `repo_url` and `repo_branch` are reachable from the current machine before apply, for example `git ls-remote --heads <repo_url> <repo_branch>`
-- the shipped repo-sync path works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL
-- private desired-state repo authentication is not wired into this module yet
+- public HTTPS `repo_url` values work anonymously when `repo_sync_token_secret_arn` is unset
+- for a private HTTPS desired-state repo, store the repo token in AWS Secrets Manager and set `repo_sync_token_secret_arn` to that secret ARN
 
 ### 4. Add account manifests
 
@@ -478,7 +478,7 @@ Pick one practical pattern:
 - build a sidecar/init step that clones the repo into ephemeral task storage on startup
 - publish a repo snapshot artifact and unpack it into the task filesystem during deploy
 
-For a first ECS deployment, EFS plus a simple repo-sync job is the most straightforward long-lived option because both services can read the same tree without custom image rebuilds. In the shipped Terraform/bootstrap module, that repo-sync job works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL. Private desired-state repo authentication is not wired into this module yet.
+For a first ECS deployment, EFS plus a simple repo-sync job is the most straightforward long-lived option because both services can read the same tree without custom image rebuilds. In the shipped Terraform/bootstrap module, public HTTPS `repo_url` values work anonymously. Private HTTPS desired-state repos can use `repo_sync_token_secret_arn`, which injects a Secrets Manager-backed `TENET_REPO_SYNC_TOKEN` into the repo-sync sidecars only.
 
 #### IAM expectations
 

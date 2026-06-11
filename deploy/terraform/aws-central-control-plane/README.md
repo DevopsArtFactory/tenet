@@ -43,12 +43,16 @@ Run this checklist on the same machine that will run `terraform apply`:
 git ls-remote --heads <repo_url> <repo_branch>
 ```
 
-- the shipped repo-sync path works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL
-- private desired-state repo authentication is not wired into this module yet
+- public HTTPS `repo_url` values work anonymously when `repo_sync_token_secret_arn` is unset
+- for a private HTTPS desired-state repo, store the repo token in AWS Secrets Manager and set `repo_sync_token_secret_arn` to that secret ARN
 
 ## Repo-sync pattern
 
-Both `tenet-api` and `tenet-controller` now support `TENET_CATALOG_SOURCE=filesystem|github` for desired-state reads. This Terraform bootstrap intentionally chooses the filesystem path and sets `TENET_REPO_ROOT` because the shared repo-sync volume works for both services today. The shipped repo-sync path works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL. Private desired-state repo authentication is not wired into this module yet.
+Both `tenet-api` and `tenet-controller` now support `TENET_CATALOG_SOURCE=filesystem|github` for desired-state reads. This Terraform bootstrap intentionally chooses the filesystem path and sets `TENET_REPO_ROOT` because the shared repo-sync volume works for both services today. Public HTTPS `repo_url` values work anonymously, and private HTTPS desired-state repos can use the optional Secrets Manager token ARN described below.
+
+`repo_sync_token_secret_arn` is optional. Leave it unset for anonymously readable public HTTPS repos. When set, ECS injects the secret value as `TENET_REPO_SYNC_TOKEN` only into the two `repo-sync` sidecars, and the ECS execution role receives `secretsmanager:GetSecretValue` for that secret ARN.
+
+The repo-sync script keeps using the plain `repo_url` when no token is present, so public anonymous clones continue to work. When `TENET_REPO_SYNC_TOKEN` is present, the script requires an `https://` `repo_url` and supplies the token through Git's HTTPS credential prompt path instead of rewriting the configured repo URL.
 
 To satisfy that without introducing an external GitOps controller, each ECS task definition includes a lightweight `alpine/git` sidecar that:
 - clones `repo_url` into a shared task volume
@@ -116,7 +120,8 @@ A minimal target-account trust shape is:
 
 See `variables.tf`, but the main knobs are:
 - `name_prefix`
-- `repo_url` (an anonymously readable clone URL, such as a public HTTPS clone URL)
+- `repo_url` (public HTTPS works anonymously; private HTTPS can use `repo_sync_token_secret_arn`)
+- `repo_sync_token_secret_arn` (optional Secrets Manager ARN containing an HTTPS repo token for the repo-sync sidecars)
 - `repo_branch`
 - `image_tag`
 - `operator_cidr_blocks`
@@ -127,6 +132,7 @@ See `variables.tf`, but the main knobs are:
 ```hcl
 name_prefix          = "tenet-prod"
 repo_url             = "https://github.com/DevopsArtFactory/tenet.git"
+# repo_sync_token_secret_arn = "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:tenet/repo-sync-token-AbCdEf"
 repo_branch          = "main"
 image_tag            = "bootstrap"
 operator_cidr_blocks = ["203.0.113.10/32"]
@@ -135,8 +141,6 @@ observer_role_arns = [
   "arn:aws:iam::210987654322:role/TenetObserverRole"
 ]
 ```
-
-The shipped repo-sync path works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL. Private desired-state repo authentication is not wired into this module yet.
 
 ## Verification after apply
 

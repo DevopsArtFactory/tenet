@@ -18,6 +18,12 @@ locals {
     repo_branch   = var.repo_branch
     sync_interval = var.repo_sync_interval_seconds
   })
+  repo_sync_token_secrets = var.repo_sync_token_secret_arn == null ? [] : [
+    {
+      name      = "TENET_REPO_SYNC_TOKEN"
+      valueFrom = var.repo_sync_token_secret_arn
+    }
+  ]
 
   api_start_command = templatefile("${path.module}/templates/start-api.sh.tftpl", {
     api_request_timeout = var.api_request_timeout
@@ -29,28 +35,33 @@ locals {
   })
 
   api_container_definitions = jsonencode([
-    {
-      name       = "repo-sync"
-      image      = "public.ecr.aws/docker/library/alpine/git:2.47.2"
-      essential  = true
-      entryPoint = ["/bin/sh", "-lc"]
-      command    = [local.repo_sync_command]
-      mountPoints = [
-        {
-          sourceVolume  = "repo"
-          containerPath = "/workspace/repo"
-          readOnly      = false
+    merge(
+      {
+        name       = "repo-sync"
+        image      = "public.ecr.aws/docker/library/alpine/git:2.47.2"
+        essential  = true
+        entryPoint = ["/bin/sh", "-lc"]
+        command    = [local.repo_sync_command]
+        mountPoints = [
+          {
+            sourceVolume  = "repo"
+            containerPath = "/workspace/repo"
+            readOnly      = false
+          }
+        ]
+        logConfiguration = {
+          logDriver = "awslogs"
+          options = {
+            awslogs-group         = aws_cloudwatch_log_group.api.name
+            awslogs-region        = data.aws_region.current.name
+            awslogs-stream-prefix = "repo-sync"
+          }
         }
-      ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.api.name
-          awslogs-region        = data.aws_region.current.name
-          awslogs-stream-prefix = "repo-sync"
-        }
+      },
+      length(local.repo_sync_token_secrets) == 0 ? {} : {
+        secrets = local.repo_sync_token_secrets
       }
-    },
+    ),
     {
       name       = "tenet-api"
       image      = local.image_uri
@@ -99,28 +110,33 @@ locals {
   ])
 
   controller_container_definitions = jsonencode([
-    {
-      name       = "repo-sync"
-      image      = "public.ecr.aws/docker/library/alpine/git:2.47.2"
-      essential  = true
-      entryPoint = ["/bin/sh", "-lc"]
-      command    = [local.repo_sync_command]
-      mountPoints = [
-        {
-          sourceVolume  = "repo"
-          containerPath = "/workspace/repo"
-          readOnly      = false
+    merge(
+      {
+        name       = "repo-sync"
+        image      = "public.ecr.aws/docker/library/alpine/git:2.47.2"
+        essential  = true
+        entryPoint = ["/bin/sh", "-lc"]
+        command    = [local.repo_sync_command]
+        mountPoints = [
+          {
+            sourceVolume  = "repo"
+            containerPath = "/workspace/repo"
+            readOnly      = false
+          }
+        ]
+        logConfiguration = {
+          logDriver = "awslogs"
+          options = {
+            awslogs-group         = aws_cloudwatch_log_group.controller.name
+            awslogs-region        = data.aws_region.current.name
+            awslogs-stream-prefix = "repo-sync"
+          }
         }
-      ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.controller.name
-          awslogs-region        = data.aws_region.current.name
-          awslogs-stream-prefix = "repo-sync"
-        }
+      },
+      length(local.repo_sync_token_secrets) == 0 ? {} : {
+        secrets = local.repo_sync_token_secrets
       }
-    },
+    ),
     {
       name       = "tenet-controller"
       image      = local.image_uri
@@ -475,6 +491,22 @@ resource "aws_iam_role_policy_attachment" "execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+resource "aws_iam_role_policy" "execution_repo_sync_secret" {
+  count = var.repo_sync_token_secret_arn == null ? 0 : 1
+
+  name = "${var.name_prefix}-repo-sync-secret"
+  role = aws_iam_role.execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = var.repo_sync_token_secret_arn
+    }]
+  })
+}
+
 resource "aws_iam_role" "runtime" {
   name = "${var.name_prefix}-runtime"
 
@@ -574,7 +606,7 @@ resource "aws_ecs_task_definition" "api" {
 
   container_definitions = local.api_container_definitions
 
-  depends_on = [terraform_data.image_build, aws_iam_role_policy_attachment.execution, aws_iam_role_policy_attachment.runtime_read_only, aws_efs_mount_target.state]
+  depends_on = [terraform_data.image_build, aws_iam_role_policy_attachment.execution, aws_iam_role_policy_attachment.runtime_read_only, aws_iam_role_policy.execution_repo_sync_secret, aws_efs_mount_target.state]
 
   tags = local.common_tags
 }
@@ -598,7 +630,7 @@ resource "aws_ecs_task_definition" "controller" {
 
   container_definitions = local.controller_container_definitions
 
-  depends_on = [terraform_data.image_build, aws_iam_role_policy_attachment.execution, aws_iam_role_policy_attachment.runtime_read_only]
+  depends_on = [terraform_data.image_build, aws_iam_role_policy_attachment.execution, aws_iam_role_policy_attachment.runtime_read_only, aws_iam_role_policy.execution_repo_sync_secret]
 
   tags = local.common_tags
 }
