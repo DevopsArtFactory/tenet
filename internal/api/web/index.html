@@ -2939,6 +2939,9 @@
       const renderApplicationsEmptyState = (visibleApplications, sourceApplications) => {
         const root = document.getElementById('accounts');
         const empty = createElement('div', 'empty');
+        empty.setAttribute('role', 'status');
+        empty.setAttribute('aria-live', 'polite');
+        empty.setAttribute('aria-atomic', 'true');
         const active = applicationsFilterLabels(sourceApplications, currentViewState);
         if (sourceApplications.length && active.length && !visibleApplications.length) {
           const clearButton = createElement('button', 'toolbar-button', 'Clear filters');
@@ -4557,6 +4560,9 @@
       };
       const renderEmptyState = (message) => {
         const empty = createElement('div', 'empty', message);
+        empty.setAttribute('role', 'status');
+        empty.setAttribute('aria-live', 'polite');
+        empty.setAttribute('aria-atomic', 'true');
         document.getElementById('accounts').replaceChildren(empty);
       };
       const embeddedPageTitle = (page) => {
