@@ -2046,6 +2046,7 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
         "const createResourceDetailActions = (resourceState = null, detail = null, resource = null) => [",
         "Resource JSON",
         "createNavLink(`/v1/overview/deployments/${encodeURIComponent(detail?.name || resourceState?.detail?.name || currentPageState.deployment)}`, 'Resource JSON')",
+        "workspace-callout-factors resource-read-route",
         "Current resource read: ${resourceDetailReadRoute(deploymentName)}.",
         "Refresh resource detail",
         "Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…",
