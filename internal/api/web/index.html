@@ -3537,6 +3537,15 @@
             return 'Not loaded yet';
         }
       };
+      const resourceTroubleshootingFreshnessPart = (label, state) => {
+        if (state?.status !== 'ready') return `${label} not refreshed yet`;
+        const fetchedAt = resourcePanelFetchedAtText(state.result);
+        return fetchedAt ? `${label} refreshed ${fetchedAt}` : `${label} not refreshed yet`;
+      };
+      const resourceTroubleshootingFreshness = (states) => [
+        resourceTroubleshootingFreshnessPart('Recent logs', states.logsState),
+        resourceTroubleshootingFreshnessPart('Live inspection', states.inspectionState),
+      ].join(' · ');
       const resourceTroubleshootingReasonLabel = (reason, fallback = 'unavailable') => {
         switch (reason) {
           case 'aws_unavailable':
@@ -3620,6 +3629,7 @@
           ['Current step', metricValue(detail?.rollout?.currentStep || detail?.runtimeSummary?.currentStep)],
           ['Recent logs', resourceTroubleshootingState(states.logsState, resourceTroubleshootingLogsLabel)],
           ['Live inspection', resourceTroubleshootingState(states.inspectionState, resourceTroubleshootingInspectionLabel)],
+          ['Evidence freshness', resourceTroubleshootingFreshness(states)],
           ['Next check', resourceTroubleshootingNextCheck(states)],
         ];
         summaryRows.forEach(([label, value]) => summaryGrid.append(createMetric(label, value, label === 'Next check' ? 'summary' : '')));

@@ -7886,6 +7886,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Target account ID') || !text.includes('210987654321')) throw new Error('expected recent logs provider lookup context to include target account');
   if (!text.includes('Observer role configured') || !text.includes('True')) throw new Error('expected recent logs provider lookup context to include observer role status');
   if (!text.includes('Failed to load live inspection: resource inspection request failed (503)')) throw new Error('expected initial live inspection error state before refresh');
+  if (!text.match(/Evidence freshness \| Recent logs refreshed .+ · Live inspection not refreshed yet/)) throw new Error('expected troubleshooting summary to surface only completed evidence freshness after initial reads: ' + text);
 
   refreshLogs.dispatch('click');
   await settle(1);
@@ -7909,6 +7910,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   text = collectText(root).join(' | ');
   if (!text.includes('Updated recent log line')) throw new Error('expected recent-logs refresh to render fresh payload');
   if (text.includes('Initial recent log line')) throw new Error('expected recent-logs refresh to replace stale payload');
+  if (!text.match(/Evidence freshness \| Recent logs refreshed .+ · Live inspection not refreshed yet/)) throw new Error('expected recent-logs refresh to update summary freshness without inventing failed inspection freshness: ' + text);
 
   buttons = collectNodes(root, (node) => node.tagName === 'BUTTON');
   refreshLogs = buttons.find((node) => node.textContent === 'Refresh recent logs');
@@ -7949,6 +7951,7 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   if (!text.includes('Service name')) throw new Error('expected refreshed live inspection payload to render supported fields');
   if (!text.includes('payments-api-staging-service')) throw new Error('expected refreshed live inspection payload to render service name');
   if (!text.includes('Service reached steady state again')) throw new Error('expected refreshed live inspection payload to render fresh event text');
+  if (!text.match(/Evidence freshness \| Recent logs refreshed .+ · Live inspection refreshed .+/)) throw new Error('expected troubleshooting summary to show both completed evidence freshness values after live inspection refresh: ' + text);
   if (collectText(root).filter((value) => value === 'Provider lookup context').length !== 2) throw new Error('expected recent logs and live inspection to label returned provider lookup context');
   if (!text.includes('Inspection path · ap-northeast-2 · account 210987654321 · same-account lookup · observer role configured')) throw new Error('expected live inspection provider lookup context summary');
   if (text.includes('Failed to load live inspection: resource inspection request failed (503)')) throw new Error('expected refreshed live inspection payload to replace stale error state');
@@ -8141,6 +8144,7 @@ async function renderResource(logPayload, inspectionPayload) {
   if (!emptyText.includes('Derived from selected deployment/resource context plus the latest Live inspection and Recent logs panel results.')) throw new Error('expected derived-summary explanation');
   if (!emptySummaryText.includes('Selected lookup scope | Selected instance · i-0abc123def4567890 · Selected container · app · Selected cluster · arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-prod')) throw new Error('expected selected lookup scope in resource troubleshooting summary: ' + emptySummaryText);
   if (!emptyText.includes('Recent logs | Empty · no log rows · cloudwatch')) throw new Error('expected successful empty recent-log summary state: ' + emptyText);
+  if (!emptyText.match(/Evidence freshness \| Recent logs refreshed .+ · Live inspection refreshed .+/)) throw new Error('expected successful empty evidence reads to surface freshness in summary: ' + emptyText);
   if (emptyText.includes('Recent logs | Empty · no_recent_events')) throw new Error('expected summary to hide raw empty recent-log reason code: ' + emptyText);
   if (!emptyText.includes('Live inspection | Available · ecs_service')) throw new Error('expected available live-inspection summary state: ' + emptyText);
   if (!emptyText.includes('Next check | Recent logs returned no rows in the selected window; increase the log cap or refresh after deployment activity before treating logs as absent.')) throw new Error('expected empty-log next-step guidance: ' + emptyText);
@@ -8163,6 +8167,7 @@ async function renderResource(logPayload, inspectionPayload) {
   const unavailableText = unavailableRun.accountsText;
   if (!unavailableText.includes('Recent logs | Unavailable · Cross-account observer role missing')) throw new Error('expected cross-account unavailable recent-log summary state: ' + unavailableText);
   if (!unavailableText.includes('Live inspection | Unavailable · AWS access unavailable')) throw new Error('expected AWS-unavailable inspection summary state: ' + unavailableText);
+  if (!unavailableText.match(/Evidence freshness \| Recent logs refreshed .+ · Live inspection refreshed .+/)) throw new Error('expected completed unavailable evidence reads to still surface freshness in summary: ' + unavailableText);
   if (!unavailableText.includes('Next check | Cross-account observer role wiring is missing for this resource evidence lookup; configure the observer role, then refresh Recent logs and Live inspection.')) throw new Error('expected cross-account next-step guidance: ' + unavailableText);
 })();
 `
