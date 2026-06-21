@@ -148,6 +148,15 @@ func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 		}
 	}
 
+	for _, fragment := range []string{
+		"log and inspection caps stay bookmarkable as `resourceLogLimit=` and `resourceInspectionLimit=` UI state",
+		"positive caps are sent only to the matching lazy `resource-logs` or `resource-inspection` read as backend `limit=` query parameters",
+	} {
+		if !strings.Contains(readmeText, fragment) {
+			t.Fatalf("expected README to include resource-page cap state summary %q", fragment)
+		}
+	}
+
 	overviewUIText := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
 	for _, fragment := range []string{
 		"The application-detail linked-resource filter is a client-side, bookmarkable `resourceFilter` query parameter",

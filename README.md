@@ -195,6 +195,7 @@ Primary operator APIs:
   `truncated`)
 
 Resource drill-down Recent logs and Live inspection panels label returned `lookupContext` as `Provider lookup context`; Recent logs renders that path in a compact card so operators can confirm the region/account/observer-role path before troubleshooting unavailable AWS reads.
+In the embedded resource page, log and inspection caps stay bookmarkable as `resourceLogLimit=` and `resourceInspectionLimit=` UI state; positive caps are sent only to the matching lazy `resource-logs` or `resource-inspection` read as backend `limit=` query parameters.
 Capture the HTTP `Request-Id` response header with that lookup context when escalating a failed or unavailable Recent logs or Live inspection read; the embedded Recent logs and Live inspection cards label the same value as `Tenet request ID` metadata so reviewers can match the payload to Tenet's structured request logs.
 Auto Scaling Group Live inspection can also render optional
 `autoScalingGroup.scalingActivities[]` evidence as `Recent scaling activities`
