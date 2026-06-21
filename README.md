@@ -163,8 +163,9 @@ drill-down keeps its `Refresh account detail` action in the page toolbar so
 operators can refresh account-scoped rows from the same place they refresh
 application detail pages. Application detail pages show the exact backing read route,
 `Application JSON`, `Copy read route`, and a lightweight `resourceFilter=` search
-for grouped linked resources while rollout/history/log evidence stays on the final
-resource page. The drift and plan workspaces show `Current workspace read: GET /v1/overview/deployments/{deploymentName}.`
+for grouped linked resources with an inline `Clear resource filter` action whenever
+that filter is active, while rollout/history/log evidence stays on the final resource
+page. The drift and plan workspaces show `Current workspace read: GET /v1/overview/deployments/{deploymentName}.`
 in their chrome and include a top-level `Workspace JSON` handoff to that
 deployment-detail read model.
 
