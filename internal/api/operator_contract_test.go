@@ -79,14 +79,16 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 		"docs/architecture/tenet-v1-aws-central-control-plane.md",
 		"docs/features/overview-dashboard.md",
 	}
+	redactedPlaceholder := strings.Repeat("*", 3)
 	for _, path := range docPaths {
 		doc := readRepoFile(t, path)
-		for _, placeholder := range []string{
-			"TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
-			"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
-			"TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=***",
-			"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***",
+		for _, toggle := range []string{
+			"TENET_API_TRUST_AUTHENTICATED_HEADERS",
+			"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY",
+			"TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION",
+			"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION",
 		} {
+			placeholder := toggle + "=" + redactedPlaceholder
 			if strings.Contains(doc, placeholder) {
 				t.Fatalf("expected %s to use operator-readable boolean examples instead of placeholder %q", path, placeholder)
 			}
@@ -1329,11 +1331,12 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 			t.Fatalf("expected smoke-docker front-door auth contract to include %q", fragment)
 		}
 	}
+	redactedPlaceholder := strings.Repeat("*", 3)
 	for _, forbidden := range []string{
-		`TENET_API_TRUST_AUTHENTICATED_HEADERS=*** \`,
-		`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=*** \`,
-		`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=*** \`,
-		`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=*** \`,
+		"TENET_API_TRUST_AUTHENTICATED_HEADERS=" + redactedPlaceholder + " \\",
+		"TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=" + redactedPlaceholder + " \\",
+		"TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=" + redactedPlaceholder + " \\",
+		"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=" + redactedPlaceholder + " \\",
 	} {
 		if strings.Contains(dockerSmoke, forbidden) {
 			t.Fatalf("expected smoke-docker front-door auth contract to reject %q", forbidden)
@@ -1495,11 +1498,12 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 			t.Fatalf("expected local runtime doc front-door auth contract to include %q", fragment)
 		}
 	}
+	redactedPlaceholder = strings.Repeat("*", 3)
 	for _, forbidden := range []string{
-		"`TENET_API_TRUST_AUTHENTICATED_HEADERS=***",
-		"`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=***",
-		"`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=***",
-		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***",
+		"`TENET_API_TRUST_AUTHENTICATED_HEADERS=" + redactedPlaceholder + "`",
+		"`TENET_API_ENFORCE_AUTHENTICATED_IDENTITY=" + redactedPlaceholder + "`",
+		"`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=" + redactedPlaceholder + "`",
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=" + redactedPlaceholder + "`",
 	} {
 		if strings.Contains(localRuntimeDoc, forbidden) {
 			t.Fatalf("expected local runtime doc front-door auth contract to reject %q", forbidden)
@@ -1547,8 +1551,8 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 		}
 	}
 	for _, forbidden := range []string{
-		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***",
-		"`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=***",
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=" + redactedPlaceholder + "`",
+		"`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=" + redactedPlaceholder + "`",
 		"the raw status collection now requires",
 		"Stated directly: the raw status detail route now follows",
 	} {
@@ -1561,8 +1565,8 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		"`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true`",
 		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`",
-		"`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION`",
-		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION`",
+		"`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true`",
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`",
 		"`X-Tenet-Authenticated-Roles`",
 		"`X-Tenet-Authorized-Deployments`",
 		"`GET /v1/plans/{planId}`",
@@ -1591,9 +1595,10 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 			t.Fatalf("expected overview feature doc front-door auth contract to include %q", fragment)
 		}
 	}
+	redactedPlaceholder = strings.Repeat("*", 3)
 	for _, forbidden := range []string{
-		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=***`",
-		"`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=***`",
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=" + redactedPlaceholder + "`",
+		"`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=" + redactedPlaceholder + "`",
 	} {
 		if strings.Contains(overviewFeatureDoc, forbidden) {
 			t.Fatalf("expected overview feature doc front-door auth contract to reject %q", forbidden)
@@ -1602,7 +1607,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 
 	overviewUIDoc := readRepoFile(t, "docs/architecture/tenet-v1-overview-ui.md")
 	for _, fragment := range []string{
-		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION`",
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`",
 		"`X-Tenet-Authorized-Deployments`",
 		"`GET /v1/plans/{planId}`",
 		"`GET /v1/applies/{applyId}`",
@@ -1622,7 +1627,7 @@ func TestFrontDoorAuthOperatorContract(t *testing.T) {
 	}
 	for _, forbidden := range []string{
 		"compatibility fragments for current string-contract tests",
-		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` `TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true`",
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=" + redactedPlaceholder + "` `TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=" + redactedPlaceholder + "`",
 	} {
 		if strings.Contains(overviewUIDoc, forbidden) {
 			t.Fatalf("expected overview UI doc to keep operator-facing prose instead of compatibility-only fragment %q", forbidden)
