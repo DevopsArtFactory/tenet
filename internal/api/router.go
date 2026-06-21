@@ -137,10 +137,22 @@ func validECSClusterARN(clusterARN string) bool {
 	if len(parts) != 6 {
 		return false
 	}
-	if parts[0] != "arn" || parts[1] == "" || parts[2] != "ecs" || parts[3] == "" || parts[4] == "" {
+	if parts[0] != "arn" || parts[1] == "" || parts[2] != "ecs" || parts[3] == "" || !validAWSAccountID(parts[4]) {
 		return false
 	}
 	return strings.HasPrefix(parts[5], "cluster/") && strings.TrimSpace(strings.TrimPrefix(parts[5], "cluster/")) != ""
+}
+
+func validAWSAccountID(accountID string) bool {
+	if len(accountID) != 12 {
+		return false
+	}
+	for _, r := range accountID {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func parseOptionalECSClusterARN(w http.ResponseWriter, r *http.Request) (string, bool) {
