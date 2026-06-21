@@ -88,6 +88,50 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 	}
 }
 
+func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
+	readmeText := readTextFile(t, "../README.md")
+	overviewText := readTextFile(t, "architecture/tenet-v1-overview.md")
+	overviewUIText := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
+	contractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
+	featureText := readTextFile(t, "features/resource-inspection.md")
+
+	for _, fragment := range []string{
+		"`docs/features/resource-inspection.md` documents live resource inspection selectors, lookup context, and bounded sample metadata.",
+		"`docs/features/resource-recent-logs.md` documents recent-log resource contracts.",
+	} {
+		if !strings.Contains(readmeText, fragment) {
+			t.Fatalf("expected README documentation map to include %q", fragment)
+		}
+	}
+
+	for _, doc := range []struct {
+		name string
+		text string
+	}{
+		{name: "overview", text: overviewText},
+		{name: "overview UI", text: overviewUIText},
+		{name: "operator contracts", text: contractsText},
+	} {
+		if !strings.Contains(doc.text, "docs/features/resource-inspection.md") {
+			t.Fatalf("expected %s docs map to link resource inspection guide", doc.name)
+		}
+	}
+
+	for _, fragment := range []string{
+		"GET /v1/overview/deployments/{deploymentName}/resource-inspection",
+		"`clusterArn`",
+		"`limit`",
+		"`instanceId`",
+		"`lookupContext`",
+		"`unavailableReason`",
+		"`resultScope`",
+	} {
+		if !strings.Contains(featureText, fragment) {
+			t.Fatalf("expected resource inspection guide to include %q", fragment)
+		}
+	}
+}
+
 func readTextFile(t *testing.T, path string) string {
 	t.Helper()
 

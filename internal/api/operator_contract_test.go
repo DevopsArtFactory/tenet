@@ -2226,7 +2226,7 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 
 	readme := readRepoFile(t, "README.md")
 	for _, fragment := range []string{
-		"`GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}[&clusterArn={ecsClusterArn}][&limit={positiveInteger}]`",
+		"`GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}[&clusterArn={ecsClusterArn}][&limit={positiveInteger}][&instanceId={ec2InstanceId}]`",
 		"the route requires a concrete resource type/name",
 	} {
 		if !strings.Contains(readme, fragment) {
