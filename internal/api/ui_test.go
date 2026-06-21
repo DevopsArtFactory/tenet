@@ -510,6 +510,8 @@ func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
 		"const resourceTroubleshootingSummaryByResourceKey = new Map();",
 		"const renderResourceTroubleshootingSummary = (section, detail, resource) => {",
 		"Derived from selected deployment/resource context plus the latest Live inspection and Recent logs panel results.",
+		"const selectedLookupScope = selectedResourceScopeText(resource);",
+		"...(selectedLookupScope ? [['Selected lookup scope', selectedLookupScope]] : []),",
 		"resourceTroubleshootingState(states.logsState, resourceTroubleshootingLogsLabel)",
 		"resourceTroubleshootingState(states.inspectionState, resourceTroubleshootingInspectionLabel)",
 		"refreshResourceTroubleshootingSummary(deploymentName, resource);",

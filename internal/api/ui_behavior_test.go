@@ -8054,6 +8054,7 @@ class Document {
   querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
 }
 const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
 async function settle(count = 1) { for (let i = 0; i < count; i += 1) { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); } }
 async function renderResource(logPayload, inspectionPayload) {
   const document = new Document();
@@ -8061,20 +8062,25 @@ async function renderResource(logPayload, inspectionPayload) {
   document.byID.set('summary', document.createElement('section'));
   document.byID.set('accounts', document.createElement('section'));
   const resourceID = 'ecsService::payments-api-staging-service::Primary ECS service';
-  const window = { location: { pathname: '/', search: '?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(resourceID), hash: '' } };
+  const selectedContainer = 'app';
+  const selectedInstance = 'i-0abc123def4567890';
+  const selectedCluster = 'arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-prod';
+  const window = { location: { pathname: '/', search: '?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(resourceID) + '&containerName=' + encodeURIComponent(selectedContainer) + '&instanceId=' + encodeURIComponent(selectedInstance) + '&clusterArn=' + encodeURIComponent(selectedCluster), hash: '' } };
   const history = { replaceState(_state, _title, url) { const [pathAndQuery, hash = ''] = String(url).split('#'); const [pathname, query = ''] = pathAndQuery.split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; window.location.hash = hash ? '#' + hash : ''; } };
   const fetch = (url) => {
     if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
-    if (url === '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service') return Promise.resolve({ ok: true, json: () => Promise.resolve(logPayload) });
-    if (url === '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve(inspectionPayload) });
+    if (url === '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service&containerName=app&instanceId=i-0abc123def4567890&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-prod') return Promise.resolve({ ok: true, json: () => Promise.resolve(logPayload) });
+    if (url === '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&instanceId=i-0abc123def4567890&clusterArn=arn%3Aaws%3Aecs%3Aap-northeast-2%3A210987654321%3Acluster%2Fpayments-prod&limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve(inspectionPayload) });
     throw new Error('unexpected fetch url: ' + url);
   };
   new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
   await settle(4);
-  return collectText(document.getElementById('accounts')).join(' | ');
+  const accounts = document.getElementById('accounts');
+  const troubleshootingSummary = collectNodes(accounts, (node) => node.id === 'resource-troubleshooting-summary')[0];
+  return { accountsText: collectText(accounts).join(' | '), summaryText: collectText(troubleshootingSummary).join(' | ') };
 }
 (async () => {
-  const emptyText = await renderResource(
+  const emptyRun = await renderResource(
     {
       available: true,
       source: 'cloudwatch',
@@ -8090,14 +8096,17 @@ async function renderResource(logPayload, inspectionPayload) {
       ecsService: { serviceName: 'payments-api-staging-service', status: 'ACTIVE', desiredCount: 2, runningCount: 2, pendingCount: 0, deployments: [], events: [] },
     },
   );
+  const emptyText = emptyRun.accountsText;
+  const emptySummaryText = emptyRun.summaryText;
   if (!emptyText.includes('Troubleshooting summary')) throw new Error('expected resource troubleshooting summary heading');
   if (!emptyText.includes('Derived from selected deployment/resource context plus the latest Live inspection and Recent logs panel results.')) throw new Error('expected derived-summary explanation');
+  if (!emptySummaryText.includes('Selected lookup scope | Selected instance · i-0abc123def4567890 · Selected container · app · Selected cluster · arn:aws:ecs:ap-northeast-2:210987654321:cluster/payments-prod')) throw new Error('expected selected lookup scope in resource troubleshooting summary: ' + emptySummaryText);
   if (!emptyText.includes('Recent logs | Empty · no log rows · cloudwatch')) throw new Error('expected successful empty recent-log summary state: ' + emptyText);
   if (emptyText.includes('Recent logs | Empty · no_recent_events')) throw new Error('expected summary to hide raw empty recent-log reason code: ' + emptyText);
   if (!emptyText.includes('Live inspection | Available · ecs_service')) throw new Error('expected available live-inspection summary state: ' + emptyText);
   if (!emptyText.includes('Next check | Recent logs returned no rows in the selected window; increase the log cap or refresh after deployment activity before treating logs as absent.')) throw new Error('expected empty-log next-step guidance: ' + emptyText);
 
-  const unavailableText = await renderResource(
+  const unavailableRun = await renderResource(
     {
       available: false,
       source: '',
@@ -8112,6 +8121,7 @@ async function renderResource(logPayload, inspectionPayload) {
       lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true },
     },
   );
+  const unavailableText = unavailableRun.accountsText;
   if (!unavailableText.includes('Recent logs | Unavailable · Cross-account observer role missing')) throw new Error('expected cross-account unavailable recent-log summary state: ' + unavailableText);
   if (!unavailableText.includes('Live inspection | Unavailable · AWS access unavailable')) throw new Error('expected AWS-unavailable inspection summary state: ' + unavailableText);
   if (!unavailableText.includes('Next check | Cross-account observer role wiring is missing for this resource evidence lookup; configure the observer role, then refresh Recent logs and Live inspection.')) throw new Error('expected cross-account next-step guidance: ' + unavailableText);
