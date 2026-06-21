@@ -198,6 +198,57 @@ func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 	}
 }
 
+func TestResourceDetailTroubleshootingSummaryDocsContract(t *testing.T) {
+	readmeText := readTextFile(t, "../README.md")
+	for _, fragment := range []string{
+		"The bookmarkable resource page (`/?page=resource...`)",
+		"compact `Troubleshooting summary`",
+		"selected lookup scope (`containerName`, `clusterArn`, or `instanceId`)",
+		"latest lazy Recent logs and Live inspection panel states",
+		"empty-log and unavailable-provider next-step guidance",
+	} {
+		if !strings.Contains(readmeText, fragment) {
+			t.Fatalf("expected README to include resource-detail troubleshooting summary contract %q", fragment)
+		}
+	}
+
+	overviewUIText := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
+	for _, fragment := range []string{
+		"The resource-detail Troubleshooting summary is a derived UI contract, not a separate API read.",
+		"latest completed Live inspection state and the latest completed Recent logs panel state",
+		"selected lookup scope (`containerName`, `clusterArn`, or `instanceId`)",
+		"Current resource read: GET /v1/overview/deployments/{deploymentName}",
+	} {
+		if !strings.Contains(overviewUIText, fragment) {
+			t.Fatalf("expected overview UI docs to include resource-detail troubleshooting summary contract %q", fragment)
+		}
+	}
+
+	overviewDashboardText := readTextFile(t, "features/overview-dashboard.md")
+	for _, fragment := range []string{
+		"compact `Selected resource context` callout",
+		"the final resource page also renders a compact `Troubleshooting summary`",
+		"any selected lookup scope (`containerName`, `clusterArn`, or `instanceId`)",
+		"available, loading, empty, unavailable, and fetch-error evidence states",
+	} {
+		if !strings.Contains(overviewDashboardText, fragment) {
+			t.Fatalf("expected overview dashboard docs to include resource-detail troubleshooting summary contract %q", fragment)
+		}
+	}
+
+	operatorContractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
+	for _, fragment := range []string{
+		"top-level `Selected resource context` callout",
+		"the exact live-inspection/recent-log backing reads operators can refresh below",
+		"GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}",
+		"GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}",
+	} {
+		if !strings.Contains(operatorContractsText, fragment) {
+			t.Fatalf("expected operator contracts docs to include resource-detail troubleshooting summary contract %q", fragment)
+		}
+	}
+}
+
 func readTextFile(t *testing.T, path string) string {
 	t.Helper()
 
