@@ -49,7 +49,7 @@ Response fields:
 - optional `backingResourceName`
 - optional `containerName` when an ECS task recent-log request supplied a container selector
 - optional `instanceId` when an Auto Scaling Group-backed EC2 console-log request supplied an instance selector
-- optional `clusterArn` when an ECS service recent-log request supplied an accepted cluster selector
+- optional `clusterArn` when an ECS service/task recent-log request supplied an accepted cluster selector
 - `lookupContext`
   - `region`
   - `controlAccountId`
