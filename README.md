@@ -187,7 +187,7 @@ Primary operator APIs:
   (recent-log responses expose `resultScope.limit`, `resultScope.returned`,
   `resultScope.total`, and `resultScope.truncated` so operators can tell when
   the returned entries were capped)
-- `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}[&clusterArn={ecsClusterArn}][&limit={positiveInteger}]`
+- `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}[&clusterArn={ecsClusterArn}][&limit={positiveInteger}][&instanceId={ec2InstanceId}]`
   (the route requires a concrete resource type/name; supported ECS service and
   ASG reads accept optional bounded selectors/caps, and bounded ECS task / ASG
   instance samples expose `resultScope.returnedItemCount` and compact alias
@@ -324,7 +324,8 @@ The detailed runner-start evidence bundle remains available by omitting
   Google Workspace OIDC, Okta OIDC, Okta SAML diagnostics, and SSO boundaries.
 - `docs/features/overview-dashboard.md` documents application/account/resource pages,
   drift, audit, and plan/apply workspaces.
-- `docs/features/resource-recent-logs.md` documents recent-log and live inspection resource contracts.
+- `docs/features/resource-recent-logs.md` documents recent-log resource contracts.
+- `docs/features/resource-inspection.md` documents live resource inspection selectors, lookup context, and bounded sample metadata.
 - `docs/runbooks/ci-smoke-runner-start.md` documents GitHub Actions runner-start
   failure triage for CI smoke checks.
 

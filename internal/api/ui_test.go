@@ -3991,6 +3991,71 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 	}
 }
 
+func TestResourceInspectionFeatureGuideDocumentsSelectorsAndScope(t *testing.T) {
+	fieldFragments := []string{"clusterArn", "limit", "instanceId", "lookupContext", "unavailableReason", "resultScope"}
+	guidePath := "../../docs/features/resource-inspection.md"
+	guideBody, err := os.ReadFile(guidePath)
+	if err != nil {
+		t.Fatalf("read resource inspection feature guide: %v", err)
+	}
+	guideText := string(guideBody)
+
+	for _, fragment := range []string{
+		"# Resource Inspection",
+		"`GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}[&clusterArn={ecsClusterArn}][&limit={positiveInteger}][&instanceId={ec2InstanceId}]`",
+		"`clusterArn` is optional and only meaningful for `resourceType=ecsService` and `resourceType=ecsTask`",
+		"`limit` is optional and applies only to bounded ECS service task samples and Auto Scaling Group instance samples",
+		"`instanceId` is optional and only meaningful for Auto Scaling Group-backed inspection reads",
+		"Like recent logs, every resource-inspection response includes `lookupContext`",
+		"Unavailable responses keep the selected route explicit with `available=false`, `unavailableReason`, `lookupContext`, and any accepted selector echo such as `clusterArn` or `instanceId`",
+		"`resultScope` is additive metadata for bounded live-inspection samples, not a pagination cursor or provider-wide total guarantee",
+		"`resultScope.sampleType`",
+		"`resultScope.returnedItemCount`",
+		"`resultScope.returnedCount`",
+		"`resultScope.truncationStatus`",
+		"`resultScope.truncated`",
+		"`not_truncated`, `truncated`, `unknown`, or `not_applicable`",
+		"Operators should capture the HTTP `Request-Id` response header together with the `lookupContext` object before escalating",
+		"Runtime code is intentionally unchanged by this guide; it documents the existing read-only route contract.",
+	} {
+		if !strings.Contains(guideText, fragment) {
+			t.Fatalf("expected resource inspection feature guide to include %q", fragment)
+		}
+	}
+	for _, fragment := range fieldFragments {
+		if !strings.Contains(guideText, fragment) {
+			t.Fatalf("expected resource inspection feature guide to keep selector/result wording %q discoverable", fragment)
+		}
+	}
+
+	files := map[string][]string{
+		"../../README.md": {
+			"`docs/features/resource-inspection.md` documents live resource inspection selectors, lookup context, and bounded sample metadata.",
+		},
+		"../../docs/architecture/tenet-v1-overview.md": {
+			"`docs/features/resource-inspection.md`",
+		},
+		"../../docs/architecture/tenet-v1-overview-ui.md": {
+			"See `docs/features/resource-inspection.md` for the focused selector, lookup-context, unavailable-state, and `resultScope` contract.",
+		},
+		"../../docs/architecture/tenet-v1-operator-contracts.md": {
+			"See `docs/features/resource-inspection.md` for the focused resource-inspection guide covering `clusterArn`, `limit`, `instanceId`, `lookupContext`, `unavailableReason`, and `resultScope`.",
+		},
+	}
+	for path, fragments := range files {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		for _, fragment := range fragments {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to include %q", path, fragment)
+			}
+		}
+	}
+}
+
 func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 	files := map[string][]string{
 		"../../docs/architecture/tenet-v1-operator-contracts.md": {
