@@ -15,6 +15,20 @@ func TestEmbeddedUIAvoidsInlineEventHandlers(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUITopLevelEmptyStatesAreStatusRegions(t *testing.T) {
+	body := string(indexHTML)
+
+	contracts := []string{
+		`const renderApplicationsEmptyState = \(visibleApplications, sourceApplications\) => \{[\s\S]*?const empty = createElement\('div', 'empty'\);[\s\S]*?empty\.setAttribute\('role', 'status'\);[\s\S]*?empty\.setAttribute\('aria-live', 'polite'\);[\s\S]*?empty\.setAttribute\('aria-atomic', 'true'\);[\s\S]*?createElement\('h2', 'account-name', 'Filters hid every application'\)[\s\S]*?createElement\('h2', 'account-name', 'No visible applications'\)`,
+		`const renderEmptyState = \(message\) => \{[\s\S]*?const empty = createElement\('div', 'empty', message\);[\s\S]*?empty\.setAttribute\('role', 'status'\);[\s\S]*?empty\.setAttribute\('aria-live', 'polite'\);[\s\S]*?empty\.setAttribute\('aria-atomic', 'true'\);[\s\S]*?document\.getElementById\('accounts'\)\.replaceChildren\(empty\);`,
+	}
+	for _, contract := range contracts {
+		if !regexp.MustCompile(contract).MatchString(body) {
+			t.Fatalf("expected embedded UI empty-state status contract %s", contract)
+		}
+	}
+}
+
 func TestEmbeddedUIRendersOperatorContextBannerSafely(t *testing.T) {
 	body := string(indexHTML)
 
