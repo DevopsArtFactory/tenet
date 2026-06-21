@@ -8378,7 +8378,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				if deploymentName != "api-prod" || resourceType != "ecsTask" || resourceName != "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123" {
 					t.Fatalf("unexpected ECS task inspection request: deployment=%q type=%q name=%q", deploymentName, resourceType, resourceName)
 				}
-				return resourceinspection.Result{DeploymentName: deploymentName, ResourceType: resourceType, ResourceName: resourceName, ClusterARN: gotClusterARN, Available: true, Source: resourceinspection.SourceECSService, ECSTask: &resourceinspection.ECSTaskInspection{ECSTaskSummary: resourceinspection.ECSTaskSummary{TaskARN: resourceName, TaskID: "abc123", ContainerInstanceARN: "arn:aws:ecs:ap-northeast-2:123456789012:container-instance/payments/ci-abc123", CapacityProviderName: "payments-ec2", AvailabilityZone: "ap-northeast-2b", Containers: []resourceinspection.ECSTaskContainerInfo{{Name: "api", LastStatus: "STOPPED", ExitCode: aws.Int32(1), Reason: "Error", NetworkBindings: []resourceinspection.ECSTaskContainerNetworkBinding{{BindIP: "127.0.0.1", ContainerPort: aws.Int32(8080), HostPort: aws.Int32(8080), Protocol: "tcp"}}}}}}}, nil
+				return resourceinspection.Result{DeploymentName: deploymentName, ResourceType: resourceType, ResourceName: resourceName, ClusterARN: gotClusterARN, Available: true, Source: resourceinspection.SourceECSService, ECSTask: &resourceinspection.ECSTaskInspection{ECSTaskSummary: resourceinspection.ECSTaskSummary{TaskARN: resourceName, TaskID: "abc123", ContainerInstanceARN: "arn:aws:ecs:ap-northeast-2:123456789012:container-instance/payments/ci-abc123", CapacityProviderName: "payments-ec2", AvailabilityZone: "ap-northeast-2b", Containers: []resourceinspection.ECSTaskContainerInfo{{Name: "api", ImageDigest: "sha256:api-digest", RuntimeID: "runtime-api-123", LastStatus: "STOPPED", ExitCode: aws.Int32(1), Reason: "Error", NetworkBindings: []resourceinspection.ECSTaskContainerNetworkBinding{{BindIP: "127.0.0.1", ContainerPort: aws.Int32(8080), HostPort: aws.Int32(8080), Protocol: "tcp"}}}}}}}, nil
 			},
 		})
 
@@ -8417,6 +8417,14 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		container, ok := containers[0].(map[string]any)
 		if !ok {
 			t.Fatalf("expected ECS task container object, got %#v", containers[0])
+		}
+		for key, want := range map[string]any{
+			"imageDigest": "sha256:api-digest",
+			"runtimeId":   "runtime-api-123",
+		} {
+			if container[key] != want {
+				t.Fatalf("expected ECS task container %s=%#v, got %#v in %#v", key, want, container[key], container)
+			}
 		}
 		networkBindings, ok := container["networkBindings"].([]any)
 		if !ok || len(networkBindings) != 1 {

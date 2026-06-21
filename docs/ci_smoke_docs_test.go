@@ -164,6 +164,7 @@ func TestResourceEvidenceDocsLockOperatorFieldFamilies(t *testing.T) {
 		"`Deployment controller`",
 		"`Deployment circuit breaker`",
 		"operator-facing ECS task/container labels include",
+		"`Container {name} image digest`, `Container {name} runtime ID`,",
 		"`Container {name} exit`, `Container {name} awslogs`, and",
 		"operator-facing ASG/EC2 labels include `Launch template`,",
 		"`Instances`, `Recent scaling activities`, `EC2 state`, `EC2 instance type`, and",
@@ -196,7 +197,7 @@ func TestResourceEvidenceDocsLockOperatorFieldFamilies(t *testing.T) {
 	for _, fragment := range []string{
 		"Resource evidence docs intentionally lock the operator-facing labels that reviewers use to spot drift",
 		"ECS service deployment configuration and recent events",
-		"ECS task container status/failure/log-binding/network evidence",
+		"ECS task container status/identity/failure/log-binding/network evidence",
 		"Auto Scaling launch-template, sampled-instance, EC2 host, and scaling-activity evidence",
 		"traffic-routing summary-only fallback and live CodeDeploy/listener/target-group health evidence",
 		"recent-log lookup context plus friendly empty/unavailable distinctions",

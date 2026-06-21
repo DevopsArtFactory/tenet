@@ -164,8 +164,9 @@ Current resource-inspection payload families:
 `ecsService` reads service identity, status, desired/running/pending counts,
 deployment configuration, deployments, recent service events, task definition
 evidence, and a bounded task sample when available. Task sample container rows
-preserve status, health, exit/reason, optional `awslogs`, and optional
-`networkBindings` evidence from ECS `DescribeTasks`. The selected-cluster
+preserve status, health, exit/reason, optional `imageDigest`, optional
+`runtimeId`, optional `awslogs`, and optional `networkBindings` evidence from
+ECS `DescribeTasks`. The selected-cluster
 `clusterArn` selector scopes the service lookup directly and is echoed on
 successful and explicit unavailable payloads. The operator-facing ECS service
 labels include `Deployment controller`, `Deployment circuit breaker`,
@@ -174,15 +175,17 @@ labels include `Deployment controller`, `Deployment circuit breaker`,
 same review vocabulary.
 
 `ecsTask` reads exact task identity, status, stopped reason, placement evidence,
-task definition, container rows, optional `awslogs` metadata, optional
-`networkBindings` evidence from ECS `DescribeTasks`, and optional EC2 host facts
-for ECS-on-EC2 tasks when Tenet can resolve and describe the backing instance.
+task definition, container rows, optional `imageDigest`, optional `runtimeId`,
+optional `awslogs` metadata, optional `networkBindings` evidence from ECS
+`DescribeTasks`, and optional EC2 host facts for ECS-on-EC2 tasks when Tenet can
+resolve and describe the backing instance.
 The same `clusterArn` selector keeps task IDs unambiguous when a parent service
 handoff selected a cluster. The operator-facing ECS task/container labels include
 `Last/desired status`, `Health status`, `Stopped reason`, `Container {name} · status`,
+`Container {name} image digest`, `Container {name} runtime ID`,
 `Container {name} exit`, `Container {name} awslogs`, and
 `Container {name} network binding`, which keeps status, failure, log-binding,
-and network evidence discoverable without opening raw JSON.
+network, and container identity evidence discoverable without opening raw JSON.
 
 `candidateAutoScalingGroup` and `serviceAutoScalingGroup` read ASG size, health
 settings, target groups, launch-template metadata, current instances, optional

@@ -1999,6 +1999,8 @@ func TestECSTaskSummaryIncludesContainerNetworkBindingsAndFailureEvidence(t *tes
 		Containers: []ecstypes.Container{{
 			Name:         stringPtr("worker"),
 			Image:        stringPtr("worker:broken"),
+			ImageDigest:  stringPtr("sha256:worker-broken-digest"),
+			RuntimeId:    stringPtr("runtime-worker-123"),
 			LastStatus:   stringPtr("STOPPED"),
 			HealthStatus: ecstypes.HealthStatusUnhealthy,
 			ExitCode:     int32Ptr(137),
@@ -2024,6 +2026,9 @@ func TestECSTaskSummaryIncludesContainerNetworkBindingsAndFailureEvidence(t *tes
 	container := got.Containers[0]
 	if container.LastStatus != "STOPPED" || container.HealthStatus != string(ecstypes.HealthStatusUnhealthy) || container.ExitCode == nil || *container.ExitCode != 137 || container.Reason != "OutOfMemoryError" || container.AWSLogs == nil {
 		t.Fatalf("expected stopped/failed container status, exit, reason, and awslogs evidence to remain intact, got %+v", container)
+	}
+	if container.ImageDigest != "sha256:worker-broken-digest" || container.RuntimeID != "runtime-worker-123" {
+		t.Fatalf("expected container identity evidence from DescribeTasks, got %+v", container)
 	}
 	if len(container.NetworkBindings) != 1 {
 		t.Fatalf("expected container network binding evidence from DescribeTasks, got %+v", container)
