@@ -12792,6 +12792,10 @@ async function render(search, hash = '#application-current-status') {
   const clearText = compactText(clearRun.document.getElementById('accounts'));
   if (!clearText.includes('ecsService') || !clearText.includes('productionListenerRule') || !clearText.includes('userDataBootstrapSource')) throw new Error('expected active filter clear action to restore all groups: ' + clearText);
   if (clearRun.window.location.search !== '?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging') throw new Error('expected active filter clear action to preserve existing query state and remove only resourceFilter, got ' + clearRun.window.location.search);
+  const clearedActiveInput = collectNodes(clearRun.document.getElementById('toolbar'), (node) => node.tagName === 'INPUT' && node.dataset.toolbarField === 'Filter linked resources')[0];
+  if (!clearedActiveInput || clearRun.document.activeElement !== clearedActiveInput) throw new Error('expected active clear action to restore focus to the resource filter input');
+  if (clearedActiveInput.value !== '') throw new Error('expected active clear action to render an empty resource filter input, got ' + clearedActiveInput.value);
+  if (clearedActiveInput.selectionStart !== 0 || clearedActiveInput.selectionEnd !== 0) throw new Error('expected active clear action to restore caret at the cleared filter start');
 
   const run = await render(initialSearch);
   const accounts = run.document.getElementById('accounts');
@@ -12843,6 +12847,10 @@ async function render(search, hash = '#application-current-status') {
   text = compactText(run.document.getElementById('accounts'));
   if (!text.includes('ecsService') || !text.includes('productionListenerRule') || !text.includes('userDataBootstrapSource')) throw new Error('expected clearing resource filter to restore all groups: ' + text);
   if (run.window.location.search !== '?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging') throw new Error('expected clearing resource filter to preserve existing query state and remove only resourceFilter, got ' + run.window.location.search);
+  const clearedEmptyStateInput = collectNodes(run.document.getElementById('toolbar'), (node) => node.tagName === 'INPUT' && node.dataset.toolbarField === 'Filter linked resources')[0];
+  if (!clearedEmptyStateInput || run.document.activeElement !== clearedEmptyStateInput) throw new Error('expected filtered-empty clear action to restore focus to the resource filter input');
+  if (clearedEmptyStateInput.value !== '') throw new Error('expected filtered-empty clear action to render an empty resource filter input, got ' + clearedEmptyStateInput.value);
+  if (clearedEmptyStateInput.selectionStart !== 0 || clearedEmptyStateInput.selectionEnd !== 0) throw new Error('expected filtered-empty clear action to restore caret at the cleared filter start');
 
   const emptyRun = await render('?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=empty-api&resourceFilter=ecs', '');
   const emptyText = compactText(emptyRun.document.getElementById('accounts'));

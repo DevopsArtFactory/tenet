@@ -2037,6 +2037,8 @@ func TestEmbeddedUIPreservesToolbarFocusAndRestoresCaretAcrossFilterRerenders(t 
 		"const focusState = captureToolbarFocus();",
 		"renderApplicationsOverview(allApplications, focusState);",
 		"restoreToolbarFocus(focusState);",
+		"const applicationResourceFilterFocusState = () => ({ field: 'Filter linked resources', selectionStart: 0, selectionEnd: 0 });",
+		"renderApplicationDetailPage(detail, applicationState, applicationResourceFilterFocusState());",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include %q", fragment)
