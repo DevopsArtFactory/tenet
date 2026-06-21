@@ -1313,6 +1313,7 @@ const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(no
   if (!filteredEmptyText.includes('Clear filters to return to the full applications overview')) throw new Error('expected filtered-empty recovery guidance');
   const clearEmptyButton = collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && node.textContent === 'Clear filters')[0];
   if (!clearEmptyButton) throw new Error('expected filtered-empty Clear filters action');
+  if (clearEmptyButton.getAttribute('aria-label') !== 'Clear active application filters: search “does-not-exist”, sync OutOfSync, health Progressing, account staging-core') throw new Error('expected filtered-empty Clear filters aria-label to name active filters, got ' + clearEmptyButton.getAttribute('aria-label'));
   clearEmptyButton.dispatch('click');
   const resetText = collectText(document.getElementById('accounts')).join(' | ');
   if (!resetText.includes('payments-api-staging') || !resetText.includes('payments-api-prod')) throw new Error('expected empty-state Clear filters action to restore all application rows');

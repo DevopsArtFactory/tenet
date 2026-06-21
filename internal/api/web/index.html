@@ -2943,6 +2943,7 @@
         if (sourceApplications.length && active.length && !visibleApplications.length) {
           const clearButton = createElement('button', 'toolbar-button', 'Clear filters');
           clearButton.type = 'button';
+          clearButton.setAttribute('aria-label', applicationsClearFiltersAriaLabel(active));
           clearButton.addEventListener('click', () => {
             resetApplicationsFilters(captureToolbarFocus());
           });
