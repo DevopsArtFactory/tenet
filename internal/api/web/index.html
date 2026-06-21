@@ -205,6 +205,7 @@
       const resourceLogLimitByResourceKey = new Map();
       const resourceInspectionLimitByResourceKey = new Map();
       const resourceInspectionStateByKey = new Map();
+      const resourceTroubleshootingSummaryByResourceKey = new Map();
       let auditLogsPageState = { status: 'idle', route: '', result: null, error: null, promise: null, requestId: 0 };
       let operatorContextState = { status: 'idle', context: null, error: null, refreshing: false, lastCheckedAt: null };
       let activeOperatorReadFailurePage = null;
@@ -3421,6 +3422,118 @@
         }
         return callout;
       };
+      const resourceTroubleshootingSummaryKey = (deploymentName, resource) => resourceLogCacheKey(deploymentName, resource);
+      const registerResourceTroubleshootingSummary = (section, detail, resource) => {
+        const deploymentName = detail?.name || currentPageState.deployment || '';
+        if (!section || !deploymentName || !resource?.type || !resource?.name) return;
+        resourceTroubleshootingSummaryByResourceKey.set(resourceTroubleshootingSummaryKey(deploymentName, resource), { section, detail, resource });
+      };
+      const refreshResourceTroubleshootingSummary = (deploymentName, resource) => {
+        const registered = resourceTroubleshootingSummaryByResourceKey.get(resourceTroubleshootingSummaryKey(deploymentName, resource));
+        if (!registered?.section) return;
+        renderResourceTroubleshootingSummary(registered.section, registered.detail, registered.resource);
+      };
+      const resourceTroubleshootingState = (state, readyLabel) => {
+        switch (state?.status) {
+          case 'loading':
+            return 'Loading';
+          case 'ready':
+            return readyLabel(state.result);
+          case 'error':
+            return `Fetch error · ${state.error?.message || 'unknown error'}`;
+          default:
+            return 'Not loaded yet';
+        }
+      };
+      const resourceTroubleshootingReasonLabel = (reason, fallback = 'unavailable') => {
+        switch (reason) {
+          case 'aws_unavailable':
+            return 'AWS access unavailable';
+          case 'cross_account_not_configured':
+            return 'Cross-account observer role missing';
+          case 'unsupported_resource_type':
+            return 'Unsupported resource type';
+          case 'no_log_source':
+            return 'No log source configured';
+          case 'no_running_tasks':
+            return 'No running tasks found';
+          case 'not_found':
+            return 'Resource not found';
+          default:
+            return reason ? fallback : 'unknown';
+        }
+      };
+      const resourceTroubleshootingLogsLabel = (result) => {
+        const source = metricValue(result?.source);
+        if (!result?.available) {
+          return `Unavailable · ${resourceTroubleshootingReasonLabel(result?.unavailableReason, 'provider unavailable')}`;
+        }
+        const entries = Array.isArray(result?.entries) ? result.entries : [];
+        if (!entries.length) {
+          return `Empty · ${resourceTroubleshootingReasonLabel(result?.emptyReason, 'no log rows')}${source !== '—' ? ` · ${source}` : ''}`;
+        }
+        return `Available · ${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}${source !== '—' ? ` · ${source}` : ''}`;
+      };
+      const resourceTroubleshootingInspectionLabel = (result) => {
+        const source = metricValue(result?.source);
+        if (!result?.available) {
+          return `Unavailable · ${resourceTroubleshootingReasonLabel(result?.unavailableReason, 'provider unavailable')}`;
+        }
+        return `Available${source !== '—' ? ` · ${source}` : ''}`;
+      };
+      const resourceTroubleshootingPanelStates = (deploymentName, resource) => {
+        const logsLimit = selectedResourceLogsLimit(deploymentName, resource);
+        const inspectionLimit = supportsBoundedResourceInspection(resource) ? selectedResourceInspectionLimit(deploymentName, resource) : 0;
+        const logsState = resourceLogStateByKey.get(resourceLogRequestCacheKey(deploymentName, resource, logsLimit));
+        const inspectionState = resourceInspectionStateByKey.get(resourceInspectionRequestCacheKey(deploymentName, resource, inspectionLimit));
+        return { logsState, inspectionState };
+      };
+      const resourceTroubleshootingUnavailableReasons = (states) => [
+        states.logsState?.status === 'ready' && states.logsState.result?.available === false ? states.logsState.result?.unavailableReason : '',
+        states.inspectionState?.status === 'ready' && states.inspectionState.result?.available === false ? states.inspectionState.result?.unavailableReason : '',
+      ].filter(Boolean);
+      const resourceTroubleshootingNextCheck = (states) => {
+        const reasons = resourceTroubleshootingUnavailableReasons(states);
+        if (reasons.includes('cross_account_not_configured')) {
+          return 'Cross-account observer role wiring is missing for this resource evidence lookup; configure the observer role, then refresh Recent logs and Live inspection.';
+        }
+        if (reasons.includes('aws_unavailable')) {
+          return 'AWS/provider access is unavailable for this resource evidence lookup; capture the Tenet request ID and lookup path, verify credentials, account/region placement, observer-role reachability, and permissions, then refresh both panels.';
+        }
+        if (states.logsState?.status === 'error' || states.inspectionState?.status === 'error') {
+          return 'One evidence read failed; use the panel-specific request route and Tenet request ID, then refresh only the failed panel after access or provider wiring is corrected.';
+        }
+        const logsResult = states.logsState?.status === 'ready' ? states.logsState.result : null;
+        const logEntries = Array.isArray(logsResult?.entries) ? logsResult.entries : [];
+        if (logsResult?.available && !logEntries.length) {
+          return 'Recent logs returned no rows in the selected window; increase the log cap or refresh after deployment activity before treating logs as absent.';
+        }
+        if (states.logsState?.status === 'loading' || states.inspectionState?.status === 'loading') {
+          return 'Evidence panels are still loading; wait for Live inspection and Recent logs before deciding the next troubleshooting action.';
+        }
+        if (states.logsState?.status === 'ready' && states.inspectionState?.status === 'ready') {
+          return 'Compare the latest log entries with live resource state, deployment sync, health, rollout phase, and current step before retrying or escalating.';
+        }
+        return 'Open or refresh Live inspection and Recent logs to complete the resource evidence set for this selection.';
+      };
+      const renderResourceTroubleshootingSummary = (section, detail, resource) => {
+        const deploymentName = detail?.name || currentPageState.deployment || '';
+        const states = resourceTroubleshootingPanelStates(deploymentName, resource);
+        const summaryGrid = createElement('div', 'detail-grid');
+        [
+          ['Selected resource', `${textOrDash(resource?.type)} · ${textOrDash(resource?.name)}`],
+          ['Deployment state', `${detail?.sync?.state || 'Unknown'} · ${healthLabel(detail?.health)} · ${metricValue(detail?.rollout?.phase)}`],
+          ['Current step', metricValue(detail?.rollout?.currentStep || detail?.runtimeSummary?.currentStep)],
+          ['Recent logs', resourceTroubleshootingState(states.logsState, resourceTroubleshootingLogsLabel)],
+          ['Live inspection', resourceTroubleshootingState(states.inspectionState, resourceTroubleshootingInspectionLabel)],
+          ['Next check', resourceTroubleshootingNextCheck(states)],
+        ].forEach(([label, value]) => summaryGrid.append(createMetric(label, value, label === 'Next check' ? 'summary' : '')));
+        section.replaceChildren(
+          createDetailSectionHeader('Troubleshooting summary'),
+          createElement('p', 'detail-section-copy', 'Derived from selected deployment/resource context plus the latest Live inspection and Recent logs panel results.'),
+          summaryGrid,
+        );
+      };
       const resourceDetailRefreshState = (resourceState = null) => {
         if (resourceState?.status === 'loading') {
           return {
@@ -4209,6 +4322,11 @@
           ['Health summary', `${healthLabel(detail.health)}${detail.health?.summary ? ` · ${detail.health.summary}` : ''}`],
         ].forEach(([label, value]) => shell.append(createMetric(label, value)));
 
+        const troubleshootingSection = createDetailSection('Troubleshooting summary');
+        pushResourceSection(troubleshootingSection, 'resource-troubleshooting-summary', 'Troubleshooting summary');
+        registerResourceTroubleshootingSummary(troubleshootingSection, detail, resource);
+        renderResourceTroubleshootingSummary(troubleshootingSection, detail, resource);
+
         const historySection = createDetailSection('Runtime history');
         pushResourceSection(historySection, 'resource-runtime-history', 'Runtime history');
         const history = detail.history || [];
@@ -4304,6 +4422,7 @@
         const logsSection = createDetailSection('Recent logs');
         pushResourceSection(logsSection, 'resource-recent-logs', 'Recent logs');
         renderResourceLogsSection(logsSection, detail.name || currentPageState.deployment || '', resource, { detail }).catch(() => {});
+        renderResourceTroubleshootingSummary(troubleshootingSection, detail, resource);
 
         const quickNav = createResourceQuickNav(detail, resource, resourceSectionLinks);
         const refreshState = resourceDetailRefreshState(resourceState);
@@ -4315,7 +4434,7 @@
         } else if (refreshState?.message) {
           page.append(createElement('div', refreshState.className ? `detail-state ${refreshState.className}` : 'detail-state', refreshState.message));
         }
-        page.append(quickNav, shell, historySection, executionSection, conditionsSection, inspectionSection, logsSection);
+        page.append(quickNav, troubleshootingSection, shell, historySection, executionSection, conditionsSection, inspectionSection, logsSection);
         root.replaceChildren(page);
         activeResourceQuickNavSync = typeof quickNav.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;
         syncActiveResourceQuickNav();
@@ -4917,11 +5036,13 @@
         }
         if (!force && cached?.status === 'ready') {
           renderResourceLogsPayload(section, deploymentName, resource, cached.result, detail, selectedLimit);
+          refreshResourceTroubleshootingSummary(deploymentName, resource);
           return Promise.resolve(cached.result);
         }
         if (cached?.status === 'loading') {
           resourceLogStateByKey.set(logsKey, { ...cached, sections: [...(cached.sections || []), { section, detail, limit: selectedLimit }] });
           renderResourceLogsState(section, 'Loading recent logs…', '', pendingContext(), [], loadingActions);
+          refreshResourceTroubleshootingSummary(deploymentName, resource);
           return cached.promise;
         }
 
@@ -4935,6 +5056,7 @@
               const container = target?.section || target;
               renderResourceLogsPayload(container, deploymentName, resource, result, target?.detail || detail, target?.limit ?? selectedLimit);
             });
+            refreshResourceTroubleshootingSummary(deploymentName, resource);
             scrollToCurrentHashTarget();
             return result;
           })
@@ -4963,11 +5085,13 @@
                 createResourceLogsActions(container, deploymentName, resource, false, target?.detail || detail),
               );
             });
+            refreshResourceTroubleshootingSummary(deploymentName, resource);
             scrollToCurrentHashTarget();
             throw error;
           });
 
         resourceLogStateByKey.set(logsKey, { status: 'loading', promise, sections: [{ section, detail, limit: selectedLimit }] });
+        refreshResourceTroubleshootingSummary(deploymentName, resource);
         return promise;
       };
       const resourceInspectionCacheKey = (deploymentName, resource) => resourceLogCacheKey(deploymentName, resource);
@@ -6159,11 +6283,13 @@
         }
         if (!force && cached?.status === 'ready') {
           renderResourceInspectionPayload(section, detail, resource, cached.result);
+          refreshResourceTroubleshootingSummary(deploymentName, resource);
           return Promise.resolve(cached.result);
         }
         if (cached?.status === 'loading') {
           resourceInspectionStateByKey.set(inspectionKey, { ...cached, sections: [...(cached.sections || []), { section, detail, limit: selectedLimit }] });
           renderResourceInspectionState(section, 'Loading live inspection…', '', pendingContext(), [], loadingActions);
+          refreshResourceTroubleshootingSummary(deploymentName, resource);
           return cached.promise;
         }
 
@@ -6177,6 +6303,7 @@
               const container = target?.section || target;
               renderResourceInspectionPayload(container, target?.detail || detail, resource, result);
             });
+            refreshResourceTroubleshootingSummary(deploymentName, resource);
             scrollToCurrentHashTarget();
             return result;
           })
@@ -6206,11 +6333,13 @@
                 createResourceInspectionActions(container, targetDetail, resource),
               );
             });
+            refreshResourceTroubleshootingSummary(deploymentName, resource);
             scrollToCurrentHashTarget();
             throw error;
           });
 
         resourceInspectionStateByKey.set(inspectionKey, { status: 'loading', promise, sections: [{ section, detail, limit: selectedLimit }] });
+        refreshResourceTroubleshootingSummary(deploymentName, resource);
         return promise;
       };
       const requestError = (kind, message, status = 0, requestId = '') => {

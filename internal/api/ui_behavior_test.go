@@ -5564,7 +5564,7 @@ async function renderScenario(hash, fetchImpl) {
   if (recentLogsRun.window.location.hash !== '#resource-recent-logs') throw new Error('expected recent logs hash to stay stable, got ' + recentLogsRun.window.location.hash);
   const recentLogsRoot = recentLogsRun.document.getElementById('accounts');
   const sectionIDs = collectNodes(recentLogsRoot, (node) => typeof node.id === 'string' && node.id.startsWith('resource-')).map((node) => node.id).sort();
-  const expectedSectionIDs = ['resource-live-inspection', 'resource-recent-logs', 'resource-rollout-execution', 'resource-runtime-history', 'resource-status-conditions'];
+  const expectedSectionIDs = ['resource-live-inspection', 'resource-recent-logs', 'resource-rollout-execution', 'resource-runtime-history', 'resource-status-conditions', 'resource-troubleshooting-summary'];
   if (JSON.stringify(sectionIDs) !== JSON.stringify(expectedSectionIDs)) throw new Error('unexpected resource section ids: ' + JSON.stringify(sectionIDs));
   const recentLogsChip = collectNodes(recentLogsRoot, (node) => node.tagName === 'SPAN' && node.className === 'quick-nav-chip').find((node) => node.getAttribute('aria-label') === 'Current section: Recent logs');
   if (!recentLogsChip) throw new Error('expected recent logs hash to render the current-section chip');
@@ -7957,6 +7957,150 @@ new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInput
   unavailableButtons = collectNodes(unavailableRoot, (node) => node.tagName === 'BUTTON');
   if (unavailableButtons.find((node) => node.textContent === 'Refresh live inspection')?.disabled) throw new Error('expected unavailable live-inspection refresh button to re-enable after refresh');
   if (unavailableWindow.location.search !== initialSearch) throw new Error('expected unavailable live-inspection refresh to preserve bookmarkable URL');
+})();
+`
+
+	runNodeHarness(t, nodeProgram)
+}
+
+func TestResourceTroubleshootingSummaryWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	detailJSON, err := json.Marshal(map[string]any{
+		"name":          "payments-api-staging",
+		"accountName":   "staging-core",
+		"awsAccountId":  "210987654321",
+		"region":        "ap-northeast-2",
+		"executionMode": "ecsRolling",
+		"sync":          map[string]any{"state": "OutOfSync", "reason": "rollout in progress"},
+		"health":        map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy"},
+		"runtimeSummary": map[string]any{
+			"timestamp":   "2026-04-18T00:10:00Z",
+			"currentStep": "VerifyServiceStability",
+			"source":      "controller",
+		},
+		"rollout": map[string]any{
+			"phase":       "Progressing",
+			"currentStep": "VerifyServiceStability",
+			"execution": []map[string]any{{
+				"name":        "payments-api-staging-service",
+				"resource":    "ecsService",
+				"description": "Primary ECS service",
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal resource detail body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
+async function settle(count = 1) { for (let i = 0; i < count; i += 1) { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); } }
+async function renderResource(logPayload, inspectionPayload) {
+  const document = new Document();
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  const resourceID = 'ecsService::payments-api-staging-service::Primary ECS service';
+  const window = { location: { pathname: '/', search: '?page=resource&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodeURIComponent(resourceID), hash: '' } };
+  const history = { replaceState(_state, _title, url) { const [pathAndQuery, hash = ''] = String(url).split('#'); const [pathname, query = ''] = pathAndQuery.split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; window.location.hash = hash ? '#' + hash : ''; } };
+  const fetch = (url) => {
+    if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === '/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=ecsService&resourceName=payments-api-staging-service') return Promise.resolve({ ok: true, json: () => Promise.resolve(logPayload) });
+    if (url === '/v1/overview/deployments/payments-api-staging/resource-inspection?resourceType=ecsService&resourceName=payments-api-staging-service&limit=10') return Promise.resolve({ ok: true, json: () => Promise.resolve(inspectionPayload) });
+    throw new Error('unexpected fetch url: ' + url);
+  };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle(4);
+  return collectText(document.getElementById('accounts')).join(' | ');
+}
+(async () => {
+  const emptyText = await renderResource(
+    {
+      available: true,
+      source: 'cloudwatch',
+      emptyReason: 'no_recent_events',
+      resultScope: { requestedLimit: null, effectiveLimit: 25, returnedEntryCount: 0, truncationStatus: 'not_truncated' },
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true },
+      entries: [],
+    },
+    {
+      available: true,
+      source: 'ecs_service',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '210987654321', targetAccountId: '210987654321', crossAccount: false, observerRoleConfigured: true },
+      ecsService: { serviceName: 'payments-api-staging-service', status: 'ACTIVE', desiredCount: 2, runningCount: 2, pendingCount: 0, deployments: [], events: [] },
+    },
+  );
+  if (!emptyText.includes('Troubleshooting summary')) throw new Error('expected resource troubleshooting summary heading');
+  if (!emptyText.includes('Derived from selected deployment/resource context plus the latest Live inspection and Recent logs panel results.')) throw new Error('expected derived-summary explanation');
+  if (!emptyText.includes('Recent logs | Empty · no log rows · cloudwatch')) throw new Error('expected successful empty recent-log summary state: ' + emptyText);
+  if (emptyText.includes('Recent logs | Empty · no_recent_events')) throw new Error('expected summary to hide raw empty recent-log reason code: ' + emptyText);
+  if (!emptyText.includes('Live inspection | Available · ecs_service')) throw new Error('expected available live-inspection summary state: ' + emptyText);
+  if (!emptyText.includes('Next check | Recent logs returned no rows in the selected window; increase the log cap or refresh after deployment activity before treating logs as absent.')) throw new Error('expected empty-log next-step guidance: ' + emptyText);
+
+  const unavailableText = await renderResource(
+    {
+      available: false,
+      source: '',
+      unavailableReason: 'cross_account_not_configured',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: false },
+      entries: [],
+    },
+    {
+      available: false,
+      source: '',
+      unavailableReason: 'aws_unavailable',
+      lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '210987654321', crossAccount: true, observerRoleConfigured: true },
+    },
+  );
+  if (!unavailableText.includes('Recent logs | Unavailable · Cross-account observer role missing')) throw new Error('expected cross-account unavailable recent-log summary state: ' + unavailableText);
+  if (!unavailableText.includes('Live inspection | Unavailable · AWS access unavailable')) throw new Error('expected AWS-unavailable inspection summary state: ' + unavailableText);
+  if (!unavailableText.includes('Next check | Cross-account observer role wiring is missing for this resource evidence lookup; configure the observer role, then refresh Recent logs and Live inspection.')) throw new Error('expected cross-account next-step guidance: ' + unavailableText);
 })();
 `
 
