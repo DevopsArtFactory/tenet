@@ -167,20 +167,32 @@ evidence, and a bounded task sample when available. Task sample container rows
 preserve status, health, exit/reason, optional `awslogs`, and optional
 `networkBindings` evidence from ECS `DescribeTasks`. The selected-cluster
 `clusterArn` selector scopes the service lookup directly and is echoed on
-successful and explicit unavailable payloads.
+successful and explicit unavailable payloads. The operator-facing ECS service
+labels include `Deployment controller`, `Deployment circuit breaker`,
+`Deployment alarms`, `Service deployments`, `Recent ECS tasks`, and
+`Recent ECS service events` so docs, smoke evidence, and the embedded UI keep the
+same review vocabulary.
 
 `ecsTask` reads exact task identity, status, stopped reason, placement evidence,
 task definition, container rows, optional `awslogs` metadata, optional
 `networkBindings` evidence from ECS `DescribeTasks`, and optional EC2 host facts
 for ECS-on-EC2 tasks when Tenet can resolve and describe the backing instance.
 The same `clusterArn` selector keeps task IDs unambiguous when a parent service
-handoff selected a cluster.
+handoff selected a cluster. The operator-facing ECS task/container labels include
+`Last/desired status`, `Health status`, `Stopped reason`, `Container {name} · status`,
+`Container {name} exit`, `Container {name} awslogs`, and
+`Container {name} network binding`, which keeps status, failure, log-binding,
+and network evidence discoverable without opening raw JSON.
 
 `candidateAutoScalingGroup` and `serviceAutoScalingGroup` read ASG size, health
 settings, target groups, launch-template metadata, current instances, optional
 scaling activity evidence, and optional EC2 host facts. The `limit` query bounds
 the current-instance sample, and `instanceId` focuses the payload on one current
-ASG member.
+ASG member. The operator-facing ASG/EC2 labels include `Launch template`,
+`Mixed instances launch template`, `Observed image ID`, `Observed instance type`,
+`Instances`, `Recent scaling activities`, `EC2 state`, `EC2 instance type`, and
+`AMI image ID`, plus bounded activity labels such as `Activity ID`, `Status code`,
+`Progress`, `Cause`, and `Status message`.
 
 `userDataBootstrapSource` resolves the backing Auto Scaling Group for a bootstrap
 source resource and compares the desired bootstrap source to the observed launch
@@ -190,10 +202,17 @@ AWS evidence is available.
 
 Traffic-routing resources return `trafficRoutingResource` payloads. In local or
 no-AWS runs, Tenet may return `inspectionMode=summary_only` from rollout
-execution metadata. When AWS inspection succeeds, the same route can upgrade to
-`inspectionMode=live` with CodeDeploy, listener, listener-rule, target-group,
-latest-deployment, rollback, error, alarm, deployment-overview, and target-health
-evidence.
+execution metadata. `inspectionMode=summary_only` remains the local/no-AWS
+fallback for rollout-derived traffic-routing resources so fixture and Compose
+drill-downs stay useful without live AWS credentials. When AWS inspection
+succeeds, the same route can upgrade to `inspectionMode=live` with CodeDeploy,
+listener, listener-rule, target-group, latest-deployment, rollback, error, alarm,
+deployment-overview, and target-health evidence. The traffic-routing inspection
+labels include `Traffic-routing status`, `CodeDeploy deployment group status`,
+`Target group live details`, `Registered target health`, `Target group health`,
+and `Inspection mode`, covering CodeDeploy deployment-group, production/test
+listener, listener-rule, task-set target-group, and weighted target-group
+families without changing the route shape.
 
 ## Embedded UI Behavior
 

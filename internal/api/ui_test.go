@@ -4107,7 +4107,7 @@ func TestResourceInspectionFeatureGuideDocumentsSelectorsAndScope(t *testing.T) 
 
 	files := map[string][]string{
 		"../../README.md": {
-			"`docs/features/resource-inspection.md` documents live resource inspection selectors, lookup context, and bounded sample metadata.",
+			"`docs/features/resource-inspection.md` documents live resource inspection selectors, lookup context, bounded sample metadata, and the operator-facing ECS/ASG/traffic-routing field families locked by docs tests.",
 		},
 		"../../docs/architecture/tenet-v1-overview.md": {
 			"`docs/features/resource-inspection.md`",
