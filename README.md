@@ -183,10 +183,10 @@ Primary operator APIs:
 - `GET /v1/overview/applications`
 - `GET /v1/overview/deployments/{deploymentName}`
 - `GET /v1/overview/deployments/{deploymentName}/events`
-- `GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}[&limit={positiveInteger}]`
+- `GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}[&limit={positiveInteger}][&containerName={container}][&instanceId={ec2InstanceId}][&clusterArn={ecsClusterArn}]`
   (recent-log responses expose `resultScope.limit`, `resultScope.returned`,
-  `resultScope.total`, and `resultScope.truncated` so operators can tell when
-  the returned entries were capped)
+  `resultScope.total`, and `resultScope.truncated`; ECS task container, ASG
+  instance, and ECS cluster selectors keep focused troubleshooting reads explicit)
 - `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}[&clusterArn={ecsClusterArn}][&limit={positiveInteger}][&instanceId={ec2InstanceId}]`
   (the route requires a concrete resource type/name; supported ECS service and
   ASG reads accept optional bounded selectors/caps, and bounded ECS task / ASG
