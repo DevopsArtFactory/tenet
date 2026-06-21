@@ -117,6 +117,9 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 		if !strings.Contains(doc.text, "docs/features/resource-inspection.md") {
 			t.Fatalf("expected %s docs map to link resource inspection guide", doc.name)
 		}
+		if !strings.Contains(doc.text, "docs/features/resource-recent-logs.md") {
+			t.Fatalf("expected %s docs map to link resource recent logs guide", doc.name)
+		}
 	}
 
 	for _, fragment := range []string{
