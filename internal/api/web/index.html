@@ -3104,10 +3104,11 @@
         const hash = window.location.hash || '';
         history.replaceState({}, '', `${window.location.pathname || '/'}${query ? `?${query}` : ''}${hash}`);
       };
+      const applicationResourceFilterFocusState = () => ({ field: 'Filter linked resources', selectionStart: 0, selectionEnd: 0 });
       const clearApplicationResourceFilter = (detail, applicationState = null) => {
         currentPageState.resourceFilter = '';
         syncApplicationResourceFilterQueryParam('');
-        renderApplicationDetailPage(detail, applicationState);
+        renderApplicationDetailPage(detail, applicationState, applicationResourceFilterFocusState());
       };
       const createClearApplicationResourceFilterButton = (detail, applicationState = null) => {
         const clearButton = createElement('button', 'toolbar-button', 'Clear resource filter');
