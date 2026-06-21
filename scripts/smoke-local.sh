@@ -1877,6 +1877,8 @@ assert "containerName: params.get('containerName') || ''" in ui, ui
 assert "buildPageSectionURL('resource', 'resource-recent-logs'" in ui, ui
 assert "const renderResourceTroubleshootingSummary = (section, detail, resource) => {" in ui, ui
 assert "Derived from selected deployment/resource context plus the latest Live inspection and Recent logs panel results." in ui, ui
+assert "const selectedLookupScope = selectedResourceScopeText(resource);" in ui, ui
+assert "...(selectedLookupScope ? [['Selected lookup scope', selectedLookupScope]] : [])," in ui, ui
 assert "refreshResourceTroubleshootingSummary(deploymentName, resource);" in ui, ui
 assert "pushResourceSection(troubleshootingSection, 'resource-troubleshooting-summary', 'Troubleshooting summary');" in ui, ui
 assert "pushResourceSection(historySection, 'resource-runtime-history', 'Runtime history');" in ui, ui
@@ -2126,6 +2128,8 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "currentLabel: resource.name," in body, body
     assert "const createResourceQuickNav = (detail, resource, sectionLinks = []) => {" in body, body
     assert "const pushResourceSection = (section, sectionID, label) => {" in body, body
+    assert "const selectedLookupScope = selectedResourceScopeText(resource);" in body, body
+    assert "...(selectedLookupScope ? [['Selected lookup scope', selectedLookupScope]] : [])," in body, body
     assert "pushResourceSection(troubleshootingSection, 'resource-troubleshooting-summary', 'Troubleshooting summary');" in body, body
     assert "pushResourceSection(historySection, 'resource-runtime-history', 'Runtime history');" in body, body
     assert "pushResourceSection(executionSection, 'resource-rollout-execution', 'Rollout execution');" in body, body
