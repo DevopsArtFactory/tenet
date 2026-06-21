@@ -168,7 +168,7 @@ visible/total impact and section-specific empty guidance alongside the inline
 `Clear resource filter` action, while rollout/history/log evidence stays on the final
 resource page. The drift and plan workspaces show `Current workspace read: GET /v1/overview/deployments/{deploymentName}.`
 in their chrome and include a top-level `Workspace JSON` handoff to that
-deployment-detail read model.
+deployment-detail read model. Non-auth read failures render the active page label, failed `GET ...` route, optional `Tenet request ID`, and same-URL `Retry current page` action instead of a generic overview-only error.
 
 Common bookmarkable routes:
 
