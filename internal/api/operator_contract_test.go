@@ -2089,6 +2089,16 @@ func TestResourceLogsOperatorContract(t *testing.T) {
 		}
 	}
 
+	readme := readRepoFile(t, "README.md")
+	for _, fragment := range []string{
+		"`GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}[&limit={positiveInteger}][&containerName={container}][&instanceId={ec2InstanceId}][&clusterArn={ecsClusterArn}]`",
+		"ECS task container, ASG\n  instance, and ECS cluster selectors keep focused troubleshooting reads explicit",
+	} {
+		if !strings.Contains(readme, fragment) {
+			t.Fatalf("expected README resource logs contract to include %q", fragment)
+		}
+	}
+
 	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
 		"`lookupContext` object",
