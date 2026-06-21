@@ -126,6 +126,18 @@ in `autoScalingGroup.instancesScope`. The top-level `resultScope` exists so
 generic clients and scripts can summarize the bounded read without parsing every
 resource-specific body first.
 
+ECS service payloads can also include additive deployment-configuration evidence
+from `DescribeServices` when AWS returns it:
+- `ecsService.deploymentControllerType`
+- `ecsService.deploymentCircuitBreaker.enabled`
+- `ecsService.deploymentCircuitBreaker.rollback`
+- `ecsService.deploymentAlarmConfiguration.enabled`
+- `ecsService.deploymentAlarmConfiguration.rollback`
+- `ecsService.deploymentAlarmConfiguration.alarmNames[]`
+
+Those fields are optional. Fixture-backed, local, no-AWS, and older provider
+payloads omit them rather than emitting empty placeholders.
+
 ## Supported Resource Types
 
 Current resource-inspection payload families:

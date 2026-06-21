@@ -8130,7 +8130,17 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				MinimumHealthyPercent:         aws.Int32(100),
 				MaximumPercent:                aws.Int32(200),
 				HealthCheckGracePeriodSeconds: aws.Int32(45),
-				TaskDefinition:                "payments-api:42",
+				DeploymentControllerType:      "ECS",
+				DeploymentCircuitBreaker: &resourceinspection.ECSDeploymentCircuitBreaker{
+					Enabled:  true,
+					Rollback: true,
+				},
+				DeploymentAlarmConfiguration: &resourceinspection.ECSDeploymentAlarmConfiguration{
+					Enabled:    true,
+					Rollback:   false,
+					AlarmNames: []string{"payments-api-5xx", "payments-api-latency"},
+				},
+				TaskDefinition: "payments-api:42",
 				Deployments: []resourceinspection.ECSDeploymentSummary{{
 					ID:             "ecs-svc/123",
 					Status:         "PRIMARY",
@@ -8242,10 +8252,35 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected ecsService object in payload, got %#v", raw["ecsService"])
 		}
-		for _, key := range []string{"minimumHealthyPercent", "maximumPercent", "healthCheckGracePeriodSeconds", "tasks", "tasksScope"} {
+		for _, key := range []string{"minimumHealthyPercent", "maximumPercent", "healthCheckGracePeriodSeconds", "deploymentControllerType", "deploymentCircuitBreaker", "deploymentAlarmConfiguration", "tasks", "tasksScope"} {
 			if _, ok := ecsService[key]; !ok {
 				t.Fatalf("expected ECS service inspection field %q in payload, got %#v", key, ecsService)
 			}
+		}
+		if ecsService["deploymentControllerType"] != "ECS" {
+			t.Fatalf("expected ECS service deploymentControllerType in raw payload, got %#v", ecsService)
+		}
+		circuitBreaker, ok := ecsService["deploymentCircuitBreaker"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected deploymentCircuitBreaker object in ECS service payload, got %#v", ecsService["deploymentCircuitBreaker"])
+		}
+		for key, want := range map[string]any{"enabled": true, "rollback": true} {
+			if circuitBreaker[key] != want {
+				t.Fatalf("expected deploymentCircuitBreaker.%s=%#v, got %#v in %#v", key, want, circuitBreaker[key], circuitBreaker)
+			}
+		}
+		alarmConfig, ok := ecsService["deploymentAlarmConfiguration"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected deploymentAlarmConfiguration object in ECS service payload, got %#v", ecsService["deploymentAlarmConfiguration"])
+		}
+		for key, want := range map[string]any{"enabled": true, "rollback": false} {
+			if alarmConfig[key] != want {
+				t.Fatalf("expected deploymentAlarmConfiguration.%s=%#v, got %#v in %#v", key, want, alarmConfig[key], alarmConfig)
+			}
+		}
+		alarmNames, ok := alarmConfig["alarmNames"].([]any)
+		if !ok || !reflect.DeepEqual(alarmNames, []any{"payments-api-5xx", "payments-api-latency"}) {
+			t.Fatalf("expected deploymentAlarmConfiguration.alarmNames in raw payload, got %#v", alarmConfig["alarmNames"])
 		}
 		tasksScope, ok := ecsService["tasksScope"].(map[string]any)
 		if !ok {

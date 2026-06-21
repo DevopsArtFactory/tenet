@@ -280,23 +280,37 @@ type ListenerActionTargetInspection struct {
 }
 
 type ECSServiceInspection struct {
-	ClusterARN                    string                 `json:"clusterArn"`
-	ServiceARN                    string                 `json:"serviceArn"`
-	ServiceName                   string                 `json:"serviceName"`
-	Status                        string                 `json:"status"`
-	LaunchType                    string                 `json:"launchType,omitempty"`
-	DesiredCount                  int32                  `json:"desiredCount"`
-	RunningCount                  int32                  `json:"runningCount"`
-	PendingCount                  int32                  `json:"pendingCount"`
-	MinimumHealthyPercent         *int32                 `json:"minimumHealthyPercent,omitempty"`
-	MaximumPercent                *int32                 `json:"maximumPercent,omitempty"`
-	HealthCheckGracePeriodSeconds *int32                 `json:"healthCheckGracePeriodSeconds,omitempty"`
-	TaskDefinition                string                 `json:"taskDefinition"`
-	TaskDefinitionImage           string                 `json:"taskDefinitionImage,omitempty"`
-	Deployments                   []ECSDeploymentSummary `json:"deployments"`
-	Events                        []ECSServiceEvent      `json:"events"`
-	Tasks                         []ECSTaskSummary       `json:"tasks,omitempty"`
-	TasksScope                    *ECSTaskSummaryScope   `json:"tasksScope,omitempty"`
+	ClusterARN                    string                           `json:"clusterArn"`
+	ServiceARN                    string                           `json:"serviceArn"`
+	ServiceName                   string                           `json:"serviceName"`
+	Status                        string                           `json:"status"`
+	LaunchType                    string                           `json:"launchType,omitempty"`
+	DesiredCount                  int32                            `json:"desiredCount"`
+	RunningCount                  int32                            `json:"runningCount"`
+	PendingCount                  int32                            `json:"pendingCount"`
+	MinimumHealthyPercent         *int32                           `json:"minimumHealthyPercent,omitempty"`
+	MaximumPercent                *int32                           `json:"maximumPercent,omitempty"`
+	HealthCheckGracePeriodSeconds *int32                           `json:"healthCheckGracePeriodSeconds,omitempty"`
+	DeploymentControllerType      string                           `json:"deploymentControllerType,omitempty"`
+	DeploymentCircuitBreaker      *ECSDeploymentCircuitBreaker     `json:"deploymentCircuitBreaker,omitempty"`
+	DeploymentAlarmConfiguration  *ECSDeploymentAlarmConfiguration `json:"deploymentAlarmConfiguration,omitempty"`
+	TaskDefinition                string                           `json:"taskDefinition"`
+	TaskDefinitionImage           string                           `json:"taskDefinitionImage,omitempty"`
+	Deployments                   []ECSDeploymentSummary           `json:"deployments"`
+	Events                        []ECSServiceEvent                `json:"events"`
+	Tasks                         []ECSTaskSummary                 `json:"tasks,omitempty"`
+	TasksScope                    *ECSTaskSummaryScope             `json:"tasksScope,omitempty"`
+}
+
+type ECSDeploymentCircuitBreaker struct {
+	Enabled  bool `json:"enabled"`
+	Rollback bool `json:"rollback"`
+}
+
+type ECSDeploymentAlarmConfiguration struct {
+	Enabled    bool     `json:"enabled"`
+	Rollback   bool     `json:"rollback"`
+	AlarmNames []string `json:"alarmNames,omitempty"`
 }
 
 type ECSTaskSummaryScope struct {
@@ -1812,9 +1826,17 @@ func autoScalingActivitySummaries(activities []asgtypes.Activity, limit int) []A
 func ecsInspectionFromService(service ecstypes.Service, clusterARN string, taskDefinitionImage string, tasks []ECSTaskSummary, tasksScope *ECSTaskSummaryScope) ECSServiceInspection {
 	var minimumHealthyPercent *int32
 	var maximumPercent *int32
+	var deploymentCircuitBreaker *ECSDeploymentCircuitBreaker
+	var deploymentAlarmConfiguration *ECSDeploymentAlarmConfiguration
 	if service.DeploymentConfiguration != nil {
 		minimumHealthyPercent = cloneInt32(service.DeploymentConfiguration.MinimumHealthyPercent)
 		maximumPercent = cloneInt32(service.DeploymentConfiguration.MaximumPercent)
+		deploymentCircuitBreaker = ecsDeploymentCircuitBreaker(service.DeploymentConfiguration.DeploymentCircuitBreaker)
+		deploymentAlarmConfiguration = ecsDeploymentAlarmConfiguration(service.DeploymentConfiguration.Alarms)
+	}
+	deploymentControllerType := ""
+	if service.DeploymentController != nil {
+		deploymentControllerType = strings.TrimSpace(string(service.DeploymentController.Type))
 	}
 
 	deployments := append([]ecstypes.Deployment(nil), service.Deployments...)
@@ -1878,12 +1900,43 @@ func ecsInspectionFromService(service ecstypes.Service, clusterARN string, taskD
 		MinimumHealthyPercent:         minimumHealthyPercent,
 		MaximumPercent:                maximumPercent,
 		HealthCheckGracePeriodSeconds: cloneInt32(service.HealthCheckGracePeriodSeconds),
+		DeploymentControllerType:      deploymentControllerType,
+		DeploymentCircuitBreaker:      deploymentCircuitBreaker,
+		DeploymentAlarmConfiguration:  deploymentAlarmConfiguration,
 		TaskDefinition:                aws.ToString(service.TaskDefinition),
 		TaskDefinitionImage:           strings.TrimSpace(taskDefinitionImage),
 		Deployments:                   deploymentSummaries,
 		Events:                        eventSummaries,
 		Tasks:                         append([]ECSTaskSummary(nil), tasks...),
 		TasksScope:                    cloneECSTaskSummaryScope(tasksScope),
+	}
+}
+
+func ecsDeploymentCircuitBreaker(circuitBreaker *ecstypes.DeploymentCircuitBreaker) *ECSDeploymentCircuitBreaker {
+	if circuitBreaker == nil {
+		return nil
+	}
+	return &ECSDeploymentCircuitBreaker{
+		Enabled:  circuitBreaker.Enable,
+		Rollback: circuitBreaker.Rollback,
+	}
+}
+
+func ecsDeploymentAlarmConfiguration(alarms *ecstypes.DeploymentAlarms) *ECSDeploymentAlarmConfiguration {
+	if alarms == nil {
+		return nil
+	}
+	alarmNames := make([]string, 0, len(alarms.AlarmNames))
+	for _, name := range alarms.AlarmNames {
+		name = strings.TrimSpace(name)
+		if name != "" {
+			alarmNames = append(alarmNames, name)
+		}
+	}
+	return &ECSDeploymentAlarmConfiguration{
+		Enabled:    alarms.Enable,
+		Rollback:   alarms.Rollback,
+		AlarmNames: alarmNames,
 	}
 }
 

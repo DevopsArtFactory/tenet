@@ -5235,7 +5235,7 @@ async function render(search, inspectionResult, hash = '') {
   if (!logsDeniedRun.text.includes('Authenticated operator required')) throw new Error('expected recent logs 401 guidance to stay visible: ' + logsDeniedRun.text);
   if (!logsDeniedRun.text.includes('Tenet request ID · req-logs-951-denied')) throw new Error('expected recent logs 401 to render Tenet Request-Id metadata: ' + logsDeniedRun.text);
 
-  const serviceResult = { available: true, source: 'ecs_service', clusterArn, lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, resultScope: { sampleType: 'ecsTasks', requestedLimit: 10, effectiveLimit: 10, returnedItemCount: 1, truncationStatus: 'not_truncated' }, ecsService: { clusterArn, serviceName: 'worker-prod-service', status: 'ACTIVE', desiredCount: 1, runningCount: 1, pendingCount: 0, taskDefinition: 'worker:42', deployments: [], events: [], tasksScope: { effectiveLimit: 10, returnedTaskCount: 1, truncationStatus: 'not_truncated' }, tasks: [{ taskArn, taskId: 'abc123', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containerInstanceArn: 'arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker-prod/ci-sample', ec2InstanceId: 'i-0sampleec2host', capacityProviderName: 'worker-capacity', availabilityZone: 'ap-northeast-2c', containers: [{ name: 'worker', lastStatus: 'RUNNING', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] }] } };
+  const serviceResult = { available: true, source: 'ecs_service', clusterArn, lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, resultScope: { sampleType: 'ecsTasks', requestedLimit: 10, effectiveLimit: 10, returnedItemCount: 1, truncationStatus: 'not_truncated' }, ecsService: { clusterArn, serviceName: 'worker-prod-service', status: 'ACTIVE', deploymentControllerType: 'ECS', deploymentCircuitBreaker: { enabled: true, rollback: true }, deploymentAlarmConfiguration: { enabled: true, rollback: false, alarmNames: ['payments-api-5xx', 'payments-api-latency'] }, desiredCount: 1, runningCount: 1, pendingCount: 0, taskDefinition: 'worker:42', deployments: [], events: [], tasksScope: { effectiveLimit: 10, returnedTaskCount: 1, truncationStatus: 'not_truncated' }, tasks: [{ taskArn, taskId: 'abc123', lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containerInstanceArn: 'arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker-prod/ci-sample', ec2InstanceId: 'i-0sampleec2host', capacityProviderName: 'worker-capacity', availabilityZone: 'ap-northeast-2c', containers: [{ name: 'worker', lastStatus: 'RUNNING', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' } }] }] } };
   const serviceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId) + '&clusterArn=' + encodedClusterArn, serviceResult);
   if (!serviceRun.text.includes('Recent ECS tasks')) throw new Error('expected ECS service task list');
   ['Sample type | ECS tasks', 'Requested sample cap | 10 items', 'Effective sample cap | 10 items', 'Returned sample items | 1 item', 'Scope status | Below cap; no router truncation'].forEach((fragment) => {
@@ -5249,6 +5249,9 @@ async function render(search, inspectionResult, hash = '') {
   if (!serviceRun.text.includes('Availability Zone · ap-northeast-2c')) throw new Error('expected ECS service task sample availability-zone placement evidence: ' + serviceRun.text);
   if (!serviceRun.text.includes('Selected cluster | ' + clusterArn)) throw new Error('expected selected ECS cluster to render in resource scope evidence: ' + serviceRun.text);
   if (!serviceRun.text.includes('Selected cluster · ' + clusterArn)) throw new Error('expected selected ECS cluster to render in quick navigation: ' + serviceRun.text);
+  ['Deployment controller | ECS', 'Deployment circuit breaker | Enabled; rollback enabled', 'Deployment alarms | Enabled; rollback disabled; alarms: payments-api-5xx, payments-api-latency'].forEach((fragment) => {
+    if (!serviceRun.text.includes(fragment)) throw new Error('expected ECS deployment configuration label ' + fragment + ': ' + serviceRun.text);
+  });
   const clusterSectionLinks = collectNodes(serviceRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#resource-'));
   ['#resource-live-inspection', '#resource-recent-logs'].forEach((hashSuffix) => {
     const link = clusterSectionLinks.find((node) => node.href.endsWith(hashSuffix));
@@ -5319,6 +5322,15 @@ async function render(search, inspectionResult, hash = '') {
   const noPlacementServiceRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId) + '&clusterArn=' + encodedClusterArn, noPlacementServiceResult);
   ['Container instance ·', 'EC2 instance ·', 'Capacity provider ·', 'Availability Zone ·'].forEach((fragment) => {
     if (noPlacementServiceRun.text.includes(fragment)) throw new Error('expected absent ECS service task placement fields to stay quiet for ' + fragment + ': ' + noPlacementServiceRun.text);
+  });
+
+  const noDeploymentConfigResult = JSON.parse(JSON.stringify(serviceResult));
+  delete noDeploymentConfigResult.ecsService.deploymentControllerType;
+  delete noDeploymentConfigResult.ecsService.deploymentCircuitBreaker;
+  delete noDeploymentConfigResult.ecsService.deploymentAlarmConfiguration;
+  const noDeploymentConfigRun = await render('?page=resource&deployment=worker-prod&resourceType=ecsService&resourceId=' + encodeURIComponent(serviceResourceId) + '&clusterArn=' + encodedClusterArn, noDeploymentConfigResult);
+  ['Deployment controller |', 'Deployment circuit breaker |', 'Deployment alarms |'].forEach((fragment) => {
+    if (noDeploymentConfigRun.text.includes(fragment)) throw new Error('expected absent ECS deployment configuration fields to stay quiet for ' + fragment + ': ' + noDeploymentConfigRun.text);
   });
 
   const emptyServiceResult = JSON.parse(JSON.stringify(serviceResult));
