@@ -2307,6 +2307,7 @@ assert 'Recent logs' in ui, ui
 assert 'Recent logs request' in ui, ui
 assert 'Live inspection request' in ui, ui
 assert 'Refresh recent logs' in ui, ui
+assert 'recent-log-lookup-context-card' in ui, ui
 assert 'Requested cap' in ui, ui
 assert 'Effective cap' in ui, ui
 assert 'Returned entries' in ui, ui

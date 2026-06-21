@@ -2148,8 +2148,13 @@ func TestEmbeddedUIResourceDetailRecentLogsContract(t *testing.T) {
 		"const createResourceLogsLookupPathSummary = (lookupContext) => createElement('p', 'detail-section-copy', resourceLogsLookupPathText(lookupContext));",
 		"const createResourceInspectionLookupPathSummary = (lookupContext) => createElement('p', 'detail-section-copy', resourceInspectionLookupPathText(lookupContext));",
 		"const createProviderLookupContextLabel = () => createElement('div', 'detail-condition-meta', 'Provider lookup context');",
+		"const createResourceLogsLookupContextCard = (lookupContext) => {",
+		"createElement('div', 'recent-log-lookup-context-card'",
+		"createElement('div', 'recent-log-lookup-context-label', 'Provider lookup context')",
+		"createElement('div', 'recent-log-lookup-context-summary', resourceLogsLookupPathText(lookupContext))",
+		"createElement('span', 'recent-log-lookup-context-chip'",
 		"const createResourceLogsLookupContextNodes = (lookupContext) => lookupContextReturned(lookupContext)",
-		"? [createResourceLogsLookupPathSummary(lookupContext), createProviderLookupContextLabel()]",
+		"? [createResourceLogsLookupContextCard(lookupContext)]",
 		"const createResourceInspectionLookupContextNodes = (lookupContext) => lookupContextReturned(lookupContext)",
 		"? [createResourceInspectionLookupPathSummary(lookupContext), createProviderLookupContextLabel()]",
 		"const resourcePanelFetchedAtText = (result) => {",
@@ -3070,6 +3075,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Refresh recent logs' in ui, ui") && !strings.Contains(text, "assert \"Refresh recent logs\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh recent logs")
 	}
+	if !strings.Contains(text, "assert 'recent-log-lookup-context-card' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains recent-log lookup context card")
+	}
 	for _, fragment := range []string{
 		"assert \"const resourceLogsLimitOptions = [\" in ui, ui",
 		"assert \"Log entry cap · ${resourceLogsLimitText(limit)}\" in ui, ui",
@@ -3977,6 +3985,7 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"assert ecs_task_scope.get('requestedLimit') == 1",
 			"assert ecs_task_resource_inspection['resourceType'] == 'ecsTask'",
 			"assert no_log_source.get('truncationStatus') == 'not_applicable'",
+			"assert 'recent-log-lookup-context-card' in ui, ui",
 		},
 		"../../scripts/smoke-docker.sh": {
 			"limited_worker_resource_logs=$(curl -fsS \"$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service&limit=1\")",
@@ -3996,6 +4005,7 @@ func TestResourceLogsResultScopeReleaseGuardContracts(t *testing.T) {
 			"assert ecs_task_scope.get(\"requestedLimit\") == 1",
 			"assert ecs_task_resource_inspection[\"resourceType\"] == \"ecsTask\"",
 			"assert no_log_source.get(\"truncationStatus\") == \"not_applicable\"",
+			"\"recent-log-lookup-context-card\"",
 			"\"audit-freshness\"",
 			"\"Last refreshed · ${fetchedAt}\"",
 			"\"meta.setAttribute('role', 'status');\"",
@@ -4152,7 +4162,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"representative live-inspection read plus correlated bookmarkable shell reads for the application drill-down, account drill-down, drift workspace, deployment-scoped audit workspace, and bookmarkable plan/apply workspace",
 			"CodeDeploy application, task-set target-group, and weighted production listener-rule resource shells",
 			"bookmarkable application-detail status summary shell",
-			"The raw embedded shell/docs contract also keeps the labels `Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Resolved backing resource`, `Lookup path ·`, `Lookup region`, `Observer role configured`, and the runtime-events `Open field-level drift` handoff present",
+			"The raw embedded shell/docs contract also keeps the labels `Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Resolved backing resource`, `recent-log-lookup-context-card`, `Lookup path ·`, `Lookup region`, `Observer role configured`, and the runtime-events `Open field-level drift` handoff present",
 			"resource is a valid drill-down target but has no independent recent-log stream yet",
 			"temp files via the shared `write_payload` helper",
 			"The compose-backed smoke now covers shipped resource drill-down shells directly",
@@ -4250,7 +4260,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"survive the Compose `api` service restart",
 			"`TENET_AWS_ENABLE_APPLY=true make docker-up`",
 			"correlated structured `http_request` logs with stable fields such as `request_id`, `method`, `path`, `status`, `duration_ms`, and `result` for a representative live-inspection read, the bookmarkable application drill-down shell request, bookmarkable account drill-down shell request, bookmarkable drift workspace request, the deployment-scoped audit workspace request, and the bookmarkable plan/apply workspace shell request",
-			"`Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Resolved backing resource`, `Lookup path ·`, `Lookup region`, `Observer role configured`, and the runtime-events `Open field-level drift` handoff",
+			"`Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Resolved backing resource`, `recent-log-lookup-context-card`, `Lookup path ·`, `Lookup region`, `Observer role configured`, and the runtime-events `Open field-level drift` handoff",
 			"temp files through the shared `write_payload` helper",
 			"bookmarkable bootstrap-source resource page plus the paired `userDataBootstrapSource` `resource-logs` and `resource-inspection` routes, the `codeDeployApplication` recent-log route, the `testListener` recent-log backing-resource metadata, weighted target-group `no_log_source` recent-log payloads, the selected `userDataBootstrapSource` recent-log probe with `instanceId=i-0abc123def4567890` plus echoed selector/backing-ASG metadata on explicit unavailable payloads, the selected ASG live-inspection probe `resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate&instanceId=i-0abc123def4567890` with echoed selector/lookup context/typed ASG evidence, malformed `instanceId=i-` `400 Bad Request` / `invalid instanceId query` validation on both selected route families before provider lookup, the `candidateAutoScalingGroup` bounded `resource-inspection?limit=2` sample with `autoScalingGroup.instancesScope` fields when available plus explicit unavailable semantics without AWS access",
 			"bookmarkable CodeDeploy application, `blueTaskSetTargetGroup`, and `productionListenerRule` resource pages and the local-friendly traffic-routing inspection fallback",
