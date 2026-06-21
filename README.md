@@ -187,10 +187,12 @@ Primary operator APIs:
   (recent-log responses expose `resultScope.limit`, `resultScope.returned`,
   `resultScope.total`, and `resultScope.truncated` so operators can tell when
   the returned entries were capped)
-- `GET /v1/overview/deployments/{deploymentName}/resource-inspection`
-  (bounded ECS task / ASG instance samples expose `resultScope.returnedItemCount`
-  and compact alias `resultScope.returnedCount`, plus `truncationStatus` and
-  compact boolean alias `truncated`)
+- `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}[&clusterArn={ecsClusterArn}][&limit={positiveInteger}]`
+  (the route requires a concrete resource type/name; supported ECS service and
+  ASG reads accept optional bounded selectors/caps, and bounded ECS task / ASG
+  instance samples expose `resultScope.returnedItemCount` and compact alias
+  `resultScope.returnedCount`, plus `truncationStatus` and compact boolean alias
+  `truncated`)
 
 Resource drill-down Recent logs and Live inspection panels label returned
 `lookupContext` as `Provider lookup context` so operators can confirm the
