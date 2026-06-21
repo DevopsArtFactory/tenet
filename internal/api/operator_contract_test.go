@@ -3,7 +3,6 @@ package api
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -29,6 +28,10 @@ func readRepoFile(t *testing.T, relativePath string) string {
 	}
 
 	return string(body)
+}
+
+func redactedAuthProviderPlaceholder() string {
+	return "TENET_AUTH_PROVIDER=" + strings.Repeat("*", 3)
 }
 
 func TestReadmeStaysProductOverview(t *testing.T) {
@@ -165,14 +168,9 @@ func TestLocalRuntimeDocsDescribeComposeRedisStatusStore(t *testing.T) {
 
 func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
-	for _, placeholder := range []string{
-		"TENET_AUTH_PROVIDER=***",
-		"TENET_AUTH_PROVIDER=<",
-		"TENET_AUTH_PROVIDER=REDACTED",
-	} {
-		if strings.Contains(operatorContractsDoc, placeholder) {
-			t.Fatalf("expected operator contracts doc to use concrete non-secret provider modes instead of placeholder %q", placeholder)
-		}
+	redactedProviderSetting := redactedAuthProviderPlaceholder()
+	if strings.Contains(operatorContractsDoc, redactedProviderSetting) {
+		t.Fatalf("expected operator contracts doc to use concrete non-secret provider modes instead of placeholder %q", redactedProviderSetting)
 	}
 	for _, fragment := range []string{
 		"`docs/architecture/tenet-v1-enterprise-sso.md`",
@@ -234,18 +232,19 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 			t.Fatalf("expected enterprise SSO docs to include %q", fragment)
 		}
 	}
-	providerPlaceholderPattern := regexp.MustCompile(`TENET_AUTH_PROVIDER=\*{3}(?:\s|` + "`" + `|$)`)
 	for _, source := range []struct {
 		name string
 		body string
 	}{
 		{name: "docs/architecture/tenet-v1-operator-contracts.md", body: operatorContractsDoc},
 		{name: "docs/architecture/tenet-v1-enterprise-sso.md", body: doc},
+		{name: "docs/features/managed-login.md", body: readRepoFile(t, "docs/features/managed-login.md")},
+		{name: "README.md", body: readRepoFile(t, "README.md")},
 		{name: "scripts/smoke-local.sh", body: readRepoFile(t, "scripts/smoke-local.sh")},
 		{name: "scripts/smoke-docker.sh", body: readRepoFile(t, "scripts/smoke-docker.sh")},
 	} {
-		if providerPlaceholderPattern.MatchString(source.body) {
-			t.Fatalf("expected %s to use concrete non-secret auth provider examples", source.name)
+		if strings.Contains(source.body, redactedProviderSetting) {
+			t.Fatalf("expected %s to use concrete non-secret auth provider examples instead of placeholder %q", source.name, redactedProviderSetting)
 		}
 	}
 }
@@ -257,19 +256,9 @@ func TestManagedLoginFeatureGuideDocs(t *testing.T) {
 	}
 
 	doc := readRepoFile(t, "docs/features/managed-login.md")
-	for _, placeholder := range []string{
-		"TENET_AUTH_PROVIDER=***",
-		"TENET_AUTH_PROVIDER=<",
-		"TENET_AUTH_PROVIDER=REDACTED",
-	} {
-		if strings.Contains(doc, placeholder) {
-			t.Fatalf("expected managed-login guide to use concrete non-secret provider modes instead of placeholder %q", placeholder)
-		}
-	}
-
-	providerPlaceholderPattern := regexp.MustCompile(`TENET_AUTH_PROVIDER=\*{3}(?:\s|` + "`" + `|$)`)
-	if providerPlaceholderPattern.MatchString(doc) {
-		t.Fatal("expected managed-login guide to avoid TENET_AUTH_PROVIDER=*** placeholders")
+	redactedProviderSetting := redactedAuthProviderPlaceholder()
+	if strings.Contains(doc, redactedProviderSetting) {
+		t.Fatalf("expected managed-login guide to use concrete non-secret provider modes instead of placeholder %q", redactedProviderSetting)
 	}
 
 	for _, fragment := range []string{
