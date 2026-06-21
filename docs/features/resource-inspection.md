@@ -138,6 +138,10 @@ from `DescribeServices` when AWS returns it:
 Those fields are optional. Fixture-backed, local, no-AWS, and older provider
 payloads omit them rather than emitting empty placeholders.
 
+When present, the embedded Live inspection card renders the same evidence with
+the operator-facing labels `Deployment controller`, `Deployment circuit breaker`,
+and `Deployment alarms`; when the fields are absent, those rows stay quiet.
+
 ## Supported Resource Types
 
 Current resource-inspection payload families:
