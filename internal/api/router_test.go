@@ -7185,7 +7185,7 @@ func TestRouterOverviewDeploymentResourceLogs(t *testing.T) {
 		})
 
 		for _, resourceType := range []string{"ecsService", "ecsTask"} {
-			for _, rawClusterARN := range []string{"not-an-arn", "arn:aws:sqs:ap-northeast-2:123456789012:queue/name", "arn:aws:ecs:ap-northeast-2:123456789012:service/cluster/name"} {
+			for _, rawClusterARN := range []string{"not-an-arn", "arn:aws:sqs:ap-northeast-2:123456789012:queue/name", "arn:aws:ecs:ap-northeast-2:12345678901x:cluster/payments", "arn:aws:ecs:ap-northeast-2:123456789012:service/cluster/name"} {
 				t.Run(resourceType+"/"+rawClusterARN, func(t *testing.T) {
 					resourceName := "api-prod-service"
 					if resourceType == "ecsTask" {
@@ -8352,13 +8352,20 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 			},
 		})
 
-		resp := httptest.NewRecorder()
-		router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=api-prod-service&clusterArn="+url.QueryEscape("arn:aws:ecs:ap-northeast-2:123456789012:service/cluster/name"), nil))
-		if resp.Code != http.StatusBadRequest {
-			t.Fatalf("expected 400, got %d with body %q", resp.Code, resp.Body.String())
-		}
-		if body := resp.Body.String(); body != "invalid clusterArn query\n" {
-			t.Fatalf("unexpected invalid clusterArn response: %q", body)
+		for _, rawClusterARN := range []string{
+			"arn:aws:ecs:ap-northeast-2:12345678901x:cluster/payments",
+			"arn:aws:ecs:ap-northeast-2:123456789012:service/cluster/name",
+		} {
+			t.Run(rawClusterARN, func(t *testing.T) {
+				resp := httptest.NewRecorder()
+				router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=ecsService&resourceName=api-prod-service&clusterArn="+url.QueryEscape(rawClusterARN), nil))
+				if resp.Code != http.StatusBadRequest {
+					t.Fatalf("expected 400, got %d with body %q", resp.Code, resp.Body.String())
+				}
+				if body := resp.Body.String(); body != "invalid clusterArn query\n" {
+					t.Fatalf("unexpected invalid clusterArn response: %q", body)
+				}
+			})
 		}
 		if overviewCalls != 0 || providerCalls != 0 {
 			t.Fatalf("expected invalid clusterArn to short-circuit providers, got overview=%d resourceInspection=%d", overviewCalls, providerCalls)
