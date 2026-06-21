@@ -322,6 +322,7 @@ The detailed runner-start evidence bundle remains available by omitting
   Terraform bootstrap, public repo-sync, and `repo_sync_token_secret_arn`.
 - `docs/architecture/tenet-v1-enterprise-sso.md` documents managed login,
   Google Workspace OIDC, Okta OIDC, Okta SAML diagnostics, and SSO boundaries.
+- `docs/features/managed-login.md` documents managed-login activation, provider routes, cookie-security diagnostics, logout boundaries, and trusted-front-door/policy relationships.
 - `docs/features/overview-dashboard.md` documents application/account/resource pages,
   drift, audit, and plan/apply workspaces.
 - `docs/features/resource-recent-logs.md` documents recent-log resource contracts.
