@@ -3064,6 +3064,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Recent logs request' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Recent logs request")
 	}
+	if !strings.Contains(text, "assert 'Live inspection request' in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert embedded html contains Live inspection request")
+	}
 	if !strings.Contains(text, "assert 'Refresh recent logs' in ui, ui") && !strings.Contains(text, "assert \"Refresh recent logs\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains Refresh recent logs")
 	}
@@ -4462,6 +4465,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		"\"params.set('limit', String(normalizedLimit));\",",
 		"\"`Failed to load recent logs: ${error.message}`\",",
 		"\"'Recent logs'\",",
+		"\"'Recent logs request'\",",
 		"\"resourceLogsReadRoute(deploymentName, resource, target?.limit ?? selectedLimit)\",",
 		"\"const createResourceInspectionActions = (section, detail, resource, isLoading = false) => [\",",
 		"\"createResourceInspectionLimitControl(section, detail, resource, isLoading)\",",
@@ -4475,6 +4479,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		"\"renderResourceInspectionState(section, 'Loading live inspection…', '', pendingContext(), [], loadingActions);\",",
 		"\"`Failed to load live inspection: ${error.message}`\",",
 		"\"'Live inspection'\",",
+		"\"'Live inspection request'\",",
 		"\"resourceInspectionReadRoute(deploymentName, resource, targetLimit)\",",
 	} {
 		if !strings.Contains(dockerSmoke, fragment) {
