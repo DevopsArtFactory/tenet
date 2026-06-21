@@ -250,6 +250,60 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 	}
 }
 
+func TestManagedLoginFeatureGuideDocs(t *testing.T) {
+	readme := readRepoFile(t, "README.md")
+	if !strings.Contains(readme, "`docs/features/managed-login.md` documents managed-login activation, provider routes, cookie-security diagnostics, logout boundaries, and trusted-front-door/policy relationships.") {
+		t.Fatal("expected README documentation map to point operators at the managed-login troubleshooting guide")
+	}
+
+	doc := readRepoFile(t, "docs/features/managed-login.md")
+	for _, placeholder := range []string{
+		"TENET_AUTH_PROVIDER=***",
+		"TENET_AUTH_PROVIDER=<",
+		"TENET_AUTH_PROVIDER=REDACTED",
+	} {
+		if strings.Contains(doc, placeholder) {
+			t.Fatalf("expected managed-login guide to use concrete non-secret provider modes instead of placeholder %q", placeholder)
+		}
+	}
+
+	providerPlaceholderPattern := regexp.MustCompile(`TENET_AUTH_PROVIDER=\*{3}(?:\s|` + "`" + `|$)`)
+	if providerPlaceholderPattern.MatchString(doc) {
+		t.Fatal("expected managed-login guide to avoid TENET_AUTH_PROVIDER=*** placeholders")
+	}
+
+	for _, fragment := range []string{
+		"# Managed Login",
+		"Operator troubleshooting guide",
+		"Managed login is active only when `GET /v1/operator/context.authRuntime.tenetManagedLogin.active=true`",
+		"`TENET_AUTH_PROVIDER=github`",
+		"`TENET_AUTH_PROVIDER=google_oidc`",
+		"`TENET_AUTH_PROVIDER=okta_oidc`",
+		"`TENET_AUTH_PROVIDER=okta_saml` is diagnostic-only",
+		"`GET /auth/login/github`",
+		"`GET /auth/login/google`",
+		"`GET /auth/login/okta`",
+		"`GET /auth/callback/github`",
+		"`GET /auth/callback/google`",
+		"`GET /auth/callback/okta/oidc`",
+		"`GET /auth/callback/okta/saml`",
+		"`GET /auth/logout` and `POST /auth/logout`",
+		"`TENET_AUTH_SESSION_COOKIE_SECURE=true`",
+		"`sessionCookieSecureOverride`, `sessionCookieSecureForRequest`, and `sessionCookieSecureSources`",
+		"HTTPS request evidence or trusted `X-Forwarded-Proto: https` / `Forwarded: proto=https` evidence",
+		"Logout clears only Tenet's signed `tenet_session` cookie",
+		"does not revoke provider tokens, clear GitHub/Google/Okta sessions, or sign out an upstream trusted front door",
+		"Trusted front-door identity still wins when trusted headers are present",
+		"Managed login authenticates the browser operator; it does not grant Tenet roles or deployment access by itself.",
+		"Repository-backed RBAC policy diagnostics can explain how users or groups map to Tenet roles and deployment/project/environment scopes",
+		"route enforcement still depends on Tenet's trusted role and deployment/project/environment authorization settings",
+	} {
+		if !strings.Contains(doc, fragment) {
+			t.Fatalf("expected managed-login guide to include %q", fragment)
+		}
+	}
+}
+
 func TestEnterpriseSSOSmokeContracts(t *testing.T) {
 	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
