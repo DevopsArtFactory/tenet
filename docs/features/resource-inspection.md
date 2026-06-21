@@ -86,6 +86,8 @@ Known unavailable reasons include:
 - `unsupported_resource_type`
 - `no_log_source`
 
+For operator triage, `cross_account_not_configured` means the target deployment needs observer-role wiring before Tenet can inspect the selected resource. `resource_not_found` means the selected AWS resource, task, instance, or rollout target was not found in the resolved lookup path. `aws_unavailable` means Tenet could not complete the provider lookup because credentials, permissions, region/account placement, or the AWS API were unavailable. `unsupported_resource_type` means the route is stable but Tenet has not implemented live inspection for that resource family yet. `no_log_source` means the resource is valid, but inspection can only use summary or sibling evidence rather than a dedicated live provider read.
+
 Operators should capture the HTTP `Request-Id` response header together with the `lookupContext` object before escalating. The request ID anchors Tenet's structured
 API logs, while the lookup context explains the attempted region, control
 account, target account, and observer-role path. The embedded UI surfaces that
