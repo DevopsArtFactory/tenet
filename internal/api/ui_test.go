@@ -2905,6 +2905,18 @@ func TestSmokeScriptsAssertGuardedResourceEvidenceRequestIDHeaders(t *testing.T)
 				t.Fatalf("expected %s to lock guarded resource Request-Id smoke fragment %q", script, fragment)
 			}
 		}
+
+		if script == "smoke-docker.sh" {
+			for _, fragment := range []string{
+				"worker_resource_inspection_request_id=$(assert_request_id_header",
+				"WORKER_RESOURCE_INSPECTION_REQUEST_ID",
+				"/v1/overview/deployments/worker-prod/resource-inspection",
+			} {
+				if !strings.Contains(text, fragment) {
+					t.Fatalf("expected %s to correlate live-inspection Request-Id fragment %q", script, fragment)
+				}
+			}
+		}
 	}
 }
 
@@ -4123,7 +4135,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"controller-authored `managedDrift[]` evidence in `GET /v1/overview/deployments/payments-api-prod` with stable `driftId` / `field` / `desired` / `actual` / `severity` rows, additive detail-level `managedDriftSummary` severity counts, validates `resourceRef` shape when backend-authored metadata is present, and keeps the local-friendly no-resourceRef fallback explicit while aligned `runtimeSummary.managedDrift` remains present",
 			"survive the Compose `api` service restart",
 			"`TENET_AWS_ENABLE_APPLY=true make docker-up`",
-			"correlated bookmarkable shell reads for the application drill-down, account drill-down, drift workspace, deployment-scoped audit workspace, and bookmarkable plan/apply workspace",
+			"representative live-inspection read plus correlated bookmarkable shell reads for the application drill-down, account drill-down, drift workspace, deployment-scoped audit workspace, and bookmarkable plan/apply workspace",
 			"CodeDeploy application, task-set target-group, and weighted production listener-rule resource shells",
 			"bookmarkable application-detail status summary shell",
 			"The raw embedded shell/docs contract also keeps the labels `Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Resolved backing resource`, `Lookup path ·`, `Lookup region`, `Observer role configured`, and the runtime-events `Open field-level drift` handoff present",
@@ -4223,7 +4235,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 			"authenticated but unauthorized transitions fail with `403`",
 			"survive the Compose `api` service restart",
 			"`TENET_AWS_ENABLE_APPLY=true make docker-up`",
-			"correlated structured `http_request` logs with stable fields such as `request_id`, `method`, `path`, `status`, `duration_ms`, and `result` for the bookmarkable application drill-down shell request, bookmarkable account drill-down shell request, bookmarkable drift workspace request, the deployment-scoped audit workspace request, and the bookmarkable plan/apply workspace shell request",
+			"correlated structured `http_request` logs with stable fields such as `request_id`, `method`, `path`, `status`, `duration_ms`, and `result` for a representative live-inspection read, the bookmarkable application drill-down shell request, bookmarkable account drill-down shell request, bookmarkable drift workspace request, the deployment-scoped audit workspace request, and the bookmarkable plan/apply workspace shell request",
 			"`Plan preview actions`, `Apply request actions`, `Controller runtime events`, `Recent logs`, `Resolved backing resource`, `Lookup path ·`, `Lookup region`, `Observer role configured`, and the runtime-events `Open field-level drift` handoff",
 			"temp files through the shared `write_payload` helper",
 			"bookmarkable bootstrap-source resource page plus the paired `userDataBootstrapSource` `resource-logs` and `resource-inspection` routes, the `codeDeployApplication` recent-log route, the `testListener` recent-log backing-resource metadata, weighted target-group `no_log_source` recent-log payloads, the selected `userDataBootstrapSource` recent-log probe with `instanceId=i-0abc123def4567890` plus echoed selector/backing-ASG metadata on explicit unavailable payloads, the selected ASG live-inspection probe `resource-inspection?resourceType=candidateAutoScalingGroup&resourceName=payments-api-prod-candidate&instanceId=i-0abc123def4567890` with echoed selector/lookup context/typed ASG evidence, malformed `instanceId=i-` `400 Bad Request` / `invalid instanceId query` validation on both selected route families before provider lookup, the `candidateAutoScalingGroup` bounded `resource-inspection?limit=2` sample with `autoScalingGroup.instancesScope` fields when available plus explicit unavailable semantics without AWS access",

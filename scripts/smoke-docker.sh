@@ -118,18 +118,20 @@ assert_structured_api_request_logs() {
   local summary_request_id=$3
   local worker_resource_logs_request_id=$4
   local codedeploy_application_resource_logs_request_id=$5
-  local audit_logs_request_id=$6
-  local application_ui_request_id=$7
-  local account_ui_request_id=$8
-  local drift_ui_request_id=$9
-  local audit_ui_request_id=${10}
-  local plan_apply_ui_request_id=${11}
+  local worker_resource_inspection_request_id=$6
+  local audit_logs_request_id=$7
+  local application_ui_request_id=$8
+  local account_ui_request_id=$9
+  local drift_ui_request_id=${10}
+  local audit_ui_request_id=${11}
+  local plan_apply_ui_request_id=${12}
 
   API_LOGS_TEXT="$logs_text" \
   HEALTHZ_REQUEST_ID="$healthz_request_id" \
   SUMMARY_REQUEST_ID="$summary_request_id" \
   WORKER_RESOURCE_LOGS_REQUEST_ID="$worker_resource_logs_request_id" \
   CODEDEPLOY_APPLICATION_RESOURCE_LOGS_REQUEST_ID="$codedeploy_application_resource_logs_request_id" \
+  WORKER_RESOURCE_INSPECTION_REQUEST_ID="$worker_resource_inspection_request_id" \
   AUDIT_LOGS_REQUEST_ID="$audit_logs_request_id" \
   APPLICATION_UI_REQUEST_ID="$application_ui_request_id" \
   ACCOUNT_UI_REQUEST_ID="$account_ui_request_id" \
@@ -163,6 +165,7 @@ expected = [
     (os.environ["SUMMARY_REQUEST_ID"], "/v1/catalog/summary"),
     (os.environ["WORKER_RESOURCE_LOGS_REQUEST_ID"], "/v1/overview/deployments/worker-prod/resource-logs"),
     (os.environ["CODEDEPLOY_APPLICATION_RESOURCE_LOGS_REQUEST_ID"], "/v1/overview/deployments/payments-api-staging/resource-logs"),
+    (os.environ["WORKER_RESOURCE_INSPECTION_REQUEST_ID"], "/v1/overview/deployments/worker-prod/resource-inspection"),
     (os.environ["AUDIT_LOGS_REQUEST_ID"], "/v1/audit-logs"),
     (os.environ["APPLICATION_UI_REQUEST_ID"], "/"),
     (os.environ["ACCOUNT_UI_REQUEST_ID"], "/"),
@@ -469,6 +472,7 @@ assert_request_id_header "$API_BASE_URL/favicon.ico" >/dev/null
 summary_request_id=$(assert_request_id_header "$API_BASE_URL/v1/catalog/summary")
 worker_resource_logs_request_id=$(assert_request_id_header "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-logs?resourceType=ecsService&resourceName=worker-prod-service")
 codedeploy_application_resource_logs_request_id=$(assert_request_id_header "$API_BASE_URL/v1/overview/deployments/payments-api-staging/resource-logs?resourceType=codeDeployApplication&resourceName=payments-api-staging-codedeploy-app")
+worker_resource_inspection_request_id=$(assert_request_id_header "$API_BASE_URL/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsService&resourceName=worker-prod-service")
 audit_logs_request_id=$(assert_request_id_header "$API_BASE_URL/v1/audit-logs?action=apply.requested&limit=2")
 
 summary=$(curl -fsS "$API_BASE_URL/v1/catalog/summary")
@@ -2217,13 +2221,13 @@ fi
 api_logs=""
 for _ in $(seq 1 60); do
   api_logs=$("${COMPOSE[@]}" logs api --tail=200 2>&1 || true)
-  if assert_structured_api_request_logs "$api_logs" "$healthz_request_id" "$summary_request_id" "$worker_resource_logs_request_id" "$codedeploy_application_resource_logs_request_id" "$audit_logs_request_id" "$application_ui_request_id" "$account_ui_request_id" "$drift_ui_request_id" "$audit_ui_request_id" "$plan_apply_ui_request_id" >/dev/null 2>&1; then
+  if assert_structured_api_request_logs "$api_logs" "$healthz_request_id" "$summary_request_id" "$worker_resource_logs_request_id" "$codedeploy_application_resource_logs_request_id" "$worker_resource_inspection_request_id" "$audit_logs_request_id" "$application_ui_request_id" "$account_ui_request_id" "$drift_ui_request_id" "$audit_ui_request_id" "$plan_apply_ui_request_id" >/dev/null 2>&1; then
     break
   fi
   sleep 1
 done
 
-if ! assert_structured_api_request_logs "$api_logs" "$healthz_request_id" "$summary_request_id" "$worker_resource_logs_request_id" "$codedeploy_application_resource_logs_request_id" "$audit_logs_request_id" "$application_ui_request_id" "$account_ui_request_id" "$drift_ui_request_id" "$audit_ui_request_id" "$plan_apply_ui_request_id"; then
+if ! assert_structured_api_request_logs "$api_logs" "$healthz_request_id" "$summary_request_id" "$worker_resource_logs_request_id" "$codedeploy_application_resource_logs_request_id" "$worker_resource_inspection_request_id" "$audit_logs_request_id" "$application_ui_request_id" "$account_ui_request_id" "$drift_ui_request_id" "$audit_ui_request_id" "$plan_apply_ui_request_id"; then
   echo "smoke-docker: api logs missing correlated structured request entries" >&2
   exit 1
 fi
