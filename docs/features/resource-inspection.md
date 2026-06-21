@@ -88,7 +88,11 @@ Known unavailable reasons include:
 
 Operators should capture the HTTP `Request-Id` response header together with the `lookupContext` object before escalating. The request ID anchors Tenet's structured
 API logs, while the lookup context explains the attempted region, control
-account, target account, and observer-role path.
+account, target account, and observer-role path. The embedded UI surfaces that
+header as `Tenet request ID` metadata in the Live inspection card when the lazy
+read provides it, including successful unavailable payloads and non-auth fetch
+errors, so operators can copy the escalation token without opening browser
+devtools.
 
 ## Result Scope
 
