@@ -94,6 +94,7 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 	overviewUIText := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
 	contractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
 	featureText := readTextFile(t, "features/resource-inspection.md")
+	recentLogsFeatureText := readTextFile(t, "features/resource-recent-logs.md")
 
 	for _, fragment := range []string{
 		"`docs/features/resource-inspection.md` documents live resource inspection selectors, lookup context, and bounded sample metadata.",
@@ -135,6 +136,15 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 	} {
 		if !strings.Contains(featureText, fragment) {
 			t.Fatalf("expected resource inspection guide to include %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"optional `clusterArn` when an ECS service/task recent-log request supplied an accepted cluster selector",
+		"Tenet validates and echoes that selector just like `ecsService`",
+	} {
+		if !strings.Contains(recentLogsFeatureText, fragment) {
+			t.Fatalf("expected resource recent logs guide to include %q", fragment)
 		}
 	}
 }
