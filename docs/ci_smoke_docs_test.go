@@ -156,8 +156,8 @@ func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	for _, fragment := range []string{
 		"`Application JSON`, `Copy read route`, and a lightweight `resourceFilter=` search",
-		"with an inline `Clear resource filter` action whenever",
-		"that filter is active, while rollout/history/log evidence stays on the final resource",
+		"visible/total impact and section-specific empty guidance alongside the inline",
+		"`Clear resource filter` action, while rollout/history/log evidence stays on the final",
 	} {
 		if !strings.Contains(readmeText, fragment) {
 			t.Fatalf("expected README to include application-detail resource-filter summary %q", fragment)
@@ -179,7 +179,8 @@ func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 		"It matches normalized linked-resource `resource` type, `name`, and `description` text",
 		"Filtering never changes the backing read route: application detail still reads `GET /v1/overview/applications/{deploymentName}`",
 		"deeper resource/drift/plan links still preserve their existing route contracts",
-		"When `resourceFilter` hides all reported linked resources, the UI renders the filtered-empty state `No linked resources match the current filter. Clear the resource filter to show all reported linked resources.`",
+		"When `resourceFilter` hides rows in one or more reported resource groups, the UI keeps those sections visible with section-specific filtered-empty copy",
+		"Active filters also switch section quick-nav labels to visible/total counts such as `Traffic routing (1 of 3)`.",
 		"When the application read reports no linked resources at all, the page keeps the separate no-resource state `No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.`",
 		"Resource-filter updates and clear actions preserve the surrounding bookmarkable shell state (`q`, `sync`, `account`, `deployment`, and the current hash) while only changing or removing `resourceFilter`.",
 	} {

@@ -2063,7 +2063,8 @@ assert "const createClearApplicationResourceFilterButton = (detail, applicationS
 assert "createInput('Filter linked resources', currentPageState.resourceFilter, 'Filter by type, name, or description'," in application_ui, application_ui
 assert "createElement('div', 'account-topology resource-filter-summary')" in application_ui, application_ui
 assert "createClearApplicationResourceFilterButton(detail, applicationState)" in application_ui, application_ui
-assert 'No linked resources match the current filter. Clear the resource filter to show all reported linked resources.' in application_ui, application_ui
+assert "const applicationResourceSectionLinkLabel = (group, resourceFilter = '') => {" in application_ui, application_ui
+assert 'No ${group.title} resources match resource filter "${resourceFilter}". Clear the resource filter to show all ${group.title} resources.' in application_ui, application_ui
 assert 'Clear resource filter' in application_ui, application_ui
 assert 'Current application status' in application_ui, application_ui
 assert 'Application rollout context:' in application_ui, application_ui
