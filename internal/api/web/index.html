@@ -5446,9 +5446,36 @@
         }
         return item;
       };
+      const ecsDeploymentCircuitBreakerText = (circuitBreaker) => {
+        if (!circuitBreaker || typeof circuitBreaker !== 'object') return '';
+        const enabled = circuitBreaker.enabled === true ? 'Enabled' : 'Disabled';
+        const rollback = circuitBreaker.rollback === true ? 'rollback enabled' : 'rollback disabled';
+        return `${enabled}; ${rollback}`;
+      };
+      const ecsDeploymentAlarmConfigurationText = (alarmConfiguration) => {
+        if (!alarmConfiguration || typeof alarmConfiguration !== 'object') return '';
+        const enabled = alarmConfiguration.enabled === true ? 'Enabled' : 'Disabled';
+        const rollback = alarmConfiguration.rollback === true ? 'rollback enabled' : 'rollback disabled';
+        const alarmNames = Array.isArray(alarmConfiguration.alarmNames)
+          ? alarmConfiguration.alarmNames.map((name) => String(name || '').trim()).filter(Boolean)
+          : [];
+        return [enabled, rollback, alarmNames.length ? `alarms: ${alarmNames.join(', ')}` : 'no alarms reported'].join('; ');
+      };
       const renderECSServiceInspection = (section, deploymentName, resource, result) => {
         const service = result?.ecsService;
         const actions = createResourceInspectionActions(section, deploymentName, resource);
+        const deploymentConfigurationFields = [];
+        if (String(service?.deploymentControllerType || '').trim()) {
+          deploymentConfigurationFields.push(['Deployment controller', String(service.deploymentControllerType).trim()]);
+        }
+        const circuitBreakerText = ecsDeploymentCircuitBreakerText(service?.deploymentCircuitBreaker);
+        if (circuitBreakerText) {
+          deploymentConfigurationFields.push(['Deployment circuit breaker', circuitBreakerText]);
+        }
+        const alarmConfigurationText = ecsDeploymentAlarmConfigurationText(service?.deploymentAlarmConfiguration);
+        if (alarmConfigurationText) {
+          deploymentConfigurationFields.push(['Deployment alarms', alarmConfigurationText]);
+        }
         const metadata = createLookupContextGrid(result?.lookupContext, [
           ...resourceInspectionRequestIDFields(result),
           ['Inspection source', metricValue(result?.source)],
@@ -5462,6 +5489,7 @@
           ['Minimum healthy percent', percentText(service?.minimumHealthyPercent)],
           ['Maximum percent', percentText(service?.maximumPercent)],
           ['Health check grace period', durationSecondsText(service?.healthCheckGracePeriodSeconds)],
+          ...deploymentConfigurationFields,
           ['Task definition', textOrDash(service?.taskDefinition)],
           ['Cluster ARN', textOrDash(service?.clusterArn)],
           ['Service ARN', textOrDash(service?.serviceArn)],

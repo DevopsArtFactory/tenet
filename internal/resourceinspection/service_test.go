@@ -1732,6 +1732,57 @@ func TestECSInspectionFromServiceSortsDeploymentsAndEvents(t *testing.T) {
 	}
 }
 
+func TestECSInspectionFromServiceIncludesDeploymentConfigurationEvidence(t *testing.T) {
+	service := ecstypes.Service{
+		ServiceArn:     stringPtr("arn:service"),
+		ServiceName:    stringPtr("payments-api-prod-service"),
+		Status:         stringPtr("ACTIVE"),
+		TaskDefinition: stringPtr("payments-api:42"),
+		DesiredCount:   2,
+		RunningCount:   2,
+		PendingCount:   0,
+		DeploymentController: &ecstypes.DeploymentController{
+			Type: ecstypes.DeploymentControllerTypeEcs,
+		},
+		DeploymentConfiguration: &ecstypes.DeploymentConfiguration{
+			DeploymentCircuitBreaker: &ecstypes.DeploymentCircuitBreaker{
+				Enable:   true,
+				Rollback: true,
+			},
+			Alarms: &ecstypes.DeploymentAlarms{
+				Enable:     true,
+				Rollback:   false,
+				AlarmNames: []string{"payments-api-5xx", "payments-api-latency"},
+			},
+		},
+	}
+
+	got := ecsInspectionFromService(service, "arn:cluster", "", nil, nil)
+	if got.DeploymentControllerType != "ECS" {
+		t.Fatalf("expected deployment controller type evidence, got %+v", got)
+	}
+	if got.DeploymentCircuitBreaker == nil || !got.DeploymentCircuitBreaker.Enabled || !got.DeploymentCircuitBreaker.Rollback {
+		t.Fatalf("expected deployment circuit breaker evidence, got %+v", got.DeploymentCircuitBreaker)
+	}
+	if got.DeploymentAlarmConfiguration == nil || !got.DeploymentAlarmConfiguration.Enabled || got.DeploymentAlarmConfiguration.Rollback || !reflect.DeepEqual(got.DeploymentAlarmConfiguration.AlarmNames, []string{"payments-api-5xx", "payments-api-latency"}) {
+		t.Fatalf("expected deployment alarm configuration evidence, got %+v", got.DeploymentAlarmConfiguration)
+	}
+
+	raw, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal ECS inspection: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("decode ECS inspection JSON: %v", err)
+	}
+	for _, key := range []string{"deploymentControllerType", "deploymentCircuitBreaker", "deploymentAlarmConfiguration"} {
+		if _, ok := payload[key]; !ok {
+			t.Fatalf("expected ECS inspection JSON field %q in %#v", key, payload)
+		}
+	}
+}
+
 func TestECSServiceTaskSummariesReportsUnavailableScopeWhenTaskBridgeFails(t *testing.T) {
 	const (
 		clusterARN  = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker"
