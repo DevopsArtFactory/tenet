@@ -97,8 +97,8 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 	recentLogsFeatureText := readTextFile(t, "features/resource-recent-logs.md")
 
 	for _, fragment := range []string{
-		"`docs/features/resource-inspection.md` documents live resource inspection selectors, lookup context, and bounded sample metadata.",
-		"`docs/features/resource-recent-logs.md` documents recent-log resource contracts.",
+		"`docs/features/resource-inspection.md` documents live resource inspection selectors, lookup context, bounded sample metadata, and the operator-facing ECS/ASG/traffic-routing field families locked by docs tests.",
+		"`docs/features/resource-recent-logs.md` documents recent-log resource contracts, including lookup context, selector echoes, and friendly empty/unavailable states.",
 		"Capture the HTTP `Request-Id` response header with that lookup context when escalating a failed or unavailable Recent logs or Live inspection read",
 		"Recent logs and Live inspection cards label the same value as `Tenet request ID` metadata",
 	} {
@@ -148,6 +148,61 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 	} {
 		if !strings.Contains(recentLogsFeatureText, fragment) {
 			t.Fatalf("expected resource recent logs guide to include %q", fragment)
+		}
+	}
+}
+
+func TestResourceEvidenceDocsLockOperatorFieldFamilies(t *testing.T) {
+	inspectionText := readTextFile(t, "features/resource-inspection.md")
+	recentLogsText := readTextFile(t, "features/resource-recent-logs.md")
+	overviewText := readTextFile(t, "features/overview-dashboard.md")
+
+	for _, fragment := range []string{
+		"recent service events",
+		"bounded task sample",
+		"operator-facing ECS service",
+		"`Deployment controller`",
+		"`Deployment circuit breaker`",
+		"operator-facing ECS task/container labels include",
+		"`Container {name} exit`, `Container {name} awslogs`, and",
+		"operator-facing ASG/EC2 labels include `Launch template`,",
+		"`Instances`, `Recent scaling activities`, `EC2 state`, `EC2 instance type`, and",
+		"traffic-routing inspection",
+		"`Traffic-routing status`",
+		"`CodeDeploy deployment group status`",
+		"`Target group live details`, `Registered target health`, `Target group health`,",
+		"fixture and Compose",
+	} {
+		if !strings.Contains(inspectionText, fragment) {
+			t.Fatalf("expected resource inspection guide to lock operator field-family fragment %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"optional `clusterArn` when an ECS service/task recent-log request supplied an accepted cluster selector",
+		"optional `containerName` when an ECS task recent-log request supplied a container selector",
+		"optional `instanceId` when an Auto Scaling Group-backed EC2 console-log request supplied an instance selector",
+		"Supported resource, AWS lookup unavailable: `available=false`, `unavailableReason=aws_unavailable`",
+		"Route-stable resource with no independent stream: `available=false`, `unavailableReason=no_log_source`",
+		"empty: `No recent logs are available for this resource.`",
+		"unavailable: `Recent logs are unavailable for this resource.`",
+		"The additive `lookupContext` object is always present, including unavailable responses",
+	} {
+		if !strings.Contains(recentLogsText, fragment) {
+			t.Fatalf("expected resource recent logs guide to lock route/field fragment %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"Resource evidence docs intentionally lock the operator-facing labels that reviewers use to spot drift",
+		"ECS service deployment configuration and recent events",
+		"ECS task container status/failure/log-binding/network evidence",
+		"Auto Scaling launch-template, sampled-instance, EC2 host, and scaling-activity evidence",
+		"traffic-routing summary-only fallback and live CodeDeploy/listener/target-group health evidence",
+		"recent-log lookup context plus friendly empty/unavailable distinctions",
+	} {
+		if !strings.Contains(overviewText, fragment) {
+			t.Fatalf("expected overview dashboard docs to summarize resource evidence docs-contract scope %q", fragment)
 		}
 	}
 }
