@@ -2288,6 +2288,10 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 
 	uiDoc := readRepoFile(t, "docs/architecture/tenet-v1-overview-ui.md")
 	for _, fragment := range []string{
+		"resource-detail Troubleshooting summary",
+		"derived from the selected resource identity plus the latest completed Live inspection state and the latest completed Recent logs panel state",
+		"covers loading, empty, unavailable, and fetch-error states without hiding the selected resource",
+		"keeps `Current resource read: GET /v1/overview/deployments/{deploymentName}` visible",
 		"`minimumHealthyPercent`",
 		"`maximumPercent`",
 		"`healthCheckGracePeriodSeconds`",
