@@ -163,15 +163,18 @@ Current resource-inspection payload families:
 
 `ecsService` reads service identity, status, desired/running/pending counts,
 deployment configuration, deployments, recent service events, task definition
-evidence, and a bounded task sample when available. The selected-cluster
+evidence, and a bounded task sample when available. Task sample container rows
+preserve status, health, exit/reason, optional `awslogs`, and optional
+`networkBindings` evidence from ECS `DescribeTasks`. The selected-cluster
 `clusterArn` selector scopes the service lookup directly and is echoed on
 successful and explicit unavailable payloads.
 
 `ecsTask` reads exact task identity, status, stopped reason, placement evidence,
-task definition, container rows, optional `awslogs` metadata, and optional EC2
-host facts for ECS-on-EC2 tasks when Tenet can resolve and describe the backing
-instance. The same `clusterArn` selector keeps task IDs unambiguous when a parent
-service handoff selected a cluster.
+task definition, container rows, optional `awslogs` metadata, optional
+`networkBindings` evidence from ECS `DescribeTasks`, and optional EC2 host facts
+for ECS-on-EC2 tasks when Tenet can resolve and describe the backing instance.
+The same `clusterArn` selector keeps task IDs unambiguous when a parent service
+handoff selected a cluster.
 
 `candidateAutoScalingGroup` and `serviceAutoScalingGroup` read ASG size, health
 settings, target groups, launch-template metadata, current instances, optional

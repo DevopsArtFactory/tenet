@@ -2355,6 +2355,10 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"Capacity provider",
 		"Availability Zone",
 		"appendECSTaskPlacementRows(meta, taskWithScope);",
+		"const ecsContainerNetworkBindingText = (binding) => {",
+		"const appendECSTaskContainerNetworkBindingRows = (meta, container, name) => {",
+		"Container ${name} network binding · ${bindingText}",
+		"appendECSTaskContainerNetworkBindingRows(containerSection, container, name);",
 		"createECSTaskContainerLogHandoff",
 		"containerName: params.get('containerName') || ''",
 		"clusterArn: params.get('clusterArn') || ''",
@@ -2400,6 +2404,7 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"VPC",
 		"Launch time",
 		"Task containers",
+		"appendECSTaskContainerNetworkBindingRows(meta, container, textOrDash(container?.name || 'container'));",
 		"Container awslogs",
 		"No container evidence is available for this ECS task.",
 		"const autoScalingObservedLaunchTemplate = (group) => {",
@@ -2596,6 +2601,7 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"renderResourceInspectionState.innerHTML",
 		"metadata.innerHTML",
 		"item.innerHTML",
+		"networkBinding.innerHTML",
 	} {
 		if strings.Contains(body, unsafe) {
 			t.Fatalf("expected embedded UI to avoid unsafe live-inspection rendering %q", unsafe)

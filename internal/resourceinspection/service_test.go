@@ -1980,6 +1980,95 @@ func TestECSServiceTaskSummariesOmitLogMetadataWhenTaskDefinitionLookupFails(t *
 	}
 }
 
+func TestECSTaskSummaryIncludesContainerNetworkBindingsAndFailureEvidence(t *testing.T) {
+	const (
+		clusterARN  = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker"
+		taskARN     = "arn:aws:ecs:ap-northeast-2:123456789012:task/worker/stopped-failed"
+		taskDefARN  = "arn:aws:ecs:ap-northeast-2:123456789012:task-definition/worker:42"
+		containerID = "arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker/ci-failed"
+	)
+
+	got := ecsTaskSummaryFromTask(ecstypes.Task{
+		TaskArn:              stringPtr(taskARN),
+		ClusterArn:           stringPtr(clusterARN),
+		TaskDefinitionArn:    stringPtr(taskDefARN),
+		ContainerInstanceArn: stringPtr(containerID),
+		LastStatus:           stringPtr("STOPPED"),
+		DesiredStatus:        stringPtr("STOPPED"),
+		StoppedReason:        stringPtr("Essential container in task exited"),
+		Containers: []ecstypes.Container{{
+			Name:         stringPtr("worker"),
+			Image:        stringPtr("worker:broken"),
+			LastStatus:   stringPtr("STOPPED"),
+			HealthStatus: ecstypes.HealthStatusUnhealthy,
+			ExitCode:     int32Ptr(137),
+			Reason:       stringPtr("OutOfMemoryError"),
+			NetworkBindings: []ecstypes.NetworkBinding{{
+				BindIP:             stringPtr("0.0.0.0"),
+				ContainerPort:      int32Ptr(8080),
+				HostPort:           int32Ptr(32768),
+				Protocol:           ecstypes.TransportProtocolTcp,
+				ContainerPortRange: stringPtr("8080-8081"),
+				HostPortRange:      stringPtr("32768-32769"),
+			}},
+		}},
+	}, clusterARN, map[string]ecstypes.TaskDefinition{
+		taskDefARN: {ContainerDefinitions: []ecstypes.ContainerDefinition{
+			{Name: stringPtr("worker"), LogConfiguration: &ecstypes.LogConfiguration{LogDriver: ecstypes.LogDriverAwslogs, Options: map[string]string{"awslogs-group": "/ecs/worker", "awslogs-stream-prefix": "ecs"}}},
+		}},
+	}, map[string]string{containerID: "i-0failedhost"})
+
+	if len(got.Containers) != 1 {
+		t.Fatalf("expected one failed container summary, got %+v", got.Containers)
+	}
+	container := got.Containers[0]
+	if container.LastStatus != "STOPPED" || container.HealthStatus != string(ecstypes.HealthStatusUnhealthy) || container.ExitCode == nil || *container.ExitCode != 137 || container.Reason != "OutOfMemoryError" || container.AWSLogs == nil {
+		t.Fatalf("expected stopped/failed container status, exit, reason, and awslogs evidence to remain intact, got %+v", container)
+	}
+	if len(container.NetworkBindings) != 1 {
+		t.Fatalf("expected container network binding evidence from DescribeTasks, got %+v", container)
+	}
+	binding := container.NetworkBindings[0]
+	if binding.BindIP != "0.0.0.0" || binding.ContainerPort == nil || *binding.ContainerPort != 8080 || binding.HostPort == nil || *binding.HostPort != 32768 || binding.Protocol != "tcp" || binding.ContainerPortRange != "8080-8081" || binding.HostPortRange != "32768-32769" {
+		t.Fatalf("unexpected container network binding evidence: %+v", binding)
+	}
+}
+
+func TestECSTaskSummaryIncludesFargateNetworkBindingsWithoutHostEvidence(t *testing.T) {
+	const (
+		clusterARN = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker"
+		taskARN    = "arn:aws:ecs:ap-northeast-2:123456789012:task/worker/fargate-running"
+	)
+
+	got := ecsTaskSummaryFromTask(ecstypes.Task{
+		TaskArn:    stringPtr(taskARN),
+		ClusterArn: stringPtr(clusterARN),
+		LaunchType: ecstypes.LaunchTypeFargate,
+		LastStatus: stringPtr("RUNNING"),
+		Containers: []ecstypes.Container{{
+			Name:       stringPtr("worker"),
+			LastStatus: stringPtr("RUNNING"),
+			NetworkBindings: []ecstypes.NetworkBinding{{
+				BindIP:        stringPtr("10.0.8.21"),
+				ContainerPort: int32Ptr(8080),
+				HostPort:      int32Ptr(8080),
+				Protocol:      ecstypes.TransportProtocolTcp,
+			}},
+		}},
+	}, clusterARN, nil, nil)
+
+	if got.LaunchType != string(ecstypes.LaunchTypeFargate) || got.ContainerInstanceARN != "" || got.EC2InstanceID != "" || got.EC2Instance != nil {
+		t.Fatalf("expected Fargate task to omit ECS-on-EC2 host evidence, got %+v", got)
+	}
+	if len(got.Containers) != 1 || len(got.Containers[0].NetworkBindings) != 1 {
+		t.Fatalf("expected Fargate container network binding evidence, got %+v", got.Containers)
+	}
+	binding := got.Containers[0].NetworkBindings[0]
+	if binding.BindIP != "10.0.8.21" || binding.ContainerPort == nil || *binding.ContainerPort != 8080 || binding.HostPort == nil || *binding.HostPort != 8080 || binding.Protocol != "tcp" {
+		t.Fatalf("unexpected Fargate network binding evidence: %+v", binding)
+	}
+}
+
 func TestECSTaskInspectionIncludesContainerInstanceEC2HostIdentity(t *testing.T) {
 	const (
 		clusterARN           = "arn:aws:ecs:ap-northeast-2:123456789012:cluster/worker"

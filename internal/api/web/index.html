@@ -5396,6 +5396,33 @@
             meta.append(createElement('span', 'detail-condition-meta', `${label} · ${value}`));
           });
       };
+      const ecsContainerNetworkBindingText = (binding) => {
+        if (!binding || typeof binding !== 'object') return '';
+        const bindIP = String(binding.bindIp || '').trim();
+        const hostPort = binding.hostPort == null ? '' : String(binding.hostPort).trim();
+        const containerPort = binding.containerPort == null ? '' : String(binding.containerPort).trim();
+        const protocol = String(binding.protocol || '').trim();
+        const containerPortRange = String(binding.containerPortRange || '').trim();
+        const hostPortRange = String(binding.hostPortRange || '').trim();
+        const endpointParts = [];
+        if (bindIP || hostPort || containerPort || protocol) {
+          const host = bindIP && hostPort ? `${bindIP}:${hostPort}` : bindIP || hostPort;
+          const ports = host && containerPort ? `${host}->${containerPort}` : host || containerPort;
+          endpointParts.push(protocol && ports ? `${ports}/${protocol}` : ports || protocol);
+        }
+        if (hostPortRange) endpointParts.push(`host ports ${hostPortRange}`);
+        if (containerPortRange) endpointParts.push(`container ports ${containerPortRange}`);
+        return endpointParts.map((part) => String(part || '').trim()).filter(Boolean).join(' · ');
+      };
+      const appendECSTaskContainerNetworkBindingRows = (meta, container, name) => {
+        const bindings = Array.isArray(container?.networkBindings) ? container.networkBindings : [];
+        bindings
+          .map(ecsContainerNetworkBindingText)
+          .filter(Boolean)
+          .forEach((bindingText) => {
+            meta.append(createElement('span', 'detail-condition-meta', `Container ${name} network binding · ${bindingText}`));
+          });
+      };
       const appendECSTaskContainerRows = (item, containers, deploymentName = '', task = null) => {
         if (!Array.isArray(containers) || !containers.length) return;
         const containerSection = createElement('div', 'detail-history-meta');
@@ -5410,6 +5437,7 @@
           if (container?.exitCode != null || container?.reason) {
             containerSection.append(createElement('span', 'detail-condition-meta', `Container ${name} exit · code ${textOrDash(container?.exitCode)} · ${textOrDash(container?.reason)}`));
           }
+          appendECSTaskContainerNetworkBindingRows(containerSection, container, name);
           if (container?.awslogs?.group || container?.awslogs?.stream) {
             containerSection.append(createElement('span', 'detail-condition-meta', `Container ${name} awslogs · ${textOrDash(container?.awslogs?.group)} / ${textOrDash(container?.awslogs?.stream)}`));
             const handoff = createECSTaskContainerLogHandoff(deploymentName, task, container);
@@ -6313,6 +6341,7 @@
             if (container?.exitCode != null || container?.reason) {
               meta.append(createElement('span', 'detail-condition-meta', `Container exit · code ${textOrDash(container?.exitCode)} · ${textOrDash(container?.reason)}`));
             }
+            appendECSTaskContainerNetworkBindingRows(meta, container, textOrDash(container?.name || 'container'));
             if (container?.awslogs?.group || container?.awslogs?.stream) {
               meta.append(createElement('span', 'detail-condition-meta', `Container awslogs · ${textOrDash(container?.awslogs?.group)} / ${textOrDash(container?.awslogs?.stream)}`));
               const handoff = createECSTaskContainerLogHandoff(deploymentName, { taskArn: task?.taskArn, taskId: task?.taskId, clusterArn: task?.clusterArn || resource?.clusterArn }, container);
