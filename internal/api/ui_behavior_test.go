@@ -12651,6 +12651,200 @@ async function render(search) {
 	runNodeHarness(t, nodeProgram)
 }
 
+func TestEmbeddedUIApplicationResourceFilterWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	detailJSON, err := json.Marshal(map[string]any{
+		"name":           "payments-api-staging",
+		"appRef":         "payments",
+		"environmentRef": "staging-apne2",
+		"region":         "ap-northeast-2",
+		"accountName":    "staging-core",
+		"awsAccountId":   "210987654321",
+		"targetType":     "ecs",
+		"strategy":       "linear",
+		"executionMode":  "ecsCodeDeploy",
+		"sync":           map[string]any{"state": "OutOfSync", "reason": "traffic shift running"},
+		"health":         map[string]any{"overall": "Progressing", "summary": "1/2 tasks healthy"},
+		"runtimeSummary": map[string]any{"summary": "shifting test traffic", "historyCount": 0},
+		"rollout": map[string]any{
+			"phase":       "Accepted",
+			"currentStep": "ShiftTrafficLinear",
+			"execution": []map[string]any{
+				{"name": "payments-api-staging-service", "resource": "ecsService", "description": "ECS service Tenet updates during CodeDeploy traffic shifting"},
+				{"name": "payments-api-staging-prod-rule", "resource": "productionListenerRule", "description": "Weighted production listener rule for staging traffic"},
+				{"name": "userdata/payments-api-staging.sh", "resource": "userDataBootstrapSource", "description": "Normalized userdata bootstrap source for candidate EC2 capacity"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal application detail body: %v", err)
+	}
+
+	emptyDetailJSON, err := json.Marshal(map[string]any{
+		"name":           "empty-api",
+		"region":         "us-west-2",
+		"sync":           map[string]any{"state": "Synced"},
+		"health":         map[string]any{"overall": "Healthy"},
+		"runtimeSummary": map[string]any{"historyCount": 0},
+	})
+	if err != nil {
+		t.Fatalf("marshal empty application detail body: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+const emptyDetailBody = ` + string(emptyDetailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.placeholder = '';
+    this.autocomplete = '';
+    this.selectionStart = null;
+    this.selectionEnd = null;
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); if (this.tagName === 'SELECT' && node.tagName === 'OPTION') { if (node.selected || this.value === '') this.value = node.value; } }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); if (name === 'id') this.id = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+  scrollIntoView(options) { this.ownerDocument.lastScrolledTarget = { id: this.id || '', options }; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); this.lastScrolledTarget = null; }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) { return this.byID.get(id) || null; }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const createDocument = () => {
+  const document = new Document();
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  document.byID.set('operator-context', document.createElement('section'));
+  return document;
+};
+const collectText = (node) => node ? [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean) : [];
+const collectNodes = (node, predicate) => {
+  if (!node) return [];
+  const here = predicate(node) ? [node] : [];
+  return [...here, ...(node.children || []).flatMap((child) => collectNodes(child, predicate))];
+};
+const compactText = (node) => collectText(node).join(' | ');
+const hasInteractiveAncestor = (node) => {
+  let parent = node.parentNode;
+  while (parent) {
+    if (['A', 'BUTTON'].includes(parent.tagName)) return true;
+    parent = parent.parentNode;
+  }
+  return false;
+};
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); await Promise.resolve(); }
+async function render(search, hash = '#application-current-status') {
+  const document = createDocument();
+  const window = { location: { pathname: '/console', search, hash }, listeners: {}, addEventListener(type, handler) { this.listeners[type] = handler; }, dispatchHashChange() { if (this.listeners.hashchange) this.listeners.hashchange({ type: 'hashchange' }); } };
+  const history = { replaceState(_state, _title, url) { const [pathAndQuery, nextHash = ''] = String(url).split('#'); const [pathname, query = ''] = pathAndQuery.split('?'); window.location.pathname = pathname || '/console'; window.location.search = query ? '?' + query : ''; window.location.hash = nextHash ? '#' + nextHash : ''; } };
+  const fetchCalls = [];
+  const fetch = (url) => {
+    fetchCalls.push(String(url));
+    if (url === '/v1/operator/context') return Promise.resolve({ ok: true, json: () => Promise.resolve({ trustedHeaders: { enabled: false }, identity: { authenticated: false }, roles: { canRead: false, canWrite: false } }) });
+    if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === '/v1/overview/applications/empty-api') return Promise.resolve({ ok: true, json: () => Promise.resolve(emptyDetailBody) });
+    if (url.startsWith('/v1/overview/deployments/payments-api-staging/events') || url.startsWith('/v1/overview/deployments/empty-api/events')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, events: [] }) });
+    throw new Error('unexpected fetch url: ' + url);
+  };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle();
+  await settle();
+  return { document, window, fetchCalls };
+}
+(async () => {
+  const initialSearch = '?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging&resourceFilter=weighted';
+  const run = await render(initialSearch);
+  const accounts = run.document.getElementById('accounts');
+  const toolbar = run.document.getElementById('toolbar');
+  const input = collectNodes(toolbar, (node) => node.tagName === 'INPUT' && node.dataset.toolbarField === 'Filter linked resources')[0];
+  if (!input) throw new Error('expected application resource filter input');
+  if (input.value !== 'weighted') throw new Error('expected bookmarkable resource filter value, got ' + input.value);
+  let text = compactText(accounts);
+  if (!text.includes('productionListenerRule')) throw new Error('expected resource description filter to show traffic routing resource');
+  if (text.includes('ecsService') || text.includes('userDataBootstrapSource')) throw new Error('expected resource filter to hide unmatched resource groups');
+  if (!text.includes('1 of 3 linked resources match resource filter "weighted"')) throw new Error('expected grouped filtered count copy: ' + text);
+  if (run.window.location.search !== initialSearch) throw new Error('expected initial resourceFilter query state to be preserved, got ' + run.window.location.search);
+  if (run.window.location.hash !== '#application-current-status') throw new Error('expected section hash to be preserved, got ' + run.window.location.hash);
+  const routingQuickLink = collectNodes(accounts, (node) => node.tagName === 'A' && node.textContent === 'Traffic routing (1)')[0];
+  if (!routingQuickLink) throw new Error('expected filtered traffic-routing section link');
+  const [routingURL, routingHash = ''] = routingQuickLink.href.split('#');
+  const routingParams = new URLSearchParams(routingURL.split('?')[1] || '');
+  for (const [key, value] of [['page', 'application'], ['q', 'payments'], ['sync', 'OutOfSync'], ['account', '210987654321'], ['deployment', 'payments-api-staging'], ['resourceFilter', 'weighted']]) {
+    if (routingParams.get(key) !== value) throw new Error('expected quick-nav link to preserve ' + key + ', got ' + routingQuickLink.href);
+  }
+  if (routingHash !== 'application-traffic-routing') throw new Error('expected quick-nav traffic-routing hash, got ' + routingQuickLink.href);
+  if (collectNodes(accounts, (node) => ['A', 'BUTTON'].includes(node.tagName) && hasInteractiveAncestor(node)).length) throw new Error('expected no nested interactive controls in filtered application resources');
+
+  input.focus();
+  input.selectionStart = 3;
+  input.selectionEnd = 3;
+  input.value = 'ecs';
+  input.dispatch('input');
+  await settle();
+  const nextInput = collectNodes(run.document.getElementById('toolbar'), (node) => node.tagName === 'INPUT' && node.dataset.toolbarField === 'Filter linked resources')[0];
+  if (!nextInput || run.document.activeElement !== nextInput) throw new Error('expected filter input focus to be restored after render');
+  if (nextInput.selectionStart !== 3 || nextInput.selectionEnd !== 3) throw new Error('expected filter caret to be restored after render');
+  if (run.window.location.search !== '?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging&resourceFilter=ecs') throw new Error('expected resource filter URL update to preserve q/sync/account/deployment, got ' + run.window.location.search);
+  text = compactText(run.document.getElementById('accounts'));
+  if (!text.includes('ecsService') || text.includes('productionListenerRule') || text.includes('userDataBootstrapSource')) throw new Error('expected type filter to show only workload resource: ' + text);
+
+  nextInput.value = 'does-not-match';
+  nextInput.selectionStart = 5;
+  nextInput.selectionEnd = 5;
+  nextInput.dispatch('input');
+  await settle();
+  text = compactText(run.document.getElementById('accounts'));
+  if (!text.includes('No linked resources match the current filter. Clear the resource filter to show all reported linked resources.')) throw new Error('expected filter-empty application resource state: ' + text);
+  if (text.includes('No linked resources are currently reported for this application.')) throw new Error('expected filtered-empty state to differ from no-resources state');
+  const clearButton = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && node.textContent === 'Clear resource filter')[0];
+  if (!clearButton) throw new Error('expected inline clear resource filter button');
+  clearButton.dispatch('click');
+  await settle();
+  text = compactText(run.document.getElementById('accounts'));
+  if (!text.includes('ecsService') || !text.includes('productionListenerRule') || !text.includes('userDataBootstrapSource')) throw new Error('expected clearing resource filter to restore all groups: ' + text);
+  if (run.window.location.search !== '?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging') throw new Error('expected clearing resource filter to preserve existing query state and remove only resourceFilter, got ' + run.window.location.search);
+
+  const emptyRun = await render('?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=empty-api&resourceFilter=ecs', '');
+  const emptyText = compactText(emptyRun.document.getElementById('accounts'));
+  if (!emptyText.includes('No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.')) throw new Error('expected explicit no-resources-reported state: ' + emptyText);
+  if (emptyText.includes('No linked resources match the current filter.')) throw new Error('did not expect filter-empty state when no resources were reported');
+})();
+`
+
+	runNodeHarness(t, nodeProgram)
+}
+
 func TestEmbeddedUIRolloutExecutionFallbackContractWithNodeHarness(t *testing.T) {
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not installed")

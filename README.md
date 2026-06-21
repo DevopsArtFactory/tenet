@@ -161,11 +161,10 @@ compact `Last update` field from the joined runtime summary, falling back to
 `Latest runtime status` when no timestamp is present. The secondary account
 drill-down keeps its `Refresh account detail` action in the page toolbar so
 operators can refresh account-scoped rows from the same place they refresh
-application detail pages. Application detail pages also show the exact backing
-read route, for example `Current application read: GET /v1/overview/applications/{deploymentName}`,
-and expose `Application JSON` plus `Copy read route` handoffs to that same read
-model. The drift and
-plan workspaces show `Current workspace read: GET /v1/overview/deployments/{deploymentName}.`
+application detail pages. Application detail pages show the exact backing read route,
+`Application JSON`, `Copy read route`, and a lightweight `resourceFilter=` search
+for grouped linked resources while rollout/history/log evidence stays on the final
+resource page. The drift and plan workspaces show `Current workspace read: GET /v1/overview/deployments/{deploymentName}.`
 in their chrome and include a top-level `Workspace JSON` handoff to that
 deployment-detail read model.
 

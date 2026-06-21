@@ -2049,10 +2049,17 @@ assert "createNavLink(`/v1/overview/applications/${encodeURIComponent(applicatio
 assert "createCopyReadRouteButton(applicationDetailReadRoute(applicationState?.detail?.name || currentPageState.deployment))" in application_ui, application_ui
 assert 'Refreshing application detail from GET /v1/overview/applications/{deploymentName}…' in application_ui, application_ui
 assert 'Failed to refresh application detail:' in application_ui, application_ui
-assert "const renderApplicationDetailPage = (detail, applicationState = null) => {" in application_ui, application_ui
+assert "const renderApplicationDetailPage = (detail, applicationState = null, focusState = null) => {" in application_ui, application_ui
 assert "const breadcrumb = createDeploymentBreadcrumb({" in application_ui, application_ui
 assert "const nonEmptyResourceSections = (detail) => groupResourceSections(detail).filter((group) => Array.isArray(group?.resources) && group.resources.length > 0);" in application_ui, application_ui
-assert "const resourceGroups = nonEmptyResourceSections(detail);" in application_ui, application_ui
+assert "const allResourceGroups = nonEmptyResourceSections(detail);" in application_ui, application_ui
+assert "const resourceGroups = filterApplicationResourceSections(allResourceGroups, resourceFilter);" in application_ui, application_ui
+assert "resourceFilter: params.get('resourceFilter') || ''," in application_ui, application_ui
+assert "const applicationResourceFilterMatches = (resource, query) => {" in application_ui, application_ui
+assert "const syncApplicationResourceFilterQueryParam = (value) => {" in application_ui, application_ui
+assert "createInput('Filter linked resources', currentPageState.resourceFilter, 'Filter by type, name, or description'," in application_ui, application_ui
+assert 'No linked resources match the current filter. Clear the resource filter to show all reported linked resources.' in application_ui, application_ui
+assert 'Clear resource filter' in application_ui, application_ui
 assert 'Current application status' in application_ui, application_ui
 assert 'Application rollout context:' in application_ui, application_ui
 assert "['Runtime events', applicationRuntimeEventSummary(detail)]," in application_ui, application_ui
