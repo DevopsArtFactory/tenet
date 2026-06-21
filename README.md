@@ -198,8 +198,8 @@ Resource drill-down Recent logs and Live inspection panels label returned
 `lookupContext` as `Provider lookup context` so operators can confirm the
 region/account/observer-role path before troubleshooting unavailable AWS reads.
 Capture the HTTP `Request-Id` response header with that lookup context when
-escalating a failed or unavailable Live inspection read so reviewers can match
-the operator-facing payload to Tenet's structured request logs.
+escalating a failed or unavailable Live inspection read; the embedded Live inspection card labels the same value as `Tenet request ID` metadata so reviewers
+can match the payload to Tenet's structured request logs.
 Auto Scaling Group Live inspection can also render optional
 `autoScalingGroup.scalingActivities[]` evidence as `Recent scaling activities`
 with `Activity ID`, `Status code`, `Progress`, `Start time`, `End time`,
