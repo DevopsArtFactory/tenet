@@ -2224,8 +2224,21 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 		}
 	}
 
+	readme := readRepoFile(t, "README.md")
+	for _, fragment := range []string{
+		"`GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}[&clusterArn={ecsClusterArn}][&limit={positiveInteger}]`",
+		"the route requires a concrete resource type/name",
+	} {
+		if !strings.Contains(readme, fragment) {
+			t.Fatalf("expected README resource inspection contract to include %q", fragment)
+		}
+	}
+
 	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
+		"`GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}`",
+		"both require a concrete resource type/name before provider lookup",
+		"supported ECS/ASG inspection reads may add selectors such as `clusterArn` or a positive `limit`",
 		"Auto Scaling payloads add `autoScalingGroup`, including optional `launchTemplate` and `mixedInstancesPolicy` metadata",
 		"`productionListenerRule`",
 		"`activeTargetGroup`",
