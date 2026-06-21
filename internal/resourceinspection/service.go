@@ -343,13 +343,23 @@ type ECSTaskSummary struct {
 }
 
 type ECSTaskContainerInfo struct {
-	Name         string       `json:"name"`
-	Image        string       `json:"image,omitempty"`
-	LastStatus   string       `json:"lastStatus,omitempty"`
-	HealthStatus string       `json:"healthStatus,omitempty"`
-	ExitCode     *int32       `json:"exitCode,omitempty"`
-	Reason       string       `json:"reason,omitempty"`
-	AWSLogs      *AWSLogsInfo `json:"awslogs,omitempty"`
+	Name            string                           `json:"name"`
+	Image           string                           `json:"image,omitempty"`
+	LastStatus      string                           `json:"lastStatus,omitempty"`
+	HealthStatus    string                           `json:"healthStatus,omitempty"`
+	ExitCode        *int32                           `json:"exitCode,omitempty"`
+	Reason          string                           `json:"reason,omitempty"`
+	NetworkBindings []ECSTaskContainerNetworkBinding `json:"networkBindings,omitempty"`
+	AWSLogs         *AWSLogsInfo                     `json:"awslogs,omitempty"`
+}
+
+type ECSTaskContainerNetworkBinding struct {
+	BindIP             string `json:"bindIp,omitempty"`
+	ContainerPort      *int32 `json:"containerPort,omitempty"`
+	HostPort           *int32 `json:"hostPort,omitempty"`
+	Protocol           string `json:"protocol,omitempty"`
+	ContainerPortRange string `json:"containerPortRange,omitempty"`
+	HostPortRange      string `json:"hostPortRange,omitempty"`
 }
 
 type AWSLogsInfo struct {
@@ -1486,6 +1496,7 @@ func ecsTaskSummaryFromTask(task ecstypes.Task, clusterARN string, definitions m
 		if container.ExitCode != nil {
 			info.ExitCode = cloneInt32(container.ExitCode)
 		}
+		info.NetworkBindings = ecsContainerNetworkBindingsFromAWS(container.NetworkBindings)
 		if def, ok := containerDefs[aws.ToString(container.Name)]; ok {
 			group, stream := awsLogsLocation(def, taskID)
 			if group != "" && stream != "" {
@@ -1497,6 +1508,32 @@ func ecsTaskSummaryFromTask(task ecstypes.Task, clusterARN string, definitions m
 	sort.SliceStable(containers, func(i, j int) bool { return containers[i].Name < containers[j].Name })
 	containerInstanceARN := strings.TrimSpace(aws.ToString(task.ContainerInstanceArn))
 	return ECSTaskSummary{TaskARN: strings.TrimSpace(aws.ToString(task.TaskArn)), TaskID: taskID, ClusterARN: strings.TrimSpace(clusterARN), ContainerInstanceARN: containerInstanceARN, EC2InstanceID: strings.TrimSpace(containerInstanceEC2IDs[containerInstanceARN]), CapacityProviderName: strings.TrimSpace(aws.ToString(task.CapacityProviderName)), AvailabilityZone: strings.TrimSpace(aws.ToString(task.AvailabilityZone)), LastStatus: strings.TrimSpace(aws.ToString(task.LastStatus)), DesiredStatus: strings.TrimSpace(aws.ToString(task.DesiredStatus)), HealthStatus: string(task.HealthStatus), LaunchType: string(task.LaunchType), StartedAt: formatTime(aws.ToTime(task.StartedAt)), StoppedAt: formatTime(aws.ToTime(task.StoppedAt)), StoppedReason: strings.TrimSpace(aws.ToString(task.StoppedReason)), Containers: containers}
+}
+
+func ecsContainerNetworkBindingsFromAWS(bindings []ecstypes.NetworkBinding) []ECSTaskContainerNetworkBinding {
+	if len(bindings) == 0 {
+		return nil
+	}
+	out := make([]ECSTaskContainerNetworkBinding, 0, len(bindings))
+	for _, binding := range bindings {
+		info := ECSTaskContainerNetworkBinding{
+			BindIP:             strings.TrimSpace(aws.ToString(binding.BindIP)),
+			Protocol:           strings.TrimSpace(string(binding.Protocol)),
+			ContainerPortRange: strings.TrimSpace(aws.ToString(binding.ContainerPortRange)),
+			HostPortRange:      strings.TrimSpace(aws.ToString(binding.HostPortRange)),
+		}
+		if binding.ContainerPort != nil {
+			info.ContainerPort = cloneInt32(binding.ContainerPort)
+		}
+		if binding.HostPort != nil {
+			info.HostPort = cloneInt32(binding.HostPort)
+		}
+		if info.BindIP == "" && info.ContainerPort == nil && info.HostPort == nil && info.Protocol == "" && info.ContainerPortRange == "" && info.HostPortRange == "" {
+			continue
+		}
+		out = append(out, info)
+	}
+	return out
 }
 
 func ecsServiceTaskSummaries(ctx context.Context, client ecsServiceAPI, ec2Client ec2InstanceAPI, clusterARN, serviceName string, limit int) ([]ECSTaskSummary, *ECSTaskSummaryScope, error) {

@@ -8170,6 +8170,18 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 					},
 					CapacityProviderName: "payments-capacity",
 					AvailabilityZone:     "ap-northeast-2a",
+					Containers: []resourceinspection.ECSTaskContainerInfo{{
+						Name:       "api",
+						LastStatus: "RUNNING",
+						NetworkBindings: []resourceinspection.ECSTaskContainerNetworkBinding{{
+							BindIP:             "0.0.0.0",
+							ContainerPort:      aws.Int32(8080),
+							HostPort:           aws.Int32(32768),
+							Protocol:           "tcp",
+							ContainerPortRange: "8080-8081",
+							HostPortRange:      "32768-32769",
+						}},
+					}},
 				}},
 				TasksScope: &resourceinspection.ECSTaskSummaryScope{
 					Available:         true,
@@ -8307,6 +8319,34 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				t.Fatalf("expected task sample %s=%#v, got %#v", key, want, task)
 			}
 		}
+		containers, ok := task["containers"].([]any)
+		if !ok || len(containers) != 1 {
+			t.Fatalf("expected task sample containers in raw payload, got %#v", task["containers"])
+		}
+		container, ok := containers[0].(map[string]any)
+		if !ok {
+			t.Fatalf("expected task sample container object, got %#v", containers[0])
+		}
+		networkBindings, ok := container["networkBindings"].([]any)
+		if !ok || len(networkBindings) != 1 {
+			t.Fatalf("expected container networkBindings array in raw payload, got %#v", container["networkBindings"])
+		}
+		networkBinding, ok := networkBindings[0].(map[string]any)
+		if !ok {
+			t.Fatalf("expected networkBindings item object, got %#v", networkBindings[0])
+		}
+		for key, want := range map[string]any{
+			"bindIp":             "0.0.0.0",
+			"containerPort":      float64(8080),
+			"hostPort":           float64(32768),
+			"protocol":           "tcp",
+			"containerPortRange": "8080-8081",
+			"hostPortRange":      "32768-32769",
+		} {
+			if networkBinding[key] != want {
+				t.Fatalf("expected networkBinding.%s=%#v, got %#v in %#v", key, want, networkBinding[key], networkBinding)
+			}
+		}
 		ec2Instance, ok := task["ec2Instance"].(map[string]any)
 		if !ok {
 			t.Fatalf("expected optional ECS service task ec2Instance host detail object, got %#v", task["ec2Instance"])
@@ -8338,7 +8378,7 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 				if deploymentName != "api-prod" || resourceType != "ecsTask" || resourceName != "arn:aws:ecs:ap-northeast-2:123456789012:task/payments/abc123" {
 					t.Fatalf("unexpected ECS task inspection request: deployment=%q type=%q name=%q", deploymentName, resourceType, resourceName)
 				}
-				return resourceinspection.Result{DeploymentName: deploymentName, ResourceType: resourceType, ResourceName: resourceName, ClusterARN: gotClusterARN, Available: true, Source: resourceinspection.SourceECSService, ECSTask: &resourceinspection.ECSTaskInspection{ECSTaskSummary: resourceinspection.ECSTaskSummary{TaskARN: resourceName, TaskID: "abc123", ContainerInstanceARN: "arn:aws:ecs:ap-northeast-2:123456789012:container-instance/payments/ci-abc123", CapacityProviderName: "payments-ec2", AvailabilityZone: "ap-northeast-2b"}}}, nil
+				return resourceinspection.Result{DeploymentName: deploymentName, ResourceType: resourceType, ResourceName: resourceName, ClusterARN: gotClusterARN, Available: true, Source: resourceinspection.SourceECSService, ECSTask: &resourceinspection.ECSTaskInspection{ECSTaskSummary: resourceinspection.ECSTaskSummary{TaskARN: resourceName, TaskID: "abc123", ContainerInstanceARN: "arn:aws:ecs:ap-northeast-2:123456789012:container-instance/payments/ci-abc123", CapacityProviderName: "payments-ec2", AvailabilityZone: "ap-northeast-2b", Containers: []resourceinspection.ECSTaskContainerInfo{{Name: "api", LastStatus: "STOPPED", ExitCode: aws.Int32(1), Reason: "Error", NetworkBindings: []resourceinspection.ECSTaskContainerNetworkBinding{{BindIP: "127.0.0.1", ContainerPort: aws.Int32(8080), HostPort: aws.Int32(8080), Protocol: "tcp"}}}}}}}, nil
 			},
 		})
 
@@ -8368,6 +8408,32 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 		} {
 			if ecsTask[key] != want {
 				t.Fatalf("expected ECS task inspection %s=%#v, got %#v", key, want, ecsTask)
+			}
+		}
+		containers, ok := ecsTask["containers"].([]any)
+		if !ok || len(containers) != 1 {
+			t.Fatalf("expected ECS task containers in raw payload, got %#v", ecsTask["containers"])
+		}
+		container, ok := containers[0].(map[string]any)
+		if !ok {
+			t.Fatalf("expected ECS task container object, got %#v", containers[0])
+		}
+		networkBindings, ok := container["networkBindings"].([]any)
+		if !ok || len(networkBindings) != 1 {
+			t.Fatalf("expected ECS task container networkBindings in raw payload, got %#v", container["networkBindings"])
+		}
+		networkBinding, ok := networkBindings[0].(map[string]any)
+		if !ok {
+			t.Fatalf("expected ECS task networkBinding object, got %#v", networkBindings[0])
+		}
+		for key, want := range map[string]any{
+			"bindIp":        "127.0.0.1",
+			"containerPort": float64(8080),
+			"hostPort":      float64(8080),
+			"protocol":      "tcp",
+		} {
+			if networkBinding[key] != want {
+				t.Fatalf("expected ECS task networkBinding.%s=%#v, got %#v in %#v", key, want, networkBinding[key], networkBinding)
 			}
 		}
 	})
