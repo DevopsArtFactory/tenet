@@ -152,6 +152,11 @@
       .detail-step-meta-cancelled { color: var(--muted); }
       .detail-execution-meta, .detail-history-meta { display:grid; gap: 4px; margin-top: 6px; }
       .detail-section-copy { margin: 0 0 12px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+      .recent-log-lookup-context-card { display:grid; gap: 8px; margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(103,183,255,.16); background: rgba(103,183,255,.06); }
+      .recent-log-lookup-context-label { color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+      .recent-log-lookup-context-summary { color: var(--text); font-size: 13px; line-height: 1.45; }
+      .recent-log-lookup-context-chips { display:flex; flex-wrap:wrap; gap: 6px; }
+      .recent-log-lookup-context-chip { display:inline-flex; align-items:center; padding: 5px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.045); color: var(--muted); font-size: 12px; line-height: 1.3; }
       .detail-callout { display:grid; gap: 8px; margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.035); }
       .detail-callout .detail-section-copy { margin: 0; }
       .drift-table-wrap { overflow-x: auto; }
@@ -4862,8 +4867,25 @@
       const createResourceLogsLookupPathSummary = (lookupContext) => createElement('p', 'detail-section-copy', resourceLogsLookupPathText(lookupContext));
       const createResourceInspectionLookupPathSummary = (lookupContext) => createElement('p', 'detail-section-copy', resourceInspectionLookupPathText(lookupContext));
       const createProviderLookupContextLabel = () => createElement('div', 'detail-condition-meta', 'Provider lookup context');
+      const createResourceLogsLookupContextCard = (lookupContext) => {
+        const card = createElement('div', 'recent-log-lookup-context-card');
+        const chips = createElement('div', 'recent-log-lookup-context-chips');
+        resourceLogsLookupContextFields(lookupContext)
+          .filter(([, value]) => value !== '—')
+          .forEach(([label, value]) => {
+            chips.append(createElement('span', 'recent-log-lookup-context-chip', `${label}: ${value}`));
+          });
+        card.append(
+          createElement('div', 'recent-log-lookup-context-label', 'Provider lookup context'),
+          createElement('div', 'recent-log-lookup-context-summary', resourceLogsLookupPathText(lookupContext)),
+        );
+        if (chips.children.length) {
+          card.append(chips);
+        }
+        return card;
+      };
       const createResourceLogsLookupContextNodes = (lookupContext) => lookupContextReturned(lookupContext)
-        ? [createResourceLogsLookupPathSummary(lookupContext), createProviderLookupContextLabel()]
+        ? [createResourceLogsLookupContextCard(lookupContext)]
         : [];
       const createResourceInspectionLookupContextNodes = (lookupContext) => lookupContextReturned(lookupContext)
         ? [createResourceInspectionLookupPathSummary(lookupContext), createProviderLookupContextLabel()]

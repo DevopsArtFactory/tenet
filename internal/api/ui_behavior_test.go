@@ -6101,6 +6101,11 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
     throw new Error('unexpected unavailable fetch url: ' + url);
   });
   const unavailableText = collectText(unavailableRun.document.getElementById('accounts')).join(' | ');
+  const unavailableLookupCards = collectNodes(unavailableRun.document.getElementById('accounts'), (node) => node.className === 'recent-log-lookup-context-card');
+  if (unavailableLookupCards.length !== 1) throw new Error('expected unavailable recent logs state to render one compact lookup-context card, got ' + unavailableLookupCards.length);
+  const unavailableLookupCardText = collectText(unavailableLookupCards[0]).join(' | ');
+  if (!unavailableLookupCardText.includes('Provider lookup context')) throw new Error('expected unavailable lookup-context card label, got ' + unavailableLookupCardText);
+  if (!unavailableLookupCardText.includes('Lookup path · ap-northeast-2 · control 123456789012 → target 210987654321 · cross-account lookup · observer role not configured')) throw new Error('expected unavailable lookup-context card summary, got ' + unavailableLookupCardText);
   if (!unavailableText.includes('Recent logs are unavailable for this resource.')) throw new Error('expected resource page unavailable recent logs state');
   if (unavailableText.includes('Share log entry')) throw new Error('expected unavailable recent logs state not to render share links');
   if (!unavailableText.includes('Ask the platform owner to configure the observer role for this target account, then retry Recent logs after the account wiring is updated.')) throw new Error('expected unavailable recent logs state to surface friendly provider guidance');
@@ -6134,6 +6139,10 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
     throw new Error('unexpected empty fetch url: ' + url);
   });
   const emptyText = collectText(emptyRun.document.getElementById('accounts')).join(' | ');
+  const emptyLookupCards = collectNodes(emptyRun.document.getElementById('accounts'), (node) => node.className === 'recent-log-lookup-context-card');
+  if (emptyLookupCards.length !== 1) throw new Error('expected empty recent logs state to render one compact lookup-context card, got ' + emptyLookupCards.length);
+  const emptyLookupCardText = collectText(emptyLookupCards[0]).join(' | ');
+  if (!emptyLookupCardText.includes('Lookup path · ap-northeast-2 · account 210987654321 · same-account lookup · observer role configured')) throw new Error('expected empty lookup-context card summary, got ' + emptyLookupCardText);
   if (!emptyText.includes('No recent logs are available for this resource.')) throw new Error('expected resource page empty recent logs state');
   if (emptyText.includes('Share log entry')) throw new Error('expected empty recent logs state not to render share links');
   if (!emptyText.includes('Tenet reached the recent-log provider, but no events were found in the selected bounded window.')) throw new Error('expected empty recent logs state to explain no_recent_events, got ' + emptyText);
@@ -6187,6 +6196,10 @@ async function renderWithFetch(fetchImpl, search = '?page=resource&deployment=pa
   });
   await settle();
   const populatedText = collectText(populatedRun.document.getElementById('accounts')).join(' | ');
+  const populatedLookupCards = collectNodes(populatedRun.document.getElementById('accounts'), (node) => node.className === 'recent-log-lookup-context-card');
+  if (populatedLookupCards.length !== 1) throw new Error('expected populated recent logs state to render one compact lookup-context card, got ' + populatedLookupCards.length);
+  const populatedLookupCardText = collectText(populatedLookupCards[0]).join(' | ');
+  if (!populatedLookupCardText.includes('Lookup path · ap-northeast-2 · control 123456789012 → target 210987654321 · cross-account lookup · observer role configured')) throw new Error('expected populated lookup-context card summary, got ' + populatedLookupCardText);
   if (!populatedText.includes('Logs source')) throw new Error('expected populated recent logs section to show source');
   if (!populatedText.includes('cloudwatch')) throw new Error('expected populated recent logs section to show source value');
   if (!populatedText.includes('Lookup path · ap-northeast-2 · control 123456789012 → target 210987654321 · cross-account lookup · observer role configured')) throw new Error('expected populated recent logs state to summarize the lookup path, got ' + populatedText);
