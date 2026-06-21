@@ -238,6 +238,7 @@
         auditAction: '',
         auditLimit: 0,
         eventLimit: 10,
+        resourceFilter: '',
         resourceLogLimit: 0,
         resourceInspectionLimit: 10,
         driftQuery: defaultDriftFilters.query,
@@ -2369,6 +2370,7 @@
           instanceId: params.get('instanceId') || '',
           clusterArn: params.get('clusterArn') || '',
           eventLimit: normalizeDeploymentEventsLimit(params.get('eventLimit') || ''),
+          resourceFilter: params.get('resourceFilter') || '',
           resourceLogLimit: normalizeResourceLogsLimit(params.get('resourceLogLimit') || ''),
           resourceInspectionLimit: normalizeResourceInspectionTaskLimit(params.get('resourceInspectionLimit') || ''),
           auditAction: normalizeAuditAction(params.get('action') || ''),
@@ -2541,6 +2543,9 @@
           if (eventLimit !== defaultDeploymentEventsLimit) {
             params.set('eventLimit', String(eventLimit));
           }
+          if (currentPageState.resourceFilter) {
+            params.set('resourceFilter', currentPageState.resourceFilter);
+          }
         }
         Object.entries(extras).forEach(([key, value]) => {
           if (key === 'limit') {
@@ -2558,6 +2563,15 @@
               params.set('eventLimit', String(limit));
             } else {
               params.delete('eventLimit');
+            }
+            return;
+          }
+          if (key === 'resourceFilter') {
+            const filter = String(value || '').trim();
+            if (filter) {
+              params.set('resourceFilter', filter);
+            } else {
+              params.delete('resourceFilter');
             }
             return;
           }
@@ -3054,6 +3068,41 @@
         return groups;
       };
       const nonEmptyResourceSections = (detail) => groupResourceSections(detail).filter((group) => Array.isArray(group?.resources) && group.resources.length > 0);
+      const normalizeApplicationResourceFilter = (value) => String(value || '').trim();
+      const applicationResourceFilterMatches = (resource, query) => {
+        const filter = normalizeApplicationResourceFilter(query).toLowerCase();
+        if (!filter) return true;
+        return [resource?.type, resource?.name, resource?.description]
+          .map((value) => String(value || '').toLowerCase())
+          .some((value) => value.includes(filter));
+      };
+      const filterApplicationResourceSections = (groups, query) => {
+        const filter = normalizeApplicationResourceFilter(query);
+        if (!filter) return groups;
+        return (groups || [])
+          .map((group) => ({
+            ...group,
+            resources: (group.resources || []).filter((resource) => applicationResourceFilterMatches(resource, filter)),
+          }))
+          .filter((group) => group.resources.length > 0);
+      };
+      const applicationResourceCount = (groups) => (groups || []).reduce((count, group) => count + (group.resources || []).length, 0);
+      const syncApplicationResourceFilterQueryParam = (value) => {
+        const filter = normalizeApplicationResourceFilter(value);
+        const params = new URLSearchParams(window.location.search);
+        params.set('page', 'application');
+        if (currentPageState.deployment) {
+          params.set('deployment', currentPageState.deployment);
+        }
+        if (filter) {
+          params.set('resourceFilter', filter);
+        } else {
+          params.delete('resourceFilter');
+        }
+        const query = params.toString();
+        const hash = window.location.hash || '';
+        history.replaceState({}, '', `${window.location.pathname || '/'}${query ? `?${query}` : ''}${hash}`);
+      };
       const applicationDetailReadRoute = (deploymentName) => `GET /v1/overview/applications/${deploymentName || '{deploymentName}'}`;
       const applicationStatusSignal = (detail) => {
         const signal = detail.sync?.reason || detail.runtimeSummary?.summary || detail.health?.summary || '';
@@ -3610,14 +3659,18 @@
           container.append(createNavLink(buildPageSectionURL('resource', 'resource-recent-logs', { deployment: deploymentName, resourceType: resource.type, resourceId: resource.id }), 'Open recent logs', '_self'));
         }
       };
-      const renderApplicationDetailPage = (detail, applicationState = null) => {
+      const renderApplicationDetailPage = (detail, applicationState = null, focusState = null) => {
         const toolbar = document.getElementById('toolbar');
         const summary = document.getElementById('summary');
         const root = document.getElementById('accounts');
         const deploymentName = detail.name || currentPageState.deployment || '';
         setEmbeddedBrowserTitle(deploymentName, 'Application detail');
         const eventsDeploymentName = deploymentName;
-        const resourceGroups = nonEmptyResourceSections(detail);
+        const allResourceGroups = nonEmptyResourceSections(detail);
+        const resourceFilter = normalizeApplicationResourceFilter(currentPageState.resourceFilter);
+        const resourceGroups = filterApplicationResourceSections(allResourceGroups, resourceFilter);
+        const totalResourceCount = applicationResourceCount(allResourceGroups);
+        const visibleResourceCount = applicationResourceCount(resourceGroups);
         const applicationStatusSectionID = 'application-current-status';
         const applicationSectionIDs = {
           'Workloads': 'application-workloads',
@@ -3641,6 +3694,13 @@
         createApplicationDetailActions(applicationState).forEach((action) => {
           if (action) toolbarActions.append(action);
         });
+        toolbarActions.append(createInput('Filter linked resources', currentPageState.resourceFilter, 'Filter by type, name, or description', (event) => {
+          const nextFilter = normalizeApplicationResourceFilter(event.target.value);
+          const nextFocus = captureToolbarFocus();
+          currentPageState.resourceFilter = nextFilter;
+          syncApplicationResourceFilterQueryParam(nextFilter);
+          renderApplicationDetailPage(detail, applicationState, nextFocus);
+        }));
         toolbar.replaceChildren(toolbarActions);
         const detailSummary = createElement('article', 'account');
         detailSummary.append(
@@ -3665,7 +3725,10 @@
           createElement('h2', 'account-name', 'Application resources'),
           createElement('div', 'account-meta', 'Grouped linked resources for the selected application. Open drift, plan/apply, or audit log from here before the final resource page.'),
         );
-        const applicationStatusSection = createApplicationStatusSummary(detail, resourceGroups);
+        if (resourceFilter && totalResourceCount > 0) {
+          page.append(createElement('div', 'account-topology', `${visibleResourceCount} of ${totalResourceCount} linked resources match resource filter "${resourceFilter}"`));
+        }
+        const applicationStatusSection = createApplicationStatusSummary(detail, allResourceGroups);
         applicationStatusSection.id = applicationStatusSectionID;
         page.append(applicationStatusSection);
         pushApplicationSectionLink(applicationStatusSectionID, 'Current application status');
@@ -3711,10 +3774,21 @@
           rows.append(groupSection);
           pushApplicationSectionLink(groupSection.id, `${group.title} (${group.resources.length})`);
         });
-        if (!resourceGroups.length) {
+        if (!totalResourceCount) {
           const emptyState = createElement('div', 'detail-state', 'No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.');
           const emptyStateActions = createElement('div', 'row-links row-links-shell');
           emptyStateActions.append(createNavLink(buildPageSectionURL('application', 'application-runtime-events', { deployment: deploymentName }), 'Jump to runtime events', '_self'));
+          rows.append(emptyState, emptyStateActions);
+        } else if (!resourceGroups.length) {
+          const emptyState = createElement('div', 'detail-state', 'No linked resources match the current filter. Clear the resource filter to show all reported linked resources.');
+          const emptyStateActions = createElement('div', 'row-links row-links-shell');
+          const clearButton = createElement('button', 'toolbar-button', 'Clear resource filter');
+          clearButton.addEventListener('click', () => {
+            currentPageState.resourceFilter = '';
+            syncApplicationResourceFilterQueryParam('');
+            renderApplicationDetailPage(detail, applicationState);
+          });
+          emptyStateActions.append(clearButton);
           rows.append(emptyState, emptyStateActions);
         }
         const eventsSection = createDetailSection('Controller runtime events');
@@ -3738,6 +3812,7 @@
         root.replaceChildren(page);
         activeResourceQuickNavSync = typeof quickNav?.syncCurrentSection === 'function' ? quickNav.syncCurrentSection : null;
         syncActiveResourceQuickNav();
+        restoreToolbarFocus(focusState);
         scrollToCurrentHashTarget();
       };
       const applyResourcePageContainerState = (resource) => {
