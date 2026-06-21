@@ -68,6 +68,21 @@ func RepositoryTopologyProvider(root string) func() (TopologySnapshot, error) {
 	}
 }
 
+// RepositoryApplicationOverviewDetailProvider builds an application detail function backed by a repository root.
+func RepositoryApplicationOverviewDetailProvider(root string, snapshots func() ([]statusstore.Snapshot, error)) func(string) (ApplicationOverviewDetail, error) {
+	return func(deploymentName string) (ApplicationOverviewDetail, error) {
+		compiled, err := LoadFromRepository(root)
+		if err != nil {
+			return ApplicationOverviewDetail{}, err
+		}
+		currentSnapshots, err := snapshots()
+		if err != nil {
+			return ApplicationOverviewDetail{}, err
+		}
+		return BuildApplicationOverviewDetail(compiled, currentSnapshots, deploymentName)
+	}
+}
+
 // RepositoryAccountOverviewDetailProvider builds an account detail function backed by a repository root.
 func RepositoryAccountOverviewDetailProvider(root string, snapshots func() ([]statusstore.Snapshot, error)) func(string) (AccountOverviewDetail, error) {
 	return func(awsAccountID string) (AccountOverviewDetail, error) {

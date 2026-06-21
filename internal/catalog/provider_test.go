@@ -141,6 +141,54 @@ func TestRepositoryTopologyProviderLoadsStableTopologySnapshot(t *testing.T) {
 	}
 }
 
+func TestRepositoryApplicationOverviewDetailProvider(t *testing.T) {
+	t.Run("loads application detail", func(t *testing.T) {
+		root := t.TempDir()
+		writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole","allowedRegions":["ap-northeast-2"]}`)
+		writeJSON(t, filepath.Join(root, "environments", "prod.json"), `{"name":"prod","accountRef":"prod-core","region":"ap-northeast-2"}`)
+		writeJSON(t, filepath.Join(root, "deployments", "payments-api-prod.json"), `{"name":"payments-api-prod","appRef":"payments-api","environmentRef":"prod","target":{"type":"ec2"},"strategy":{"type":"canary"},"traffic":{"port":443},"capacity":{"desired":1,"min":1,"max":1},"userdata":{"type":"file","path":"userdata/payments-api-prod.sh"}}`)
+
+		provider := RepositoryApplicationOverviewDetailProvider(root, func() ([]statusstore.Snapshot, error) {
+			return []statusstore.Snapshot{{
+				DeploymentName: "payments-api-prod",
+				Status:         domain.DeploymentStatus{Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "warming"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "candidate warming"}},
+			}}, nil
+		})
+
+		detail, err := provider("payments-api-prod")
+		if err != nil {
+			t.Fatalf("provider returned error: %v", err)
+		}
+		if detail.Name != "payments-api-prod" || detail.AppRef != "payments-api" || detail.AccountName != "prod-core" || detail.Region != "ap-northeast-2" {
+			t.Fatalf("unexpected application detail: %+v", detail)
+		}
+		if detail.Sync.State != domain.SyncStateReconciling || detail.Sync.Reason != "warming" || detail.Health.Overall != domain.HealthProgressing || detail.Health.Summary != "candidate warming" {
+			t.Fatalf("expected snapshot-backed runtime state, got sync=%+v health=%+v", detail.Sync, detail.Health)
+		}
+	})
+
+	t.Run("propagates snapshot errors", func(t *testing.T) {
+		root := t.TempDir()
+		writeJSON(t, filepath.Join(root, "accounts", "prod-core.json"), `{"name":"prod-core","awsAccountId":"123456789012","roleArn":"arn:aws:iam::123456789012:role/TenetDeployerRole"}`)
+		if err := os.Mkdir(filepath.Join(root, "environments"), 0o755); err != nil {
+			t.Fatalf("failed to create environments dir: %v", err)
+		}
+		if err := os.Mkdir(filepath.Join(root, "deployments"), 0o755); err != nil {
+			t.Fatalf("failed to create deployments dir: %v", err)
+		}
+
+		expected := errors.New("snapshots unavailable")
+		provider := RepositoryApplicationOverviewDetailProvider(root, func() ([]statusstore.Snapshot, error) {
+			return nil, expected
+		})
+
+		_, err := provider("payments-api-prod")
+		if !errors.Is(err, expected) {
+			t.Fatalf("expected snapshot error, got %v", err)
+		}
+	})
+}
+
 func TestRepositoryProjectEnvironmentOverviewDetailProvider(t *testing.T) {
 	t.Run("loads grouped detail", func(t *testing.T) {
 		root := t.TempDir()
