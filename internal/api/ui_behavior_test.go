@@ -12784,6 +12784,15 @@ async function render(search, hash = '#application-current-status') {
 }
 (async () => {
   const initialSearch = '?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging&resourceFilter=weighted';
+  const clearRun = await render(initialSearch);
+  const activeClearButton = collectNodes(clearRun.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && node.textContent === 'Clear resource filter')[0];
+  if (!activeClearButton) throw new Error('expected active resource filter clear button');
+  activeClearButton.dispatch('click');
+  await settle();
+  const clearText = compactText(clearRun.document.getElementById('accounts'));
+  if (!clearText.includes('ecsService') || !clearText.includes('productionListenerRule') || !clearText.includes('userDataBootstrapSource')) throw new Error('expected active filter clear action to restore all groups: ' + clearText);
+  if (clearRun.window.location.search !== '?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging') throw new Error('expected active filter clear action to preserve existing query state and remove only resourceFilter, got ' + clearRun.window.location.search);
+
   const run = await render(initialSearch);
   const accounts = run.document.getElementById('accounts');
   const toolbar = run.document.getElementById('toolbar');

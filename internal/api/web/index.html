@@ -79,6 +79,7 @@
       .deployment-group-head { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; padding: 0 4px; }
       .deployment-group-title { margin:0; font-size: 16px; }
       .deployment-group-meta, .account-topology { color: var(--muted); font-size: 13px; margin-top: 6px; }
+      .resource-filter-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
       .group-pill { padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; border: 1px solid rgba(103,183,255,.24); color: var(--blue); background: rgba(103,183,255,.08); }
       .group-rows { display:grid; gap: 12px; }
       .row { background: var(--panel-2); border: 1px solid rgba(255,255,255,.06); border-radius: 14px; display:grid; gap: 10px; overflow: clip; }
@@ -3103,6 +3104,17 @@
         const hash = window.location.hash || '';
         history.replaceState({}, '', `${window.location.pathname || '/'}${query ? `?${query}` : ''}${hash}`);
       };
+      const clearApplicationResourceFilter = (detail, applicationState = null) => {
+        currentPageState.resourceFilter = '';
+        syncApplicationResourceFilterQueryParam('');
+        renderApplicationDetailPage(detail, applicationState);
+      };
+      const createClearApplicationResourceFilterButton = (detail, applicationState = null) => {
+        const clearButton = createElement('button', 'toolbar-button', 'Clear resource filter');
+        clearButton.setAttribute('type', 'button');
+        clearButton.addEventListener('click', () => clearApplicationResourceFilter(detail, applicationState));
+        return clearButton;
+      };
       const applicationDetailReadRoute = (deploymentName) => `GET /v1/overview/applications/${deploymentName || '{deploymentName}'}`;
       const applicationStatusSignal = (detail) => {
         const signal = detail.sync?.reason || detail.runtimeSummary?.summary || detail.health?.summary || '';
@@ -3726,7 +3738,12 @@
           createElement('div', 'account-meta', 'Grouped linked resources for the selected application. Open drift, plan/apply, or audit log from here before the final resource page.'),
         );
         if (resourceFilter && totalResourceCount > 0) {
-          page.append(createElement('div', 'account-topology', `${visibleResourceCount} of ${totalResourceCount} linked resources match resource filter "${resourceFilter}"`));
+          const filterSummary = createElement('div', 'account-topology resource-filter-summary');
+          filterSummary.append(
+            createElement('span', '', `${visibleResourceCount} of ${totalResourceCount} linked resources match resource filter "${resourceFilter}"`),
+            createClearApplicationResourceFilterButton(detail, applicationState),
+          );
+          page.append(filterSummary);
         }
         const applicationStatusSection = createApplicationStatusSummary(detail, allResourceGroups);
         applicationStatusSection.id = applicationStatusSectionID;
@@ -3782,13 +3799,7 @@
         } else if (!resourceGroups.length) {
           const emptyState = createElement('div', 'detail-state', 'No linked resources match the current filter. Clear the resource filter to show all reported linked resources.');
           const emptyStateActions = createElement('div', 'row-links row-links-shell');
-          const clearButton = createElement('button', 'toolbar-button', 'Clear resource filter');
-          clearButton.addEventListener('click', () => {
-            currentPageState.resourceFilter = '';
-            syncApplicationResourceFilterQueryParam('');
-            renderApplicationDetailPage(detail, applicationState);
-          });
-          emptyStateActions.append(clearButton);
+          emptyStateActions.append(createClearApplicationResourceFilterButton(detail, applicationState));
           rows.append(emptyState, emptyStateActions);
         }
         const eventsSection = createDetailSection('Controller runtime events');

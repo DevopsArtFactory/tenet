@@ -2057,7 +2057,10 @@ assert "const resourceGroups = filterApplicationResourceSections(allResourceGrou
 assert "resourceFilter: params.get('resourceFilter') || ''," in application_ui, application_ui
 assert "const applicationResourceFilterMatches = (resource, query) => {" in application_ui, application_ui
 assert "const syncApplicationResourceFilterQueryParam = (value) => {" in application_ui, application_ui
+assert "const createClearApplicationResourceFilterButton = (detail, applicationState = null) => {" in application_ui, application_ui
 assert "createInput('Filter linked resources', currentPageState.resourceFilter, 'Filter by type, name, or description'," in application_ui, application_ui
+assert "createElement('div', 'account-topology resource-filter-summary')" in application_ui, application_ui
+assert "createClearApplicationResourceFilterButton(detail, applicationState)" in application_ui, application_ui
 assert 'No linked resources match the current filter. Clear the resource filter to show all reported linked resources.' in application_ui, application_ui
 assert 'Clear resource filter' in application_ui, application_ui
 assert 'Current application status' in application_ui, application_ui
