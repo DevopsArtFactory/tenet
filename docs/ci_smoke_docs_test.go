@@ -136,6 +136,35 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 	}
 }
 
+func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
+	overviewUIText := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
+	for _, fragment := range []string{
+		"The application-detail linked-resource filter is a client-side, bookmarkable `resourceFilter` query parameter",
+		"It matches normalized linked-resource `resource` type, `name`, and `description` text",
+		"Filtering never changes the backing read route: application detail still reads `GET /v1/overview/applications/{deploymentName}`",
+		"deeper resource/drift/plan links still preserve their existing route contracts",
+		"When `resourceFilter` hides all reported linked resources, the UI renders the filtered-empty state `No linked resources match the current filter. Clear the resource filter to show all reported linked resources.`",
+		"When the application read reports no linked resources at all, the page keeps the separate no-resource state `No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.`",
+		"Resource-filter updates and clear actions preserve the surrounding bookmarkable shell state (`q`, `sync`, `account`, `deployment`, and the current hash) while only changing or removing `resourceFilter`.",
+	} {
+		if !strings.Contains(overviewUIText, fragment) {
+			t.Fatalf("expected overview UI docs to include application-detail resource-filter contract %q", fragment)
+		}
+	}
+
+	operatorContractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
+	for _, fragment := range []string{
+		"`resourceFilter` is UI query state only; it is not sent to `GET /v1/overview/applications/{deploymentName}` and does not add a read-route variant.",
+		"The filter matches linked-resource type, name, and description text after the application-detail payload is loaded.",
+		"The filtered-empty state is distinct from the no-resource state so operators can tell whether client-side filtering hid resources or the read model reported none.",
+		"Application-detail links and filter controls must preserve `q`, `sync`, `account`, `deployment`, and hash state while changing only `resourceFilter`.",
+	} {
+		if !strings.Contains(operatorContractsText, fragment) {
+			t.Fatalf("expected operator contracts doc to include application-detail resource-filter contract %q", fragment)
+		}
+	}
+}
+
 func readTextFile(t *testing.T, path string) string {
 	t.Helper()
 
