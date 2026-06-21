@@ -98,6 +98,7 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 	for _, fragment := range []string{
 		"`docs/features/resource-inspection.md` documents live resource inspection selectors, lookup context, and bounded sample metadata.",
 		"`docs/features/resource-recent-logs.md` documents recent-log resource contracts.",
+		"Capture the HTTP `Request-Id` response header with that lookup context",
 	} {
 		if !strings.Contains(readmeText, fragment) {
 			t.Fatalf("expected README documentation map to include %q", fragment)
@@ -125,6 +126,7 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 		"`lookupContext`",
 		"`unavailableReason`",
 		"`resultScope`",
+		"Operators should capture the HTTP `Request-Id` response header together with the `lookupContext` object before escalating",
 	} {
 		if !strings.Contains(featureText, fragment) {
 			t.Fatalf("expected resource inspection guide to include %q", fragment)
