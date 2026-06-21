@@ -2549,9 +2549,9 @@
           if (eventLimit !== defaultDeploymentEventsLimit) {
             params.set('eventLimit', String(eventLimit));
           }
-          if (currentPageState.resourceFilter) {
-            params.set('resourceFilter', currentPageState.resourceFilter);
-          }
+        }
+        if ((page === 'application' || page === 'resource') && currentPageState.resourceFilter) {
+          params.set('resourceFilter', currentPageState.resourceFilter);
         }
         Object.entries(extras).forEach(([key, value]) => {
           if (key === 'limit') {
@@ -3089,11 +3089,32 @@
         return (groups || [])
           .map((group) => ({
             ...group,
+            totalResources: (group.resources || []).length,
             resources: (group.resources || []).filter((resource) => applicationResourceFilterMatches(resource, filter)),
-          }))
-          .filter((group) => group.resources.length > 0);
+          }));
       };
       const applicationResourceCount = (groups) => (groups || []).reduce((count, group) => count + (group.resources || []).length, 0);
+      const applicationResourceGroupTotal = (group) => Number.isFinite(group?.totalResources) ? group.totalResources : (group?.resources || []).length;
+      const applicationResourceGroupCountText = (group, resourceFilter = '') => {
+        const visibleCount = (group?.resources || []).length;
+        const totalCount = applicationResourceGroupTotal(group);
+        if (resourceFilter) {
+          return `${visibleCount} of ${totalCount} linked resources match resource filter "${resourceFilter}"`;
+        }
+        return `${visibleCount} linked resource${visibleCount === 1 ? '' : 's'}`;
+      };
+      const applicationResourceGroupPillText = (group, resourceFilter = '') => {
+        const visibleCount = (group?.resources || []).length;
+        if (resourceFilter) return `${visibleCount} of ${applicationResourceGroupTotal(group)} resources`;
+        return `${visibleCount} resources`;
+      };
+      const applicationResourceSectionLinkLabel = (group, resourceFilter = '') => {
+        const visibleCount = (group?.resources || []).length;
+        if (resourceFilter) return `${group.title} (${visibleCount} of ${applicationResourceGroupTotal(group)})`;
+        return `${group.title} (${visibleCount})`;
+      };
+      const applicationResourceFilteredEmptyMessage = (group, resourceFilter) =>
+        `No ${group.title} resources match resource filter "${resourceFilter}". Clear the resource filter to show all ${group.title} resources.`;
       const syncApplicationResourceFilterQueryParam = (value) => {
         const filter = normalizeApplicationResourceFilter(value);
         const params = new URLSearchParams(window.location.search);
@@ -3776,9 +3797,9 @@
           const groupTitleWrap = createElement('div');
           groupTitleWrap.append(
             createElement('h3', 'deployment-group-title', group.title),
-            createElement('div', 'deployment-group-meta', `Application ${detail.name || currentPageState.deployment || 'deployment'} · ${group.resources.length} linked resource${group.resources.length === 1 ? '' : 's'}`),
+            createElement('div', 'deployment-group-meta', `Application ${detail.name || currentPageState.deployment || 'deployment'} · ${applicationResourceGroupCountText(group, resourceFilter)}`),
           );
-          groupHead.append(groupTitleWrap, createElement('div', 'group-pill', `${group.resources.length} resources`));
+          groupHead.append(groupTitleWrap, createElement('div', 'group-pill', applicationResourceGroupPillText(group, resourceFilter)));
           const groupRows = createElement('div', 'group-rows');
           group.resources.forEach((resource) => {
             const row = createElement('div', 'row');
@@ -3797,19 +3818,17 @@
             row.append(top, detailLinks);
             groupRows.append(row);
           });
+          if (resourceFilter && !group.resources.length) {
+            groupRows.append(createElement('div', 'detail-state', applicationResourceFilteredEmptyMessage(group, resourceFilter)));
+          }
           groupSection.append(groupHead, groupRows);
           rows.append(groupSection);
-          pushApplicationSectionLink(groupSection.id, `${group.title} (${group.resources.length})`);
+          pushApplicationSectionLink(groupSection.id, applicationResourceSectionLinkLabel(group, resourceFilter));
         });
         if (!totalResourceCount) {
           const emptyState = createElement('div', 'detail-state', 'No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.');
           const emptyStateActions = createElement('div', 'row-links row-links-shell');
           emptyStateActions.append(createNavLink(buildPageSectionURL('application', 'application-runtime-events', { deployment: deploymentName }), 'Jump to runtime events', '_self'));
-          rows.append(emptyState, emptyStateActions);
-        } else if (!resourceGroups.length) {
-          const emptyState = createElement('div', 'detail-state', 'No linked resources match the current filter. Clear the resource filter to show all reported linked resources.');
-          const emptyStateActions = createElement('div', 'row-links row-links-shell');
-          emptyStateActions.append(createClearApplicationResourceFilterButton(detail, applicationState));
           rows.append(emptyState, emptyStateActions);
         }
         const eventsSection = createDetailSection('Controller runtime events');

@@ -12843,9 +12843,12 @@ async function render(search, hash = '#application-current-status') {
   if (!text.includes('productionListenerRule')) throw new Error('expected resource description filter to show traffic routing resource');
   if (text.includes('ecsService') || text.includes('userDataBootstrapSource')) throw new Error('expected resource filter to hide unmatched resource groups');
   if (!text.includes('1 of 3 linked resources match resource filter "weighted"')) throw new Error('expected grouped filtered count copy: ' + text);
+  if (!text.includes('Traffic routing') || !text.includes('1 of 1 linked resources match resource filter "weighted"')) throw new Error('expected filtered traffic-routing group count copy: ' + text);
+  if (!text.includes('No Workloads resources match resource filter "weighted". Clear the resource filter to show all Workloads resources.')) throw new Error('expected section-specific workload filtered-empty copy: ' + text);
+  if (!text.includes('No Config and access resources match resource filter "weighted". Clear the resource filter to show all Config and access resources.')) throw new Error('expected section-specific config filtered-empty copy: ' + text);
   if (run.window.location.search !== initialSearch) throw new Error('expected initial resourceFilter query state to be preserved, got ' + run.window.location.search);
   if (run.window.location.hash !== '#application-current-status') throw new Error('expected section hash to be preserved, got ' + run.window.location.hash);
-  const routingQuickLink = collectNodes(accounts, (node) => node.tagName === 'A' && node.textContent === 'Traffic routing (1)')[0];
+  const routingQuickLink = collectNodes(accounts, (node) => node.tagName === 'A' && node.textContent === 'Traffic routing (1 of 1)')[0];
   if (!routingQuickLink) throw new Error('expected filtered traffic-routing section link');
   const [routingURL, routingHash = ''] = routingQuickLink.href.split('#');
   const routingParams = new URLSearchParams(routingURL.split('?')[1] || '');
@@ -12853,6 +12856,14 @@ async function render(search, hash = '#application-current-status') {
     if (routingParams.get(key) !== value) throw new Error('expected quick-nav link to preserve ' + key + ', got ' + routingQuickLink.href);
   }
   if (routingHash !== 'application-traffic-routing') throw new Error('expected quick-nav traffic-routing hash, got ' + routingQuickLink.href);
+  const filteredResourceLink = collectNodes(accounts, (node) => node.tagName === 'A' && node.textContent === 'Open resource')[0];
+  if (!filteredResourceLink) throw new Error('expected filtered resource Open resource link');
+  if (filteredResourceLink.target !== '_self' || filteredResourceLink.rel) throw new Error('expected filtered resource link to stay in embedded shell');
+  const filteredResourceParams = new URLSearchParams((filteredResourceLink.href.split('?')[1] || '').split('#')[0]);
+  for (const [key, value] of [['page', 'resource'], ['q', 'payments'], ['sync', 'OutOfSync'], ['account', '210987654321'], ['deployment', 'payments-api-staging'], ['resourceType', 'productionListenerRule'], ['resourceFilter', 'weighted']]) {
+    if (filteredResourceParams.get(key) !== value) throw new Error('expected filtered resource link to preserve ' + key + ', got ' + filteredResourceLink.href);
+  }
+  if (!filteredResourceParams.get('resourceId')) throw new Error('expected filtered resource link to preserve resourceId, got ' + filteredResourceLink.href);
   if (collectNodes(accounts, (node) => ['A', 'BUTTON'].includes(node.tagName) && hasInteractiveAncestor(node)).length) throw new Error('expected no nested interactive controls in filtered application resources');
 
   input.focus();
@@ -12867,6 +12878,9 @@ async function render(search, hash = '#application-current-status') {
   if (run.window.location.search !== '?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging&resourceFilter=ecs') throw new Error('expected resource filter URL update to preserve q/sync/account/deployment, got ' + run.window.location.search);
   text = compactText(run.document.getElementById('accounts'));
   if (!text.includes('ecsService') || text.includes('productionListenerRule') || text.includes('userDataBootstrapSource')) throw new Error('expected type filter to show only workload resource: ' + text);
+  if (!text.includes('Workloads') || !text.includes('1 of 1 linked resources match resource filter "ecs"')) throw new Error('expected filtered workload group count copy: ' + text);
+  if (!text.includes('No Traffic routing resources match resource filter "ecs". Clear the resource filter to show all Traffic routing resources.')) throw new Error('expected traffic-routing filtered-empty copy: ' + text);
+  if (!text.includes('No Config and access resources match resource filter "ecs". Clear the resource filter to show all Config and access resources.')) throw new Error('expected config filtered-empty copy: ' + text);
 
   nextInput.value = 'does-not-match';
   nextInput.selectionStart = 5;
@@ -12874,7 +12888,10 @@ async function render(search, hash = '#application-current-status') {
   nextInput.dispatch('input');
   await settle();
   text = compactText(run.document.getElementById('accounts'));
-  if (!text.includes('No linked resources match the current filter. Clear the resource filter to show all reported linked resources.')) throw new Error('expected filter-empty application resource state: ' + text);
+  if (!text.includes('No Workloads resources match resource filter "does-not-match". Clear the resource filter to show all Workloads resources.')) throw new Error('expected workload filtered-empty application resource state: ' + text);
+  if (!text.includes('No Traffic routing resources match resource filter "does-not-match". Clear the resource filter to show all Traffic routing resources.')) throw new Error('expected traffic-routing filtered-empty application resource state: ' + text);
+  if (!text.includes('No Config and access resources match resource filter "does-not-match". Clear the resource filter to show all Config and access resources.')) throw new Error('expected config filtered-empty application resource state: ' + text);
+  if (text.includes('No linked resources match the current filter.')) throw new Error('expected section-specific filtered-empty state to replace generic filtered-empty copy');
   if (text.includes('No linked resources are currently reported for this application.')) throw new Error('expected filtered-empty state to differ from no-resources state');
   const clearButton = collectNodes(run.document.getElementById('accounts'), (node) => node.tagName === 'BUTTON' && node.textContent === 'Clear resource filter')[0];
   if (!clearButton) throw new Error('expected inline clear resource filter button');

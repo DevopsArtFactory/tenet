@@ -465,6 +465,11 @@ func TestEmbeddedUIIncludesQuickLinksToDeploymentReadModels(t *testing.T) {
 		"Audit log",
 		"const allResourceGroups = nonEmptyResourceSections(detail);",
 		"const resourceGroups = filterApplicationResourceSections(allResourceGroups, resourceFilter);",
+		"const applicationResourceGroupTotal = (group) => Number.isFinite(group?.totalResources) ? group.totalResources : (group?.resources || []).length;",
+		"const applicationResourceGroupCountText = (group, resourceFilter = '') => {",
+		"return `${visibleCount} of ${totalCount} linked resources match resource filter \"${resourceFilter}\"`;",
+		"const applicationResourceFilteredEmptyMessage = (group, resourceFilter) =>",
+		"createElement('div', 'detail-state', applicationResourceFilteredEmptyMessage(group, resourceFilter))",
 		"if (!totalResourceCount) {",
 		"'No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.'",
 		"emptyStateActions.append(createNavLink(buildPageSectionURL('application', 'application-runtime-events', { deployment: deploymentName }), 'Jump to runtime events', '_self'));",
@@ -617,7 +622,7 @@ func TestEmbeddedUIIncludesApplicationSectionNavigation(t *testing.T) {
 		"'Traffic routing': 'application-traffic-routing',",
 		"'Config and access': 'application-config-access',",
 		"sectionID,",
-		"pushApplicationSectionLink(groupSection.id, `${group.title} (${group.resources.length})`);",
+		"pushApplicationSectionLink(groupSection.id, applicationResourceSectionLinkLabel(group, resourceFilter));",
 		"applicationStatusSection.id = applicationStatusSectionID;",
 		"pushApplicationSectionLink(applicationStatusSectionID, 'Current application status');",
 		"eventsSection.id = 'application-runtime-events';",
@@ -987,7 +992,8 @@ func TestEmbeddedUIIncludesApplicationDetailRoute(t *testing.T) {
 		"const createClearApplicationResourceFilterButton = (detail, applicationState = null) => {",
 		"createInput('Filter linked resources', currentPageState.resourceFilter, 'Filter by type, name, or description',",
 		"createElement('div', 'account-topology resource-filter-summary')",
-		"No linked resources match the current filter. Clear the resource filter to show all reported linked resources.",
+		"const applicationResourceSectionLinkLabel = (group, resourceFilter = '') => {",
+		"No ${group.title} resources match resource filter \"${resourceFilter}\". Clear the resource filter to show all ${group.title} resources.",
 		"Clear resource filter",
 		"const resourceDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;",
 		"const createResourceDetailActions = (resourceState = null, detail = null, resource = null) => [",
@@ -3422,7 +3428,7 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert 'Open live inspection' in application_ui, application_ui") || !strings.Contains(text, "assert 'Open recent logs' in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page evidence handoff copy")
 	}
-	if !strings.Contains(text, "assert \"const nonEmptyResourceSections = (detail) => groupResourceSections(detail).filter((group) => Array.isArray(group?.resources) && group.resources.length > 0);\" in application_ui, application_ui") {
+	if !strings.Contains(text, "assert \"const applicationResourceSectionLinkLabel = (group, resourceFilter = '') => {\" in application_ui, application_ui") {
 		t.Fatalf("expected smoke-local.sh to assert application page filters empty linked-resource groups")
 	}
 	if !strings.Contains(text, "assert 'No linked resources are currently reported for this application. Use controller runtime events below to inspect the latest rollout signals.' in application_ui, application_ui") {
