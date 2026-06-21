@@ -137,6 +137,17 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 }
 
 func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
+	readmeText := readTextFile(t, "../README.md")
+	for _, fragment := range []string{
+		"`Application JSON`, `Copy read route`, and a lightweight `resourceFilter=` search",
+		"with an inline `Clear resource filter` action whenever",
+		"that filter is active, while rollout/history/log evidence stays on the final resource",
+	} {
+		if !strings.Contains(readmeText, fragment) {
+			t.Fatalf("expected README to include application-detail resource-filter summary %q", fragment)
+		}
+	}
+
 	overviewUIText := readTextFile(t, "architecture/tenet-v1-overview-ui.md")
 	for _, fragment := range []string{
 		"The application-detail linked-resource filter is a client-side, bookmarkable `resourceFilter` query parameter",
