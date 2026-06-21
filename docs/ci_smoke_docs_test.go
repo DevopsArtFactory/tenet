@@ -133,6 +133,9 @@ func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 		"`resultScope`",
 		"Operators should capture the HTTP `Request-Id` response header together with the `lookupContext` object before escalating",
 		"`Tenet request ID` metadata in the Live inspection card",
+		"`Deployment controller`",
+		"`Deployment circuit breaker`",
+		"`Deployment alarms`",
 	} {
 		if !strings.Contains(featureText, fragment) {
 			t.Fatalf("expected resource inspection guide to include %q", fragment)
