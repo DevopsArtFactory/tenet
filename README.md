@@ -322,12 +322,13 @@ The detailed runner-start evidence bundle remains available by omitting
   route shapes, and operator-workspace behavior.
 - `docs/architecture/tenet-v1-audit-log-api.md` documents immutable audit,
   plan/apply, actor, and authorization contracts.
+- `docs/architecture/tenet-v1-aws-central-control-plane.md` documents the AWS
+  Terraform bootstrap, public repo-sync, and `repo_sync_token_secret_arn`.
 - `docs/architecture/tenet-v1-enterprise-sso.md` documents managed login,
   Google Workspace OIDC, Okta OIDC, Okta SAML diagnostics, and SSO boundaries.
-- `docs/features/overview-dashboard.md` documents the applications overview,
-  application/account/resource pages, drift, audit, and plan/apply workspaces.
-- `docs/features/resource-recent-logs.md` documents recent-log and live
-  inspection resource contracts.
+- `docs/features/overview-dashboard.md` documents application/account/resource pages,
+  drift, audit, and plan/apply workspaces.
+- `docs/features/resource-recent-logs.md` documents recent-log and live inspection resource contracts.
 - `docs/runbooks/ci-smoke-runner-start.md` documents GitHub Actions runner-start
   failure triage for CI smoke checks.
 

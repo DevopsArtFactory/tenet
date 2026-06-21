@@ -849,7 +849,7 @@ For deeper design details, see:
 - `docs/runbooks/ci-smoke-runner-start.md`
 - `deploy/terraform/aws-central-control-plane/README.md`
 
-The AWS central-control-plane docs and Terraform bootstrap README now explicitly call out that the shipped repo-sync bootstrap path works out of the box only with an anonymously readable `repo_url` (for example a public HTTPS clone URL). Private desired-state repo authentication for that module is still a follow-up.
+The AWS central-control-plane Terraform bootstrap can optionally inject a Secrets Manager-backed `TENET_REPO_SYNC_TOKEN` into its two repo-sync sidecars with `repo_sync_token_secret_arn`. Leaving that ARN unset preserves anonymous public clone behavior.
 
 If you plan to use the AWS central-control-plane Terraform bootstrap, do the preflight before `terraform apply`: it builds and pushes the current local Tenet checkout from the machine running apply, requires Terraform 1.5+, Docker Buildx, and AWS CLI v2 with working credentials, and expects you to verify that `repo_url` and `repo_branch` are reachable from that machine first, for example with `git ls-remote --heads <repo_url> <repo_branch>`.
 

@@ -765,11 +765,22 @@ func TestDriftRowShareLinkDocsContract(t *testing.T) {
 }
 
 func TestDesiredStateSourceOperatorDocsContract(t *testing.T) {
+	readme := readRepoFile(t, "README.md")
+	for _, fragment := range []string{
+		"`docs/architecture/tenet-v1-aws-central-control-plane.md` documents the AWS",
+		"Terraform bootstrap, public repo-sync, and `repo_sync_token_secret_arn`.",
+	} {
+		if !strings.Contains(readme, fragment) {
+			t.Fatalf("expected README documentation map to include %q", fragment)
+		}
+	}
+
 	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	for _, fragment := range []string{
 		"Both `tenet-api` and `tenet-controller` can read that desired state from either:",
 		"`TENET_REPO_ROOT` remains the filesystem-mode input when you want a local checkout; it is not a universal runtime requirement.",
-		"The AWS central-control-plane docs and Terraform bootstrap README now explicitly call out that the shipped repo-sync bootstrap path works out of the box only with an anonymously readable `repo_url` (for example a public HTTPS clone URL).",
+		"The AWS central-control-plane Terraform bootstrap can optionally inject a Secrets Manager-backed `TENET_REPO_SYNC_TOKEN` into its two repo-sync sidecars with `repo_sync_token_secret_arn`.",
+		"Leaving that ARN unset preserves anonymous public clone behavior.",
 		"If you plan to use the AWS central-control-plane Terraform bootstrap, do the preflight before `terraform apply`: it builds and pushes the current local Tenet checkout from the machine running apply, requires Terraform 1.5+, Docker Buildx, and AWS CLI v2 with working credentials, and expects you to verify that `repo_url` and `repo_branch` are reachable from that machine first, for example with `git ls-remote --heads <repo_url> <repo_branch>`.",
 	} {
 		if !strings.Contains(operatorContractsDoc, fragment) {
@@ -783,19 +794,20 @@ func TestDesiredStateSourceOperatorDocsContract(t *testing.T) {
 		"`filesystem` uses `TENET_REPO_ROOT` to point `tenet-api` and `tenet-controller` at the same checked-out repo or synced repo tree",
 		"`github` uses `TENET_CATALOG_GITHUB_*` so both services read the same desired-state manifests directly from GitHub in read-only mode",
 		"The shipped Terraform/bootstrap path in this doc still uses repo-sync plus shared filesystem delivery today because that works for both services now.",
-		"That repo-sync path works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL.",
-		"Private desired-state repo authentication is not wired into this module yet.",
+		"Public HTTPS `repo_url` values work anonymously.",
+		"Set `repo_sync_token_secret_arn` to an AWS Secrets Manager secret ARN when the filesystem-mode desired-state repo is private.",
 		"the shipped Terraform bootstrap below uses the shared repo tree path at `/workspace/repo`",
 		"### 3. Choose desired-state delivery",
 		"The shipped Terraform/bootstrap path still uses the shared checkout plus repo-sync pattern today.",
+		"Leave `repo_sync_token_secret_arn` unset for public repos; the repo-sync sidecars keep using anonymous HTTPS clone/fetch.",
 		"If you use the shipped Terraform bootstrap, run this operator preflight on the same machine before `terraform apply`:",
 		"`terraform apply` builds and pushes the current local Tenet checkout from that machine, so run it from the repo checkout you intend to ship",
 		"Terraform 1.5+ is installed",
 		"Docker Buildx is installed and working locally",
 		"AWS CLI v2 is installed and your current shell has working AWS credentials for this deployment",
 		"verify that `repo_url` and `repo_branch` are reachable from the current machine before apply, for example `git ls-remote --heads <repo_url> <repo_branch>`",
-		"the shipped repo-sync path works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL",
-		"private desired-state repo authentication is not wired into this module yet",
+		"public HTTPS `repo_url` values work anonymously when `repo_sync_token_secret_arn` is unset",
+		"for a private HTTPS desired-state repo, store the repo token in AWS Secrets Manager and set `repo_sync_token_secret_arn` to that secret ARN",
 		"#### Filesystem-mode repo delivery options",
 		"TENET_CATALOG_SOURCE=filesystem",
 	} {
@@ -812,9 +824,11 @@ func TestDesiredStateSourceOperatorDocsContract(t *testing.T) {
 	for _, fragment := range []string{
 		"Both `tenet-api` and `tenet-controller` now support `TENET_CATALOG_SOURCE=filesystem|github` for desired-state reads.",
 		"This Terraform bootstrap intentionally chooses the filesystem path and sets `TENET_REPO_ROOT` because the shared repo-sync volume works for both services today.",
-		"The shipped repo-sync path works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL.",
-		"Private desired-state repo authentication is not wired into this module yet.",
-		"`repo_url` (an anonymously readable clone URL, such as a public HTTPS clone URL)",
+		"Public HTTPS `repo_url` values work anonymously, and private HTTPS desired-state repos can use the optional Secrets Manager token ARN described below.",
+		"`repo_sync_token_secret_arn` is optional. Leave it unset for anonymously readable public HTTPS repos.",
+		"When set, ECS injects the secret value as `TENET_REPO_SYNC_TOKEN` only into the two `repo-sync` sidecars, and the ECS execution role receives `secretsmanager:GetSecretValue` for that secret ARN.",
+		"`repo_url` (public HTTPS works anonymously; private HTTPS can use `repo_sync_token_secret_arn`)",
+		"`repo_sync_token_secret_arn` (optional Secrets Manager ARN containing an HTTPS repo token for the repo-sync sidecars)",
 		"## Preflight before `terraform apply`",
 		"Run this checklist on the same machine that will run `terraform apply`:",
 		"`terraform apply` builds and pushes the current local Tenet checkout from that machine, so run it from the repo checkout you intend to ship",
@@ -822,8 +836,8 @@ func TestDesiredStateSourceOperatorDocsContract(t *testing.T) {
 		"Docker Buildx is installed and working locally",
 		"AWS CLI v2 is installed and your current shell has working AWS credentials for this deployment",
 		"verify that `repo_url` and `repo_branch` are reachable from the current machine before apply, for example `git ls-remote --heads <repo_url> <repo_branch>`:",
-		"the shipped repo-sync path works out of the box only when `repo_url` is anonymously readable, for example a public HTTPS clone URL",
-		"private desired-state repo authentication is not wired into this module yet",
+		"public HTTPS `repo_url` values work anonymously when `repo_sync_token_secret_arn` is unset",
+		"for a private HTTPS desired-state repo, store the repo token in AWS Secrets Manager and set `repo_sync_token_secret_arn` to that secret ARN",
 	} {
 		if !strings.Contains(terraformDoc, fragment) {
 			t.Fatalf("expected Terraform README desired-state source contract to include %q", fragment)
@@ -836,7 +850,9 @@ func TestDesiredStateSourceOperatorDocsContract(t *testing.T) {
 
 	terraformVars := readRepoFile(t, "deploy/terraform/aws-central-control-plane/variables.tf")
 	for _, fragment := range []string{
-		`description = "Git clone URL that the repo-sync sidecars keep mounted into both Tenet tasks. The shipped repo-sync path works out of the box only when this URL is anonymously readable, for example a public HTTPS clone URL. Private desired-state repo authentication is not wired into this module yet."`,
+		`description = "Git clone URL that the repo-sync sidecars keep mounted into both Tenet tasks. Public HTTPS clone URLs work anonymously; private HTTPS repos can use repo_sync_token_secret_arn."`,
+		`variable "repo_sync_token_secret_arn"`,
+		`description = "Optional AWS Secrets Manager secret ARN containing an HTTPS token for the repo-sync sidecars. Leave null to keep anonymous public clone behavior."`,
 	} {
 		if !strings.Contains(terraformVars, fragment) {
 			t.Fatalf("expected Terraform variables desired-state source contract to include %q", fragment)
@@ -845,10 +861,10 @@ func TestDesiredStateSourceOperatorDocsContract(t *testing.T) {
 
 	terraformTfvarsExample := readRepoFile(t, "deploy/terraform/aws-central-control-plane/terraform.tfvars.example")
 	for _, fragment := range []string{
-		"# The shipped repo-sync path works out of the box only when `repo_url` is",
-		"# anonymously readable, for example a public HTTPS clone URL. Private",
-		"# desired-state repo authentication is not wired into this module yet.",
+		"# Public HTTPS repo URLs work anonymously. For a private HTTPS desired-state",
+		"# repo, store the repo token in Secrets Manager and set repo_sync_token_secret_arn.",
 		`repo_url             = "https://github.com/DevopsArtFactory/tenet.git"`,
+		`# repo_sync_token_secret_arn = "arn:aws:secretsmanager:ap-northeast-2:123456789012:secret:tenet/repo-sync-token-AbCdEf"`,
 	} {
 		if !strings.Contains(terraformTfvarsExample, fragment) {
 			t.Fatalf("expected Terraform tfvars example desired-state source contract to include %q", fragment)
@@ -859,6 +875,9 @@ func TestDesiredStateSourceOperatorDocsContract(t *testing.T) {
 	for _, fragment := range []string{
 		`{ name = "TENET_CATALOG_SOURCE", value = "filesystem" },`,
 		`{ name = "TENET_REPO_ROOT", value = "/workspace/repo" },`,
+		`repo_sync_token_secrets = var.repo_sync_token_secret_arn == null ? [] : [`,
+		`name      = "TENET_REPO_SYNC_TOKEN"`,
+		`Action   = ["secretsmanager:GetSecretValue"]`,
 	} {
 		if !strings.Contains(terraformModule, fragment) {
 			t.Fatalf("expected Terraform bootstrap task definition to include %q", fragment)
