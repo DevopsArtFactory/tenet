@@ -345,6 +345,8 @@ type ECSTaskSummary struct {
 type ECSTaskContainerInfo struct {
 	Name            string                           `json:"name"`
 	Image           string                           `json:"image,omitempty"`
+	ImageDigest     string                           `json:"imageDigest,omitempty"`
+	RuntimeID       string                           `json:"runtimeId,omitempty"`
 	LastStatus      string                           `json:"lastStatus,omitempty"`
 	HealthStatus    string                           `json:"healthStatus,omitempty"`
 	ExitCode        *int32                           `json:"exitCode,omitempty"`
@@ -1492,7 +1494,7 @@ func ecsTaskSummaryFromTask(task ecstypes.Task, clusterARN string, definitions m
 	containers := make([]ECSTaskContainerInfo, 0, len(task.Containers))
 	taskID := taskIDFromARN(aws.ToString(task.TaskArn))
 	for _, container := range task.Containers {
-		info := ECSTaskContainerInfo{Name: strings.TrimSpace(aws.ToString(container.Name)), Image: strings.TrimSpace(aws.ToString(container.Image)), LastStatus: strings.TrimSpace(aws.ToString(container.LastStatus)), HealthStatus: string(container.HealthStatus), Reason: strings.TrimSpace(aws.ToString(container.Reason))}
+		info := ECSTaskContainerInfo{Name: strings.TrimSpace(aws.ToString(container.Name)), Image: strings.TrimSpace(aws.ToString(container.Image)), ImageDigest: strings.TrimSpace(aws.ToString(container.ImageDigest)), RuntimeID: strings.TrimSpace(aws.ToString(container.RuntimeId)), LastStatus: strings.TrimSpace(aws.ToString(container.LastStatus)), HealthStatus: string(container.HealthStatus), Reason: strings.TrimSpace(aws.ToString(container.Reason))}
 		if container.ExitCode != nil {
 			info.ExitCode = cloneInt32(container.ExitCode)
 		}

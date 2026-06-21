@@ -5484,6 +5484,12 @@
           if (container?.image) {
             containerSection.append(createElement('span', 'detail-condition-meta', `Container ${name} image · ${container.image}`));
           }
+          if (container?.imageDigest) {
+            containerSection.append(createElement('span', 'detail-condition-meta', `Container ${name} image digest · ${container.imageDigest}`));
+          }
+          if (container?.runtimeId) {
+            containerSection.append(createElement('span', 'detail-condition-meta', `Container ${name} runtime ID · ${container.runtimeId}`));
+          }
           if (container?.exitCode != null || container?.reason) {
             containerSection.append(createElement('span', 'detail-condition-meta', `Container ${name} exit · code ${textOrDash(container?.exitCode)} · ${textOrDash(container?.reason)}`));
           }
@@ -6388,6 +6394,12 @@
               createElement('span', 'detail-condition-meta', `Container health · ${textOrDash(container?.healthStatus)}`),
               createElement('span', 'detail-condition-meta', `Container image · ${textOrDash(container?.image)}`),
             );
+            if (container?.imageDigest) {
+              meta.append(createElement('span', 'detail-condition-meta', `Container image digest · ${container.imageDigest}`));
+            }
+            if (container?.runtimeId) {
+              meta.append(createElement('span', 'detail-condition-meta', `Container runtime ID · ${container.runtimeId}`));
+            }
             if (container?.exitCode != null || container?.reason) {
               meta.append(createElement('span', 'detail-condition-meta', `Container exit · code ${textOrDash(container?.exitCode)} · ${textOrDash(container?.reason)}`));
             }

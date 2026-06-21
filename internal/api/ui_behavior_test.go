@@ -5171,7 +5171,7 @@ async function render(search, inspectionResult, hash = '') {
   return { document, window, fetchCalls, text: collectText(document.getElementById('accounts')).join(' | '), toolbarText: collectText(document.getElementById('toolbar')).join(' | '), toolbarButtons: collectNodes(document.getElementById('toolbar'), (node) => node.tagName === 'BUTTON'), links: collectNodes(document.getElementById('accounts'), (node) => node.tagName === 'A') };
 }
 (async () => {
-  const taskResult = { available: true, source: 'ecs_task', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, ecsTask: { taskArn, taskId: 'abc123', clusterArn, lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containerInstanceArn: 'arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker-prod/ci-abc123', ec2InstanceId: 'i-0abc123def4567890', capacityProviderName: 'FARGATE_SPOT', availabilityZone: 'ap-northeast-2a', startedAt: '2026-05-03T04:00:00Z', taskDefinition: 'worker:42', ec2Instance: { instanceState: 'running', instanceType: 'm6i.large', imageId: 'ami-abc123', privateIpAddress: '10.0.4.12', publicIpAddress: '54.1.2.3', subnetId: 'subnet-abc123', vpcId: 'vpc-abc123', launchTime: '2026-05-05T07:30:00Z' }, containers: [{ name: 'worker', image: 'ghcr.io/example/worker:v2', lastStatus: 'STOPPED', healthStatus: 'UNHEALTHY', exitCode: 137, reason: 'OutOfMemoryError', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' }, networkBindings: [{ bindIp: '0.0.0.0', containerPort: 8080, hostPort: 32768, protocol: 'tcp', containerPortRange: '8080-8081', hostPortRange: '32768-32769' }] }] } };
+  const taskResult = { available: true, source: 'ecs_task', lookupContext: { region: 'ap-northeast-2', controlAccountId: '123456789012', targetAccountId: '123456789012', crossAccount: false, observerRoleConfigured: true }, ecsTask: { taskArn, taskId: 'abc123', clusterArn, lastStatus: 'RUNNING', desiredStatus: 'RUNNING', healthStatus: 'HEALTHY', launchType: 'FARGATE', containerInstanceArn: 'arn:aws:ecs:ap-northeast-2:123456789012:container-instance/worker-prod/ci-abc123', ec2InstanceId: 'i-0abc123def4567890', capacityProviderName: 'FARGATE_SPOT', availabilityZone: 'ap-northeast-2a', startedAt: '2026-05-03T04:00:00Z', taskDefinition: 'worker:42', ec2Instance: { instanceState: 'running', instanceType: 'm6i.large', imageId: 'ami-abc123', privateIpAddress: '10.0.4.12', publicIpAddress: '54.1.2.3', subnetId: 'subnet-abc123', vpcId: 'vpc-abc123', launchTime: '2026-05-05T07:30:00Z' }, containers: [{ name: 'worker', image: 'ghcr.io/example/worker:v2', imageDigest: 'sha256:worker-image-digest', runtimeId: 'runtime-worker-123', lastStatus: 'STOPPED', healthStatus: 'UNHEALTHY', exitCode: 137, reason: 'OutOfMemoryError', awslogs: { group: '/aws/ecs/worker', stream: 'worker/abc123' }, networkBindings: [{ bindIp: '0.0.0.0', containerPort: 8080, hostPort: 32768, protocol: 'tcp', containerPortRange: '8080-8081', hostPortRange: '32768-32769' }] }] } };
   const scopedTaskSearch = '?page=resource&deployment=worker-prod&resourceType=ecsTask&resourceId=' + encodeURIComponent(taskResourceId) + '&containerName=worker&clusterArn=' + encodedClusterArn + '&resourceLogLimit=10';
   const taskRun = await render(scopedTaskSearch, taskResult, '#resource-recent-logs');
   const taskInspectionURL = '/v1/overview/deployments/worker-prod/resource-inspection?resourceType=ecsTask&resourceName=' + encodeURIComponent(taskArn) + '&clusterArn=' + encodedClusterArn;
@@ -5184,6 +5184,8 @@ async function render(search, inspectionResult, hash = '') {
   if (!taskRun.text.includes('Last refreshed |')) throw new Error('expected live inspection success to render last-refreshed metadata: ' + taskRun.text);
   if (!taskRun.text.includes('Task containers')) throw new Error('expected ECS task container section');
   if (!taskRun.text.includes('Container exit · code 137 · OutOfMemoryError')) throw new Error('expected task container exit code and reason evidence: ' + taskRun.text);
+  if (!taskRun.text.includes('Container image digest · sha256:worker-image-digest')) throw new Error('expected task container image digest evidence: ' + taskRun.text);
+  if (!taskRun.text.includes('Container runtime ID · runtime-worker-123')) throw new Error('expected task container runtime ID evidence: ' + taskRun.text);
   if (!taskRun.text.includes('Container awslogs')) throw new Error('expected awslogs metadata');
   if (!taskRun.text.includes('/aws/ecs/worker / worker/abc123')) throw new Error('expected task awslogs group/stream');
   if (!taskRun.text.includes('Container worker network binding · 0.0.0.0:32768->8080/tcp · host ports 32768-32769 · container ports 8080-8081')) throw new Error('expected task container network binding evidence: ' + taskRun.text);
@@ -5209,9 +5211,11 @@ async function render(search, inspectionResult, hash = '') {
   const noBindingTaskResult = JSON.parse(JSON.stringify(taskResult));
   delete noBindingTaskResult.ecsTask.containers[0].exitCode;
   delete noBindingTaskResult.ecsTask.containers[0].reason;
+  delete noBindingTaskResult.ecsTask.containers[0].imageDigest;
+  delete noBindingTaskResult.ecsTask.containers[0].runtimeId;
   delete noBindingTaskResult.ecsTask.containers[0].networkBindings;
   const noBindingTaskRun = await render(scopedTaskSearch, noBindingTaskResult, '#resource-live-inspection');
-  ['Container exit ·', 'network binding'].forEach((fragment) => {
+  ['Container exit ·', 'Container image digest ·', 'Container runtime ID ·', 'network binding'].forEach((fragment) => {
     if (noBindingTaskRun.text.includes(fragment)) throw new Error('expected absent container exit/network binding evidence to stay quiet for ' + fragment + ': ' + noBindingTaskRun.text);
   });
   const taskSectionLinks = collectNodes(taskRun.document.getElementById('accounts'), (node) => node.tagName === 'A' && typeof node.href === 'string' && node.href.includes('#resource-'));
