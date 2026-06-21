@@ -1322,7 +1322,13 @@ func TestEmbeddedUIIncludesOperatorReadAuthGuidanceContract(t *testing.T) {
 		"Open Operator context details",
 		"Retry current page after access update",
 		"currentBookmarkableURL(operatorContextAccessDetailsPanelID)",
+		"const renderGenericReadFailurePage = (pageLabel, route, error) => {",
+		"`Failed to load ${pageLabel.toLowerCase()}`",
+		"`Tenet could not load ${route}: ${message}`",
+		"`Tenet request ID · ${requestId}`",
+		"Retry current page",
 		"const renderOperatorReadFailurePage = (pageLabel, route, error) => {",
+		"renderGenericReadFailurePage(pageLabel, route, error);",
 		"createElement('h2', 'account-name', heading)",
 		"createElement('div', 'account-meta', operatorReadFailureMessage(route, error))",
 		"createOperatorReadFailureActions(error)",
@@ -1832,7 +1838,8 @@ func TestEmbeddedUIIncludesOverviewStatusInFetchErrors(t *testing.T) {
 		"fetchApplicationsOverview()",
 		"fetchAccountDetail(currentPageState.accountId)",
 		"renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);",
-		"renderEmptyState(`Failed to load overview: ${error.message}`);",
+		"renderGenericReadFailurePage(pageLabel, route, error);",
+		"Tenet could not load ${route}: ${message}",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include %q", fragment)

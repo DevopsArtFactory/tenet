@@ -4754,11 +4754,26 @@
         actionBar.append(createNavLink(managedSignInURL, operatorContextSignInLabel(), '_self'));
         return actionBar;
       };
+      const renderGenericReadFailurePage = (pageLabel, route, error) => {
+        const message = error?.message || 'unknown error';
+        const requestId = String(error?.requestId || '').trim();
+        const retryActions = createElement('div', 'detail-section-actions operator-read-recovery-actions');
+        retryActions.append(createNavLink(currentBookmarkableURL(), 'Retry current page', '_self'));
+        const page = createElement('article', 'account');
+        page.append(
+          createElement('div', 'label', pageLabel),
+          createElement('h2', 'account-name', `Failed to load ${pageLabel.toLowerCase()}`),
+          createElement('div', 'account-meta', `Tenet could not load ${route}: ${message}`),
+          ...(requestId ? [createElement('div', 'detail-condition-meta', `Tenet request ID · ${requestId}`)] : []),
+          retryActions,
+        );
+        document.getElementById('accounts').replaceChildren(page);
+      };
       const renderOperatorReadFailurePage = (pageLabel, route, error) => {
         const heading = operatorReadFailureHeading(error);
         if (!heading) {
           activeOperatorReadFailurePage = null;
-          renderEmptyState(`Failed to load overview: ${error?.message || 'unknown error'}`);
+          renderGenericReadFailurePage(pageLabel, route, error);
           return;
         }
         activeOperatorReadFailurePage = { pageLabel, route, error };

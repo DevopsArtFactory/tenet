@@ -213,6 +213,22 @@ const scenarios = [
     unexpected: 'Failed to load overview:',
   },
   {
+    name: 'application detail 500 shows route-aware retry guidance',
+    search: '?page=application&deployment=payments-api-staging',
+    route: '/v1/overview/applications/payments-api-staging',
+    status: 500,
+    body: 'database unavailable',
+    requestId: 'req-app-detail-953-error',
+    expected: [
+      'Application detail',
+      'Failed to load application detail',
+      'Tenet could not load GET /v1/overview/applications/payments-api-staging: application detail request failed (500): database unavailable',
+      'Tenet request ID · req-app-detail-953-error',
+      'Retry current page',
+    ],
+    unexpected: 'Failed to load overview:',
+  },
+  {
     name: 'applications overview 401 offers managed login when operator context reports active route',
     search: '?q=payments&sync=OutOfSync&account=210987654321',
     route: '/v1/overview/applications',
