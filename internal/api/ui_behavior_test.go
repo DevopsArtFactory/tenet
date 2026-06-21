@@ -1824,6 +1824,7 @@ const createDocument = () => {
 };
 async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
 const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
+const collectText = (node) => [node.textContent || '', ...(node.children || []).flatMap(collectText)].filter(Boolean);
 
 async function render(search, fetchImpl) {
   const document = createDocument();
@@ -1919,6 +1920,12 @@ async function render(search, fetchImpl) {
   resourceCopyButton.dispatch('click');
   await settle();
   if (resourceView.clipboardWrites.join(', ') !== 'GET /v1/overview/deployments/payments-api-staging') throw new Error('expected resource detail copy route, got ' + resourceView.clipboardWrites.join(', '));
+  const resourceBodyText = collectText(resourceView.document.getElementById('accounts')).join(' | ');
+  const resourceToolbarText = collectText(resourceView.document.getElementById('toolbar')).join(' | ');
+  if (!resourceBodyText.includes('Current resource read: GET /v1/overview/deployments/payments-api-staging')) throw new Error('expected resource detail body to show the top-level read route');
+  if (resourceToolbarText.includes('Current resource read: GET /v1/overview/deployments/payments-api-staging')) throw new Error('expected current resource read route outside toolbar');
+  const resourceReadRouteCue = collectNodes(resourceView.document.getElementById('accounts'), (node) => String(node.className || '').split(/\s+/).includes('resource-read-route')).find((node) => node.textContent === 'Current resource read: GET /v1/overview/deployments/payments-api-staging.');
+  if (!resourceReadRouteCue) throw new Error('expected resource detail body read-route cue node');
 })();
 `
 

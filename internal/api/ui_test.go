@@ -519,6 +519,7 @@ func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
 		"const createSelectedResourceContextCallout = (detail, resource) => {",
 		"'Selected resource context'",
 		"Current resource read: ${resourceDetailReadRoute(deploymentName)}.",
+		"workspace-callout-factors resource-read-route",
 		"resourceInspectionReadRoute(deploymentName, resource)",
 		"resourceLogsReadRoute(deploymentName, resource)",
 		"const evidenceLinks = createElement('div', 'row-links selected-resource-context-links');",
@@ -3293,6 +3294,9 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"createCopyReadRouteButton(resourceDetailReadRoute(detail?.name || resourceState?.detail?.name || currentPageState.deployment))\" in body, body") {
 		t.Fatalf("expected smoke-local.sh to assert resource detail copy route contract")
 	}
+	if !strings.Contains(text, "assert \"workspace-callout-factors resource-read-route\" in body, body") {
+		t.Fatalf("expected smoke-local.sh to assert resource detail read route body cue")
+	}
 	if !strings.Contains(text, "assert 'Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…' in body, body") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains resource detail refresh loading copy")
 	}
@@ -4501,6 +4505,7 @@ func TestDocsDescribeTrustedFrontDoorAuthAndSmokeScope(t *testing.T) {
 		"\"const resourceDetailReadRoute = (deploymentName) => `GET /v1/overview/deployments/${deploymentName || '{deploymentName}'}`;\",",
 		"\"const createResourceDetailActions = (resourceState = null, detail = null, resource = null) => [\",",
 		"\"Current resource read: ${resourceDetailReadRoute(deploymentName)}.\",",
+		"\"workspace-callout-factors resource-read-route\",",
 		"\"Refresh resource detail\",",
 		"\"Refreshing resource detail from GET /v1/overview/deployments/{deploymentName}…\",",
 		"\"Current resource detail remains visible below.\",",
