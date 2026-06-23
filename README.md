@@ -287,7 +287,7 @@ General repository checks:
 go test ./...
 ```
 
-CI Smoke mirrors those checks in the hosted fast lane and also syntax-checks the operator smoke helpers before running local smoke. Hosted fast-lane order is `go test ./...`, smoke helper syntax checks, then `make smoke-local`. For smoke-script or runner-start evidence changes, run:
+CI Smoke mirrors those checks in the hosted fast lane and also syntax-checks the operator smoke helpers before running local smoke. Hosted fast-lane order is `go test ./...`, smoke helper syntax checks, then `make smoke-local`. Smoke helper scripts must keep their executable bits because Makefile targets and runner-start docs invoke them directly by path. For smoke-script or runner-start evidence changes, run:
 
 ```bash
 bash -n scripts/smoke-local.sh
