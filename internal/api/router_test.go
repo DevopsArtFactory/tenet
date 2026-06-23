@@ -3377,6 +3377,111 @@ func TestDeploymentOverviewEventsRouteAppliesLimitToEventsAndSummary(t *testing.
 	}
 }
 
+func TestDeploymentOverviewEventsRouteFiltersBySourceBeforeApplyingLimit(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeploymentEvents: func(_ context.Context, name string) (catalog.DeploymentOverviewEvents, error) {
+			if name != "api-prod" {
+				t.Fatalf("unexpected deployment name %q", name)
+			}
+			return catalog.DeploymentOverviewEvents{
+				DeploymentName: name,
+				Events: []domain.StatusHistoryEntry{
+					{Timestamp: "2026-05-06T04:00:00Z", Source: "controller", Summary: "new controller reconcile"},
+					{Timestamp: "2026-05-06T03:00:00Z", Source: "github", Summary: "new github refresh", ManagedDrift: []domain.ManagedDriftItem{{Field: "artifact", Severity: domain.ManagedDriftSeverityHigh}}},
+					{Timestamp: "2026-05-06T02:00:00Z", Source: "github", Summary: "older github refresh", ManagedDrift: []domain.ManagedDriftItem{{Field: "runtimeContext.capacity.min", Severity: domain.ManagedDriftSeverityMedium}}},
+				},
+				ManagedDriftSummary: catalog.ManagedDriftSummary{Total: 2, High: 1, Medium: 1},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/events?source=github&limit=1", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode deployment events payload: %v", err)
+	}
+	events, ok := payload["events"].([]any)
+	if !ok || len(events) != 1 {
+		t.Fatalf("expected one source-filtered event, got %#v", payload["events"])
+	}
+	event, ok := events[0].(map[string]any)
+	if !ok || event["source"] != "github" || event["summary"] != "new github refresh" {
+		t.Fatalf("expected newest github event after source-before-limit filtering, got %#v", events[0])
+	}
+	summary, ok := payload["managedDriftSummary"].(map[string]any)
+	if !ok || summary["total"] != float64(1) || summary["high"] != float64(1) || summary["medium"] != float64(0) {
+		t.Fatalf("expected managedDriftSummary to describe returned source-filtered events, got %#v", payload["managedDriftSummary"])
+	}
+	scope, ok := payload["resultScope"].(map[string]any)
+	if !ok || scope["sourceFilter"] != "github" || scope["totalEventCount"] != float64(2) || scope["returnedEventCount"] != float64(1) || scope["retainedEventCount"] != float64(3) || scope["limited"] != true || scope["truncationStatus"] != "truncated" {
+		t.Fatalf("expected resultScope to echo source filter and count filtered events before limit, got %#v", payload["resultScope"])
+	}
+}
+
+func TestDeploymentOverviewEventsRouteReturnsEmptySourceFilterWindow(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeploymentEvents: func(_ context.Context, name string) (catalog.DeploymentOverviewEvents, error) {
+			return catalog.DeploymentOverviewEvents{
+				DeploymentName: name,
+				Events:         []domain.StatusHistoryEntry{{Timestamp: "2026-05-06T03:00:00Z", Source: "controller", Summary: "controller reconcile"}},
+			}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/events?source=github", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode deployment events payload: %v", err)
+	}
+	events, ok := payload["events"].([]any)
+	if !ok || len(events) != 0 {
+		t.Fatalf("expected explicit empty events array for unmatched source filter, got %#v", payload["events"])
+	}
+	scope, ok := payload["resultScope"].(map[string]any)
+	if !ok || scope["sourceFilter"] != "github" || scope["totalEventCount"] != float64(0) || scope["returnedEventCount"] != float64(0) || scope["retainedEventCount"] != float64(1) || scope["truncationStatus"] != "not_truncated" {
+		t.Fatalf("expected resultScope to describe empty source-filtered window, got %#v", payload["resultScope"])
+	}
+}
+
+func TestDeploymentOverviewEventsRouteRejectsInvalidSourceFilter(t *testing.T) {
+	providerCalls := 0
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		OverviewDeploymentEvents: func(_ context.Context, name string) (catalog.DeploymentOverviewEvents, error) {
+			providerCalls++
+			return catalog.DeploymentOverviewEvents{DeploymentName: name}, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/events?source=github%20refresh", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", resp.Code, resp.Body.String())
+	}
+	if got := strings.TrimSpace(resp.Body.String()); got != "invalid source query" {
+		t.Fatalf("expected invalid source query response, got %q", got)
+	}
+	if providerCalls != 0 {
+		t.Fatalf("expected invalid source to fail before provider call, got %d calls", providerCalls)
+	}
+}
+
 func TestDeploymentOverviewEventsRouteReportsRetainedHistoryCapSeparatelyFromQueryLimit(t *testing.T) {
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},

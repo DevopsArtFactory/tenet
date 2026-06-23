@@ -167,6 +167,7 @@ type RuntimeEventRetention struct {
 // expensive provider-wide total count.
 type DeploymentEventsResultScope struct {
 	RequestedLimit       *int   `json:"requestedLimit,omitempty"`
+	SourceFilter         string `json:"sourceFilter,omitempty"`
 	EffectiveLimit       int    `json:"effectiveLimit"`
 	ReturnedEventCount   int    `json:"returnedEventCount"`
 	ReturnedCount        int    `json:"returnedCount"`

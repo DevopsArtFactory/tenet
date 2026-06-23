@@ -1929,7 +1929,7 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		"`deploymentName` plus `events` list payload contract",
 		"additive `managedDriftSummary` severity counts",
 		"top-level `retention` metadata (`limit`, `retainedEventCount`, `status`)",
-		"router-authored `resultScope` metadata (`requestedLimit`, `effectiveLimit`, `returnedEventCount`, `totalEventCount`, `retentionLimit`, `retainedEventCount`, `retentionStatus`, `limited`, optional `newestEventTimestamp` / `oldestEventTimestamp` from the returned window, and `truncationStatus`)",
+		"router-authored `resultScope` metadata (`sourceFilter` when exact `?source=` filtering is used, `requestedLimit`, `effectiveLimit`, `returnedEventCount`, `totalEventCount`, `retentionLimit`, `retainedEventCount`, `retentionStatus`, `limited`, optional `newestEventTimestamp` / `oldestEventTimestamp` from the returned window, and `truncationStatus`)",
 		"`returnedCount` mirrors `returnedEventCount`, and `truncated` mirrors `truncationStatus == \"truncated\"`",
 		"ticker/default controller events do not include `controllerRefresh`",
 	} {
@@ -1945,7 +1945,7 @@ func TestDeploymentEventsFrontDoorAuthOperatorContract(t *testing.T) {
 		"`deploymentName` plus `events` list shape",
 		"additive `managedDriftSummary` object carrying explicit zero/non-zero severity counts",
 		"top-level `retention` metadata (`limit`, `retainedEventCount`, `status`)",
-		"router-authored `resultScope` object (`requestedLimit`, `effectiveLimit`, optional `newestEventTimestamp` / `oldestEventTimestamp` from the returned window, `returnedEventCount`, compact alias `returnedCount`, `totalEventCount`, `retentionLimit`, `retainedEventCount`, `retentionStatus`, `limited`, `truncationStatus`, compact alias `truncated`) for both default and bounded `?limit=` reads",
+		"router-authored `resultScope` object (`sourceFilter` when exact `?source=` filtering is used, `requestedLimit`, `effectiveLimit`, optional `newestEventTimestamp` / `oldestEventTimestamp` from the returned window, `returnedEventCount`, compact alias `returnedCount`, `totalEventCount`, `retentionLimit`, `retainedEventCount`, `retentionStatus`, `limited`, `truncationStatus`, compact alias `truncated`) for both default and source-filtered/bounded `?limit=` reads",
 		"ticker/default controller-event path omit `controllerRefresh`",
 	} {
 		if !strings.Contains(localRuntimeDoc, fragment) {
