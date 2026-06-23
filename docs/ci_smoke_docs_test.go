@@ -10,9 +10,11 @@ func TestREADMEValidationDocumentsCISmokeFastLaneScriptChecks(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	workflowText := readTextFile(t, "../.github/workflows/ci-smoke.yml")
 	for _, command := range []string{
+		"go test ./...",
 		"bash -n scripts/smoke-local.sh",
 		"bash -n scripts/smoke-docker.sh",
 		"bash -n scripts/ci-smoke-runner-evidence.sh",
+		"make smoke-local",
 	} {
 		if !strings.Contains(readmeText, command) {
 			t.Fatalf("expected README validation docs to include %q", command)
@@ -24,6 +26,7 @@ func TestREADMEValidationDocumentsCISmokeFastLaneScriptChecks(t *testing.T) {
 
 	for _, fragment := range []string{
 		"CI Smoke mirrors those checks in the hosted fast lane",
+		"Hosted fast-lane order is `go test ./...`, smoke helper syntax checks, then `make smoke-local`",
 		"operator smoke helpers",
 		"The Docker smoke lane remains separate",
 		"In hosted PRs it is path-scoped",
