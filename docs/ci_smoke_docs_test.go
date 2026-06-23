@@ -213,6 +213,47 @@ func TestResourceEvidenceDocsLockOperatorFieldFamilies(t *testing.T) {
 	}
 }
 
+func TestOverviewDashboardAuthToggleDocsUseReadableBooleanExamples(t *testing.T) {
+	overviewText := readTextFile(t, "features/overview-dashboard.md")
+	for _, fragment := range []string{
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true`",
+		"`TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true`",
+		"when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` is enabled, `GET /v1/overview/accounts`",
+		"when `TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true` is also enabled, those same guarded account reads",
+		"When `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` is enabled, the same narrow read gate also applies",
+		"when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` is enabled, `GET /v1/overview/applications`",
+		"when `TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true` is also enabled, the same guarded read routes additionally require",
+		"when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` is enabled, stored `GET /v1/plans/{planId}`",
+		"when `TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION=true` is enabled, `POST /v1/plans/deployments/{deploymentName}`",
+		"when that same `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` setting is enabled",
+		"when `TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` is enabled, stored `GET /v1/applies/{applyId}`",
+	} {
+		if !strings.Contains(overviewText, fragment) {
+			t.Fatalf("expected overview dashboard docs to include readable boolean auth-toggle example %q", fragment)
+		}
+	}
+
+	redactedPlaceholder := strings.Repeat("*", 3)
+	for _, toggle := range []string{
+		"TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION",
+		"TENET_API_ENFORCE_OPERATOR_ROLE_AUTHORIZATION",
+	} {
+		for _, placeholder := range []string{
+			"`" + toggle + "=" + redactedPlaceholder + "`",
+			toggle + "=" + redactedPlaceholder,
+		} {
+			if strings.Contains(overviewText, placeholder) {
+				t.Fatalf("expected overview dashboard docs to reject non-secret auth-toggle placeholder %q", placeholder)
+			}
+		}
+	}
+
+	operatorContractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
+	if !strings.Contains(operatorContractsText, "TENET_CATALOG_GITHUB_TOKEN=***") {
+		t.Fatal("expected credential-bearing GitHub token example to remain redacted")
+	}
+}
+
 func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	for _, fragment := range []string{
