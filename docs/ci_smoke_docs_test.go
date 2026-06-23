@@ -40,6 +40,36 @@ func TestREADMEValidationDocumentsCISmokeFastLaneScriptChecks(t *testing.T) {
 	}
 }
 
+func TestSmokeHelperScriptsRemainDirectlyRunnable(t *testing.T) {
+	readmeText := readTextFile(t, "../README.md")
+	for _, fragment := range []string{
+		"Smoke helper scripts must keep their executable bits",
+		"Makefile targets and runner-start docs invoke them directly by path",
+	} {
+		if !strings.Contains(readmeText, fragment) {
+			t.Fatalf("expected README validation docs to include executable helper contract %q", fragment)
+		}
+	}
+
+	for _, path := range []string{
+		"../scripts/smoke-local.sh",
+		"../scripts/smoke-docker.sh",
+		"../scripts/ci-smoke-runner-evidence.sh",
+		"../scripts/docker-up.sh",
+	} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+		if info.Mode()&0111 == 0 {
+			t.Fatalf("expected %s to keep at least one executable bit because operators invoke it directly", path)
+		}
+		if !strings.HasPrefix(readTextFile(t, path), "#!/usr/bin/env bash\n") {
+			t.Fatalf("expected %s to keep its bash shebang", path)
+		}
+	}
+}
+
 func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 	runbookText := readTextFile(t, "runbooks/ci-smoke-runner-start.md")
 	helperText := readTextFile(t, "../scripts/ci-smoke-runner-evidence.sh")
