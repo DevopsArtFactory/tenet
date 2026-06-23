@@ -142,6 +142,7 @@
       .detail-section-head { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap: 10px; margin-bottom: 10px; }
       .detail-section-head h4 { margin: 0; }
       .detail-section-actions { display:flex; flex-wrap:wrap; gap: 10px; }
+      .resource-section-handoff { margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.06); }
       .detail-list { margin: 0; padding-left: 18px; display:grid; gap: 8px; }
       .detail-list li::marker { color: var(--blue); }
       .detail-step-meta, .detail-condition-meta { display:block; margin-top: 4px; color: var(--muted); font-size: 13px; }
@@ -1783,12 +1784,15 @@
         link.rel = target === '_blank' ? 'noreferrer noopener' : '';
         return link;
       };
-      const copyReadRouteToClipboard = (routeText) => {
+      const copyTextToClipboard = (text) => {
         const navigator = window.navigator;
         if (!navigator?.clipboard?.writeText) {
           return Promise.reject(new Error('clipboard unavailable'));
         }
-        return navigator.clipboard.writeText(routeText);
+        return navigator.clipboard.writeText(text);
+      };
+      const copyReadRouteToClipboard = (routeText) => {
+        return copyTextToClipboard(routeText);
       };
       const createCopyReadRouteButton = (routeText) => {
         if (!routeText) return null;
@@ -1812,6 +1816,58 @@
             });
         });
         return button;
+      };
+      const currentPageSectionURL = (sectionID) => {
+        const pathname = window.location.pathname || '/';
+        const search = window.location.search || '';
+        if (!sectionID) return `${pathname}${search}`;
+        return `${pathname}${search}#${sectionID}`;
+      };
+      const createCopySectionLinkButton = (sectionID, label) => {
+        if (!sectionID) return null;
+        const button = createElement('button', 'toolbar-button copy-section-link', 'Copy section link');
+        button.type = 'button';
+        button.setAttribute('aria-label', `Copy ${label || 'resource detail'} section link`);
+        button.addEventListener('click', () => {
+          button.disabled = true;
+          copyTextToClipboard(currentPageSectionURL(sectionID))
+            .then(() => {
+              button.textContent = 'Copied';
+            })
+            .catch(() => {
+              button.textContent = 'Copy failed';
+            })
+            .finally(() => {
+              setTimeout(() => {
+                button.disabled = false;
+                button.textContent = 'Copy section link';
+              }, 1600);
+            });
+        });
+        return button;
+      };
+      const createResourceSectionHandoff = (sectionID, label) => {
+        if (!sectionID) return null;
+        const href = currentPageSectionURL(sectionID);
+        const handoff = createElement('div', 'row-links row-links-shell resource-section-handoff');
+        handoff.dataset.resourceSectionHandoff = 'true';
+        handoff.append(createNavLink(href, 'Section link', '_self'));
+        const copyButton = createCopySectionLinkButton(sectionID, label);
+        if (copyButton) handoff.append(copyButton);
+        return handoff;
+      };
+      const decorateResourceDetailSection = (section, sectionID = '', label = '') => {
+        if (!section?.dataset || section.dataset.resourceDetailSection !== 'true') return;
+        const targetID = sectionID || section.dataset.resourceSectionID || section.id || '';
+        if (!targetID) return;
+        const targetLabel = label || section.dataset.resourceSectionLabel || targetID;
+        const existingChildren = Array.from(section.children || []);
+        const contentChildren = existingChildren.filter((child) => child?.dataset?.resourceSectionHandoff !== 'true');
+        if (contentChildren.length !== existingChildren.length) {
+          section.replaceChildren(...contentChildren);
+        }
+        const handoff = createResourceSectionHandoff(targetID, targetLabel);
+        if (handoff) section.append(handoff);
       };
       const createQuickNavChip = (text, ariaLabel) => {
         const chip = createElement('span', 'quick-nav-chip', text);
@@ -3638,6 +3694,7 @@
           createElement('p', 'detail-section-copy', 'Derived from selected deployment/resource context plus the latest Live inspection and Recent logs panel results.'),
           summaryGrid,
         );
+        decorateResourceDetailSection(section);
       };
       const resourceDetailRefreshState = (resourceState = null) => {
         if (resourceState?.status === 'loading') {
@@ -4376,19 +4433,16 @@
         const resourceSectionLinks = [];
         const pushResourceSection = (section, sectionID, label) => {
           section.id = sectionID;
+          section.setAttribute('id', sectionID);
+          section.dataset.resourceDetailSection = 'true';
+          section.dataset.resourceSectionID = sectionID;
+          section.dataset.resourceSectionLabel = label;
           resourceSectionLinks.push({
             sectionID,
             label,
-            href: buildPageSectionURL('resource', sectionID, {
-              deployment: deploymentName,
-              resourceType: resourceRouteState.routeResourceType,
-              resourceId: resourceRouteState.routeResourceId,
-              containerName: resourceRouteState.routeContainerName,
-              instanceId: resourceRouteState.routeInstanceId,
-              clusterArn: resourceRouteState.routeClusterArn,
-              ...resourcePanelLimitURLParams(deploymentName, resource),
-            }),
+            href: currentPageSectionURL(sectionID),
           });
+          decorateResourceDetailSection(section, sectionID, label);
         };
         const backLink = createNavLink(buildPageURL('application', { deployment: detail.name || currentPageState.deployment || '' }), 'Back to application');
         backLink.target = '_self';
@@ -4850,6 +4904,7 @@
         const stateNode = createElement('div', 'detail-state', text);
         if (className) stateNode.classList.add(className);
         container.replaceChildren(heading, ...beforeNodes, stateNode, ...afterNodes);
+        decorateResourceDetailSection(container);
       };
       const resourceLogsUnavailableReasonText = (reason) => {
         switch (reason) {
@@ -5181,6 +5236,7 @@
         });
         fragment.push(logList);
         section.replaceChildren(createDetailSectionHeader('Recent logs', actions), ...fragment);
+        decorateResourceDetailSection(section);
       };
       const renderResourceLogsSection = (section, deploymentName, resource, options = {}) => {
         const force = Boolean(options?.force);
@@ -5323,6 +5379,7 @@
         const stateNode = createElement('div', 'detail-state', text);
         if (className) stateNode.classList.add(className);
         container.replaceChildren(heading, ...beforeNodes, stateNode, ...afterNodes);
+        decorateResourceDetailSection(container);
       };
       const resourceInspectionUnavailableReasonText = (reason) => {
         switch (reason) {
@@ -6478,22 +6535,27 @@
         }
         if (result?.ecsService) {
           renderECSServiceInspection(section, deploymentName, resource, result);
+          decorateResourceDetailSection(section);
           return;
         }
         if (result?.ecsTask) {
           renderECSTaskInspection(section, deploymentName, resource, result);
+          decorateResourceDetailSection(section);
           return;
         }
         if (result?.autoScalingGroup) {
           renderAutoScalingGroupInspection(section, deploymentName, resource, result);
+          decorateResourceDetailSection(section);
           return;
         }
         if (result?.userDataBootstrapSource) {
           renderUserDataBootstrapSourceInspection(section, detail, resource, result);
+          decorateResourceDetailSection(section);
           return;
         }
         if (result?.trafficRoutingResource) {
           renderTrafficRoutingInspection(section, detail, resource, result);
+          decorateResourceDetailSection(section);
           return;
         }
         renderResourceInspectionState(section, 'No live inspection details are available for this resource yet.', '', [...createResourceInspectionLookupContextNodes(result?.lookupContext), metadata], [], actions);

@@ -13042,3 +13042,175 @@ if (!refreshService || refreshService.description !== 'Service Auto Scaling Grou
 
 	runNodeHarness(t, nodeProgram)
 }
+
+func TestEmbeddedUIResourceDetailSectionHandoffsWithNodeHarness(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not installed")
+	}
+
+	scriptJSON, err := json.Marshal(embeddedUIScriptForTest(t))
+	if err != nil {
+		t.Fatalf("marshal embedded script: %v", err)
+	}
+
+	detailJSON, err := json.Marshal(map[string]any{
+		"name":         "payments-api-staging",
+		"accountName":  "platform-dev",
+		"awsAccountId": "210987654321",
+		"region":       "us-east-1",
+		"sync": map[string]any{
+			"state":  "OutOfSync",
+			"reason": "rollout pending",
+		},
+		"health": map[string]any{
+			"overall": "Progressing",
+			"summary": "deployment warming",
+		},
+		"rollout": map[string]any{
+			"phase":       "Progressing",
+			"currentStep": "DeployService",
+			"execution": []map[string]any{
+				{
+					"resource":    "ecsService",
+					"name":        "payments-api-staging-service",
+					"description": "ECS service",
+				},
+			},
+		},
+		"conditions": []map[string]any{
+			{"type": "Ready", "status": false, "reason": "Updating", "message": "service deployment in progress"},
+		},
+		"history": []map[string]any{
+			{"timestamp": "2026-06-23T05:30:00Z", "summary": "Started rollout", "source": "controller"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal resource detail payload: %v", err)
+	}
+
+	nodeProgram := `
+const scriptContent = ` + string(scriptJSON) + `;
+const detailBody = ` + string(detailJSON) + `;
+class Element {
+  constructor(tagName, ownerDocument) {
+    this.tagName = String(tagName).toUpperCase();
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.textContent = '';
+    this.dataset = {};
+    this.listeners = {};
+    this.attributes = {};
+    this.hidden = false;
+    this.value = '';
+    this.disabled = false;
+    this.type = '';
+    this.target = '';
+    this.rel = '';
+    this.href = '';
+    this.id = '';
+    this.classList = { add: (...names) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); names.forEach((name) => current.add(name)); this.className = Array.from(current).join(' '); }, toggle: (name, force) => { const current = new Set(this.className.split(/\s+/).filter(Boolean)); const shouldAdd = force === undefined ? !current.has(name) : Boolean(force); if (shouldAdd) current.add(name); else current.delete(name); this.className = Array.from(current).join(' '); } };
+  }
+  append(...nodes) { nodes.forEach((node) => { if (node == null) return; if (typeof node === 'string') { const textNode = new Element('#text', this.ownerDocument); textNode.textContent = node; node = textNode; } node.parentNode = this; this.children.push(node); }); }
+  replaceChildren(...nodes) { this.children = []; this.append(...nodes); }
+  addEventListener(type, handler) { this.listeners[type] = handler; }
+  dispatch(type, event = {}) { if (!event.target) event.target = this; const handler = this.listeners[type]; if (handler) handler(event); }
+  setAttribute(name, value) { this.attributes[name] = String(value); if (name === 'id') this.id = String(value); }
+  getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null; }
+  focus() { this.ownerDocument.activeElement = this; }
+  scrollIntoView(options) { this.ownerDocument.lastScrolledTarget = { id: this.id || '', options }; }
+}
+class InputElement extends Element { setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } }
+class Document {
+  constructor() { this.activeElement = null; this.byID = new Map(); this.lastScrolledTarget = null; }
+  createElement(tagName) { return String(tagName).toLowerCase() === 'input' ? new InputElement(tagName, this) : new Element(tagName, this); }
+  getElementById(id) {
+    if (this.byID.has(id)) return this.byID.get(id);
+    const stack = Array.from(this.byID.values());
+    while (stack.length) {
+      const node = stack.shift();
+      if (node?.id === id || node?.getAttribute?.('id') === id) return node;
+      stack.push(...(node.children || []));
+    }
+    return null;
+  }
+  querySelector(selector) { const dataMatch = selector.match(/^\[data-toolbar-field="(.+)"\]$/); if (!dataMatch) return null; const target = dataMatch[1]; const stack = Array.from(this.byID.values()); while (stack.length) { const node = stack.shift(); if (node?.dataset?.toolbarField === target) return node; stack.push(...(node.children || [])); } return null; }
+}
+const collectText = (node) => node ? [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean) : [];
+const collectNodes = (node, predicate) => {
+  if (!node) return [];
+  const here = predicate(node) ? [node] : [];
+  return [...here, ...(node.children || []).flatMap((child) => collectNodes(child, predicate))];
+};
+const compactText = (node) => collectText(node).join(' | ');
+async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); await Promise.resolve(); }
+const encodedResourceId = encodeURIComponent('ecsService::payments-api-staging-service::ECS service');
+const resourceSearch = '?page=resource&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging&resourceType=ecsService&resourceId=' + encodedResourceId + '&containerName=api&instanceId=i-abc123&resourceLogLimit=25&resourceInspectionLimit=10';
+async function render(search, hash = '') {
+  const document = new Document();
+  document.byID.set('toolbar', document.createElement('section'));
+  document.byID.set('summary', document.createElement('section'));
+  document.byID.set('accounts', document.createElement('section'));
+  document.byID.set('operator-context', document.createElement('section'));
+  const clipboardWrites = [];
+  const window = {
+    location: { pathname: '/console', search, hash },
+    navigator: { clipboard: { writeText: (value) => { clipboardWrites.push(String(value)); return Promise.resolve(); } } },
+    listeners: {},
+    addEventListener(type, handler) { this.listeners[type] = handler; },
+    dispatchHashChange() { if (this.listeners.hashchange) this.listeners.hashchange({ type: 'hashchange' }); },
+  };
+  const history = { replaceState(_state, _title, url) { const [pathAndQuery, nextHash = ''] = String(url).split('#'); const [pathname, query = ''] = pathAndQuery.split('?'); window.location.pathname = pathname || '/console'; window.location.search = query ? '?' + query : ''; window.location.hash = nextHash ? '#' + nextHash : ''; } };
+  const fetchCalls = [];
+  const fetch = (url) => {
+    fetchCalls.push(String(url));
+    if (url === '/v1/operator/context') return Promise.resolve({ ok: true, json: () => Promise.resolve({ trustedHeaders: { enabled: false }, identity: { authenticated: false }, roles: { canRead: false, canWrite: false } }) });
+    if (url === '/v1/overview/applications') return Promise.resolve({ ok: true, json: () => Promise.resolve([{ name: 'payments-api-staging' }]) });
+    if (url === '/v1/overview/applications/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === '/v1/overview/deployments/payments-api-staging') return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (String(url).startsWith('/v1/overview/deployments/payments-api-staging/resource-logs?')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'fixture', entries: [], resultScope: { requestedLimit: 25, effectiveLimit: 25, returnedEntryCount: 0, truncationStatus: 'not_truncated' } }) });
+    if (String(url).startsWith('/v1/overview/deployments/payments-api-staging/resource-inspection?')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, source: 'fixture', resultScope: { requestedLimit: 10, effectiveLimit: 10, returnedItemCount: 0, truncationStatus: 'not_truncated' } }) });
+    if (String(url).startsWith('/v1/overview/deployments/payments-api-staging/events')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ available: true, events: [] }) });
+    throw new Error('unexpected fetch url: ' + url);
+  };
+  new Function('window', 'document', 'fetch', 'history', 'HTMLElement', 'HTMLInputElement', scriptContent)(window, document, fetch, history, Element, InputElement);
+  await settle();
+  await settle();
+  return { document, window, fetchCalls, clipboardWrites };
+}
+(async () => {
+  const run = await render(resourceSearch, '#resource-runtime-history');
+  const accounts = run.document.getElementById('accounts');
+  const expectedURL = '/console' + resourceSearch + '#resource-runtime-history';
+  const sectionLinks = collectNodes(accounts, (node) => node.tagName === 'A' && node.textContent === 'Section link');
+  if (sectionLinks.length < 6) throw new Error('expected resource section handoff links, got ' + sectionLinks.length + ': ' + compactText(accounts));
+  const runtimeSectionLink = sectionLinks.find((node) => node.href === expectedURL);
+  if (!runtimeSectionLink) throw new Error('expected resource runtime section link to preserve exact pathname/query and change only hash; links=' + sectionLinks.map((node) => node.href).join(', '));
+  if (runtimeSectionLink.target !== '_self' || runtimeSectionLink.rel) throw new Error('expected section link to stay in embedded shell');
+  const copyButtons = collectNodes(accounts, (node) => node.tagName === 'BUTTON' && node.textContent === 'Copy section link');
+  if (copyButtons.length < 6) throw new Error('expected resource copy section controls, got ' + copyButtons.length);
+  const runtimeCopyButton = copyButtons.find((node) => node.getAttribute('aria-label') === 'Copy Runtime history section link');
+  if (!runtimeCopyButton) throw new Error('expected labelled Runtime history copy section button');
+  runtimeCopyButton.dispatch('click');
+  await settle();
+  if (run.clipboardWrites[0] !== expectedURL) throw new Error('expected copy section link to preserve exact pathname/query and only change hash, got ' + run.clipboardWrites[0]);
+  const quickNavLogsLink = collectNodes(accounts, (node) => node.tagName === 'A' && node.textContent === 'Recent logs')[0];
+  const expectedLogsURL = '/console' + resourceSearch + '#resource-recent-logs';
+  if (!quickNavLogsLink || quickNavLogsLink.href !== expectedLogsURL) throw new Error('expected resource quick-nav section link to preserve exact query state, got ' + (quickNavLogsLink && quickNavLogsLink.href));
+  for (const key of ['containerName=api', 'instanceId=i-abc123', 'resourceLogLimit=25', 'resourceInspectionLimit=10']) {
+    if (!runtimeSectionLink.href.includes(key)) throw new Error('expected resource section link to preserve ' + key + ', got ' + runtimeSectionLink.href);
+  }
+
+  const applicationsRun = await render('?q=payments&sync=OutOfSync&account=210987654321', '');
+  const applicationsText = compactText(applicationsRun.document.getElementById('accounts'));
+  if (applicationsText.includes('Copy section link') || applicationsText.includes('Section link')) throw new Error('did not expect resource section handoff controls on applications overview: ' + applicationsText);
+
+  const applicationRun = await render('?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging', '');
+  const applicationText = compactText(applicationRun.document.getElementById('accounts'));
+  if (applicationText.includes('Copy section link') || applicationText.includes('Section link')) throw new Error('did not expect resource section handoff controls on application resource list: ' + applicationText);
+})();
+`
+
+	runNodeHarness(t, nodeProgram)
+}

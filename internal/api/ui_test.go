@@ -545,7 +545,7 @@ func TestEmbeddedUIIncludesResourceDetailQuickNavigation(t *testing.T) {
 		"createElement('div', 'quick-nav-empty', 'No additional section links are available for this resource.')",
 		"const pushResourceSection = (section, sectionID, label) => {",
 		"sectionID,",
-		"href: buildPageSectionURL('resource', sectionID, {",
+		"href: currentPageSectionURL(sectionID),",
 		"pushResourceSection(historySection, 'resource-runtime-history', 'Runtime history');",
 		"pushResourceSection(troubleshootingSection, 'resource-troubleshooting-summary', 'Troubleshooting summary');",
 		"pushResourceSection(executionSection, 'resource-rollout-execution', 'Rollout execution');",
@@ -906,6 +906,15 @@ func TestEmbeddedUIIncludesApplicationsOverviewPageArchitecture(t *testing.T) {
 		"Back to application",
 		"Quick navigation",
 		"Sibling resources",
+		"const currentPageSectionURL = (sectionID) => {",
+		"return `${pathname}${search}#${sectionID}`;",
+		"const createCopySectionLinkButton = (sectionID, label) => {",
+		"Copy section link",
+		"const decorateResourceDetailSection = (section, sectionID",
+		"createNavLink(href, 'Section link', '_self')",
+		"section.dataset.resourceDetailSection = 'true';",
+		"decorateResourceDetailSection(section, sectionID, label);",
+		"href: currentPageSectionURL(sectionID),",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI to include %q", fragment)
@@ -2411,9 +2420,9 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 		"instanceId: '',",
 		"createClearSelectedInstanceButton(detail, resource, resourceState)",
 		"renderResourceDetailPage(detail, resourceState);",
-		"containerName: resourceRouteState.routeContainerName",
-		"instanceId: resourceRouteState.routeInstanceId",
-		"clusterArn: resourceRouteState.routeClusterArn",
+		"currentPageSectionURL(sectionID)",
+		"selectedResourceScopeText(resource)",
+		"selectedResourceScopeEntries(resource)",
 		"buildPageSectionURL('resource', 'resource-recent-logs'",
 		"Container ${name} awslogs",
 		"Deployment status",
@@ -3234,8 +3243,11 @@ func TestSmokeLocalScriptAssertsRecentLogsInEmbeddedHTML(t *testing.T) {
 	if !strings.Contains(text, "assert \"createCopyReadRouteButton(applicationsOverviewReadRoute())\" in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert applications overview copy route contract")
 	}
-	if !strings.Contains(text, "assert \"navigator.clipboard.writeText(routeText)\" in ui, ui") {
-		t.Fatalf("expected smoke-local.sh to assert clipboard write contract")
+	if !strings.Contains(text, "assert \"return copyTextToClipboard(routeText);\" in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert copy read route helper delegates to shared clipboard helper")
+	}
+	if !strings.Contains(text, "assert \"navigator.clipboard.writeText(text)\" in ui, ui") {
+		t.Fatalf("expected smoke-local.sh to assert shared clipboard write contract")
 	}
 	if !strings.Contains(text, "assert 'Workspace JSON' in ui, ui") {
 		t.Fatalf("expected smoke-local.sh to assert embedded html contains workspace JSON handoff")

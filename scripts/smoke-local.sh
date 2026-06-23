@@ -1487,7 +1487,8 @@ assert 'Applications JSON' in ui, ui
 assert "createNavLink('/v1/overview/applications', 'Applications JSON')" in ui, ui
 assert 'Copy read route' in ui, ui
 assert "createCopyReadRouteButton(applicationsOverviewReadRoute())" in ui, ui
-assert "navigator.clipboard.writeText(routeText)" in ui, ui
+assert "return copyTextToClipboard(routeText);" in ui, ui
+assert "navigator.clipboard.writeText(text)" in ui, ui
 assert 'Workspace JSON' in ui, ui
 assert "const deploymentDetailJSONRoute = (deploymentName) => `/v1/overview/deployments/${encodeURIComponent(deploymentName || '')}`;" in ui, ui
 assert "createNavLink(deploymentDetailJSONRoute(deploymentName), 'Workspace JSON')" in ui, ui
@@ -1870,8 +1871,8 @@ assert "createElement('div', 'quick-nav-empty', 'No section is currently targete
 assert "sectionLink?.sectionID !== currentSectionLink?.sectionID" in ui, ui
 assert "const pushResourceSection = (section, sectionID, label) => {" in ui, ui
 assert "sectionID," in ui, ui
-assert "href: buildPageSectionURL('resource', sectionID, {" in ui, ui
-assert "containerName: resourceRouteState.routeContainerName," in ui, ui
+assert "href: currentPageSectionURL(sectionID)," in ui, ui
+assert "selectedResourceScopeText(resource)" in ui, ui
 assert "routeContainerName: String(currentPageState.containerName || resource.containerName || '').trim()" in ui, ui
 assert "containerName: params.get('containerName') || ''" in ui, ui
 assert "buildPageSectionURL('resource', 'resource-recent-logs'" in ui, ui
@@ -2129,6 +2130,15 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     assert "return fetchDeploymentDetail(deploymentName)" in body, body
     assert "currentLabel: resource.name," in body, body
     assert "const createResourceQuickNav = (detail, resource, sectionLinks = []) => {" in body, body
+    assert "const currentPageSectionURL = (sectionID) => {" in body, body
+    assert "return `${pathname}${search}#${sectionID}`;" in body, body
+    assert "const createCopySectionLinkButton = (sectionID, label) => {" in body, body
+    assert "Copy section link" in body, body
+    assert "const decorateResourceDetailSection = (section, sectionID" in body, body
+    assert "createNavLink(href, 'Section link', '_self')" in body, body
+    assert "section.dataset.resourceDetailSection = 'true';" in body, body
+    assert "decorateResourceDetailSection(section, sectionID, label);" in body, body
+    assert "href: currentPageSectionURL(sectionID)," in body, body
     assert "const pushResourceSection = (section, sectionID, label) => {" in body, body
     assert "const selectedLookupScope = selectedResourceScopeText(resource);" in body, body
     assert "...(selectedLookupScope ? [['Selected lookup scope', selectedLookupScope]] : [])," in body, body
