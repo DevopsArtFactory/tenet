@@ -180,6 +180,36 @@ func parseOptionalPositiveLimit(w http.ResponseWriter, r *http.Request) (limit i
 	return limit, true
 }
 
+func parseOptionalDeploymentEventsSource(w http.ResponseWriter, r *http.Request) (string, bool) {
+	values, present := r.URL.Query()["source"]
+	if !present {
+		return "", true
+	}
+	source := ""
+	if len(values) > 0 {
+		source = strings.TrimSpace(values[0])
+	}
+	if source == "" || !validDeploymentEventsSource(source) {
+		http.Error(w, "invalid source query", http.StatusBadRequest)
+		return "", false
+	}
+	return source, true
+}
+
+func validDeploymentEventsSource(source string) bool {
+	for _, r := range source {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '_' || r == '-' || r == '.' || r == ':':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 func applyAuditLogLimit(result auditlog.Result, query auditlog.Query) auditlog.Result {
 	totalEntryCount := len(result.Entries)
 	if query.Limit > 0 && query.Limit < len(result.Entries) {
@@ -190,12 +220,29 @@ func applyAuditLogLimit(result auditlog.Result, query auditlog.Query) auditlog.R
 }
 
 func applyDeploymentEventsLimit(result catalog.DeploymentOverviewEvents, limit int) catalog.DeploymentOverviewEvents {
-	totalEventCount := len(result.Events)
+	return applyDeploymentEventsQuery(result, limit, "")
+}
+
+func applyDeploymentEventsQuery(result catalog.DeploymentOverviewEvents, limit int, sourceFilter string) catalog.DeploymentOverviewEvents {
+	retainedEventCount := len(result.Events)
 	retention := result.Retention
 	if retention.Limit == 0 {
-		retention = catalog.BuildRuntimeEventRetention(totalEventCount)
+		retention = catalog.BuildRuntimeEventRetention(retainedEventCount)
 		result.Retention = retention
 	}
+
+	if sourceFilter != "" {
+		filtered := make([]domain.StatusHistoryEntry, 0, len(result.Events))
+		for _, event := range result.Events {
+			if event.Source == sourceFilter {
+				filtered = append(filtered, event)
+			}
+		}
+		result.Events = filtered
+		result.ManagedDriftSummary = summarizeDeploymentEventsManagedDrift(result.Events)
+	}
+
+	totalEventCount := len(result.Events)
 	effectiveLimit := 0
 	var requestedLimit *int
 	limited := false
@@ -214,10 +261,14 @@ func applyDeploymentEventsLimit(result catalog.DeploymentOverviewEvents, limit i
 			truncationStatus = resourcelogs.ScopeTruncationStatusUnknown
 		}
 	}
+	if result.Events == nil {
+		result.Events = []domain.StatusHistoryEntry{}
+	}
 
 	newestEventTimestamp, oldestEventTimestamp := deploymentEventWindow(result.Events)
 	result.ResultScope = &catalog.DeploymentEventsResultScope{
 		RequestedLimit:       requestedLimit,
+		SourceFilter:         sourceFilter,
 		EffectiveLimit:       effectiveLimit,
 		ReturnedEventCount:   len(result.Events),
 		ReturnedCount:        len(result.Events),
@@ -2434,12 +2485,16 @@ func NewRouter(options Options) http.Handler {
 			if !ok {
 				return
 			}
+			eventSource, ok := parseOptionalDeploymentEventsSource(w, r)
+			if !ok {
+				return
+			}
 			events, err := options.OverviewDeploymentEvents(r.Context(), name)
 			if err != nil {
 				respondReadLookupError(w, err, "overview deployment events unavailable")
 				return
 			}
-			events = applyDeploymentEventsLimit(events, eventLimit)
+			events = applyDeploymentEventsQuery(events, eventLimit, eventSource)
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(events)
 		case strings.HasSuffix(path, "/resource-logs"):
