@@ -4208,11 +4208,11 @@ const createDocument = () => {
 const collectText = (node) => [node.textContent, ...(node.children || []).flatMap((child) => collectText(child))].filter(Boolean);
 const collectNodes = (node, predicate) => [predicate(node) ? [node] : [], ...(node.children || []).map((child) => collectNodes(child, predicate))].flat();
 async function settle() { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); }
-async function render(fetchImpl, initialSearch = '?page=application&deployment=payments-api-staging') {
+async function render(fetchImpl, initialSearch = '?page=application&deployment=payments-api-staging', initialHash = '') {
   const document = createDocument();
   const fetchCalls = [];
-  const window = { location: { pathname: '/', search: initialSearch, hash: '' } };
-  const history = { replaceState(_state, _title, url) { const [pathname, query = ''] = String(url).split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; } };
+  const window = { location: { pathname: '/', search: initialSearch, hash: initialHash } };
+  const history = { replaceState(_state, _title, url) { const [pathAndQuery, nextHash = ''] = String(url).split('#'); const [pathname, query = ''] = pathAndQuery.split('?'); window.location.pathname = pathname || '/'; window.location.search = query ? '?' + query : ''; window.location.hash = nextHash ? '#' + nextHash : ''; } };
   const fetch = (url) => {
     fetchCalls.push(String(url));
     return fetchImpl(String(url));
@@ -4226,6 +4226,8 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   const detailURL = '/v1/overview/applications/payments-api-staging';
   const eventsURL = '/v1/overview/deployments/payments-api-staging/events?limit=10';
   const selectedWindowURL = '/v1/overview/deployments/payments-api-staging/events?limit=25';
+  const selectedSourceURL = '/v1/overview/deployments/payments-api-staging/events?limit=25&source=controller';
+  const defaultSourceURL = '/v1/overview/deployments/payments-api-staging/events?limit=10&source=controller';
   const initialSearch = '?page=application&deployment=payments-api-staging';
   let eventsFetchCount = 0;
   let selectedWindowFetchCount = 0;
@@ -4348,6 +4350,52 @@ async function render(fetchImpl, initialSearch = '?page=application&deployment=p
   const selectedWindowShareLink = collectNodes(selectedWindowView.document.getElementById('accounts'), (node) => node.tagName === 'A').find((node) => node.textContent === 'Share event' && node.href === '/?page=application&eventLimit=25&deployment=payments-api-staging#' + expectedEventAnchor);
   if (!selectedWindowShareLink) throw new Error('expected bookmarked Event window share links to preserve the non-default eventLimit');
   if (selectedWindowView.window.location.search !== '?page=application&deployment=payments-api-staging&eventLimit=25') throw new Error('expected bookmarked Event window route to remain stable after rendering');
+
+  const selectedSourceView = await render((url) => {
+    if (url === detailURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === selectedSourceURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ ...eventsBody, resultScope: { ...eventsBody.resultScope, sourceFilter: 'controller' } }) });
+    if (url === selectedWindowURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(eventsBody) });
+    throw new Error('unexpected source-filter fetch url: ' + url);
+  }, '?page=application&q=payments&sync=OutOfSync&account=210987654321&deployment=payments-api-staging&eventLimit=25&eventSource=controller', '#application-runtime-events');
+  if (selectedSourceView.fetchCalls[1] !== selectedSourceURL) throw new Error('expected bookmarked Event source to fetch source-filtered deployment events route, got ' + selectedSourceView.fetchCalls.join(', '));
+  const selectedSourceText = collectText(selectedSourceView.document.getElementById('accounts')).join(' | ');
+  if (!selectedSourceText.includes('Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events?limit=25&source=controller.')) throw new Error('expected runtime-events intro to show the selected source route');
+  if (!selectedSourceText.includes('Source filter · controller')) throw new Error('expected runtime-events scope summary to show the selected source filter');
+  const eventSourceSelect = collectNodes(selectedSourceView.document.getElementById('accounts'), (node) => node.tagName === 'SELECT').find((node) => node.dataset.toolbarField === 'Event source');
+  if (!eventSourceSelect) throw new Error('expected Event source selector on application runtime-events section');
+  if (eventSourceSelect.disabled) throw new Error('expected Event source selector enabled after runtime-events load');
+  if (eventSourceSelect.value !== 'controller') throw new Error('expected Event source selector to reflect bookmarked eventSource query param');
+  const selectedSourceShare = collectNodes(selectedSourceView.document.getElementById('accounts'), (node) => node.tagName === 'A').find((node) => node.textContent === 'Share event' && node.href.endsWith('#' + expectedEventAnchor));
+  if (!selectedSourceShare) throw new Error('expected source-filtered runtime event share link');
+  const [selectedSourceShareURL, selectedSourceShareHash = ''] = selectedSourceShare.href.split('#');
+  const selectedSourceShareParams = new URLSearchParams(selectedSourceShareURL.split('?')[1] || '');
+  for (const [key, value] of [['page', 'application'], ['q', 'payments'], ['sync', 'OutOfSync'], ['account', '210987654321'], ['deployment', 'payments-api-staging'], ['eventLimit', '25'], ['eventSource', 'controller']]) {
+    if (selectedSourceShareParams.get(key) !== value) throw new Error('expected source-filtered Share event link to preserve ' + key + ', got ' + selectedSourceShare.href);
+  }
+  if (selectedSourceShareHash !== expectedEventAnchor) throw new Error('expected source-filtered Share event link to target event anchor, got ' + selectedSourceShare.href);
+  eventSourceSelect.value = '';
+  eventSourceSelect.dispatch('change');
+  await settle();
+  await settle();
+  if (selectedSourceView.fetchCalls[selectedSourceView.fetchCalls.length - 1] !== selectedWindowURL) throw new Error('expected clearing Event source to refetch selected window without source, got ' + selectedSourceView.fetchCalls.join(', '));
+  const clearedSourceParams = new URLSearchParams(selectedSourceView.window.location.search);
+  for (const [key, value] of [['page', 'application'], ['q', 'payments'], ['sync', 'OutOfSync'], ['account', '210987654321'], ['deployment', 'payments-api-staging'], ['eventLimit', '25']]) {
+    if (clearedSourceParams.get(key) !== value) throw new Error('expected clearing Event source to preserve ' + key + ', got ' + selectedSourceView.window.location.search);
+  }
+  if (clearedSourceParams.has('eventSource')) throw new Error('expected clearing Event source to remove eventSource query, got ' + selectedSourceView.window.location.search);
+  if (selectedSourceView.window.location.hash !== '#application-runtime-events') throw new Error('expected clearing Event source to preserve application section hash, got ' + selectedSourceView.window.location.hash);
+  const clearedSourceSelect = collectNodes(selectedSourceView.document.getElementById('accounts'), (node) => node.tagName === 'SELECT').find((node) => node.dataset.toolbarField === 'Event source');
+  if (!clearedSourceSelect || clearedSourceSelect.value !== '') throw new Error('expected clearing Event source to render All sources selection');
+
+  const filteredEmptyView = await render((url) => {
+    if (url === detailURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });
+    if (url === defaultSourceURL) return Promise.resolve({ ok: true, json: () => Promise.resolve({ deploymentName: 'payments-api-staging', retention: { limit: 10, retainedEventCount: 10, status: 'within_retention_limit' }, resultScope: { sourceFilter: 'controller', requestedLimit: 10, effectiveLimit: 10, returnedEventCount: 0, totalEventCount: 0, retentionLimit: 10, retainedEventCount: 10, retentionStatus: 'within_retention_limit', truncationStatus: 'not_truncated' }, events: [] }) });
+    throw new Error('unexpected filtered-empty fetch url: ' + url);
+  }, '?page=application&deployment=payments-api-staging&eventSource=controller');
+  const filteredEmptyText = collectText(filteredEmptyView.document.getElementById('accounts')).join(' | ');
+  if (!filteredEmptyText.includes('No controller runtime events match source filter "controller" in the latest 10-event window. Clear Event source or refresh before treating controller history as absent.')) throw new Error('expected source-filtered empty runtime-events guidance, got ' + filteredEmptyText);
+  if (filteredEmptyText.includes('No controller runtime events are retained for this application yet.')) throw new Error('expected source-filtered empty copy to differ from no retained controller history');
+  if (!filteredEmptyText.includes('Source filter · controller')) throw new Error('expected filtered-empty scope summary to keep selected source filter metadata');
 
   const emptyView = await render((url) => {
     if (url === detailURL) return Promise.resolve({ ok: true, json: () => Promise.resolve(detailBody) });

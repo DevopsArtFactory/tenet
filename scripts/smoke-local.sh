@@ -1721,7 +1721,8 @@ assert 'Visible high' in ui, ui
 assert 'No field-level drift rows match the current filters. Adjust the query or severity filters to inspect reported drift.' in ui, ui
 assert 'Controller runtime events' in ui, ui
 assert 'Refresh runtime events' in ui, ui
-assert 'Controller-derived runtime events from GET /v1/overview/deployments/{deploymentName}/events?limit=${normalizeDeploymentEventsLimit(limit)}. Tenet shows the selected bounded window, newest first; use Event window to change how much controller history this panel reads without leaving the application drill-down. This is not audit/auth history.' in ui, ui
+assert "Controller-derived runtime events from ${deploymentEventsReadRoute('{deploymentName}', limit, source)}. Tenet shows the selected bounded window, newest first; use Event window to change how much controller history this panel reads without leaving the application drill-down. This is not audit/auth history." in ui, ui
+assert 'Event source' in ui, ui
 assert 'Loading controller runtime events…' in ui, ui
 assert 'No controller runtime events are retained for this application yet.' in ui, ui
 assert "const createDeploymentEventsFreshnessMeta = (result) => {" in ui, ui
@@ -1743,12 +1744,12 @@ assert "const runtimeEventAnchorBase = (event) => {" in ui, ui
 assert "const backendID = auditAnchorSlug(event?.eventId);" in ui, ui
 assert "if (backendID && backendID !== 'unknown') return `runtime-event-${backendID}`;" in ui, ui
 assert "const uniqueRuntimeEventAnchorID = (event, seenAnchors) => {" in ui, ui
-assert "createNavLink(runtimeEventAnchorURL(deploymentName, eventID, selectedLimit), 'Share event', '_self')" in ui, ui
+assert "createNavLink(runtimeEventAnchorURL(deploymentName, eventID, selectedLimit, selectedSource), 'Share event', '_self')" in ui, ui
 assert "actions.push(createNavLink(buildPageSectionURL('drift', 'drift-field-level', { deployment: deploymentName }), 'Open field-level drift', '_self'));" in ui, ui
-assert "const deploymentEventsReadRoute = (deploymentName, limit = currentPageState.eventLimit) => `GET ${buildDeploymentEventsReadRoute(deploymentName, { limit })}`;" in ui, ui
+assert "const deploymentEventsReadRoute = (deploymentName, limit = currentPageState.eventLimit, source = currentPageState.eventSource) => `GET ${buildDeploymentEventsReadRoute(deploymentName, { limit, source })}`;" in ui, ui
 assert "createDeploymentEventsActions(section, deploymentName)," in ui, ui
 assert "createDeploymentEventsActions(container, deploymentName)," in ui, ui
-assert "deploymentEventsReadRoute(deploymentName, limit)," in ui, ui
+assert "deploymentEventsReadRoute(deploymentName, limit, source)," in ui, ui
 assert 'Live inspection' in ui, ui
 assert 'Loading live inspection…' in ui, ui
 assert 'Live inspection is unavailable for this resource.' in ui, ui
@@ -1990,14 +1991,14 @@ assert_fragments("application_ui", application_ui, operator_read_auth_fragments 
     "return `GET /v1/overview/applications/${deploymentName}`;",
     "const renderOperatorReadFailurePage = (pageLabel, route, error) => {",
     "renderOperatorReadFailurePage(embeddedPageTitle(currentPageState.page), buildEmbeddedPageReadRoute(currentPageState), error);",
-    "const deploymentEventsReadRoute = (deploymentName, limit = currentPageState.eventLimit) => `GET ${buildDeploymentEventsReadRoute(deploymentName, { limit })}`;",
+    "const deploymentEventsReadRoute = (deploymentName, limit = currentPageState.eventLimit, source = currentPageState.eventSource) => `GET ${buildDeploymentEventsReadRoute(deploymentName, { limit, source })}`;",
     "const applicationManagedDriftCounts = (detail) => {",
     "const applicationManagedDriftSummaryText = (detail) => {",
     "No managed drift reported",
     "['Managed drift', applicationManagedDriftSummaryText(detail)],",
     "createDeploymentEventsActions(section, deploymentName),",
     "createDeploymentEventsActions(container, deploymentName),",
-    "deploymentEventsReadRoute(deploymentName, limit),",
+    "deploymentEventsReadRoute(deploymentName, limit, source),",
 ))
 assert_fragments("account_ui", account_ui, operator_read_auth_fragments + (
     "return 'Account detail';",
@@ -2334,9 +2335,9 @@ assert 'Open application drill-down' in audit_ui, audit_ui
 assert 'Open drift view' in audit_ui, audit_ui
 assert 'Open plan/apply workspace' in audit_ui, audit_ui
 assert "const defaultDeploymentEventsLimit = 10;" in ui, ui
-assert "const buildDeploymentEventsReadRoute = (deploymentName, { limit = defaultDeploymentEventsLimit } = {}) => {" in ui, ui
-assert "return `${route}?limit=${normalizedLimit}`;" in ui, ui
-assert "const fetchDeploymentEvents = (deploymentName, limit = currentPageState.eventLimit) => fetchEmbeddedReadRouteJSON(buildDeploymentEventsReadRoute(deploymentName, { limit }), {" in ui, ui
+assert "const buildDeploymentEventsReadRoute = (deploymentName, { limit = defaultDeploymentEventsLimit, source = currentPageState.eventSource } = {}) => {" in ui, ui
+assert "if (normalizedSource) params.set('source', normalizedSource);" in ui, ui
+assert "const fetchDeploymentEvents = (deploymentName, limit = currentPageState.eventLimit, source = currentPageState.eventSource) => fetchEmbeddedReadRouteJSON(buildDeploymentEventsReadRoute(deploymentName, { limit, source }), {" in ui, ui
 assert "const ifMatch = workspaceDetail.sourceFingerprint || await derivePlanSourceFingerprint(workspaceDetail).catch(() => '') || fallbackIfMatch;" in ui, ui
 assert 'Recent logs' in ui, ui
 assert 'Recent logs request' in ui, ui
