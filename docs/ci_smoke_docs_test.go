@@ -121,6 +121,75 @@ func TestRunnerStartRunbookDocumentsEvidenceHelperContract(t *testing.T) {
 	}
 }
 
+func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T) {
+	readmeText := readTextFile(t, "../README.md")
+	overviewText := readTextFile(t, "features/overview-dashboard.md")
+	localRuntimeText := readTextFile(t, "architecture/tenet-v1-local-runtime.md")
+	smokeLocalText := readTextFile(t, "../scripts/smoke-local.sh")
+	smokeDockerText := readTextFile(t, "../scripts/smoke-docker.sh")
+
+	for _, fragment := range []string{
+		"events?source=controller&limit=1",
+		"events?source=bad%20source",
+		"INVALID_DEPLOYMENT_EVENTS_SOURCE_STATUS",
+		"invalid source query",
+	} {
+		if !strings.Contains(smokeLocalText, fragment) {
+			t.Fatalf("expected direct-process smoke to include deployment-events source-filter contract %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"events?limit=1",
+		"requestedLimit",
+		"effectiveLimit",
+		"returnedEventCount",
+		"truncationStatus",
+	} {
+		if !strings.Contains(smokeDockerText, fragment) {
+			t.Fatalf("expected Docker smoke to include bounded deployment-events resultScope contract %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"`GET /v1/overview/deployments/{deploymentName}/events?source={source}&limit={positiveInteger}` for exact source-filtered, bounded controller-history reads",
+		"controller-history timeline is not the immutable audit log",
+		"Invalid source values return `400 Bad Request` with `invalid source query`",
+		"direct-process smoke covers that validation while Compose smoke keeps the bounded `?limit=1` runtime-events `resultScope` contract exercised",
+		"`eventLimit` and optional `eventSource`",
+		"`retention.limit` may still be non-zero",
+		"`returnedCount` as a compact alias for `returnedEventCount`",
+	} {
+		if !strings.Contains(readmeText, fragment) {
+			t.Fatalf("expected README deployment-events docs to include %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"`GET /v1/overview/deployments/{deploymentName}/events?source={source}&limit={n}` for exact source-filtered windows, with source filtering applied before limit",
+		"It is a controller-history timeline for operator drill-down and timeline rendering, not the immutable audit log",
+		"Invalid source filters fail before a controller-history read with `400 Bad Request` and `invalid source query`",
+		"compact alias `returnedCount`",
+		"compact boolean alias `truncated`",
+		"keeps selected source state in `eventSource`",
+		"preserves `eventLimit` plus `eventSource` in share links",
+	} {
+		if !strings.Contains(overviewText, fragment) {
+			t.Fatalf("expected overview dashboard deployment-events docs to include %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"Invalid source filters return `400 Bad Request` with `invalid source query`.",
+		"calls the fixture-empty deployment-events route with `?limit=1` and `?source=controller&limit=1`",
+		"direct-process smoke owns retention metadata, exact `?source=controller&limit=1`, and invalid-source `400` coverage",
+	} {
+		if !strings.Contains(localRuntimeText, fragment) {
+			t.Fatalf("expected local runtime smoke docs to include %q", fragment)
+		}
+	}
+}
+
 func TestDocumentationMapLinksResourceInspectionGuide(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	overviewText := readTextFile(t, "architecture/tenet-v1-overview.md")
