@@ -3423,6 +3423,25 @@ func TestDeploymentOverviewEventsRouteFiltersBySourceBeforeApplyingLimit(t *test
 	if !ok || scope["sourceFilter"] != "github" || scope["totalEventCount"] != float64(2) || scope["returnedEventCount"] != float64(1) || scope["retainedEventCount"] != float64(3) || scope["limited"] != true || scope["truncationStatus"] != "truncated" {
 		t.Fatalf("expected resultScope to echo source filter and count filtered events before limit, got %#v", payload["resultScope"])
 	}
+	sourceSummary, ok := payload["sourceSummary"].([]any)
+	if !ok || len(sourceSummary) != 2 {
+		t.Fatalf("expected sourceSummary for retained event window, got %#v", payload["sourceSummary"])
+	}
+	wantSources := []map[string]any{
+		{"source": "controller", "count": float64(1)},
+		{"source": "github", "count": float64(2)},
+	}
+	for i, want := range wantSources {
+		got, ok := sourceSummary[i].(map[string]any)
+		if !ok {
+			t.Fatalf("expected sourceSummary[%d] object, got %#v", i, sourceSummary[i])
+		}
+		for key, wantValue := range want {
+			if got[key] != wantValue {
+				t.Fatalf("expected sourceSummary[%d][%q]=%#v, got %#v in %#v", i, key, wantValue, got[key], sourceSummary)
+			}
+		}
+	}
 }
 
 func TestDeploymentOverviewEventsRouteReturnsEmptySourceFilterWindow(t *testing.T) {

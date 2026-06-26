@@ -1065,6 +1065,26 @@ func TestBuildDeploymentOverviewEvents(t *testing.T) {
 		t.Fatalf("expected managed drift summary to count events by severity, got %+v", events.ManagedDriftSummary)
 	}
 
+	payload, err := json.Marshal(events)
+	if err != nil {
+		t.Fatalf("Marshal returned error: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("failed to decode events payload: %v", err)
+	}
+	sourceSummary, ok := decoded["sourceSummary"].([]any)
+	if !ok || len(sourceSummary) != 1 {
+		t.Fatalf("expected sourceSummary JSON array, got %#v", decoded["sourceSummary"])
+	}
+	source, ok := sourceSummary[0].(map[string]any)
+	if !ok || source["source"] != "controller" || source["count"] != float64(1) {
+		t.Fatalf("expected controller sourceSummary count in JSON payload, got %#v", sourceSummary)
+	}
+	if _, exists := decoded["SourceSummary"]; exists {
+		t.Fatalf("unexpected Go-style source summary field in %#v", decoded)
+	}
+
 	snapshots[0].Status.History[0].Summary = "mutated"
 	snapshots[0].Status.History[0].ChangeDetails[0] = "mutated"
 	if events.Events[0].Summary != "Accepted rollout for r7" || events.Events[0].ChangeDetails[0] != "Summary changed to Accepted rollout for r7" {
@@ -1082,6 +1102,29 @@ func TestBuildDeploymentOverviewEvents(t *testing.T) {
 	events.Events[0].ChangeDetails[0] = "mutated-by-caller"
 	if snapshots[0].Status.History[0].Summary != "mutated" || snapshots[0].Status.History[0].ChangeDetails[0] != "mutated" {
 		t.Fatalf("expected caller mutations to avoid mutating stored history, got %+v", snapshots[0].Status.History)
+	}
+}
+
+func TestBuildRuntimeEventSourceSummaryCountsSourcesDeterministically(t *testing.T) {
+	summary := BuildRuntimeEventSourceSummary([]domain.StatusHistoryEntry{
+		{Source: "github"},
+		{Source: "controller"},
+		{Source: "github"},
+		{Source: "deployment-controller"},
+	})
+
+	want := []RuntimeEventSourceSummary{
+		{Source: "controller", Count: 1},
+		{Source: "deployment-controller", Count: 1},
+		{Source: "github", Count: 2},
+	}
+	if !reflect.DeepEqual(summary, want) {
+		t.Fatalf("expected deterministic retained-window source summary %+v, got %+v", want, summary)
+	}
+
+	empty := BuildRuntimeEventSourceSummary(nil)
+	if empty == nil || len(empty) != 0 {
+		t.Fatalf("expected explicit empty source summary, got %+v", empty)
 	}
 }
 
@@ -1143,6 +1186,9 @@ func TestBuildDeploymentOverviewEventsReturnsEmptyListWhenHistoryMissing(t *test
 	if events.ManagedDriftSummary != (ManagedDriftSummary{}) {
 		t.Fatalf("expected zero managed drift summary for empty history, got %+v", events.ManagedDriftSummary)
 	}
+	if events.SourceSummary == nil || len(events.SourceSummary) != 0 {
+		t.Fatalf("expected explicit empty source summary, got %+v", events.SourceSummary)
+	}
 
 	payload, err := json.Marshal(events)
 	if err != nil {
@@ -1155,6 +1201,10 @@ func TestBuildDeploymentOverviewEventsReturnsEmptyListWhenHistoryMissing(t *test
 	rawEvents, ok := decoded["events"].([]any)
 	if !ok || len(rawEvents) != 0 {
 		t.Fatalf("expected events JSON array field, got %#v", decoded["events"])
+	}
+	rawSourceSummary, ok := decoded["sourceSummary"].([]any)
+	if !ok || len(rawSourceSummary) != 0 {
+		t.Fatalf("expected sourceSummary JSON array field, got %#v", decoded["sourceSummary"])
 	}
 	if decoded["deploymentName"] != "payments-api-prod" {
 		t.Fatalf("expected deploymentName JSON field, got %#v", decoded)

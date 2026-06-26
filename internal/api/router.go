@@ -225,6 +225,7 @@ func applyDeploymentEventsLimit(result catalog.DeploymentOverviewEvents, limit i
 
 func applyDeploymentEventsQuery(result catalog.DeploymentOverviewEvents, limit int, sourceFilter string) catalog.DeploymentOverviewEvents {
 	retainedEventCount := len(result.Events)
+	result.SourceSummary = catalog.BuildRuntimeEventSourceSummary(result.Events)
 	retention := result.Retention
 	if retention.Limit == 0 {
 		retention = catalog.BuildRuntimeEventRetention(retainedEventCount)
