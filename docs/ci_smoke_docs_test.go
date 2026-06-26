@@ -157,6 +157,8 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 		"Invalid source values return `400 Bad Request` with `invalid source query`",
 		"direct-process smoke covers that validation while Compose smoke keeps the bounded `?limit=1` runtime-events `resultScope` contract exercised",
 		"`eventLimit` and optional `eventSource`",
+		"the selector offers `All sources`, `controller`, `deployment-controller`, and `github`",
+		"exact bookmarked custom source values remain visible instead of being discarded",
 		"`retention.limit` may still be non-zero",
 		"`returnedCount` as a compact alias for `returnedEventCount`",
 	} {
@@ -173,6 +175,8 @@ func TestDeploymentRuntimeEventsDocsTrackSmokeSourceFilterContracts(t *testing.T
 		"compact boolean alias `truncated`",
 		"keeps selected source state in `eventSource`",
 		"preserves `eventLimit` plus `eventSource` in share links",
+		"The selector offers `All sources`, `controller`, `deployment-controller`, and `github`",
+		"exact bookmarked custom source values remain visible instead of being discarded",
 	} {
 		if !strings.Contains(overviewText, fragment) {
 			t.Fatalf("expected overview dashboard deployment-events docs to include %q", fragment)
