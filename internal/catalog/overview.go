@@ -149,9 +149,16 @@ type ManagedDriftSummary struct {
 type DeploymentOverviewEvents struct {
 	DeploymentName      string                       `json:"deploymentName"`
 	Events              []domain.StatusHistoryEntry  `json:"events"`
+	SourceSummary       []RuntimeEventSourceSummary  `json:"sourceSummary"`
 	ManagedDriftSummary ManagedDriftSummary          `json:"managedDriftSummary"`
 	Retention           RuntimeEventRetention        `json:"retention"`
 	ResultScope         *DeploymentEventsResultScope `json:"resultScope,omitempty"`
+}
+
+// RuntimeEventSourceSummary counts retained runtime events by source.
+type RuntimeEventSourceSummary struct {
+	Source string `json:"source"`
+	Count  int    `json:"count"`
 }
 
 // RuntimeEventRetention describes the bounded controller-history slice used to
@@ -549,9 +556,33 @@ func BuildDeploymentOverviewEvents(c manifest.Catalog, snapshots []statusstore.S
 	return DeploymentOverviewEvents{
 		DeploymentName:      detail.Name,
 		Events:              events,
+		SourceSummary:       BuildRuntimeEventSourceSummary(events),
 		ManagedDriftSummary: summarizeManagedDriftEvents(events),
 		Retention:           BuildRuntimeEventRetention(len(events)),
 	}, nil
+}
+
+func BuildRuntimeEventSourceSummary(events []domain.StatusHistoryEntry) []RuntimeEventSourceSummary {
+	if len(events) == 0 {
+		return []RuntimeEventSourceSummary{}
+	}
+
+	counts := make(map[string]int)
+	for _, event := range events {
+		counts[event.Source]++
+	}
+
+	sources := make([]string, 0, len(counts))
+	for source := range counts {
+		sources = append(sources, source)
+	}
+	sort.Strings(sources)
+
+	summary := make([]RuntimeEventSourceSummary, 0, len(sources))
+	for _, source := range sources {
+		summary = append(summary, RuntimeEventSourceSummary{Source: source, Count: counts[source]})
+	}
+	return summary
 }
 
 func BuildRuntimeEventRetention(retainedEventCount int) RuntimeEventRetention {

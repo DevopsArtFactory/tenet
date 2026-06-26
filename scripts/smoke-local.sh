@@ -805,6 +805,7 @@ if deployment_history:
 assert deployment_events_fixture['deploymentName'] == 'payments-api-prod', deployment_events_fixture
 assert isinstance(deployment_events_fixture['events'], list), deployment_events_fixture
 assert len(deployment_events_fixture['events']) == 0, deployment_events_fixture
+assert deployment_events_fixture.get('sourceSummary') == [], deployment_events_fixture
 assert all('controllerRefresh' not in event for event in deployment_events_fixture['events']), deployment_events_fixture
 assert deployment_events_fixture.get('managedDriftSummary') == {'total': 0, 'high': 0, 'medium': 0, 'low': 0}, deployment_events_fixture
 fixture_events_retention = deployment_events_fixture.get('retention') or {}
@@ -827,6 +828,7 @@ assert 'newestEventTimestamp' not in fixture_events_default_scope, deployment_ev
 assert 'oldestEventTimestamp' not in fixture_events_default_scope, deployment_events_fixture
 assert deployment_events_fixture_limited['deploymentName'] == 'payments-api-prod', deployment_events_fixture_limited
 assert deployment_events_fixture_limited['events'] == [], deployment_events_fixture_limited
+assert deployment_events_fixture_limited.get('sourceSummary') == [], deployment_events_fixture_limited
 fixture_events_limited_retention = deployment_events_fixture_limited.get('retention') or {}
 assert fixture_events_limited_retention == fixture_events_retention, deployment_events_fixture_limited
 fixture_events_scope = deployment_events_fixture_limited.get('resultScope') or {}
@@ -845,6 +847,7 @@ assert 'newestEventTimestamp' not in fixture_events_scope, deployment_events_fix
 assert 'oldestEventTimestamp' not in fixture_events_scope, deployment_events_fixture_limited
 assert deployment_events_fixture_source['deploymentName'] == 'payments-api-prod', deployment_events_fixture_source
 assert deployment_events_fixture_source['events'] == [], deployment_events_fixture_source
+assert deployment_events_fixture_source.get('sourceSummary') == [], deployment_events_fixture_source
 fixture_events_source_scope = deployment_events_fixture_source.get('resultScope') or {}
 assert fixture_events_source_scope.get('sourceFilter') == 'controller', deployment_events_fixture_source
 assert fixture_events_source_scope.get('requestedLimit') == 1, deployment_events_fixture_source
@@ -3847,6 +3850,10 @@ for event in events_payload['events']:
 assert source_events_payload['deploymentName'] == 'payments-api-prod', source_events_payload
 assert len(source_events_payload.get('events') or []) == 1, source_events_payload
 assert all(event.get('source') == 'controller' for event in source_events_payload['events']), source_events_payload
+source_summary = source_events_payload.get('sourceSummary') or []
+assert isinstance(source_summary, list), source_events_payload
+controller_source_summary = [entry for entry in source_summary if entry.get('source') == 'controller']
+assert controller_source_summary, source_events_payload
 source_scope = source_events_payload.get('resultScope') or {}
 assert source_scope.get('sourceFilter') == 'controller', source_events_payload
 assert source_scope.get('requestedLimit') == 1, source_events_payload
@@ -3855,6 +3862,7 @@ assert source_scope.get('returnedEventCount') == 1, source_events_payload
 assert source_scope.get('returnedCount') == 1, source_events_payload
 assert source_scope.get('totalEventCount') >= source_scope.get('returnedEventCount'), source_events_payload
 assert source_scope.get('limited') == (source_scope.get('totalEventCount') > source_scope.get('returnedEventCount')), source_events_payload
+assert controller_source_summary[0].get('count') == source_scope.get('totalEventCount'), source_events_payload
 print('smoke-local: controller changeDetails path ok')
 PY
 

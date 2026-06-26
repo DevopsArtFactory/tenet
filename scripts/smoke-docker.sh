@@ -1069,6 +1069,8 @@ assert actor_audit_logs["entries"][0]["actor"]["email"] == "alex.explicit@exampl
 
 assert deployment_events["deploymentName"] == "payments-api-prod", deployment_events
 assert isinstance(deployment_events.get("events"), list), deployment_events
+events_source_summary = deployment_events.get("sourceSummary") or []
+assert isinstance(events_source_summary, list), deployment_events
 events_scope = deployment_events.get("resultScope") or {}
 assert events_scope.get("requestedLimit") == 1, deployment_events
 assert events_scope.get("effectiveLimit") == 1, deployment_events
@@ -1076,6 +1078,7 @@ assert events_scope.get("returnedEventCount") == len(deployment_events["events"]
 assert events_scope.get("returnedCount") == events_scope.get("returnedEventCount"), deployment_events
 assert isinstance(events_scope.get("totalEventCount"), int), deployment_events
 assert events_scope.get("totalEventCount") >= events_scope.get("returnedEventCount"), deployment_events
+assert sum(entry.get("count", 0) for entry in events_source_summary) == events_scope.get("totalEventCount"), deployment_events
 assert isinstance(events_scope.get("limited"), bool), deployment_events
 assert events_scope.get("limited") == (events_scope.get("totalEventCount") > events_scope.get("returnedEventCount")), deployment_events
 assert events_scope.get("truncationStatus") in {"truncated", "not_truncated", "unknown"}, deployment_events
@@ -3071,6 +3074,8 @@ assert os.environ["AUTH_FORBIDDEN_RESOURCE_INSPECTION_REQUEST_ID"], "guarded res
 assert allowed_status_read["deploymentName"] == "payments-api-staging", allowed_status_read
 assert allowed_events_read["deploymentName"] == "payments-api-staging", allowed_events_read
 assert isinstance(allowed_events_read.get("events"), list), allowed_events_read
+allowed_events_source_summary = allowed_events_read.get("sourceSummary") or []
+assert isinstance(allowed_events_source_summary, list), allowed_events_read
 allowed_events_scope = allowed_events_read.get("resultScope") or {}
 assert allowed_events_scope.get("requestedLimit") == 1, allowed_events_read
 assert allowed_events_scope.get("effectiveLimit") == 1, allowed_events_read
@@ -3078,6 +3083,7 @@ assert allowed_events_scope.get("returnedEventCount") == len(allowed_events_read
 assert allowed_events_scope.get("returnedCount") == allowed_events_scope.get("returnedEventCount"), allowed_events_read
 assert isinstance(allowed_events_scope.get("totalEventCount"), int), allowed_events_read
 assert allowed_events_scope.get("totalEventCount") >= allowed_events_scope.get("returnedEventCount"), allowed_events_read
+assert sum(entry.get("count", 0) for entry in allowed_events_source_summary) == allowed_events_scope.get("totalEventCount"), allowed_events_read
 assert isinstance(allowed_events_scope.get("limited"), bool), allowed_events_read
 assert allowed_events_scope.get("limited") == (allowed_events_scope.get("totalEventCount") > allowed_events_scope.get("returnedEventCount")), allowed_events_read
 assert allowed_events_scope.get("truncationStatus") in {"truncated", "not_truncated", "unknown"}, allowed_events_read
