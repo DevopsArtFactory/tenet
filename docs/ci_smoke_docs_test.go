@@ -43,6 +43,7 @@ func TestREADMEValidationDocumentsCISmokeFastLaneScriptChecks(t *testing.T) {
 
 	for _, fragment := range []string{
 		"internal/rbacpolicy/*|internal/rbacpolicy/**",
+		"RBAC policy diagnostics",
 	} {
 		if !strings.Contains(workflowText, fragment) {
 			t.Fatalf("expected CI Smoke Docker scope to include %q", fragment)
