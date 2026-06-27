@@ -435,6 +435,78 @@ func TestDeriveRuntimeSummaryReturnsManagedDriftWithoutOtherRuntimeSignals(t *te
 	}
 }
 
+func TestBuildAccountOverviewsRuntimeEventCueUsesRetainedHistory(t *testing.T) {
+	catalog := manifest.Catalog{
+		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
+		Environments: []domain.Environment{{Name: "prod-apne2", AccountRef: "prod-core", Region: "ap-northeast-2"}},
+		Deployments: []domain.Deployment{
+			{Name: "payments-api-prod", AppRef: "payments-api", EnvironmentRef: "prod-apne2"},
+			{Name: "billing-api-prod", AppRef: "billing-api", EnvironmentRef: "prod-apne2"},
+			{Name: "search-api-prod", AppRef: "search-api", EnvironmentRef: "prod-apne2"},
+		},
+	}
+	snapshots := []statusstore.Snapshot{
+		{
+			DeploymentName: "payments-api-prod",
+			Status: domain.DeploymentStatus{
+				History: []domain.StatusHistoryEntry{
+					{Timestamp: "2026-04-16T06:10:00Z", Source: "controller", Summary: "Accepted rollout", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "accepted"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "warming"}, RolloutPhase: domain.RolloutPhaseAccepted, CurrentStep: "CreateCandidateCapacity"},
+					{Timestamp: "2026-04-16T06:20:00Z", Source: "controller", Summary: "Shifted canary", Sync: domain.Sync{State: domain.SyncStateReconciling, Reason: "shifting"}, Health: domain.Health{Overall: domain.HealthProgressing, Summary: "2/3 healthy"}, RolloutPhase: domain.RolloutPhasePromoting, CurrentStep: "ShiftTrafficCanary"},
+				},
+			},
+		},
+		{
+			DeploymentName: "billing-api-prod",
+			Status: domain.DeploymentStatus{
+				History: []domain.StatusHistoryEntry{
+					{Timestamp: "2026-04-16T06:25:00Z", Source: "deployment-controller", Summary: "Completed rollout", Sync: domain.Sync{State: domain.SyncStateSynced, Reason: "steady"}, Health: domain.Health{Overall: domain.HealthHealthy, Summary: "3/3 healthy"}, RolloutPhase: domain.RolloutPhaseCompleted, CurrentStep: "Complete"},
+				},
+			},
+		},
+		{
+			DeploymentName: "search-api-prod",
+			Status: domain.DeploymentStatus{
+				Sync:   domain.Sync{State: domain.SyncStateSynced, Reason: "current-only"},
+				Health: domain.Health{Overall: domain.HealthHealthy, Summary: "steady"},
+			},
+		},
+	}
+
+	overviews, err := BuildAccountOverviews(catalog, snapshots)
+	if err != nil {
+		t.Fatalf("BuildAccountOverviews returned error: %v", err)
+	}
+	if len(overviews) != 1 {
+		t.Fatalf("expected one account overview, got %+v", overviews)
+	}
+	cue := overviews[0].RuntimeEventCue
+	if cue == nil {
+		t.Fatalf("expected runtime event cue from retained history, got %+v", overviews[0])
+	}
+	if cue.DeploymentName != "billing-api-prod" || cue.Timestamp != "2026-04-16T06:25:00Z" || cue.Source != "deployment-controller" || cue.Summary != "Completed rollout" || cue.Sync.State != domain.SyncStateSynced || cue.Health.Overall != domain.HealthHealthy || cue.RolloutPhase != domain.RolloutPhaseCompleted || cue.CurrentStep != "Complete" || cue.RetainedEventCount != 3 || cue.EventDeploymentCount != 2 {
+		t.Fatalf("expected latest retained runtime event cue with aggregate counts, got %+v", cue)
+	}
+	if overviews[0].Deployments[2].Name != "search-api-prod" || overviews[0].Deployments[2].RuntimeEventCue != nil {
+		t.Fatalf("expected current-only runtime status to avoid creating retained-event cue, got %+v", overviews[0].Deployments[2])
+	}
+
+	detail, err := BuildAccountOverviewDetail(catalog, snapshots, "123456789012")
+	if err != nil {
+		t.Fatalf("BuildAccountOverviewDetail returned error: %v", err)
+	}
+	if detail.RuntimeEventCue == nil || detail.RuntimeEventCue.DeploymentName != "billing-api-prod" || detail.RuntimeEventCue.RetainedEventCount != 3 || detail.RuntimeEventCue.EventDeploymentCount != 2 {
+		t.Fatalf("expected account detail runtime event cue to match account aggregate, got %+v", detail.RuntimeEventCue)
+	}
+
+	group, err := BuildProjectEnvironmentOverviewDetail(catalog, snapshots, "123456789012", "payments-api", "prod-apne2")
+	if err != nil {
+		t.Fatalf("BuildProjectEnvironmentOverviewDetail returned error: %v", err)
+	}
+	if group.RuntimeEventCue == nil || group.RuntimeEventCue.DeploymentName != "payments-api-prod" || group.RuntimeEventCue.Timestamp != "2026-04-16T06:20:00Z" || group.RuntimeEventCue.RetainedEventCount != 2 || group.RuntimeEventCue.EventDeploymentCount != 1 {
+		t.Fatalf("expected grouped overview runtime event cue to stay scoped to visible grouped deployments, got %+v", group.RuntimeEventCue)
+	}
+}
+
 func TestBuildAccountOverviewsRuntimeSummaryRemainsNilWhenStatusIsEmpty(t *testing.T) {
 	catalog := manifest.Catalog{
 		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},

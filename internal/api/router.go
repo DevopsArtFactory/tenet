@@ -1961,6 +1961,7 @@ func filterAuthorizedAccountOverviews(accounts []catalog.AccountOverview, visibl
 			ProgressingCount: counts.progressingCount,
 			PausedCount:      counts.pausedCount,
 			ErrorCount:       counts.errorCount,
+			RuntimeEventCue:  catalog.BuildRuntimeEventCue(visibleDeployments),
 			Deployments:      visibleDeployments,
 		})
 	}
@@ -1984,6 +1985,7 @@ func filterAuthorizedAccountOverviewDetail(detail catalog.AccountOverviewDetail,
 		ProgressingCount: counts.progressingCount,
 		PausedCount:      counts.pausedCount,
 		ErrorCount:       counts.errorCount,
+		RuntimeEventCue:  catalog.BuildRuntimeEventCue(visibleDeployments),
 		Deployments:      visibleDeployments,
 	}
 }
@@ -2006,6 +2008,7 @@ func filterAuthorizedProjectEnvironmentOverviewDetail(detail catalog.ProjectEnvi
 		ProgressingCount: counts.progressingCount,
 		PausedCount:      counts.pausedCount,
 		ErrorCount:       counts.errorCount,
+		RuntimeEventCue:  catalog.BuildRuntimeEventCue(visibleDeployments),
 		Deployments:      visibleDeployments,
 	}
 }
