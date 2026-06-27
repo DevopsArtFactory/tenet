@@ -1797,6 +1797,7 @@ func TestEmbeddedUIIncludesDeploymentWorkspaceViewModes(t *testing.T) {
 		"statusLabel: applyOperationStatusLabel(operation?.status),",
 		"lifecycleStatus: normalizedStatus,",
 		"const createOperationsSection = ({ title, intro, operations, emptyMessage, shareURLForOperation = null }) => {",
+		"section.append(markPoliteStatusNode(createElement('div', 'detail-state', emptyMessage)));",
 		"createNavLink(shareURLForOperation(operation), 'Share operation', '_self')",
 		"const planPreviewCanApply = (planState) => {",
 		"const operatorWriteAuthRequiredState = (state) => state?.request === 'create' && state?.status === 'fetch-error' && Number(state?.error?.status) === 401;",
