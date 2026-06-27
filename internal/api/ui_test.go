@@ -2783,6 +2783,43 @@ func TestEmbeddedUIResourceDetailLiveInspectionContract(t *testing.T) {
 	}
 }
 
+func TestEmbeddedUIRendersECSServiceDeploymentRolloutRowsSafely(t *testing.T) {
+	body := string(indexHTML)
+
+	for _, fragment := range []string{
+		"const createECSServiceDeploymentListItem = (deployment) => {",
+		"const cueNodes = createElement('div', 'pills');",
+		"`Deployment · ${textOrDash(deployment.id || deployment.taskDefinition || deployment.status)}`",
+		"createElement('span', 'pill synced', 'Primary deployment')",
+		"createElement('span', 'pill progress', 'Active deployment')",
+		"['Deployment ID', deployment.id]",
+		"['Deployment status', deployment.status]",
+		"['Rollout state', deployment.rolloutState]",
+		"['Rollout reason', deployment.rolloutStateReason]",
+		"['Desired/running/pending', `${countText(deployment.desiredCount)} / ${countText(deployment.runningCount)} / ${countText(deployment.pendingCount)}`]",
+		"['Task definition', deployment.taskDefinition]",
+		"['Created at', deployment.createdAt]",
+		"['Updated at', deployment.updatedAt]",
+		"createInspectionListSection(",
+		"'Service deployments'",
+		"(deployment) => createECSServiceDeploymentListItem(deployment),",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected embedded UI ECS service deployment rollout contract %q", fragment)
+		}
+	}
+
+	for _, unsafe := range []string{
+		"deployment.rolloutStateReason.innerHTML",
+		"rolloutStateReason.innerHTML",
+		"createECSServiceDeploymentListItem.innerHTML",
+	} {
+		if strings.Contains(body, unsafe) {
+			t.Fatalf("expected deployment rollout rows to avoid unsafe rendering %q", unsafe)
+		}
+	}
+}
+
 func TestEmbeddedUIIncludesRuntimeAndHistoryChangeDetailsRendering(t *testing.T) {
 	body := string(indexHTML)
 

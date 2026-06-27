@@ -149,7 +149,11 @@ payloads omit them rather than emitting empty placeholders.
 
 When present, the embedded Live inspection card renders the same evidence with
 the operator-facing labels `Deployment controller`, `Deployment circuit breaker`,
-and `Deployment alarms`; when the fields are absent, those rows stay quiet.
+and `Deployment alarms`; deployment rollout rows use `Deployment ID`,
+`Deployment status`, `Rollout state`, `Rollout reason`,
+`Desired/running/pending`, `Task definition`, `Created at`, and `Updated at`
+labels plus `Primary deployment` / `Active deployment` cues. When the fields are
+absent, those rows stay quiet.
 
 ## Supported Resource Types
 
