@@ -295,7 +295,7 @@ bash -n scripts/smoke-docker.sh
 bash -n scripts/ci-smoke-runner-evidence.sh
 ```
 
-The Docker smoke lane remains separate; use `make smoke-docker` for Compose, container startup, fixture, or Docker-stack runtime changes. In hosted PRs it is path-scoped: docs-only changes normally stay on the fast lane, while changes under Docker/Compose, API/controller, local fixtures, runtime read models, resource evidence, webhook, plan/apply, or audit smoke surfaces run the full Docker stack before merge.
+The Docker smoke lane remains separate; use `make smoke-docker` for Compose, container startup, fixture, or Docker-stack runtime changes. In hosted PRs it is path-scoped: docs-only changes normally stay on the fast lane, while changes under Docker/Compose, API/controller, local fixtures, runtime read models, RBAC policy diagnostics, resource evidence, webhook, plan/apply, or audit smoke surfaces run the full Docker stack before merge.
 
 For hosted CI Smoke failures that never start a runner, collect pasteable issue
 evidence with:

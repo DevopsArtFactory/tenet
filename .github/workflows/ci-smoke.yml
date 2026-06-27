@@ -100,6 +100,7 @@ jobs:
               internal/authidentity/*|internal/authidentity/**|\
               internal/authstate/*|internal/authstate/**|\
               internal/requestactor/*|internal/requestactor/**|\
+              internal/rbacpolicy/*|internal/rbacpolicy/**|\
               internal/statusstore/*|internal/statusstore/**|\
               internal/resourceaws/*|internal/resourceaws/**|\
               internal/resourcelogs/*|internal/resourcelogs/**|\
