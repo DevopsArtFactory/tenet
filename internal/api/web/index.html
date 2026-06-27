@@ -9210,7 +9210,9 @@
               const emptyMessage = driftRows.length
                 ? 'No field-level drift rows match the current filters. Adjust the query or severity filters to inspect reported drift.'
                 : driftSource.empty;
-              driftTableWrap.replaceChildren(createElement('div', 'detail-state', emptyMessage));
+              const stateNode = createElement('div', 'detail-state', emptyMessage);
+              markPoliteStatusNode(stateNode);
+              driftTableWrap.replaceChildren(stateNode);
               return;
             }
 
