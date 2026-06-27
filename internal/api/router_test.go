@@ -8297,25 +8297,29 @@ func TestRouterOverviewDeploymentResourceInspection(t *testing.T) {
 	})
 
 	t.Run("ignores limit query for unbounded inspection resources", func(t *testing.T) {
-		var gotLimit int
-		router := NewRouter(Options{
-			BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
-			OverviewDeployment: func(context.Context, string) (catalog.DeploymentOverviewDetail, error) {
-				return catalog.DeploymentOverviewDetail{Name: "api-prod"}, nil
-			},
-			OverviewDeploymentResourceInspection: func(_ context.Context, name, resourceType, resourceName string, limit int) (resourceinspection.Result, error) {
-				gotLimit = limit
-				return resourceinspection.Result{DeploymentName: name, ResourceType: resourceType, ResourceName: resourceName, Available: true}, nil
-			},
-		})
+		for _, resourceType := range []string{"trafficShiftPlan", "userDataBootstrapSource"} {
+			t.Run(resourceType, func(t *testing.T) {
+				var gotLimit int
+				router := NewRouter(Options{
+					BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+					OverviewDeployment: func(context.Context, string) (catalog.DeploymentOverviewDetail, error) {
+						return catalog.DeploymentOverviewDetail{Name: "api-prod"}, nil
+					},
+					OverviewDeploymentResourceInspection: func(_ context.Context, name, gotResourceType, resourceName string, limit int) (resourceinspection.Result, error) {
+						gotLimit = limit
+						return resourceinspection.Result{DeploymentName: name, ResourceType: gotResourceType, ResourceName: resourceName, Available: true}, nil
+					},
+				})
 
-		resp := httptest.NewRecorder()
-		router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType=trafficShiftPlan&resourceName=api-prod-routing&limit=0", nil))
-		if resp.Code != http.StatusOK {
-			t.Fatalf("expected non-ECS resource inspection to ignore limit query, got %d with body %q", resp.Code, resp.Body.String())
-		}
-		if gotLimit != 0 {
-			t.Fatalf("expected non-ECS resource inspection limit to stay zero, got %d", gotLimit)
+				resp := httptest.NewRecorder()
+				router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/v1/overview/deployments/api-prod/resource-inspection?resourceType="+resourceType+"&resourceName=api-prod-routing&limit=0", nil))
+				if resp.Code != http.StatusOK {
+					t.Fatalf("expected %s resource inspection to ignore unsupported limit query, got %d with body %q", resourceType, resp.Code, resp.Body.String())
+				}
+				if gotLimit != 0 {
+					t.Fatalf("expected %s resource inspection limit to stay zero, got %d", resourceType, gotLimit)
+				}
+			})
 		}
 	})
 

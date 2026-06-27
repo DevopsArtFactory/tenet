@@ -2296,7 +2296,8 @@ func TestResourceInspectionOperatorContract(t *testing.T) {
 	for _, fragment := range []string{
 		"`GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}`",
 		"both require a concrete resource type/name before provider lookup",
-		"supported ECS/ASG inspection reads may add selectors such as `clusterArn` or a positive `limit`",
+		"ECS service and direct ASG inspection reads may add selectors such as `clusterArn` or a positive `limit`",
+		"bootstrap-source inspection uses `instanceId` for focused ASG-member troubleshooting rather than bounded `limit` sampling",
 		"Auto Scaling payloads add `autoScalingGroup`, including optional `launchTemplate` and `mixedInstancesPolicy` metadata",
 		"`productionListenerRule`",
 		"`activeTargetGroup`",

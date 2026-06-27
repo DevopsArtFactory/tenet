@@ -23,20 +23,21 @@ unavailable payloads, so saved evidence identifies the cluster-scoped lookup.
 Omit it to preserve Tenet's default ECS cluster discovery behavior. Malformed
 cluster ARNs fail with `400 Bad Request` / `invalid clusterArn query`.
 
-`limit` is optional and applies only to bounded ECS service task samples and Auto Scaling Group instance samples. For `ecsService`, it caps the newest inspected
-running/stopped task summary bridge. For `candidateAutoScalingGroup`,
-`serviceAutoScalingGroup`, and `userDataBootstrapSource` after it resolves a
-backing ASG, it caps current-instance samples. Invalid, zero, or negative values
-return `400 Bad Request` / `invalid limit query` for resource types that support
-bounded samples; resource types without a sample window ignore the query.
+`limit` is optional and applies only to bounded ECS service task samples and direct Auto Scaling Group instance samples. For `ecsService`, it caps the newest inspected
+running/stopped task summary bridge. For `candidateAutoScalingGroup` and
+`serviceAutoScalingGroup`, it caps current-instance samples. Invalid, zero, or
+negative values return `400 Bad Request` / `invalid limit query` for resource
+types that support bounded samples; resource types without a sample window,
+including `userDataBootstrapSource`, ignore the query.
 
-`instanceId` is optional and only meaningful for Auto Scaling Group-backed inspection reads. When present, Tenet validates the selector as an EC2 instance ID
+`instanceId` is optional and only meaningful for Auto Scaling Group-backed inspection reads, including `userDataBootstrapSource` after it resolves a backing ASG. When present, Tenet validates the selector as an EC2 instance ID
 (`i-...`) before provider lookup, narrows the inspection to that ASG member, and
 echoes the trimmed selector as response-level `instanceId`. If the selected
 instance is well formed but is not currently part of the resolved ASG, the route
 returns `available=false` / `unavailableReason=resource_not_found` instead of
 falling back to another host. Omit it to preserve the bounded ASG sample
-behavior.
+behavior on direct ASG resources, or the default bootstrap-source comparison on
+`userDataBootstrapSource`.
 
 Example selected-cluster service inspection:
 
