@@ -2093,7 +2093,10 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
     ):
         assert fragment in body, fragment
     assert_fragments("resource_ui", body, operator_read_auth_fragments + (
-        "const createResourceLogsActions = (section, deploymentName, resource, isLoading = false, detail = null) => [",
+        "const createResourceLogsActions = (section, deploymentName, resource, isLoading = false, detail = null) => {",
+        "const selectedLimit = selectedResourceLogsLimit(deploymentName, resource);",
+        "const readRoute = deploymentName && resource?.type && resource?.name ? resourceLogsReadRoute(deploymentName, resource, selectedLimit) : '';",
+        "return [",
         "createResourceLogsLimitControl(section, deploymentName, resource, isLoading, detail)",
         "'Log limit'",
         "'Refresh recent logs'",
@@ -2144,7 +2147,11 @@ for body in (resource_ui, ecs_resource_ui, bootstrap_resource_ui, codedeploy_app
         "'Recent logs request'",
         "resourceLogsReadRoute(deploymentName, resource, target?.limit ?? selectedLimit)",
         "`Failed to load recent logs: ${error.message}`",
-        "const createResourceInspectionActions = (section, detail, resource, isLoading = false) => [",
+        "const createResourceInspectionActions = (section, detail, resource, isLoading = false) => {",
+        "const deploymentName = resourceInspectionDeploymentName(detail);",
+        "const selectedLimit = selectedResourceInspectionLimit(deploymentName, resource);",
+        "const readRoute = deploymentName && resource?.type && resource?.name ? resourceInspectionReadRoute(deploymentName, resource, selectedLimit) : '';",
+        "return [",
         "createResourceInspectionLimitControl(section, detail, resource, isLoading)",
         "'Task sample limit'",
         "'ASG instance sample limit'",
