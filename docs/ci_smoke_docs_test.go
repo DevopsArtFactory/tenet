@@ -2,6 +2,7 @@ package docs
 
 import (
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -68,6 +69,7 @@ func TestSmokeHelperScriptsRemainDirectlyRunnable(t *testing.T) {
 	for _, fragment := range []string{
 		"Smoke helper scripts must keep their executable bits",
 		"Makefile targets and runner-start docs invoke them directly by path",
+		"remove every mktemp-backed helper file or directory during cleanup",
 	} {
 		if !strings.Contains(readmeText, fragment) {
 			t.Fatalf("expected README validation docs to include executable helper contract %q", fragment)
@@ -89,6 +91,30 @@ func TestSmokeHelperScriptsRemainDirectlyRunnable(t *testing.T) {
 		}
 		if !strings.HasPrefix(readTextFile(t, path), "#!/usr/bin/env bash\n") {
 			t.Fatalf("expected %s to keep its bash shebang", path)
+		}
+	}
+}
+
+func TestSmokeHelpersCleanUpEveryTempPath(t *testing.T) {
+	assignmentRE := regexp.MustCompile(`(?m)^([A-Z0-9_]+)=\$\(mktemp(?: -d)?\)$`)
+	cleanupRE := regexp.MustCompile(`(?s)cleanup\(\) \{(.*?)\n\}`)
+
+	for _, path := range []string{
+		"../scripts/smoke-local.sh",
+		"../scripts/smoke-docker.sh",
+	} {
+		text := readTextFile(t, path)
+		cleanupMatch := cleanupRE.FindStringSubmatch(text)
+		if cleanupMatch == nil {
+			t.Fatalf("expected %s to define a cleanup function", path)
+		}
+		cleanupBody := cleanupMatch[1]
+
+		for _, match := range assignmentRE.FindAllStringSubmatch(text, -1) {
+			variable := match[1]
+			if !strings.Contains(cleanupBody, "$"+variable) {
+				t.Fatalf("expected %s cleanup to remove %s", path, variable)
+			}
 		}
 	}
 }
