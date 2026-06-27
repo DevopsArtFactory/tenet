@@ -59,7 +59,16 @@ Filter for `controller.refresh.requested` and the deployment when applicable.
 The matching audit rows should carry actor metadata plus safe request, route,
 status, result, request ID, delivery ID, channel, or filesystem no-op evidence.
 If no row appears after an accepted request, check the controller-refresh status
-route before assuming desired state changed.
+route before assuming desired state changed:
+
+```bash
+curl -i "$TENET_API_BASE/v1/controller/refresh/status"
+```
+
+Use `latestReceipt` when the status is `published`, treat `no_history` as an
+empty configured audit store rather than a failed refresh, and treat
+`unavailable` as an audit read-model/configuration problem to fix before
+retrying refresh requests.
 
 ## 4. Drill into application, resource evidence, events, live inspection, and logs
 
