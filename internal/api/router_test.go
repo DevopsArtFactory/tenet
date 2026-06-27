@@ -25,6 +25,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/controllerrefresh"
+	"github.com/DevopsArtFactory/tenet/internal/controllerrefreshaudit"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/githubwebhook"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
@@ -248,14 +249,26 @@ func TestRouterOperatorContextReportsGitHubDesiredStateSourceRefreshDiagnostics(
 
 func TestRouterControllerRefreshFilesystemNoop(t *testing.T) {
 	publisher := &recordingControllerRefreshPublisher{}
+	var records []controllerrefreshaudit.Record
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 		GitHubWebhookDesiredStateSource: githubwebhook.DesiredStateSourceConfig{
 			Kind: githubwebhook.DesiredStateSourceKindFilesystem,
 		},
 		GitHubWebhookRefreshPublisher: publisher,
+		RecordControllerRefreshAudit: func(_ context.Context, record controllerrefreshaudit.Record) error {
+			records = append(records, record)
+			return nil
+		},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/v1/controller/refresh", nil)
+	req.Header.Set(RequestIDHeader, "manual-noop-1")
+	req.Header.Set(requestactor.HeaderID, "explicit-456")
+	req.Header.Set(requestactor.HeaderName, "Alex Explicit")
+	req.Header.Set(requestactor.HeaderEmail, "alex.explicit@example.com")
+	req.Header.Set(requestactor.HeaderAliasID, "alias-123")
+	req.Header.Set(requestactor.HeaderAliasName, "Alias Actor")
+	req.Header.Set(requestactor.HeaderAliasEmail, "alias@example.com")
 	resp := httptest.NewRecorder()
 
 	router.ServeHTTP(resp, req)
@@ -284,6 +297,19 @@ func TestRouterControllerRefreshFilesystemNoop(t *testing.T) {
 	if len(publisher.requests) != 0 {
 		t.Fatalf("expected filesystem refresh to skip publisher, got %+v", publisher.requests)
 	}
+	if len(records) != 1 {
+		t.Fatalf("expected one controller refresh audit record, got %+v", records)
+	}
+	record := records[0]
+	if record.Route != "POST /v1/controller/refresh" || record.Status != "filesystem_noop" || record.Result != "noop" || record.RequestID != "manual-noop-1" || record.DeliveryID != "" || record.Channel != "" || record.HTTPStatusCode != http.StatusOK {
+		t.Fatalf("unexpected filesystem refresh audit record: %+v", record)
+	}
+	if !strings.Contains(record.NoopReason, "filesystem catalog") {
+		t.Fatalf("expected safe no-op reason in audit record, got %+v", record)
+	}
+	if !record.Actor.Available || record.Actor.ID != "explicit-456" || record.Actor.Name != "Alex Explicit" || record.Actor.Email != "alex.explicit@example.com" {
+		t.Fatalf("expected explicit X-Tenet-Actor-* audit actor to win, got %+v", record.Actor)
+	}
 }
 
 func TestRouterControllerRefreshPublishesGitHubDesiredStateRefresh(t *testing.T) {
@@ -300,6 +326,7 @@ func TestRouterControllerRefreshPublishesGitHubDesiredStateRefresh(t *testing.T)
 			RequestID: "api-controller-refresh:manual-refresh-123",
 		},
 	}
+	var records []controllerrefreshaudit.Record
 	router := NewRouter(Options{
 		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
 		GitHubWebhookDesiredStateSource: githubwebhook.DesiredStateSourceConfig{
@@ -309,6 +336,10 @@ func TestRouterControllerRefreshPublishesGitHubDesiredStateRefresh(t *testing.T)
 			Path:       "tenet",
 		},
 		GitHubWebhookRefreshPublisher: publisher,
+		RecordControllerRefreshAudit: func(_ context.Context, record controllerrefreshaudit.Record) error {
+			records = append(records, record)
+			return nil
+		},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/v1/controller/refresh", nil)
 	req.Header.Set(RequestIDHeader, "manual-refresh-123")
@@ -339,6 +370,13 @@ func TestRouterControllerRefreshPublishesGitHubDesiredStateRefresh(t *testing.T)
 	request := publisher.requests[0]
 	if request.RequestID != "api-controller-refresh:manual-refresh-123" || request.DeliveryID != "manual-refresh-123" || request.Repository != "acme/platform-config" || request.Ref != "main" || request.After != "" || request.RequestedAt != "2026-04-20T10:45:00Z" {
 		t.Fatalf("unexpected controller refresh publish request: %+v", request)
+	}
+	if len(records) != 1 {
+		t.Fatalf("expected one controller refresh audit record, got %+v", records)
+	}
+	record := records[0]
+	if record.ID != "api-controller-refresh:manual-refresh-123" || record.Route != "POST /v1/controller/refresh" || record.Status != "published" || record.Result != "published" || record.RequestID != "api-controller-refresh:manual-refresh-123" || record.DeliveryID != "manual-refresh-123" || record.Backend != controllerrefresh.BackendRedis || record.Channel != "tenet:test:controller-refresh" || record.NoopReason != "" || record.HTTPStatusCode != http.StatusAccepted {
+		t.Fatalf("unexpected published refresh audit record: %+v", record)
 	}
 }
 
@@ -3339,6 +3377,65 @@ func TestRouterAuditLogsAcceptsApplyTransitionAction(t *testing.T) {
 	rawScope, ok := raw["resultScope"].(map[string]any)
 	if !ok || rawScope["action"] != "apply.transitioned" || rawScope["deploymentName"] != "api-prod" || rawScope["returnedEntryCount"] != float64(1) || rawScope["returnedCount"] != float64(1) || rawScope["truncated"] != false {
 		t.Fatalf("expected raw transition result scope, got %#v", raw["resultScope"])
+	}
+}
+
+func TestRouterAuditLogsAcceptsControllerRefreshAction(t *testing.T) {
+	router := NewRouter(Options{
+		BuildInfo: buildinfo.Info{Version: "dev", Commit: "abc123"},
+		AuditLogs: func(ctx context.Context, query auditlog.Query) (auditlog.Result, error) {
+			if query.Limit != 0 || query.DeploymentName != "" || query.Action != auditlog.ActionControllerRefresh {
+				t.Fatalf("expected controller-refresh-filtered audit query, got %+v", query)
+			}
+			return auditlog.Result{
+				Entries: []auditlog.Entry{{
+					EntryID:   "audit_controller_refresh_testopaque",
+					Timestamp: "2026-04-20T10:45:00Z",
+					Action:    string(auditlog.ActionControllerRefresh),
+					Actor:     auditlog.Actor{Available: false, Reason: requestactor.UnavailableReason},
+					Metadata: auditlog.Metadata{
+						Status:         "published",
+						Route:          "POST /v1/controller/refresh",
+						Result:         "published",
+						RequestID:      "api-controller-refresh:manual-refresh-123",
+						DeliveryID:     "manual-refresh-123",
+						Backend:        controllerrefresh.BackendRedis,
+						Channel:        "tenet:test:controller-refresh",
+						HTTPStatusCode: http.StatusAccepted,
+					},
+					Source: auditlog.Source{Kind: "controllerRefreshRequest", Store: "controllerRefreshAuditStore", RecordRoute: "POST /v1/controller/refresh"},
+				}},
+				ResultScope: auditlog.BuildResultScope(query, 1, 1),
+			}, nil
+		},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/audit-logs?action=controller.refresh.requested", nil)
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d with body %q", resp.Code, resp.Body.String())
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("failed to decode raw audit logs: %v", err)
+	}
+	rawEntries, ok := raw["entries"].([]any)
+	if !ok || len(rawEntries) != 1 {
+		t.Fatalf("expected one controller refresh entry, got %#v", raw["entries"])
+	}
+	rawEntry, ok := rawEntries[0].(map[string]any)
+	if !ok || rawEntry["action"] != "controller.refresh.requested" || rawEntry["entryId"] != "audit_controller_refresh_testopaque" {
+		t.Fatalf("expected raw controller refresh audit entry, got %#v", rawEntries[0])
+	}
+	rawMetadata, ok := rawEntry["metadata"].(map[string]any)
+	if !ok || rawMetadata["route"] != "POST /v1/controller/refresh" || rawMetadata["status"] != "published" || rawMetadata["result"] != "published" || rawMetadata["requestId"] != "api-controller-refresh:manual-refresh-123" || rawMetadata["deliveryId"] != "manual-refresh-123" || rawMetadata["channel"] != "tenet:test:controller-refresh" {
+		t.Fatalf("expected safe controller refresh metadata, got %#v", rawEntry["metadata"])
+	}
+	rawScope, ok := raw["resultScope"].(map[string]any)
+	if !ok || rawScope["action"] != "controller.refresh.requested" || rawScope["returnedEntryCount"] != float64(1) {
+		t.Fatalf("expected raw controller refresh result scope, got %#v", raw["resultScope"])
 	}
 }
 

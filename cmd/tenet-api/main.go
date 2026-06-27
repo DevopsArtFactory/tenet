@@ -22,6 +22,7 @@ import (
 	"github.com/DevopsArtFactory/tenet/internal/buildinfo"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
 	"github.com/DevopsArtFactory/tenet/internal/controllerrefresh"
+	"github.com/DevopsArtFactory/tenet/internal/controllerrefreshaudit"
 	"github.com/DevopsArtFactory/tenet/internal/domain"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
 	"github.com/DevopsArtFactory/tenet/internal/rbacpolicy"
@@ -56,6 +57,7 @@ func main() {
 	statusPath := os.Getenv("TENET_STATUS_PATH")
 	planStorePath := envOrDefault("TENET_PLAN_STORE_PATH", defaultPlanPreviewStorePath())
 	applyStorePath := envOrDefault("TENET_APPLY_STORE_PATH", defaultApplyRequestStorePath())
+	controllerRefreshAuditStorePath := envOrDefault("TENET_CONTROLLER_REFRESH_AUDIT_STORE_PATH", defaultControllerRefreshAuditStorePath())
 	applyEnabled := awsApplyEnabled()
 	enforceAuthenticatedIdentity := operatorWriteAuthenticationEnforced()
 	enforceOperatorRoleAuthorization := operatorWriteRoleAuthorizationEnforced()
@@ -80,7 +82,7 @@ func main() {
 
 	info := buildinfo.Current(version, commit)
 	catalogSourceKind, repoRoot, githubRepository, githubRef, githubPath, githubBaseURL := catalogSource.logFields()
-	log.Printf("starting tenet-api version=%s commit=%s addr=%s catalog_source=%s repo_root=%s github_repository=%s github_ref=%s github_path=%s github_base_url=%s status_backend=%s status_path=%s plan_store_path=%s apply_store_path=%s apply_enabled=%t trust_authenticated_headers=%t require_authenticated_identity=%t require_operator_role_for_write=%t require_deployment_read_authorization=%t github_webhook_configured=%t tenet_managed_login_configured=%t redis_addr=%s request_timeout=%s", info.Version, info.Commit, addr, catalogSourceKind, repoRoot, githubRepository, githubRef, githubPath, githubBaseURL, statusBackend, statusPath, planStorePath, applyStorePath, applyEnabled, trustAuthenticatedHeaders, enforceAuthenticatedIdentity, enforceOperatorRoleAuthorization, enforceDeploymentReadAuthorization, webhookConfigured, authRuntime.TenetManagedLogin.Configured, redisAddr, requestTimeout)
+	log.Printf("starting tenet-api version=%s commit=%s addr=%s catalog_source=%s repo_root=%s github_repository=%s github_ref=%s github_path=%s github_base_url=%s status_backend=%s status_path=%s plan_store_path=%s apply_store_path=%s controller_refresh_audit_store_path=%s apply_enabled=%t trust_authenticated_headers=%t require_authenticated_identity=%t require_operator_role_for_write=%t require_deployment_read_authorization=%t github_webhook_configured=%t tenet_managed_login_configured=%t redis_addr=%s request_timeout=%s", info.Version, info.Commit, addr, catalogSourceKind, repoRoot, githubRepository, githubRef, githubPath, githubBaseURL, statusBackend, statusPath, planStorePath, applyStorePath, controllerRefreshAuditStorePath, applyEnabled, trustAuthenticatedHeaders, enforceAuthenticatedIdentity, enforceOperatorRoleAuthorization, enforceDeploymentReadAuthorization, webhookConfigured, authRuntime.TenetManagedLogin.Configured, redisAddr, requestTimeout)
 
 	store := mustOpenStatusStore(statusBackend, statusPath, redisAddr)
 	if store != nil {
@@ -330,10 +332,16 @@ func newAPIOptionsWithCatalogSourceAndStores(info buildinfo.Info, source apiCata
 		options.CreateApplyRequest = applyService.Create
 		options.ApplyRequest = applyService.Get
 		options.TransitionApplyRequest = applyService.Transition
+		controllerRefreshAuditStorePath := envOrDefault("TENET_CONTROLLER_REFRESH_AUDIT_STORE_PATH", defaultControllerRefreshAuditStorePath())
+		controllerRefreshAuditStore := controllerrefreshaudit.NewFileStore(controllerRefreshAuditStorePath)
+		options.RecordControllerRefreshAudit = controllerRefreshAuditStore.Save
 		options.AuditLogs = auditlog.Service{
 			ListPlanPreviews:  func() ([]planpreview.Record, error) { return loadPlanPreviewRecords(planStorePath) },
 			ListApplyRequests: func() ([]applyrequest.Record, error) { return loadApplyRequestRecords(applyStorePath) },
-			ListDeployments:   options.CatalogDeployments,
+			ListControllerRefreshAuditRows: func() ([]controllerrefreshaudit.Record, error) {
+				return loadControllerRefreshAuditRecords(controllerRefreshAuditStorePath)
+			},
+			ListDeployments: options.CatalogDeployments,
 		}.List
 	}
 	if store == nil {
@@ -354,6 +362,10 @@ func defaultPlanPreviewStorePath() string {
 
 func defaultApplyRequestStorePath() string {
 	return filepath.Join(os.TempDir(), "tenet", "apply-requests.json")
+}
+
+func defaultControllerRefreshAuditStorePath() string {
+	return filepath.Join(os.TempDir(), "tenet", "controller-refresh-requests.json")
 }
 
 func awsApplyEnabled() bool {
@@ -689,6 +701,18 @@ func loadPlanPreviewRecords(path string) ([]planpreview.Record, error) {
 
 func loadApplyRequestRecords(path string) ([]applyrequest.Record, error) {
 	records, err := applyrequest.Load(path)
+	if err == nil {
+		return records, nil
+	}
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) && errors.Is(pathErr.Err, os.ErrNotExist) {
+		return nil, nil
+	}
+	return nil, err
+}
+
+func loadControllerRefreshAuditRecords(path string) ([]controllerrefreshaudit.Record, error) {
+	records, err := controllerrefreshaudit.Load(path)
 	if err == nil {
 		return records, nil
 	}

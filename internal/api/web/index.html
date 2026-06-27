@@ -264,6 +264,7 @@
         { value: 'plan.created', label: 'Plan preview created (plan.created)' },
         { value: 'apply.requested', label: 'Apply requested (apply.requested)' },
         { value: 'apply.transitioned', label: 'Apply lifecycle transitioned (apply.transitioned)' },
+        { value: 'controller.refresh.requested', label: 'Controller refresh requested (controller.refresh.requested)' },
       ];
       const validAuditActions = new Set(auditActionOptions.map((option) => option.value).filter(Boolean));
       const auditActionLabel = (value) => {
@@ -7631,6 +7632,7 @@
         const planCount = visibleEntries.filter((entry) => entry?.action === 'plan.created').length;
         const applyCount = visibleEntries.filter((entry) => entry?.action === 'apply.requested').length;
         const transitionCount = visibleEntries.filter((entry) => entry?.action === 'apply.transitioned').length;
+        const controllerRefreshCount = visibleEntries.filter((entry) => entry?.action === 'controller.refresh.requested').length;
         const actorRecordedCount = visibleEntries.filter((entry) => entry?.actor?.available === true).length;
         const actorUnavailableCount = visibleEntries.length - actorRecordedCount;
         const summary = createElement('div', 'metrics audit-summary-strip');
@@ -7639,6 +7641,7 @@
           ['Plan previews', String(planCount)],
           ['Apply requests', String(applyCount)],
           ['Apply transitions', String(transitionCount)],
+          ['Controller refreshes', String(controllerRefreshCount)],
           ['Actor recorded', String(actorRecordedCount)],
           ['Actor unavailable/unknown', String(actorUnavailableCount)],
         ].forEach(([label, value]) => {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/DevopsArtFactory/tenet/internal/applyrequest"
 	"github.com/DevopsArtFactory/tenet/internal/catalog"
+	"github.com/DevopsArtFactory/tenet/internal/controllerrefreshaudit"
 	"github.com/DevopsArtFactory/tenet/internal/planpreview"
 	"github.com/DevopsArtFactory/tenet/internal/requestactor"
 )
@@ -20,6 +21,7 @@ const (
 	ActionPlanCreated       Action = "plan.created"
 	ActionApplyRequested    Action = "apply.requested"
 	ActionApplyTransitioned Action = "apply.transitioned"
+	ActionControllerRefresh Action = "controller.refresh.requested"
 )
 
 // Query captures optional audit timeline filters.
@@ -48,6 +50,15 @@ type Metadata struct {
 	Error             string   `json:"error,omitempty"`
 	Details           []string `json:"details,omitempty"`
 	Errors            []string `json:"errors,omitempty"`
+	Route             string   `json:"route,omitempty"`
+	Result            string   `json:"result,omitempty"`
+	RequestID         string   `json:"requestId,omitempty"`
+	DeliveryID        string   `json:"deliveryId,omitempty"`
+	Backend           string   `json:"backend,omitempty"`
+	Channel           string   `json:"channel,omitempty"`
+	NoopReason        string   `json:"noopReason,omitempty"`
+	FailureReason     string   `json:"failureReason,omitempty"`
+	HTTPStatusCode    int      `json:"httpStatusCode,omitempty"`
 }
 
 // Source captures the local immutable record that produced an audit timeline entry.
@@ -96,9 +107,10 @@ type Result struct {
 
 // Service projects immutable plan preview and apply request records into an audit timeline.
 type Service struct {
-	ListPlanPreviews  func() ([]planpreview.Record, error)
-	ListApplyRequests func() ([]applyrequest.Record, error)
-	ListDeployments   func(context.Context) ([]catalog.DeploymentView, error)
+	ListPlanPreviews               func() ([]planpreview.Record, error)
+	ListApplyRequests              func() ([]applyrequest.Record, error)
+	ListControllerRefreshAuditRows func() ([]controllerrefreshaudit.Record, error)
+	ListDeployments                func(context.Context) ([]catalog.DeploymentView, error)
 }
 
 // List returns a newest-first local audit timeline derived from persisted records.
@@ -121,12 +133,16 @@ func (s Service) List(ctx context.Context, query Query) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	refreshRecords, err := s.listControllerRefreshAuditRows()
+	if err != nil {
+		return Result{}, err
+	}
 	deployments, err := s.loadDeployments(ctx)
 	if err != nil {
 		return Result{}, err
 	}
 
-	entries := make([]Entry, 0, len(planRecords)+len(applyRecords))
+	entries := make([]Entry, 0, len(planRecords)+len(applyRecords)+len(refreshRecords))
 	for _, record := range planRecords {
 		if query.DeploymentName != "" && record.DeploymentName != query.DeploymentName {
 			continue
@@ -147,6 +163,11 @@ func (s Service) List(ctx context.Context, query Query) (Result, error) {
 			entries = append(entries, projectApplyTransitions(record, deployments[record.DeploymentName])...)
 		}
 	}
+	if query.DeploymentName == "" && (query.Action == "" || query.Action == ActionControllerRefresh) {
+		for _, record := range refreshRecords {
+			entries = append(entries, projectControllerRefresh(record))
+		}
+	}
 
 	sort.Slice(entries, func(i, j int) bool {
 		if entries[i].Timestamp != entries[j].Timestamp {
@@ -163,6 +184,13 @@ func (s Service) List(ctx context.Context, query Query) (Result, error) {
 		entries = entries[:query.Limit]
 	}
 	return Result{Entries: entries, ResultScope: BuildResultScope(query, totalEntryCount, len(entries))}, nil
+}
+
+func (s Service) listControllerRefreshAuditRows() ([]controllerrefreshaudit.Record, error) {
+	if s.ListControllerRefreshAuditRows == nil {
+		return nil, nil
+	}
+	return s.ListControllerRefreshAuditRows()
 }
 
 // BuildResultScope returns operator-facing metadata for the filtered, optionally limited window.
@@ -304,6 +332,32 @@ func projectApplyTransition(record applyrequest.Record, transition applyrequest.
 	}
 }
 
+func projectControllerRefresh(record controllerrefreshaudit.Record) Entry {
+	return Entry{
+		EntryID:   stableAuditEntryID("controller_refresh", record.ID),
+		Timestamp: record.RequestedAt,
+		Action:    string(ActionControllerRefresh),
+		Actor:     requestactor.Normalize(record.Actor),
+		Metadata: Metadata{
+			Status:         record.Status,
+			Route:          record.Route,
+			Result:         record.Result,
+			RequestID:      record.RequestID,
+			DeliveryID:     record.DeliveryID,
+			Backend:        record.Backend,
+			Channel:        record.Channel,
+			NoopReason:     record.NoopReason,
+			FailureReason:  record.FailureReason,
+			HTTPStatusCode: record.HTTPStatusCode,
+		},
+		Source: Source{
+			Kind:        "controllerRefreshRequest",
+			Store:       "controllerRefreshAuditStore",
+			RecordRoute: record.Route,
+		},
+	}
+}
+
 func (e Entry) stableID() string {
 	if e.EntryID != "" {
 		return e.EntryID
@@ -322,7 +376,7 @@ func stableAuditEntryID(kind, id string) string {
 // ValidAction reports whether the provided query value is one of the supported audit actions.
 func ValidAction(value string) bool {
 	switch Action(value) {
-	case ActionPlanCreated, ActionApplyRequested, ActionApplyTransitioned:
+	case ActionPlanCreated, ActionApplyRequested, ActionApplyTransitioned, ActionControllerRefresh:
 		return true
 	default:
 		return false
