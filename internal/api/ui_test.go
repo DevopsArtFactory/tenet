@@ -3023,6 +3023,28 @@ func TestSmokeScriptsLockBoundedASGResourceInspectionReleaseGuard(t *testing.T) 
 	}
 }
 
+func TestSmokeScriptsLockControllerRefreshFilesystemNoopReleaseGuard(t *testing.T) {
+	for _, script := range []string{"smoke-local.sh", "smoke-docker.sh"} {
+		body, err := os.ReadFile("../../scripts/" + script)
+		if err != nil {
+			t.Fatalf("read %s: %v", script, err)
+		}
+		text := string(body)
+		for _, fragment := range []string{
+			"/v1/controller/refresh",
+			"CONTROLLER_REFRESH_STATUS",
+			"assert controller_refresh[",
+			"filesystem_noop",
+			"controllerRefresh",
+			"desiredStateSource",
+		} {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected %s to lock controller-refresh filesystem-noop smoke fragment %q", script, fragment)
+			}
+		}
+	}
+}
+
 func TestSmokeScriptsLockDeploymentEventsInvalidLimitReleaseGuard(t *testing.T) {
 	for _, script := range []string{"smoke-local.sh", "smoke-docker.sh"} {
 		body, err := os.ReadFile("../../scripts/" + script)
