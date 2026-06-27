@@ -183,9 +183,10 @@ Primary operator APIs:
 - `GET /v1/status/deployments` and `GET /v1/status/deployments/{deploymentName}` for raw persisted runtime snapshots
 - `GET /v1/overview/deployments/{deploymentName}/events` (or `GET /v1/overview/deployments/{deploymentName}/events?source={source}&limit={positiveInteger}` for exact source-filtered, bounded controller-history reads)
 - `GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}[&limit={positiveInteger}][&containerName={container}][&instanceId={ec2InstanceId}][&clusterArn={ecsClusterArn}]`
-  (recent-log responses expose `resultScope.limit`, `resultScope.returned`,
-  `resultScope.total`, and `resultScope.truncated`; ECS task container, ASG
-  instance, and ECS cluster selectors keep focused troubleshooting reads explicit)
+  (recent-log responses expose `resultScope.requestedLimit`, `effectiveLimit`,
+  `returnedEntryCount`, `returnedCount`, `truncationStatus`, and `truncated`;
+  compact aliases such as `limit`/`returned` keep bounded reads terse, while ECS
+  task container, ASG instance, and ECS cluster selectors keep focused reads explicit)
 - `GET /v1/overview/deployments/{deploymentName}/resource-inspection?resourceType={type}&resourceName={name}[&clusterArn={ecsClusterArn}][&limit={positiveInteger}][&instanceId={ec2InstanceId}]`
   (the route requires a concrete resource type/name; supported ECS service and
   ASG reads accept optional bounded selectors/caps, and bounded ECS task / ASG

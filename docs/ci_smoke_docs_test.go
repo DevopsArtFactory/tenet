@@ -88,6 +88,24 @@ func TestReadmeDocumentsRawDeploymentStatusProbes(t *testing.T) {
 	}
 }
 
+func TestReadmeDocumentsRecentLogResultScopeFields(t *testing.T) {
+	readmeText := readTextFile(t, "../README.md")
+	for _, fragment := range []string{
+		"`GET /v1/overview/deployments/{deploymentName}/resource-logs?resourceType={type}&resourceName={name}[&limit={positiveInteger}][&containerName={container}][&instanceId={ec2InstanceId}][&clusterArn={ecsClusterArn}]`",
+		"`resultScope.requestedLimit`",
+		"`effectiveLimit`",
+		"`returnedEntryCount`",
+		"`returnedCount`",
+		"`truncationStatus`",
+		"`truncated`",
+		"compact aliases such as `limit`/`returned` keep bounded reads terse",
+	} {
+		if !strings.Contains(readmeText, fragment) {
+			t.Fatalf("expected README recent-log resultScope docs to include %q", fragment)
+		}
+	}
+}
+
 func TestSmokeHelperScriptsRemainDirectlyRunnable(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	for _, fragment := range []string{
