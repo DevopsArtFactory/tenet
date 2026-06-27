@@ -64,6 +64,18 @@ func TestREADMEValidationDocumentsCISmokeFastLaneScriptChecks(t *testing.T) {
 	}
 }
 
+func TestReadmeDocumentsRawDeploymentStatusProbes(t *testing.T) {
+	readmeText := readTextFile(t, "../README.md")
+	for _, fragment := range []string{
+		"curl -fsS http://localhost:18083/v1/status/deployments",
+		"`GET /v1/status/deployments` and `GET /v1/status/deployments/{deploymentName}` for raw persisted runtime snapshots",
+	} {
+		if !strings.Contains(readmeText, fragment) {
+			t.Fatalf("expected README raw deployment-status docs to include %q", fragment)
+		}
+	}
+}
+
 func TestSmokeHelperScriptsRemainDirectlyRunnable(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	for _, fragment := range []string{
