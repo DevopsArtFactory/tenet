@@ -122,6 +122,19 @@ func TestTrustedFrontDoorDocsUseReadableBooleanExamples(t *testing.T) {
 		}
 	}
 
+	overviewUIDoc := readRepoFile(t, "docs/architecture/tenet-v1-overview-ui.md")
+	for _, fragment := range []string{
+		"`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true` is also enabled",
+		"or matching `X-Tenet-Authorized-Projects` plus `X-Tenet-Authorized-Environments` catalog placement for that target",
+	} {
+		if !strings.Contains(overviewUIDoc, fragment) {
+			t.Fatalf("expected overview UI auth docs to include guarded-read fragment %q", fragment)
+		}
+	}
+	if strings.Contains(overviewUIDoc, "`TENET_API_ENFORCE_DEPLOYMENT_READ_AUTHORIZATION=true is also enabled") {
+		t.Fatal("expected overview UI guarded-read auth toggle example to close inline code before prose")
+	}
+
 	operatorContractsDoc := readRepoFile(t, "docs/architecture/tenet-v1-operator-contracts.md")
 	if !strings.Contains(operatorContractsDoc, "`GET /auth/login/github`, `GET /auth/login/google`, or `GET /auth/login/okta` creates one-time callback state") {
 		t.Fatal("expected operator contracts doc auth runtime boundary to state public GitHub login route is shipped")
