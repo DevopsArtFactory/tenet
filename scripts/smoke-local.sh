@@ -145,7 +145,7 @@ curl_status_body_request_id() {
   local status
   local request_id
 
-  headers_path=$(mktemp)
+  headers_path=$(mktemp "$PAYLOAD_DIR/request-id-headers.XXXXXX")
   status=$(curl -sS -D "$headers_path" -o "$body_path" -w "%{http_code}" "$@")
   request_id=$(python3 - "$headers_path" <<'PY'
 import sys
@@ -246,8 +246,8 @@ assert_enterprise_sso_logout_boundary() {
   local encoded_return_url headers_path body_path status
 
   encoded_return_url=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$return_url")
-  headers_path=$(mktemp "${TMPDIR:-/tmp}/enterprise-sso-logout-headers.XXXXXX")
-  body_path=$(mktemp "${TMPDIR:-/tmp}/enterprise-sso-logout-body.XXXXXX")
+  headers_path=$(mktemp "$PAYLOAD_DIR/enterprise-sso-logout-headers.XXXXXX")
+  body_path=$(mktemp "$PAYLOAD_DIR/enterprise-sso-logout-body.XXXXXX")
   status=$(curl -sS -D "$headers_path" -o "$body_path" -w "%{http_code}" \
     -X "$method" \
     "http://$HOST:$PORT/auth/logout?returnUrl=$encoded_return_url")

@@ -88,7 +88,7 @@ curl_status_body_request_id() {
   local status
   local request_id
 
-  headers_path=$(mktemp)
+  headers_path=$(mktemp "$PAYLOAD_DIR/request-id-headers.XXXXXX")
   status=$(curl -sS -D "$headers_path" -o "$body_path" -w "%{http_code}" "$@")
   request_id=$(python3 - "$headers_path" <<'PY'
 import sys
