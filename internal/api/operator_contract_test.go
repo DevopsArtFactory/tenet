@@ -337,6 +337,8 @@ func TestOperatorTroubleshootingRunbookDocsContract(t *testing.T) {
 		"`/?page=audit`",
 		"curl -i \"$TENET_API_BASE/v1/controller/refresh/status\"",
 		"Use `latestReceipt` when the status is `published`",
+		"Treat `filesystem_noop` as a configured filesystem catalog refresh receipt",
+		"no controller handoff was published, and no desired-state change should be expected",
 		"treat `no_history` as an",
 		"empty configured audit store rather than a failed refresh",
 		"`unavailable` as an audit read-model/configuration problem",

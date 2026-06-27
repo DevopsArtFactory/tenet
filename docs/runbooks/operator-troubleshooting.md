@@ -65,10 +65,12 @@ route before assuming desired state changed:
 curl -i "$TENET_API_BASE/v1/controller/refresh/status"
 ```
 
-Use `latestReceipt` when the status is `published`, treat `no_history` as an
-empty configured audit store rather than a failed refresh, and treat
-`unavailable` as an audit read-model/configuration problem to fix before
-retrying refresh requests.
+Use `latestReceipt` when the status is `published`.
+Treat `filesystem_noop` as a configured filesystem catalog refresh receipt:
+no controller handoff was published, and no desired-state change should be expected.
+Then treat `no_history` as an empty configured audit store rather than a failed refresh,
+and treat `unavailable` as an audit read-model/configuration problem to fix
+before retrying refresh requests.
 
 ## 4. Drill into application, resource evidence, events, live inspection, and logs
 
