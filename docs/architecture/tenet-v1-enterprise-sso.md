@@ -90,7 +90,7 @@ Recommended mapping:
 
 | Tenet field | Google OIDC source | Okta SAML/OIDC source |
 | --- | --- | --- |
-| `provider` | canonical runtime provider `google_oidc` (`TENET_AUTH_PROVIDER=google` remains a legacy alias) | `okta_saml` or `okta_oidc` |
+| `provider` | canonical runtime provider `google` (`TENET_AUTH_PROVIDER=google_oidc` is the preferred configuration mode; `google` remains a legacy alias) | `okta_saml` or `okta_oidc` |
 | `subject` / stable provider ID | OIDC `sub` | SAML `NameID` or OIDC `sub` |
 | `email` | verified email claim when available | email attribute/claim |
 | `name` | profile/display-name claim | display-name attribute/claim |
@@ -112,7 +112,7 @@ Enterprise SSO must not weaken existing fail-safe behavior.
 
 `GET /v1/operator/context` should remain the first troubleshooting stop. Enterprise SSO additions should be additive and non-secret, for example:
 
-- configured provider type (`google_oidc` for active Google Workspace OIDC, `okta_saml`, `okta_oidc`)
+- configured provider type (`google` in runtime diagnostics for active Google Workspace OIDC configured with `TENET_AUTH_PROVIDER=google_oidc`, plus `okta_saml` and `okta_oidc`)
 - human-readable provider labels in operator-facing UI (`Google Workspace OIDC`, `Okta SAML`, `Okta OIDC`) so operators do not need to decode raw enum values during 401/403 recovery
 - provider-boundary copy in the embedded Operator context details that keeps Google Workspace identity separate from Gmail/API access and keeps Okta SSO identity separate from Tenet role/deployment authorization
 - whether managed enterprise SSO is configured and active

@@ -204,7 +204,8 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 		"`TENET_AUTH_PROVIDER=okta_oidc`",
 		"`TENET_AUTH_PROVIDER=okta_saml`",
 		"When the runtime variables are complete for Google (`TENET_AUTH_PROVIDER=google_oidc`",
-		`"provider": "google_oidc"`,
+		"The diagnostic canonicalizes the Google Workspace runtime provider to `google` even when operators configure the preferred `google_oidc` mode",
+		`"provider": "google"`,
 	} {
 		if !strings.Contains(operatorContractsDoc, fragment) {
 			t.Fatalf("expected operator contracts doc enterprise SSO boundary to include %q", fragment)
@@ -221,6 +222,8 @@ func TestEnterpriseSSOBoundaryDocs(t *testing.T) {
 		"Okta OIDC uses `TENET_AUTH_PROVIDER=okta_oidc`",
 		"Okta SAML uses `TENET_AUTH_PROVIDER=okta_saml` for diagnostic-only preflight",
 		"TENET_AUTH_PROVIDER=google_oidc # use okta_oidc for Okta OIDC, okta_saml for Okta SAML diagnostics, or github for GitHub OAuth",
+		"canonical runtime provider `google` (`TENET_AUTH_PROVIDER=google_oidc` is the preferred configuration mode; `google` remains a legacy alias)",
+		"configured provider type (`google` in runtime diagnostics for active Google Workspace OIDC configured with `TENET_AUTH_PROVIDER=google_oidc`, plus `okta_saml` and `okta_oidc`)",
 		"human-readable provider labels in operator-facing UI (`Google Workspace OIDC`, `Okta SAML`, `Okta OIDC`)",
 		"provider-boundary copy in the embedded Operator context details",
 		"Okta identity through SAML assertions or OIDC profile claims",
