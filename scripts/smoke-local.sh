@@ -1728,6 +1728,12 @@ assert "Controller-derived runtime events from ${deploymentEventsReadRoute('{dep
 assert 'Event source' in ui, ui
 assert 'Loading controller runtime events…' in ui, ui
 assert 'No controller runtime events are retained for this application yet.' in ui, ui
+assert "const deploymentEventsSourceSummaryEntries = (result) => {" in ui, ui
+assert "const createDeploymentEventsSourceSummaryChips = (result) => {" in ui, ui
+assert "deployment-events-source-summary" in ui, ui
+assert "deployment-events-source-chip" in ui, ui
+assert "Runtime event source summary" in ui, ui
+assert "Source mix · ${source} · ${deploymentEventsCountText(count)}" in ui, ui
 assert "const createDeploymentEventsFreshnessMeta = (result) => {" in ui, ui
 assert "deployment-events-freshness" in ui, ui
 assert 'Last refreshed · ${fetchedAt}' in ui, ui

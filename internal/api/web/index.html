@@ -6834,6 +6834,27 @@
         const count = Number(value);
         return Number.isFinite(count) && count >= 0 ? `${count} ${count === 1 ? 'event' : 'events'}` : '—';
       };
+      const deploymentEventsSourceSummaryEntries = (result) => {
+        const summary = Array.isArray(result?.sourceSummary) ? result.sourceSummary : [];
+        return summary
+          .map((entry) => {
+            const source = String(entry?.source || '').trim();
+            const rawCount = entry?.count;
+            const count = rawCount === undefined || rawCount === null || rawCount === '' ? NaN : Number(rawCount);
+            return { source, count };
+          })
+          .filter(({ source, count }) => source && Number.isFinite(count) && count >= 0);
+      };
+      const createDeploymentEventsSourceSummaryChips = (result) => {
+        const entries = deploymentEventsSourceSummaryEntries(result);
+        if (!entries.length) return null;
+        const chips = createElement('div', 'pills deployment-events-source-summary');
+        chips.setAttribute('aria-label', 'Runtime event source summary');
+        entries.forEach(({ source, count }) => {
+          chips.append(createElement('span', 'pill target deployment-events-source-chip', `Source mix · ${source} · ${deploymentEventsCountText(count)}`));
+        });
+        return chips;
+      };
       const deploymentEventsScopeLimitText = (value) => {
         const limit = Number(value);
         return Number.isFinite(limit) && limit > 0 ? `${limit} events` : 'All available events';
@@ -7044,11 +7065,12 @@
         const events = sortTimelineEvents(result?.events || []);
         const scopeSummary = createDeploymentEventsResultScopeSummary(result);
         const freshnessMeta = createDeploymentEventsFreshnessMeta(result);
+        const sourceSummaryChips = createDeploymentEventsSourceSummaryChips(result);
         if (!events.length) {
           const heading = createDetailSectionHeader('Controller runtime events', createDeploymentEventsActions(section, deploymentName, false, result));
           const intro = createDeploymentEventsIntro(selectedLimit, selectedSource);
           const stateNode = createElement('div', 'detail-state', deploymentEventsEmptyStateText(result, selectedLimit, selectedSource));
-          section.replaceChildren(heading, intro, ...(scopeSummary ? [scopeSummary] : []), ...(freshnessMeta ? [freshnessMeta] : []), stateNode);
+          section.replaceChildren(heading, intro, ...(scopeSummary ? [scopeSummary] : []), ...(freshnessMeta ? [freshnessMeta] : []), ...(sourceSummaryChips ? [sourceSummaryChips] : []), stateNode);
           return;
         }
 
@@ -7120,7 +7142,7 @@
           eventList.append(item);
         });
 
-        section.replaceChildren(heading, intro, ...(scopeSummary ? [scopeSummary] : []), ...(freshnessMeta ? [freshnessMeta] : []), ordering, driftSummary, eventList);
+        section.replaceChildren(heading, intro, ...(scopeSummary ? [scopeSummary] : []), ...(freshnessMeta ? [freshnessMeta] : []), ...(sourceSummaryChips ? [sourceSummaryChips] : []), ordering, driftSummary, eventList);
       };
       const renderDeploymentEventsSection = (section, deploymentName, options = {}) => {
         const force = Boolean(options?.force);
