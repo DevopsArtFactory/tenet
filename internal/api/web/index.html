@@ -4956,12 +4956,15 @@
         if (className) stateNode.classList.add(className);
         container.replaceChildren(stateNode);
       };
-      const markResourcePanelStatusNode = (node) => {
+      const markPoliteStatusNode = (node) => {
         if (!node) return node;
         node.setAttribute('role', 'status');
         node.setAttribute('aria-live', 'polite');
         node.setAttribute('aria-atomic', 'true');
         return node;
+      };
+      const markResourcePanelStatusNode = (node) => {
+        markPoliteStatusNode(node);
       };
       const renderResourceLogsState = (container, text, className = '', beforeNodes = [], afterNodes = [], actions = []) => {
         const heading = createDetailSectionHeader('Recent logs', actions);
@@ -7102,6 +7105,7 @@
         const heading = createDetailSectionHeader('Controller runtime events', createDeploymentEventsActions(section, deploymentName, isLoading));
         const intro = createDeploymentEventsIntro(limit, currentPageState.eventSource);
         const stateNode = createElement('div', 'detail-state', text);
+        markPoliteStatusNode(stateNode);
         if (className) stateNode.classList.add(className);
         if (detailText) {
           section.replaceChildren(heading, intro, stateNode, createElement('div', 'detail-condition-meta', detailText));
@@ -7124,6 +7128,7 @@
           const heading = createDetailSectionHeader('Controller runtime events', createDeploymentEventsActions(section, deploymentName, false, result));
           const intro = createDeploymentEventsIntro(selectedLimit, selectedSource);
           const stateNode = createElement('div', 'detail-state', deploymentEventsEmptyStateText(result, selectedLimit, selectedSource));
+          markPoliteStatusNode(stateNode);
           section.replaceChildren(heading, intro, ...(scopeSummary ? [scopeSummary] : []), ...(freshnessMeta ? [freshnessMeta] : []), ...(sourceSummaryChips ? [sourceSummaryChips] : []), stateNode);
           return;
         }

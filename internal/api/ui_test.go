@@ -34,10 +34,11 @@ func TestEmbeddedUIResourceLazyPanelStatesAreStatusRegions(t *testing.T) {
 	body := string(indexHTML)
 
 	for _, fragment := range []string{
-		"const markResourcePanelStatusNode = (node) => {",
+		"const markPoliteStatusNode = (node) => {",
 		"node.setAttribute('role', 'status');",
 		"node.setAttribute('aria-live', 'polite');",
 		"node.setAttribute('aria-atomic', 'true');",
+		"const markResourcePanelStatusNode = (node) => {",
 	} {
 		if !strings.Contains(body, fragment) {
 			t.Fatalf("expected embedded UI lazy-panel status helper fragment %q", fragment)
@@ -51,6 +52,20 @@ func TestEmbeddedUIResourceLazyPanelStatesAreStatusRegions(t *testing.T) {
 	for _, contract := range contracts {
 		if !regexp.MustCompile(contract).MatchString(body) {
 			t.Fatalf("expected embedded UI lazy-panel status contract %s", contract)
+		}
+	}
+}
+
+func TestEmbeddedUIRuntimeEventStatesAreStatusRegions(t *testing.T) {
+	body := string(indexHTML)
+
+	contracts := []string{
+		`const renderDeploymentEventsState = \(section, deploymentName, text, className = '', detailText = '', isLoading = false, limit = currentPageState.eventLimit\) => \{[\s\S]*?const stateNode = createElement\('div', 'detail-state', text\);[\s\S]*?markPoliteStatusNode\(stateNode\);[\s\S]*?section\.replaceChildren\(heading, intro, stateNode\);`,
+		`if \(!events\.length\) \{[\s\S]*?const stateNode = createElement\('div', 'detail-state', deploymentEventsEmptyStateText\(result, selectedLimit, selectedSource\)\);[\s\S]*?markPoliteStatusNode\(stateNode\);[\s\S]*?section\.replaceChildren\(heading, intro, \.\.\.\(scopeSummary \? \[scopeSummary\] : \[\]\), \.\.\.\(freshnessMeta \? \[freshnessMeta\] : \[\]\), \.\.\.\(sourceSummaryChips \? \[sourceSummaryChips\] : \[\]\), stateNode\);`,
+	}
+	for _, contract := range contracts {
+		if !regexp.MustCompile(contract).MatchString(body) {
+			t.Fatalf("expected runtime-events status-region contract %s", contract)
 		}
 	}
 }
