@@ -4850,6 +4850,7 @@ func TestOverviewDocsDescribeAccountDetailRefresh(t *testing.T) {
 		"../../docs/features/overview-dashboard.md": {
 			"toolbar-level `Refresh account detail`",
 			"re-runs only `GET /v1/overview/accounts/{awsAccountId}`",
+			"keyboard-accessible toggle wired to the controlled lazy-loaded detail panel with `aria-controls`",
 			"refresh-time `401` / `403` responses reuse that same trusted-front-door / access-denied guidance instead of generic fetch-error copy",
 		},
 	}
