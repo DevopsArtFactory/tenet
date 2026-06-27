@@ -364,6 +364,29 @@ func TestOverviewDashboardAuthToggleDocsUseReadableBooleanExamples(t *testing.T)
 	}
 }
 
+func TestLocalRuntimeDocsSeparateShippedWriteRoutesFromDeferredAWSMutation(t *testing.T) {
+	localRuntimeText := readTextFile(t, "architecture/tenet-v1-local-runtime.md")
+
+	for _, fragment := range []string{
+		"shipped immutable plan/apply write routes",
+		"`POST /v1/plans/deployments/{deploymentName}`",
+		"`POST /v1/applies/plans/{planId}`",
+		"`POST /v1/applies/{applyId}/transitions`",
+		"`TENET_AWS_ENABLE_APPLY=true` queued local-safe handoff",
+		"without AWS mutation",
+		"live AWS observation/execution adapters",
+		"real mutation executor loops",
+	} {
+		if !strings.Contains(localRuntimeText, fragment) {
+			t.Fatalf("expected local runtime docs to separate shipped write routes from deferred AWS mutation via %q", fragment)
+		}
+	}
+
+	if strings.Contains(localRuntimeText, "- write APIs") {
+		t.Fatal("expected deferred work docs not to describe generic write APIs as deferred")
+	}
+}
+
 func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	for _, fragment := range []string{

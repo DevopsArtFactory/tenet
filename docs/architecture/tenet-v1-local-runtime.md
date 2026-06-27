@@ -1,6 +1,6 @@
 # Tenet v1 Local Runtime
 
-The local runtime packages the current read-only control-plane foundation as a Docker-friendly stack.
+The local runtime packages the current mutation-safe control-plane foundation as a Docker-friendly stack.
 
 ## What is implemented in this slice
 
@@ -25,6 +25,8 @@ The local stack uses these inputs:
 - `TENET_AWS_ENABLE_APPLY=false` by default in the local Compose demo; set it to `true` when you want queued-on-create immutable apply records plus a local-safe executor handoff on the same `applyId` without introducing AWS mutation
 
 Both services mount `./examples` read-only so the Redis-backed status store can seed from the local deployment snapshot when empty. The `api` service also mounts a named volume on `/tmp`, which keeps `/tmp/tenet/plan-previews.json` and `/tmp/tenet/apply-requests.json` restart-safe so immutable plan/apply records survive the Compose `api` service restart used by `make smoke-docker`. That keeps the runtime deterministic and aligned with the current repo-backed architecture.
+
+This stack is not API-read-only: the shipped immutable plan/apply write routes `POST /v1/plans/deployments/{deploymentName}`, `POST /v1/applies/plans/{planId}`, and `POST /v1/applies/{applyId}/transitions` persist Tenet-owned records and apply lifecycle transitions in the local stores. They still do not execute AWS mutations. The `TENET_AWS_ENABLE_APPLY=true` queued local-safe handoff creates queued-on-create apply records and lets the local-safe executor advance the same `applyId` through handoff states without AWS mutation.
 
 For `tenet-api`, the local runtime also enables request-scoped JSON logs for every API/UI request. Operators can rely on the stable fields `request_id`, `method`, `path`, `status`, `duration_ms`, and `result`, plus an `error` field on timeout/panic paths. `TENET_API_REQUEST_TIMEOUT` defaults to `30s`; set it to `0` to disable the timeout wrapper for local debugging.
 
@@ -193,8 +195,8 @@ This slice deliberately does not introduce live AWS reconciliation yet. The next
 
 - controller-owned reconciliation loops based on the abstract planner
 - durable runtime history beyond a single status file
-- write APIs
-- AWS observation/execution adapters
+- live AWS observation/execution adapters
+- real mutation executor loops that turn reviewed apply operations into AWS changes
 
 
 The smoke helper still runs `docker compose down --remove-orphans` even on failure so local cleanup stays deterministic.
