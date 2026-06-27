@@ -8478,7 +8478,7 @@
       const createOperationsSection = ({ title, intro, operations, emptyMessage, shareURLForOperation = null }) => {
         const section = createDetailSection(title);
         if (!operations.length) {
-          section.append(createElement('div', 'detail-state', emptyMessage));
+          section.append(markPoliteStatusNode(createElement('div', 'detail-state', emptyMessage)));
           return section;
         }
 
