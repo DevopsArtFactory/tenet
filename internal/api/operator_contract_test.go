@@ -289,7 +289,7 @@ func TestManagedLoginFeatureGuideDocs(t *testing.T) {
 	for _, fragment := range []string{
 		"# Managed Login",
 		"Operator troubleshooting guide",
-		"Managed login is active only when `GET /v1/operator/context.authRuntime.tenetManagedLogin.active=true`",
+		"Managed login is active only when `GET /v1/operator/context` reports `authRuntime.tenetManagedLogin.active=true`",
 		"`TENET_AUTH_PROVIDER=github`",
 		"`TENET_AUTH_PROVIDER=google_oidc`",
 		"`TENET_AUTH_PROVIDER=okta_oidc`",
@@ -303,6 +303,7 @@ func TestManagedLoginFeatureGuideDocs(t *testing.T) {
 		"`GET /auth/callback/okta/saml`",
 		"`GET /auth/logout` and `POST /auth/logout`",
 		"`TENET_AUTH_SESSION_COOKIE_SECURE=true`",
+		"Use `GET /v1/operator/context` and inspect `authRuntime.tenetManagedLogin` to diagnose cookie behavior.",
 		"`sessionCookieSecureOverride`, `sessionCookieSecureForRequest`, and `sessionCookieSecureSources`",
 		"HTTPS request evidence or trusted `X-Forwarded-Proto: https` / `Forwarded: proto=https` evidence",
 		"Logout clears only Tenet's signed `tenet_session` cookie",
