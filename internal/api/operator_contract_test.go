@@ -1997,6 +1997,7 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 		"`POST /api/v1/github/webhook`",
 		"`TENET_GITHUB_WEBHOOK_SECRET`",
 		"`smoke-webhook-secret`",
+		"`TENET_GITHUB_WEBHOOK_SECRET=smoke-webhook-secret`",
 		"`X-GitHub-Delivery`",
 		"`X-GitHub-Event`",
 		"`X-Hub-Signature-256`",
@@ -2015,6 +2016,15 @@ func TestGitHubWebhookOperatorContract(t *testing.T) {
 	} {
 		if !strings.Contains(operatorContractsDoc, fragment) {
 			t.Fatalf("expected operator contracts doc github webhook contract to include %q", fragment)
+		}
+	}
+
+	for _, malformedFragment := range []string{
+		"`TENET_GITHUB_WEBHOOK_SECRET=*** so `make smoke-docker`",
+		"`TENET_GITHUB_WEBHOOK_SECRET=smoke-webhook-secret so `make smoke-docker`",
+	} {
+		if strings.Contains(operatorContractsDoc, malformedFragment) {
+			t.Fatalf("expected operator contracts doc to avoid malformed inline webhook-secret fragment %q", malformedFragment)
 		}
 	}
 
