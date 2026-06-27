@@ -527,6 +527,20 @@ func TestApplicationDetailResourceFilterDocsContract(t *testing.T) {
 	}
 }
 
+func TestOverviewDashboardRuntimeEventCueDocumentsDeterministicTieBreak(t *testing.T) {
+	overviewText := readTextFile(t, "features/overview-dashboard.md")
+	for _, fragment := range []string{
+		"`runtimeEventCue` when the visible deployment slice has retained controller history",
+		"newest retained event's deployment, timestamp, source, summary, sync/health, rollout phase/current step",
+		"lexicographically smaller deployment name, then lexicographically smaller source",
+		"aggregate counts across all visible retained-history deployments",
+	} {
+		if !strings.Contains(overviewText, fragment) {
+			t.Fatalf("expected overview dashboard docs to include runtimeEventCue deterministic contract %q", fragment)
+		}
+	}
+}
+
 func TestOverviewDashboardDeploymentScopedAuditWorkspaceDocumentsClearableAuditChips(t *testing.T) {
 	overviewText := readTextFile(t, "features/overview-dashboard.md")
 	section := markdownSection(t, overviewText, "### Deployment-scoped audit workspace")

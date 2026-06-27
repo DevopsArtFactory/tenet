@@ -507,6 +507,78 @@ func TestBuildAccountOverviewsRuntimeEventCueUsesRetainedHistory(t *testing.T) {
 	}
 }
 
+func TestBuildRuntimeEventCueUsesDeterministicTieBreakers(t *testing.T) {
+	cue := BuildRuntimeEventCue([]DeploymentOverview{
+		{
+			Name: "payments-api-prod",
+			RuntimeSummary: &domain.RuntimeSummary{
+				Timestamp:    "2026-04-16T06:25:00Z",
+				Source:       "controller",
+				Summary:      "payments candidate warming",
+				HistoryCount: 2,
+			},
+		},
+		{
+			Name: "billing-api-prod",
+			RuntimeSummary: &domain.RuntimeSummary{
+				Timestamp:    "2026-04-16T06:25:00Z",
+				Source:       "deployment-controller",
+				Summary:      "billing completed",
+				HistoryCount: 1,
+			},
+		},
+		{
+			Name: "analytics-api-prod",
+			RuntimeSummary: &domain.RuntimeSummary{
+				Timestamp:    "2026-04-16T06:20:00Z",
+				Source:       "controller",
+				Summary:      "older retained event",
+				HistoryCount: 4,
+			},
+		},
+	})
+	if cue == nil {
+		t.Fatal("expected runtime event cue")
+	}
+	if cue.DeploymentName != "billing-api-prod" || cue.Timestamp != "2026-04-16T06:25:00Z" || cue.Source != "deployment-controller" || cue.Summary != "billing completed" {
+		t.Fatalf("expected equal timestamps to prefer lexicographically smaller deployment name, got %+v", cue)
+	}
+	if cue.RetainedEventCount != 7 || cue.EventDeploymentCount != 3 {
+		t.Fatalf("expected aggregate event counts to include all retained-history deployments, got %+v", cue)
+	}
+
+	cue = BuildRuntimeEventCue([]DeploymentOverview{
+		{
+			Name: "payments-api-prod",
+			RuntimeEventCue: &RuntimeEventCue{
+				DeploymentName:       "payments-api-prod",
+				Timestamp:            "2026-04-16T06:25:00Z",
+				Source:               "runtime-controller",
+				Summary:              "runtime controller event",
+				RetainedEventCount:   1,
+				EventDeploymentCount: 1,
+			},
+		},
+		{
+			Name: "payments-api-prod",
+			RuntimeEventCue: &RuntimeEventCue{
+				DeploymentName:       "payments-api-prod",
+				Timestamp:            "2026-04-16T06:25:00Z",
+				Source:               "controller",
+				Summary:              "controller event",
+				RetainedEventCount:   1,
+				EventDeploymentCount: 1,
+			},
+		},
+	})
+	if cue == nil || cue.Source != "controller" || cue.Summary != "controller event" {
+		t.Fatalf("expected equal timestamp/name ties to prefer lexicographically smaller source, got %+v", cue)
+	}
+	if cue.RetainedEventCount != 2 || cue.EventDeploymentCount != 2 {
+		t.Fatalf("expected tie-break source cue to preserve aggregate counts, got %+v", cue)
+	}
+}
+
 func TestBuildAccountOverviewsRuntimeSummaryRemainsNilWhenStatusIsEmpty(t *testing.T) {
 	catalog := manifest.Catalog{
 		Accounts:     []domain.Account{{Name: "prod-core", AWSAccountID: "123456789012", AllowedRegions: []string{"ap-northeast-2"}}},
