@@ -9,6 +9,8 @@ import (
 func TestREADMEValidationDocumentsCISmokeFastLaneScriptChecks(t *testing.T) {
 	readmeText := readTextFile(t, "../README.md")
 	workflowText := readTextFile(t, "../.github/workflows/ci-smoke.yml")
+	localRuntimeText := readTextFile(t, "architecture/tenet-v1-local-runtime.md")
+	operatorContractsText := readTextFile(t, "architecture/tenet-v1-operator-contracts.md")
 	for _, command := range []string{
 		"go test ./...",
 		"bash -n scripts/smoke-local.sh",
@@ -31,11 +33,31 @@ func TestREADMEValidationDocumentsCISmokeFastLaneScriptChecks(t *testing.T) {
 		"The Docker smoke lane remains separate",
 		"In hosted PRs it is path-scoped",
 		"docs-only changes normally stay on the fast lane",
-		"changes under Docker/Compose, API/controller, local fixtures, runtime read models, resource evidence, webhook, plan/apply, or audit smoke surfaces run the full Docker stack before merge",
+		"changes under Docker/Compose, API/controller, local fixtures, runtime read models, RBAC policy diagnostics, resource evidence, webhook, plan/apply, or audit smoke surfaces run the full Docker stack before merge",
 		"make smoke-docker",
 	} {
 		if !strings.Contains(readmeText, fragment) {
 			t.Fatalf("expected README validation docs to include %q", fragment)
+		}
+	}
+
+	for _, fragment := range []string{
+		"internal/rbacpolicy/*|internal/rbacpolicy/**",
+	} {
+		if !strings.Contains(workflowText, fragment) {
+			t.Fatalf("expected CI Smoke Docker scope to include %q", fragment)
+		}
+	}
+
+	for _, doc := range []struct {
+		name string
+		text string
+	}{
+		{name: "local runtime docs", text: localRuntimeText},
+		{name: "operator contracts docs", text: operatorContractsText},
+	} {
+		if !strings.Contains(doc.text, "internal/rbacpolicy/**") {
+			t.Fatalf("expected %s to document RBAC policy changes as Docker-smoke scoped", doc.name)
 		}
 	}
 }
